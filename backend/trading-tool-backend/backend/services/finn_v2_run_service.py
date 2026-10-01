@@ -344,6 +344,7 @@ class FinnV2RunService:
                 "answer": answer.text,
                 "user_message": run.message,
                 "tool_trace": exchange.get("tool_trace") or [],
+                "turn_contract": exchange.get("turn_contract") or {},
             }
             selected = verified_selected_setup(current_view)
             if selected:
@@ -649,7 +650,7 @@ class FinnV2RunService:
             await session.commit()
         result = await FinnResponsesFrontDoor(
             client=client, session_factory=async_session_factory,
-            user_id=user_id, run_id=run_id,
+            user_id=user_id, run_id=run_id, model_led_coach=True,
         ).run(
             message=message,
             corrected_guided_operation_id=corrected_guided_operation_id,
@@ -1548,8 +1549,9 @@ class FinnV2RunService:
                                     locale=prepared.locale,
                                 )
                             logger.info(
-                                "FINN Responses verification completed in %.2fs",
+                                "FINN Responses verification completed in %.2fs status=%s reason=%s",
                                 monotonic() - responses_stage_started,
+                                answer.status, answer.reason,
                             )
                             remaining = remaining_lifecycle_seconds()
                             assessment_limited = any(
@@ -1626,10 +1628,11 @@ class FinnV2RunService:
                         else:
                             answer = None
                     if answer is not None:
-                        answer = FinnResponsesAnswerVerifier.recover_read_only_coaching(
-                            message=message, result=prepared.response,
-                            answer=answer, locale=prepared.locale,
-                        )
+                        if not prepared.response.model_owned_repair:
+                            answer = FinnResponsesAnswerVerifier.recover_read_only_coaching(
+                                message=message, result=prepared.response,
+                                answer=answer, locale=prepared.locale,
+                            )
                         async with async_session_factory() as session:
                             await cls(session).complete_responses_read(
                                 run_id=run_id, user_id=user_id,

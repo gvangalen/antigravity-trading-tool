@@ -26,7 +26,9 @@ from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
     verified_selected_setup_asset,
 )
-from backend.services.finn_v2_turn_contract import build_turn_contract, turn_contract_gap
+from backend.services.finn_v2_turn_contract import (
+    build_turn_contract, can_compose_after_first_read, turn_contract_gap,
+)
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier, FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
@@ -733,6 +735,437 @@ def test_multi_setup_comparison_reaches_model_with_unfiltered_owner_inventory(me
     assert "BTC Full Base" in verified.text and "Apple Full Setup" in verified.text
 
 
+def test_model_owned_comparison_binds_exact_owner_scoped_pair():
+    question = "Vergelijk BTC Full Base op 4H met Apple Full Setup op 1D."
+    fake = FakeResponses(
+        response("pair-read", calls=[tool_call("pair-call", "get_saved_setup_inventory", {
+            "asset": None, "timeframe": "4H", "answer_mode": "compare",
+            "setup_names": ["BTC Full Base", "Apple Full Setup"],
+        })]),
+        response("pair-answer", text=(
+            "BTC Full Base is een BTC-setup op 4H; Apple Full Setup is een AAPL-setup op 1D."
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="model-pair", model_led_coach=True,
+    )
+    reads = []
+
+    async def read(call):
+        reads.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"complete": True, "setups": [
+                {"setup_id": 1, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"},
+                {"setup_id": 2, "name": "Apple Full Setup", "symbol": "AAPL", "timeframe": "1D"},
+                {"setup_id": 3, "name": "ETH Full Setup", "symbol": "ETH", "timeframe": "4H"},
+            ]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+    ))
+    assert fake.requests[0]["tool_choice"] == "auto"
+    assert reads[0].inputs == {}
+    trace_result = result.response.tool_trace[0]["result"]
+    assert trace_result["turn_request"] == {
+        "answer_type": "compare", "target_ids": [1, 2],
+    }
+    assert [target["name"] for target in result.response.turn_contract["targets"]] == [
+        "BTC Full Base", "Apple Full Setup",
+    ]
+    assert result.response.model_owned_repair
+
+
+def test_cross_asset_followup_binds_verified_source_and_unique_target():
+    question = "Mag ik dezelfde BTC-regel ook voor Apple gebruiken?"
+    fake = FakeResponses(
+        response("asset-read", calls=[tool_call("asset-call", "get_saved_setup_inventory", {
+            "asset": "BTC", "timeframe": None, "answer_mode": "explain",
+            "setup_names": ["BTC Full Base"],
+        })]),
+        response("asset-answer", text=(
+            "De regel van BTC Full Base geldt niet automatisch voor Apple Full Setup op AAPL."
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="cross-asset-source", model_led_coach=True,
+    )
+
+    async def read(_call):
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"complete": True, "setups": [
+                {"setup_id": 1, "name": "BTC Full Base", "symbol": "BTC"},
+                {"setup_id": 2, "name": "Apple Full Setup", "symbol": "AAPL"},
+                {"setup_id": 3, "name": "BTC Breakout Full", "symbol": "BTC"},
+            ]},
+        }]}
+
+    front.reads = read
+    previous = {
+        "terminal_status": "completed", "terminal_kind": "free_text",
+        "owner_user_id": 7, "answer": "BTC Full Base is de tweede setup.",
+        "verified_setup_subject": {"owner_id": 7, "setup_id": 1,
+                                    "name": "BTC Full Base", "symbol": "BTC"},
+    }
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+        previous_response=previous, previous_response_id="resp-prior",
+    ))
+    tool_result = result.response.tool_trace[0]["result"]
+    assert tool_result["turn_request"] == {"answer_type": "explain", "target_ids": [1, 2]}
+    assert tool_result["finalize_now"] is True
+    assert [row["name"] for row in tool_result["results"][0]["data"]["setups"]] == [
+        "BTC Full Base", "Apple Full Setup",
+    ]
+
+
+def test_complete_cross_asset_inventory_ends_read_round_without_guessing_source():
+    question = "Als ik Apple koop vanwege FOMO, mag ik dezelfde regel als bij BTC hanteren?"
+    fake = FakeResponses(
+        response("cross-read", calls=[tool_call("cross-call", "get_active_plan_and_strategy", {
+            "asset": "Apple", "timeframe": None, "setup_name": None,
+            "reference": "current_request",
+        })]),
+        response("cross-answer", text=(
+            "Nee, een BTC-regel geldt niet automatisch voor Apple. "
+            "Er zijn twee BTC-setups; welke regel bedoel je?"
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="cross-asset-ambiguous", model_led_coach=True,
+    )
+
+    async def read(_call):
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"complete": True, "setups": [
+                {"setup_id": 1, "name": "BTC Full Base", "symbol": "BTC"},
+                {"setup_id": 2, "name": "BTC Breakout Full", "symbol": "BTC"},
+                {"setup_id": 3, "name": "Apple Full Setup", "symbol": "AAPL"},
+            ]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+    ))
+    tool_result = result.response.tool_trace[0]["result"]
+    assert tool_result["finalize_now"] is True
+    assert "turn_request" not in tool_result
+    assert result.response.turn_contract["targets"] == []
+    assert fake.requests[1]["tool_choice"] == "none"
+
+
+def test_current_risk_tradeoff_outweighs_tool_list_hint():
+    contract = build_turn_contract(
+        message=("Zou een kleinere positie met een ruimere stop verstandiger zijn? "
+                 "Weeg stopafstand en positieomvang af."),
+        tool_trace=({"result": {"turn_request": {"answer_type": "list"}}},),
+    )
+    assert contract["answer_type"] == "weigh"
+    assert contract["targets"] == []
+    assert turn_contract_gap(contract, "Een ruimere stop vraagt om een kleinere positie.") is None
+    assert turn_contract_gap(contract, "Een wachttijd helpt.") == "risk_tradeoff_topic_missing"
+
+
+def test_saved_entry_question_requires_linked_strategy_read_before_absence_claim():
+    message = "Ik krijg FOMO bij dat plan. Wat zijn de instap en stop?"
+    setup_read = ({"name": "evaluate_setup", "result": {"results": [{
+        "scope": "read_active_setup", "status": "completed", "data": {
+            "setup_id": 42, "name": "BTC Full Base", "symbol": "BTC",
+        },
+    }]}},)
+    subject = {"setup_id": 42, "name": "BTC Full Base", "symbol": "BTC"}
+    contract = build_turn_contract(
+        message=message, tool_trace=setup_read, previous_subject=subject,
+    )
+    assert contract["saved_subject_reference"]
+    assert turn_contract_gap(
+        contract, "Bij BTC Full Base zie ik geen instap of stopniveau.",
+    ) == "linked_strategy_not_checked"
+    strategy_attempt = setup_read + ({"name": "get_active_plan_and_strategy", "result": {
+        "results": [{"scope": "read_linked_strategy", "status": "unavailable",
+                     "reason": "strategy_not_resolved", "data": None}],
+    }},)
+    attempted = build_turn_contract(
+        message=message, tool_trace=strategy_attempt, previous_subject=subject,
+    )
+    assert turn_contract_gap(
+        attempted, "Ik kon de gekoppelde strategie niet eenduidig lezen.",
+    ) is None
+
+
+def test_verified_single_inventory_row_becomes_durable_ordinal_subject():
+    row = {"setup_id": 42, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"}
+    previous = {
+        "terminal_status": "completed", "terminal_kind": "free_text",
+        "user_message": "Nummer twee: wat weet je daarvan uit mijn opgeslagen gegevens?",
+        "answer": "Nummer twee is BTC Full Base, een BTC-setup op 4H.",
+        "turn_contract": {"targets": [{"setup_id": 42, "name": "BTC Full Base"}]},
+        "tool_trace": [{"name": "get_saved_setup_inventory", "status": "completed",
+                        "result": {"results": [{"scope": "read_saved_setup_inventory",
+                                                "status": "completed", "data": {"setups": [row]}}]}}],
+    }
+    assert verified_selected_setup(previous) == (42, "BTC Full Base")
+    assert verified_selected_setup_asset(previous, 42) == "BTC"
+    previous["turn_contract"]["targets"] = [
+        {"setup_id": 41, "name": "BTC Breakout Full"},
+        {"setup_id": 42, "name": "BTC Full Base"},
+    ]
+    assert verified_selected_setup(previous) is None
+
+
+def test_saved_strategy_levels_use_typed_source_without_semantic_rewrite():
+    message = "En welke entry en stop horen daarbij volgens mijn opgeslagen strategie?"
+    trace = ({
+        "name": "get_active_plan_and_strategy", "status": "completed",
+        "result": {"results": [
+            {"scope": "read_active_setup", "status": "completed",
+             "data": {"setup_id": 42, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"}},
+            {"scope": "read_linked_strategy", "status": "completed",
+             "data": {"setup_id": 42, "name": "BTC Full Base Strategy",
+                      "entry": "76000", "stop_loss": "72000"}},
+        ]},
+    },)
+    draft = "Volgens BTC Full Base Strategy is de entry 76.000 en de stop-loss 72.000."
+    result = FinnResponsesResult(
+        draft, "saved-levels", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=message, tool_trace=trace),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=AssertionError("unexpected model judge")))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=message, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.text == draft
+    assert answer.reason == "source_bound_read"
+    semantic.verify_async.assert_not_awaited()
+    coaching_question = "Ik krijg FOMO bij dat plan. Wat zijn de instap en stop, en wat zou je eerst checken?"
+    coaching_draft = (
+        "Voor BTC Full Base staat in BTC Full Base Strategy een instap op 76.000 "
+        "en een stop-loss op 72.000. Dat zijn opgeslagen niveaus, geen advies om nu in te stappen. "
+        "Controleer eerst je vooraf bepaalde instapvoorwaarden; FOMO is geen bevestiging."
+    )
+    coaching_result = FinnResponsesResult(
+        coaching_draft, "saved-levels-coach", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=coaching_question, tool_trace=trace),
+    )
+    coached = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=coaching_question, result=coaching_result, locale="nl",
+    ))
+    assert coached.status == "completed" and coached.text == coaching_draft
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_linked_strategy_identity_uses_typed_source_without_semantic_rewrite():
+    message = "Welke strategie is gekoppeld aan BTC Full Base? Lees die opgeslagen strategie zonder iets te wijzigen."
+    trace = ({
+        "name": "get_active_plan_and_strategy", "status": "completed",
+        "result": {"results": [
+            {"scope": "read_active_setup", "status": "completed",
+             "data": {"setup_id": 42, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"}},
+            {"scope": "read_linked_strategy", "status": "completed",
+             "data": {"setup_id": 42, "name": "BTC Full Base Strategy",
+                      "entry": "76000", "stop_loss": "72000"}},
+        ]},
+    },)
+    draft = "Aan BTC Full Base is BTC Full Base Strategy gekoppeld; de entry is 76.000 en de stop-loss 72.000."
+    result = FinnResponsesResult(
+        draft, "linked-strategy", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=message, tool_trace=trace),
+    )
+    assert "strategy_name" in result.turn_contract["requested_fields"]
+    semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=AssertionError("unexpected model judge")))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=message, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.text == draft
+    assert answer.reason == "source_bound_read"
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_asset_transfer_boundary_survives_ambiguous_saved_source():
+    message = "Als ik Apple koop vanwege FOMO, mag ik dan dezelfde regel als bij BTC hanteren?"
+    rows = [
+        {"setup_id": 1, "name": "BTC Breakout Full", "symbol": "BTC"},
+        {"setup_id": 2, "name": "BTC Full Base", "symbol": "BTC"},
+        {"setup_id": 3, "name": "Apple Full Setup", "symbol": "AAPL"},
+    ]
+    trace = ({"name": "get_saved_setup_inventory", "status": "completed", "result": {
+        "results": [{"scope": "read_saved_setup_inventory", "status": "completed",
+                     "data": {"setups": rows, "complete": True}}],
+    }},)
+    draft = (
+        "Gebruik niet automatisch dezelfde regel voor Apple als voor BTC. "
+        "Welke BTC-setup bedoel je: BTC Breakout Full of BTC Full Base?"
+    )
+    result = FinnResponsesResult(
+        draft, "asset-boundary", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=message, tool_trace=trace),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=AssertionError("unexpected model judge")))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=message, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.text == draft
+    assert answer.reason == "source_bound_asset_transfer"
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_comparison_can_explicitly_exclude_an_unselected_setup():
+    message = "Vergelijk BTC Full Base met Apple Full Setup, niet ETH Full Setup."
+    rows = [
+        {"setup_id": 1, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"},
+        {"setup_id": 2, "name": "Apple Full Setup", "symbol": "AAPL", "timeframe": "1D"},
+        {"setup_id": 3, "name": "ETH Full Setup", "symbol": "ETH", "timeframe": "4H"},
+    ]
+    trace = ({"name": "get_saved_setup_inventory", "status": "completed", "result": {
+        "turn_request": {"answer_type": "compare", "target_ids": [1, 2]},
+        "results": [{"scope": "read_saved_setup_inventory", "status": "completed",
+                     "data": {"setups": rows, "complete": True}}],
+    }},)
+    draft = (
+        "BTC Full Base is een BTC-setup op 4H; Apple Full Setup is een AAPL-setup op 1D. "
+        "Ik heb geen ETH Full Setup gebruikt."
+    )
+    result = FinnResponsesResult(
+        draft, "excluded-object", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=message, tool_trace=trace),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=AssertionError("unexpected model judge")))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=message, result=result, locale="nl",
+    ))
+    assert answer.status == "completed" and answer.reason == "source_bound_read"
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_verified_single_setup_overrides_only_spurious_ambiguity_verdict():
+    message = "Ik krijg FOMO bij dat plan. Wat zijn de instap en stop?"
+    evaluation = {"name": "evaluate_setup", "status": "completed", "result": {
+        "evaluation_operation_id": "evaluate_setup",
+        "assessment_status": "evidence_collected_not_yet_judged", "results": [],
+    }}
+    read = {"name": "get_active_plan_and_strategy", "status": "completed", "result": {
+        "results": [
+            {"scope": "read_active_setup", "status": "completed", "data": {
+                "setup_id": 42, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H",
+            }},
+            {"scope": "read_linked_strategy", "status": "completed", "data": {
+                "setup_id": 42, "name": "BTC Full Base Strategy",
+                "entry": "76000", "stop_loss": "72000",
+            }},
+        ],
+    }}
+    trace = (evaluation, read)
+    text = (
+        "Bij BTC Full Base staat in je opgeslagen strategie een instap op 76.000 "
+        "en een stop-loss op 72.000. Dit is geen bevestiging om nu te kopen."
+    )
+    result = FinnResponsesResult(
+        text, "typed-target", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=message, tool_trace=trace),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["setup_ambiguous"],
+    )))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=message, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.text == text
+
+
+def test_unselected_source_can_state_ambiguity_without_fixed_fallback():
+    message = "Mag ik dezelfde BTC-regel ook voor Apple gebruiken?"
+    draft = (
+        "Een BTC-regel geldt niet automatisch voor Apple. Ik kan niet bevestigen "
+        "welke BTC-regel je bedoelt of of die in de Apple-setup staat. Welke regel bedoel je?"
+    )
+    trace = ({"name": "get_saved_setup_inventory", "status": "completed", "result": {
+        "results": [{"scope": "read_saved_setup_inventory", "status": "completed",
+                     "data": {"complete": True, "setups": [
+                         {"setup_id": 1, "name": "BTC Breakout Full", "symbol": "BTC"},
+                         {"setup_id": 2, "name": "BTC Full Base", "symbol": "BTC"},
+                         {"setup_id": 3, "name": "Apple Full Setup", "symbol": "AAPL"},
+                     ]}}],
+    }},)
+    result = FinnResponsesResult(
+        draft, "ambiguous-source", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=message, tool_trace=trace),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["setup_ambiguous"],
+    )))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=message, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.text == draft
+    second_draft = (
+        "Ga niet automatisch uit van dezelfde regel: er zijn aparte BTC- en Apple-setups, "
+        "maar geen bevestigingsregel om gelijkheid vast te stellen. "
+        "Welke BTC-regel bedoel je precies?"
+    )
+    second_result = FinnResponsesResult(
+        second_draft, "ambiguous-source-2", trace, model_led_coach=True,
+        model_owned_repair=True,
+        turn_contract=build_turn_contract(message=message, tool_trace=trace),
+    )
+    second_answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=message, result=second_result, locale="nl",
+    ))
+    assert second_answer.status == "completed"
+    assert second_answer.text == second_draft
+
+
+def test_inventory_count_is_not_mistaken_for_asset_units():
+    evidence = ({"status": "completed", "asset": "BTC", "scope": "read_saved_setup_inventory",
+                 "data": {"setups": [{"name": "BTC Full Base"}, {"name": "BTC Breakout Full"}]}},)
+    assert FinnResponsesAnswerVerifier._asset_quantities_supported(
+        answer="Ik zie 2 BTC-setups.", message="Welke BTC-setups heb ik?", evidence=evidence,
+    )
+    assert FinnResponsesAnswerVerifier._asset_quantities_supported(
+        answer="Je hebt 2 BTC plannen.", message="Welke BTC-plannen heb ik?", evidence=evidence,
+    )
+    assert not FinnResponsesAnswerVerifier._asset_quantities_supported(
+        answer="Je bezit 2 BTC.", message="Welke BTC-setups heb ik?", evidence=evidence,
+    )
+    inventory_answer = (
+        "Je hebt **2 BTC-setups** opgeslagen:\n\n"
+        "- **BTC Breakout Full** — trade, 4H\n"
+        "- **BTC Full Base** — trade, 4H"
+    )
+    assert FinnResponsesAnswerVerifier._language_matches(inventory_answer, "nl")
+    detail_answer = (
+        "Van **BTC Full Base** staat vast:\n\n"
+        "- **Asset:** BTC\n- **Timeframe:** 4H\n- **Type:** trade\n\n"
+        "Er zijn geen DCA-instellingen of minimuminvestering ingevuld."
+    )
+    assert FinnResponsesAnswerVerifier._language_matches(detail_answer, "nl")
+    assert not FinnResponsesAnswerVerifier._language_matches(
+        "You have two saved BTC setups and can review them now.", "nl",
+    )
+
+
 def test_strategy_field_followup_reads_linked_strategy_instead_of_setup_names():
     draft = "BTC Full Base Strategy heeft entry 76.000; een aparte trigger is niet bevestigd."
     fake = FakeResponses(
@@ -896,7 +1329,7 @@ def test_comparison_correction_rereads_prior_pair_and_excludes_negated_setup():
         )]),
         response("correction-answer", text="BTC Full Base staat op 4H; Apple Full Setup staat op 1D."),
     )
-    front = FinnResponsesFrontDoor(client=SimpleNamespace(responses=fake), session=object(), user_id=7, run_id="compare-correction")
+    front = FinnResponsesFrontDoor(client=SimpleNamespace(responses=fake), session=object(), user_id=7, run_id="compare-correction", model_led_coach=True)
     front.relevance_guard = SimpleNamespace(
         saved_plan_query_kind=AsyncMock(return_value={"kind": "inventory", "source_asset": "", "target_asset": ""}),
         previous_answer_suffices=AsyncMock(return_value=False),
@@ -965,6 +1398,11 @@ def test_turn_contract_keeps_stop_distance_and_position_size_as_the_topic():
     )
     assert contract["answer_type"] == "weigh"
     assert {"stop_distance", "position_size"} <= set(contract["requested_fields"])
+    assert can_compose_after_first_read(contract)
+    assert not can_compose_after_first_read({**contract, "targets": [{"setup_id": 42}]})
+    assert not can_compose_after_first_read({
+        **contract, "requested_fields": [*contract["requested_fields"], "entry"],
+    })
     assert turn_contract_gap(contract, "Een strenge wachttijd is niet vanzelf veiliger.") == "risk_tradeoff_topic_missing"
     assert turn_contract_gap(contract, "Een ruimere stop vergroot verlies per eenheid; een kleinere positie begrenst het totaalrisico.") is None
 
@@ -3781,10 +4219,10 @@ def test_next_decision_followup_is_restricted_to_previous_verified_answer(messag
 
 
 def test_model_led_next_decision_uses_completed_verified_answer():
-    fake = FakeResponses(response("r1", text=json.dumps({
-        "reason": "De geschiktheid van een wijziging is nog onbewezen.",
-        "next_decision": "Bepaal eerst of je de huidige inleg wilt aanhouden.",
-    })))
+    fake = FakeResponses(response("r1", text=(
+        "De geschiktheid van een wijziging is nog onbewezen. "
+        "Bepaal eerst of je de huidige inleg wilt aanhouden."
+    )))
     front = object.__new__(FinnResponsesFrontDoor)
     front.client = SimpleNamespace(responses=fake)
     front.user_id = 21
@@ -3810,15 +4248,12 @@ def test_model_led_next_decision_uses_completed_verified_answer():
             "terminal_status": "completed", "tool_trace": [],
         },
     ))
-    front.relevance_guard.previous_answer_suffices.assert_awaited_once_with(
-        message="Welke keuze moet ik nu eerst maken?",
-        previous_answer="De huidige DCA-inleg is bekend, maar actuele marktdata ontbreken.",
-        model="gpt-6-luna", reasoning_effort="none",
-    )
+    front.relevance_guard.previous_answer_suffices.assert_not_awaited()
     assert fake.requests[0]["model"] == "gpt-6-luna"
     assert fake.requests[0]["reasoning"] == {"effort": "none"}
-    assert fake.requests[0]["tool_choice"] == "none"
-    assert result.response.answer_kind == "grounded_next_decision"
+    assert fake.requests[0]["tool_choice"] == "auto"
+    assert result.response.answer_kind == "free_text"
+    assert "Bepaal eerst" in result.response.text
 
 
 def test_next_decision_uses_prior_typed_absence_without_inventing_strategy():
@@ -4322,7 +4757,8 @@ def test_model_led_explanation_of_verified_answer_does_not_fetch_market_data():
         },
     ))
     assert turn.response.tool_trace == ()
-    assert fake.requests[0]["tool_choice"] == "none"
+    front.relevance_guard.previous_answer_suffices.assert_not_awaited()
+    assert fake.requests[0]["tool_choice"] == "auto"
 
 
 def test_model_led_followup_after_open_tool_response_uses_verified_context_only():
@@ -4550,7 +4986,9 @@ def test_read_only_coach_questions_cannot_be_reaudited_as_mutations(question):
         verified_asset=None,
     ))
     assert result.proposal_analysis is None
-    assert fake.requests[0]["tool_choice"] == "none"
+    assert fake.requests[0]["tool_choice"] == "auto"
+    assert all(not tool["name"].startswith("propose_") for tool in fake.requests[0]["tools"])
+    assert all(tool["name"] != "ask_for_clarification" for tool in fake.requests[0]["tools"])
     front.relevance_guard.requested_action_contract.assert_not_awaited()
 
 
@@ -8948,9 +9386,8 @@ def test_saved_confirmation_question_requires_a_read_and_uses_verified_absence()
         message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
         model_led_coach=True, locale="nl",
     ))
-    assert fake.requests[0]["tool_choice"] == {
-        "type": "function", "name": "get_active_plan_and_strategy",
-    }
+    assert fake.requests[0]["tool_choice"] == "auto"
+    assert result.tool_trace[0]["name"] == "get_active_plan_and_strategy"
     answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=question, result=result, locale="nl",
     ))
@@ -8959,6 +9396,26 @@ def test_saved_confirmation_question_requires_a_read_and_uses_verified_absence()
     assert "geen concrete bevestigings- of entryregel" in answer.text
     assert "BTC 4H" in answer.text
     assert "betrouwbare gegevens" not in answer.text
+
+
+def test_model_owned_verifier_returns_rejection_instead_of_replacement_copy():
+    question = "Welke bevestigingsregel staat in mijn opgeslagen BTC 4H-setup?"
+    draft = "Ik kan dit nog niet onderbouwen met betrouwbare gegevens."
+    result = FinnResponsesResult(
+        draft, "model-draft", ({"result": {"results": [
+            {"scope": "read_active_setup", "status": "completed",
+             "data": {"setup_id": 7, "name": "BTC 4H", "timeframe": "4H"}},
+            {"scope": "read_linked_strategy", "status": "unavailable",
+             "reason": "strategy_not_resolved", "data": None},
+        ]}},), model_led_coach=True, model_owned_repair=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.status == "unavailable"
+    assert answer.reason == "responses_evidence_not_verified"
+    assert answer.rejection_details["replacement_reason"] == "saved_confirmation_readback"
+    assert "geen concrete bevestigings- of entryregel" not in answer.text
 
 
 def test_saved_confirmation_question_names_ambiguous_matching_setups():
@@ -9015,7 +9472,8 @@ def test_hypothetical_trade_reflection_uses_no_action_tools():
         message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
         model_led_coach=True, locale="nl",
     ))
-    assert fake.requests[0]["tool_choice"] == "none"
+    assert fake.requests[0]["tool_choice"] == "auto"
+    assert all(not tool["name"].startswith("propose_") for tool in fake.requests[0]["tools"])
     assert result.tool_trace == ()
 
 
@@ -9033,12 +9491,12 @@ def test_standalone_coach_questions_do_not_inherit_unrelated_setup_read(question
         verified_turn_context={"answer": "BTC 4H-setup", "evidence": [{"scope": "read_active_setup"}]},
         model_led_coach=True, locale="nl",
     ))
-    assert fake.requests[0].get("previous_response_id") is None
-    assert [item["role"] for item in fake.requests[0]["input"]] == ["user"]
-    assert not result.uses_previous_response
+    assert fake.requests[0]["previous_response_id"] == "previous-setup-response"
+    assert fake.requests[0]["input"][-1]["role"] == "user"
+    assert result.tool_trace == ()
 
 
-def test_hypothetical_trade_reflection_has_safe_timeout_reply():
+def test_hypothetical_trade_reflection_timeout_does_not_forge_coaching():
     question = (
         "Stel: ik nam deze maand 8 impulsieve trades, 6 verlies en 2 winst, "
         "samen -4,2%. Wat is het belangrijkste patroon en welke ene regel zou ik testen?"
@@ -9052,18 +9510,14 @@ def test_hypothetical_trade_reflection_has_safe_timeout_reply():
         client=SimpleNamespace(responses=provider), executor=AsyncMock(),
         provider_timeout_seconds=0.01,
     )
-    result = asyncio.run(loop.run(
-        message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
-        model_led_coach=True, locale="nl",
-    ))
-    assert result.answer_kind == "provider_unavailable"
-    assert not result.response_id_reusable
-    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
-        message=question, result=result, locale="nl",
-    ))
-    assert answer.reason == "safe_hypothetical_reflection"
-    assert "geen opgeslagen tradehistorie" in answer.text
-    assert "één regel" in answer.text
+    with pytest.raises(FinnResponsesError, match="responses_provider_timeout"):
+        asyncio.run(loop.run(
+            message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+            model_led_coach=True, locale="nl",
+        ))
+    request = provider.create.await_args.kwargs
+    assert request["tool_choice"] == "auto"
+    assert all(not tool["name"].startswith("propose_") for tool in request["tools"])
 
 
 def test_first_provider_call_retries_one_transient_server_failure():
@@ -9109,7 +9563,7 @@ def test_rule_objection_does_not_replace_stop_size_question_with_waiting_copy():
     assert "wachttijd" not in answer.text
 
 
-def test_read_only_stop_loss_coaching_completes_on_provider_timeout():
+def test_read_only_stop_loss_timeout_does_not_forge_coaching():
     question = (
         "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. "
         "Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?"
@@ -9125,20 +9579,14 @@ def test_read_only_stop_loss_coaching_completes_on_provider_timeout():
         client=SimpleNamespace(responses=provider), executor=AsyncMock(),
         provider_timeout_seconds=0.01,
     )
-    result = asyncio.run(loop.run(
-        message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
-        model_led_coach=True, locale="nl",
-    ))
-    assert result.answer_kind == "provider_unavailable"
-    assert result.response_id.startswith("local-safe-coach-")
-    assert result.text.strip() and not result.response_id_reusable
-    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
-        message=question, result=result, locale="nl",
-    ))
-    assert answer.status == "completed"
-    assert answer.reason == "safe_stop_loss_coaching"
-    assert "stop-loss niet uit angst" in answer.text
-    assert "Ik wijzig niets" in answer.text
+    with pytest.raises(FinnResponsesError, match="responses_provider_timeout"):
+        asyncio.run(loop.run(
+            message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+            model_led_coach=True, locale="nl",
+        ))
+    request = provider.create.await_args.kwargs
+    assert request["tool_choice"] == "auto"
+    assert all(not tool["name"].startswith("propose_") for tool in request["tools"])
 
 
 def test_stop_loss_coach_does_not_offer_a_mental_exit_as_order_substitute():

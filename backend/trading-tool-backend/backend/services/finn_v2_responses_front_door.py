@@ -32,7 +32,9 @@ from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
     verified_selected_setup_asset,
 )
-from backend.services.finn_v2_turn_contract import build_turn_contract, referenced_setup_rows
+from backend.services.finn_v2_turn_contract import (
+    build_turn_contract, can_compose_after_first_read, referenced_setup_rows,
+)
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -134,9 +136,18 @@ class FinnResponsesFrontDoor:
             "Lead the conversation: answer directly when general reasoning suffices, ask one "
             "useful follow-up when a choice is missing, and call one or more FINN tools when "
             "the answer needs saved account facts, a personal assessment, or current data. "
+            "For a question asking what entry, stop or target is saved, read the selected "
+            "setup and linked strategy. An evaluation of plan quality cannot substitute "
+            "for that linked-strategy read. "
+            "If a general boundary can be answered without the exact saved rule, answer "
+            "that boundary first. For example, a rule for one asset does not automatically "
+            "apply to another; ask which rule only for a detailed comparison. "
             "For a general explanation, answer without account reads and do not invent an "
             "example price, currency amount, or holding. If asked what to do now, offer a "
             "specific safe process step rather than a generic invitation to ask again. "
+            "For a general risk tradeoff or calculation, answer the mechanism directly. "
+            "Do not evaluate an entire personal plan solely because the trader says 'my plan' "
+            "without identifying a saved setup or requesting a personal suitability judgment. "
             "User statements are conversational context, not proof of saved FINN facts. "
             "A short reply to a question you just asked supplies conversational detail; it "
             "does not authorize changing a saved object unless the user explicitly requests that change. "
@@ -154,7 +165,7 @@ class FinnResponsesFrontDoor:
             "broker order or live-bot activation. Hide internal IDs and error codes."
         )
 
-    def __init__(self, *, client: Any, session: Any = None, session_factory: Any = None, user_id: int, run_id: str, model_led_coach: bool = True) -> None:
+    def __init__(self, *, client: Any, session: Any = None, session_factory: Any = None, user_id: int, run_id: str, model_led_coach: bool = False) -> None:
         self.client = client
         self.user_id = user_id
         self.run_id = run_id
@@ -401,6 +412,7 @@ class FinnResponsesFrontDoor:
             query = {"kind": "confirmation_inventory"}
         if (
             pending_operation is None and not resuming_clarification and is_read_request
+            and not getattr(self, "model_led_coach", False)
             and (inventory_followup or listed_setup_id)
             and not multiple_targets
             and not (subject_reference and not collection_cue and not cross_asset_cue
@@ -444,7 +456,8 @@ class FinnResponsesFrontDoor:
                 message, re.I,
             ))
         )
-        if unresolved_transfer and pending_operation is None and not resuming_clarification:
+        if (unresolved_transfer and not getattr(self, "model_led_coach", False)
+                and pending_operation is None and not resuming_clarification):
             return FinnResponsesFrontDoorResult(
                 FinnResponsesResult(
                     text="Asset rule transfer needs an unambiguous source and target.",
@@ -458,6 +471,7 @@ class FinnResponsesFrontDoor:
             and not resuming_clarification
             and is_read_request
             and query_kind in {"inventory", "confirmation_inventory", "cross_asset_scope", "listed_setup_reference"}
+            and not getattr(self, "model_led_coach", False)
         ):
             # Collection questions have their own typed, owner-scoped read.
             # No active setup or linked strategy is selected here.
@@ -572,6 +586,7 @@ class FinnResponsesFrontDoor:
             guard is not None
             and previous_response and previous_response.get("answer") and not pending_operation
             and not force_read_repair
+            and not getattr(self, "model_led_coach", False)
             and not _read_only_stop_loss_coaching(message)
             and not _hypothetical_trade_reflection(message)
             and (not resuming_clarification or detail_clarification)
@@ -806,6 +821,10 @@ class FinnResponsesFrontDoor:
                     # One global asset or timeframe would silently remove the
                     # other side of a multi-object read.
                     call = replace(call, inputs={})
+                if call.name == "get_saved_setup_inventory" and listed_setup_id is not None:
+                    # The model chose the read; the server binds an ordinal to
+                    # the preceding owner-scoped inventory, never to a model ID.
+                    call = replace(call, inputs={"setup_ids": [listed_setup_id]})
                 previous_setup_target: dict[str, object] = (
                     {"entity_type": "setup", "entity_id": verified_subject[0]}
                     if subject_reference and verified_subject else {}
@@ -955,6 +974,7 @@ class FinnResponsesFrontDoor:
                     # model receives the requested records, not unrelated setups
                     # that happen to share an asset or timeframe.
                     projected_results = []
+                    resolved_setup_ids: list[int] = []
                     for item in read_result.get("results", []):
                         if not isinstance(item, dict):
                             projected_results.append(item)
@@ -964,12 +984,67 @@ class FinnResponsesFrontDoor:
                         if item.get("scope") != "read_saved_setup_inventory" or not isinstance(rows, list):
                             projected_results.append(item)
                             continue
+                        available_rows = [row for row in rows if isinstance(row, dict)]
                         named_rows = referenced_setup_rows(
                             message=message,
-                            rows=[row for row in rows if isinstance(row, dict)],
+                            rows=available_rows,
                             previous_contract=previous_turn_contract,
                         )
-                        if len(named_rows) >= 2:
+                        if call.setup_names:
+                            by_name = {
+                                str(row.get("name") or "").casefold(): row
+                                for row in available_rows
+                            }
+                            previous_ids = {
+                                row["setup_id"] for row in prior_pair
+                                if isinstance(row.get("setup_id"), int)
+                            }
+                            if (
+                                verified_subject and subject_asset in mentioned_assets
+                                and references_selected_setup(message, subject_asset)
+                            ):
+                                previous_ids.add(verified_subject[0])
+                            chosen = [by_name.get(name.casefold()) for name in call.setup_names]
+                            if any(row is None or not (
+                                str(row.get("name") or "").casefold() in message.casefold()
+                                or row.get("setup_id") in previous_ids
+                            ) for row in chosen) or len({
+                                row.get("setup_id") for row in chosen if row is not None
+                            }) != len(chosen):
+                                return {
+                                    "status": "retry", "reason": "setup_names_not_bound_to_user_request",
+                                    "instruction": (
+                                        "Use only setup names explicitly in the latest user question or "
+                                        "the two previously verified setups it refers to. The read was "
+                                        "owner-scoped but your named targets did not match that request."
+                                    ),
+                                }
+                            named_rows = chosen
+                        if (
+                            verified_subject and subject_asset in mentioned_assets
+                            and len(mentioned_assets) == 2
+                            and references_selected_setup(message, subject_asset)
+                        ):
+                            source_row = next((
+                                row for row in available_rows
+                                if row.get("setup_id") == verified_subject[0]
+                            ), None)
+                            target_rows = [
+                                row for row in available_rows
+                                if str(row.get("symbol") or "").upper()
+                                in (mentioned_assets - {subject_asset})
+                            ]
+                            if source_row and len(target_rows) == 1 and (
+                                not call.setup_names or named_rows == [source_row]
+                            ):
+                                named_rows = [source_row, target_rows[0]]
+                        selected_rows = named_rows is not available_rows or bool(call.setup_names)
+                        if selected_rows or (call.answer_mode == "list" and explicit_list):
+                            resolved_setup_ids = [
+                                row["setup_id"] for row in named_rows
+                                if isinstance(row.get("setup_id"), int)
+                            ]
+                        if selected_rows:
                             projected_results.append({
                                 **item, "data": {
                                     **data, "setups": named_rows,
@@ -979,6 +1054,15 @@ class FinnResponsesFrontDoor:
                         else:
                             projected_results.append(item)
                     read_result = {**read_result, "results": projected_results}
+                    verified_answer_mode = (
+                        call.answer_mode
+                        if call.answer_mode != "list" or explicit_list else None
+                    )
+                    if resolved_setup_ids or verified_answer_mode:
+                        read_result["turn_request"] = {
+                            "target_ids": resolved_setup_ids,
+                            **({"answer_type": verified_answer_mode} if verified_answer_mode else {}),
+                        }
                     if (multiple_targets or pair_followup) and any(
                         item.get("scope") == "read_saved_setup_inventory"
                         and len((item.get("data") or {}).get("setups") or []) == 2
@@ -987,6 +1071,34 @@ class FinnResponsesFrontDoor:
                         # The two requested rows are now in one typed result.
                         # Spend the next provider round answering, not rereading
                         # the same pair until the run deadline expires.
+                        read_result["finalize_now"] = True
+                    elif len(mentioned_assets) >= 2 and any(
+                        item.get("scope") == "read_saved_setup_inventory"
+                        and item.get("status") == "completed"
+                        and (item.get("data") or {}).get("complete") is True
+                        and mentioned_assets <= {
+                            str(row.get("symbol") or "").upper()
+                            for row in (item.get("data") or {}).get("setups") or []
+                            if isinstance(row, dict)
+                        }
+                        for item in projected_results if isinstance(item, dict)
+                    ):
+                        # A complete owner-scoped collection has already shown
+                        # every named asset. Repeated reads cannot resolve a
+                        # missing user choice; compose the boundary or ask it.
+                        read_result["finalize_now"] = True
+                if getattr(self, "model_led_coach", False) and not verified_subject and not read_result.get("finalize_now"):
+                    current_contract = build_turn_contract(
+                        message=message,
+                        tool_trace=({"name": call.name, "result": read_result},),
+                        previous_contract=previous_turn_contract,
+                    )
+                    if can_compose_after_first_read(current_contract):
+                        # The model chose its first read. Once a general
+                        # stop/size tradeoff has no selected saved target,
+                        # another account lookup cannot establish a personal
+                        # level; the answer should explain the mechanism and
+                        # acknowledge any missing personal evidence.
                         read_result["finalize_now"] = True
                 read_context.append(read_result)
                 completed_read_calls.add(read_identity)
@@ -1240,7 +1352,7 @@ class FinnResponsesFrontDoor:
                 tool_trace=(*prior_tool_trace, *result.tool_trace),
                 previous_subject=(previous_response or {}).get("verified_setup_subject"),
                 previous_contract=previous_turn_contract,
-            ))
+            ), model_owned_repair=result.answer_kind == "free_text")
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
             recent_action_result = {}

@@ -47,8 +47,8 @@ def _requested_fields(message: str) -> list[str]:
         "asset": r"\b(?:asset|symbol|symbool)\b",
         "timeframe": r"\b(?:timeframe|tijdframe|4h|1d|1h|1w|15m|30m)\b",
         "setup_type": r"\b(?:type|soort)\b",
-        "strategy_name": r"\b(?:strategienaam|strategy name)\b",
-        "entry": r"\b(?:entryniveau|instapniveau|entry level)\b",
+        "strategy_name": r"\b(?:strategienaam|strategy name|welke strategie|which strategy|welche strategie)\b",
+        "entry": r"\b(?:entry|entryniveau|instap|instapniveau|entry level)\b",
         "confirmation": r"\b(?:trigger|bevestig\w*|confirmation)\b",
         "stop_distance": r"\b(?:stop\w*|exit\w*)\b",
         "position_size": r"\b(?:positie\w*|position\w*|inzet|size)\b",
@@ -66,8 +66,22 @@ def build_turn_contract(
     setups: dict[int, dict[str, Any]] = {}
     strategies: dict[int, dict[str, Any]] = {}
     evidence_fields = []
+    attempted_scopes: set[str] = set()
+    model_answer_type: str | None = None
+    resolved_target_ids: list[int] = []
     for call in tool_trace:
+        turn_request = (call.get("result") or {}).get("turn_request") or {}
+        if isinstance(turn_request, dict):
+            if turn_request.get("answer_type") in {"list", "compare", "explain"}:
+                model_answer_type = turn_request["answer_type"]
+            if isinstance(turn_request.get("target_ids"), list):
+                resolved_target_ids = [
+                    value for value in turn_request["target_ids"]
+                    if isinstance(value, int)
+                ]
         for item in (call.get("result") or {}).get("results") or []:
+            if isinstance(item, dict) and isinstance(item.get("scope"), str):
+                attempted_scopes.add(item["scope"])
             if not isinstance(item, dict) or item.get("status") != "completed":
                 continue
             data = item.get("data")
@@ -101,7 +115,8 @@ def build_turn_contract(
     ):
         named_ids = [prior_id]
 
-    target_ids = named_ids or ([next(iter(setups))] if len(setups) == 1 else [])
+    bound_ids = [setup_id for setup_id in resolved_target_ids if setup_id in setups]
+    target_ids = bound_ids or named_ids or ([next(iter(setups))] if len(setups) == 1 else [])
     targets = []
     for setup_id in target_ids:
         row = setups[setup_id]
@@ -119,6 +134,8 @@ def build_turn_contract(
         selected_answer_type = "compare"
     elif re.search(r"\b(?:verstandiger|afweging|weeg|wegen|wise|trade.off)\b", message, re.I):
         selected_answer_type = "weigh"
+    elif model_answer_type:
+        selected_answer_type = model_answer_type
     else:
         selected_answer_type = "explain"
     if (
@@ -136,6 +153,16 @@ def build_turn_contract(
         "requested_fields": _requested_fields(message),
         "targets": targets,
         "evidence_fields": evidence_fields,
+        "attempted_scopes": sorted(attempted_scopes),
+        "saved_subject_reference": bool(
+            (isinstance(prior_id, int)
+             and references_selected_setup(message, prior_asset))
+            or re.search(
+                r"\b(?:mijn|my|meine)\s+(?:opgeslagen\s+|saved\s+|gespeicherte\s+)?"
+                r"(?:setup|plan|strateg\w*)\b",
+                message, re.I,
+            )
+        ),
     }
 
 
@@ -155,6 +182,12 @@ def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
         ):
             return "comparison_fields_missing"
     fields = contract.get("requested_fields") or []
+    if (
+        "entry" in fields
+        and contract.get("saved_subject_reference")
+        and "read_linked_strategy" not in (contract.get("attempted_scopes") or [])
+    ):
+        return "linked_strategy_not_checked"
     if contract.get("answer_type") == "weigh" and {"stop_distance", "position_size"} <= set(fields):
         if not re.search(r"\b(?:stop\w*|exit\w*)\b", answer, re.I) or not re.search(
             r"\b(?:positie\w*|omvang|grootte|inzet|aantal|size|units?)\b", answer, re.I,
@@ -174,3 +207,16 @@ def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
         if digits and digits not in answer_numbers:
             return "strategy_entry_missing"
     return None
+
+
+def can_compose_after_first_read(contract: Mapping[str, Any]) -> bool:
+    """A general tradeoff needs a bounded explanation, not repeated account reads."""
+    requested_facts = set(contract.get("requested_fields") or ())
+    return bool(
+        contract.get("answer_type") == "weigh"
+        and not contract.get("targets")
+        and {"stop_distance", "position_size"} <= requested_facts
+        and not requested_facts & {
+            "asset", "timeframe", "setup_type", "strategy_name", "entry", "confirmation",
+        }
+    )

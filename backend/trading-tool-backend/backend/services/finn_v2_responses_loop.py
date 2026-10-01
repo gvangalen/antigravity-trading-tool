@@ -7,7 +7,6 @@ import json
 import re
 import logging
 import time
-import uuid
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -295,6 +294,7 @@ class FinnResponsesResult:
     model_led_coach: bool = False
     response_id_reusable: bool = True
     turn_contract: dict[str, Any] | None = None
+    model_owned_repair: bool = False
 
 
 class FinnResponsesLoop:
@@ -356,18 +356,11 @@ class FinnResponsesLoop:
         model_led_coach: bool = False,
         rejection_feedback: dict[str, Any] | None = None,
     ) -> FinnResponsesResult:
-        stop_loss_coaching = model_led_coach and _read_only_stop_loss_coaching(message)
-        hypothetical_trade_reflection = model_led_coach and _hypothetical_trade_reflection(message)
-        if stop_loss_coaching or hypothetical_trade_reflection:
-            # These are self-contained coach questions. A preceding setup read
-            # must not become an implied fact about this hypothetical decision.
-            previous_response_id = None
-            verified_turn_context = None
-            previous_verified_answer = None
-            previous_tool_availability = ()
-            previous_terminal_status = None
-            previous_terminal_reason = None
-            antecedent_verified_answer = None
+        # The latest user turn decides whether previous context is relevant.
+        # Topic words must not silently erase a verified conversation cursor.
+        read_only_coaching = model_led_coach and (
+            _read_only_stop_loss_coaching(message) or _hypothetical_trade_reflection(message)
+        )
         verified_context = (
             f"Earlier verified FINN answer: {antecedent_verified_answer}\n"
             f"Immediately preceding verified FINN answer: {previous_verified_answer or ''}"
@@ -433,24 +426,9 @@ class FinnResponsesLoop:
         incomplete_output_retry_used = False
         transient_provider_retry_used = False
         output_token_override: int | None = None
-        saved_confirmation_readback = model_led_coach and _saved_confirmation_readback(message)
-
-        def safe_coach_timeout_result() -> FinnResponsesResult:
-            # The runtime contract needs an exchange identifier and nonempty
-            # draft even when the provider never returned a response. This
-            # synthetic cursor is never reused as a provider response ID.
-            return FinnResponsesResult(
-                "Read-only coaching fallback.",
-                prior_id or f"local-safe-coach-{uuid.uuid4().hex}",
-                tuple(trace), "provider_unavailable", model_led_coach=True,
-                response_id_reusable=False,
-            )
-
         for _ in range(self.max_rounds):
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
-                if (stop_loss_coaching or hypothetical_trade_reflection) and not proposal_selected:
-                    return safe_coach_timeout_result()
                 raise FinnResponsesError("responses_lifecycle_budget_exhausted")
             retry_target_domain = (
                 str(trace[-1]["result"].get("target_domain") or "")
@@ -469,6 +447,21 @@ class FinnResponsesLoop:
                 retry_target_domain=retry_target_domain,
                 retry_operation_id=retry_operation_id,
             )
+            if model_led_coach and not guided_operation_id:
+                # Conversational clarification belongs in the model's answer.
+                # A separate tool turns a useful answer plus one follow-up
+                # into a fixed question in the legacy verifier.
+                definitions = [
+                    item for item in definitions
+                    if item["name"] != "ask_for_clarification"
+                ]
+            if read_only_coaching and not guided_operation_id:
+                # Limit side-effect capabilities for an explicitly read-only
+                # turn while leaving read choice and composition to the model.
+                definitions = [
+                    item for item in definitions
+                    if not self.catalog.is_proposal_tool(item["name"])
+                ]
             if previous_answer_only or (
                 rejection_feedback and rejection_feedback.get("repair_mode") == "explain_limit"
             ):
@@ -635,22 +628,6 @@ class FinnResponsesLoop:
                     "requested fields. If a named record is absent, say which one is missing; "
                     "do not substitute another setup or answer with the entire inventory."
                 )
-                if stop_loss_coaching:
-                    turn_instructions += (
-                        "\nThe trader asks for read-only coaching about "
-                        "removing a stop-loss. Address that concern directly as a read-only "
-                        "process question. Do not claim to know the saved stop or suggest a "
-                        "replacement level. Do not suggest that a mental exit rule is an "
-                        "equivalent substitute for the protective order. A tool read is "
-                        "unnecessary unless the trader asks for a saved setting."
-                    )
-                if hypothetical_trade_reflection:
-                    turn_instructions += (
-                        "\nThe trader describes a hypothetical example for reflection. "
-                        "Call it an example, not saved trade history or actual performance. "
-                        "Answer the requested pattern and one process rule; do not prepare "
-                        "a setup or other persistent change."
-                    )
                 if resuming_clarification and original_user_request:
                     turn_instructions += (
                         "\nThe trader is answering a clarification for this original request: "
@@ -813,7 +790,7 @@ class FinnResponsesLoop:
             if (proposal_selected or repair_exhausted or limited_evaluations
                     or previous_answer_only
                     or (rejection_feedback and rejection_feedback.get("repair_mode") == "explain_limit")
-                    or (tool_rounds >= 2 and not repair_tool_name
+                    or (not model_led_coach and tool_rounds >= 2 and not repair_tool_name
                         and (not trace or trace[-1]["status"] != "retry"))):
                 kwargs["tool_choice"] = "none"
             elif repair_tool_name:
@@ -823,10 +800,6 @@ class FinnResponsesLoop:
                     {"type": "function", "name": self.catalog.proposal_tool_for_operation(guided_operation_id)}
                     if guided_operation_id else "required" if force_read_repair else "auto"
                 )
-                if saved_confirmation_readback:
-                    kwargs["tool_choice"] = {"type": "function", "name": "get_active_plan_and_strategy"}
-                elif stop_loss_coaching or hypothetical_trade_reflection:
-                    kwargs["tool_choice"] = "none"
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
             if (
@@ -896,8 +869,6 @@ class FinnResponsesLoop:
                     provider_task.add_done_callback(
                         lambda task: task.exception() if not task.cancelled() else None
                     )
-                    if (stop_loss_coaching or hypothetical_trade_reflection) and not proposal_selected:
-                        return safe_coach_timeout_result()
                     if trace and not proposal_selected:
                         return FinnResponsesResult(
                             "Provider response unavailable.", prior_id or "", tuple(trace), "provider_unavailable",
@@ -917,8 +888,6 @@ class FinnResponsesLoop:
                     "FINN Responses provider round timed out round=%d elapsed_seconds=%.2f",
                     tool_rounds + 1, time.perf_counter() - provider_started,
                 )
-                if (stop_loss_coaching or hypothetical_trade_reflection) and not proposal_selected:
-                    return safe_coach_timeout_result()
                 if trace and not proposal_selected:
                     return FinnResponsesResult(
                         "Provider response unavailable.", prior_id or "", tuple(trace), "provider_unavailable",

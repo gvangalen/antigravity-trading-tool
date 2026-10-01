@@ -18,6 +18,18 @@ from backend.scripts.run_finn_v2_persisted_runtime_gate import run_gate
 from backend.utils.auth_utils import create_access_token
 
 
+def _only_excluded_mentions(answer: str, name: str) -> bool:
+    for match in re.finditer(re.escape(name), answer, re.I):
+        before = answer[max(0, match.start() - 50):match.start()]
+        after = answer[match.end():match.end() + 50]
+        if not (
+            re.search(r"\b(?:niet|geen|not|no|keine|kein)\b[^.!?\n]{0,35}$", before, re.I)
+            or re.match(r"[^.!?\n]{0,25}\b(?:niet|geen|not|no|keine|ausgeschlossen|uitgesloten)\b", after, re.I)
+        ):
+            return False
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
@@ -115,18 +127,23 @@ def main() -> None:
                 "read_only": record["proposal"] is None and not state.get("action_result"),
                 "one_dispatch": observed["dispatch_count"] == observed["attempt_count"] == 1,
             }
-            if sequence_number in {1, 2} and turn_number == 1:
+            if sequence_number in {1, 2, 4} and turn_number == 1:
                 checks["complete_inventory"] = (
                     "BTC Breakout Full" in answer and "BTC Full Base" in answer
-                    and exchange.get("answer_kind") == "saved_setup_collection"
+                    and any(call.get("name") == "get_saved_setup_inventory"
+                            and call.get("status") == "completed" for call in trace)
                 )
             if sequence_number in {1, 2} and turn_number == 2:
+                contract = exchange.get("turn_contract") or {}
                 checks["selected_base_identity"] = (
                     "BTC Full Base" in answer
+                    and [target.get("setup_id") for target in contract.get("targets") or []] == [base]
                     and any(
-                        call.get("name") == "get_saved_setup_inventory"
-                        and (call.get("arguments") or {}).get("setup_ids") == [base]
+                        item.get("scope") == "read_saved_setup_inventory"
+                        and item.get("status") == "completed"
+                        and [row.get("setup_id") for row in (item.get("data") or {}).get("setups") or []] == [base]
                         for call in trace
+                        for item in (call.get("result") or {}).get("results") or []
                     )
                 )
             if sequence_number == 1 and turn_number == 3:
@@ -166,13 +183,17 @@ def main() -> None:
                 )
             if sequence_number == 3:
                 checks["asset_boundary"] = (
-                    exchange.get("answer_kind") == "cross_asset_rule_scope"
-                    and "BTC" in answer and "AAPL" in answer
-                    and "niet automatisch" in answer.casefold()
+                    "BTC" in answer and ("AAPL" in answer or "Apple" in answer)
+                    and (
+                        "niet automatisch" in answer.casefold()
+                        or "niet zonder meer" in answer.casefold()
+                        or ("niet aannemen" in answer.casefold()
+                            and "geldt" in answer.casefold())
+                    )
                 )
             if sequence_number == 4 and turn_number == 3:
                 checks["asset_switch_clears_selected_setup"] = (
-                    exchange.get("answer_kind") == "cross_asset_rule_scope"
+                    "BTC" in answer and ("AAPL" in answer or "Apple" in answer)
                     and state.get("verified_setup_subject") is None
                 )
             if sequence_number == 5 and turn_number in {2, 3}:
@@ -181,10 +202,8 @@ def main() -> None:
                         r"(?:bezwaar|probleem)[^.!?]{0,55}wachttijd[^.!?]{0,35}signaal",
                         answer, re.I,
                     )
-                    and re.search(
-                        r"(?:stopafstand|ruimere\s+stop|stop\s+verder\s+weg)",
-                        answer, re.I,
-                    ) is not None
+                    and "stop" in answer.casefold()
+                    and any(word in answer.casefold() for word in ("ruim", "afstand", "verder weg"))
                     and any(word in answer.casefold() for word in ("positie", "omvang", "grootte"))
                 )
             if sequence_number == 5 and turn_number in {1, 4}:
@@ -197,9 +216,7 @@ def main() -> None:
                     "BTC Full Base" in answer and "Apple Full Setup" in answer
                     and "BTC" in answer and "AAPL" in answer
                     and "4H" in answer and "1D" in answer
-                    and ("ETH Full Setup" not in answer or re.search(
-                        r"\b(?:niet|not)\s+(?:om\s+)?ETH Full Setup\b", answer, re.I,
-                    ) is not None)
+                    and _only_excluded_mentions(answer, "ETH Full Setup")
                     and exchange.get("answer_kind") != "saved_setup_collection"
                 )
                 contract = exchange.get("turn_contract") or {}

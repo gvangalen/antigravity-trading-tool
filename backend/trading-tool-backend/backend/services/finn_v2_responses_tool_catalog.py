@@ -69,6 +69,8 @@ class FinnResponsesToolCall:
     missing_inputs: tuple[str, ...]
     draft_intent: str | None = None
     evaluation_operation_id: str | None = None
+    answer_mode: str | None = None
+    setup_names: tuple[str, ...] = ()
 
 
 class FinnResponsesToolCatalog:
@@ -126,7 +128,9 @@ class FinnResponsesToolCatalog:
             "description": (
                 "Use only when a specific choice or user-provided detail is necessary to answer the "
                 "current question and cannot be obtained from FINN read tools. Ask one short natural "
-                "question. Do not use this for unavailable market data; state that limitation instead."
+                "question. If a general yes/no boundary can be answered without that detail, "
+                "answer it directly and ask the detail only if needed afterward. Do not use "
+                "this for unavailable market data; state that limitation instead."
             ),
             "strict": False,
             "parameters": {
@@ -171,26 +175,39 @@ class FinnResponsesToolCatalog:
                     "the typed complete flag reports whether repository pagination truncated it. "
                     "Use for all setup names, counts and comparisons, including a follow-up about "
                     "'those three' after listing setups. This does not select an active setup "
-                    "or read a linked strategy."
+                    "or read a linked strategy. For a comparison, provide answer_mode=compare and "
+                    "the two user-named setup names in setup_names. The server resolves names to "
+                    "owner-scoped records; do not invent an ID or replace one named setup with another."
                 )
+            properties = {
+                "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
+                "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
+            }
+            if name == "get_active_plan_and_strategy":
+                properties.update({
+                    "setup_name": {"type": ["string", "null"],
+                                   "description": "Saved setup name explicitly selected by the user. FINN resolves ownership server-side."},
+                    "reference": {"type": ["string", "null"],
+                                  "enum": ["current_request", "previous_response", None],
+                                  "description": "Use previous_response only to revisit the owner-scoped setup read in the preceding verified answer."},
+                })
+            if name == "get_saved_setup_inventory":
+                properties.update({
+                    "answer_mode": {"type": ["string", "null"],
+                                    "enum": ["list", "compare", "explain", None]},
+                    "setup_names": {"type": ["array", "null"],
+                                    "items": {"type": "string"},
+                                    "description": "Exactly the user-named setups to compare, or null when listing."},
+                })
             definitions.append({
                 "type": "function",
                 "name": name,
                 "description": description,
-                "strict": False,
+                "strict": True,
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "asset": {"type": "string", "description": "Asset named by the user, if any."},
-                        "timeframe": {"type": "string", "description": "A real timeframe such as 4H or 1D, never an object name."},
-                        **({"setup_name": {
-                            "type": "string",
-                            "description": "Saved setup name explicitly selected by the user. FINN resolves ownership server-side.",
-                        }, "reference": {
-                            "type": "string", "enum": ["current_request", "previous_response"],
-                            "description": "Use previous_response only to revisit the owner-scoped setup read in the preceding verified answer.",
-                        }} if name == "get_active_plan_and_strategy" else {}),
-                    },
+                    "properties": properties,
+                    "required": list(properties),
                     "additionalProperties": False,
                 },
             })
@@ -357,11 +374,26 @@ class FinnResponsesToolCatalog:
                 allowed.update(self.evaluation_contracts[name].optional_inputs)
             if name == "get_active_plan_and_strategy":
                 allowed.update({"setup_name", "reference"})
+            if name == "get_saved_setup_inventory":
+                allowed.update({"answer_mode", "setup_names"})
             if set(arguments).difference(allowed):
                 raise FinnResponsesToolError("read_arguments_invalid")
-            if any(not isinstance(value, str) for value in arguments.values()):
+            raw_names = arguments.get("setup_names")
+            if raw_names is not None and (
+                name != "get_saved_setup_inventory" or not isinstance(raw_names, list)
+                or len(raw_names) > 2 or any(not isinstance(item, str) or not item.strip() for item in raw_names)
+            ):
                 raise FinnResponsesToolError("read_arguments_invalid")
-            supplied = {key: value.strip() for key, value in arguments.items() if value.strip()}
+            if any(value is not None and not isinstance(value, str)
+                   for key, value in arguments.items() if key != "setup_names"):
+                raise FinnResponsesToolError("read_arguments_invalid")
+            answer_mode = arguments.get("answer_mode")
+            if answer_mode is not None and answer_mode not in {"list", "compare", "explain"}:
+                raise FinnResponsesToolError("read_answer_mode_invalid")
+            supplied = {
+                key: value.strip() for key, value in arguments.items()
+                if key not in {"answer_mode", "setup_names"} and isinstance(value, str) and value.strip()
+            }
             if len(supplied.get("hypothetical_change", "")) > 500:
                 raise FinnResponsesToolError("read_arguments_invalid")
             if "reference" in supplied and supplied["reference"] not in {"current_request", "previous_response"}:
@@ -377,7 +409,11 @@ class FinnResponsesToolCatalog:
                     name, None, supplied, contract.tool_names, (), (),
                     evaluation_operation_id=name,
                 )
-            return FinnResponsesToolCall(name, None, supplied, self.read_tools[name], (), ())
+            return FinnResponsesToolCall(
+                name, None, supplied, self.read_tools[name], (), (),
+                answer_mode=answer_mode,
+                setup_names=tuple(item.strip() for item in (raw_names or [])),
+            )
         operations = self.proposal_operations.get(name)
         if operations is None:
             raise FinnResponsesToolError("tool_unknown")

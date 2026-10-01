@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 import asyncio
@@ -382,8 +382,14 @@ class FinnResponsesAnswerVerifier:
             if sentence.lstrip().startswith("|"):
                 # Table cells mostly contain field names, tickers and values.
                 continue
+            if re.match(r"^\s*[-*]\s+\*{0,2}[^.!?]+\*{0,2}\s*[—–-]\s*[\w, ]+$", sentence):
+                # A compact saved-object label with type/timeframe is data.
+                continue
             word_count = len(sentence.split())
             if word_count < 5:
+                continue
+            if sentence.rstrip().endswith(":") and word_count <= 8:
+                # Short headings often consist mostly of saved object names.
                 continue
             label, separator, _value = sentence.partition(":")
             if separator and len(label.split()) <= 3 and word_count <= 12:
@@ -400,10 +406,9 @@ class FinnResponsesAnswerVerifier:
             # this is not evidence that the user-facing text changed language.
             if locale == "nl" and candidate.lang == "af":
                 continue
-            if (
-                locale == "nl" and candidate.lang == "en" and candidate.prob >= 0.7
-                and not re.search(r"\b(?:de|het|een|en|niet|staat|mijn|jouw|opgeslagen)\b", sentence, re.I)
-            ):
+            if locale == "nl" and candidate.lang == "en" and candidate.prob >= 0.7:
+                if re.search(r"\b(?:de|het|een|en|niet|staat|mijn|jouw|opgeslagen|hebt)\b", sentence, re.I):
+                    continue
                 return False
             if candidate.lang != locale and candidate.prob >= 0.95:
                 return False
@@ -1381,7 +1386,11 @@ class FinnResponsesAnswerVerifier:
         for asset in assets:
             if not re.fullmatch(r"[A-Z]{2,8}", asset):
                 continue
-            quantity = re.compile(rf"\b\d+(?:[.,]\d+)?\s+{re.escape(asset)}\b", re.IGNORECASE)
+            quantity = re.compile(
+                rf"\b\d+(?:[.,]\d+)?\s+{re.escape(asset)}\b"
+                r"(?![- ](?:setups?|plannen?|plans?|strateg(?:ie|y|ieën|ies))\b)",
+                re.IGNORECASE,
+            )
             claims = {match.group().casefold() for match in quantity.finditer(answer)}
             if claims and not claims <= {match.group().casefold() for match in quantity.finditer(message)}:
                 return False
@@ -1961,6 +1970,40 @@ class FinnResponsesAnswerVerifier:
         recent_action_result: dict[str, Any] | None = None,
         locale: str | None = None,
     ) -> FinnResponsesVerifiedAnswer:
+        if result.model_owned_repair and result.answer_kind == "free_text":
+            checked = await self.verify(
+                message=message,
+                result=replace(result, model_owned_repair=False),
+                previous_response=previous_response,
+                recent_action_result=recent_action_result,
+                locale=locale,
+            )
+            if checked.status == "completed" and checked.text.strip() != result.text.strip():
+                # Existing source and safety checks may synthesize a safe
+                # replacement. In the single-owner path that is feedback to
+                # the composer, never the user-facing coach answer.
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable",
+                    self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                    "responses_evidence_not_verified", checked.evidence,
+                    checked.used_previous_response,
+                    rejection_details={
+                        "replacement_reason": checked.reason or "answer_replaced_by_verifier",
+                        **({"turn_contract": result.turn_contract} if result.turn_contract else {}),
+                    },
+                )
+            if checked.status == "clarification_required" and checked.text.strip() != result.text.strip():
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable",
+                    self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                    "responses_evidence_not_verified", checked.evidence,
+                    checked.used_previous_response,
+                    rejection_details={
+                        "replacement_reason": checked.reason or "clarification_replaced_by_verifier",
+                        **({"turn_contract": result.turn_contract} if result.turn_contract else {}),
+                    },
+                )
+            return checked
         evidence = tuple(
             item
             for call in result.tool_trace
@@ -3434,7 +3477,7 @@ class FinnResponsesAnswerVerifier:
             result.model_led_coach and result.answer_kind == "free_text"
             and selected_targets
             and (
-                contract.get("answer_type") == "compare"
+                contract.get("answer_type") in {"list", "compare"}
                 or requested_facts & {
                     "asset", "timeframe", "setup_type", "strategy_name", "entry", "confirmation",
                 }
@@ -3467,10 +3510,18 @@ class FinnResponsesAnswerVerifier:
                 if isinstance(row, dict)
                 and str(row.get("name") or "").casefold() not in selected_names
             }
+            def claims_other_name(name: str) -> bool:
+                return any(
+                    not re.search(
+                        r"\b(?:geen|niet|not|no|keine|kein)\s+(?:om\s+)?$",
+                        result.text[max(0, match.start() - 20):match.start()], re.I,
+                    )
+                    for match in re.finditer(re.escape(name), result.text, re.I)
+                )
             if (
                 all(name and name in result.text.casefold() for name in selected_names)
                 and
-                not any(name and name.casefold() in result.text.casefold() for name in other_names)
+                not any(name and claims_other_name(name) for name in other_names)
                 and quantities_supported(result.text)
                 and self._language_matches(result.text, locale)
                 and self._assistant_does_not_claim_user_mutation(result.text)
@@ -3483,6 +3534,49 @@ class FinnResponsesAnswerVerifier:
                     "completed", result.text, "source_bound_read", evidence,
                     result.uses_previous_response,
                 )
+        # An asset-transfer question has a useful, general boundary even when
+        # several saved rules could be the source. A complete owner-scoped
+        # inventory can establish the assets while the model states that no
+        # specific saved rule has been checked. Do not let an ambiguous-source
+        # semantic verdict erase that answer and its clarification question.
+        question_assets = mentioned_catalog_symbols(message)
+        complete_inventory_assets = {
+            str(row.get("symbol") or "").upper()
+            for item in evidence
+            if item.get("scope") == "read_saved_setup_inventory"
+            and item.get("status") == "completed"
+            and (item.get("data") or {}).get("complete") is True
+            for row in (item.get("data") or {}).get("setups") or []
+            if isinstance(row, dict)
+        }
+        source_bound_asset_transfer = (
+            result.model_led_coach and result.answer_kind == "free_text"
+            and not selected_targets
+            and len(question_assets) >= 2
+            and question_assets <= complete_inventory_assets
+            and re.search(r"\b(?:dezelfde|same|gleiche\w*|toepassen|apply|übertrag\w*)\b", message, re.I)
+            and re.search(
+                r"\b(?:niet\s+(?:automatisch|zonder meer|zomaar)|not\s+automatically|"
+                r"does(?:n.t| not)\s+automatically|nicht\s+automatisch)\b",
+                result.text, re.I,
+            )
+            and all(
+                symbol in mentioned_catalog_symbols(result.text)
+                for symbol in question_assets
+            )
+            and quantities_supported(result.text)
+            and self._language_matches(result.text, locale)
+            and self._assistant_does_not_claim_user_mutation(result.text)
+            and self._proposal_speaker_is_user(result.text)
+            and not self._unsupported_personal_confirmation(result.text, evidence, message)
+            and not self._ungrounded_level_advice(result.text)
+            and not self._promises_unverified_trading_outcome(result.text)
+        )
+        if source_bound_asset_transfer:
+            return FinnResponsesVerifiedAnswer(
+                "completed", result.text, "source_bound_asset_transfer", evidence,
+                result.uses_previous_response,
+            )
         general_risk_lesson = (
             result.model_led_coach
             and result.answer_kind == "free_text"
@@ -3536,13 +3630,58 @@ class FinnResponsesAnswerVerifier:
             technical_supported(result.text),
             catalog_focused(result.text),
         )
-        selected_pair_grounded = (
+        selected_targets_grounded = (
             result.model_led_coach
             and result.turn_contract is not None
-            and result.turn_contract.get("answer_type") == "compare"
-            and len(result.turn_contract.get("targets") or []) == 2
+            and 1 <= len(result.turn_contract.get("targets") or []) <= 2
             and turn_contract_gap(result.turn_contract, result.text) is None
+            and all(
+                str(target.get("name") or "").casefold() in result.text.casefold()
+                and any(
+                    item.get("status") == "completed"
+                    and item.get("scope") in {"read_active_setup", "read_saved_setup_inventory"}
+                    and (
+                        target.get("setup_id") == (item.get("data") or {}).get("setup_id")
+                        or target.get("setup_id") in {
+                            row.get("setup_id")
+                            for row in (item.get("data") or {}).get("setups") or []
+                            if isinstance(row, dict)
+                        }
+                    )
+                    for item in evidence
+                )
+                for target in result.turn_contract.get("targets") or []
+            )
             and set(verdict.reason_codes or ()) == {"setup_ambiguous"}
+        )
+        ambiguity_explained = (
+            result.model_led_coach
+            and result.turn_contract is not None
+            and not (result.turn_contract.get("targets") or [])
+            and set(verdict.reason_codes or ()) == {"setup_ambiguous"}
+            and any(
+                item.get("scope") == "read_saved_setup_inventory"
+                and item.get("status") == "completed"
+                for item in evidence
+            )
+            and (
+                re.search(
+                    r"\b(?:kan niet bevestigen|niet eenduidig|niet duidelijk|"
+                    r"cannot confirm|unclear which|can't identify|"
+                    r"kann nicht bestätigen|nicht eindeutig)\b",
+                    result.text, re.I,
+                ) is not None
+                or re.search(
+                    r"\b(?:welke|which|welcher)\b[^?]{0,100}\?",
+                    result.text, re.I,
+                ) is not None
+            )
+            and not any(
+                str(row.get("name") or "").casefold() in result.text.casefold()
+                for item in evidence
+                for row in (item.get("data") or {}).get("setups") or []
+                if isinstance(row, dict) and row.get("name")
+            )
         )
         general_risk_tradeoff = (
             result.model_led_coach
@@ -3556,7 +3695,7 @@ class FinnResponsesAnswerVerifier:
             and bool(verdict.reason_codes)
             and set(verdict.reason_codes) == {"setup_ambiguous"}
         )
-        verdict_passes = (verdict.passes or selected_pair_grounded or general_risk_tradeoff) if result.model_led_coach else (
+        verdict_passes = (verdict.passes or selected_targets_grounded or ambiguity_explained or general_risk_tradeoff) if result.model_led_coach else (
             verdict.passes or (
                 not previous_explanation_only and personal_evidence
                 and self.client is not None and advice_ok

@@ -69,6 +69,29 @@ def verified_selected_setup(previous: Mapping[str, Any] | None) -> tuple[int, st
         str(previous.get("answer") or ""),
         str(previous.get("user_message") or ""),
     )).casefold()
+    current_message = str(previous.get("user_message") or "")
+    contract_targets = (previous.get("turn_contract") or {}).get("targets") or []
+    if len(contract_targets) == 1 and isinstance(contract_targets[0], dict):
+        target = contract_targets[0]
+        target_id = target.get("setup_id")
+        target_name = str(target.get("name") or "")
+        if (
+            isinstance(target_id, int) and target_id > 0 and target_name
+            and target_name.casefold() in str(previous.get("answer") or "").casefold()
+            and (target_name.casefold() in current_message.casefold()
+                 or listed_setup_ordinal(current_message) is not None
+                 or references_selected_setup(current_message))
+            and any(
+                item.get("status") == "completed"
+                and any(
+                    isinstance(row, dict) and row.get("setup_id") == target_id
+                    for row in ((item.get("data") or {}).get("setups") or [item.get("data") or {}])
+                )
+                for call in previous.get("tool_trace") or []
+                for item in (call.get("result") or {}).get("results") or []
+            )
+        ):
+            return target_id, target_name
     for call in reversed(previous.get("tool_trace") or []):
         if call.get("status") not in {"completed", "partial"}:
             continue
