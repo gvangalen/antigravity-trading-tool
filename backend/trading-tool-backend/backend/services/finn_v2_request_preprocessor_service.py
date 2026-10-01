@@ -480,6 +480,44 @@ class FinnV2RequestPreprocessorService:
         return {"strategie": "strategy"}.get(matches[-1], matches[-1])
 
     def _action_polarity(self, text: str) -> str:
+        # An explicit request for advice plus an explicit refusal of changes
+        # is a read. The trader may describe an urge to change a position in
+        # the first sentence; that description is not an imperative to FINN.
+        # A leading mutation command retains priority even if advice is also
+        # requested later in the turn.
+        coaching_no_write = re.search(
+            r"\b(?:niet\s+om|zonder|not\s+to|without|ohne)\b.{0,80}"
+            r"\b(?:wijzig\w*|verander\w*|verwijder\w*|ma(?:ak|k)\w*|"
+            r"chang\w*|updat\w*|delet\w*|creat\w*|änder\w*|aender\w*|erstell\w*)\b",
+            text,
+        )
+        if (
+            re.search(r"\b(?:coaching|advies|advice|hoe kijk je hiernaar|what do you think|wie siehst du das)\b", text)
+            and coaching_no_write
+            and self._action_polarity(text[:coaching_no_write.start()].rstrip(" ,")) == "read"
+        ):
+            return "read"
+        # A terminal "without changing anything" clause constrains the
+        # preceding request; its verbs are not actions to propose. Classify
+        # the preceding clause first so a real mutation ("maak een bot,
+        # zonder live te activeren") keeps its mutation polarity.
+        negated_tail = re.search(
+            r"(?:,\s*|\s+)\b(?:zonder|without|ohne)\b(?P<tail>[^.!?]*)[.!?]*$",
+            text,
+        )
+        if negated_tail:
+            tail = negated_tail.group("tail")
+            has_mutation = re.search(
+                r"\b(?:ma(?:ak|k)\w*|wijzig\w*|verwijder\w*|activeer\w*|"
+                r"creat\w*|chang\w*|updat\w*|delet\w*|remov\w*|activat\w*|"
+                r"erstell\w*|änder\w*|aender\w*|aktualisier\w*|"
+                r"entfern\w*|lösch\w*|loesch\w*|aktivier\w*)\b",
+                tail,
+            )
+            starts_new_request = re.search(r"\b(?:maar|but|aber)\b", tail)
+            prefix = text[:negated_tail.start()].rstrip(" ,")
+            if has_mutation and not starts_new_request and prefix and self._action_polarity(prefix) == "read":
+                return "read"
         # Declarative and interrogative verb forms ("volg ik", "bevestigd")
         # describe existing product state; they are not confirmation or add
         # commands. This is grammatical normalization, not prompt matching.

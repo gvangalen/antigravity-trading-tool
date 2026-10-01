@@ -71,6 +71,8 @@ def test_factual_tool_result_experiment_cannot_enable_outside_local_fixture(monk
     [
         ("Welke BTC-setups staan er op Mijn Plan? Noem de namen.",
          "saved_setup_collection", "BTC"),
+        ("Welke BTC-setups staan er op Mijn Plan? Noem de namen, zonder iets te maken of wijzigen.",
+         "saved_setup_collection", "BTC"),
         ("Geldt mijn BTC-DCA-regel ook voor Apple/AAPL?",
          "cross_asset_rule_scope", None),
         ("Welke van mijn BTC-setups gebruik je en welke entrytrigger staat erin?",

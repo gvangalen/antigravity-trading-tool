@@ -225,6 +225,41 @@ def test_separable_update_and_deactivate_verbs_keep_their_typed_mutation_polarit
     assert service.preprocess(message="Deactiveer die bot.").action_polarity == "deactivate"
 
 
+@pytest.mark.parametrize("message", (
+    "Welke BTC-setups staan er op Mijn Plan? Noem de namen, zonder iets te maken of wijzigen.",
+    "Noem mijn BTC-setups zonder iets te verwijderen.",
+    "List my BTC setups without creating or changing anything.",
+    "Nenne meine BTC-Setups, ohne etwas zu ändern.",
+))
+def test_terminal_negated_mutation_constrains_a_read_request(message):
+    assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == "read"
+
+
+@pytest.mark.parametrize(("message", "polarity"), (
+    ("Wijzig mijn BTC-setup zonder iets nieuws te maken.", "update"),
+    ("Maak een paper bot, zonder live trading te activeren.", "create"),
+    ("Verwijder mijn BTC-setup zonder de strategie te wijzigen.", "remove"),
+    ("Noem mijn BTC-setups zonder iets te maken, maar wijzig daarna de eerste.", "update"),
+))
+def test_terminal_negated_mutation_does_not_hide_an_affirmative_action(message, polarity):
+    assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == polarity
+
+
+def test_read_only_coaching_request_does_not_turn_a_described_urge_into_an_update():
+    service = FinnV2RequestPreprocessorService()
+    message = (
+        "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. "
+        "Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?"
+    )
+    assert service.preprocess(message=message).action_polarity == "read"
+    assert service.preprocess(
+        message="Wijzig mijn stop-loss, maar geef ook coaching zonder iets anders te wijzigen."
+    ).action_polarity == "update"
+    assert service.preprocess(
+        message="Kun je mijn BTC-setup wijzigen en daarna coaching geven zonder iets anders te wijzigen?"
+    ).action_polarity == "update"
+
+
 @pytest.mark.parametrize(
     "message",
     (
