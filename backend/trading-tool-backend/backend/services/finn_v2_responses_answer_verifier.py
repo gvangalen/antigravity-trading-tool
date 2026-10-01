@@ -1958,6 +1958,36 @@ class FinnResponsesAnswerVerifier:
                 "en": f"Number {position} on my list is ‘{name}’.",
                 "de": f"Nummer {position} auf meiner Liste ist ‘{name}’.",
             }[language]
+            if (reference_call.get("arguments") or {}).get("evidence_followup") is True:
+                fields = []
+                for key, labels in (
+                    ("symbol", {"nl": "asset ", "en": "asset ", "de": "Asset "}),
+                    ("timeframe", {"nl": "timeframe ", "en": "timeframe ", "de": "Zeitrahmen "}),
+                    ("setup_type", {"nl": "type ", "en": "type ", "de": "Typ "}),
+                ):
+                    value = str(row.get(key) or "").strip()
+                    if value:
+                        fields.append(labels[language] + value)
+                source = {
+                    "nl": "Ik heb die setup opnieuw in je opgeslagen setupoverzicht gelezen.",
+                    "en": "I reread that setup in your saved setup inventory.",
+                    "de": "Ich habe dieses Setup erneut in deiner gespeicherten Setup-Liste gelesen.",
+                }[language]
+                if fields:
+                    source += {
+                        "nl": " De vastgelegde velden die ik hier kan bevestigen zijn: ",
+                        "en": " The saved fields I can confirm here are: ",
+                        "de": " Die gespeicherten Angaben, die ich hier bestätigen kann, sind: ",
+                    }[language] + ", ".join(fields) + "."
+                limit = {
+                    "nl": "Een instapbevestiging of gekoppelde strategie heb ik hiermee niet gecontroleerd.",
+                    "en": "This does not verify an entry confirmation or a linked strategy.",
+                    "de": "Eine Einstiegsbestätigung oder verknüpfte Strategie habe ich damit nicht geprüft.",
+                }[language]
+                return FinnResponsesVerifiedAnswer(
+                    "completed", " ".join((answer, source, limit)),
+                    "listed_setup_reference_evidence", evidence,
+                )
             if re.search(r"\b(?:meer|details?|informatie|vertel|about|explain|mehr|erzähl)\b", message, re.I):
                 asset = str(row.get("symbol") or "").upper()
                 timeframe = str(row.get("timeframe") or "").upper()
