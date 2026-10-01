@@ -9,11 +9,11 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED`; CI and Auto Deploy pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; Build release gates passed. |
 | Active goal | Repair the defects from live SHA `71d45f271800d56307d90ee598d78e9f9e88d6a8`: read-only stop-loss coaching fallback, first-turn saved-setup inventory fallback, and failure to resolve “de tweede uit jouw lijst”. |
-| Candidate branch | `codex/finn-coach-followup-grounding` |
-| Candidate code SHA | `d33472f5` (includes `9be63c7c`). A status-only commit follows; use the PR merge SHA for deployment identity. |
-| Production code SHA | Latest user-reported live QA SHA: `71d45f271800d56307d90ee598d78e9f9e88d6a8`. Build has not yet performed deployment identity verification for this candidate. |
+| Candidate branch | `codex/finn-coach-followup-grounding` ([PR #25](https://github.com/gvangalen/antigravity-trading-tool/pull/25), merged). |
+| Candidate code SHA | `d33472f5` (includes `9be63c7c`); merge SHA `9b03ea3de8846d83c88a6dbf5bbee8b5a493aa41`. |
+| Production code SHA | `9b03ea3de8846d83c88a6dbf5bbee8b5a493aa41`, verified on public backend health and frontend build-info at 05:37 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
@@ -61,10 +61,10 @@ verification used `gpt-4o-mini`. Artifacts are ignored files under
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Backend health and frontend build-info | Pending for this candidate. |
+| Candidate CI | `PASS`: PR run `36820126923`, all five jobs green. |
+| Main CI | `PASS`: main run `36820346158`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36820494331` deployed merge SHA `9b03ea3de8846d83c88a6dbf5bbee8b5a493aa41`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 05:37 UTC on 2026-10-01. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
 Build's local checks establish technical readiness only. Authenticated
