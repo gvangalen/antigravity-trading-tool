@@ -21,7 +21,7 @@ from backend.services.finn_v2_responses_read_executor import FinnResponsesReadEx
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
-from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier, FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
@@ -70,6 +70,8 @@ def test_factual_tool_result_experiment_cannot_enable_outside_local_fixture(monk
     ("message", "expected_kind", "expected_asset"),
     [
         ("Welke BTC-setups staan er op Mijn Plan? Noem de namen.",
+         "saved_setup_collection", "BTC"),
+        ("Welke BTC-setups staan er op Mijn Plan? Noem de namen, zonder iets te maken of wijzigen.",
          "saved_setup_collection", "BTC"),
         ("Geldt mijn BTC-DCA-regel ook voor Apple/AAPL?",
          "cross_asset_rule_scope", None),
@@ -236,6 +238,155 @@ def test_inventory_followup_reads_collection_again_instead_of_active_singleton()
     assert answer.status == "completed"
     assert all(name in answer.text for name in names)
     assert "geen daarvan" in answer.text
+
+
+@pytest.mark.parametrize("message", [
+    "Welke is de tweede uit jouw lijst?",
+    "De tweede uit jouw lijst. Vertel daar meer over.",
+    "Bij de tweede uit jouw lijst: staat daar een entrybevestiging?",
+])
+def test_ordered_inventory_reference_uses_verified_id_not_model_name(message):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="ordered-reference")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock())
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 2, "name": "BTC 4H terugtest",
+                                "symbol": "BTC", "timeframe": "4H", "setup_type": "trade"}],
+                     "setup_count": 1, "complete": True},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+        previous_response={
+            "terminal_kind": "saved_setup_collection", "answer": "Ik zie drie setups.",
+            "tool_trace": [{
+                "name": "get_saved_setup_inventory", "status": "completed",
+                "arguments": {"asset": "BTC"},
+                "result": {"results": [{
+                    "scope": "read_saved_setup_inventory", "status": "completed",
+                    "data": {"setups": [
+                        {"setup_id": 1, "name": "BTC Maandag DCA"},
+                        {"setup_id": 2, "name": "BTC 4H terugtest"},
+                        {"setup_id": 3, "name": "BTC breakout"},
+                    ]},
+                }]},
+            }],
+        },
+    ))
+    assert len(calls) == 1
+    assert calls[0].name == "get_saved_setup_inventory"
+    assert calls[0].inputs == {"asset": "BTC", "setup_ids": [2]}
+    front.relevance_guard.saved_plan_query_kind.assert_not_awaited()
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert "BTC 4H terugtest" in answer.text
+    assert "BTC Maandag DCA" not in answer.text
+    if "entrybevestiging" in message:
+        assert "gekoppelde strategie" in answer.text
+
+
+def test_failed_read_only_stop_loss_coaching_has_safe_process_answer():
+    question = (
+        "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. "
+        "Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?"
+    )
+    rejected = FinnResponsesVerifiedAnswer(
+        "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
+        "responses_evidence_not_verified", (),
+    )
+    result = FinnResponsesAnswerVerifier.recover_read_only_coaching(
+        message=question,
+        result=FinnResponsesResult("rejected draft", "response-1", (), model_led_coach=True),
+        answer=rejected, locale="nl",
+    )
+    assert result.status == "completed"
+    assert result.reason == "safe_stop_loss_coaching"
+    assert "stop-loss" in result.text
+    assert "Ik wijzig niets" in result.text
+
+
+def test_out_of_range_list_reference_asks_for_a_listed_name():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="out-of-range")
+    front.reads = AsyncMock(side_effect=AssertionError("do not guess another setup"))
+    result = asyncio.run(front.run(
+        message="De vierde uit jouw lijst?", instructions="",
+        conversation_context={}, verified_asset="BTC",
+        previous_response={
+            "terminal_kind": "saved_setup_collection", "answer": "Ik zie drie setups.",
+            "tool_trace": [{"name": "get_saved_setup_inventory", "status": "completed",
+                            "arguments": {"asset": "BTC"}, "result": {"results": [{
+                                "scope": "read_saved_setup_inventory", "status": "completed",
+                                "data": {"setups": [{"setup_id": 1}, {"setup_id": 2}, {"setup_id": 3}]},
+                            }]}}],
+        },
+    ))
+    assert result.response.answer_kind == "listed_setup_reference_out_of_range"
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="De vierde uit jouw lijst?", result=result.response, locale="nl",
+    ))
+    assert "niet in de setup-lijst" in answer.text
+    front.reads.assert_not_awaited()
+
+
+def test_second_ordinal_followup_keeps_original_list_order():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="third-reference")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock())
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 3, "name": "BTC breakout"}]},
+        }]}
+
+    front.reads = read
+    list_call = {
+        "name": "get_saved_setup_inventory", "status": "completed",
+        "arguments": {"asset": "BTC"}, "result": {"results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [
+                {"setup_id": 1}, {"setup_id": 2}, {"setup_id": 3},
+            ]},
+        }]},
+    }
+    selected_call = {
+        "name": "get_saved_setup_inventory", "status": "completed",
+        "arguments": {"asset": "BTC", "setup_ids": [2], "listed_ordinal": 2},
+        "result": {"results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 2}]},
+        }]},
+    }
+    result = asyncio.run(front.run(
+        message="En de derde uit jouw lijst?", instructions="",
+        conversation_context={}, verified_asset="BTC",
+        previous_response={"terminal_kind": "listed_setup_reference",
+                           "answer": "Nummer 2 is BTC 4H terugtest.",
+                           "tool_trace": [list_call, selected_call]},
+    ))
+    assert result.response.answer_kind == "listed_setup_reference"
+    assert calls[0].inputs == {"asset": "BTC", "setup_ids": [3]}
+
+
+def test_stop_loss_recovery_does_not_hide_proposal_failure():
+    rejected = FinnResponsesVerifiedAnswer("unavailable", "failed", "proposal_failed", ())
+    result = FinnResponsesAnswerVerifier.recover_read_only_coaching(
+        message="Ik wil mijn stop-loss weghalen. Ik vraag om coaching, niet om iets te wijzigen.",
+        result=FinnResponsesResult(
+            "rejected draft", "response-1",
+            ({"name": "update_strategy_proposal", "result": {"proposal_id": "p1"}},),
+            model_led_coach=True,
+        ), answer=rejected, locale="nl",
+    )
+    assert result is rejected
 
 
 def test_inventory_router_never_intercepts_explicit_setup_creation(monkeypatch):

@@ -1573,6 +1573,10 @@ class FinnV2RunService:
                         else:
                             answer = None
                     if answer is not None:
+                        answer = FinnResponsesAnswerVerifier.recover_read_only_coaching(
+                            message=message, result=prepared.response,
+                            answer=answer, locale=prepared.locale,
+                        )
                         async with async_session_factory() as session:
                             await cls(session).complete_responses_read(
                                 run_id=run_id, user_id=user_id,

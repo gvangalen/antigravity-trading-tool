@@ -34,6 +34,30 @@ from backend.services.finn_v2_operation_classification_service import FinnV2Oper
 logger = logging.getLogger(__name__)
 
 
+def _listed_setup_ordinal(message: str) -> int | None:
+    """Resolve an ordinal only against a previously verified ordered inventory."""
+    match = re.search(
+        r"\b(?:de|het|nummer|nr\.?|the|das|die)\s+"
+        r"(eerste|tweede|derde|vierde|vijfde|zesde|zevende|achtste|negende|tiende|"
+        r"first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"
+        r"erste|zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte|"
+        r"[1-9][0-9]?(?:e|de|ste|st|nd|rd|th)?)\b",
+        message, re.I,
+    )
+    if not match:
+        return None
+    token = match.group(1).casefold()
+    names = (
+        "eerste tweede derde vierde vijfde zesde zevende achtste negende tiende "
+        "first second third fourth fifth sixth seventh eighth ninth tenth "
+        "erste zweite dritte vierte fünfte sechste siebte achte neunte zehnte"
+    ).split()
+    if token in names:
+        return names.index(token) % 10
+    number = re.match(r"\d+", token)
+    return int(number.group()) - 1 if number else None
+
+
 @dataclass(frozen=True)
 class FinnResponsesFrontDoorResult:
     response: FinnResponsesResult
@@ -203,6 +227,7 @@ class FinnResponsesFrontDoor:
         prior_inventory = next((
             call for call in reversed((previous_response or {}).get("tool_trace") or [])
             if call.get("name") == "get_saved_setup_inventory"
+            and not (call.get("arguments") or {}).get("listed_ordinal")
             and call.get("status") == "completed"
             and any(
                 item.get("scope") == "read_saved_setup_inventory"
@@ -219,6 +244,22 @@ class FinnResponsesFrontDoor:
             row["setup_id"] for row in prior_inventory_data.get("setups") or []
             if isinstance(row, dict) and isinstance(row.get("setup_id"), int)
         ]
+        listed_ordinal = _listed_setup_ordinal(message) if prior_setup_ids else None
+        listed_setup_id = (
+            prior_setup_ids[listed_ordinal]
+            if listed_ordinal is not None and 0 <= listed_ordinal < len(prior_setup_ids)
+            else None
+        )
+        if (is_read_request and pending_operation is None and not resuming_clarification
+                and listed_ordinal is not None and listed_setup_id is None):
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Referenced list position is outside the verified inventory.",
+                    response_id=f"local-setup-reference-out-of-range-{self.run_id}",
+                    tool_trace=(), answer_kind="listed_setup_reference_out_of_range",
+                    model_led_coach=True, response_id_reusable=False,
+                ), selected, previous_response, locale=locale,
+            )
         prior_inventory_asset = resolve_catalog_symbol(
             (prior_inventory or {}).get("arguments", {}).get("asset")
         )
@@ -251,13 +292,15 @@ class FinnResponsesFrontDoor:
             or re.search(r"\b(?:welke|which)\b.{0,80}\b(?:staan|heb|have|are)\b", message, re.I)
         )
         query: dict[str, str] | None = None
-        if is_read_request and not cross_asset_cue and explicit_list:
+        if is_read_request and listed_setup_id and not mentioned_assets:
+            query = {"kind": "listed_setup_reference"}
+        elif is_read_request and not cross_asset_cue and explicit_list:
             query = {"kind": "confirmation_inventory" if confirmation_subject else "inventory"}
         elif is_read_request and confirmation_followup and not mentioned_assets:
             query = {"kind": "confirmation_inventory"}
         if (
             pending_operation is None and not resuming_clarification and is_read_request
-            and (collection_cue or cross_asset_cue or inventory_followup)
+            and (collection_cue or cross_asset_cue or inventory_followup or listed_setup_id)
             and query is None
             and guard is not None
             and callable(getattr(guard, "saved_plan_query_kind", None))
@@ -284,7 +327,7 @@ class FinnResponsesFrontDoor:
             pending_operation is None
             and not resuming_clarification
             and is_read_request
-            and query_kind in {"inventory", "confirmation_inventory", "cross_asset_scope"}
+            and query_kind in {"inventory", "confirmation_inventory", "cross_asset_scope", "listed_setup_reference"}
         ):
             # Collection questions have their own typed, owner-scoped read.
             # No active setup or linked strategy is selected here.
@@ -297,7 +340,12 @@ class FinnResponsesFrontDoor:
             timeframe = re.search(r"\b(?:15m|30m|1h|4h|1d|1w)\b", message, re.I)
             if timeframe and query_kind != "cross_asset_scope":
                 inputs["timeframe"] = timeframe.group().upper()
-            if query_kind != "cross_asset_scope" and inventory_followup and not mentioned_assets:
+            if query_kind == "listed_setup_reference":
+                inputs = {
+                    **({"asset": prior_inventory_asset} if prior_inventory_asset else {}),
+                    "setup_ids": [listed_setup_id],
+                }
+            elif query_kind != "cross_asset_scope" and inventory_followup and not mentioned_assets:
                 inputs = {
                     **({"asset": prior_inventory_asset} if prior_inventory_asset else {}),
                     **({"timeframe": prior_inventory_timeframe} if prior_inventory_timeframe and not timeframe else {}),
@@ -330,12 +378,15 @@ class FinnResponsesFrontDoor:
                             "name": collection_call.name, "status": collection_read["status"],
                             "arguments": {
                                 **collection_call.inputs,
+                                **({"listed_ordinal": listed_ordinal + 1}
+                                   if query_kind == "listed_setup_reference" else {}),
                                 **({"source_asset": source_asset, "target_asset": target_asset}
                                    if query_kind == "cross_asset_scope" else {}),
                             },
                             "result": collection_read,
                         },),
-                        answer_kind=("cross_asset_rule_scope" if query_kind == "cross_asset_scope"
+                        answer_kind=("listed_setup_reference" if query_kind == "listed_setup_reference"
+                                     else "cross_asset_rule_scope" if query_kind == "cross_asset_scope"
                                      else "saved_confirmation_inventory" if query_kind == "confirmation_inventory"
                                      else "saved_setup_collection"),
                         model_led_coach=True,
@@ -352,6 +403,8 @@ class FinnResponsesFrontDoor:
                         "status": str(collection_read.get("status") or "unavailable"),
                         "arguments": {
                             **collection_call.inputs,
+                            **({"listed_ordinal": listed_ordinal + 1}
+                               if query_kind == "listed_setup_reference" else {}),
                             **({"source_asset": source_asset, "target_asset": target_asset}
                                if query_kind == "cross_asset_scope" else {}),
                         },
