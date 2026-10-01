@@ -9,57 +9,70 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; Build release gates passed. |
-| Active goal | Improve the evidence follow-up after FINN identifies a numbered saved setup: on “Wat weet je daarvan zeker?” name the reread source, confirmed fields, and unverified limits. The user's targeted live retest of the prior defects passed on `9666f39db37607f1157ed71e06cc9b82080f434a`; this answer-quality gap remained. |
-| Candidate branch | `codex/finn-listed-setup-evidence` ([PR #27](https://github.com/gvangalen/antigravity-trading-tool/pull/27), merged). |
-| Candidate code SHA | `c00fc760`; merge SHA `220ae2d4dda16c5eae657bea870c16d7f67cd17e`. |
-| Production code SHA | `220ae2d4dda16c5eae657bea870c16d7f67cd17e`, verified on public backend health and frontend build-info at 08:21 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
+| Phase | `CANDIDATE_CI_PENDING`; required local Build gates passed, no new candidate has been deployed. |
+| Active goal | Repair the user-reported coach failures on live SHA `94913335abaed9f82c9824bc268dc783f1cc0107`: a combined numbered-setup/evidence follow-up dropped its evidence, a named BTC setup could receive levels from another BTC strategy or generic FOMO coaching, and a BTC-to-AAPL rule question could lose its asset boundary when FOMO was mentioned. |
+| Candidate branch | `codex/finn-coach-identity-boundary`; candidate pending CI. |
+| Candidate code SHA | `c0cb0d7ac8e7179103734b0d215f120ecd04e7ad`. |
+| Production SHA | `94913335abaed9f82c9824bc268dc783f1cc0107` was reported by the user as matching backend and frontend during the failed targeted live recheck. Build has not redeployed. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
-The preceding candidate and its targeted live QA report remain historical
-context. This is a new local repair batch. Build did not use the protected
-production QA fixture or sealed holdout and did not run authenticated
-production QA.
+The user's targeted authenticated live recheck is **not accepted** for its
+coach scope. Build did not access the protected QA fixture or sealed holdout,
+and the new candidate needs independent authenticated QA after deployment.
 
-## Root Cause and Repair
+## Investigation and Repair
 
-The numbered setup answer was grounded by a verified owner-scoped inventory
-read, but an anaphoric evidence question did not preserve that selected-item
-reference. The following model-led answer could repeat the name without
-explaining its evidence. The preprocessor now recognises a question about what
-is certain as an evidence follow-up. When the immediately preceding verified
-turn selected a numbered setup, the Responses front door validates its saved
-ID and reads that owner-scoped setup again. The answer verifier names only
-fields returned by the fresh read and explains that the setup inventory did
-not check an entry confirmation or linked strategy. Missing or mismatched
-prior evidence cannot select an ID.
+- The combined “second from your list + what do you know for certain” turn
+  resolved the verified inventory position but only set the evidence flag when
+  the previous turn had already selected one item. The route now sets that
+  flag from either verified path and rereads the selected owner-scoped ID.
+- The Responses read catalog cannot carry model-supplied setup IDs. The front
+  door previously bound a named setup only for `get_active_plan_and_strategy`,
+  leaving evaluation reads with an asset such as `BTC` that may match several
+  setups. It now resolves a setup named in the user message against the
+  owner's records and supplies that ID to evaluation reads as well.
+- An explicit strategy ID or name can no longer override a different
+  selected setup in the graph resolver. The answer verifier now checks stated
+  entry, stop and target prices against the linked strategy returned in that
+  turn. If model coaching is rejected after a verified named setup and linked
+  strategy read, a source-bound coach answer preserves that setup's saved
+  levels instead of discarding the facts into generic FOMO advice.
+- A question applying a rule named for one asset to another now takes the
+  typed cross-asset route even when FOMO appears elsewhere in the message.
+
+The live report did not include a run ID or server trace. The precise path
+that produced its `80.000/76.000` claim is therefore unproven. A synthetic
+worker-driven repro did prove the separate verifier issue: FINN read the
+correct `BTC Full Base` strategy and drafted `76.000/72.000`, but a verifier
+rejection replaced it with generic FOMO advice. A subsequent run on the
+repair kept the correct levels and the BTC-to-AAPL boundary. This is local
+Build evidence, not authenticated live acceptance.
 
 ## Local Build Evidence
 
-The parity stack used isolated PostgreSQL, Redis, API, and Celery with synthetic
-users. FINN chat used `gpt-6-luna` with reasoning `none`; selection and semantic
-verification used `gpt-4o-mini`. Artifacts are ignored files under
-`.local-finn-parity-artifacts/`.
+The disposable parity stack uses isolated PostgreSQL, Redis, API and Celery
+with synthetic users. FINN chat uses `gpt-6-luna` with reasoning `none`.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Exact list → second setup → evidence follow-up via API/Celery | `3/3` completed, no proposals. The follow-up names `BTC Full Base`, confirms BTC/4H/trade from the reread setup, and states what was not checked. | `evidence-followup-repro.json`, SHA-256 `5f0a7d3ebe6a84a1c40279489da584afa502e4188a5a25c02a5dc3d3a5d00dde`. |
-| Full safe action-contract matrix on final local build | `16/16`; zero broker orders, live bots, live-trading calls, or production connections. | `listed-evidence-action-matrix.json`, SHA-256 `a6fec3619a199e8ac22e4624582cfcfdc74e9ac5c721139feaf5a9bc60a11052`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, or timeout failures. | `listed-evidence-provider-development.json`, SHA-256 `59dc34ada8488e503140b86892286817141b5ad56f776b0b71888763750a6764`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation, or timeout failures. | `listed-evidence-provider-regression.json`, SHA-256 `c284b93d3e0583661d5d70edfa8c53e79509e4039c8f9004afc0bc749681566b`. |
-| Backend canonical suite | `2914 passed, 3 skipped`. | `pytest -q --disable-warnings` on final code. |
-| Frontend canonical checks | `PASS`; no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, and production `build`. |
+| Targeted API/Celery coach sequence | `4/4` completed without proposals: list, combined ordinal/evidence follow-up, named `BTC Full Base` FOMO/levels (`76.000/72.000`), and BTC-to-AAPL/FOMO. | `.local-finn-parity-artifacts/coach-identity-repro.json`, SHA-256 `48be34e4528ef2bc9289b505d36baf6d02df665bd9797650ee4f6b5cef72bbe8`. |
+| Full safe action-contract matrix on final code | `16/16`; zero broker orders, live bots, live-trading calls, or production connections. | `.local-finn-parity-artifacts/coach-identity-action-matrix-release.json`, SHA-256 `fbebfb651efb4bff1fbac67a2aac89edcde0c91515fcab532009e80540d89c63`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-identity-provider-development.json`, SHA-256 `7349647428ed085dbb3cd8530bd5b7ad685f29b0e1e46db0cfc62085cb3e6648`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-identity-provider-regression.json`, SHA-256 `95cd924916776d439bf37d7fa9280a4773f34c9b679a7fd28bfa573167741446`. |
+| Backend canonical suite | `2922 passed, 3 skipped` on final code. | `pytest -q --disable-warnings`. |
+| Frontend canonical checks | Passed; no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, production `build`. |
 
 ## Release and Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: PR run `36834333984`, all five jobs green. |
-| Main CI | `PASS`: main run `36835506591`, all five jobs green. |
-| Auto Deploy | `PASS`: run `36835662943` deployed merge SHA `220ae2d4dda16c5eae657bea870c16d7f67cd17e`. |
-| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 08:21 UTC on 2026-10-01. |
+| Candidate CI | Pending. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Backend health and frontend build-info | Pending for this candidate. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
-Build's local checks establish technical readiness only. Authenticated
-production acceptance remains independent QA's responsibility.
+Build's local checks establish technical readiness only after all required
+gates finish. Authenticated production acceptance remains independent QA's
+responsibility.
