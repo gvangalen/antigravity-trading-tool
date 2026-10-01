@@ -155,6 +155,9 @@ class FinnV2RequestPreprocessorService:
         "previous_verified_conclusion": (
             "die conclusie", "dat antwoord", "eerder antwoord", "onderbouw",
             "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde",
+            "wat weet je daarvan zeker", "wat weet je zeker", "waar ben je zeker van",
+            "what do you know for sure", "what are you certain of",
+            "was weißt du darüber sicher", "was weisst du darueber sicher",
             "leg de eerdere", "evidence achter", "vastgelegde feiten",
             "feiten achter", "gegeven oordeel", "zojuist gegeven oordeel",
             "vorige oordeel", "eerdere oordeel", "vorige beoordeling", "eerdere beoordeling",

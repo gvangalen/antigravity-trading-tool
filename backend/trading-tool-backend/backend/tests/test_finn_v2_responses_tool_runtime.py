@@ -19,7 +19,7 @@ from backend.services.finn_v2_responses_tool_catalog import (
 )
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
-from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
+from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, _verified_listed_setup_reference
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier, FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
@@ -290,6 +290,82 @@ def test_ordered_inventory_reference_uses_verified_id_not_model_name(message):
     assert "BTC Maandag DCA" not in answer.text
     if "entrybevestiging" in message:
         assert "gekoppelde strategie" in answer.text
+
+
+def test_evidence_followup_rereads_the_last_listed_setup_and_names_verified_fields():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="listed-evidence")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock())
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 2, "name": "BTC Full Base",
+                                "symbol": "BTC", "timeframe": "4H", "setup_type": "trade"}],
+                     "setup_count": 1, "complete": True},
+        }]}
+
+    front.reads = read
+
+    prior_list = {
+        "name": "get_saved_setup_inventory", "status": "completed",
+        "arguments": {"asset": "BTC"}, "result": {"results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 1, "name": "BTC Eerste"},
+                                {"setup_id": 2, "name": "BTC Full Base"}]},
+        }]},
+    }
+    prior_selection = {
+        "name": "get_saved_setup_inventory", "status": "completed",
+        "arguments": {"asset": "BTC", "setup_ids": [2], "listed_ordinal": 2},
+        "result": {"results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 2, "name": "BTC Full Base"}]},
+        }]},
+    }
+    message = "Wat weet je daarvan zeker?"
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+        previous_response={"terminal_kind": "listed_setup_reference",
+                           "answer": "Nummer 2 uit mijn lijst is ‘BTC Full Base’.",
+                           "tool_trace": [prior_list, prior_selection]},
+    ))
+    assert len(calls) == 1
+    assert calls[0].inputs == {"asset": "BTC", "setup_ids": [2]}
+    assert result.response.answer_kind == "listed_setup_reference"
+    assert result.response.tool_trace[0]["arguments"]["evidence_followup"] is True
+    front.relevance_guard.saved_plan_query_kind.assert_not_awaited()
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "listed_setup_reference_evidence"
+    assert "BTC Full Base" in answer.text
+    assert "opgeslagen setupoverzicht" in answer.text
+    assert "asset BTC" in answer.text
+    assert "timeframe 4H" in answer.text
+    assert "type trade" in answer.text
+    assert "gekoppelde strategie" in answer.text
+    assert "BTC Eerste" not in answer.text
+
+
+def test_listed_evidence_reference_rejects_unverified_or_other_turn_ids():
+    trace = [{
+        "name": "get_saved_setup_inventory", "status": "completed",
+        "arguments": {"setup_ids": [99], "listed_ordinal": 2},
+        "result": {"results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 2, "name": "BTC Full Base"}]},
+        }]},
+    }]
+    assert _verified_listed_setup_reference({
+        "terminal_kind": "listed_setup_reference", "tool_trace": trace,
+    }) is None
+    trace[0]["arguments"]["setup_ids"] = [2]
+    assert _verified_listed_setup_reference({
+        "terminal_kind": "saved_setup_collection", "tool_trace": trace,
+    }) is None
 
 
 def test_failed_read_only_stop_loss_coaching_has_safe_process_answer():

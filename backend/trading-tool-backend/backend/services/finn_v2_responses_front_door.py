@@ -58,6 +58,34 @@ def _listed_setup_ordinal(message: str) -> int | None:
     return int(number.group()) - 1 if number else None
 
 
+def _verified_listed_setup_reference(previous_response: Mapping[str, Any] | None) -> tuple[int, int] | None:
+    """Return the last selected (ordinal, owner-scoped ID) from a verified list turn."""
+    if (previous_response or {}).get("terminal_kind") != "listed_setup_reference":
+        return None
+    for call in reversed((previous_response or {}).get("tool_trace") or []):
+        if call.get("name") != "get_saved_setup_inventory" or call.get("status") != "completed":
+            continue
+        arguments = call.get("arguments") or {}
+        ordinal = arguments.get("listed_ordinal")
+        setup_ids = arguments.get("setup_ids")
+        if not isinstance(ordinal, int) or ordinal < 1 or not isinstance(setup_ids, list) or len(setup_ids) != 1:
+            continue
+        setup_id = setup_ids[0]
+        if not isinstance(setup_id, int) or setup_id < 1:
+            continue
+        if any(
+            item.get("scope") == "read_saved_setup_inventory"
+            and item.get("status") == "completed"
+            and any(
+                isinstance(row, dict) and row.get("setup_id") == setup_id
+                for row in (item.get("data") or {}).get("setups") or []
+            )
+            for item in (call.get("result") or {}).get("results") or []
+        ):
+            return ordinal, setup_id
+    return None
+
+
 @dataclass(frozen=True)
 class FinnResponsesFrontDoorResult:
     response: FinnResponsesResult
@@ -220,9 +248,8 @@ class FinnResponsesFrontDoor:
                 )
         guard = getattr(self, "relevance_guard", None)
         previous_kind = str((previous_response or {}).get("terminal_kind") or "")
-        is_read_request = (
-            FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == "read"
-        )
+        request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+        is_read_request = request_facts.action_polarity == "read"
         mentioned_assets = mentioned_catalog_symbols(message)
         prior_inventory = next((
             call for call in reversed((previous_response or {}).get("tool_trace") or [])
@@ -244,10 +271,21 @@ class FinnResponsesFrontDoor:
             row["setup_id"] for row in prior_inventory_data.get("setups") or []
             if isinstance(row, dict) and isinstance(row.get("setup_id"), int)
         ]
+        # A request to justify the last selected list item still refers to
+        # that owner-scoped item. Re-read its verified ID instead of relying
+        # on the old prose answer or asking the model to infer an identity.
+        prior_selected = _verified_listed_setup_reference(previous_response)
+        evidence_followup = (
+            is_read_request and request_facts.discourse_act == "evidence_follow_up"
+            and prior_selected is not None
+        )
         listed_ordinal = _listed_setup_ordinal(message) if prior_setup_ids else None
+        if listed_ordinal is None and evidence_followup:
+            listed_ordinal = prior_selected[0] - 1
         listed_setup_id = (
             prior_setup_ids[listed_ordinal]
             if listed_ordinal is not None and 0 <= listed_ordinal < len(prior_setup_ids)
+            else prior_selected[1] if evidence_followup
             else None
         )
         if (is_read_request and pending_operation is None and not resuming_clarification
@@ -380,6 +418,7 @@ class FinnResponsesFrontDoor:
                                 **collection_call.inputs,
                                 **({"listed_ordinal": listed_ordinal + 1}
                                    if query_kind == "listed_setup_reference" else {}),
+                                **({"evidence_followup": True} if evidence_followup else {}),
                                 **({"source_asset": source_asset, "target_asset": target_asset}
                                    if query_kind == "cross_asset_scope" else {}),
                             },
@@ -405,6 +444,7 @@ class FinnResponsesFrontDoor:
                             **collection_call.inputs,
                             **({"listed_ordinal": listed_ordinal + 1}
                                if query_kind == "listed_setup_reference" else {}),
+                            **({"evidence_followup": True} if evidence_followup else {}),
                             **({"source_asset": source_asset, "target_asset": target_asset}
                                if query_kind == "cross_asset_scope" else {}),
                         },

@@ -90,6 +90,14 @@ def test_bare_causal_question_is_a_lineage_marker_not_an_off_topic_fact():
     assert "previous_verified_conclusion" in facts.conversation_reference_markers
 
 
+def test_asking_what_is_certain_is_an_evidence_followup():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Wat weet je daarvan zeker?"
+    )
+    assert facts.action_polarity == "read"
+    assert facts.discourse_act == "evidence_follow_up"
+
+
 def test_contextual_bot_implication_preserves_the_previous_assessment_fact():
     facts = FinnV2RequestPreprocessorService().preprocess(
         message="Wat betekent die eerdere beoordeling concreet voor mijn gekoppelde bot?"
