@@ -9,61 +9,63 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA` |
-| Active goal | Repair the recurring live coach defects reported on `a6247144468e9d407bb376cda115af861bfe6554`: contradictory saved BTC setup inventory and entry-condition follow-ups; BTC-to-AAPL rule scope hidden by FOMO coaching. |
-| Candidate branch | `codex/finn-coach-structural-context` ([PR #23](https://github.com/gvangalen/antigravity-trading-tool/pull/23), merged) |
-| Candidate code SHA | `d6a3a5785812e6d1a7fd4de94fd15793182430f0`; merge SHA `91f24f0b2cd9e533f19b393351c5458dcf6766ea`. |
-| Production code SHA | `91f24f0b2cd9e533f19b393351c5458dcf6766ea`, verified on public backend health and frontend build-info at 20:04 UTC on 2026-09-30. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
+| Phase | `BUILD_VALIDATED`; CI and Auto Deploy pending. |
+| Active goal | Repair the defects from live SHA `71d45f271800d56307d90ee598d78e9f9e88d6a8`: read-only stop-loss coaching fallback, first-turn saved-setup inventory fallback, and failure to resolve “de tweede uit jouw lijst”. |
+| Candidate branch | `codex/finn-coach-followup-grounding` |
+| Candidate code SHA | `d33472f5` (includes `9be63c7c`). A status-only commit follows; use the PR merge SHA for deployment identity. |
+| Production code SHA | Latest user-reported live QA SHA: `71d45f271800d56307d90ee598d78e9f9e88d6a8`. Build has not yet performed deployment identity verification for this candidate. |
 | Release owner | Build |
-| Last updated | `2026-09-30` |
+| Last updated | `2026-10-01` |
 
-The prior release remains historical evidence; its `READY_FOR_INDEPENDENT_QA`
-phase does not apply to this new repair batch. The user supplied the latest
-live findings. Build has not run authenticated production QA or used the
-protected QA fixture or sealed holdout.
+The prior candidate's release and QA evidence remain in Git history. This is a
+new local repair batch. Build did not use the protected production QA fixture
+or sealed holdout and did not run authenticated production QA.
 
 ## Root Cause and Repair
 
-The old tool represented both one active setup and a full saved-setup list.
-Plural questions and follow-ups could therefore fall into singleton entity
-resolution, where multiple BTC setups became an ambiguity or the first row
-was mistaken for the whole list. A phrase such as "bevestigde
-instapvoorwaarde" could also be parsed as an action confirmation, bypassing a
-read. Separately, FOMO language could steer a two-asset applicability question
-into general coaching before its asset scope was answered.
+The exact first-turn question, “Welke BTC-setups staan er op Mijn Plan? Noem de
+namen, zonder iets te maken of wijzigen”, was classified as `update` because
+the negated clause contains “wijzigen”. The direct rephrase was classified as
+`read`. This prevented the typed owner-scoped setup-inventory path from running.
+The exact read-only stop-loss coaching question was also classified as
+`update` because it says “niet om iets te wijzigen”. The production verifier
+reason for its observed fallback is unknown because that live run has no trace;
+the incorrect local request polarity is proven, but is not claimed as the sole
+production cause.
 
-This candidate adds an owner-scoped, typed saved-setup inventory, re-reads the
-verified setup IDs for collection follow-ups, distinguishes confirmation
-questions from confirmation actions, and answers cross-asset rule scope before
-secondary FOMO context. The inventory response explicitly states that linked
-strategies were not checked for entry rules.
+The preprocessor now treats a negated mutation as a constraint on an explicit
+read or coaching request while preserving positive mutation requests. The
+Responses front door resolves ordinals from its previously verified ordered
+setup list and re-reads the selected owner-scoped setup ID. A bounded read-only
+stop-loss recovery provides safe process coaching when a model-led answer
+cannot be verified; it never creates a proposal.
 
 ## Local Build Evidence
 
-The local parity stack used isolated PostgreSQL, Redis, API, and Celery with
-synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`; selector and
-semantic verification used `gpt-4o-mini`. Artifacts are ignored files under
+The parity stack used isolated PostgreSQL, Redis, API, and Celery with synthetic
+users. Chat used `gpt-6-luna` with reasoning `none`; selection and semantic
+verification used `gpt-4o-mini`. Artifacts are ignored files under
 `.local-finn-parity-artifacts/`.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| New multi-turn coach repro through API/Celery | `8/8` completed, no proposals | `structural-coach-repro.json`, SHA-256 `654cdfa0c68fcc503cde5627de28182d2974bc0d988c7a35785ea589b903f551`; three BTC setups plus a separate ETH setup, verified collection-ID follow-ups and BTC-to-AAPL answer order. |
-| Real-provider saved-plan scope development | `14/14` | `structural-query-eval.json`, SHA-256 `e74fe4b319135e53e4d8cb73fb8fe75ea474f5515979c37fdb20b6827e02b54c`. |
-| Real-provider selector development | `18/18` | `structural-provider-development.json`, SHA-256 `357ec64637c1b0ead04cf224e52205ebd32be03bcc789f94b38d37fb6dd30bff`. |
-| Real-provider selector regression | `109/109` | `structural-provider-regression.json`, SHA-256 `0eea45e5f441a7d8bc58a2980baeff5ce0367694e5a40950f481b6d95c1bb2b3`; no provider, schema, parse, or timeout failures. |
-| Full safe action matrix on final local build | `16/16`, zero broker orders, live bots, live-trading calls, or production connections. | `structural-action-matrix-final.json`, SHA-256 `c21867a26768b5927a90585b3846e6baeafcb6ab72fd96b215fa1d64a6028f27`. |
-| Backend canonical suite | `2894 passed, 3 skipped` | `pytest -q` after the final code changes. |
-| Frontend | `PASS` | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, and production `build`; no frontend source changes. |
+| Exact first-turn setup question, rephrase, then ordinal via API/Celery | `3/3` completed; all three names and the second setup were correct; no proposals. | `exact-inventory-repro.json`, SHA-256 `318b9481f725a0d64f7fd2a5ec00a4d663e71dfe64b408a21cfc35b89b5b5a00`. |
+| Stop-loss and list follow-up conversations via API/Celery | `8/8` completed; no proposals. The exact stop-loss prompt received read-only coaching. | `followup-root-probe.json`, SHA-256 `cfa48ab651824ed40f680c740f78f3ef9f6766f4d71074c5c07eca1a09512ba3`. |
+| Full safe action-contract matrix on final local build | `16/16`; zero broker orders, live bots, live-trading calls, or production connections. | `coach-ordinal-safe-action-matrix.json`, SHA-256 `3a3e18e67e5e5bb5b1a1ed8419cba5724441d96a56c2d9669fd50e3d55946a37`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, or timeout failures. | `coach-ordinal-provider-development.json`, SHA-256 `f3b9f96e6fbcddff7a2790371d87b9296854b65d235df114429363baef6d3e5b`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, or timeout failures. | `coach-ordinal-provider-regression.json`, SHA-256 `bd702946ac04636e451e90216e2d621b82e462d51f9587ce29978a26f8230ecf`. |
+| Backend canonical suite | `2911 passed, 3 skipped`. | `pytest -q --disable-warnings` on final code. |
+| Frontend canonical checks | `PASS`; no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, and production `build`. |
 
 ## Release and Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: PR run `36769396747`, all five jobs green. |
-| Main CI | `PASS`: main run `36769663898`, all five jobs green. |
-| Auto Deploy | `PASS`: run `36769888529` deployed merge SHA `91f24f0b2cd9e533f19b393351c5458dcf6766ea`. |
-| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 20:04 UTC on 2026-09-30. |
-| Independent authenticated live QA | Pending; QA owns the protected fixture, full live matrix, and final verdict. |
+| Candidate CI | Pending. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Backend health and frontend build-info | Pending for this candidate. |
+| Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
 Build's local checks establish technical readiness only. Authenticated
 production acceptance remains independent QA's responsibility.
