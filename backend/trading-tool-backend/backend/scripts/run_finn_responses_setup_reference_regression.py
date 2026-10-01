@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from sqlalchemy import text
@@ -21,6 +22,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--sequence", type=int, choices=range(1, 9))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -29,7 +31,11 @@ def main() -> None:
     with sync_engine.begin() as connection:
         breakout = _insert_setup(connection, user["id"], "BTC Breakout Full")
         base = _insert_setup(connection, user["id"], "BTC Full Base")
-        _insert_setup(connection, user["id"], "Apple swing", symbol="AAPL")
+        apple = _insert_setup(connection, user["id"], "Apple Full Setup", symbol="AAPL")
+        _insert_setup(connection, user["id"], "ETH Full Setup", symbol="ETH")
+        connection.execute(text("UPDATE setups SET timeframe='1D' WHERE id=:id AND user_id=:user_id"), {
+            "id": apple, "user_id": user["id"],
+        })
         for setup_id, name, entry, stop in (
             (breakout, "BTC Breakout Full Strategy", 80000, 76000),
             (base, "BTC Full Base Strategy", 76000, 72000),
@@ -67,9 +73,31 @@ def main() -> None:
             "De tweede uit de lijst: wat staat daarvan vast?",
             "Mag ik dezelfde BTC-regel ook voor Apple gebruiken?",
         ),
+        (
+            "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?",
+            "Ik vind dat te streng. Zou een kleinere positie met meer ruimte voor de stop niet verstandiger kunnen zijn? Denk kritisch mee zonder een nieuw niveau te verzinnen.",
+            "Je hebt het over wachttijd, maar ik vroeg naar stopafstand en positieomvang. Kun je die afweging beantwoorden zonder mijn plan te wijzigen?",
+            "Puur als algemene risicoles: als een stop verder weg ligt, hoe kun je dan met een kleinere positie hetzelfde maximale verlies begrenzen? Ik vraag niet om een koersniveau of uitvoering.",
+        ),
+        (
+            "Ik twijfel tussen BTC Full Base op 4H en Apple Full Setup op 1D. Vergelijk de opgeslagen setupvoorwaarden naast elkaar en zeg wat je niet kunt vaststellen. Verander niets.",
+            "Ik vroeg Apple Full Setup, niet ETH Full Setup. Kun je de twee genoemde setups opnieuw owner-scoped lezen en hun bevestigde velden vergelijken?",
+            "Lees alleen Apple Full Setup. Welke asset, timeframe en type staan daar opgeslagen?",
+            "Wat weet je zeker over die Apple Full Setup uit de database? Noem asset, timeframe en type, niet alleen de naam.",
+        ),
+        (
+            "Vergelijk BTC Full Base met Apple Full Setup. Verander niets.",
+            "Dat is een lijst, geen vergelijking. Wat verschilt er tussen precies die twee opgeslagen setups?",
+        ),
+        (
+            "Welke strategie is gekoppeld aan BTC Full Base? Lees die opgeslagen strategie zonder iets te wijzigen.",
+            "Welke strategienaam, welk entryniveau en welke aparte trigger staan daarin? Noem ook wat niet is vastgelegd.",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
+        if args.sequence is not None and sequence_number != args.sequence:
+            continue
         conversation_id = None
         for turn_number, message in enumerate(sequence, 1):
             observed = run_gate(
@@ -146,6 +174,48 @@ def main() -> None:
                 checks["asset_switch_clears_selected_setup"] = (
                     exchange.get("answer_kind") == "cross_asset_rule_scope"
                     and state.get("verified_setup_subject") is None
+                )
+            if sequence_number == 5 and turn_number in {2, 3}:
+                checks["stop_size_topic_retained"] = (
+                    not re.search(
+                        r"(?:bezwaar|probleem)[^.!?]{0,55}wachttijd[^.!?]{0,35}signaal",
+                        answer, re.I,
+                    )
+                    and re.search(
+                        r"(?:stopafstand|ruimere\s+stop|stop\s+verder\s+weg)",
+                        answer, re.I,
+                    ) is not None
+                    and any(word in answer.casefold() for word in ("positie", "omvang", "grootte"))
+                )
+            if sequence_number == 5 and turn_number in {1, 4}:
+                checks["stop_coaching_stays_on_risk"] = (
+                    "stop" in answer.casefold()
+                    and any(word in answer.casefold() for word in ("risico", "verlies", "positie"))
+                )
+            if sequence_number in {6, 7} and turn_number in {1, 2}:
+                checks["two_named_setups_compared"] = (
+                    "BTC Full Base" in answer and "Apple Full Setup" in answer
+                    and "BTC" in answer and "AAPL" in answer
+                    and "4H" in answer and "1D" in answer
+                    and ("ETH Full Setup" not in answer or re.search(
+                        r"\b(?:niet|not)\s+(?:om\s+)?ETH Full Setup\b", answer, re.I,
+                    ) is not None)
+                    and exchange.get("answer_kind") != "saved_setup_collection"
+                )
+                contract = exchange.get("turn_contract") or {}
+                checks["turn_contract_pair"] = (
+                    contract.get("answer_type") == "compare"
+                    and {item.get("setup_id") for item in contract.get("targets") or []} == {base, apple}
+                )
+            if sequence_number == 6 and turn_number in {3, 4}:
+                checks["apple_fields"] = (
+                    "AAPL" in answer and "1D" in answer and "trade" in answer.casefold()
+                )
+            if sequence_number == 8 and turn_number == 2:
+                checks["linked_strategy_fields"] = (
+                    "BTC Full Base Strategy" in answer and "76.000" in answer
+                    and "80.000" not in answer and "ETH Full Setup" not in answer
+                    and exchange.get("answer_kind") != "saved_setup_collection"
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,

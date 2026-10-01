@@ -19,7 +19,6 @@ from backend.services.finn_v2_responses_loop import (
     FinnResponsesResult,
     _read_only_stop_loss_coaching,
     _hypothetical_trade_reflection,
-    _rule_objection,
     _saved_confirmation_readback,
     limited_evaluation_answer,
     limited_evaluation_format,
@@ -30,6 +29,7 @@ from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_second
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_verified_setup_reference import verified_selected_setup
+from backend.services.finn_v2_turn_contract import turn_contract_gap
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
@@ -302,18 +302,6 @@ class FinnResponsesAnswerVerifier:
         }[language]
 
     @staticmethod
-    def _rule_objection_answer(
-        message: str, previous_answer: str, locale: str | None,
-    ) -> str | None:
-        if not _rule_objection(message, previous_answer):
-            return None
-        return {
-            "nl": "Ik snap je bezwaar: een regel die te streng voelt, mag je kritisch bekijken. Een strenge wachttijd is niet vanzelf veiliger, maar versoepelen uit ongeduld is ook geen onderbouwde keuze. Kijk welk risico de regel moest begrenzen en welke meetbare voorwaarde datzelfde doel dient. Gaat je bezwaar vooral over de wachttijd of over het vereiste signaal?",
-            "en": "I hear your objection: a rule that feels too strict is worth reviewing. A longer wait is not automatically safer, but relaxing it out of impatience is not a reasoned choice either. Check what risk the rule was meant to limit and what measurable condition would serve that purpose. Is your objection mainly about the wait or the required signal?",
-            "de": "Ich verstehe deinen Einwand: Eine Regel, die zu streng wirkt, solltest du prüfen. Längeres Warten ist nicht automatisch sicherer, aber die Regel aus Ungeduld zu lockern ist auch keine begründete Entscheidung. Prüfe, welches Risiko sie begrenzen sollte und welche messbare Bedingung denselben Zweck erfüllt. Geht es dir vor allem um die Wartezeit oder um das verlangte Signal?",
-        }[locale if locale in {"nl", "en", "de"} else "nl"]
-
-    @staticmethod
     def _unsupported_personal_confirmation(
         answer: str, evidence: tuple[dict[str, Any], ...], message: str = "",
     ) -> bool:
@@ -391,6 +379,9 @@ class FinnResponsesAnswerVerifier:
             return False
         DetectorFactory.seed = 0
         for sentence in re.split(r"(?<!\d)[.!?](?!\d)|\n+", text):
+            if sentence.lstrip().startswith("|"):
+                # Table cells mostly contain field names, tickers and values.
+                continue
             word_count = len(sentence.split())
             if word_count < 5:
                 continue
@@ -409,9 +400,12 @@ class FinnResponsesAnswerVerifier:
             # this is not evidence that the user-facing text changed language.
             if locale == "nl" and candidate.lang == "af":
                 continue
-            if candidate.lang != locale and (
-                candidate.lang in {"nl", "en", "de"} or candidate.prob >= 0.95
+            if (
+                locale == "nl" and candidate.lang == "en" and candidate.prob >= 0.7
+                and not re.search(r"\b(?:de|het|een|en|niet|staat|mijn|jouw|opgeslagen)\b", sentence, re.I)
             ):
+                return False
+            if candidate.lang != locale and candidate.prob >= 0.95:
                 return False
         return True
 
@@ -712,11 +706,16 @@ class FinnResponsesAnswerVerifier:
         return "responses_evidence_not_verified"
 
     @staticmethod
-    def _contains_internal_identifier(text: str) -> bool:
-        return bool(re.search(r"\b[a-z]+(?:_[a-z0-9]+)+\b", text)) or bool(re.search(
+    def _contains_internal_identifier(text: str, *, allowed_fields: frozenset[str] = frozenset()) -> bool:
+        exposed = re.sub(
+            r"\b[a-z]+(?:_[a-z0-9]+)+\b",
+            lambda match: "" if match.group().lower() in allowed_fields else match.group(),
+            text,
+        )
+        return bool(re.search(r"\b[a-z]+(?:_[a-z0-9]+)+\b", exposed)) or bool(re.search(
             r"\bfinn-v2-(?:run|conv|proposal|execution|contract)-[\w-]+\b"
             r"|\b(?:setup|strategy|bot|proposal|execution|run)[\s_-]*id[*_`\s]*[:#=]",
-            text, re.IGNORECASE,
+            exposed, re.IGNORECASE,
         ))
 
     @staticmethod
@@ -960,6 +959,13 @@ class FinnResponsesAnswerVerifier:
             r"\b(?:stop.?loss|target|doel|entry|instap|strategie|strategy|order)\b",
             text, re.IGNORECASE,
         )
+        # "Zet geen order klaar" is a restraint, not an instruction to place
+        # an order. The broad verb/object pattern must retain the negation.
+        if directed_change and re.search(
+            r"\b(?:geen|niet|no|not|kein(?:e|en|em|er)?)\b",
+            directed_change.group(), re.IGNORECASE,
+        ):
+            directed_change = None
         directed_change_by_pas = re.search(
             r"\bpas\b[^.!?;\n]{0,65}"
             r"\b(?:stop.?loss|target|doel|entry|instap|strategie|strategy|order)\b"
@@ -1961,6 +1967,21 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.model_led_coach and result.answer_kind == "free_text" and result.turn_contract:
+            gap = turn_contract_gap(result.turn_contract, result.text)
+            if gap:
+                language = locale if locale in {"nl", "en", "de"} else "nl"
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable", {
+                        "nl": "Ik heb je vraag nog niet volledig over de bedoelde opgeslagen gegevens beantwoord.",
+                        "en": "I have not yet fully answered your question about the intended saved data.",
+                        "de": "Ich habe deine Frage zu den gemeinten gespeicherten Daten noch nicht vollständig beantwortet.",
+                    }[language], "turn_contract_mismatch", evidence,
+                    rejection_details={
+                        "gap": gap,
+                        "turn_contract": result.turn_contract,
+                    },
+                )
         prior_selected_setup = verified_selected_setup(previous_response)
         if result.answer_kind in {"saved_inventory_unavailable", "cross_asset_inventory_unavailable"}:
             language = locale if locale in {"nl", "en", "de"} else "nl"
@@ -2310,7 +2331,9 @@ class FinnResponsesAnswerVerifier:
             )
         if result.model_led_coach:
             saved_confirmation = self._saved_confirmation_answer(message, evidence, locale)
-            if saved_confirmation:
+            if saved_confirmation and not (
+                result.turn_contract and turn_contract_gap(result.turn_contract, saved_confirmation)
+            ):
                 return FinnResponsesVerifiedAnswer(
                     "completed", saved_confirmation, "saved_confirmation_readback", evidence,
                 )
@@ -2367,16 +2390,11 @@ class FinnResponsesAnswerVerifier:
                     "completed", self._stop_loss_coach_fallback(locale),
                     "safe_stop_loss_coaching", evidence,
                 )
-            objection = self._rule_objection_answer(
-                message, str((previous_response or {}).get("answer") or ""), locale,
-            )
-            if objection and previous_response:
-                return FinnResponsesVerifiedAnswer(
-                    "completed", objection, "rule_objection_coaching", evidence, True,
-                )
         if result.model_led_coach and self._unsupported_personal_confirmation(result.text, evidence, message):
             coach_fallback = self._emotional_coach_fallback(message, locale)
-            if coach_fallback:
+            if coach_fallback and not (
+                result.turn_contract and turn_contract_gap(result.turn_contract, coach_fallback)
+            ):
                 return FinnResponsesVerifiedAnswer(
                     "completed", coach_fallback, "safe_emotional_coaching", evidence,
                 )
@@ -2451,7 +2469,7 @@ class FinnResponsesAnswerVerifier:
         )):
             previous_response = None
         previous_answer = str((previous_response or {}).get("answer") or "").strip()
-        def quantities_supported(text: str) -> bool:
+        def quantities_supported(text: str, *, general_risk_mechanics: bool = False) -> bool:
             user_question_context = "\n".join(filter(None, (
                 str((previous_response or {}).get("user_message") or "")
                 if reusing_previous_read else "",
@@ -2483,8 +2501,17 @@ class FinnResponsesAnswerVerifier:
                     evidence=evidence,
                 )
                 and self._static_geometry_complete(text, evidence, result.response_focus)
-                and not self._contains_internal_identifier(text)
-                and not self._promises_unverified_trading_outcome(text)
+                and not self._contains_internal_identifier(
+                    text,
+                    allowed_fields=frozenset({"entry_type"}) if result.model_led_coach and any(
+                        item.get("scope") == "read_linked_strategy"
+                        and item.get("status") == "completed"
+                        and isinstance(item.get("data"), dict)
+                        and "entry_type" in item["data"]
+                        for item in evidence
+                    ) else frozenset(),
+                )
+                and (general_risk_mechanics or not self._promises_unverified_trading_outcome(text))
                 and not self._strategy_levels_attributed_to_setup(text, evidence)
                 and self._saved_entity_type_supported(
                     text,
@@ -3396,6 +3423,104 @@ class FinnResponsesAnswerVerifier:
                 return FinnResponsesVerifiedAnswer("completed", grounded_choice, None, evidence, True)
             return None
 
+        # A factual read already has owner-scoped typed rows and deterministic
+        # checks for the selected objects and saved numbers. Sending it through
+        # two more model judges can reject a correct answer and exhaust the
+        # response deadline. Keep model review for judgment and action turns.
+        contract = result.turn_contract or {}
+        selected_targets = contract.get("targets") or []
+        requested_facts = set(contract.get("requested_fields") or ())
+        factual_read = bool(
+            result.model_led_coach and result.answer_kind == "free_text"
+            and selected_targets
+            and (
+                contract.get("answer_type") == "compare"
+                or requested_facts & {
+                    "asset", "timeframe", "setup_type", "strategy_name", "entry", "confirmation",
+                }
+            )
+            and all(call.get("name") in {
+                "get_saved_setup_inventory", "get_active_plan_and_strategy", "answer_directly",
+            } for call in result.tool_trace)
+            and all(any(
+                item.get("status") == "completed"
+                and item.get("scope") in {"read_saved_setup_inventory", "read_active_setup"}
+                and (
+                    target.get("setup_id") == (item.get("data") or {}).get("setup_id")
+                    or target.get("setup_id") in {
+                        row.get("setup_id")
+                        for row in (item.get("data") or {}).get("setups") or []
+                        if isinstance(row, dict)
+                    }
+                )
+                for item in evidence
+            ) for target in selected_targets)
+        )
+        if factual_read:
+            selected_names = {
+                str(target.get("name") or "").casefold() for target in selected_targets
+            }
+            other_names = {
+                str(row.get("name") or "")
+                for item in evidence
+                for row in (item.get("data") or {}).get("setups") or []
+                if isinstance(row, dict)
+                and str(row.get("name") or "").casefold() not in selected_names
+            }
+            if (
+                all(name and name in result.text.casefold() for name in selected_names)
+                and
+                not any(name and name.casefold() in result.text.casefold() for name in other_names)
+                and quantities_supported(result.text)
+                and self._language_matches(result.text, locale)
+                and self._assistant_does_not_claim_user_mutation(result.text)
+                and self._proposal_speaker_is_user(result.text)
+                and not self._unevaluated_positive_fit_claim(result.text)
+                and not self._ungrounded_level_advice(result.text)
+                and not self._promises_unverified_trading_outcome(result.text)
+            ):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", result.text, "source_bound_read", evidence,
+                    result.uses_previous_response,
+                )
+        general_risk_lesson = (
+            result.model_led_coach
+            and result.answer_kind == "free_text"
+            and not selected_targets
+            and {"stop_distance", "position_size"} <= requested_facts
+            and (
+                contract.get("answer_type") == "weigh"
+                or re.search(r"\b(?:algeme\w*|general|allgemein\w*)\b", message, re.I)
+            )
+            and re.search(r"\b(?:stop\w*|exit\w*)\b", result.text, re.I)
+            and re.search(r"\b(?:positie\w*|omvang|grootte|inzet|aantal|size|units?)\b", result.text, re.I)
+            and not re.search(r"\b\d{2,}(?:[.,]\d+)?\b", result.text)
+            and not re.search(r"\b(?:koers|price|markt|market)\b[^.!?\n]{0,35}\b(?:nu|now|today|vandaag)\b", result.text, re.I)
+            and not re.search(
+                r"\b(?:koop|verkoop|buy|sell|plaats|place|open)\b[^.!?\n]{0,50}"
+                r"\b(?:order|positie|position|trade)\b", result.text, re.I,
+            )
+            and not re.search(
+                r"\b(?:haal|verwijder|schrap|remove|delete)\b[^.!?\n]{0,30}"
+                r"\b(?:stop|stop.loss)\b", result.text, re.I,
+            )
+            and quantities_supported(result.text, general_risk_mechanics=True)
+            and self._assistant_does_not_claim_user_mutation(result.text)
+            and not self._unevaluated_positive_fit_claim(result.text)
+            and not self._ungrounded_level_advice(result.text)
+            and not re.search(
+                r"\b(?:winst|profit|succes|success|kans|chance|risicovrij|risk.free)\b"
+                r"[^.!?\n]{0,40}\b(?:garandeer\w*|guarantee\w*|zeker|certain)\b"
+                r"|\b(?:garandeer\w*|guarantee\w*)\b[^.!?\n]{0,40}"
+                r"\b(?:winst|profit|succes|success|risicovrij|risk.free)\b",
+                result.text, re.I,
+            )
+        )
+        if general_risk_lesson:
+            return FinnResponsesVerifiedAnswer(
+                "completed", result.text, "general_risk_education", evidence,
+                result.uses_previous_response,
+            )
         async def verify_text(text: str):
             return await self.semantic.verify_async(
                 mode=mode, user_message=user_message, mandatory=True,
@@ -3411,7 +3536,27 @@ class FinnResponsesAnswerVerifier:
             technical_supported(result.text),
             catalog_focused(result.text),
         )
-        verdict_passes = verdict.passes if result.model_led_coach else (
+        selected_pair_grounded = (
+            result.model_led_coach
+            and result.turn_contract is not None
+            and result.turn_contract.get("answer_type") == "compare"
+            and len(result.turn_contract.get("targets") or []) == 2
+            and turn_contract_gap(result.turn_contract, result.text) is None
+            and set(verdict.reason_codes or ()) == {"setup_ambiguous"}
+        )
+        general_risk_tradeoff = (
+            result.model_led_coach
+            and result.turn_contract is not None
+            and result.turn_contract.get("answer_type") == "weigh"
+            and {"stop_distance", "position_size"} <= set(
+                result.turn_contract.get("requested_fields") or ()
+            )
+            and not result.turn_contract.get("targets")
+            and turn_contract_gap(result.turn_contract, result.text) is None
+            and bool(verdict.reason_codes)
+            and set(verdict.reason_codes) == {"setup_ambiguous"}
+        )
+        verdict_passes = (verdict.passes or selected_pair_grounded or general_risk_tradeoff) if result.model_led_coach else (
             verdict.passes or (
                 not previous_explanation_only and personal_evidence
                 and self.client is not None and advice_ok
@@ -3542,7 +3687,9 @@ class FinnResponsesAnswerVerifier:
                         message, evidence, locale,
                         verified_setup_id=(prior_selected_setup or (None,))[0],
                     )
-                    if named_plan_fallback:
+                    if named_plan_fallback and not (
+                        result.turn_contract and turn_contract_gap(result.turn_contract, named_plan_fallback)
+                    ):
                         return FinnResponsesVerifiedAnswer(
                             "completed", named_plan_fallback, "grounded_named_setup_coaching",
                             evidence, bool(previous_answer),
@@ -3550,7 +3697,9 @@ class FinnResponsesAnswerVerifier:
                     review_fallback = self._grounded_plan_review_fallback(
                         message, evidence, locale,
                     )
-                    if review_fallback:
+                    if review_fallback and not (
+                        result.turn_contract and turn_contract_gap(result.turn_contract, review_fallback)
+                    ):
                         return FinnResponsesVerifiedAnswer(
                             "completed", review_fallback, "grounded_plan_review", evidence,
                             bool(previous_answer),
@@ -3558,7 +3707,9 @@ class FinnResponsesAnswerVerifier:
                     personal_fallback = self._limited_personal_plan_fallback(
                         message, evidence, result.tool_trace, locale,
                     )
-                    if personal_fallback:
+                    if personal_fallback and not (
+                        result.turn_contract and turn_contract_gap(result.turn_contract, personal_fallback)
+                    ):
                         return FinnResponsesVerifiedAnswer(
                             "completed", personal_fallback, "limited_personal_plan", evidence,
                             bool(previous_answer),
@@ -3571,7 +3722,9 @@ class FinnResponsesAnswerVerifier:
                             "trading_outcome_claim_unverified",
                         } else None
                     )
-                    if coach_fallback:
+                    if coach_fallback and not (
+                        result.turn_contract and turn_contract_gap(result.turn_contract, coach_fallback)
+                    ):
                         return FinnResponsesVerifiedAnswer(
                             "completed", coach_fallback, "safe_emotional_coaching", evidence,
                             bool(previous_answer),

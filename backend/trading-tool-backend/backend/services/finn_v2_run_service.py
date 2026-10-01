@@ -453,6 +453,7 @@ class FinnV2RunService:
                                 or next(iter(dict(prior_state.get("terminal_response") or {}).get("uncertainty") or []), None)
                             ),
                             "tool_trace": list(exchange.get("tool_trace") or []),
+                            "turn_contract": exchange.get("turn_contract"),
                         }
             prior_contract = await orchestrator.runtime_contracts.get_latest_for_conversation(
                 conversation_id=conversation_id, user_id=user_id, exclude_run_id=run_id,
@@ -477,6 +478,7 @@ class FinnV2RunService:
                             or next(iter(dict(prior_state.get("terminal_response") or {}).get("uncertainty") or []), None)
                         ),
                         "tool_trace": list(exchange.get("tool_trace") or progress.get("tool_trace") or []),
+                        "turn_contract": exchange.get("turn_contract"),
                     }
             if previous_response and previous_response.get("run_id"):
                 preceding_run = await orchestrator.runs.get_by_id_for_user(
@@ -905,6 +907,7 @@ class FinnV2RunService:
                 answer_kind=result.response.answer_kind,
                 uses_previous_response=result.response.uses_previous_response,
                 response_id_reusable=result.response.response_id_reusable,
+                turn_contract=result.response.turn_contract,
             )
             logger.info(
                 "FINN Responses exchange recorded in %.2fs",
@@ -1568,6 +1571,7 @@ class FinnV2RunService:
                                     "personal_fit_not_established", "current_market_claim_unverified",
                                     "saved_action_claim_unverified", "trading_outcome_claim_unverified",
                                     "user_condition_bypass_blocked", "saved_entity_type_unverified",
+                                    "turn_contract_mismatch",
                                 }
                                 and cls._read_only_repair_eligible(prepared.response.tool_trace)
                                 and cls._read_repair_has_budget(remaining, explain_limit=explain_limit)

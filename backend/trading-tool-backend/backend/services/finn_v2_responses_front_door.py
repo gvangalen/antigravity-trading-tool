@@ -32,6 +32,7 @@ from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
     verified_selected_setup_asset,
 )
+from backend.services.finn_v2_turn_contract import build_turn_contract, referenced_setup_rows
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -277,6 +278,22 @@ class FinnResponsesFrontDoor:
         request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
         is_read_request = request_facts.action_polarity == "read"
         mentioned_assets = mentioned_catalog_symbols(message)
+        mentioned_timeframes = {
+            value.upper() for value in re.findall(r"\b(?:15m|30m|1h|4h|1d|1w)\b", message, re.I)
+        }
+        multiple_targets = len(mentioned_assets) > 1 or len(mentioned_timeframes) > 1
+        previous_turn_contract = (previous_response or {}).get("turn_contract") or {}
+        prior_pair = [
+            {"setup_id": target.get("setup_id"), "name": target.get("name")}
+            for target in previous_turn_contract.get("targets") or []
+            if isinstance(target, dict) and isinstance(target.get("setup_id"), int)
+        ]
+        pair_followup = bool(
+            len(prior_pair) == 2
+            and len(referenced_setup_rows(
+                message=message, rows=prior_pair, previous_contract=previous_turn_contract,
+            )) == 2
+        )
         prior_inventory = next((
             call for call in reversed((previous_response or {}).get("tool_trace") or [])
             if call.get("name") == "get_saved_setup_inventory"
@@ -365,9 +382,13 @@ class FinnResponsesFrontDoor:
             message, re.I,
         ))
         explicit_list = collection_cue and bool(
-            re.search(r"\b(?:noem|opsom\w*|lijst|list|alle|all|namen|names|overzicht|show|toon)\b", message, re.I)
+            re.search(r"\b(?:namen|names|aantal|hoeveel|count|overzicht|opsom\w*|list)\b", message, re.I)
             or re.search(r"\b(?:welke|which)\b.{0,80}\b(?:staan|heb|have|are)\b", message, re.I)
-        )
+        ) and not bool(re.search(
+            r"\b(?:vergelijk\w*|verschil\w*|compare\w*|vergleich\w*|"
+            r"voorwaard\w*|conditions?|strategie\w*|strateg\w*|entry\w*|"
+            r"instap\w*|stop\w*|trigger\w*)\b", message, re.I,
+        ))
         query: dict[str, str] | None = None
         if is_read_request and explicit_rule_transfer:
             query = {"kind": "cross_asset_scope", "source_asset": explicit_rule_transfer[0],
@@ -380,7 +401,8 @@ class FinnResponsesFrontDoor:
             query = {"kind": "confirmation_inventory"}
         if (
             pending_operation is None and not resuming_clarification and is_read_request
-            and (collection_cue or cross_asset_cue or inventory_followup or listed_setup_id)
+            and (inventory_followup or listed_setup_id)
+            and not multiple_targets
             and not (subject_reference and not collection_cue and not cross_asset_cue
                      and not confirmation_followup)
             and query is None
@@ -399,11 +421,15 @@ class FinnResponsesFrontDoor:
         # The classifier is a semantic router. These narrow fallbacks keep an
         # unambiguous read available if the selector provider is unavailable.
         if query is None and is_read_request:
-            if FinnV2OperationClassificationService._is_explicit_setup_collection_read(message):
-                query = {"kind": "inventory"}
-            elif _saved_confirmation_readback(message):
+            if _saved_confirmation_readback(message):
                 query = {"kind": "confirmation_inventory"}
+            elif FinnV2OperationClassificationService._is_explicit_setup_collection_read(message):
+                query = {"kind": "inventory"}
         query_kind = str((query or {}).get("kind") or "none")
+        if query_kind == "inventory" and not explicit_list:
+            # Inventory is a terminal names/count answer. Questions asking
+            # about the contents of saved objects need a model-composed answer.
+            query_kind = "none"
         source_asset = str((query or {}).get("source_asset") or "").upper()
         target_asset = str((query or {}).get("target_asset") or "").upper()
         if query_kind == "cross_asset_scope" and not (
@@ -474,28 +500,35 @@ class FinnResponsesFrontDoor:
                 and isinstance(item["data"].get("setups"), list)
             ), None)
             if collection_evidence is not None:
+                collection_trace = ({
+                    "name": collection_call.name, "status": collection_read["status"],
+                    "arguments": {
+                        **collection_call.inputs,
+                        **({"listed_ordinal": listed_ordinal + 1}
+                           if query_kind == "listed_setup_reference" else {}),
+                        **({"evidence_followup": True} if evidence_followup else {}),
+                        **({"source_asset": source_asset, "target_asset": target_asset}
+                           if query_kind == "cross_asset_scope" else {}),
+                    },
+                    "result": collection_read,
+                },)
                 return FinnResponsesFrontDoorResult(
                     FinnResponsesResult(
                         text="Verified saved setup context.",
                         response_id=f"local-setup-collection-{self.run_id}",
-                        tool_trace=({
-                            "name": collection_call.name, "status": collection_read["status"],
-                            "arguments": {
-                                **collection_call.inputs,
-                                **({"listed_ordinal": listed_ordinal + 1}
-                                   if query_kind == "listed_setup_reference" else {}),
-                                **({"evidence_followup": True} if evidence_followup else {}),
-                                **({"source_asset": source_asset, "target_asset": target_asset}
-                                   if query_kind == "cross_asset_scope" else {}),
-                            },
-                            "result": collection_read,
-                        },),
+                        tool_trace=collection_trace,
                         answer_kind=("listed_setup_reference" if query_kind == "listed_setup_reference"
                                      else "cross_asset_rule_scope" if query_kind == "cross_asset_scope"
                                      else "saved_confirmation_inventory" if query_kind == "confirmation_inventory"
                                      else "saved_setup_collection"),
                         model_led_coach=True,
                         response_id_reusable=False,
+                        turn_contract=build_turn_contract(
+                            message=message, tool_trace=collection_trace,
+                            previous_subject=(previous_response or {}).get("verified_setup_subject"),
+                            previous_contract=previous_turn_contract,
+                            answer_type="list" if query_kind == "inventory" else None,
+                        ),
                     ),
                     selected, previous_response, locale=locale,
                 )
@@ -760,6 +793,19 @@ class FinnResponsesFrontDoor:
                         ),
                     }
             if call.operation_id is None:
+                if call.name == "get_active_plan_and_strategy" and (multiple_targets or pair_followup):
+                    # A single-target resolver cannot represent a two-setup
+                    # comparison. Read the owner-scoped collection once and
+                    # project the named pair from its typed rows below.
+                    call = replace(
+                        call, name="get_saved_setup_inventory", inputs={},
+                        read_tools=("read_saved_setup_inventory",),
+                        required_inputs=(), missing_inputs=(),
+                    )
+                if call.name == "get_saved_setup_inventory" and (multiple_targets or pair_followup):
+                    # One global asset or timeframe would silently remove the
+                    # other side of a multi-object read.
+                    call = replace(call, inputs={})
                 previous_setup_target: dict[str, object] = (
                     {"entity_type": "setup", "entity_id": verified_subject[0]}
                     if subject_reference and verified_subject else {}
@@ -904,6 +950,44 @@ class FinnResponsesFrontDoor:
                         ),
                     }
                 read_result = await self.reads(call)
+                if call.name == "get_saved_setup_inventory":
+                    # Match explicit names against the owner-scoped result. The
+                    # model receives the requested records, not unrelated setups
+                    # that happen to share an asset or timeframe.
+                    projected_results = []
+                    for item in read_result.get("results", []):
+                        if not isinstance(item, dict):
+                            projected_results.append(item)
+                            continue
+                        data = item.get("data")
+                        rows = data.get("setups") if isinstance(data, dict) else None
+                        if item.get("scope") != "read_saved_setup_inventory" or not isinstance(rows, list):
+                            projected_results.append(item)
+                            continue
+                        named_rows = referenced_setup_rows(
+                            message=message,
+                            rows=[row for row in rows if isinstance(row, dict)],
+                            previous_contract=previous_turn_contract,
+                        )
+                        if len(named_rows) >= 2:
+                            projected_results.append({
+                                **item, "data": {
+                                    **data, "setups": named_rows,
+                                    "setup_count": len(named_rows),
+                                },
+                            })
+                        else:
+                            projected_results.append(item)
+                    read_result = {**read_result, "results": projected_results}
+                    if (multiple_targets or pair_followup) and any(
+                        item.get("scope") == "read_saved_setup_inventory"
+                        and len((item.get("data") or {}).get("setups") or []) == 2
+                        for item in projected_results if isinstance(item, dict)
+                    ):
+                        # The two requested rows are now in one typed result.
+                        # Spend the next provider round answering, not rereading
+                        # the same pair until the run deadline expires.
+                        read_result["finalize_now"] = True
                 read_context.append(read_result)
                 completed_read_calls.add(read_identity)
                 return read_result
@@ -1034,7 +1118,15 @@ class FinnResponsesFrontDoor:
         )
         result = await loop.run(
             message=model_message or message,
-            instructions=(self._model_led_instructions(locale) if getattr(self, "model_led_coach", False) else instructions),
+            instructions=(
+                self._model_led_instructions(locale)
+                + ("\nThe current comparison refers to these two previously verified saved setups: "
+                   + ", ".join(str(row["name"]) for row in prior_pair)
+                   + ". Identify both by name in the answer; compare only fields established by "
+                   "their owner-scoped read."
+                   if pair_followup else "")
+                if getattr(self, "model_led_coach", False) else instructions
+            ),
             verified_turn_context=verified_turn,
             previous_response_id=(
                 previous_response_id
@@ -1142,6 +1234,13 @@ class FinnResponsesFrontDoor:
             result = replace(result, uses_previous_response=True)
         if pending_operation and selected is None:
             raise FinnResponsesError("guided_proposal_tool_call_required")
+        if getattr(self, "model_led_coach", False) and selected is None:
+            result = replace(result, turn_contract=build_turn_contract(
+                message=message,
+                tool_trace=(*prior_tool_trace, *result.tool_trace),
+                previous_subject=(previous_response or {}).get("verified_setup_subject"),
+                previous_contract=previous_turn_contract,
+            ))
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
             recent_action_result = {}

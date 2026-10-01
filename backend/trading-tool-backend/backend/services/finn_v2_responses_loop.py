@@ -82,16 +82,6 @@ def _hypothetical_trade_reflection(message: str) -> bool:
     )
 
 
-def _rule_objection(message: str, previous_answer: str) -> bool:
-    return bool(
-        re.search(r"\b(?:te streng|overdreven|too strict|overly strict|zu streng)\b", message, re.I)
-        and re.search(
-            r"\b(?:\w*regel|voorwaarde|wacht\w*|rule|condition|wait\w*|Bedingung|wart\w*)\b",
-            message + " " + previous_answer, re.I,
-        )
-    )
-
-
 def limited_evaluation_format(response_focus: str | None = None) -> dict[str, Any]:
     output = {"format": {
         "type": "json_schema", "name": "finn_limited_evaluation", "strict": True,
@@ -304,6 +294,7 @@ class FinnResponsesResult:
     uses_previous_response: bool = False
     model_led_coach: bool = False
     response_id_reusable: bool = True
+    turn_contract: dict[str, Any] | None = None
 
 
 class FinnResponsesLoop:
@@ -440,9 +431,9 @@ class FinnResponsesLoop:
         repair_attempts: dict[str, int] = {}
         repair_exhausted = False
         incomplete_output_retry_used = False
+        transient_provider_retry_used = False
         output_token_override: int | None = None
         saved_confirmation_readback = model_led_coach and _saved_confirmation_readback(message)
-        rule_objection = model_led_coach and _rule_objection(message, previous_verified_answer or "")
 
         def safe_coach_timeout_result() -> FinnResponsesResult:
             # The runtime contract needs an exchange identifier and nonempty
@@ -638,7 +629,11 @@ class FinnResponsesLoop:
                     "process discussion, but do not call an unspecified trigger 'your "
                     "confirmation condition' or imply it is stored. "
                     "Do not repeat a clarification already answered or a failed evaluation "
-                    "without new evidence."
+                    "without new evidence. When comparing multiple saved setups, read the "
+                    "owner-scoped setup inventory without a single global asset or timeframe "
+                    "filter, identify the exact records the trader named, and compare the "
+                    "requested fields. If a named record is absent, say which one is missing; "
+                    "do not substitute another setup or answer with the entire inventory."
                 )
                 if stop_loss_coaching:
                     turn_instructions += (
@@ -830,7 +825,7 @@ class FinnResponsesLoop:
                 )
                 if saved_confirmation_readback:
                     kwargs["tool_choice"] = {"type": "function", "name": "get_active_plan_and_strategy"}
-                elif stop_loss_coaching or rule_objection or hypothetical_trade_reflection:
+                elif stop_loss_coaching or hypothetical_trade_reflection:
                     kwargs["tool_choice"] = "none"
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
@@ -905,9 +900,10 @@ class FinnResponsesLoop:
                         return safe_coach_timeout_result()
                     if trace and not proposal_selected:
                         return FinnResponsesResult(
-                            "", prior_id or "", tuple(trace), "provider_unavailable",
+                            "Provider response unavailable.", prior_id or "", tuple(trace), "provider_unavailable",
                             response_focus_check() if response_focus_check is not None else None,
                             False, None, model_led_coach=model_led_coach,
+                            response_id_reusable=False,
                         )
                     raise FinnResponsesError("responses_provider_timeout")
                 response = await provider_task
@@ -925,9 +921,10 @@ class FinnResponsesLoop:
                     return safe_coach_timeout_result()
                 if trace and not proposal_selected:
                     return FinnResponsesResult(
-                        "", prior_id or "", tuple(trace), "provider_unavailable",
+                        "Provider response unavailable.", prior_id or "", tuple(trace), "provider_unavailable",
                         response_focus_check() if response_focus_check is not None else None,
                         model_led_coach=model_led_coach,
+                        response_id_reusable=False,
                     )
                 raise FinnResponsesError("responses_provider_timeout") from exc
             except FinnResponsesError:
@@ -938,11 +935,29 @@ class FinnResponsesLoop:
                 raise
             except Exception as exc:
                 provider_code = getattr(exc, "code", None)
+                provider_status = getattr(exc, "status_code", None)
                 provider_body = getattr(exc, "body", None)
                 if isinstance(provider_body, dict):
                     provider_code = provider_code or (provider_body.get("error") or {}).get("code")
                 if provider_code in {"credit_balance_exhausted", "insufficient_quota"}:
                     raise FinnResponsesError("responses_provider_quota_unavailable") from exc
+                transient = (
+                    provider_status in {429, 500, 502, 503, 504}
+                    or type(exc).__name__ in {
+                        "APIConnectionError", "APITimeoutError", "ConnectError", "ReadError",
+                    }
+                )
+                remaining_after_error = remaining_lifecycle_seconds()
+                logger.warning(
+                    "FINN Responses provider failure type=%s status=%s code=%s retryable=%s",
+                    type(exc).__name__, provider_status, provider_code, transient,
+                )
+                if (
+                    transient and not transient_provider_retry_used and not trace
+                    and (remaining_after_error is None or remaining_after_error > 6)
+                ):
+                    transient_provider_retry_used = True
+                    continue
                 raise FinnResponsesError("responses_provider_error") from exc
             if getattr(response, "status", "completed") != "completed":
                 incomplete_reason = str(getattr(getattr(response, "incomplete_details", None), "reason", "") or "")
