@@ -9,12 +9,12 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_CI_PENDING`; all required local Build gates passed. No deployment or independent QA verdict for this candidate yet. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build, CI and deployment identity gates passed. |
 | Active goal | Make FINN's read-only coach conversation model-owned: Luna chooses reads and composes the answer; the server binds only owner-scoped objects, checks source claims and write safety, and returns structured rejection for one model repair. Verify complete multi-turn conversations. |
 | Candidate branch | `codex/finn-single-owner-flow`. |
 | Candidate code SHA | `b737aa83d4b11fb76813d73fa4d6960d7e08eb39`. |
-| Candidate PR/head SHA | [PR #35](https://github.com/gvangalen/antigravity-trading-tool/pull/35); use the PR's Git HEAD for its status commit. |
-| Production SHA | Pending deployment of this candidate. |
+| Candidate PR/head SHA | [PR #35](https://github.com/gvangalen/antigravity-trading-tool/pull/35), head `b5f1664a6d1cfcc2a5b7948ed52a59584d832bb3`, merged. |
+| Production code SHA | `4772960646257870889b8955ceb25b1ed31281e9`, verified on public backend health and frontend build-info at 22:13 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
 | Release owner | Build |
 | Last updated | `2026-10-02` |
 
@@ -67,11 +67,12 @@ protected QA fixture or sealed holdout was used.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | PR #35 is running; final head CI pending. |
-| Main CI | Pending merge. |
-| Auto Deploy | Pending successful main CI. |
-| Backend health and frontend build-info | Pending deployed SHA verification. |
+| Candidate CI | `PASS`: PR run `36933101250`, all five jobs green on head `b5f1664a6d1cfcc2a5b7948ed52a59584d832bb3`. |
+| Main CI | `PASS`: main run `36933335821`, all five jobs green on merge SHA `4772960646257870889b8955ceb25b1ed31281e9`. |
+| Auto Deploy | `PASS`: run `36933540084` deployed merge SHA `4772960646257870889b8955ceb25b1ed31281e9`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 22:13 UTC on 2026-10-01. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and final verdict. |
 
-Local Build evidence establishes technical readiness for a candidate. It does
-not establish authenticated production coach acceptance.
+Build's local and deployment evidence establishes technical readiness only.
+Authenticated production coach acceptance remains independent QA's
+responsibility.
