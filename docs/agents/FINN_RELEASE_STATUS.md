@@ -9,11 +9,11 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED`; CI and Auto Deploy pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; Build release gates passed. |
 | Active goal | Improve the evidence follow-up after FINN identifies a numbered saved setup: on “Wat weet je daarvan zeker?” name the reread source, confirmed fields, and unverified limits. The user's targeted live retest of the prior defects passed on `9666f39db37607f1157ed71e06cc9b82080f434a`; this answer-quality gap remained. |
-| Candidate branch | `codex/finn-listed-setup-evidence` |
-| Candidate code SHA | `c00fc760`; a status-only commit follows. Use the PR merge SHA for deployment identity. |
-| Production code SHA | Latest user-reported live QA SHA: `9666f39db37607f1157ed71e06cc9b82080f434a`. Build has not yet verified deployment identity for this candidate. |
+| Candidate branch | `codex/finn-listed-setup-evidence` ([PR #27](https://github.com/gvangalen/antigravity-trading-tool/pull/27), merged). |
+| Candidate code SHA | `c00fc760`; merge SHA `220ae2d4dda16c5eae657bea870c16d7f67cd17e`. |
+| Production code SHA | `220ae2d4dda16c5eae657bea870c16d7f67cd17e`, verified on public backend health and frontend build-info at 08:21 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
@@ -55,10 +55,10 @@ verification used `gpt-4o-mini`. Artifacts are ignored files under
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Backend health and frontend build-info | Pending for this candidate. |
+| Candidate CI | `PASS`: PR run `36834333984`, all five jobs green. |
+| Main CI | `PASS`: main run `36835506591`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36835662943` deployed merge SHA `220ae2d4dda16c5eae657bea870c16d7f67cd17e`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 08:21 UTC on 2026-10-01. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
 Build's local checks establish technical readiness only. Authenticated
