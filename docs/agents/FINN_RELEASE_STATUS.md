@@ -9,76 +9,69 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build, CI and deployment identity gates passed; the nonsealed parity diagnostic gap remains recorded below. |
-| Active goal | Repair FINN's recurring multi-turn coach failures as one flow: keep the current question and selected owner-scoped setup evidence through comparisons, risk tradeoffs, corrections and linked-strategy follow-ups, without fixed coach copy replacing the answer. |
-| Candidate branch | `codex/finn-turn-contract` ([PR #33](https://github.com/gvangalen/antigravity-trading-tool/pull/33), merged). |
-| Candidate code SHA | `80324808ec474b163bfc727f29291b3ce63dcd47`. |
-| Candidate PR/head SHA | `d8d167408d191c608457362793b170125be7562d`. |
-| Production code SHA | `a31beb3574da4adad890ac065b8dc65b1b4e997a`, verified on public backend health and frontend build-info at 19:42 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
+| Phase | `CANDIDATE_CI_PENDING`; all required local Build gates passed. No deployment or independent QA verdict for this candidate yet. |
+| Active goal | Make FINN's read-only coach conversation model-owned: Luna chooses reads and composes the answer; the server binds only owner-scoped objects, checks source claims and write safety, and returns structured rejection for one model repair. Verify complete multi-turn conversations. |
+| Candidate branch | `codex/finn-single-owner-flow`. |
+| Candidate code SHA | `b737aa83d4b11fb76813d73fa4d6960d7e08eb39`. |
+| Candidate PR/head SHA | Pending PR creation and CI. |
+| Production SHA | Pending deployment of this candidate. |
 | Release owner | Build |
-| Last updated | `2026-10-01` |
+| Last updated | `2026-10-02` |
 
-The previous release was marked `READY_FOR_INDEPENDENT_QA`, but the user's
-subsequent live report on SHA `3ad45d1486936abd2104139172180ada9bf01e85`
-showed further related failures. No independent QA run for this new candidate
-has started.
+The previous candidate on `codex/finn-turn-contract` reached
+`READY_FOR_INDEPENDENT_QA` but the user reported further related live failures.
+It is superseded by this batch. No independent QA run has started for this
+new candidate.
 
 ## Root Causes and Repair
 
-- A broad objection rule matched “te streng” and replaced a stop-distance and
-  position-size question with fixed waiting-time copy. The fixed override was
-  removed; the current question's risk tradeoff is now checked for coverage.
-- Comparison reads reduced a request containing `4H` and `1D` to the first
-  timeframe, then listed matching records. Explicitly named setups are now
-  selected by their owner-scoped IDs from a completed inventory read; the
-  response must address the selected pair and their evidence fields.
-- Linked-strategy follow-ups lost the selected setup or became broad inventory
-  answers. The per-turn contract persists the current question, answer type,
-  selected verified objects and evidence; a reference to the previously
-  verified pair can reuse that pair without changing objects.
-- The answer verifier rejected correct read-only replies due to a second
-  semantic pass and overly broad checks for negated order mentions, Dutch
-  Markdown tables, field identifiers and general risk mechanics. Factual reads
-  and general stop/size explanations now use source-bound checks, while write
-  safety and other hard constraints remain in force.
-- A transient first Responses error previously ended in a generic failure.
-  The loop makes one bounded retry for transient provider errors and records
-  safe error type/status diagnostics.
+- The chat route still included legacy collection and answer-sufficiency
+  decisions that could turn the current question into an inventory or fixed
+  response. The production run now enables the model-led path explicitly.
+  Luna chooses a read when needed and composes the answer; explicit read-only
+  coaching turns cannot call proposal tools.
+- Multi-object reads could use one asset/timeframe filter or a model-supplied
+  name as authority. The server now binds at most two selected names to
+  owner-scoped inventory IDs and the current user request or a verified prior
+  subject. A complete inventory or an unbound general tradeoff has a bounded
+  read path, avoiding repeated unrelated account lookups.
+- The answer verifier could replace a good answer with fixed coach copy or a
+  generic fallback after a second semantic verdict. The model-led path treats
+  replacement as structured rejection and gives Luna one repair. Factual
+  saved-object reads and asset-transfer boundaries use typed source checks;
+  saved numbers, object identity, language and mutation safety remain checked.
+- Previous tests exercised individual reads and answers more than their
+  continuation. Eight full synthetic conversations now cover ordinal
+  references, correct linked-strategy levels, FOMO and asset transfer,
+  stop-distance versus position size, two-setup comparisons, corrections and
+  strategy readback through the public local API and Celery worker.
 
 ## Local Build Evidence
 
 The disposable parity stack used isolated PostgreSQL, Redis, API and prefork
-Celery with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`;
-the real-provider selector used its configured `gpt-4o-mini`. No protected QA
-fixture or sealed holdout was used.
+Celery with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`.
+The real-provider selector evaluation used its configured `gpt-4o-mini`; this
+batch does not claim a migration of every safety or selector model. No
+protected QA fixture or sealed holdout was used.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| API/Celery/Responses conversation regression | `24/24` read-only turns across eight multi-turn sequences, including the exact reported stop/size, BTC/Apple comparison, correction, and linked-strategy follow-up paths. | `.local-finn-parity-artifacts/coach-turn-contract-final-v8.json`, SHA-256 `777e3d53ead1147a9e4f6a9f5e60593af3d0d3a86ef32ada0d663d40c6d79cfd`. |
-| Full worker-driven safe action-contract matrix | `16/16`; zero broker orders, live bots, live-trading calls or production connections. | `.local-finn-parity-artifacts/coach-turn-contract-action-final.json`, SHA-256 `4a376399b39413a74e89d44fde33df7311a43a6cf38d6763eb0909d17d37fe0b`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-turn-contract-provider-development.json`, SHA-256 `509f35dd92c8e1aa313d369c88c6159a364845e015c5568e2a6db0c4142a9e1d`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-turn-contract-provider-regression.json`, SHA-256 `1f8f9ca235c222cd47c2aafd0adcb7e740f8d6bf6778130a2923500de67b6a5e`. |
-| Backend canonical suite | `2965 passed, 3 skipped` on final source. | `pytest -q --disable-warnings --tb=short`. |
-| Frontend canonical checks | Passed; no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, production `build`. |
-
-The additional 37-case nonsealed parity diagnostic completed but reported
-`all_passed=false`. Its embedded action chain was `16/16` and lineage `9/9`;
-read-only model-led cases did not emit the legacy `final_operation_id` the
-runner expects, and terminal p95 was 18.9 seconds against its 10-second
-budget. Artifact: `.local-finn-parity-artifacts/coach-turn-contract-action-matrix.json`,
-SHA-256 `8ec75248dd096ebcaf9bb2e359c0f8cafcf005efbc9f5f10e6933f0d74abeb2e`.
-This diagnostic gap is not presented as a passing result or a QA verdict.
+| API/Celery/Responses conversation regression | `24/24` read-only turns across eight multi-turn sequences; every turn completed in one dispatch with no proposal. | `.local-finn-parity-artifacts/single-owner-all-green.json`, SHA-256 `c50c0ba694245765a6579d422581703748f32832b17ed9557605b0509f5cbbe4`. |
+| Full worker-driven safe action-contract matrix | `16/16`; zero broker orders, live bots, live-trading calls or production connections. | `.local-finn-parity-artifacts/single-owner-action-final.json`, SHA-256 `fdd8fc62b925a717ff25280370931a26666c21dffa3b263b184e30e617cea79a`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/single-owner-provider-development.json`, SHA-256 `3758d7dda9ca4daabd93167d68cca252f24f23e958e3e7383c0f0131515d16c3`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/single-owner-provider-regression.json`, SHA-256 `3de05e419ffff9d82269288376b340ce440deacc477e5a3535eaba3a3c2aa829`. |
+| Backend canonical suite | `2979 passed, 3 skipped`. | `pytest -q --disable-warnings --tb=short`. |
+| Frontend canonical checks | Passed, with no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, production `build`. |
 
 ## Release and Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: PR run `36915579106`, all five jobs green. |
-| Main CI | `PASS`: main run `36915892538`, all five jobs green. |
-| Auto Deploy | `PASS`: run `36916142306` deployed merge SHA `a31beb3574da4adad890ac065b8dc65b1b4e997a`. |
-| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 19:42 UTC on 2026-10-01. |
-| Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
+| Candidate CI | Pending PR and CI. |
+| Main CI | Pending merge. |
+| Auto Deploy | Pending successful main CI. |
+| Backend health and frontend build-info | Pending deployed SHA verification. |
+| Independent authenticated live QA | Pending; QA owns the protected fixture and final verdict. |
 
-Build's local and deployment evidence establishes technical readiness only.
-Authenticated production coach acceptance remains independent QA's
-responsibility.
+Local Build evidence establishes technical readiness for a candidate. It does
+not establish authenticated production coach acceptance.
