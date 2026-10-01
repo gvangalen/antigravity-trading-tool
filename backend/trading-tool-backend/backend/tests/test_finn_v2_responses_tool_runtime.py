@@ -22,6 +22,10 @@ from backend.services.finn_v2_responses_proposal_selection import FinnResponsesP
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
 )
+from backend.services.finn_v2_verified_setup_reference import (
+    listed_setup_ordinal, references_selected_setup, verified_selected_setup,
+    verified_selected_setup_asset,
+)
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier, FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
@@ -388,10 +392,108 @@ def test_ordinal_and_evidence_request_in_one_turn_uses_verified_list():
     assert "gekoppelde strategie" in answer.text
 
 
+@pytest.mark.parametrize(("phrase", "position"), [
+    ("de tweede uit je lijst", 1), ("nummer twee", 1),
+    ("nr. 2", 1), ("number two", 1), ("het derde plan", 2),
+])
+def test_list_position_uses_general_ordinal_and_cardinal_forms(phrase, position):
+    assert listed_setup_ordinal(phrase) == position
+
+
+def test_selected_setup_identity_comes_from_verified_read_not_previous_prose():
+    selected = {"terminal_status": "completed", "terminal_kind": "listed_setup_reference",
+                "answer": "Nummer 2 is BTC Full Base", "tool_trace": [{
+                    "name": "get_saved_setup_inventory", "status": "completed",
+                    "arguments": {"setup_ids": [2], "listed_ordinal": 2},
+                    "result": {"results": [{"scope": "read_saved_setup_inventory",
+                                           "status": "completed", "data": {"setups": [
+                                               {"setup_id": 2, "name": "BTC Full Base", "symbol": "BTC"},
+                                           ]}}]},
+                }]}
+    assert verified_selected_setup(selected) == (2, "BTC Full Base")
+    assert verified_selected_setup_asset(selected, 2) == "BTC"
+    assert references_selected_setup("Ik krijg FOMO bij dat plan. Wat staat er vast?")
+    assert references_selected_setup("Beoordeel dat BTC-plan", "BTC")
+    assert not references_selected_setup("Beoordeel dat breakout-plan", "BTC")
+    assert not references_selected_setup("Ik weet dat BTC gisteren steeg")
+    selected["answer"] = "Nummer 2 is BTC Breakout Full"
+    assert verified_selected_setup(selected) is None
+    selected["answer"] = "Nummer 2 is BTC Full Base"
+    selected["tool_trace"][0]["arguments"]["setup_ids"] = [3]
+    assert verified_selected_setup(selected) is None
+    selected["tool_trace"][0]["arguments"]["setup_ids"] = [2]
+    selected["terminal_kind"] = "saved_setup_collection"
+    assert verified_selected_setup(selected) is None
+
+
+def test_number_two_evidence_question_re_reads_verified_inventory_id():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="cardinal-evidence")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock())
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 2, "name": "BTC Full Base",
+                                "symbol": "BTC", "timeframe": "4H", "setup_type": "trade"}],
+                     "complete": True},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Nummer twee: wat weet je daarvan uit mijn opgeslagen gegevens?",
+        instructions="", conversation_context={}, verified_asset="BTC",
+        previous_response={"terminal_kind": "saved_setup_collection",
+                           "terminal_status": "completed", "answer": "Twee BTC-setups.",
+                           "tool_trace": [{"name": "get_saved_setup_inventory", "status": "completed",
+                                           "arguments": {"asset": "BTC"}, "result": {"results": [{
+                                               "scope": "read_saved_setup_inventory", "status": "completed",
+                                               "data": {"setups": [{"setup_id": 1, "name": "BTC Breakout Full"},
+                                                                   {"setup_id": 2, "name": "BTC Full Base"}]},
+                                           }]}}]},
+    ))
+    assert calls[0].inputs == {"asset": "BTC", "setup_ids": [2]}
+    assert result.response.answer_kind == "listed_setup_reference"
+    assert result.response.tool_trace[0]["arguments"]["evidence_followup"] is True
+
+
+def test_selected_setup_coaching_does_not_turn_into_confirmation_inventory(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="selected-coach")
+    front.relevance_guard = SimpleNamespace(
+        saved_plan_query_kind=AsyncMock(return_value={"kind": "confirmation_inventory"}),
+        previous_answer_suffices=AsyncMock(return_value=False),
+    )
+    prior = {"terminal_kind": "listed_setup_reference", "terminal_status": "completed",
+             "answer": "Nummer 2 is BTC Full Base.", "tool_trace": [{
+                 "name": "get_saved_setup_inventory", "status": "completed",
+                 "arguments": {"setup_ids": [2], "listed_ordinal": 2},
+                 "result": {"results": [{"scope": "read_saved_setup_inventory",
+                                        "status": "completed", "data": {"setups": [
+                                            {"setup_id": 2, "name": "BTC Full Base"},
+                                        ]}}]},
+             }]}
+    # A model loop may still read the selected setup, but the front door must
+    # never emit a plural inventory answer for this coaching continuation.
+    front.reads = AsyncMock(side_effect=AssertionError("inventory read forbidden"))
+    front.model_led_coach = True
+    monkeypatch.setattr("backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", AsyncMock(return_value=FinnResponsesResult(
+        text="Pauzeer en toets je instapvoorwaarde.", response_id="model-coach",
+        tool_trace=(), answer_kind="free_text", model_led_coach=True,
+    )))
+    result = asyncio.run(front.run(
+        message="En als ik daardoor nu impulsief wil instappen?",
+        instructions="", conversation_context={}, verified_asset="BTC",
+        previous_response=prior,
+    ))
+    assert result.response.answer_kind != "saved_confirmation_inventory"
+
+
 @pytest.mark.parametrize("message", [
     "Ik krijg FOMO bij Apple. Mag ik mijn BTC-DCA-regel daarop toepassen?",
     "Geldt mijn BTC-DCA-regel ook voor Apple/AAPL? Ik krijg FOMO.",
     "Mag ik mijn BTC-regel zomaar op AAPL toepassen door FOMO?",
+    "Als ik Apple koop vanwege FOMO, mag ik dan dezelfde regel als bij BTC hanteren?",
 ])
 def test_explicit_cross_asset_rule_transfer_survives_fomo_context(message):
     assert _explicit_rule_transfer_assets(message) == ("BTC", "AAPL")
@@ -418,6 +520,24 @@ def test_explicit_cross_asset_rule_transfer_survives_fomo_context(message):
     assert "BTC" in answer.text and "AAPL" in answer.text
     assert "niet automatisch" in answer.text
     front.relevance_guard.saved_plan_query_kind.assert_not_awaited()
+
+
+def test_ambiguous_cross_asset_transfer_has_safe_typed_boundary():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="asset-scope-ambiguous")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock(return_value=None))
+    result = asyncio.run(front.run(
+        message="Kan dezelfde regel gelden voor BTC en Apple?",
+        instructions="", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.response.answer_kind == "cross_asset_scope_unresolved"
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Kan dezelfde regel gelden voor BTC en Apple?",
+        result=result.response, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert "niet automatisch" in answer.text
+    assert "Welke opgeslagen regel" in answer.text
 
 
 def test_listed_evidence_reference_rejects_unverified_or_other_turn_ids():
@@ -5218,6 +5338,39 @@ def test_responses_exchange_is_owner_bound_and_single_write():
     assert [item["call_id"] for item in recovered.state_json["responses_exchange"]["tool_trace"]] == ["c1", "c2"]
 
 
+def test_verified_setup_subject_is_owner_bound_and_can_be_cleared():
+    row = SimpleNamespace(user_id=7, run_id="run-7", state_json={})
+    repo = object.__new__(FinnV2RuntimeContractRepository)
+    repo._required_for_update = AsyncMock(return_value=row)
+
+    async def write_revision(*, row, state):
+        row.state_json = state
+        return row
+
+    repo._write_revision = write_revision
+    subject = {"owner_id": 7, "setup_id": 42, "name": "BTC Full Base", "symbol": "BTC"}
+    with pytest.raises(RuntimeContractConflictError, match="owner_mismatch"):
+        asyncio.run(repo.record_verified_setup_subject(
+            run_id="run-7", user_id=8, subject=subject,
+        ))
+    with pytest.raises(RuntimeContractConflictError, match="invalid"):
+        asyncio.run(repo.record_verified_setup_subject(
+            run_id="run-7", user_id=7, subject={**subject, "owner_id": 8},
+        ))
+    asyncio.run(repo.record_verified_setup_subject(
+        run_id="run-7", user_id=7, subject=subject,
+    ))
+    assert row.state_json["verified_setup_subject"] == subject
+    assert verified_selected_setup({
+        "terminal_status": "completed", "terminal_kind": "free_text",
+        "owner_user_id": 7, "verified_setup_subject": row.state_json["verified_setup_subject"],
+    }) == (42, "BTC Full Base")
+    asyncio.run(repo.record_verified_setup_subject(
+        run_id="run-7", user_id=7, subject=None,
+    ))
+    assert row.state_json["verified_setup_subject"] is None
+
+
 def test_pending_clarification_is_persisted_on_the_owner_conversation_contract():
     row = SimpleNamespace(user_id=7, run_id="run-7", conversation_id="conv-7", state_json={})
     repo = object.__new__(FinnV2RuntimeContractRepository)
@@ -6765,6 +6918,16 @@ def test_saved_level_claims_cannot_borrow_prices_from_another_btc_strategy():
                     evidence, message)
     assert not supports("Je opgeslagen entry is 80.000 en de stop-loss 76.000.", evidence, message)
     assert not supports("De niveaus 80.000/76.000 horen bij dit plan.", evidence, message)
+    both_strategies = (*evidence, {"scope": "read_linked_strategy", "status": "completed",
+                                  "data": {"setup_id": 43, "name": "BTC Breakout Full Strategy",
+                                           "entry": 80000, "stop_loss": 76000,
+                                           "targets": [88000]}})
+    assert not supports("Je opgeslagen entry is 80.000 en de stop-loss 76.000.",
+                        both_strategies, "Wat staat bij dat plan?", selected_setup_id=42)
+    assert not supports("Voor dit plan staan 80.000/76.000 opgeslagen.",
+                        both_strategies, "Wat staat bij dat plan?", selected_setup_id=42)
+    assert supports("Je opgeslagen entry is 76.000 en de stop-loss 72.000.",
+                    both_strategies, "Wat staat bij dat plan?", selected_setup_id=42)
 
 
 def test_rejected_coaching_retains_only_the_named_setups_linked_strategy():
@@ -6896,6 +7059,153 @@ def test_missing_previous_setup_identity_finishes_from_verified_answer_without_r
     assert result.response.text.startswith("You said you wanted a clear signal")
     assert fake.requests[1]["tool_choice"] == "none"
     assert len(fake.requests) == 2
+
+
+def test_model_previous_reference_reuses_verified_list_selection_not_model_name(monkeypatch):
+    import backend.services.finn_v2_responses_front_door as front_module
+
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "get_active_plan_and_strategy", {
+            "reference": "previous_response", "setup_name": "BTC Breakout Full",
+        }),)),
+        response("r2", text="Ik heb BTC Full Base gelezen."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "selected-list-context"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    received = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def commit(self):
+            pass
+
+    class Reads:
+        session_factory = Session
+
+        async def __call__(self, call):
+            received.append(call.inputs)
+            return {"status": "completed", "results": []}
+
+    class Resolver:
+        is_setup_collection_request = staticmethod(lambda _message: False)
+        references_recent_action = staticmethod(lambda _message, _entity_type: False)
+
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, **kwargs):
+            assert kwargs["conversation_context"]["canonical_entity_target"] == {
+                "entity_type": "setup", "entity_id": 42,
+            }
+            assert "setup_name" not in kwargs["selector"]
+            return SimpleNamespace(resolution_status="resolved", entity_id=42)
+
+    monkeypatch.setattr(front_module, "FinnV2EntityResolutionService", Resolver)
+    monkeypatch.setattr(front_module.FinnV2RuntimeContractRepository,
+                        "record_responses_progress", AsyncMock())
+    front.reads = Reads()
+    asyncio.run(front.run(
+        message="Kun je het risico daarvan toelichten?", instructions="coach",
+        verified_asset="BTC", conversation_context={}, previous_response={
+            "answer": "Nummer 2 is BTC Full Base.", "terminal_kind": "listed_setup_reference",
+            "terminal_status": "completed", "tool_trace": [{
+                "name": "get_saved_setup_inventory", "status": "completed",
+                "arguments": {"listed_ordinal": 2, "setup_ids": [42]},
+                "result": {"results": [{"scope": "read_saved_setup_inventory",
+                                       "status": "completed", "data": {"setups": [
+                                           {"setup_id": 42, "name": "BTC Full Base"},
+                                       ]}}]},
+            }],
+        },
+    ))
+    assert received == [{"setup_id": 42}]
+
+
+@pytest.mark.parametrize("message", [
+    "Beoordeel het risico van dat plan.",
+    "Beoordeel het risico van dat BTC-plan.",
+])
+def test_evaluation_followup_uses_verified_selected_setup_id(monkeypatch, message):
+    import backend.services.finn_v2_responses_front_door as front_module
+
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "evaluate_plan", {
+            "asset": "BTC",
+        }),)),
+        response("r2", text="Controleer eerst de voorwaarden van BTC Full Base."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "selected-evaluation-context"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    received = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def commit(self):
+            pass
+
+    class Reads:
+        session_factory = Session
+
+        async def __call__(self, call):
+            received.append(call.inputs)
+            return {"status": "completed", "results": []}
+
+    class Resolver:
+        is_setup_collection_request = staticmethod(lambda _message: False)
+        references_recent_action = staticmethod(lambda _message, _entity_type: False)
+
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, **kwargs):
+            assert kwargs["conversation_context"]["canonical_entity_target"] == {
+                "entity_type": "setup", "entity_id": 42,
+            }
+            assert "setup_name" not in kwargs["selector"]
+            return SimpleNamespace(resolution_status="resolved", entity_id=42,
+                                   source="active_runtime_context")
+
+    monkeypatch.setattr(front_module, "FinnV2EntityResolutionService", Resolver)
+    monkeypatch.setattr(front_module.FinnV2RuntimeContractRepository,
+                        "record_responses_progress", AsyncMock())
+    front.reads = Reads()
+    observed = asyncio.run(front.run(
+        message=message, instructions="coach",
+        verified_asset="BTC", conversation_context={}, previous_response={
+            "answer": "Nummer 2 is BTC Full Base.", "terminal_kind": "listed_setup_reference",
+            "terminal_status": "completed", "tool_trace": [{
+                "name": "get_saved_setup_inventory", "status": "completed",
+                "arguments": {"listed_ordinal": 2, "setup_ids": [42]},
+                "result": {"results": [{"scope": "read_saved_setup_inventory",
+                                       "status": "completed", "data": {"setups": [
+                                           {"setup_id": 42, "name": "BTC Full Base", "symbol": "BTC"},
+                                       ]}}]},
+            }],
+        },
+    ))
+    assert len(received) == 1, repr(observed.response.tool_trace)
+    assert received[0]["setup_id"] == 42
+    assert received[0].get("asset") in {None, "BTC"}
 
 
 def test_duplicate_setup_read_uses_canonical_owner_scoped_target(monkeypatch):

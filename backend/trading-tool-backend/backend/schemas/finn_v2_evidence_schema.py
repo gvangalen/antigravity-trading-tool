@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, validator
 
@@ -327,7 +327,7 @@ class EvidenceArtifact(BaseModel):
     schema_name: str
     schema_version: str
     content_hash: str
-    payload: Optional[ToolDataUnion] = None
+    payload: Optional[Any] = None
     availability: Literal["available", "stale", "ambiguous", "unavailable", "not_collected"]
     error_codes: List[str] = Field(default_factory=list)
     created_at: datetime

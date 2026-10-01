@@ -194,6 +194,7 @@ TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
     "read_macro_snapshot": InformationScope.MACRO_SNAPSHOT,
     "read_technical_snapshot": InformationScope.TECHNICAL_SNAPSHOT,
     "read_active_setup": InformationScope.ACTIVE_SETUP,
+    "read_saved_setup_inventory": InformationScope.ACTIVE_SETUP,
     "read_linked_strategy": InformationScope.LINKED_STRATEGY,
     "read_linked_bot": InformationScope.LINKED_BOT,
     "read_bot_status": InformationScope.BOT_STATUS,

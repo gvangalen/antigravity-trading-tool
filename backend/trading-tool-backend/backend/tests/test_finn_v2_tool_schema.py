@@ -34,6 +34,19 @@ def test_tool_execution_envelope_assigns_the_canonical_output_scope():
     assert envelope.information_scope == "active_asset"
 
 
+def test_saved_setup_inventory_has_a_valid_owner_scoped_evidence_envelope():
+    envelope = ToolExecutionEnvelope(
+        tool_name="read_saved_setup_inventory",
+        status="completed",
+        success=True,
+        schema_name="SavedSetupInventoryData",
+        result={"setups": [{"setup_id": 9, "name": "BTC Full Base"}], "setup_count": 1},
+    )
+
+    assert envelope.information_scope == "active_setup"
+    assert envelope.result.setup_count == 1
+
+
 def test_tool_execution_envelope_rejects_a_mismatched_output_scope():
     with pytest.raises(ValueError, match="information_scope"):
         ToolExecutionEnvelope(

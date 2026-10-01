@@ -28,6 +28,10 @@ from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCat
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
+from backend.services.finn_v2_verified_setup_reference import (
+    listed_setup_ordinal, references_selected_setup, verified_selected_setup,
+    verified_selected_setup_asset,
+)
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -38,33 +42,15 @@ logger = logging.getLogger(__name__)
 
 def _listed_setup_ordinal(message: str) -> int | None:
     """Resolve an ordinal only against a previously verified ordered inventory."""
-    match = re.search(
-        r"\b(?:de|het|nummer|nr\.?|the|das|die)\s+"
-        r"(eerste|tweede|derde|vierde|vijfde|zesde|zevende|achtste|negende|tiende|"
-        r"first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"
-        r"erste|zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte|"
-        r"[1-9][0-9]?(?:e|de|ste|st|nd|rd|th)?)\b",
-        message, re.I,
-    )
-    if not match:
-        return None
-    token = match.group(1).casefold()
-    names = (
-        "eerste tweede derde vierde vijfde zesde zevende achtste negende tiende "
-        "first second third fourth fifth sixth seventh eighth ninth tenth "
-        "erste zweite dritte vierte fünfte sechste siebte achte neunte zehnte"
-    ).split()
-    if token in names:
-        return names.index(token) % 10
-    number = re.match(r"\d+", token)
-    return int(number.group()) - 1 if number else None
+    return listed_setup_ordinal(message)
 
 
 def _explicit_rule_transfer_assets(message: str) -> tuple[str, str] | None:
     """Extract the source of a named rule and the other named target asset."""
     assets = mentioned_catalog_symbols(message)
     if len(assets) != 2 or not re.search(
-        r"\b(?:geldt|toepass\w*|gebruik\w*|overnem\w*|apply|use|applies|gilt|anwenden)\b",
+        r"\b(?:geldt|geldig|toepass\w*|gebruik\w*|overnem\w*|hanteer\w*|"
+        r"dezelfde|hetzelfde|same|apply|use|applies|gilt|anwenden)\b",
         message, re.I,
     ):
         return None
@@ -85,6 +71,16 @@ def _explicit_rule_transfer_assets(message: str) -> tuple[str, str] | None:
         if nearby and len(prefix) - max(nearby)[0] <= 15:
             source = max(nearby)[1]
             return source, next(iter(assets - {source}))
+    # A comparison can name the source after the rule ("dezelfde regel als
+    # bij BTC"). Resolve that relation from the text, never from asset order.
+    for symbol in assets:
+        catalog = DEFAULT_ASSET_CATALOG[symbol]
+        names = (symbol, catalog.get("display_name"), *(catalog.get("aliases") or ()))
+        if any(name and re.search(
+            rf"\b(?:als|zoals|as|like|wie)\s+(?:bij|voor|for|bei)?\s*"
+            rf"{re.escape(str(name))}(?![a-z0-9])", message, re.I,
+        ) for name in names):
+            return symbol, next(iter(assets - {symbol}))
     return None
 
 
@@ -305,6 +301,15 @@ class FinnResponsesFrontDoor:
         # that owner-scoped item. Re-read its verified ID instead of relying
         # on the old prose answer or asking the model to infer an identity.
         prior_selected = _verified_listed_setup_reference(previous_response)
+        verified_subject = verified_selected_setup(previous_response)
+        subject_asset = (
+            verified_selected_setup_asset(previous_response, verified_subject[0])
+            if verified_subject else None
+        )
+        subject_reference = bool(
+            verified_subject and references_selected_setup(message, subject_asset)
+            and (not mentioned_assets or mentioned_assets == {subject_asset})
+        )
         asks_for_evidence = is_read_request and request_facts.discourse_act == "evidence_follow_up"
         evidence_followup = asks_for_evidence and prior_selected is not None
         listed_ordinal = _listed_setup_ordinal(message) if prior_setup_ids else None
@@ -318,7 +323,9 @@ class FinnResponsesFrontDoor:
         )
         # An ordinal and an evidence request can arrive in the same message.
         # The verified inventory already supplies the identity in that case.
-        evidence_followup = asks_for_evidence and listed_setup_id is not None
+        evidence_followup = listed_setup_id is not None and (
+            asks_for_evidence or listed_ordinal is not None
+        )
         if (is_read_request and pending_operation is None and not resuming_clarification
                 and listed_ordinal is not None and listed_setup_id is None):
             return FinnResponsesFrontDoorResult(
@@ -346,11 +353,11 @@ class FinnResponsesFrontDoor:
         inventory_followup = (
             bool(prior_setup_ids) and previous_kind != "cross_asset_rule_scope"
         ) and bool(re.search(
-            r"\b(?:die|deze|daarvan|welke|welk|bij|entry\w*|instap\w*|"
+            r"\b(?:die|deze|daarvan|welke|welk|bij|entryregel|instapregel|"
             r"bevestig\w*|those|which|any)\b", message, re.I,
         ))
         confirmation_followup = inventory_followup and bool(re.search(
-            r"\b(?:entry\w*|instap\w*|bevestig\w*|confirmation|trigger\w*)\b",
+            r"\b(?:entryregel|instapregel|bevestig\w*|confirmation|trigger\w*)\b",
             message, re.I,
         ))
         confirmation_subject = bool(re.search(
@@ -374,6 +381,8 @@ class FinnResponsesFrontDoor:
         if (
             pending_operation is None and not resuming_clarification and is_read_request
             and (collection_cue or cross_asset_cue or inventory_followup or listed_setup_id)
+            and not (subject_reference and not collection_cue and not cross_asset_cue
+                     and not confirmation_followup)
             and query is None
             and guard is not None
             and callable(getattr(guard, "saved_plan_query_kind", None))
@@ -382,6 +391,11 @@ class FinnResponsesFrontDoor:
                 message=message, previous_kind=previous_kind,
                 previous_answer=str((previous_response or {}).get("answer") or ""),
             )
+        if subject_reference and not collection_cue and not confirmation_followup:
+            # A selected object is a single-subject follow-up. A broad
+            # inventory classifier cannot turn process coaching into a list.
+            if (query or {}).get("kind") in {"inventory", "confirmation_inventory"}:
+                query = None
         # The classifier is a semantic router. These narrow fallbacks keep an
         # unambiguous read available if the selector provider is unavailable.
         if query is None and is_read_request:
@@ -396,6 +410,23 @@ class FinnResponsesFrontDoor:
             source_asset != target_asset and {source_asset, target_asset} <= mentioned_assets
         ):
             query_kind = "none"
+        unresolved_transfer = (
+            is_read_request and cross_asset_cue and query_kind == "none"
+            and bool(re.search(
+                r"\b(?:geldt|geldig|toepass\w*|gebruik\w*|overnem\w*|"
+                r"hanteer\w*|dezelfde|hetzelfde|same|apply|use|applies|gilt|anwenden)\b",
+                message, re.I,
+            ))
+        )
+        if unresolved_transfer and pending_operation is None and not resuming_clarification:
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Asset rule transfer needs an unambiguous source and target.",
+                    response_id=f"local-asset-transfer-unresolved-{self.run_id}",
+                    tool_trace=(), answer_kind="cross_asset_scope_unresolved",
+                    model_led_coach=True, response_id_reusable=False,
+                ), selected, previous_response, locale=locale,
+            )
         if (
             pending_operation is None
             and not resuming_clarification
@@ -729,7 +760,10 @@ class FinnResponsesFrontDoor:
                         ),
                     }
             if call.operation_id is None:
-                previous_setup_target: dict[str, object] = {}
+                previous_setup_target: dict[str, object] = (
+                    {"entity_type": "setup", "entity_id": verified_subject[0]}
+                    if subject_reference and verified_subject else {}
+                )
                 if call.name == "get_active_plan_and_strategy":
                     # The model can express the choice, but only the user's text
                     # and owner-scoped persisted evidence may select the object.
@@ -746,7 +780,13 @@ class FinnResponsesFrontDoor:
                     matches_prior_name = bool(
                         prior_name and call.inputs.get("setup_name", "").casefold() == prior_name.casefold()
                     )
-                    if reference == "previous_response" or matches_prior_name:
+                    if verified_subject and (
+                        subject_reference or reference == "previous_response" or matches_prior_name
+                    ):
+                        previous_setup_target = {
+                            "entity_type": "setup", "entity_id": verified_subject[0],
+                        }
+                    elif reference == "previous_response" or matches_prior_name:
                         if prior_setups:
                             previous_setup_target = {
                                 "entity_type": "setup",
@@ -799,6 +839,15 @@ class FinnResponsesFrontDoor:
                     "read_active_setup" in call.read_tools
                     and not FinnV2EntityResolutionService.is_setup_collection_request(message)
                 ):
+                    # A model-supplied name is not a user-selected target.
+                    # Preserve it only when it is visible in this turn; a
+                    # verified prior ID is the authority for a continuation.
+                    model_setup_name = str(call.inputs.get("setup_name") or "")
+                    if model_setup_name and model_setup_name.casefold() not in message.casefold():
+                        call = replace(call, inputs={
+                            key: value for key, value in call.inputs.items()
+                            if key != "setup_name"
+                        })
                     session_factory = getattr(self.reads, "session_factory", None)
                     if session_factory is not None:
                         async with session_factory() as session:
@@ -824,6 +873,7 @@ class FinnResponsesFrontDoor:
                         if target.resolution_status == "resolved" and (
                             call.name == "get_active_plan_and_strategy"
                             or target.source == "explicit_name"
+                            or (subject_reference and target.source == "active_runtime_context")
                         ):
                             call = replace(call, inputs=(
                                 {"setup_id": target.entity_id}

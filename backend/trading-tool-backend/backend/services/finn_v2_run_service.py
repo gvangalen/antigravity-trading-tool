@@ -50,6 +50,10 @@ from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
+from backend.services.finn_v2_verified_setup_reference import (
+    references_selected_setup, verified_selected_setup, verified_selected_setup_asset,
+)
+from backend.services.asset_catalog_service import mentioned_catalog_symbols
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.utils import openai_client
 
@@ -330,6 +334,43 @@ class FinnV2RunService:
                 run_id=run_id,
                 previous_run_id=str(previous_response["run_id"]),
             )
+        contract_before_terminal = await self.runtime_contracts.get_for_run(run_id=run_id)
+        exchange = dict((contract_before_terminal.state_json or {}).get("responses_exchange") or {})
+        subject: dict[str, Any] | None = None
+        if status == "completed" and not model_only_experiment:
+            current_view = {
+                "terminal_status": "completed",
+                "terminal_kind": exchange.get("answer_kind"),
+                "answer": answer.text,
+                "user_message": run.message,
+                "tool_trace": exchange.get("tool_trace") or [],
+            }
+            selected = verified_selected_setup(current_view)
+            if selected:
+                subject = {
+                    "owner_id": user_id, "setup_id": selected[0], "name": selected[1],
+                    "symbol": verified_selected_setup_asset(current_view, selected[0]),
+                }
+            else:
+                prior_subject = dict((previous_response or {}).get("verified_setup_subject") or {})
+                prior_asset = str(prior_subject.get("symbol") or "").upper()
+                mentioned_assets = mentioned_catalog_symbols(run.message)
+                if (
+                    prior_subject.get("owner_id") == user_id
+                    and isinstance(prior_subject.get("setup_id"), int)
+                    and isinstance(prior_subject.get("name"), str)
+                    and exchange.get("answer_kind") not in {
+                        "saved_setup_collection", "saved_confirmation_inventory",
+                        "cross_asset_rule_scope", "cross_asset_scope_unresolved",
+                    }
+                    and (not mentioned_assets or mentioned_assets == {prior_asset})
+                    and (references_selected_setup(run.message, prior_asset)
+                         or (answer.used_previous_response and prior_subject["name"] in answer.text))
+                ):
+                    subject = prior_subject
+        await self.runtime_contracts.record_verified_setup_subject(
+            run_id=run_id, user_id=user_id, subject=subject,
+        )
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id, status=status, mode=response_json["mode"],
             response=response_json, error_code=answer.reason,
@@ -447,6 +488,14 @@ class FinnV2RunService:
                     run_id=str(previous_response["run_id"]),
                 )
                 preceding_state = dict((preceding_contract.state_json or {}) if preceding_contract else {})
+                subject = dict(preceding_state.get("verified_setup_subject") or {})
+                if (
+                    previous_response.get("terminal_status") == "completed"
+                    and subject.get("owner_id") == user_id
+                    and isinstance(subject.get("setup_id"), int)
+                ):
+                    previous_response["owner_user_id"] = user_id
+                    previous_response["verified_setup_subject"] = subject
                 ancestor_run_id = preceding_state.get("conversation_reference")
                 for _ in range(3):
                     if not ancestor_run_id or preceding_state.get("conversation_reference_kind") != "previous_verified_response":

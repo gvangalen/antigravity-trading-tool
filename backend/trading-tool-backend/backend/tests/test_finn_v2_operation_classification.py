@@ -1036,6 +1036,14 @@ def test_plan_assessment_predicates_constrain_the_semantic_frame_without_routing
     assert facts.discourse_act == "evaluation"
 
 
+def test_broad_diagnosis_of_my_approach_uses_the_aggregate_plan_contract():
+    result = CLASSIFIER.classify(
+        message="Mijn aanpak: waar liggen de grootste resterende risico's?"
+    )
+
+    assert result.operation_id == "evaluate_plan"
+
+
 @pytest.mark.parametrize("message", (
     "Waar staat mijn handelsaanpak opgeslagen?",
     "Is mijn trading approach gekoppeld aan een bot?",

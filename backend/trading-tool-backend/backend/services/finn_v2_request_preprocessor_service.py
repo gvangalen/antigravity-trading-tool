@@ -67,7 +67,7 @@ class FinnV2RequestPreprocessorService:
     # frame: a request to diagnose a plan is not a request to clarify a change.
     _PLAN_ASSESSMENT_TERMS = (
         "kwetsbaar", "fragiel", "robuust", "weerbaar", "sterk", "zwak", "risico", "onderbouw", "beteken",
-        "wring", "probleem", "kwaliteit", "verbeter",
+        "wring", "probleem", "tekort", "kwaliteit", "verbeter",
         "vulnerable", "fragile", "robust", "resilient", "strong", "weak", "risk", "evidence",
         "vulnerability", "quality", "improve", "mean for", "meaning for",
         "verletzlich", "fragil", "robust", "widerstandsfähig", "stark", "schwach", "risiko", "beleg",
@@ -253,7 +253,8 @@ class FinnV2RequestPreprocessorService:
         ))
         explicit_plan = bool(re.search(
             r"\b(?:(?:mijn|my|mein(?:e[nsr]?)?)\s+)?(?:actieve\s+|active\s+|aktiven?\s+)?"
-            r"(?:plan|handelsplan|handelsaanpak|trading\s+(?:plan|approach)|handelsansatz)\b",
+            r"(?:plan|handelsplan|handelsaanpak|tradingaanpak|aanpak|handelswijze|"
+            r"trading\s+(?:plan|approach)|handelsansatz)\b",
             normalized,
         ))
         # A topology question about all graph nodes asks for the user's
@@ -311,8 +312,18 @@ class FinnV2RequestPreprocessorService:
         if re.fullmatch(r"(?:waarom|why|wieso|weshalb|warum)[?!\.\s]*", normalized):
             references = (*references, "previous_verified_conclusion")
         action = self._action_polarity(normalized)
+        market_mention = bool(
+            asset and re.search(
+                r"\b(?:koop\w*|kopen|verkoop\w*|verkopen|buy\w*|sell\w*|"
+                r"kaufe\w*|kaufen|verkaufe\w*|verkaufen|"
+                r"place\w*|plaats\w*|submit\w*)\b", normalized,
+            )
+        )
         financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
-            asset and re.search(r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|kaufe\w*|verkaufe\w*|place\w*|plaats\w*|submit\w*)\b", normalized)
+            market_mention and (
+                self._is_direct_market_order_request(normalized)
+                or not self._is_hypothetical_market_mention(normalized)
+            )
         )
         # In a create-setup request, "buy on Monday" describes the setup's
         # schedule; it is not an instruction to place a market order now.
@@ -637,6 +648,41 @@ class FinnV2RequestPreprocessorService:
         return any(
             re.search(rf"(?<!\w){re.escape(term)}\w*(?!\w)", text)
             for term in cls._PLAN_ASSESSMENT_TERMS
+        )
+
+    @staticmethod
+    def _is_hypothetical_market_mention(text: str) -> bool:
+        """A first-person conditional question describes a possible trade."""
+        return bool(
+            "?" in text
+            and re.search(
+                r"(?:^|[.!?,;]\s*)(?:wat als|what if|als|wanneer|indien|"
+                r"if|when|falls|stel dat|suppose)\s+(?:ik|i|ich)\b"
+                r"[^?.!]{0,120}\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|"
+                r"kaufe\w*|verkaufe\w*)\b", text,
+            )
+        )
+
+    @staticmethod
+    def _is_direct_market_order_request(text: str) -> bool:
+        """Distinguish an order directed at FINN from a hypothetical trade.
+
+        Merely mentioning an asset and "koop" in a question ("als ik koop")
+        does not delegate execution. Direct imperatives and requests that
+        explicitly address FINN remain inside the execution boundary.
+        """
+        market_verb = r"(?:koop\w*|kopen|verkoop\w*|verkopen|buy\w*|sell\w*|kaufe\w*|kaufen|verkaufe\w*|verkaufen|plaats\w*|place\w*|submit\w*)"
+        return bool(
+            re.search(rf"(?:^|[,;.!?]\s*)(?:please\s+|bitte\s+)?{market_verb}\b", text)
+            or re.search(
+                rf"\b(?:kun|kan|kunt|could|can|wil|would|laat|let)\s+"
+                rf"(?:je|jij|you|du|finn|de assistent|the assistant)\b"
+                rf"[^?.!]{{0,80}}\b{market_verb}\b", text,
+            )
+            or re.search(
+                rf"\b(?:ik wil dat je|i want you to|ich möchte dass du)\b"
+                rf"[^?.!]{{0,80}}\b{market_verb}\b", text,
+            )
         )
 
     @staticmethod

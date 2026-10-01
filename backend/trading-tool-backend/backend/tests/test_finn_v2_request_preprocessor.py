@@ -5,6 +5,8 @@ from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestP
 
 @pytest.mark.parametrize("message", [
     "Welk onderdeel maakt mijn handelsaanpak het meest robuust?",
+    "Mijn aanpak: waar liggen de grootste resterende risico's?",
+    "Waar schiet mijn handelswijze als geheel tekort?",
     "Bewerte, welche Annahme meinen Handelsplan am stärksten trägt.",
     "Which assumption supports my overall trading plan most strongly?",
 ])
@@ -40,6 +42,30 @@ def test_autonomous_financial_delegation_is_a_financial_execution_fact():
 
     assert facts.financial_execution_intent is True
     assert facts.action_polarity == "execute"
+
+
+@pytest.mark.parametrize("message", [
+    "Als ik Apple koop vanwege FOMO, mag ik dan dezelfde regel als bij BTC hanteren?",
+    "Wat als ik BTC koop volgens mijn opgeslagen plan?",
+    "If I buy Apple, does my BTC rule apply?",
+    "Ik voel FOMO; als ik Apple koop, geldt mijn BTC-regel dan?",
+])
+def test_hypothetical_market_mention_is_a_read_question(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == "read"
+    assert facts.financial_execution_intent is False
+
+
+@pytest.mark.parametrize("message", [
+    "Koop BTC voor mij.", "Plaats een kooporder voor Dogecoin.",
+    "Kun je BTC voor mij kopen?", "Sell my Apple position.",
+    "Bitte kaufe BTC für mich.",
+    "Als ik Apple koop, verkoop BTC dan voor mij.",
+])
+def test_direct_market_order_stays_inside_execution_boundary(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == "execute"
+    assert facts.financial_execution_intent is True
 
 
 def test_autonomous_financial_decision_authority_is_an_execution_fact_without_trade_verb():

@@ -9,69 +9,74 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build and deployment gates passed. |
-| Active goal | Repair the user-reported coach failures on live SHA `94913335abaed9f82c9824bc268dc783f1cc0107`: a combined numbered-setup/evidence follow-up dropped its evidence, a named BTC setup could receive levels from another BTC strategy or generic FOMO coaching, and a BTC-to-AAPL rule question could lose its asset boundary when FOMO was mentioned. |
-| Candidate branch | `codex/finn-coach-identity-boundary` ([PR #29](https://github.com/gvangalen/antigravity-trading-tool/pull/29), merged). |
-| Candidate code SHA | `c0cb0d7ac8e7179103734b0d215f120ecd04e7ad`. |
-| Production code SHA | `ad071b66c638e20a655495e68281f10bc61ccd65`, verified on public backend health and frontend build-info at 11:35 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
+| Phase | `LOCAL_BUILD_GREEN_PENDING_CI`; production deployment and independent QA are pending. |
+| Active goal | Repair FINN's recurring coach continuation failures as one flow: inconsistent saved-setup inventory, ordinal and pronoun references, wrong linked-strategy levels, coach turns becoming inventory answers, BTC-to-Apple rule transfer, and generic failure after a source-bound follow-up. |
+| Candidate branch | `codex/finn-coach-context-contract`. |
+| Candidate code SHA | `299efd3fbaab4b9175040e8fc5c400450b008bd4`. |
+| Candidate PR/head SHA | Pending publication. |
+| Production code SHA | Pending this release; verify against public backend health and frontend build-info after Auto Deploy. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
-The user's targeted authenticated live recheck is **not accepted** for its
-coach scope. Build did not access the protected QA fixture or sealed holdout,
-and the new candidate needs independent authenticated QA after deployment.
+The previous release status at base SHA `107e9b30286bd7784681e1269e7ea613ef0e60bf`
+was `READY_FOR_INDEPENDENT_QA`, but the user reported further related coach
+failures. No official independent QA run for this new candidate has started.
 
-## Investigation and Repair
+## Root Causes and Repair
 
-- The combined “second from your list + what do you know for certain” turn
-  resolved the verified inventory position but only set the evidence flag when
-  the previous turn had already selected one item. The route now sets that
-  flag from either verified path and rereads the selected owner-scoped ID.
-- The Responses read catalog cannot carry model-supplied setup IDs. The front
-  door previously bound a named setup only for `get_active_plan_and_strategy`,
-  leaving evaluation reads with an asset such as `BTC` that may match several
-  setups. It now resolves a setup named in the user message against the
-  owner's records and supplies that ID to evaluation reads as well.
-- An explicit strategy ID or name can no longer override a different
-  selected setup in the graph resolver. The answer verifier now checks stated
-  entry, stop and target prices against the linked strategy returned in that
-  turn. If model coaching is rejected after a verified named setup and linked
-  strategy read, a source-bound coach answer preserves that setup's saved
-  levels instead of discarding the facts into generic FOMO advice.
-- A question applying a rule named for one asset to another now takes the
-  typed cross-asset route even when FOMO appears elsewhere in the message.
-
-The live report did not include a run ID or server trace. The precise path
-that produced its `80.000/76.000` claim is therefore unproven. A synthetic
-worker-driven repro did prove the separate verifier issue: FINN read the
-correct `BTC Full Base` strategy and drafted `76.000/72.000`, but a verifier
-rejection replaced it with generic FOMO advice. A subsequent run on the
-repair kept the correct levels and the BTC-to-AAPL boundary. This is local
-Build evidence, not authenticated live acceptance.
+- The Responses inventory read existed, but its name was absent from the
+  persisted tool-envelope schema and the canonical tool-to-scope map. Its
+  evidence ingestion failed. The schema now accepts that owner-scoped read and
+  binds it to the existing setup scope. Payload models are selected by their
+  explicit schema name before validation; permissive union parsing could
+  otherwise silently discard inventory fields.
+- A setup named in a completed owner-scoped read now becomes a typed subject
+  in the runtime contract. Ordinals and conversational references resolve
+  against that verified subject, and subsequent reads re-fetch its ID. The
+  subject is cleared on a plural inventory, an asset switch, or an unverified
+  topic change. A model-supplied setup name cannot select a different record.
+- The answer verifier checks saved price levels against the selected setup's
+  linked strategy, including compact numeric pairs. A rejected model answer
+  can use a source-bound readback only when the selected setup and linked
+  strategy agree. Unclear cross-asset transfers ask for the source and target;
+  explicit BTC-to-Apple transfers state that the BTC rule does not apply
+  automatically.
+- A verified single-setup continuation bypasses a redundant broad-inventory
+  classifier. This avoids both a list misroute and an unnecessary provider
+  round that previously consumed the visible lifecycle deadline. Hypothetical
+  first-person market questions remain read-only; direct order requests keep
+  the execution boundary.
+- Broad diagnoses of a trader's approach are typed as aggregate plan
+  evaluations. The raw selector's first final-code regression attempt had one
+  `evaluate_setup` choice for this meaning (108/109); the grammar correction
+  makes the live route deterministic, and the repeated full real-provider
+  regression passed 109/109. Both results are retained as measured evidence.
 
 ## Local Build Evidence
 
-The disposable parity stack uses isolated PostgreSQL, Redis, API and Celery
-with synthetic users. FINN chat uses `gpt-6-luna` with reasoning `none`.
+The disposable parity stack used isolated PostgreSQL, Redis, API and Celery
+with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`;
+the real-provider selector evaluation used its configured `gpt-4o-mini`.
+No protected QA fixture or sealed holdout was used.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Targeted API/Celery coach sequence | `4/4` completed without proposals: list, combined ordinal/evidence follow-up, named `BTC Full Base` FOMO/levels (`76.000/72.000`), and BTC-to-AAPL/FOMO. | `.local-finn-parity-artifacts/coach-identity-repro.json`, SHA-256 `48be34e4528ef2bc9289b505d36baf6d02df665bd9797650ee4f6b5cef72bbe8`. |
-| Full safe action-contract matrix on final code | `16/16`; zero broker orders, live bots, live-trading calls, or production connections. | `.local-finn-parity-artifacts/coach-identity-action-matrix-release.json`, SHA-256 `fbebfb651efb4bff1fbac67a2aac89edcde0c91515fcab532009e80540d89c63`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-identity-provider-development.json`, SHA-256 `7349647428ed085dbb3cd8530bd5b7ad685f29b0e1e46db0cfc62085cb3e6648`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-identity-provider-regression.json`, SHA-256 `95cd924916776d439bf37d7fa9280a4773f34c9b679a7fd28bfa573167741446`. |
-| Backend canonical suite | `2922 passed, 3 skipped` on final code. | `pytest -q --disable-warnings`. |
+| API/Celery conversation regression | `12/12` read-only turns across four sequences, including list → second setup → strategy levels → coach turn → strategy levels; no proposals or writes. | `.local-finn-parity-artifacts/coach-context-runtime-final.json`, SHA-256 `ee32a86ff7090bdc4f9c13b89610280d278f7fe649a19217c0e2cb2a9aae797e`. |
+| Full worker-driven safe action-contract matrix | `16/16`; zero broker orders, live bots, live-trading calls, or production connections. | `.local-finn-parity-artifacts/coach-context-action-matrix-final.json`, SHA-256 `7e2e207aef08ec4736f4f3946caee43573ebccb74936e9021de7e27ff74c8c69`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-context-provider-development-final.json`, SHA-256 `9977cbdbebd30c319006151aff2f01966a0cf9aab53ad074e566dd43d1be25df`. |
+| Real-provider selector regression | Final repeat `109/109`; zero provider, schema, parse, validation or timeout failures. Prior attempt `108/109` on the pre-grammar version is recorded above. | `.local-finn-parity-artifacts/coach-context-provider-regression-final-v3.json`, SHA-256 `f81c79177acab53076275bbf54f8ee40170fe230c097978cbb7148ab34933f61`. |
+| Backend canonical suite | `2950 passed, 3 skipped` on final source. | `pytest -q --disable-warnings`. |
 | Frontend canonical checks | Passed; no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, production `build`. |
 
 ## Release and Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: PR run `36855835737`, all five jobs green. |
-| Main CI | `PASS`: main run `36856041731`, all five jobs green. |
-| Auto Deploy | `PASS`: run `36856206900` deployed merge SHA `ad071b66c638e20a655495e68281f10bc61ccd65`. |
-| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 11:35 UTC on 2026-10-01. |
+| Candidate CI | Pending. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Backend health and frontend build-info | Pending this release. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
-Build's local and deployment checks establish technical readiness only.
-Authenticated production acceptance remains independent QA's responsibility.
+Build's local evidence establishes technical readiness only. Authenticated
+production coach acceptance remains independent QA's responsibility.

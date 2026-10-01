@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, constr, validator
 
 from backend.domain.finn_v2_contract import InformationScope, information_scope_for_tool, normalize_information_scope
 from backend.domain.finn_v2_tools import FINN_V2_EXTERNAL_ERROR_CODES, FINN_V2_TOOL_ORDER
-from backend.schemas.finn_v2_evidence_schema import ToolDataUnion, parse_tool_payload
+from backend.schemas.finn_v2_evidence_schema import parse_tool_payload
 
 
 ToolName = Literal[
@@ -20,6 +20,7 @@ ToolName = Literal[
     "read_macro_snapshot",
     "read_technical_snapshot",
     "read_active_setup",
+    "read_saved_setup_inventory",
     "read_linked_strategy",
     "read_linked_bot",
     "read_bot_status",
@@ -55,13 +56,16 @@ class ToolExecutionEnvelope(BaseModel):
     status: ToolCallStatus
     success: bool
     selector: Dict[str, Any] = Field(default_factory=dict)
-    result: Optional[ToolDataUnion] = None
+    schema_name: Optional[str] = None
+    # The schema_name validator chooses the exact payload model. A Pydantic
+    # Union revalidates that model against its first permissive member and can
+    # silently discard inventory fields after successful parsing.
+    result: Optional[Any] = None
     result_summary: Optional[Dict[str, Any]] = None
     resolution_source: Optional[str] = None
     freshness_status: Optional[FreshnessStatus] = None
     error_codes: List[str] = Field(default_factory=list)
     source: str = "internal"
-    schema_name: Optional[str] = None
     schema_version: str = "2026-08-17.block3"
     availability: Literal["available", "stale", "ambiguous", "unavailable", "not_collected"] = "available"
     entity_type: Optional[str] = None
