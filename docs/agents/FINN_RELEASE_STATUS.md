@@ -9,74 +9,76 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build, CI and deployment identity gates passed. |
-| Active goal | Repair FINN's recurring coach continuation failures as one flow: inconsistent saved-setup inventory, ordinal and pronoun references, wrong linked-strategy levels, coach turns becoming inventory answers, BTC-to-Apple rule transfer, and generic failure after a source-bound follow-up. |
-| Candidate branch | `codex/finn-coach-context-contract` ([PR #31](https://github.com/gvangalen/antigravity-trading-tool/pull/31), merged). |
-| Candidate code SHA | `299efd3fbaab4b9175040e8fc5c400450b008bd4`. |
-| Candidate PR/head SHA | `d3ddddff2e8c044542ff3ae82535b03287649921`. |
-| Production code SHA | `2c0423a93cab418071042a9150608cd5419abffd`, verified on public backend health and frontend build-info at 13:26 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
+| Phase | `BUILD_CANDIDATE`; local required gates passed, CI and deployment pending. |
+| Active goal | Repair FINN's recurring multi-turn coach failures as one flow: keep the current question and selected owner-scoped setup evidence through comparisons, risk tradeoffs, corrections and linked-strategy follow-ups, without fixed coach copy replacing the answer. |
+| Candidate branch | `codex/finn-turn-contract`. |
+| Candidate code SHA | `80324808ec474b163bfc727f29291b3ce63dcd47`. |
+| Candidate PR/head SHA | Pending. |
+| Production code SHA | Pending for this candidate. Previous verified release: `2c0423a93cab418071042a9150608cd5419abffd` at 13:26 UTC on 2026-10-01. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
-The previous release status at base SHA `107e9b30286bd7784681e1269e7ea613ef0e60bf`
-was `READY_FOR_INDEPENDENT_QA`, but the user reported further related coach
-failures. No official independent QA run for this new candidate has started.
+The previous release was marked `READY_FOR_INDEPENDENT_QA`, but the user's
+subsequent live report on SHA `3ad45d1486936abd2104139172180ada9bf01e85`
+showed further related failures. No independent QA run for this new candidate
+has started.
 
 ## Root Causes and Repair
 
-- The Responses inventory read existed, but its name was absent from the
-  persisted tool-envelope schema and the canonical tool-to-scope map. Its
-  evidence ingestion failed. The schema now accepts that owner-scoped read and
-  binds it to the existing setup scope. Payload models are selected by their
-  explicit schema name before validation; permissive union parsing could
-  otherwise silently discard inventory fields.
-- A setup named in a completed owner-scoped read now becomes a typed subject
-  in the runtime contract. Ordinals and conversational references resolve
-  against that verified subject, and subsequent reads re-fetch its ID. The
-  subject is cleared on a plural inventory, an asset switch, or an unverified
-  topic change. A model-supplied setup name cannot select a different record.
-- The answer verifier checks saved price levels against the selected setup's
-  linked strategy, including compact numeric pairs. A rejected model answer
-  can use a source-bound readback only when the selected setup and linked
-  strategy agree. Unclear cross-asset transfers ask for the source and target;
-  explicit BTC-to-Apple transfers state that the BTC rule does not apply
-  automatically.
-- A verified single-setup continuation bypasses a redundant broad-inventory
-  classifier. This avoids both a list misroute and an unnecessary provider
-  round that previously consumed the visible lifecycle deadline. Hypothetical
-  first-person market questions remain read-only; direct order requests keep
-  the execution boundary.
-- Broad diagnoses of a trader's approach are typed as aggregate plan
-  evaluations. The raw selector's first final-code regression attempt had one
-  `evaluate_setup` choice for this meaning (108/109); the grammar correction
-  makes the live route deterministic, and the repeated full real-provider
-  regression passed 109/109. Both results are retained as measured evidence.
+- A broad objection rule matched “te streng” and replaced a stop-distance and
+  position-size question with fixed waiting-time copy. The fixed override was
+  removed; the current question's risk tradeoff is now checked for coverage.
+- Comparison reads reduced a request containing `4H` and `1D` to the first
+  timeframe, then listed matching records. Explicitly named setups are now
+  selected by their owner-scoped IDs from a completed inventory read; the
+  response must address the selected pair and their evidence fields.
+- Linked-strategy follow-ups lost the selected setup or became broad inventory
+  answers. The per-turn contract persists the current question, answer type,
+  selected verified objects and evidence; a reference to the previously
+  verified pair can reuse that pair without changing objects.
+- The answer verifier rejected correct read-only replies due to a second
+  semantic pass and overly broad checks for negated order mentions, Dutch
+  Markdown tables, field identifiers and general risk mechanics. Factual reads
+  and general stop/size explanations now use source-bound checks, while write
+  safety and other hard constraints remain in force.
+- A transient first Responses error previously ended in a generic failure.
+  The loop makes one bounded retry for transient provider errors and records
+  safe error type/status diagnostics.
 
 ## Local Build Evidence
 
-The disposable parity stack used isolated PostgreSQL, Redis, API and Celery
-with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`;
-the real-provider selector evaluation used its configured `gpt-4o-mini`.
-No protected QA fixture or sealed holdout was used.
+The disposable parity stack used isolated PostgreSQL, Redis, API and prefork
+Celery with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`;
+the real-provider selector used its configured `gpt-4o-mini`. No protected QA
+fixture or sealed holdout was used.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| API/Celery conversation regression | `12/12` read-only turns across four sequences, including list → second setup → strategy levels → coach turn → strategy levels; no proposals or writes. | `.local-finn-parity-artifacts/coach-context-runtime-final.json`, SHA-256 `ee32a86ff7090bdc4f9c13b89610280d278f7fe649a19217c0e2cb2a9aae797e`. |
-| Full worker-driven safe action-contract matrix | `16/16`; zero broker orders, live bots, live-trading calls, or production connections. | `.local-finn-parity-artifacts/coach-context-action-matrix-final.json`, SHA-256 `7e2e207aef08ec4736f4f3946caee43573ebccb74936e9021de7e27ff74c8c69`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-context-provider-development-final.json`, SHA-256 `9977cbdbebd30c319006151aff2f01966a0cf9aab53ad074e566dd43d1be25df`. |
-| Real-provider selector regression | Final repeat `109/109`; zero provider, schema, parse, validation or timeout failures. Prior attempt `108/109` on the pre-grammar version is recorded above. | `.local-finn-parity-artifacts/coach-context-provider-regression-final-v3.json`, SHA-256 `f81c79177acab53076275bbf54f8ee40170fe230c097978cbb7148ab34933f61`. |
-| Backend canonical suite | `2950 passed, 3 skipped` on final source. | `pytest -q --disable-warnings`. |
+| API/Celery/Responses conversation regression | `24/24` read-only turns across eight multi-turn sequences, including the exact reported stop/size, BTC/Apple comparison, correction, and linked-strategy follow-up paths. | `.local-finn-parity-artifacts/coach-turn-contract-final-v8.json`, SHA-256 `777e3d53ead1147a9e4f6a9f5e60593af3d0d3a86ef32ada0d663d40c6d79cfd`. |
+| Full worker-driven safe action-contract matrix | `16/16`; zero broker orders, live bots, live-trading calls or production connections. | `.local-finn-parity-artifacts/coach-turn-contract-action-final.json`, SHA-256 `4a376399b39413a74e89d44fde33df7311a43a6cf38d6763eb0909d17d37fe0b`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-turn-contract-provider-development.json`, SHA-256 `509f35dd92c8e1aa313d369c88c6159a364845e015c5568e2a6db0c4142a9e1d`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-turn-contract-provider-regression.json`, SHA-256 `1f8f9ca235c222cd47c2aafd0adcb7e740f8d6bf6778130a2923500de67b6a5e`. |
+| Backend canonical suite | `2965 passed, 3 skipped` on final source. | `pytest -q --disable-warnings --tb=short`. |
 | Frontend canonical checks | Passed; no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, production `build`. |
+
+The additional 37-case nonsealed parity diagnostic completed but reported
+`all_passed=false`. Its embedded action chain was `16/16` and lineage `9/9`;
+read-only model-led cases did not emit the legacy `final_operation_id` the
+runner expects, and terminal p95 was 18.9 seconds against its 10-second
+budget. Artifact: `.local-finn-parity-artifacts/coach-turn-contract-action-matrix.json`,
+SHA-256 `8ec75248dd096ebcaf9bb2e359c0f8cafcf005efbc9f5f10e6933f0d74abeb2e`.
+This diagnostic gap is not presented as a passing result or a QA verdict.
 
 ## Release and Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: PR run `36868064043`, all five jobs green. |
-| Main CI | `PASS`: main run `36868314477`, all five jobs green. |
-| Auto Deploy | `PASS`: run `36868558103` deployed merge SHA `2c0423a93cab418071042a9150608cd5419abffd`. |
-| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 13:26 UTC on 2026-10-01. |
+| Candidate CI | Pending. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Backend health and frontend build-info | Pending for this candidate. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
-Build's local evidence establishes technical readiness only. Authenticated
-production coach acceptance remains independent QA's responsibility.
+Build's local evidence establishes technical readiness for a candidate only.
+Authenticated production coach acceptance remains independent QA's
+responsibility.
