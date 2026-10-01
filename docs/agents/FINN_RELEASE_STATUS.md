@@ -13,7 +13,7 @@ this document's own commit SHA.
 | Active goal | Make FINN's read-only coach conversation model-owned: Luna chooses reads and composes the answer; the server binds only owner-scoped objects, checks source claims and write safety, and returns structured rejection for one model repair. Verify complete multi-turn conversations. |
 | Candidate branch | `codex/finn-single-owner-flow`. |
 | Candidate code SHA | `b737aa83d4b11fb76813d73fa4d6960d7e08eb39`. |
-| Candidate PR/head SHA | Pending PR creation and CI. |
+| Candidate PR/head SHA | [PR #35](https://github.com/gvangalen/antigravity-trading-tool/pull/35); use the PR's Git HEAD for its status commit. |
 | Production SHA | Pending deployment of this candidate. |
 | Release owner | Build |
 | Last updated | `2026-10-02` |
@@ -67,7 +67,7 @@ protected QA fixture or sealed holdout was used.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending PR and CI. |
+| Candidate CI | PR #35 is running; final head CI pending. |
 | Main CI | Pending merge. |
 | Auto Deploy | Pending successful main CI. |
 | Backend health and frontend build-info | Pending deployed SHA verification. |
