@@ -9,12 +9,12 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_BUILD_GREEN_PENDING_CI`; production deployment and independent QA are pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build, CI and deployment identity gates passed. |
 | Active goal | Repair FINN's recurring coach continuation failures as one flow: inconsistent saved-setup inventory, ordinal and pronoun references, wrong linked-strategy levels, coach turns becoming inventory answers, BTC-to-Apple rule transfer, and generic failure after a source-bound follow-up. |
-| Candidate branch | `codex/finn-coach-context-contract`. |
+| Candidate branch | `codex/finn-coach-context-contract` ([PR #31](https://github.com/gvangalen/antigravity-trading-tool/pull/31), merged). |
 | Candidate code SHA | `299efd3fbaab4b9175040e8fc5c400450b008bd4`. |
-| Candidate PR/head SHA | Pending publication. |
-| Production code SHA | Pending this release; verify against public backend health and frontend build-info after Auto Deploy. |
+| Candidate PR/head SHA | `d3ddddff2e8c044542ff3ae82535b03287649921`. |
+| Production code SHA | `2c0423a93cab418071042a9150608cd5419abffd`, verified on public backend health and frontend build-info at 13:26 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
@@ -72,10 +72,10 @@ No protected QA fixture or sealed holdout was used.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Backend health and frontend build-info | Pending this release. |
+| Candidate CI | `PASS`: PR run `36868064043`, all five jobs green. |
+| Main CI | `PASS`: main run `36868314477`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36868558103` deployed merge SHA `2c0423a93cab418071042a9150608cd5419abffd`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 13:26 UTC on 2026-10-01. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
 Build's local evidence establishes technical readiness only. Authenticated
