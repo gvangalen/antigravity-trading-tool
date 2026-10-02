@@ -48,8 +48,9 @@ def _requested_fields(message: str) -> list[str]:
         "timeframe": r"\b(?:timeframe|tijdframe|4h|1d|1h|1w|15m|30m)\b",
         "setup_type": r"\b(?:type|soort)\b",
         "strategy_name": r"\b(?:strategienaam|strategy name|welke strategie|which strategy|welche strategie)\b",
-        "entry": r"\b(?:entry|entryniveau|instap|instapniveau|entry level)\b",
-        "confirmation": r"\b(?:trigger|bevestig\w*|confirmation)\b",
+        "entry": r"\b(?:entry\w*|instap\w*|entry level)\b",
+        "confirmation": r"\b(?:trigger\w*|bevestig\w*|confirmation\w*|"
+                        r"(?:instap|entry)\w*(?:bevestig|confirm)\w*)\b",
         "stop_distance": r"\b(?:stop\w*|exit\w*)\b",
         "position_size": r"\b(?:positie\w*|position\w*|inzet|size)\b",
     }
@@ -147,10 +148,22 @@ def build_turn_contract(
         # read. Preserve its identities even when this turn has no tool call.
         targets = [dict(target) for target in previous_contract["targets"]]
         evidence_fields = list(previous_contract.get("evidence_fields") or [])
+    requested_fields = _requested_fields(message)
+    if (
+        selected_answer_type == "weigh"
+        and (previous_contract or {}).get("answer_type") == "weigh"
+        and "stop_distance" in requested_fields
+        and "position_size" in ((previous_contract or {}).get("requested_fields") or [])
+        and re.search(r"\b(?:afweging|trade.off|abwägung|deze|die|same|zelfde)\b", message, re.I)
+        and "position_size" not in requested_fields
+    ):
+        # A direct continuation of the stop/size tradeoff keeps both sides of
+        # that question even when the trader now asks about maximum loss.
+        requested_fields.append("position_size")
     return {
         "question": message,
         "answer_type": selected_answer_type,
-        "requested_fields": _requested_fields(message),
+        "requested_fields": requested_fields,
         "targets": targets,
         "evidence_fields": evidence_fields,
         "attempted_scopes": sorted(attempted_scopes),
@@ -176,7 +189,7 @@ def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
             str((target.get("evidence") or {}).get("timeframe") or "")
             for target in targets
         ]
-        if all(timeframes) and len(set(timeframes)) > 1 and any(
+        if "timeframe" in (contract.get("requested_fields") or []) and all(timeframes) and len(set(timeframes)) > 1 and any(
             not re.search(rf"\b{re.escape(timeframe)}\b", answer, re.I)
             for timeframe in timeframes
         ):

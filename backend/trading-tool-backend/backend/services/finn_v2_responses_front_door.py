@@ -962,6 +962,15 @@ class FinnResponsesFrontDoor:
                 if call.read_tools and read_identity in completed_read_calls:
                     return {
                         "status": "retry", "reason": "read_already_completed_this_turn",
+                        "finalize_now": bool(
+                            getattr(self, "model_led_coach", False)
+                            and any(
+                                item.get("status") == "completed"
+                                for prior_read in read_context
+                                for item in prior_read.get("results") or []
+                                if isinstance(item, dict)
+                            )
+                        ),
                         "instruction": (
                             "That same FINN read already returned evidence in this turn. Do not repeat it. "
                             "Use the existing typed result to answer the latest question, or ask one "
@@ -1063,6 +1072,64 @@ class FinnResponsesFrontDoor:
                             "target_ids": resolved_setup_ids,
                             **({"answer_type": verified_answer_mode} if verified_answer_mode else {}),
                         }
+                    comparison = build_turn_contract(
+                        message=message,
+                        tool_trace=({"name": call.name, "result": read_result},),
+                        previous_contract=previous_turn_contract,
+                    ).get("answer_type") == "compare"
+                    if (
+                        getattr(self, "model_led_coach", False)
+                        and comparison and len(resolved_setup_ids) == 2
+                        and len(set(resolved_setup_ids)) == 2
+                        and read_result.get("status") == "completed"
+                    ):
+                        # A comparison read must include the linked evidence for
+                        # both selected owner-scoped setups. Inventory metadata
+                        # alone cannot establish entry or risk conditions.
+                        details: list[dict[str, Any]] = []
+                        selected_names = {
+                            row["setup_id"]: str(row.get("name") or "")
+                            for item in projected_results if isinstance(item, dict)
+                            for row in (item.get("data") or {}).get("setups") or []
+                            if isinstance(row, dict) and isinstance(row.get("setup_id"), int)
+                        }
+                        for setup_id in resolved_setup_ids:
+                            detail = await self.reads(replace(
+                                call, name="get_active_plan_and_strategy",
+                                inputs={"setup_id": setup_id},
+                                read_tools=("read_active_setup", "read_linked_strategy"),
+                                answer_mode=None, setup_names=(),
+                            ))
+                            returned_scopes: set[str] = set()
+                            for item in detail.get("results") or []:
+                                if not isinstance(item, dict) or item.get("scope") not in {
+                                    "read_active_setup", "read_linked_strategy",
+                                }:
+                                    continue
+                                returned_scopes.add(item["scope"])
+                                data = item.get("data")
+                                if (
+                                    item.get("status") == "completed"
+                                    and (not isinstance(data, dict) or data.get("setup_id") != setup_id)
+                                ):
+                                    return {
+                                        "status": "unavailable",
+                                        "reason": "comparison_detail_identity_mismatch",
+                                    }
+                                details.append({
+                                    **item, "requested_setup_id": setup_id,
+                                    "requested_setup_name": selected_names.get(setup_id),
+                                })
+                            for missing_scope in {"read_active_setup", "read_linked_strategy"} - returned_scopes:
+                                details.append({
+                                    "scope": missing_scope, "status": "unavailable",
+                                    "reason": "comparison_detail_not_returned",
+                                    "requested_setup_id": setup_id,
+                                    "requested_setup_name": selected_names.get(setup_id),
+                                })
+                        read_result["results"] = [*read_result.get("results", []), *details]
+                        if any(item.get("status") != "completed" for item in details):
+                            read_result["status"] = "partial"
                     if (multiple_targets or pair_followup) and any(
                         item.get("scope") == "read_saved_setup_inventory"
                         and len((item.get("data") or {}).get("setups") or []) == 2
@@ -1347,9 +1414,44 @@ class FinnResponsesFrontDoor:
         if pending_operation and selected is None:
             raise FinnResponsesError("guided_proposal_tool_call_required")
         if getattr(self, "model_led_coach", False) and selected is None:
+            contract_trace = (*prior_tool_trace, *result.tool_trace)
+            current_setup_ids = {
+                row["setup_id"]
+                for current_call in result.tool_trace
+                for item in (current_call.get("result") or {}).get("results") or []
+                if isinstance(item, dict) and item.get("status") == "completed"
+                and item.get("scope") in {"read_active_setup", "read_saved_setup_inventory"}
+                for row in (
+                    (item.get("data") or {}).get("setups") or []
+                    if item.get("scope") == "read_saved_setup_inventory"
+                    else [item.get("data") or {}]
+                )
+                if isinstance(row, dict) and isinstance(row.get("setup_id"), int)
+            }
+            if (
+                verified_subject and subject_reference
+                and (not current_setup_ids or current_setup_ids == {verified_subject[0]})
+            ):
+                # The verified subject is owner-bound. Reuse only evidence for
+                # that same setup when the user asks a direct follow-up about
+                # its saved strategy; never promote another setup's old read.
+                for prior_call in (previous_response or {}).get("tool_trace") or []:
+                    matched = [
+                        item for item in (prior_call.get("result") or {}).get("results") or []
+                        if isinstance(item, dict)
+                        and item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+                        and item.get("status") == "completed"
+                        and isinstance(item.get("data"), dict)
+                        and item["data"].get("setup_id") == verified_subject[0]
+                    ]
+                    if matched:
+                        contract_trace = (*contract_trace, {
+                            "name": prior_call.get("name"),
+                            "result": {"results": matched},
+                        })
             result = replace(result, turn_contract=build_turn_contract(
                 message=message,
-                tool_trace=(*prior_tool_trace, *result.tool_trace),
+                tool_trace=contract_trace,
                 previous_subject=(previous_response or {}).get("verified_setup_subject"),
                 previous_contract=previous_turn_contract,
             ), model_owned_repair=result.answer_kind == "free_text")

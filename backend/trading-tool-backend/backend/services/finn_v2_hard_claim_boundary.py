@@ -107,6 +107,35 @@ class HardClaimBoundaryResult:
 
 class FinnV2HardClaimBoundary:
     @staticmethod
+    def _read_only_saved_action_quote(quote: str) -> bool:
+        """A quoted lookup is not a claim that FINN changed saved state."""
+        return bool(re.search(
+            r"\b(?:opgezocht|gelezen|geraadpleegd|ingelezen|looked up|read|consulted|"
+            r"nachgeschlagen|gelesen)\b", quote, re.I,
+        )) and not bool(re.search(
+            r"\b(?:gewijzigd|veranderd|aangepast|opgeslagen|verwijderd|aangemaakt|"
+            r"toegevoegd|uitgevoerd|changed|modified|saved|deleted|created|added|"
+            r"executed|geändert|gespeichert|gelöscht|erstellt|hinzugefügt|ausgeführt)\b",
+            quote, re.I,
+        ))
+
+    @staticmethod
+    def _negated_saved_action(answer: str, quote: str) -> bool:
+        """A denial of a write is not evidence that FINN performed one."""
+        position = answer.casefold().find(quote.casefold())
+        if position < 0:
+            return False
+        clause = re.split(r"[.!?;\n]", answer[:position + len(quote)])[-1]
+        if re.search(r"\b(?:niet alleen|not only|nicht nur)\b", clause, re.I):
+            return False
+        return bool(re.search(
+            r"\b(?:niets|niet|geen|nothing|not|no|kein\w*|nichts|nicht)\b"
+            r"[^.!?;\n]{0,35}\b(?:gewijzigd|veranderd|aangepast|opgeslagen|verwijderd|"
+            r"changed|modified|saved|deleted|geändert|gespeichert|gelöscht)\b",
+            clause, re.I,
+        ))
+
+    @staticmethod
     def _negated_outcome_assessment(answer: str, quote: str) -> bool:
         """A denial of evidence for an outcome is not an outcome prediction."""
         position = answer.casefold().find(quote.casefold())
@@ -390,6 +419,14 @@ class FinnV2HardClaimBoundary:
         else:
             quotes["condition_bypass_quote"] = ""
         supported = self._supported_claims(tool_trace, recent_action_result)
+        if quotes["claimed_saved_action_quote"] and self._negated_saved_action(
+            answer, quotes["claimed_saved_action_quote"],
+        ):
+            quotes["claimed_saved_action_quote"] = ""
+        if quotes["claimed_saved_action_quote"] and self._read_only_saved_action_quote(
+            quotes["claimed_saved_action_quote"],
+        ):
+            quotes["claimed_saved_action_quote"] = ""
         if self._saved_state_readback(quotes["claimed_saved_action_quote"], tool_trace):
             quotes["claimed_saved_action_quote"] = ""
         violations = tuple(
