@@ -9,12 +9,12 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_LOCAL_VALIDATED`; CI, Auto Deploy and public identity checks pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build, CI, Auto Deploy and public identity gates passed for the code release. |
 | Active goal | Make FINN's read-only coaching and setup-to-strategy follow-ups work as one owner-scoped conversation, including comparisons, ordinal references and an explicit choice among multiple linked strategies, without verifier rewrites of supported Luna answers. |
 | Candidate branch | `codex/finn-coach-strategy-continuation` |
 | Candidate code SHA | `8747a9e462a434af5961c31cd711e7f1a04c6264` |
-| Candidate PR/head SHA | [PR #41](https://github.com/gvangalen/antigravity-trading-tool/pull/41); head SHA is read from GitHub after CI. |
-| Production SHA for this candidate | Not deployed or publicly verified yet. The preceding user-supplied live QA was on `504a20a43c3bd013979508f3000abcc6b1113587`. |
+| Candidate PR/head SHA | [PR #41](https://github.com/gvangalen/antigravity-trading-tool/pull/41), head `5791bc07a7e1962f5cfaa0d8a5f561171d875ee3`, merged. |
+| Production code SHA | `fc270761eb5494d2d77d6b824a0695d0ee1b0cb2`; public backend health and frontend build-info both returned HTTP 200 with this SHA at 20:08 UTC on 2026-10-02. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-02 |
 
@@ -64,10 +64,10 @@ this batch does not claim that every safety or selector model is Luna.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Backend health and frontend build-info on candidate SHA | Pending. |
+| Candidate CI | `PASS`: [PR run 37058054641](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37058054641), all five jobs green on head `5791bc07a7e1962f5cfaa0d8a5f561171d875ee3`. |
+| Main CI | `PASS`: [main run 37058293826](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37058293826), all five jobs green on merge SHA `fc270761eb5494d2d77d6b824a0695d0ee1b0cb2`. |
+| Auto Deploy | `PASS`: [run 37058501612](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37058501612) deployed merge SHA `fc270761eb5494d2d77d6b824a0695d0ee1b0cb2`. |
+| Backend health and frontend build-info on candidate SHA | `PASS`: both HTTP 200 and both reported merge SHA `fc270761eb5494d2d77d6b824a0695d0ee1b0cb2` at 20:08 UTC on 2026-10-02. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
 Local Build evidence establishes technical readiness for a candidate, not
