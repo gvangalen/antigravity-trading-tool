@@ -30,11 +30,17 @@ def _only_excluded_mentions(answer: str, name: str) -> bool:
     return True
 
 
+def _has_number(answer: str, value: int) -> bool:
+    return str(value) in {
+        re.sub(r"\D", "", token) for token in re.findall(r"\d[\d.,]*", answer)
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 14))
+    parser.add_argument("--sequence", type=int, choices=range(1, 15))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -129,12 +135,18 @@ def main() -> None:
             "Ik twijfel tussen BTC Full Base op 4H en Apple Full Setup op 1D. Vergelijk de opgeslagen setupvoorwaarden naast elkaar en zeg wat je niet kunt vaststellen. Verander niets.",
             "Lees alleen Apple Full Strategy bij Apple Full Setup. Welke entry en stop staan daarin? Gebruik geen velden uit Apple Retest Strategy.",
         ),
+        (
+            "Ik twijfel tussen BTC Full Base op 4H en Apple Full Setup op 1D. Vergelijk de opgeslagen setupvoorwaarden naast elkaar en zeg wat je niet kunt vaststellen. Verander niets.",
+            "Gebruik Apple Full Strategy voor de vergelijking. Wat zijn de opgeslagen entry, stop en targets van beide strategieën?",
+            "En welke stop staat bij die strategie?",
+            "Lees alleen Apple Full Strategy, die bij Apple Full Setup hoort. Welke entry en stop staan daarin?",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
         if args.sequence is not None and sequence_number != args.sequence:
             continue
-        if sequence_number == 13:
+        if sequence_number == 13 or (sequence_number == 14 and args.sequence == 14):
             with sync_engine.begin() as connection:
                 _insert_strategy(connection, user["id"], apple, "Apple Retest Strategy")
         conversation_id = None
@@ -180,10 +192,14 @@ def main() -> None:
                     and [target.get("setup_id") for target in contract.get("targets") or []]
                     == [second_btc_setup_id]
                     and any(
-                        item.get("scope") == "read_saved_setup_inventory"
-                        and item.get("status") == "completed"
-                        and [row.get("setup_id") for row in (item.get("data") or {}).get("setups") or []]
-                        == [second_btc_setup_id]
+                        item.get("status") == "completed"
+                        and (
+                            item.get("scope") == "read_active_setup"
+                            and (item.get("data") or {}).get("setup_id") == second_btc_setup_id
+                            or item.get("scope") == "read_saved_setup_inventory"
+                            and [row.get("setup_id") for row in (item.get("data") or {}).get("setups") or []]
+                            == [second_btc_setup_id]
+                        )
                         for call in trace
                         for item in (call.get("result") or {}).get("results") or []
                     )
@@ -351,6 +367,36 @@ def main() -> None:
                     and item.get("status") == "completed"
                     and (item.get("data") or {}).get("name") == "Apple Full Strategy"
                     for call in trace for item in (call.get("result") or {}).get("results") or []
+                )
+            if sequence_number == 14 and turn_number == 2:
+                linked = [
+                    item for call in trace for item in (call.get("result") or {}).get("results") or []
+                    if item.get("scope") == "read_linked_strategy"
+                    and item.get("status") == "completed"
+                ]
+                checks["both_strategies_read"] = {
+                    (item.get("data") or {}).get("name") for item in linked
+                } >= {"BTC Full Base Strategy", "Apple Full Strategy"}
+                checks["comparison_answered"] = (
+                    "BTC Full Base Strategy" in answer and "Apple Full Strategy" in answer
+                    and _has_number(answer, 76000) and _has_number(answer, 210)
+                    and "Ik heb je vraag nog niet volledig" not in answer
+                )
+            if sequence_number == 14 and turn_number == 3:
+                checks["selected_strategy_pronoun"] = (
+                    "Apple Full Strategy" in answer and "190" in answer
+                    and "72.000" not in answer
+                    and "Ik kan dit nog niet onderbouwen" not in answer
+                )
+            if sequence_number == 14 and turn_number == 4:
+                checks["selected_strategy_followup"] = (
+                    any(
+                        item.get("scope") == "read_linked_strategy"
+                        and item.get("status") == "completed"
+                        and (item.get("data") or {}).get("name") == "Apple Full Strategy"
+                        for call in trace for item in (call.get("result") or {}).get("results") or []
+                    ) and "210" in answer and "190" in answer
+                    and "Ik kan dit nog niet onderbouwen" not in answer
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,

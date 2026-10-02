@@ -783,18 +783,25 @@ class FinnV2EntityResolutionService:
 
         explicit_strategy_name = self._normalized_name(selector.get("strategy_name"))
         if explicit_strategy_name:
+            selected_setup_id = self._coerce_int(
+                setup.get("id") or setup.get("setup_id")
+            ) if setup else None
             matches = [
                 row
-                for row in await self.strategies.query_strategies(user_id, {})
+                for row in await self.strategies.query_strategies(
+                    user_id, {"setup_id": selected_setup_id} if selected_setup_id else {},
+                )
                 if self._normalized_name(row.get("name")) == explicit_strategy_name
+                and (
+                    selected_setup_id is None
+                    or self._coerce_int(row.get("setup_id")) == selected_setup_id
+                )
             ]
             if len(matches) == 1:
-                if setup and self._coerce_int(matches[0].get("setup_id")) != self._coerce_int(setup.get("id") or setup.get("setup_id")):
-                    raise LookupError("strategy_not_resolved")
                 return {"strategy": matches[0], "resolution_source": "explicit_strategy_name"}
             if len(matches) > 1:
                 raise LookupError("strategy_ambiguous")
-            raise LookupError("entity_not_found")
+            raise LookupError("strategy_not_resolved" if setup else "entity_not_found")
 
         # A named bot is an explicit reference to its parent strategy; do not
         # let an unrelated active setup win before following that relation.

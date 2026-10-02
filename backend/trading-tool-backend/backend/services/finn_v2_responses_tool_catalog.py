@@ -179,7 +179,9 @@ class FinnResponsesToolCatalog:
                     "its availability separately. A list read does not select an active setup "
                     "or read a linked strategy. For a comparison, provide answer_mode=compare and "
                     "the two user-named setup names in setup_names. The server resolves names to "
-                    "owner-scoped records; do not invent an ID or replace one named setup with another."
+                    "owner-scoped records; do not invent an ID or replace one named setup with another. "
+                    "When the user chooses one linked strategy for a comparison, pass its exact "
+                    "name in strategy_name; FINN checks its owner and setup relation."
                 )
             properties = {
                 "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
@@ -202,6 +204,8 @@ class FinnResponsesToolCatalog:
                     "setup_names": {"type": ["array", "null"],
                                     "items": {"type": "string"},
                                     "description": "Exactly the user-named setups to compare, or null when listing."},
+                    "strategy_name": {"type": ["string", "null"],
+                                      "description": "One strategy explicitly named by the user for a comparison. FINN binds it to its owner-scoped setup."},
                 })
             definitions.append({
                 "type": "function",
@@ -382,7 +386,7 @@ class FinnResponsesToolCatalog:
             if name == "get_active_plan_and_strategy":
                 allowed.update({"setup_name", "strategy_name", "reference"})
             if name == "get_saved_setup_inventory":
-                allowed.update({"answer_mode", "setup_names"})
+                allowed.update({"answer_mode", "setup_names", "strategy_name"})
             if set(arguments).difference(allowed):
                 raise FinnResponsesToolError("read_arguments_invalid")
             raw_names = arguments.get("setup_names")

@@ -54,6 +54,111 @@ class FinnResponsesAnswerVerifier:
         self.client = client
 
     @staticmethod
+    def _verified_strategy_followup(
+        message: str, answer: str, previous_response: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any], ...]:
+        """Reuse one verified strategy for a plain field readback without a model audit."""
+        previous = previous_response or {}
+        contract = previous.get("turn_contract") or {}
+        setup_id = contract.get("focused_setup_id")
+        strategy_id = contract.get("focused_strategy_id")
+        if not isinstance(setup_id, int) or not isinstance(strategy_id, int):
+            return ()
+        if not re.search(r"\b(?:die|deze|that|this)\s+(?:gekoppelde\s+)?strateg\w*\b", message, re.I):
+            return ()
+        if not re.search(r"\b(?:entry|instap\w*|stop(?:-loss)?|targets?|doel\w*)\b", message, re.I):
+            return ()
+        if re.search(r"\b(?:actue\w*|huidig\w*|markt\w*|koers\w*|live|"
+                     r"koop\w*|verkoop\w*|plaats\w*|wijzig\w*|verander\w*|"
+                     r"geschikt|verstandig|risico|rendement)\b", answer, re.I):
+            return ()
+        prior_items = tuple(
+            item
+            for call in previous.get("tool_trace") or []
+            for item in (call.get("result") or {}).get("results") or []
+            if isinstance(item, dict) and item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed" and isinstance(item.get("data"), dict)
+        )
+        selected = [
+            item for item in prior_items
+            if item["data"].get("setup_id") == setup_id
+            and item["data"].get("strategy_id") == strategy_id
+        ]
+        if len(selected) != 1:
+            return ()
+        data = selected[0]["data"]
+        name = str(data.get("name") or "")
+        if not name or name.casefold() not in answer.casefold():
+            return ()
+        if any(
+            str(item["data"].get("name") or "").casefold() in answer.casefold()
+            for item in prior_items if item is not selected[0] and item["data"].get("name")
+        ):
+            return ()
+        return FinnResponsesAnswerVerifier._source_bound_strategy_fields(
+            message, answer, (selected[0],),
+        )
+
+    @staticmethod
+    def _source_bound_strategy_fields(
+        message: str, answer: str, evidence: tuple[dict[str, Any], ...],
+    ) -> tuple[dict[str, Any], ...]:
+        """Accept a plain saved-field answer from one completed owner-scoped read."""
+        if not re.search(r"\b(?:entry|instap\w*|stop(?:-loss)?|targets?|doel\w*)\b", message, re.I):
+            return ()
+        if re.search(r"\b(?:geschikt|verstandig|risico|rendement|bereken\w*|advies)\b", message, re.I):
+            return ()
+        if re.search(
+            r"\b(?:actue\w*|huidig\w*|markt\w*|koers\w*|live|koop\w*|"
+            r"verkoop\w*|plaats\w*|wijzig\w*|verander\w*|geschikt|"
+            r"verstandig|risico|rendement)\b", answer, re.I,
+        ):
+            return ()
+        candidates = [
+            item for item in evidence
+            if item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed" and isinstance(item.get("data"), dict)
+        ]
+        identities = {
+            (item["data"].get("setup_id"), item["data"].get("strategy_id"))
+            for item in candidates
+        }
+        if len(identities) != 1 or not candidates:
+            return ()
+        data = candidates[0]["data"]
+        name = str(data.get("name") or "")
+        if not name or name.casefold() not in answer.casefold():
+            return ()
+        numbers = {re.sub(r"\D", "", value) for value in re.findall(r"\d[\d.,]*", answer)}
+        targets = data.get("targets")
+        source_values = {
+            "entry": [data.get("entry")], "stop": [data.get("stop_loss")],
+            "targets": targets if isinstance(targets, (list, tuple)) else [],
+        }
+        sourced_numbers = {
+            re.sub(r"\D", "", str(value))
+            for values in source_values.values() for value in values if value is not None
+        }
+        if not numbers or not numbers <= sourced_numbers:
+            return ()
+        requested = {
+            "entry": r"\b(?:entry|instap\w*)\b",
+            "stop": r"\bstop(?:-loss)?\b",
+            "targets": r"\b(?:targets?|doel\w*)\b",
+        }
+        if any(
+            re.search(pattern, message, re.I)
+            and any(value is not None for value in source_values[field])
+            and not {
+                re.sub(r"\D", "", str(value))
+                for value in source_values[field] if value is not None
+            } <= numbers
+            for field, pattern in requested.items()
+        ):
+            return ()
+        return (candidates[0],)
+
+    @staticmethod
     def _emotional_coach_fallback(message: str, locale: str | None) -> str | None:
         """Offer a safe process question when an emotional coaching draft fails verification."""
         language = locale if locale in {"nl", "en", "de"} else "nl"
@@ -2099,6 +2204,27 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if (
+            result.model_led_coach and result.answer_kind == "free_text"
+            and (sourced_strategy := self._source_bound_strategy_fields(
+                message, result.text, evidence,
+            ))
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "completed", result.text, "source_bound_strategy_fields",
+                sourced_strategy, result.uses_previous_response,
+            )
+        if (
+            result.model_led_coach and result.answer_kind == "free_text"
+            and not result.tool_trace
+            and (prior_strategy := self._verified_strategy_followup(
+                message, result.text, previous_response,
+            ))
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "completed", result.text, "verified_strategy_followup",
+                prior_strategy, used_previous_response=True,
+            )
         if result.model_led_coach and result.answer_kind == "free_text" and result.turn_contract:
             gap = turn_contract_gap(result.turn_contract, result.text)
             if gap:
@@ -2627,7 +2753,11 @@ class FinnResponsesAnswerVerifier:
                 and self._static_risk_units_supported(text, checked_evidence)
                 and self._saved_strategy_levels_supported(
                     text, checked_evidence, message,
-                    selected_setup_id=(prior_selected_setup or (None,))[0],
+                    selected_setup_id=(
+                        None if (result.turn_contract or {}).get("answer_type") == "compare"
+                        and len((result.turn_contract or {}).get("targets") or []) > 1
+                        else (prior_selected_setup or (None,))[0]
+                    ),
                 )
                 and self._asset_quantities_supported(
                     answer=text, message=user_question_context, evidence=checked_evidence,

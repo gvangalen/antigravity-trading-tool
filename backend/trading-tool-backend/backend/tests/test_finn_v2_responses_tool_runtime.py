@@ -965,7 +965,7 @@ def test_saved_strategy_levels_use_typed_source_without_semantic_rewrite():
     ))
     assert answer.status == "completed"
     assert answer.text == draft
-    assert answer.reason == "source_bound_read"
+    assert answer.reason == "source_bound_strategy_fields"
     semantic.verify_async.assert_not_awaited()
 
 
@@ -1468,6 +1468,105 @@ def test_turn_contract_rejects_incomplete_strategy_readback():
     assert turn_contract_gap(contract, "Ik zie een BTC-setup.") == "strategy_name_missing"
     assert turn_contract_gap(contract, "BTC Full Base Strategy is gekoppeld.") == "strategy_entry_missing"
     assert turn_contract_gap(contract, "BTC Full Base Strategy heeft een entry op 76.000.") is None
+
+
+def test_turn_contract_keeps_explicit_strategy_focus_from_verified_comparison():
+    trace = ({"name": "get_saved_setup_inventory", "result": {
+        "turn_request": {"target_ids": [1, 2], "answer_type": "compare",
+                         "focused_setup_id": 2, "focused_strategy_id": 22},
+        "results": [
+            {"scope": "read_saved_setup_inventory", "status": "completed", "data": {
+                "setups": [{"setup_id": 1, "name": "First Setup"},
+                           {"setup_id": 2, "name": "Second Setup"}],
+            }},
+            {"scope": "read_linked_strategy", "status": "completed", "data": {
+                "setup_id": 2, "strategy_id": 22, "name": "Chosen Strategy", "entry": "210",
+            }},
+        ],
+    }},)
+    contract = build_turn_contract(
+        message="Gebruik Chosen Strategy voor de vergelijking.", tool_trace=trace,
+    )
+    assert contract["focused_setup_id"] == 2
+    assert contract["focused_strategy_id"] == 22
+    assert turn_contract_gap(
+        contract, "First Setup staat naast Chosen Strategy; entry 210.",
+    ) is None
+
+
+def test_comparison_requires_setup_names_when_strategy_names_repeat():
+    contract = {
+        "answer_type": "compare", "requested_fields": [],
+        "targets": [
+            {"setup_id": 1, "name": "BTC Base", "strategy": {"name": "Full Strategy"}},
+            {"setup_id": 2, "name": "Apple Base", "strategy": {"name": "Full Strategy"}},
+        ],
+    }
+    assert turn_contract_gap(contract, "Full Strategy heeft een entry.") == "comparison_targets_missing"
+    assert turn_contract_gap(contract, "BTC Base en Apple Base hebben allebei Full Strategy.") is None
+
+
+def test_verified_single_strategy_field_followup_skips_extra_semantic_audit():
+    prior = {
+        "turn_contract": {"focused_setup_id": 2, "focused_strategy_id": 22},
+        "tool_trace": [{"result": {"results": [
+            {"scope": "read_linked_strategy", "status": "completed", "data": {
+                "setup_id": 1, "strategy_id": 11, "name": "First Strategy", "stop_loss": "72000",
+            }},
+            {"scope": "read_linked_strategy", "status": "completed", "data": {
+                "setup_id": 2, "strategy_id": 22, "name": "Chosen Strategy", "stop_loss": "190",
+            }},
+        ]}}],
+    }
+    semantic = SimpleNamespace(verify_async=AsyncMock())
+    verifier = FinnResponsesAnswerVerifier(semantic=semantic)
+    answer = asyncio.run(verifier.verify(
+        message="En welke stop staat bij die strategie?",
+        result=FinnResponsesResult(
+            "Bij Chosen Strategy staat een stop-loss op 190.", "followup", (),
+            model_led_coach=True,
+        ),
+        previous_response=prior, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "verified_strategy_followup"
+    semantic.verify_async.assert_not_called()
+    assert not verifier._verified_strategy_followup(
+        "En welke stop staat bij die strategie?",
+        "Bij Chosen Strategy staat een stop-loss op 195.", prior,
+    )
+    assert not verifier._verified_strategy_followup(
+        "En welke stop staat bij die strategie?",
+        "De actuele marktprijs bij Chosen Strategy is 190.", prior,
+    )
+
+
+def test_current_owner_scoped_strategy_field_read_skips_extra_semantic_audit():
+    trace = ({"name": "get_active_plan_and_strategy", "result": {"results": [
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "setup_id": 2, "strategy_id": 22, "name": "Chosen Strategy",
+            "entry": "210", "stop_loss": "190", "targets": ["230"],
+        }},
+    ]}},)
+    semantic = SimpleNamespace(verify_async=AsyncMock())
+    verifier = FinnResponsesAnswerVerifier(semantic=semantic)
+    message = "Welke entry en stop staan in Chosen Strategy?"
+    text = "In Chosen Strategy staan entry 210 en stop-loss 190."
+    checked = asyncio.run(verifier.verify(
+        message=message,
+        result=FinnResponsesResult(text, "readback", trace, model_led_coach=True),
+        locale="nl",
+    ))
+    assert checked.status == "completed" and checked.text == text
+    assert checked.reason == "source_bound_strategy_fields"
+    semantic.verify_async.assert_not_called()
+    evidence = tuple(trace[0]["result"]["results"])
+    assert not verifier._source_bound_strategy_fields(
+        message, "In Chosen Strategy staan entry 215 en stop-loss 190.", evidence,
+    )
+    assert not verifier._source_bound_strategy_fields(
+        message, "De huidige koers voor Chosen Strategy is 210 en stop-loss 190.", evidence,
+    )
 
 
 def test_turn_contract_keeps_stop_distance_and_position_size_as_the_topic():

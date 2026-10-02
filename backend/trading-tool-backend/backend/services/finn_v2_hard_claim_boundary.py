@@ -174,6 +174,42 @@ class FinnV2HardClaimBoundary:
             for item in cls._typed_results(tool_trace)
         )
 
+    @classmethod
+    def _saved_strategy_levels_not_market(
+        cls, quote: str, answer: str, tool_trace: tuple[dict[str, Any], ...],
+    ) -> bool:
+        """A sourced strategy entry, stop or target is not a live market quote."""
+        if not re.search(r"\b(?:entry|instap\w*|stop(?:-loss)?|target\w*|doel\w*)\b", quote, re.I):
+            return False
+        if re.search(
+            r"\b(?:actue\w*|huidig\w*|marktkoers|marktprijs|live|momenteel|"
+            r"current market|market price|trading at|jetzt|derzeit)\b", quote, re.I,
+        ):
+            return False
+        quoted_numbers = {re.sub(r"\D", "", value) for value in re.findall(r"\d[\d.,]*", quote)}
+        if not quoted_numbers:
+            return False
+        for item in cls._typed_results(tool_trace):
+            if item.get("scope") != "read_linked_strategy" or item.get("status") != "completed":
+                continue
+            data = item.get("data")
+            if not isinstance(data, dict):
+                continue
+            name = str(data.get("name") or "")
+            if not name or name.casefold() not in answer.casefold():
+                continue
+            targets = data.get("targets")
+            values = (
+                data.get("entry"), data.get("stop_loss"),
+                *(targets if isinstance(targets, (list, tuple)) else ()),
+            )
+            source_numbers = {
+                re.sub(r"\D", "", str(value)) for value in values if value is not None
+            }
+            if quoted_numbers <= source_numbers:
+                return True
+        return False
+
     @staticmethod
     def _typed_results(tool_trace: tuple[dict[str, Any], ...]) -> tuple[dict[str, Any], ...]:
         return tuple(
@@ -429,6 +465,10 @@ class FinnV2HardClaimBoundary:
             quotes["claimed_saved_action_quote"] = ""
         if self._saved_state_readback(quotes["claimed_saved_action_quote"], tool_trace):
             quotes["claimed_saved_action_quote"] = ""
+        if quotes["current_market_quote"] and self._saved_strategy_levels_not_market(
+            quotes["current_market_quote"], answer, tool_trace,
+        ):
+            quotes["current_market_quote"] = ""
         violations = tuple(
             key.removesuffix("_quote")
             for key, quote in quotes.items()
