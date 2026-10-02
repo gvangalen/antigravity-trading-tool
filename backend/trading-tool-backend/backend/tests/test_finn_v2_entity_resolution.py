@@ -37,6 +37,36 @@ class _FakeStrategyRepo:
         return []
 
 
+def test_setup_link_requires_unique_owner_scoped_strategy():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+
+    with pytest.raises(LookupError, match="strategy_ambiguous"):
+        asyncio.run(service.resolve_strategy(
+            user_id=388, selector={}, setup={"id": 293, "symbol": "BTC"},
+        ))
+
+    selected = asyncio.run(service.resolve_strategy(
+        user_id=388, selector={"strategy_name": "Matrix Strategy"},
+        setup={"id": 293, "symbol": "BTC"},
+    ))
+    assert selected["strategy"]["id"] == 309
+
+
+def test_explicit_strategy_selector_survives_excluded_name_in_message():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    service.setups = _FakeSetupRepo()
+    service.bots = _FakeBotRepo()
+    selected = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=388,
+        selector={"setup_id": 293, "strategy_name": "Matrix Strategy"},
+        message="Lees Matrix Strategy bij deze setup, niet Other Strategy.",
+    ))
+    assert selected["strategy_name"] == "Matrix Strategy"
+    assert "strategy_id" not in selected
+
+
 class _FakeBotRepo:
     async def get_bot_config(self, user_id, bot_id):
         if user_id == 388 and bot_id == 170:

@@ -177,6 +177,9 @@ class StrategyRepository:
         if filters.get("timeframe"):
             q += " AND COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe) = :timeframe"
             params["timeframe"] = filters["timeframe"]
+        if filters.get("setup_id"):
+            q += " AND s.setup_id = :setup_id"
+            params["setup_id"] = filters["setup_id"]
             
         q += " ORDER BY s.created_at DESC"
         

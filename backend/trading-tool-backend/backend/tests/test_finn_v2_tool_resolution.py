@@ -62,7 +62,7 @@ def test_asset_resolution_prefers_authenticated_workspace_state_before_user_pref
 
 def test_strategy_resolution_does_not_fall_back_to_unlinked_last_strategy_when_setup_is_known(monkeypatch):
     service = FinnV2EntityResolutionService(session=object())
-    monkeypatch.setattr(service.strategies, "get_strategy_by_setup", lambda setup_id, user_id: asyncio.sleep(0, result=None))
+    monkeypatch.setattr(service.strategies, "query_strategies", lambda user_id, filters: asyncio.sleep(0, result=[]))
     monkeypatch.setattr(service.strategies, "get_last_strategy", lambda user_id: asyncio.sleep(0, result={"id": 999, "setup_id": 12}))
 
     try:

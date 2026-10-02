@@ -189,6 +189,8 @@ class FinnResponsesToolCatalog:
                 properties.update({
                     "setup_name": {"type": ["string", "null"],
                                    "description": "Saved setup name explicitly selected by the user. FINN resolves ownership server-side."},
+                    "strategy_name": {"type": ["string", "null"],
+                                      "description": "Saved strategy name explicitly selected by the user, only when named in the latest request. FINN verifies its owner and setup link."},
                     "reference": {"type": ["string", "null"],
                                   "enum": ["current_request", "previous_response", None],
                                   "description": "Use previous_response only to revisit the owner-scoped setup read in the preceding verified answer."},
@@ -229,6 +231,9 @@ class FinnResponsesToolCatalog:
                 "description": (
                     f"Read-only evidence collection for {contract.semantic_description or contract.operation_id} "
                     "Use for a personal assessment, not merely to list saved settings. "
+                    "General coaching about a hypothetical stop, position size, or trading "
+                    "impulse needs no personal assessment; answer it directly unless the user "
+                    "asks you to judge a specific saved plan. "
                     "A request only for static arithmetic from already saved levels "
                     "belongs to the owner-scoped plan/strategy read, not this assessment. "
                     "FINN collects the registry-required sources; missing or stale sources limit the judgment. "
@@ -375,7 +380,7 @@ class FinnResponsesToolCatalog:
             if name in self.evaluation_contracts:
                 allowed.update(self.evaluation_contracts[name].optional_inputs)
             if name == "get_active_plan_and_strategy":
-                allowed.update({"setup_name", "reference"})
+                allowed.update({"setup_name", "strategy_name", "reference"})
             if name == "get_saved_setup_inventory":
                 allowed.update({"answer_mode", "setup_names"})
             if set(arguments).difference(allowed):

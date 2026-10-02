@@ -386,6 +386,12 @@ class FinnResponsesAnswerVerifier:
                 # A compact saved-object label with type/timeframe is data.
                 continue
             word_count = len(sentence.split())
+            if word_count <= 8 and re.match(
+                r"^\s*(?:#{1,6}\s+)?\*{0,2}[^.!?\n]{1,80}\s+[—–]\s+[^.!?\n]{1,80}\*{0,2}\s*$",
+                sentence,
+            ):
+                # A short heading joined to a saved object name is a label.
+                continue
             if word_count < 5:
                 continue
             if sentence.rstrip().endswith(":") and word_count <= 8:
@@ -739,13 +745,26 @@ class FinnResponsesAnswerVerifier:
                 prefix, re.I,
             ):
                 return True
-        return bool(re.search(
+        risk_reduction = re.compile(
             r"\b(?:risic\w*|risk\w*|verlust\w*|loss\w*)\b.{0,40}\b"
             r"(?:beperk\w*|verminder\w*|verklein\w*|reduc\w*|lower\w*|senk\w*)\b"
             r"|\b(?:beperk\w*|verminder\w*|verklein\w*|reduc\w*|lower\w*|senk\w*)\b"
             r".{0,40}\b(?:risic\w*|risk\w*|verlust\w*|loss\w*)\b",
-            text, re.IGNORECASE | re.DOTALL,
-        )) or bool(re.search(
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in risk_reduction.finditer(text):
+            sentence = re.split(r"[.!?\n]", text[:match.start()])[-1] + re.split(
+                r"[.!?\n]", text[match.end():], maxsplit=1,
+            )[0]
+            if re.search(
+                r"\b(?:kleinere?\s+positie|positieomvang\s+verklein\w*|"
+                r"smaller\s+position|lower\s+position\s+size)\b", sentence, re.I,
+            ) and re.search(r"\b(?:stop|per\s+eenheid|per\s+unit|unit|verliesgrens)\b", sentence, re.I):
+                # Position size changes the amount exposed to a given stop;
+                # this is risk arithmetic, not a promised trading outcome.
+                continue
+            return True
+        return bool(re.search(
             r"\b(?:verlies voorkomen|verliezen vermijden|prevent losses|avoid losses|"
             r"verluste vermeiden|verluste verhindern|"
             r"verliezen.{0,30}vermijd\w*|"
@@ -759,11 +778,43 @@ class FinnResponsesAnswerVerifier:
     def _strategy_levels_attributed_to_setup(
         text: str, evidence: tuple[dict[str, Any], ...],
     ) -> bool:
-        if not any(item.get("scope") == "read_active_setup" and item.get("status") == "completed" for item in evidence):
+        setup_reads = [
+            item.get("data") or {} for item in evidence
+            if item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+        ]
+        if not setup_reads:
             return False
-        if not any(item.get("scope") == "read_linked_strategy" and item.get("status") == "completed" for item in evidence):
+        strategy_reads = [
+            item.get("data") or {} for item in evidence
+            if item.get("scope") == "read_linked_strategy" and item.get("status") == "completed"
+        ]
+        if not strategy_reads:
             return False
         for sentence in re.split(r"[.!?\n]+", text):
+            # A level is stored on a strategy. A setup name followed by
+            # "staat/is opgeslagen" must not silently turn that into a setup
+            # field, even when the strategy level itself is verified.
+            level_word = re.search(r"\b(?:entry|instap\w*|stop.?loss|targets?)\b", sentence, re.I)
+            if level_word:
+                strategy_named = any(
+                    row.get("name") and re.search(re.escape(str(row["name"])), sentence, re.I)
+                    for row in strategy_reads
+                )
+                strategy_source = re.search(
+                    r"\b(?:in|volgens|uit)\s+(?:(?:de|je|jouw|een)\s+)?"
+                    r"(?:(?:gekoppelde|opgeslagen)\s+)?strateg\w*\b"
+                    r"|\b(?:gekoppelde|opgeslagen)\s+strateg\w*\b",
+                    sentence, re.I,
+                )
+                if not strategy_named and not (strategy_source and strategy_source.start() < level_word.start()) and any(
+                    row.get("name") and re.search(
+                        r"\b(?:in|bij|voor|within)\s+(?:de\s+setup\s+)?"
+                        + re.escape(str(row["name"]))
+                        + r"\b[^.!?\n]{0,65}\b(?:staat|staan|is|heeft|contains|has|stored)\b",
+                        sentence, re.I,
+                    ) for row in setup_reads
+                ):
+                    return True
             match = re.search(
                 r"\bsetup\b[^.!?\n]{0,100}\b(?:met|heeft|with|has|enthält)\b"
                 r"(?P<detail>[^.!?\n]{0,100})",
@@ -1364,7 +1415,30 @@ class FinnResponsesAnswerVerifier:
             r"\b(\d{1,3}(?:[.,]\d{3})+)\s*[/–-]\s*"
             r"(\d{1,3}(?:[.,]\d{3})+)\b", plain_answer,
         ))
+        ratios = {
+            Decimal(str(target["reward_to_risk"]))
+            for data in strategies
+            for geometry in [data.get("level_geometry")]
+            if isinstance(geometry, dict)
+            for target in geometry.get("targets") or []
+            if isinstance(target, dict) and target.get("reward_to_risk") is not None
+        }
         for match in (*labelled, *price_pairs):
+            prefix = re.split(
+                r"[,;.!?\n|]", plain_answer[max(0, match.start() - 55):match.start()]
+            )[-1]
+            try:
+                possible_ratio = Decimal(match.group(1).rstrip(".,").replace(",", "."))
+            except InvalidOperation:
+                possible_ratio = None
+            if match in labelled and possible_ratio in ratios and re.search(
+                r"\b(?:risk\s*[/:-]\s*reward|reward\s*[/:-]\s*risk|"
+                r"verhouding|ratio|risico\s*[/:-]\s*opbrengst)\b",
+                prefix, re.I,
+            ):
+                # The number describes a risk/reward ratio, not a saved
+                # target price. Static geometry is checked separately.
+                continue
             for group_number, raw_token in enumerate((match.group(1), match.group(2)), 1):
                 if not raw_token:
                     continue

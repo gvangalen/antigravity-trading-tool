@@ -634,7 +634,10 @@ class FinnV2EntityResolutionService:
         }
         for entity, loader in repositories.items():
             id_field = f"{entity}_id"
-            if self._coerce_int(enriched.get(id_field)):
+            # An explicitly selected name is validated by the owner-scoped
+            # resolver below. A second name mentioned only to exclude it must
+            # not make this read ambiguous before that resolver runs.
+            if self._coerce_int(enriched.get(id_field)) or self._normalized_name(enriched.get(f"{entity}_name")):
                 continue
             matches = [
                 dict(row)
@@ -805,9 +808,15 @@ class FinnV2EntityResolutionService:
             raise LookupError("strategy_not_resolved")
 
         if setup and setup.get("id"):
-            row = await self.strategies.get_strategy_by_setup(int(setup["id"]), user_id)
-            if row:
-                return {"strategy": dict(row), "resolution_source": "setup_link"}
+            setup_id = int(setup["id"])
+            linked = [
+                row for row in await self.strategies.query_strategies(user_id, {"setup_id": setup_id})
+                if self._coerce_int(row.get("setup_id")) == setup_id
+            ]
+            if len(linked) > 1:
+                raise LookupError("strategy_ambiguous")
+            if linked:
+                return {"strategy": dict(linked[0]), "resolution_source": "setup_link"}
             raise LookupError("strategy_not_resolved")
 
         last_strategy = await self.strategies.get_last_strategy(user_id)

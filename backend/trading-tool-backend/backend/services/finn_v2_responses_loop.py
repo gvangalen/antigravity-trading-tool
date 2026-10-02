@@ -1124,6 +1124,7 @@ class FinnResponsesLoop:
                 except FinnResponsesError:
                     raise
                 except Exception:
+                    logger.exception("FINN Responses tool execution failed name=%s", tool_name)
                     output = {"status": "error", "reason": "tool_execution_failed"}
                 trace.append({
                     "call_id": call_id,
