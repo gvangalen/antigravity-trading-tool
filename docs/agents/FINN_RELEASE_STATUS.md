@@ -9,70 +9,68 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build, CI and deployment identity gates passed. |
-| Active goal | Make FINN's read-only coach conversation model-owned: Luna chooses reads and composes the answer; the server binds only owner-scoped objects, checks source claims and write safety, and returns structured rejection for one model repair. Verify complete multi-turn conversations. |
-| Candidate branch | `codex/finn-single-owner-flow`. |
-| Candidate code SHA | `b737aa83d4b11fb76813d73fa4d6960d7e08eb39`. |
-| Candidate PR/head SHA | [PR #35](https://github.com/gvangalen/antigravity-trading-tool/pull/35), head `b5f1664a6d1cfcc2a5b7948ed52a59584d832bb3`, merged. |
-| Production code SHA | `4772960646257870889b8955ceb25b1ed31281e9`, verified on public backend health and frontend build-info at 22:13 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
+| Phase | `LOCAL_VALIDATED_AWAITING_CI`; no production change from this candidate yet. |
+| Active goal | Keep FINN's read-only coach answer model-owned while binding selected saved setups, linked strategies, and direct follow-up evidence to owner-scoped reads. Prevent valid comparisons and general risk explanations from being erased by unrelated verifier checks. |
+| Candidate branch | `codex/finn-coach-evidence-flow` |
+| Candidate code SHA | `3fec0753374b673e6879df114987d69df39f1e51` |
+| Candidate PR/head SHA | Pending. |
+| Production code SHA | `34915e27ec9b9a8c589b10198f97c4973cccac8c`; public backend health and frontend build-info both returned HTTP 200 and this SHA on 2026-10-02. |
 | Release owner | Build |
-| Last updated | `2026-10-02` |
+| Last updated | 2026-10-02 |
 
-The previous candidate on `codex/finn-turn-contract` reached
-`READY_FOR_INDEPENDENT_QA` but the user reported further related live failures.
-It is superseded by this batch. No independent QA run has started for this
-new candidate.
+The earlier `codex/finn-single-owner-flow` candidate and its status-only merge
+reached production, but the user's authenticated live coach test on
+`34915e27ec9b9a8c589b10198f97c4973cccac8c` found further continuation
+failures. This repair batch supersedes that candidate. Build has not run
+protected QA fixture tests or the sealed holdout. Independent authenticated
+production QA remains pending and user-owned.
 
-## Root Causes and Repair
+## Root Causes And Repair
 
-- The chat route still included legacy collection and answer-sufficiency
-  decisions that could turn the current question into an inventory or fixed
-  response. The production run now enables the model-led path explicitly.
-  Luna chooses a read when needed and composes the answer; explicit read-only
-  coaching turns cannot call proposal tools.
-- Multi-object reads could use one asset/timeframe filter or a model-supplied
-  name as authority. The server now binds at most two selected names to
-  owner-scoped inventory IDs and the current user request or a verified prior
-  subject. A complete inventory or an unbound general tradeoff has a bounded
-  read path, avoiding repeated unrelated account lookups.
-- The answer verifier could replace a good answer with fixed coach copy or a
-  generic fallback after a second semantic verdict. The model-led path treats
-  replacement as structured rejection and gives Luna one repair. Factual
-  saved-object reads and asset-transfer boundaries use typed source checks;
-  saved numbers, object identity, language and mutation safety remain checked.
-- Previous tests exercised individual reads and answers more than their
-  continuation. Eight full synthetic conversations now cover ordinal
-  references, correct linked-strategy levels, FOMO and asset transfer,
-  stop-distance versus position size, two-setup comparisons, corrections and
-  strategy readback through the public local API and Celery worker.
+- A two-setup inventory read returned the correct pair but omitted their
+  linked strategies. FINN now reads both selected owner-scoped setups and
+  reports each strategy's availability in the same typed tool result. Luna
+  still composes the comparison.
+- A direct question about a just-read strategy lost its evidence at the next
+  turn. The turn contract and deterministic numeric checks now reuse only the
+  previous verified read for the same owner-bound setup.
+- The answer verifier misread saved stop-distance percentages as price levels,
+  and treated a read-only lookup or negated write as a performed write. These
+  checks now distinguish static arithmetic and readback from mutation claims.
+- A repeated read could exhaust the tool round limit after evidence was
+  already available. In model-led coaching a duplicate completed read now
+  ends the tool phase so Luna can answer or state the limit.
+- A direct follow-up about the stop-distance/position-size tradeoff could lose
+  the position-size topic. The turn contract preserves both subjects when the
+  user explicitly continues that tradeoff.
 
 ## Local Build Evidence
 
 The disposable parity stack used isolated PostgreSQL, Redis, API and prefork
 Celery with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`.
-The real-provider selector evaluation used its configured `gpt-4o-mini`; this
-batch does not claim a migration of every safety or selector model. No
-protected QA fixture or sealed holdout was used.
+The selector evaluation used its configured `gpt-4o-mini`; this batch does not
+claim a migration of every safety or selector model. No production account was
+written by these tests.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| API/Celery/Responses conversation regression | `24/24` read-only turns across eight multi-turn sequences; every turn completed in one dispatch with no proposal. | `.local-finn-parity-artifacts/single-owner-all-green.json`, SHA-256 `c50c0ba694245765a6579d422581703748f32832b17ed9557605b0509f5cbbe4`. |
-| Full worker-driven safe action-contract matrix | `16/16`; zero broker orders, live bots, live-trading calls or production connections. | `.local-finn-parity-artifacts/single-owner-action-final.json`, SHA-256 `fdd8fc62b925a717ff25280370931a26666c21dffa3b263b184e30e617cea79a`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/single-owner-provider-development.json`, SHA-256 `3758d7dda9ca4daabd93167d68cca252f24f23e958e3e7383c0f0131515d16c3`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/single-owner-provider-regression.json`, SHA-256 `3de05e419ffff9d82269288376b340ce440deacc477e5a3535eaba3a3c2aa829`. |
-| Backend canonical suite | `2979 passed, 3 skipped`. | `pytest -q --disable-warnings --tb=short`. |
+| API/Celery/Responses coach regression | `35/35` read-only turns across 12 complete conversations; one dispatch per turn, no proposal or write. Includes the latest live-QA failure sequence. | `.local-finn-parity-artifacts/coach-evidence-all-r7.json`, SHA-256 `26a85666369178bc89e11a6433090638a2dceb1b0fffa9bc575c0c44212f2e6c`. |
+| Full worker-driven safe action-contract matrix | `16/16`; zero broker orders, live bots, live-trading calls or production connections. | `.local-finn-parity-artifacts/coach-evidence-action-matrix.json`, SHA-256 `1ab830480ca50085bf32e6ace06ba80d51ef2bed6535feb444894b9405b4c5fb`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-evidence-provider-development.json`, SHA-256 `d10da496f8f358527aeeece43aaf24c5a08a9fe58b7ab353b32ebc9b7bc043b2`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/coach-evidence-provider-regression.json`, SHA-256 `60bbc4c22af296957f29ad15efff6b0fa515dea51ed8d487550eae45025981e0`. |
+| Backend canonical suite | `2982 passed, 3 skipped`. | `pytest -q --disable-warnings --tb=short`. |
 | Frontend canonical checks | Passed, with no frontend source changes. | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high`, production `build`. |
 
-## Release and Independent QA
+## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: PR run `36933101250`, all five jobs green on head `b5f1664a6d1cfcc2a5b7948ed52a59584d832bb3`. |
-| Main CI | `PASS`: main run `36933335821`, all five jobs green on merge SHA `4772960646257870889b8955ceb25b1ed31281e9`. |
-| Auto Deploy | `PASS`: run `36933540084` deployed merge SHA `4772960646257870889b8955ceb25b1ed31281e9`. |
-| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 22:13 UTC on 2026-10-01. |
+| Candidate CI | Pending. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Backend health and frontend build-info on candidate SHA | Pending. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and final verdict. |
 
-Build's local and deployment evidence establishes technical readiness only.
+Build's local evidence establishes technical readiness for CI only.
 Authenticated production coach acceptance remains independent QA's
 responsibility.

@@ -754,6 +754,19 @@ def test_model_owned_comparison_binds_exact_owner_scoped_pair():
 
     async def read(call):
         reads.append(call)
+        if call.name == "get_active_plan_and_strategy":
+            setup_id = call.inputs["setup_id"]
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {
+                    "setup_id": setup_id,
+                    "name": "BTC Full Base" if setup_id == 1 else "Apple Full Setup",
+                }},
+                {"scope": "read_linked_strategy", "status": "completed", "data": {
+                    "setup_id": setup_id,
+                    "name": "BTC Full Strategy" if setup_id == 1 else "Apple Full Strategy",
+                    "entry": "76000" if setup_id == 1 else "210",
+                }},
+            ]}
         return {"status": "completed", "results": [{
             "scope": "read_saved_setup_inventory", "status": "completed",
             "data": {"complete": True, "setups": [
@@ -770,12 +783,16 @@ def test_model_owned_comparison_binds_exact_owner_scoped_pair():
     ))
     assert fake.requests[0]["tool_choice"] == "auto"
     assert reads[0].inputs == {}
+    assert [call.inputs["setup_id"] for call in reads[1:]] == [1, 2]
     trace_result = result.response.tool_trace[0]["result"]
     assert trace_result["turn_request"] == {
         "answer_type": "compare", "target_ids": [1, 2],
     }
     assert [target["name"] for target in result.response.turn_contract["targets"]] == [
         "BTC Full Base", "Apple Full Setup",
+    ]
+    assert [target["strategy"]["entry"] for target in result.response.turn_contract["targets"]] == [
+        "76000", "210",
     ]
     assert result.response.model_owned_repair
 
@@ -1312,6 +1329,13 @@ def test_turn_contract_keeps_comparison_targets_across_correction():
         tool_trace=trace, previous_contract=correction,
     )
     assert [target["setup_id"] for target in indirect["targets"]] == [1, 2]
+    risk_followup = build_turn_contract(
+        message="Vergelijk alleen de instap- en risicovoorwaarden van BTC Full Base en Apple Full Setup.",
+        tool_trace=trace, previous_contract=contract,
+    )
+    assert turn_contract_gap(
+        risk_followup, "BTC Full Base heeft een andere instap dan Apple Full Setup.",
+    ) is None
 
 
 def test_comparison_correction_rereads_prior_pair_and_excludes_negated_setup():
@@ -1339,6 +1363,16 @@ def test_comparison_correction_rereads_prior_pair_and_excludes_negated_setup():
 
     async def read(call):
         calls.append(call)
+        if call.name == "get_active_plan_and_strategy":
+            setup_id = call.inputs["setup_id"]
+            return {"status": "partial", "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {
+                    "setup_id": setup_id,
+                    "name": "BTC Full Base" if setup_id == 1 else "Apple Full Setup",
+                }},
+                {"scope": "read_linked_strategy", "status": "unavailable",
+                 "reason": "strategy_not_resolved", "data": None},
+            ]}
         return {"status": "completed", "results": [{
             "scope": "read_saved_setup_inventory", "status": "completed", "data": {"setups": [
                 {"setup_id": 1, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"},
@@ -1356,7 +1390,7 @@ def test_comparison_correction_rereads_prior_pair_and_excludes_negated_setup():
             "terminal_kind": "free_text", "turn_contract": previous_contract,
         },
     ))
-    assert len(calls) == 1 and calls[0].inputs == {}
+    assert [call.inputs for call in calls] == [{}, {"setup_id": 1}, {"setup_id": 2}]
     read_rows = [
         row["name"] for trace in result.response.tool_trace
         for item in (trace.get("result") or {}).get("results") or []
@@ -1405,6 +1439,127 @@ def test_turn_contract_keeps_stop_distance_and_position_size_as_the_topic():
     })
     assert turn_contract_gap(contract, "Een strenge wachttijd is niet vanzelf veiliger.") == "risk_tradeoff_topic_missing"
     assert turn_contract_gap(contract, "Een ruimere stop vergroot verlies per eenheid; een kleinere positie begrenst het totaalrisico.") is None
+    followup = build_turn_contract(
+        message=("Leg de afweging concreet uit: hoe houd ik hetzelfde maximale "
+                 "euroverlies als de stop verder weg komt?"),
+        tool_trace=(), previous_contract=contract,
+    )
+    assert {"stop_distance", "position_size"} <= set(followup["requested_fields"])
+    assert turn_contract_gap(followup, "Bij een ruimere stop verklein je de positie om hetzelfde maximale verlies te houden.") is None
+
+
+def test_strategy_confirmation_followup_uses_the_previous_verified_read():
+    question = (
+        "Staat in die strategie ook een aparte instapbevestiging, of alleen "
+        "een entryprijs? Wat zou ik vóór een trade nog moeten controleren?"
+    )
+    previous_trace = ({"name": "get_active_plan_and_strategy", "status": "completed",
+                       "result": {"results": [
+                           {"scope": "read_active_setup", "status": "completed", "data": {
+                               "setup_id": 42, "name": "BTC Full Base", "symbol": "BTC",
+                           }},
+                           {"scope": "read_linked_strategy", "status": "completed", "data": {
+                               "setup_id": 42, "name": "BTC Full Strategy", "entry": "76000",
+                               "stop_loss": "72000", "entry_type": None,
+                           }},
+                       ]}},)
+    previous = {
+        "run_id": "previous-run", "response_id": "previous-response",
+        "terminal_status": "completed", "terminal_kind": "free_text",
+        "owner_user_id": 7,
+        "user_message": "Welke strategie is aan BTC Full Base gekoppeld?",
+        "answer": "BTC Full Base heeft BTC Full Strategy met entry 76.000 en stop 72.000.",
+        "verified_setup_subject": {"owner_id": 7, "setup_id": 42,
+                                   "name": "BTC Full Base", "symbol": "BTC"},
+        "tool_trace": list(previous_trace),
+    }
+    draft = (
+        "Die strategie bevat een opgeslagen entryprijs van 76.000, maar geen "
+        "afzonderlijke instapbevestiging. Controleer vóór een trade of je "
+        "instapvoorwaarde duidelijk is en hoeveel verlies je maximaal accepteert."
+    )
+    fake = FakeResponses(response("followup-response", text=draft))
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="strategy-followup", model_led_coach=True,
+    )
+    front.reads = AsyncMock(side_effect=AssertionError("verified previous read is sufficient"))
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+        previous_response=previous, previous_response_id=previous["response_id"],
+    ))
+    assert {"entry", "confirmation"} <= set(result.response.turn_contract["requested_fields"])
+    assert result.response.turn_contract["targets"][0]["strategy"]["entry"] == "76000"
+    assert turn_contract_gap(result.response.turn_contract, draft) is None
+    semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=AssertionError(
+        "a source-bound factual continuation should not need a second model judge"
+    )))
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message=question, result=result.response, previous_response=previous, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert verified.text == draft
+    assert verified.reason == "source_bound_read"
+
+
+def test_verified_static_stop_distance_percent_is_not_rejected_as_invented():
+    evidence = ({
+        "scope": "read_linked_strategy", "status": "completed",
+        "data": {"setup_id": 42, "level_geometry": {
+            "status": "completed", "entry_stop_distance_percent": "5.26",
+        }},
+    },)
+    supported = FinnResponsesAnswerVerifier._percentage_claims_supported
+    assert supported(
+        answer="De opgeslagen stopafstand is 4.000 (5,26% van de instap).",
+        message="Vergelijk mijn opgeslagen voorwaarden.", previous_answer="",
+        evidence=evidence, response_focus=None,
+    )
+    assert not supported(
+        answer="De opgeslagen stopafstand is 4.000 (6,26% van de instap).",
+        message="Vergelijk mijn opgeslagen voorwaarden.", previous_answer="",
+        evidence=evidence, response_focus=None,
+    )
+    paired_evidence = (*evidence, {
+        "scope": "read_linked_strategy", "status": "completed",
+        "data": {"setup_id": 43, "level_geometry": {
+            "status": "completed", "entry_stop_distance_percent": "9.52",
+        }},
+    })
+    assert supported(
+        answer="Stopafstand als percentage van de instap: BTC 5,26%; Apple 9,52%.",
+        message="Vergelijk beide setups.", previous_answer="",
+        evidence=paired_evidence, response_focus=None,
+    )
+    assert not supported(
+        answer="Stopafstand als percentage van de instap: BTC 5,26%; Apple 19,52%.",
+        message="Vergelijk beide setups.", previous_answer="",
+        evidence=paired_evidence, response_focus=None,
+    )
+    assert FinnResponsesAnswerVerifier._saved_strategy_levels_supported(
+        "BTC: entry 76.000, stop 72.000 en afstand tot de stop 5,26%.",
+        ({"scope": "read_linked_strategy", "status": "completed", "data": {
+            "setup_id": 42, "entry": "76000", "stop_loss": "72000", "targets": [],
+        }},),
+        "Vergelijk mijn opgeslagen niveaus.",
+    )
+
+
+def test_denial_of_a_write_is_not_a_saved_action_claim():
+    boundary = FinnV2HardClaimBoundary()
+    assert boundary._negated_saved_action("Ik heb niets gewijzigd.", "gewijzigd")
+    assert boundary._negated_saved_action("Er is geen plan opgeslagen.", "plan opgeslagen")
+    assert not boundary._negated_saved_action("Ik heb het plan gewijzigd.", "gewijzigd")
+    assert not boundary._negated_saved_action(
+        "Ik heb niet alleen gelezen, maar ook gewijzigd.", "gewijzigd",
+    )
+    assert boundary._read_only_saved_action_quote(
+        "Ik heb BTC Full Base en Apple Full Setup opnieuw opgezocht",
+    )
+    assert not boundary._read_only_saved_action_quote(
+        "Ik heb de setup gelezen en daarna gewijzigd",
+    )
 
 
 def test_inventory_read_failure_does_not_fall_back_to_active_setup_or_guess_count():

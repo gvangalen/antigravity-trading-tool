@@ -34,7 +34,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 9))
+    parser.add_argument("--sequence", type=int, choices=range(1, 13))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -48,9 +48,10 @@ def main() -> None:
         connection.execute(text("UPDATE setups SET timeframe='1D' WHERE id=:id AND user_id=:user_id"), {
             "id": apple, "user_id": user["id"],
         })
-        for setup_id, name, entry, stop in (
-            (breakout, "BTC Breakout Full Strategy", 80000, 76000),
-            (base, "BTC Full Base Strategy", 76000, 72000),
+        for setup_id, name, entry, stop, target in (
+            (breakout, "BTC Breakout Full Strategy", 80000, 76000, 88000),
+            (base, "BTC Full Base Strategy", 76000, 72000, 84000),
+            (apple, "Apple Full Strategy", 210, 190, 230),
         ):
             strategy_id = _insert_strategy(connection, user["id"], setup_id, name)
             connection.execute(text("""
@@ -58,9 +59,9 @@ def main() -> None:
                     targets=ARRAY[:target]::NUMERIC[], data=CAST(:data AS jsonb)
                 WHERE id=:id AND user_id=:user_id
             """), {
-                "entry": entry, "stop": stop, "target": entry + 8000,
-                "data": json.dumps({"name": name, "entry": entry,
-                                    "stop_loss": stop, "targets": [entry + 8000],
+                    "entry": entry, "stop": stop, "target": target,
+                    "data": json.dumps({"name": name, "entry": entry,
+                                    "stop_loss": stop, "targets": [target],
                                     "base_amount": 100, "execution_mode": "fixed"}),
                 "id": strategy_id, "user_id": user["id"],
             })
@@ -105,12 +106,32 @@ def main() -> None:
             "Welke strategie is gekoppeld aan BTC Full Base? Lees die opgeslagen strategie zonder iets te wijzigen.",
             "Welke strategienaam, welk entryniveau en welke aparte trigger staan daarin? Noem ook wat niet is vastgelegd.",
         ),
+        (
+            "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?",
+            "Ik vind dat te streng. Zou een kleinere positie met meer ruimte voor de stop niet verstandiger kunnen zijn? Denk kritisch mee zonder een nieuw niveau te verzinnen.",
+            "Leg de afweging concreet uit: hoe houd ik hetzelfde maximale euroverlies als de stop verder weg komt, zonder mijn opgeslagen plan nu te wijzigen?",
+        ),
+        (
+            "Ik twijfel tussen BTC Full Base op 4H en Apple Full Setup op 1D. Vergelijk de opgeslagen setupvoorwaarden naast elkaar en zeg wat je niet kunt vaststellen. Verander niets.",
+            "Ja, lees die gekoppelde strategieën nu en vergelijk alleen de bevestigde instap- en risicovoorwaarden van BTC Full Base en Apple Full Setup. Wat ontbreekt?",
+        ),
+        (
+            "Ik wil nu BTC Full Base traden omdat de koers stijgt. Welke concrete opgeslagen instapregel moet ik eerst controleren? Als die niet bewezen in mijn setup staat, zeg dat eerlijk. Verander niets.",
+            "Lees dan alleen de gekoppelde BTC Full Base Strategy: welk entryniveau is opgeslagen, en is er daarnaast een aparte instapbevestiging vastgelegd? Noem geen nieuw niveau.",
+        ),
+        (
+            "Welke BTC-setups staan in Mijn Plan? Noem alleen de opgeslagen namen en timeframes. Maak of wijzig niets.",
+            "Wat weet je zeker over de tweede uit jouw lijst? Noem de opgeslagen velden en wees eerlijk over wat je niet hebt gelezen.",
+            "En wat weet je daarvan zeker? Kan je ook de gekoppelde strategie controleren, zonder setupvelden en strategievelden door elkaar te halen?",
+            "Staat in die strategie ook een aparte instapbevestiging, of alleen een entryprijs? Wat zou ik vóór een trade nog moeten controleren?",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
         if args.sequence is not None and sequence_number != args.sequence:
             continue
         conversation_id = None
+        second_btc_setup_id = None
         for turn_number, message in enumerate(sequence, 1):
             observed = run_gate(
                 base_url=args.base_url, bearer_token=token, message=message,
@@ -122,6 +143,13 @@ def main() -> None:
             exchange = state.get("responses_exchange") or {}
             answer = str((state.get("terminal_response") or {}).get("content") or "")
             trace = exchange.get("tool_trace") or []
+            if sequence_number in {1, 2} and turn_number == 1:
+                breakout_position = answer.find("BTC Breakout Full")
+                base_position = answer.find("BTC Full Base")
+                if breakout_position >= 0 and base_position >= 0:
+                    second_btc_setup_id = (
+                        base if breakout_position < base_position else breakout
+                    )
             checks = {
                 "completed": observed["status"] == "completed",
                 "read_only": record["proposal"] is None and not state.get("action_result"),
@@ -135,18 +163,28 @@ def main() -> None:
                 )
             if sequence_number in {1, 2} and turn_number == 2:
                 contract = exchange.get("turn_contract") or {}
-                checks["selected_base_identity"] = (
-                    "BTC Full Base" in answer
-                    and [target.get("setup_id") for target in contract.get("targets") or []] == [base]
+                selected_name = (
+                    "BTC Full Base" if second_btc_setup_id == base
+                    else "BTC Breakout Full"
+                )
+                checks["selected_second_identity"] = (
+                    second_btc_setup_id is not None and selected_name in answer
+                    and [target.get("setup_id") for target in contract.get("targets") or []]
+                    == [second_btc_setup_id]
                     and any(
                         item.get("scope") == "read_saved_setup_inventory"
                         and item.get("status") == "completed"
-                        and [row.get("setup_id") for row in (item.get("data") or {}).get("setups") or []] == [base]
+                        and [row.get("setup_id") for row in (item.get("data") or {}).get("setups") or []]
+                        == [second_btc_setup_id]
                         for call in trace
                         for item in (call.get("result") or {}).get("results") or []
                     )
                 )
             if sequence_number == 1 and turn_number == 3:
+                expected_entry, expected_stop, other_entry = (
+                    (76000, 72000, 80000) if second_btc_setup_id == base
+                    else (80000, 76000, 0)
+                )
                 selected_reads = [
                     item for call in trace for item in (call.get("result") or {}).get("results") or []
                     if item.get("scope") in {"read_active_setup", "read_linked_strategy"}
@@ -154,11 +192,17 @@ def main() -> None:
                 ]
                 checks["source_bound_levels"] = (
                     bool(selected_reads)
-                    and all((item.get("data") or {}).get("setup_id") == base for item in selected_reads)
-                    and "76.000" in answer and "72.000" in answer
-                    and "80.000" not in answer
+                    and all((item.get("data") or {}).get("setup_id") == second_btc_setup_id
+                            for item in selected_reads)
+                    and f"{expected_entry:,.0f}".replace(",", ".") in answer
+                    and f"{expected_stop:,.0f}".replace(",", ".") in answer
+                    and (not other_entry or f"{other_entry:,.0f}".replace(",", ".") not in answer)
                 )
             if sequence_number == 1 and turn_number == 5:
+                expected_entry, expected_stop, other_entry = (
+                    (76000, 72000, 80000) if second_btc_setup_id == base
+                    else (80000, 76000, 0)
+                )
                 selected_reads = [
                     item for call in trace for item in (call.get("result") or {}).get("results") or []
                     if item.get("scope") in {"read_active_setup", "read_linked_strategy"}
@@ -166,15 +210,17 @@ def main() -> None:
                 ]
                 checks["durable_subject_after_coach_turn"] = (
                     bool(selected_reads)
-                    and all((item.get("data") or {}).get("setup_id") == base for item in selected_reads)
-                    and "76.000" in answer and "72.000" in answer
-                    and "80.000" not in answer
+                    and all((item.get("data") or {}).get("setup_id") == second_btc_setup_id
+                            for item in selected_reads)
+                    and f"{expected_entry:,.0f}".replace(",", ".") in answer
+                    and f"{expected_stop:,.0f}".replace(",", ".") in answer
+                    and (not other_entry or f"{other_entry:,.0f}".replace(",", ".") not in answer)
                 )
             if sequence_number == 1 and turn_number in {4, 5}:
                 subject = state.get("verified_setup_subject") or {}
                 checks["owner_bound_subject_persisted"] = (
                     subject.get("owner_id") == user["id"]
-                    and subject.get("setup_id") == base
+                    and subject.get("setup_id") == second_btc_setup_id
                 )
             if sequence_number == 2 and turn_number == 3:
                 checks["coach_continuation"] = (
@@ -214,7 +260,8 @@ def main() -> None:
             if sequence_number in {6, 7} and turn_number in {1, 2}:
                 checks["two_named_setups_compared"] = (
                     "BTC Full Base" in answer and "Apple Full Setup" in answer
-                    and "BTC" in answer and "AAPL" in answer
+                    and (sequence_number == 7 and turn_number == 2
+                         or ("BTC" in answer and "AAPL" in answer))
                     and "4H" in answer and "1D" in answer
                     and _only_excluded_mentions(answer, "ETH Full Setup")
                     and exchange.get("answer_kind") != "saved_setup_collection"
@@ -233,6 +280,39 @@ def main() -> None:
                     "BTC Full Base Strategy" in answer and "76.000" in answer
                     and "80.000" not in answer and "ETH Full Setup" not in answer
                     and exchange.get("answer_kind") != "saved_setup_collection"
+                )
+            if sequence_number == 9:
+                checks["stop_coach_answered"] = (
+                    "stop" in answer.casefold()
+                    and any(word in answer.casefold() for word in ("risico", "verlies", "positie"))
+                    and "Ik kan dit nog niet onderbouwen" not in answer
+                    and not re.search(r"\b(?:80|76|72)\.000\b", answer)
+                )
+            if sequence_number == 10:
+                linked = [
+                    item for call in trace for item in (call.get("result") or {}).get("results") or []
+                    if item.get("scope") == "read_linked_strategy"
+                    and item.get("status") == "completed"
+                ]
+                checks["both_linked_strategies_read"] = {
+                    (item.get("data") or {}).get("setup_id") for item in linked
+                } == {base, apple}
+                checks["conditions_compared"] = (
+                    "BTC Full Base" in answer and "Apple Full Setup" in answer
+                    and "76.000" in answer and "210" in answer
+                    and "ETH Full Setup" not in answer
+                )
+            if sequence_number == 11 and turn_number == 2:
+                checks["saved_entry_without_invented_confirmation"] = (
+                    "BTC Full Base" in answer and "76.000" in answer
+                    and "80.000" not in answer
+                    and any(word in answer.casefold() for word in ("geen", "niet", "ontbreekt"))
+                )
+            if sequence_number == 12 and turn_number == 4:
+                checks["verified_strategy_followup"] = (
+                    "76.000" in answer and "80.000" not in answer
+                    and any(word in answer.casefold() for word in ("geen", "niet", "ontbreekt"))
+                    and "Ik kan dit nog niet onderbouwen" not in answer
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,

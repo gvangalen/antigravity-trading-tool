@@ -1271,6 +1271,13 @@ class FinnResponsesAnswerVerifier:
                 answer, re.IGNORECASE,
             )
         )
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
+            if (
+                re.search(r"\b(?:stopafstand|risicoafstand|afstand[^.!?;\n]{0,35}\bstop|"
+                          r"stop\s+distance|risk\s+distance)\b", sentence, re.I)
+                and re.search(r"\b(?:instap|entry|stop)\b", sentence, re.I)
+            ):
+                price_distance_claims.update(percentages(sentence))
         if price_distance_claims:
             for item in evidence:
                 if item.get("scope") != "read_linked_strategy" or item.get("status") != "completed":
@@ -1358,8 +1365,16 @@ class FinnResponsesAnswerVerifier:
             r"(\d{1,3}(?:[.,]\d{3})+)\b", plain_answer,
         ))
         for match in (*labelled, *price_pairs):
-            for raw_token in (match.group(1), match.group(2)):
+            for group_number, raw_token in enumerate((match.group(1), match.group(2)), 1):
                 if not raw_token:
+                    continue
+                if re.match(
+                    r"\s*(?:%|procent\b|percent\b|prozent\b)",
+                    plain_answer[match.end(group_number):], re.I,
+                ):
+                    # A labelled stop-distance percentage is not a saved
+                    # stop price; the percentage checker validates it against
+                    # typed level geometry separately.
                     continue
                 token = raw_token.rstrip(".,")
                 if len(re.sub(r"\D", "", token)) < 2:
@@ -2512,7 +2527,11 @@ class FinnResponsesAnswerVerifier:
         )):
             previous_response = None
         previous_answer = str((previous_response or {}).get("answer") or "").strip()
-        def quantities_supported(text: str, *, general_risk_mechanics: bool = False) -> bool:
+        def quantities_supported(
+            text: str, *, general_risk_mechanics: bool = False,
+            source_evidence: tuple[dict[str, Any], ...] | None = None,
+        ) -> bool:
+            checked_evidence = evidence if source_evidence is None else source_evidence
             user_question_context = "\n".join(filter(None, (
                 str((previous_response or {}).get("user_message") or "")
                 if reusing_previous_read else "",
@@ -2525,25 +2544,25 @@ class FinnResponsesAnswerVerifier:
             return (
                 self._amounts_supported(
                     answer=text, message=user_question_context, previous_answer=prior_quantity_context,
-                    evidence=evidence,
+                    evidence=checked_evidence,
                 )
                 and self._percentage_claims_supported(
                     answer=text, message=user_question_context, previous_answer=previous_answer,
-                    evidence=evidence, response_focus=result.response_focus,
+                    evidence=checked_evidence, response_focus=result.response_focus,
                 )
-                and self._static_risk_units_supported(text, evidence)
+                and self._static_risk_units_supported(text, checked_evidence)
                 and self._saved_strategy_levels_supported(
-                    text, evidence, message,
+                    text, checked_evidence, message,
                     selected_setup_id=(prior_selected_setup or (None,))[0],
                 )
                 and self._asset_quantities_supported(
-                    answer=text, message=user_question_context, evidence=evidence,
+                    answer=text, message=user_question_context, evidence=checked_evidence,
                 )
                 and self._currency_units_supported(
                     answer=text, message=user_question_context, previous_answer=prior_quantity_context,
-                    evidence=evidence,
+                    evidence=checked_evidence,
                 )
-                and self._static_geometry_complete(text, evidence, result.response_focus)
+                and self._static_geometry_complete(text, checked_evidence, result.response_focus)
                 and not self._contains_internal_identifier(
                     text,
                     allowed_fields=frozenset({"entry_type"}) if result.model_led_coach and any(
@@ -2551,11 +2570,11 @@ class FinnResponsesAnswerVerifier:
                         and item.get("status") == "completed"
                         and isinstance(item.get("data"), dict)
                         and "entry_type" in item["data"]
-                        for item in evidence
+                        for item in checked_evidence
                     ) else frozenset(),
                 )
                 and (general_risk_mechanics or not self._promises_unverified_trading_outcome(text))
-                and not self._strategy_levels_attributed_to_setup(text, evidence)
+                and not self._strategy_levels_attributed_to_setup(text, checked_evidence)
                 and self._saved_entity_type_supported(
                     text,
                     tuple((*evidence, *(relevant_previous_source_evidence if reusing_previous_read else ()))),
@@ -3473,6 +3492,19 @@ class FinnResponsesAnswerVerifier:
         contract = result.turn_contract or {}
         selected_targets = contract.get("targets") or []
         requested_facts = set(contract.get("requested_fields") or ())
+        selected_ids = {
+            target.get("setup_id") for target in selected_targets
+            if isinstance(target.get("setup_id"), int)
+        }
+        prior_selected_evidence = tuple(
+            item for item in relevant_previous_source_evidence
+            if reusing_previous_read and selected_ids
+            and item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and item["data"].get("setup_id") in selected_ids
+        )
+        factual_source_evidence = (*evidence, *prior_selected_evidence)
         factual_read = bool(
             result.model_led_coach and result.answer_kind == "free_text"
             and selected_targets
@@ -3496,7 +3528,7 @@ class FinnResponsesAnswerVerifier:
                         if isinstance(row, dict)
                     }
                 )
-                for item in evidence
+                for item in factual_source_evidence
             ) for target in selected_targets)
         )
         if factual_read:
@@ -3505,7 +3537,7 @@ class FinnResponsesAnswerVerifier:
             }
             other_names = {
                 str(row.get("name") or "")
-                for item in evidence
+                for item in factual_source_evidence
                 for row in (item.get("data") or {}).get("setups") or []
                 if isinstance(row, dict)
                 and str(row.get("name") or "").casefold() not in selected_names
@@ -3519,10 +3551,15 @@ class FinnResponsesAnswerVerifier:
                     for match in re.finditer(re.escape(name), result.text, re.I)
                 )
             if (
-                all(name and name in result.text.casefold() for name in selected_names)
+                (
+                    all(name and name in result.text.casefold() for name in selected_names)
+                    or (len(selected_names) == 1 and contract.get("saved_subject_reference"))
+                )
                 and
                 not any(name and claims_other_name(name) for name in other_names)
-                and quantities_supported(result.text)
+                and quantities_supported(
+                    result.text, source_evidence=factual_source_evidence,
+                )
                 and self._language_matches(result.text, locale)
                 and self._assistant_does_not_claim_user_mutation(result.text)
                 and self._proposal_speaker_is_user(result.text)
