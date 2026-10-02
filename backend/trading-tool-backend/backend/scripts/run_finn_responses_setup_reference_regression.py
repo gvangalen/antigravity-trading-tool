@@ -34,7 +34,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 13))
+    parser.add_argument("--sequence", type=int, choices=range(1, 14))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -125,13 +125,21 @@ def main() -> None:
             "En wat weet je daarvan zeker? Kan je ook de gekoppelde strategie controleren, zonder setupvelden en strategievelden door elkaar te halen?",
             "Staat in die strategie ook een aparte instapbevestiging, of alleen een entryprijs? Wat zou ik vóór een trade nog moeten controleren?",
         ),
+        (
+            "Ik twijfel tussen BTC Full Base op 4H en Apple Full Setup op 1D. Vergelijk de opgeslagen setupvoorwaarden naast elkaar en zeg wat je niet kunt vaststellen. Verander niets.",
+            "Lees alleen Apple Full Strategy bij Apple Full Setup. Welke entry en stop staan daarin? Gebruik geen velden uit Apple Retest Strategy.",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
         if args.sequence is not None and sequence_number != args.sequence:
             continue
+        if sequence_number == 13:
+            with sync_engine.begin() as connection:
+                _insert_strategy(connection, user["id"], apple, "Apple Retest Strategy")
         conversation_id = None
         second_btc_setup_id = None
+        last_verified_linked_setup_ids: set[int] = set()
         for turn_number, message in enumerate(sequence, 1):
             observed = run_gate(
                 base_url=args.base_url, bearer_token=token, message=message,
@@ -294,8 +302,13 @@ def main() -> None:
                     if item.get("scope") == "read_linked_strategy"
                     and item.get("status") == "completed"
                 ]
-                checks["both_linked_strategies_read"] = {
+                linked_ids = {
                     (item.get("data") or {}).get("setup_id") for item in linked
+                }
+                if exchange.get("uses_previous_response"):
+                    linked_ids.update(last_verified_linked_setup_ids)
+                checks["both_linked_strategies_read"] = {
+                    setup_id for setup_id in linked_ids if isinstance(setup_id, int)
                 } == {base, apple}
                 checks["conditions_compared"] = (
                     "BTC Full Base" in answer and "Apple Full Setup" in answer
@@ -308,16 +321,52 @@ def main() -> None:
                     and "80.000" not in answer
                     and any(word in answer.casefold() for word in ("geen", "niet", "ontbreekt"))
                 )
+            if sequence_number == 11 and turn_number == 1:
+                checks["entry_source_not_misattributed"] = (
+                    "Ik kan dit nog niet onderbouwen" not in answer
+                    and ("76.000" not in answer or "strateg" in answer.casefold())
+                    and not re.search(
+                        r"\bin\s+BTC Full Base\s+staat[^.!?\n]{0,80}"
+                        r"\b(?:entry|instapwaarde|instapprijs)\b", answer, re.I,
+                    )
+                )
             if sequence_number == 12 and turn_number == 4:
                 checks["verified_strategy_followup"] = (
                     "76.000" in answer and "80.000" not in answer
                     and any(word in answer.casefold() for word in ("geen", "niet", "ontbreekt"))
                     and "Ik kan dit nog niet onderbouwen" not in answer
                 )
+            if sequence_number == 13 and turn_number == 1:
+                ambiguous = [
+                    item for call in trace for item in (call.get("result") or {}).get("results") or []
+                    if item.get("scope") == "read_linked_strategy"
+                    and item.get("reason") == "strategy_ambiguous"
+                ]
+                checks["ambiguous_link_not_silently_selected"] = bool(ambiguous) and not re.search(
+                    r"Apple (?:Full|Retest) Strategy.{0,100}(?:entry|stop)", answer, re.I,
+                )
+            if sequence_number == 13 and turn_number == 2:
+                checks["explicit_strategy_resolved"] = any(
+                    item.get("scope") == "read_linked_strategy"
+                    and item.get("status") == "completed"
+                    and (item.get("data") or {}).get("name") == "Apple Full Strategy"
+                    for call in trace for item in (call.get("result") or {}).get("results") or []
+                )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,
                           "answer": answer, "answer_kind": exchange.get("answer_kind"),
                           "checks": checks, "pass": all(checks.values())})
+            if observed["status"] == "completed":
+                current_linked_ids = {
+                    (item.get("data") or {}).get("setup_id")
+                    for call in trace for item in (call.get("result") or {}).get("results") or []
+                    if item.get("scope") == "read_linked_strategy"
+                    and item.get("status") == "completed"
+                }
+                if current_linked_ids:
+                    last_verified_linked_setup_ids = {
+                        setup_id for setup_id in current_linked_ids if isinstance(setup_id, int)
+                    }
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps({"cases": cases}, ensure_ascii=False, indent=2) + "\n")
             print(json.dumps({"sequence": sequence_number, "turn": turn_number,

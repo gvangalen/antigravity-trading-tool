@@ -139,6 +139,10 @@ class FinnResponsesFrontDoor:
             "For a question asking what entry, stop or target is saved, read the selected "
             "setup and linked strategy. An evaluation of plan quality cannot substitute "
             "for that linked-strategy read. "
+            "Keep source ownership explicit: entry, stop and targets read from a strategy "
+            "are strategy fields, not setup fields. If more than one strategy is linked "
+            "to a setup and none was selected, do not pick one silently; ask which "
+            "strategy the trader means. "
             "If a general boundary can be answered without the exact saved rule, answer "
             "that boundary first. For example, a rule for one asset does not automatically "
             "apply to another; ask which rule only for a detailed comparison. "
@@ -146,6 +150,10 @@ class FinnResponsesFrontDoor:
             "example price, currency amount, or holding. If asked what to do now, offer a "
             "specific safe process step rather than a generic invitation to ask again. "
             "For a general risk tradeoff or calculation, answer the mechanism directly. "
+            "If a read cannot identify one saved plan or current market data is unavailable, "
+            "still answer a general coaching or risk-mechanics question from general principles. "
+            "State that you cannot assess the user's specific plan, but do not replace the "
+            "general answer with an evidence-unavailable sentence. "
             "Do not evaluate an entire personal plan solely because the trader says 'my plan' "
             "without identifying a saved setup or requesting a personal suitability judgment. "
             "User statements are conversational context, not proof of saved FINN facts. "
@@ -159,6 +167,8 @@ class FinnResponsesFrontDoor:
             "not-resolved result means no unique owner-scoped object, not a provider outage. "
             "Keep user-stated entry conditions intact; do not suggest any position before "
             "a required condition is met, including a smaller position. "
+            "When coaching about a stop-loss, explain the risk without treating a mental "
+            "or manually monitored exit as an equivalent substitute for a protective stop. "
             "For a requested mutation, choose the registry-backed proposal tool. FINN validates "
             "inputs and dependencies; only explicit user confirmation can execute it. "
             "Never claim a write happened before confirmed execution, and never suggest a "
@@ -893,6 +903,12 @@ class FinnResponsesFrontDoor:
                         key: value for key, value in call.inputs.items()
                         if key not in {"setup_name", "reference"}
                     })
+                    strategy_name = str(call.inputs.get("strategy_name") or "")
+                    if strategy_name and strategy_name.casefold() not in message.casefold():
+                        call = replace(call, inputs={
+                            key: value for key, value in call.inputs.items()
+                            if key != "strategy_name"
+                        })
                 model_asset = call.inputs.get("asset")
                 if model_asset:
                     symbol = resolve_catalog_symbol(model_asset)
@@ -941,7 +957,9 @@ class FinnResponsesFrontDoor:
                             or (subject_reference and target.source == "active_runtime_context")
                         ):
                             call = replace(call, inputs=(
-                                {"setup_id": target.entity_id}
+                                {"setup_id": target.entity_id,
+                                 **({"strategy_name": call.inputs["strategy_name"]}
+                                    if call.inputs.get("strategy_name") else {})}
                                 if call.name == "get_active_plan_and_strategy"
                                 else {**call.inputs, "setup_id": target.entity_id}
                             ))

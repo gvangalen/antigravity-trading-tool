@@ -967,6 +967,8 @@ def test_saved_strategy_levels_use_typed_source_without_semantic_rewrite():
     assert answer.text == draft
     assert answer.reason == "source_bound_read"
     semantic.verify_async.assert_not_awaited()
+
+
     coaching_question = "Ik krijg FOMO bij dat plan. Wat zijn de instap en stop, en wat zou je eerst checken?"
     coaching_draft = (
         "Voor BTC Full Base staat in BTC Full Base Strategy een instap op 76.000 "
@@ -983,6 +985,50 @@ def test_saved_strategy_levels_use_typed_source_without_semantic_rewrite():
     ))
     assert coached.status == "completed" and coached.text == coaching_draft
     semantic.verify_async.assert_not_awaited()
+
+
+def test_strategy_entry_must_not_be_presented_as_a_setup_field():
+    evidence = (
+        {"scope": "read_active_setup", "status": "completed",
+         "data": {"name": "BTC Full Base", "setup_id": 42}},
+        {"scope": "read_linked_strategy", "status": "completed",
+         "data": {"name": "BTC Full Strategy", "setup_id": 42, "entry": "76000"}},
+    )
+    guard = FinnResponsesAnswerVerifier._strategy_levels_attributed_to_setup
+    assert guard("In BTC Full Base staat als concrete instapwaarde 76.000 opgeslagen.", evidence)
+    assert guard("In BTC Full Base staat de instap op 76.000 in de gekoppelde strategie.", evidence)
+    assert not guard("Bij BTC Full Base staat in je opgeslagen strategie een instap op 76.000.", evidence)
+    assert not guard("Bij BTC Full Base staat in BTC Full Strategy een entry van 76.000.", evidence)
+
+
+def test_impulsive_entry_verb_does_not_require_a_saved_entry_price():
+    trace = ({"result": {"results": [
+        {"scope": "read_active_setup", "status": "completed",
+         "data": {"setup_id": 42, "name": "BTC Full Base", "symbol": "BTC"}},
+        {"scope": "read_linked_strategy", "status": "completed",
+         "data": {"setup_id": 42, "name": "BTC Full Strategy", "entry": "76000"}},
+    ]}},)
+    contract = build_turn_contract(
+        message="En als ik daardoor nu impulsief wil instappen?", tool_trace=trace,
+        previous_subject={"setup_id": 42, "symbol": "BTC"},
+    )
+    assert "entry" not in contract["requested_fields"]
+    assert turn_contract_gap(contract, "Pauzeer eerst; FOMO bevestigt geen instapvoorwaarde.") is None
+
+
+def test_saved_target_price_guard_distinguishes_risk_reward_ratio():
+    evidence = ({"scope": "read_linked_strategy", "status": "completed", "data": {
+        "name": "BTC Full Strategy", "entry": "76000", "stop_loss": "72000",
+        "targets": ["84000"],
+        "level_geometry": {"targets": [{"reward_to_risk": "2.00"}]},
+    }},)
+    guard = FinnResponsesAnswerVerifier._saved_strategy_levels_supported
+    assert guard(
+        "Entry 76.000, stop-loss 72.000 en target 84.000. "
+        "De berekende risk/reward tot het target is 2,00.", evidence, "",
+    )
+    assert not guard("Entry 76.000 en target 85.000.", evidence, "")
+    assert not guard("Risk/reward 2,00; target 85.000.", evidence, "")
 
 
 def test_linked_strategy_identity_uses_typed_source_without_semantic_rewrite():
@@ -1592,6 +1638,15 @@ def test_inventory_reference_ids_are_server_only_not_model_arguments():
         catalog.validate("get_saved_setup_inventory", {"setup_ids": [1, 2, 3]})
 
 
+def test_selected_strategy_name_is_a_valid_owner_scoped_read_selector():
+    catalog = FinnResponsesToolCatalog()
+    call = catalog.validate("get_active_plan_and_strategy", {
+        "asset": "AAPL", "setup_name": "Apple Full Setup",
+        "strategy_name": "Apple Full Strategy", "reference": "current_request",
+    })
+    assert call.inputs["strategy_name"] == "Apple Full Strategy"
+
+
 def test_rejected_proposal_does_not_override_later_valid_clarification():
     trace = (
         {"name": "create_or_update_trade_plan_proposal", "status": "retry"},
@@ -1780,11 +1835,17 @@ def test_unverified_trading_outcome_promises_are_not_grounded_process_coaching()
     assert check("Wachten kan helpen om onnodige verliezen te vermijden.")
     assert check("Dit verhoogt de kans dat je in de juiste richting handelt.")
     assert not check("Je zegt dat je op bevestiging wilt wachten; welk signaal bedoel je?")
+    assert not check(
+        "Een ruimere stop betekent meer risico per eenheid; "
+        "een kleinere positie kan dat risico beperken."
+    )
+    assert check("Bevestiging kan het risico op verlies beperken.")
 
 
 def test_locale_check_preserves_saved_proper_names_in_short_field_rows():
     check = FinnResponsesAnswerVerifier._language_matches
     assert check("Je hebt een setup opgeslagen.\n**Naam:** Coach NL BTC Setup", "nl")
+    assert check("**Setupvelden — BTC Full Base**\nIk heb de gekoppelde strategie gecontroleerd.", "nl")
     assert not check("This answer is entirely in English and ignores the selected language.", "nl")
 
 
