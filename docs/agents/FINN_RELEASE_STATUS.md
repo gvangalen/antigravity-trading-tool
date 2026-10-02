@@ -13,7 +13,7 @@ this document's own commit SHA.
 | Active goal | Make FINN's read-only coaching and setup-to-strategy follow-ups work as one owner-scoped conversation, including comparisons, ordinal references and an explicit choice among multiple linked strategies, without verifier rewrites of supported Luna answers. |
 | Candidate branch | `codex/finn-coach-strategy-continuation` |
 | Candidate code SHA | `8747a9e462a434af5961c31cd711e7f1a04c6264` |
-| Candidate PR/head SHA | Pending PR creation. |
+| Candidate PR/head SHA | [PR #41](https://github.com/gvangalen/antigravity-trading-tool/pull/41); head SHA is read from GitHub after CI. |
 | Production SHA for this candidate | Not deployed or publicly verified yet. The preceding user-supplied live QA was on `504a20a43c3bd013979508f3000abcc6b1113587`. |
 | Release owner | Build |
 | Last updated | 2026-10-02 |
