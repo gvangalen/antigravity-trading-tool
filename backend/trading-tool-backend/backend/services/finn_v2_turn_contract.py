@@ -70,6 +70,8 @@ def build_turn_contract(
     attempted_scopes: set[str] = set()
     model_answer_type: str | None = None
     resolved_target_ids: list[int] = []
+    focused_strategy_id: int | None = None
+    focused_setup_id: int | None = None
     for call in tool_trace:
         turn_request = (call.get("result") or {}).get("turn_request") or {}
         if isinstance(turn_request, dict):
@@ -80,6 +82,11 @@ def build_turn_contract(
                     value for value in turn_request["target_ids"]
                     if isinstance(value, int)
                 ]
+            if isinstance(turn_request.get("focused_setup_id"), int) and isinstance(
+                turn_request.get("focused_strategy_id"), int,
+            ):
+                focused_setup_id = turn_request["focused_setup_id"]
+                focused_strategy_id = turn_request["focused_strategy_id"]
         for item in (call.get("result") or {}).get("results") or []:
             if isinstance(item, dict) and isinstance(item.get("scope"), str):
                 attempted_scopes.add(item["scope"])
@@ -128,6 +135,11 @@ def build_turn_contract(
             "evidence": {key: row[key] for key in ("symbol", "timeframe", "setup_type") if row.get(key) is not None},
             "strategy": {key: strategy[key] for key in ("name", "entry", "stop_loss") if strategy.get(key) is not None},
         })
+    if focused_setup_id not in target_ids or (
+        strategies.get(focused_setup_id, {}).get("strategy_id") != focused_strategy_id
+    ):
+        focused_setup_id = None
+        focused_strategy_id = None
 
     if answer_type in {"list", "compare", "weigh", "explain"}:
         selected_answer_type = answer_type
@@ -165,6 +177,8 @@ def build_turn_contract(
         "answer_type": selected_answer_type,
         "requested_fields": requested_fields,
         "targets": targets,
+        "focused_setup_id": focused_setup_id,
+        "focused_strategy_id": focused_strategy_id,
         "evidence_fields": evidence_fields,
         "attempted_scopes": sorted(attempted_scopes),
         "saved_subject_reference": bool(
@@ -183,7 +197,20 @@ def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
     """Only reject objectively missing selected objects or strategy fields."""
     targets = contract.get("targets") or []
     if contract.get("answer_type") == "compare" and len(targets) >= 2:
-        if any(str(target.get("name") or "").casefold() not in answer.casefold() for target in targets):
+        strategy_name_counts: dict[str, int] = {}
+        for target in targets:
+            strategy_name = str((target.get("strategy") or {}).get("name") or "").casefold()
+            if strategy_name:
+                strategy_name_counts[strategy_name] = strategy_name_counts.get(strategy_name, 0) + 1
+        if any(not any(
+            name and name.casefold() in answer.casefold()
+            for name in (
+                str(target.get("name") or ""),
+                str((target.get("strategy") or {}).get("name") or "")
+                if strategy_name_counts.get(str((target.get("strategy") or {}).get("name") or "").casefold(), 0) == 1
+                else "",
+            )
+        ) for target in targets):
             return "comparison_targets_missing"
         timeframes = [
             str((target.get("evidence") or {}).get("timeframe") or "")

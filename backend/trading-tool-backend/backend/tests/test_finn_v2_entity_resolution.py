@@ -164,6 +164,26 @@ def test_explicit_strategy_cannot_override_a_different_selected_setup():
         assert linked_alias["strategy"]["setup_id"] == 293
 
 
+def test_same_strategy_name_is_resolved_within_selected_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    async def strategies(_user_id, _filters):
+        return [
+            {"id": 309, "name": "Base Strategy", "setup_id": 293},
+            {"id": 310, "name": "Base Strategy", "setup_id": 294},
+        ]
+    service.strategies.query_strategies = strategies
+
+    with pytest.raises(LookupError, match="strategy_ambiguous"):
+        asyncio.run(service.resolve_strategy(
+            user_id=388, selector={"strategy_name": "Base Strategy"}, setup=None,
+        ))
+    selected = asyncio.run(service.resolve_strategy(
+        user_id=388, selector={"strategy_name": "Base Strategy"}, setup={"id": 294},
+    ))
+    assert selected["strategy"]["id"] == 310
+
+
 def test_entity_resolution_projects_only_registry_required_named_ids():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

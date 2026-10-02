@@ -565,3 +565,37 @@ def test_existing_saved_setup_readback_is_not_a_new_write_claim():
     assert not FinnV2HardClaimBoundary._saved_state_readback(
         "Het opgeslagen setup is Atlas.", (),
     )
+
+
+def test_saved_strategy_levels_are_not_live_market_quotes():
+    trace = ({"result": {"results": [{
+        "scope": "read_linked_strategy", "status": "completed",
+        "data": {"name": "Example Strategy", "entry": "210", "stop_loss": "190", "targets": ["230"]},
+    }]}},)
+    answer = "In Example Strategy staat een entry van 210 en een stop-loss van 190."
+    check = FinnV2HardClaimBoundary._saved_strategy_levels_not_market
+    assert check("een entry van 210 en een stop-loss van 190", answer, trace)
+    assert not check("de actuele koers is 210", answer, trace)
+    assert not check("een entry van 215", answer, trace)
+    assert not check("een entry van 210", answer, ())
+
+
+def test_claim_extractor_cannot_turn_saved_strategy_entry_into_market_quote(monkeypatch):
+    async def extract(**kwargs):
+        if (condition := _safe_condition_result(kwargs)) is not None:
+            return condition
+        return {"parsed": {
+            "personal_fit_quote": "",
+            "current_market_quote": "een entry van 210 en een stop-loss van 190",
+            "claimed_saved_action_quote": "",
+            "outcome_claim_quote": "", "condition_bypass_quote": "",
+        }}
+
+    monkeypatch.setattr(boundary_module, "ask_gpt_structured_response_async", extract)
+    trace = ({"result": {"results": [{
+        "scope": "read_linked_strategy", "status": "completed",
+        "data": {"name": "Example Strategy", "entry": "210", "stop_loss": "190"},
+    }]}},)
+    answer = "In Example Strategy staat een entry van 210 en een stop-loss van 190."
+    verdict = asyncio.run(FinnV2HardClaimBoundary().assess(answer=answer, tool_trace=trace))
+    assert verdict.available and not verdict.violations

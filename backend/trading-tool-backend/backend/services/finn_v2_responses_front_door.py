@@ -304,13 +304,42 @@ class FinnResponsesFrontDoor:
         }
         multiple_targets = len(mentioned_assets) > 1 or len(mentioned_timeframes) > 1
         previous_turn_contract = (previous_response or {}).get("turn_contract") or {}
+        previous_focused_setup_id = previous_turn_contract.get("focused_setup_id")
+        previous_focused_strategy_id = previous_turn_contract.get("focused_strategy_id")
+        singular_strategy_followup = bool(
+            isinstance(previous_focused_setup_id, int)
+            and isinstance(previous_focused_strategy_id, int)
+            and re.search(r"\b(?:die|deze|that|this)\s+(?:gekoppelde\s+)?strateg\w*\b", message, re.I)
+            and not re.search(r"\b(?:vergelijk\w*|compare\w*|beide|allebei|both)\b", message, re.I)
+        )
         prior_pair = [
             {"setup_id": target.get("setup_id"), "name": target.get("name")}
             for target in previous_turn_contract.get("targets") or []
             if isinstance(target, dict) and isinstance(target.get("setup_id"), int)
         ]
+        focused_asset = next((
+            str((target.get("evidence") or {}).get("symbol") or "").upper()
+            for target in previous_turn_contract.get("targets") or []
+            if isinstance(target, dict) and target.get("setup_id") == previous_focused_setup_id
+        ), "")
+        focused_target = next((
+            target for target in previous_turn_contract.get("targets") or []
+            if isinstance(target, dict) and target.get("setup_id") == previous_focused_setup_id
+        ), {})
+        focused_setup_name = str(focused_target.get("name") or "")
+        focused_strategy_name = str((focused_target.get("strategy") or {}).get("name") or "")
         pair_followup = bool(
             len(prior_pair) == 2
+            and not singular_strategy_followup
+            and not re.search(r"\b(?:lees|read)\s+(?:nu\s+)?(?:alleen|only|nur)\b", message, re.I)
+            and (
+                re.search(
+                    r"\b(?:vergelijk\w*|vergelijking|verschil\w*|beide|allebei|"
+                    r"twee|compare\w*|comparison|both)\b", message, re.I,
+                )
+                or all(str(row.get("name") or "").casefold() in message.casefold()
+                       for row in prior_pair)
+            )
             and len(referenced_setup_rows(
                 message=message, rows=prior_pair, previous_contract=previous_turn_contract,
             )) == 2
@@ -818,27 +847,39 @@ class FinnResponsesFrontDoor:
                         ),
                     }
             if call.operation_id is None:
+                selected_strategy_name = str(call.inputs.get("strategy_name") or "")
+                if selected_strategy_name.casefold() not in message.casefold():
+                    selected_strategy_name = ""
                 if call.name == "get_active_plan_and_strategy" and (multiple_targets or pair_followup):
                     # A single-target resolver cannot represent a two-setup
                     # comparison. Read the owner-scoped collection once and
                     # project the named pair from its typed rows below.
                     call = replace(
-                        call, name="get_saved_setup_inventory", inputs={},
+                        call, name="get_saved_setup_inventory",
+                        inputs=({"strategy_name": selected_strategy_name} if selected_strategy_name else {}),
                         read_tools=("read_saved_setup_inventory",),
                         required_inputs=(), missing_inputs=(),
                     )
                 if call.name == "get_saved_setup_inventory" and (multiple_targets or pair_followup):
                     # One global asset or timeframe would silently remove the
                     # other side of a multi-object read.
-                    call = replace(call, inputs={})
+                    call = replace(call, inputs=(
+                        {"strategy_name": selected_strategy_name} if selected_strategy_name else {}
+                    ))
                 if call.name == "get_saved_setup_inventory" and listed_setup_id is not None:
                     # The model chose the read; the server binds an ordinal to
                     # the preceding owner-scoped inventory, never to a model ID.
                     call = replace(call, inputs={"setup_ids": [listed_setup_id]})
                 previous_setup_target: dict[str, object] = (
+                    {"entity_type": "setup", "entity_id": listed_setup_id}
+                    if listed_setup_id is not None else
                     {"entity_type": "setup", "entity_id": verified_subject[0]}
                     if subject_reference and verified_subject else {}
                 )
+                if singular_strategy_followup:
+                    previous_setup_target = {
+                        "entity_type": "setup", "entity_id": previous_focused_setup_id,
+                    }
                 if call.name == "get_active_plan_and_strategy":
                     # The model can express the choice, but only the user's text
                     # and owner-scoped persisted evidence may select the object.
@@ -963,6 +1004,16 @@ class FinnResponsesFrontDoor:
                                 if call.name == "get_active_plan_and_strategy"
                                 else {**call.inputs, "setup_id": target.entity_id}
                             ))
+                    if (
+                        singular_strategy_followup
+                        and call.name == "get_active_plan_and_strategy"
+                        and call.inputs.get("setup_id") == previous_focused_setup_id
+                        and not call.inputs.get("strategy_name")
+                        and not (mentioned_assets and focused_asset not in mentioned_assets)
+                    ):
+                        call = replace(call, inputs={
+                            **call.inputs, "strategy_id": previous_focused_strategy_id,
+                        })
                 if call.evaluation_operation_id and resuming_clarification:
                     chosen_setups = [
                         item for prior_read in read_context
@@ -1097,13 +1148,16 @@ class FinnResponsesFrontDoor:
                     ).get("answer_type") == "compare"
                     if (
                         getattr(self, "model_led_coach", False)
-                        and comparison and len(resolved_setup_ids) == 2
-                        and len(set(resolved_setup_ids)) == 2
+                        and (
+                            comparison and len(resolved_setup_ids) == 2
+                            and len(set(resolved_setup_ids)) == 2
+                            or selected_strategy_name and len(resolved_setup_ids) == 1
+                        )
                         and read_result.get("status") == "completed"
                     ):
-                        # A comparison read must include the linked evidence for
-                        # both selected owner-scoped setups. Inventory metadata
-                        # alone cannot establish entry or risk conditions.
+                        # A comparison or explicitly named strategy read needs
+                        # linked evidence. Inventory metadata alone cannot
+                        # establish strategy entry or risk conditions.
                         details: list[dict[str, Any]] = []
                         selected_names = {
                             row["setup_id"]: str(row.get("name") or "")
@@ -1111,10 +1165,61 @@ class FinnResponsesFrontDoor:
                             for row in (item.get("data") or {}).get("setups") or []
                             if isinstance(row, dict) and isinstance(row.get("setup_id"), int)
                         }
+                        # Bind a strategy named in this user turn to one of the
+                        # selected owner-scoped setups. A model-supplied name
+                        # alone never selects a different saved strategy.
+                        named_strategies: list[tuple[int, dict[str, Any]]] = []
+                        session_factory = getattr(self.reads, "session_factory", None)
+                        if session_factory is not None:
+                            async with session_factory() as session:
+                                resolver = FinnV2EntityResolutionService(session)
+                                for setup_id in resolved_setup_ids:
+                                    for row in await resolver.strategies.query_strategies(
+                                        self.user_id, {"setup_id": setup_id},
+                                    ):
+                                        if row.get("setup_id") != setup_id:
+                                            continue
+                                        name = str(row.get("name") or "")
+                                        if name and re.search(
+                                            rf"(?<!\w){re.escape(name)}(?!\w)", message, re.I,
+                                        ) and (not selected_strategy_name or name.casefold() == selected_strategy_name.casefold()):
+                                            named_strategies.append((setup_id, row))
+                        strategy_by_setup: dict[int, int] = {}
+                        prior_strategy_ids: dict[int, set[int]] = {}
+                        for prior_call in (previous_response or {}).get("tool_trace") or []:
+                            for prior_item in (prior_call.get("result") or {}).get("results") or []:
+                                if (
+                                    isinstance(prior_item, dict)
+                                    and prior_item.get("scope") == "read_linked_strategy"
+                                    and prior_item.get("status") == "completed"
+                                    and isinstance(prior_item.get("data"), dict)
+                                ):
+                                    prior_data = prior_item["data"]
+                                    prior_setup_id = prior_data.get("setup_id")
+                                    prior_strategy_id = prior_data.get("strategy_id")
+                                    if isinstance(prior_setup_id, int) and isinstance(prior_strategy_id, int):
+                                        prior_strategy_ids.setdefault(prior_setup_id, set()).add(prior_strategy_id)
+                        for setup_id in resolved_setup_ids:
+                            prior_ids = prior_strategy_ids.get(setup_id, set())
+                            if len(prior_ids) == 1:
+                                strategy_by_setup[setup_id] = next(iter(prior_ids))
+                        if len(named_strategies) == 1:
+                            selected_setup_id, selected_row = named_strategies[0]
+                            strategy_id = selected_row.get("strategy_id") or selected_row.get("id")
+                            if isinstance(strategy_id, int):
+                                strategy_by_setup[selected_setup_id] = strategy_id
+                                read_result.setdefault("turn_request", {}).update({
+                                    "focused_setup_id": selected_setup_id,
+                                    "focused_strategy_id": strategy_id,
+                                })
                         for setup_id in resolved_setup_ids:
                             detail = await self.reads(replace(
                                 call, name="get_active_plan_and_strategy",
-                                inputs={"setup_id": setup_id},
+                                inputs={
+                                    "setup_id": setup_id,
+                                    **({"strategy_id": strategy_by_setup[setup_id]}
+                                       if setup_id in strategy_by_setup else {}),
+                                },
                                 read_tools=("read_active_setup", "read_linked_strategy"),
                                 answer_mode=None, setup_names=(),
                             ))
@@ -1134,8 +1239,27 @@ class FinnResponsesFrontDoor:
                                         "status": "unavailable",
                                         "reason": "comparison_detail_identity_mismatch",
                                     }
+                                projected_item = item
+                                if (
+                                    item.get("scope") == "read_linked_strategy"
+                                    and isinstance(data, dict)
+                                    and not re.search(
+                                        r"\b(?:bereken\w*|afstand|verhouding|ratio|"
+                                        r"risk.reward|risico.opbrengst|percentage)\b|%",
+                                        message, re.I,
+                                    )
+                                ):
+                                    # A source comparison needs stored fields.
+                                    # Derived geometry invites an unrelated
+                                    # calculation and slows answer verification.
+                                    projected_item = {
+                                        **item, "data": {
+                                            key: value for key, value in data.items()
+                                            if key != "level_geometry"
+                                        },
+                                    }
                                 details.append({
-                                    **item, "requested_setup_id": setup_id,
+                                    **projected_item, "requested_setup_id": setup_id,
                                     "requested_setup_name": selected_names.get(setup_id),
                                 })
                             for missing_scope in {"read_active_setup", "read_linked_strategy"} - returned_scopes:
@@ -1322,6 +1446,15 @@ class FinnResponsesFrontDoor:
                    + ". Identify both by name in the answer; compare only fields established by "
                    "their owner-scoped read."
                    if pair_followup else "")
+                + ("\nThe latest singular strategy reference points to the previously verified "
+                   f"strategy '{focused_strategy_name}' linked to setup '{focused_setup_name}'. "
+                   "Answer about that selected strategy. Include the other strategy only if the "
+                   "user asks to compare them again."
+                   if singular_strategy_followup and focused_strategy_name and focused_setup_name else "")
+                + ("\nFor a comparison of saved setup conditions, report the stored fields and "
+                   "identify unavailable linked strategies. Do not add derived level calculations "
+                   "unless the user asks for a calculation."
+                   if multiple_targets or pair_followup else "")
                 if getattr(self, "model_led_coach", False) else instructions
             ),
             verified_turn_context=verified_turn,
