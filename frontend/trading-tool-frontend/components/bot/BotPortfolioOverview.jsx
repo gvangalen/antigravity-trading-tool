@@ -40,6 +40,7 @@ export default function BotPortfolioOverview({
     if (envFilter === "all") return raw;
     return raw.filter(b => envFilter === "live" ? b.is_live : !b.is_live);
   }, [bots, envFilter]);
+  const openBots = list.filter((bot) => Math.abs(Number(bot?.stats?.net_qty ?? 0)) > 1e-10);
 
   if (!Array.isArray(bots) || bots.length === 0) return null;
 
@@ -71,19 +72,20 @@ export default function BotPortfolioOverview({
   // PORTFOLIO AGGREGATES
   // =============================
 
-  const positionValue = sum(list, (b) => b?.stats?.position_value_eur);
-  const positionValueKnown = list.every((b) =>
-    Number(b?.stats?.net_qty ?? 0) === 0 || b?.stats?.position_value_eur != null
+  const positionValue = sum(openBots, (b) => b?.stats?.position_value_eur);
+  const positionValueKnown = openBots.every((b) => b?.stats?.position_value_eur != null);
+  const openInvestedExecuted = sum(openBots, (b) =>
+    Math.abs(b?.stats?.net_executed_cash_delta_eur ?? 0)
   );
 
-  const pnlEur = positionValue - spentExecuted;
-  const pnlPct = spentExecuted > 0 ? (pnlEur / spentExecuted) * 100 : 0;
+  const pnlEur = positionValue - openInvestedExecuted;
+  const pnlPct = openInvestedExecuted > 0 ? (pnlEur / openInvestedExecuted) * 100 : 0;
 
   // =============================
   // SYMBOL BREAKDOWN
   // =============================
 
-  const bySymbol = list.reduce((acc, b) => {
+  const bySymbol = openBots.reduce((acc, b) => {
     const sym = b?.symbol || "—";
 
     if (!acc[sym]) {
@@ -221,7 +223,7 @@ export default function BotPortfolioOverview({
       {/* =============================
          PORTFOLIO TOTAL METRICS
       ============================= */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-8 py-8 border-y-2 border-slate-100">
+      {symbolRows.length > 0 ? <div className="grid grid-cols-2 md:grid-cols-4 gap-8 py-8 border-y-2 border-slate-100">
         <Stat label={copy.positions}>{symbolRows.length}</Stat>
 
         <Stat label={copy.totalValue}>
@@ -231,13 +233,13 @@ export default function BotPortfolioOverview({
         </Stat>
 
         <Stat label={copy.investedExecuted}>
-          {formatCurrency(Number(spentExecuted), locale, "EUR", { maximumFractionDigits: 0 })}
+          {formatCurrency(Number(openInvestedExecuted), locale, "EUR", { maximumFractionDigits: 0 })}
         </Stat>
 
         <Stat label={copy.totalPnl}>
           {positionValueKnown ? <BotPnLBadge pnlEur={pnlEur} pnlPct={pnlPct} /> : <span title={copy.noValuation} aria-label={copy.noValuation}>—</span>}
         </Stat>
-      </div>
+      </div> : <div className="border-y-2 border-slate-100 py-8 text-sm font-medium text-secondary">{copy.noOpenPositions}</div>}
 
       {/* =============================
          PER SYMBOL BREAKDOWN

@@ -487,7 +487,7 @@ def test_freshness_service_accepts_date_values_for_daily_tools():
 
     freshness = service.freshness_for("read_asset_scores", date.today())
 
-    assert freshness in {"fresh", "stale"}
+    assert freshness == "fresh"
 
 
 def test_tool_execution_rolls_back_failed_session_before_tool_call_completion(monkeypatch):

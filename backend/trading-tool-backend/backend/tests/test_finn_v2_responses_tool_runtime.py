@@ -10072,6 +10072,50 @@ def test_first_provider_call_retries_one_transient_server_failure():
     assert len(fake.requests) == 2
 
 
+def test_read_only_answer_retries_one_transient_failure_after_evidence_read():
+    class TransientProviderError(Exception):
+        status_code = 503
+
+    fake = FakeResponses(
+        response("profile-read", calls=(tool_call("profile-call", "get_my_profile_and_risk_style", {}),)),
+        TransientProviderError("temporary provider failure"),
+        response("answer", text="Je opgeslagen profiel helpt als context, niet als handelssignaal."),
+    )
+    executions = []
+
+    async def execute(call):
+        executions.append(call.name)
+        return {"status": "completed", "results": [{"scope": "read_profile", "status": "completed"}]}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(message="Wat weet je van mijn profiel?", instructions="Gebruik bewijs", model_led_coach=True))
+
+    assert result.text.startswith("Je opgeslagen profiel")
+    assert executions == ["get_my_profile_and_risk_style"]
+    assert len(fake.requests) == 3
+    assert fake.requests[1]["previous_response_id"] == fake.requests[2]["previous_response_id"]
+    assert result.tool_trace[0]["status"] == "completed"
+
+
+def test_read_only_answer_retries_one_timeout_after_evidence_read():
+    fake = FakeResponses(
+        response("profile-read", calls=(tool_call("profile-call", "get_my_profile_and_risk_style", {}),)),
+        TimeoutError("temporary timeout"),
+        response("answer", text="Ik heb je profiel gelezen."),
+    )
+
+    async def execute(_call):
+        return {"status": "completed", "results": []}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(message="Wanneer is mijn profiel gelezen?", instructions="Gebruik bewijs", model_led_coach=True))
+
+    assert result.text == "Ik heb je profiel gelezen."
+    assert len(fake.requests) == 3
+
+
 def test_rule_objection_does_not_replace_stop_size_question_with_waiting_copy():
     draft = "Een ruimere stop vergroot het verlies per eenheid; een kleinere positie kan hetzelfde maximale verlies begrenzen."
     fake = FakeResponses(response("objection-draft", text=draft))

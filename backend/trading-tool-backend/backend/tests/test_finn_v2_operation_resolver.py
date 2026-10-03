@@ -343,6 +343,24 @@ def test_aggregate_plan_assessment_overrides_a_conflicting_node_projection():
     assert resolved.operation_id == "evaluate_plan"
 
 
+def test_plan_assessment_keeps_plan_tool_when_selector_concept_and_setup_tool_disagree():
+    registry = FinnV2OperationRegistry()
+    selection = _selection("evaluate_setup", {"goal": "evaluate", "object": "setup"})
+    selection.entities["concept"] = "plan"
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=selection,
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "discourse_act": "evaluation",
+            "primary_entity": "plan",
+            "explicit_plan_subject": False,
+        },
+    )
+
+    assert resolved.operation_id == "evaluate_plan"
+
+
 def test_aggregate_plan_assessment_overrides_a_frame_less_setup_selection():
     registry = FinnV2OperationRegistry()
     selection = _selection("evaluate_setup", {})

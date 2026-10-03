@@ -145,6 +145,9 @@ function getUiCopy(locale = "nl") {
       chartClose: "Close chart",
       chartOpen: "Open chart",
       contextScores: "Context scores",
+      scoreSourceDate: "Oldest indicator source",
+      scoreSourceUnknown: "Source date incomplete",
+      scoreSourceLimit: "Saved indicator scores are not a live trading signal.",
       marketRegime: "Market regime",
       addIndicator: "Add indicator",
       positive: "Positive",
@@ -279,6 +282,9 @@ function getUiCopy(locale = "nl") {
       chartClose: "Chart schließen",
       chartOpen: "Chart öffnen",
       contextScores: "Kontext-scores",
+      scoreSourceDate: "Älteste Indikatorquelle",
+      scoreSourceUnknown: "Quelldatum unvollständig",
+      scoreSourceLimit: "Gespeicherte Indikatorwerte sind kein aktuelles Handelssignal.",
       marketRegime: "Marktregime",
       addIndicator: "Indikator hinzufügen",
       positive: "Positiv",
@@ -412,6 +418,9 @@ function getUiCopy(locale = "nl") {
     chartClose: "Chart sluiten",
     chartOpen: "Chart openen",
     contextScores: "Contextscores",
+    scoreSourceDate: "Oudste indicatorbron",
+    scoreSourceUnknown: "Brondatum onvolledig",
+    scoreSourceLimit: "Opgeslagen indicatorscores zijn geen actueel handelssignaal.",
     marketRegime: "Marktregime",
     addIndicator: "Indicator toevoegen",
     positive: "Positief",
@@ -703,6 +712,14 @@ function averageVisibleSectionScore(rows) {
   return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
 }
 
+function oldestScoredSource(rows) {
+  const scored = (Array.isArray(rows) ? rows : []).filter((row) => normalizeScore(row?.score) !== null);
+  if (!scored.length) return null;
+  const dates = scored.map((row) => new Date(row?.timestamp).getTime());
+  if (dates.some((value) => !Number.isFinite(value) || value <= 0)) return null;
+  return new Date(Math.min(...dates)).toISOString();
+}
+
 function formatScore(value) {
   const score = normalizeScore(value);
   return score === null ? "—" : Math.round(score);
@@ -773,6 +790,7 @@ function formatTimestamp(value, locale) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat(locale || "en-US", {
+    year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -1299,7 +1317,7 @@ function buildSectionInsight(sectionId, sectionScore, ui) {
   return copy.technicalNeutral;
 }
 
-function ScoreOverview({ market, macro, technical, combined, weights, loading, onSaveWeights, ui }) {
+function ScoreOverview({ market, macro, technical, combined, sections, weights, loading, onSaveWeights, ui, locale }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
@@ -1330,6 +1348,11 @@ function ScoreOverview({ market, macro, technical, combined, weights, loading, o
       score: normalizeScore(combined?.score),
     },
   ];
+  const scoreSections = sections.filter((section) => section.score !== null);
+  const sectionSource = (id) => oldestScoredSource(sections.find((section) => section.id === id)?.rows);
+  const combinedSource = scoreSections.length && scoreSections.every((section) => sectionSource(section.id))
+    ? new Date(Math.min(...scoreSections.map((section) => new Date(sectionSource(section.id)).getTime()))).toISOString()
+    : null;
 
   const weightItems = [
     { id: "market", label: ui.market, score: normalizeScore(market?.score) },
@@ -1392,6 +1415,7 @@ function ScoreOverview({ market, macro, technical, combined, weights, loading, o
         {items.map((item) => {
           const tone = scoreTone(item.score, ui);
           const summary = item.id === "combined" ? combined?.bias || tone.label : tone.label;
+          const sourceAt = item.id === "combined" ? combinedSource : sectionSource(item.id);
           return (
             <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
               <div className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">
@@ -1403,10 +1427,16 @@ function ScoreOverview({ market, macro, technical, combined, weights, loading, o
                   {summary}
                 </span>
               </div>
+              {item.score !== null ? (
+                <p className="mt-1.5 text-[10px] font-medium opacity-80">
+                  {sourceAt ? `${ui.scoreSourceDate}: ${formatTimestamp(sourceAt, locale)}` : ui.scoreSourceUnknown}
+                </p>
+              ) : null}
             </div>
           );
         })}
       </div>
+      <p className="px-4 pb-3 text-[11px] text-slate-500">{ui.scoreSourceLimit}</p>
 
       {isEditing ? (
         <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3.5">
@@ -1563,16 +1593,6 @@ function PlanBridge({ candidate, onOpenPlan, ui }) {
       </div>
     </section>
   );
-}
-
-function formatBiasLabel(value, ui = getUiCopy("nl")) {
-  const source = String(value || "").trim();
-  if (!source || /^[-–—]+$/.test(source)) return ui.neutral;
-  const normalized = source.toLowerCase();
-  if (/(bull|posit)/.test(normalized)) return ui.positive;
-  if (/(bear|negat)/.test(normalized)) return ui.negative;
-  if (/(neutr|stab|side)/.test(normalized)) return ui.neutral;
-  return source;
 }
 
 function ActiveAssetCard({
@@ -2785,16 +2805,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       technical: sections.find((section) => section.id === "technical")?.score ?? null,
     };
     const summary = summarizeWeightedScores(visibleScores, master?.weights, ui);
-    const masterBias = String(master?.bias || "").trim();
-    const hasMasterBias = masterBias && !/^[-–—]+$/.test(masterBias);
     const hasVisibleScores = Object.values(visibleScores).some((score) => score !== null);
 
     if (!hasVisibleScores) return summarizeContextScores([], ui);
-
-    return {
-      ...summary,
-      bias: hasMasterBias ? formatBiasLabel(masterBias, ui) : summary.bias,
-    };
+    return summary;
   }, [master, sections, ui]);
 
   const handleAssetSelect = (symbol) => {
@@ -2873,6 +2887,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             : combinedSummary
         }
         weights={master?.weights}
+        sections={sections}
+        locale={locale}
         loading={scoresLoading}
         onSaveWeights={saveWeights}
         ui={ui}

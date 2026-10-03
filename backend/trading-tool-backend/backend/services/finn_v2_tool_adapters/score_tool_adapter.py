@@ -9,7 +9,9 @@ class ScoreToolAdapter:
         self.repository = ScoreRepository(session)
 
     async def execute(self, *, user_id: int, asset: str, **_kwargs):
-        daily = await self.repository.fetch_daily_scores(user_id, asset)
+        # Coaching can explain the most recent saved report even when it was
+        # produced before today. Its date and freshness remain explicit.
+        daily = (await self.repository.fetch_daily_scores_batch(user_id, [asset])).get(asset.upper())
         master = await self.repository.get_master_score(user_id, asset)
         if not daily and not master:
             raise LookupError("source_unavailable")
