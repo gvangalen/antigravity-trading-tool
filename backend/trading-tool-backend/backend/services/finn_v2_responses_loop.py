@@ -869,6 +869,12 @@ class FinnResponsesLoop:
                     provider_task.add_done_callback(
                         lambda task: task.exception() if not task.cancelled() else None
                     )
+                    remaining_after_timeout = remaining_lifecycle_seconds()
+                    if (model_led_coach and not transient_provider_retry_used
+                            and not proposal_selected
+                            and (remaining_after_timeout is None or remaining_after_timeout > 8)):
+                        transient_provider_retry_used = True
+                        continue
                     if trace and not proposal_selected:
                         return FinnResponsesResult(
                             "Provider response unavailable.", prior_id or "", tuple(trace), "provider_unavailable",
@@ -888,6 +894,12 @@ class FinnResponsesLoop:
                     "FINN Responses provider round timed out round=%d elapsed_seconds=%.2f",
                     tool_rounds + 1, time.perf_counter() - provider_started,
                 )
+                remaining_after_timeout = remaining_lifecycle_seconds()
+                if (model_led_coach and not transient_provider_retry_used
+                        and not proposal_selected
+                        and (remaining_after_timeout is None or remaining_after_timeout > 8)):
+                    transient_provider_retry_used = True
+                    continue
                 if trace and not proposal_selected:
                     return FinnResponsesResult(
                         "Provider response unavailable.", prior_id or "", tuple(trace), "provider_unavailable",
@@ -922,7 +934,7 @@ class FinnResponsesLoop:
                     type(exc).__name__, provider_status, provider_code, transient,
                 )
                 if (
-                    transient and not transient_provider_retry_used and not trace
+                    transient and not transient_provider_retry_used and not proposal_selected
                     and (remaining_after_error is None or remaining_after_error > 6)
                 ):
                     transient_provider_retry_used = True

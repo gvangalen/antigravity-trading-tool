@@ -259,7 +259,7 @@ class FinnResponsesReadExecutor:
         ):
             output["evidence_boundary"] = (
                 "A dated score is a historical report, not a current market reading. "
-                "When reporting exact saved scores, name their as_of date and stale status. "
+                "When reporting exact saved scores, name their report date and actual freshness status. "
                 "Use one short paragraph without headings or a raw backend inventory. "
                 "Do not infer a present trading signal, personal suitability, or a missing score as zero. "
                 "Do not offer to refresh or repeat a score assessment when no fresh score source is available."

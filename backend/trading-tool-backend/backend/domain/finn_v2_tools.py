@@ -77,7 +77,7 @@ TOOL_FRESHNESS_MAX_AGE_SECONDS: Dict[str, Optional[int]] = {
     "read_user_preferences": None,
     "read_active_asset": None,
     "read_indicator_configuration": None,
-    "read_asset_scores": 21600,
+    "read_asset_scores": 86400,
     "read_market_snapshot": 900,
     "read_macro_snapshot": 21600,
     "read_technical_snapshot": 21600,

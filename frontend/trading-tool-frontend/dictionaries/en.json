@@ -2236,6 +2236,7 @@
       "maxPerTrade": "Sum max/trade",
       "noBudget": "No budget configured",
       "positions": "Positions",
+      "noOpenPositions": "No open positions in these bots. Bot budgets are not portfolio value or available cash.",
       "investedExecuted": "Invested (executed)",
       "totalPnl": "PnL (total)",
       "byAsset": "Breakdown by asset"

@@ -105,7 +105,10 @@ class FinnV2OperationResolverService:
         if (
             str((request_facts or {}).get("discourse_act") or "") == "evaluation"
             and str((request_facts or {}).get("primary_entity") or "") == "plan"
-            and bool((request_facts or {}).get("explicit_plan_subject"))
+            and (
+                bool((request_facts or {}).get("explicit_plan_subject"))
+                or self._normalized((selection.entities or {}).get("concept")) == "plan"
+            )
             and any(contract.operation_id == "evaluate_plan" for contract in candidates)
         ):
             return self._with_resolved_operation(

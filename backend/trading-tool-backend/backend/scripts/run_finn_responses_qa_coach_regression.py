@@ -92,7 +92,8 @@ def main() -> None:
             r"attractive|favorable|favourable|positive|better)\b"
             r"|\b(?:aantrekkelijk\w*|gunstig\w*|positiev\w*|positief|beter|"
             r"attractive|favorable|favourable|positive|better)\b"
-            r"[^.!?;\n]{0,55}\b(?:verhouding\w*|ratio\w*)\b",
+            r"[^.!?;\n]{0,55}\b(?:verhouding\w*|ratio\w*)\b"
+            r"(?![^.!?;\n]{0,45}\b(?:niet|geen|not)\b)",
             answer, re.IGNORECASE,
         ))
         checks["no_unsupported_trade_planning"] = not bool(re.search(

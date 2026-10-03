@@ -2237,6 +2237,7 @@
       "maxPerTrade": "Summe max. pro Trade",
       "noBudget": "Kein Budget konfiguriert",
       "positions": "Positionen",
+      "noOpenPositions": "Keine offenen Positionen in diesen Bots. Bot-Budgets sind weder Portfoliowert noch verfügbares Guthaben.",
       "investedExecuted": "Investiert (ausgeführt)",
       "totalPnl": "PnL (gesamt)",
       "byAsset": "Aufschlüsselung nach Asset"
