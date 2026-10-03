@@ -72,6 +72,9 @@ export default function BotPortfolioOverview({
   // =============================
 
   const positionValue = sum(list, (b) => b?.stats?.position_value_eur);
+  const positionValueKnown = list.every((b) =>
+    Number(b?.stats?.net_qty ?? 0) === 0 || b?.stats?.position_value_eur != null
+  );
 
   const pnlEur = positionValue - spentExecuted;
   const pnlPct = spentExecuted > 0 ? (pnlEur / spentExecuted) * 100 : 0;
@@ -89,12 +92,16 @@ export default function BotPortfolioOverview({
         logoUrl: resolveAssetLogoUrl(sym),
         netQty: 0,
         positionValue: 0,
+        positionValueKnown: true,
         spentExecuted: 0,
       };
     }
 
     acc[sym].netQty += Number(b?.stats?.net_qty ?? 0);
     acc[sym].positionValue += Number(b?.stats?.position_value_eur ?? 0);
+    if (Number(b?.stats?.net_qty ?? 0) !== 0 && b?.stats?.position_value_eur == null) {
+      acc[sym].positionValueKnown = false;
+    }
     acc[sym].spentExecuted += Math.abs(
       Number(b?.stats?.net_executed_cash_delta_eur ?? 0)
     );
@@ -218,7 +225,9 @@ export default function BotPortfolioOverview({
         <Stat label={copy.positions}>{symbolRows.length}</Stat>
 
         <Stat label={copy.totalValue}>
-          {formatCurrency(Number(positionValue), locale, "EUR", { maximumFractionDigits: 0 })}
+          {positionValueKnown
+            ? formatCurrency(Number(positionValue), locale, "EUR", { maximumFractionDigits: 0 })
+            : <span title={copy.noValuation} aria-label={copy.noValuation}>—</span>}
         </Stat>
 
         <Stat label={copy.investedExecuted}>
@@ -226,7 +235,7 @@ export default function BotPortfolioOverview({
         </Stat>
 
         <Stat label={copy.totalPnl}>
-          <BotPnLBadge pnlEur={pnlEur} pnlPct={pnlPct} />
+          {positionValueKnown ? <BotPnLBadge pnlEur={pnlEur} pnlPct={pnlPct} /> : <span title={copy.noValuation} aria-label={copy.noValuation}>—</span>}
         </Stat>
       </div>
 
@@ -276,10 +285,12 @@ export default function BotPortfolioOverview({
 
                   <div className="text-right">
                     <div className="text-sm font-black text-foreground tracking-tight">
-                      {formatCurrency(Number(row.positionValue), locale, "EUR", { maximumFractionDigits: 0 })}
+                      {row.positionValueKnown
+                        ? formatCurrency(Number(row.positionValue), locale, "EUR", { maximumFractionDigits: 0 })
+                        : <span title={copy.noValuation} aria-label={copy.noValuation}>—</span>}
                     </div>
                     <div className="mt-1">
-                      <BotPnLBadge pnlEur={rowPnl} pnlPct={rowPct} />
+                      {row.positionValueKnown ? <BotPnLBadge pnlEur={rowPnl} pnlPct={rowPct} /> : <span title={copy.noValuation} aria-label={copy.noValuation}>—</span>}
                     </div>
                   </div>
                 </div>

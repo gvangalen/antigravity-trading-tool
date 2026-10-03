@@ -9,7 +9,7 @@ import CardLoader from "@/components/ui/CardLoader";     // ✅ Nieuwe loader
 import AIInsightBlock from "@/components/ui/AIInsightBlock";
 
 export default function MasterScoreCard() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const { master, loading, error } = useScoresData();
 
   const getScoreColor = (score) => {
@@ -40,6 +40,11 @@ export default function MasterScoreCard() {
         {/* ✅ CONTENT */}
         {!loading && master && Number.isFinite(master.score) && (
           <>
+            <p className="text-xs text-[var(--text-muted)]">
+              {t.dashboard.gauges.scoreSourceNote} {master.reportDate
+                ? `${t.dashboard.gauges.dailyReportDate}: ${new Date(`${String(master.reportDate).slice(0, 10)}T12:00:00`).toLocaleDateString(locale)}.`
+                : t.dashboard.gauges.noSourceDate}
+            </p>
             {/* SCORE NUMBER */}
             <p className={`text-4xl font-bold ${getScoreColor(master.score)}`}>
               {master.score.toFixed(1)}

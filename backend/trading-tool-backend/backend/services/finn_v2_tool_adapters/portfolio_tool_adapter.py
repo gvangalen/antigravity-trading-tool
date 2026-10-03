@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.schemas.finn_v2_evidence_schema import PortfolioBotData, PortfolioData, PortfolioGlobalData
 
@@ -27,10 +29,24 @@ class PortfolioToolAdapter:
                 budget_total_eur=row.get("budget_total"),
                 is_active=row.get("is_active"),
                 is_live=row.get("is_live"),
+                price_as_of=row.get("price_as_of"),
             )
             for row in source_bots
         ]
         global_payload = self._global_for_bots(source_bots)
+        read_at = payload.get("read_at") or datetime.now(timezone.utc)
+        valuation_available = global_payload.get("total_equity") is not None
+        held_bots = [row for row in source_bots if float(row.get("qty") or 0) != 0]
+        priced_at = [row.get("price_as_of") for row in held_bots]
+        if valuation_available and held_bots and all(priced_at):
+            as_of = min(
+                value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+                for value in priced_at
+            )
+        elif valuation_available and not held_bots:
+            as_of = read_at
+        else:
+            as_of = None
         summary = {
             "title": "portfolio",
             "total_equity": global_payload.get("total_equity"),
@@ -42,12 +58,14 @@ class PortfolioToolAdapter:
                 {
                     "global": PortfolioGlobalData(**global_payload).dict(),
                     "bots": [row.dict() for row in compact_bots],
+                    "read_at": read_at,
+                    "valuation_available": valuation_available,
                     "covered_scopes": ["paper_bot_portfolio_valuation", "budget", "exposure"],
                     "excluded_scopes": ["trade_transaction_history", "tax_records", "tax_calculations"],
                 }
             ),
             "summary": summary,
-            "as_of": None,
+            "as_of": as_of,
             "source": "bot_portfolios",
             "schema_name": "PortfolioData",
             "entity_type": "portfolio",

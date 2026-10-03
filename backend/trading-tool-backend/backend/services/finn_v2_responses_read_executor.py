@@ -246,7 +246,12 @@ class FinnResponsesReadExecutor:
                 "global.total_budget_limit is the sum across the selected bots, not a "
                 "separate budget for one bot. When asked about a particular bot's budget, "
                 "use its matching bot row and never say its budget is missing when that "
-                "field is present. A budget limit is not available cash or invested capital."
+                "field is present. A budget limit is not available cash or invested capital. "
+                "data.read_at is when FINN fetched the records, not the date of a market price. "
+                "A bot's price_as_of is its market-price date; the outer as_of is the oldest "
+                "required price date when a valuation is available. If valuation_available is "
+                "false, do not infer cash or equity from budgets. Translate technical field "
+                "names such as as_of into natural language."
             )
         if any(
             item["scope"] == "read_asset_scores" and item["status"] == "completed"

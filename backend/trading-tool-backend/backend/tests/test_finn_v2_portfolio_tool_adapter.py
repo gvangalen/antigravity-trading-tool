@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
@@ -157,6 +158,52 @@ def test_missing_position_price_does_not_become_zero_market_value():
     assert result["data"].global_.current_position_value is None
     assert result["data"].global_.total_equity is None
     assert result["data"].bots[0].equity is None
+
+
+def test_portfolio_reports_read_time_separately_from_stale_position_price():
+    adapter = _adapter()
+    read_at = datetime(2026, 10, 3, 11, 0, tzinfo=timezone.utc)
+    price_as_of = read_at - timedelta(days=2)
+
+    async def priced(_user_id):
+        return {"read_at": read_at, "bots": [{
+            "bot_id": 1, "name": "Paper", "symbol": "BTC", "cash": 100,
+            "qty": 0.01, "invested": 200, "position_value": 300,
+            "budget_total": 1000, "portfolio_initialized": True,
+            "price_available": True, "price_as_of": price_as_of,
+            "is_active": True, "is_live": False,
+        }]}
+
+    adapter.repository.get_portfolio_intelligence_context = priced
+    result = asyncio.run(adapter.execute(user_id=17))
+
+    assert result["as_of"] == price_as_of
+    assert result["data"].read_at == read_at
+    assert result["data"].valuation_available is True
+    assert result["data"].bots[0].price_as_of == price_as_of
+    assert result["data"].global_.total_equity == 400
+    assert result["data"].global_.total_budget_limit == 1000
+
+
+def test_uninitialized_budget_has_read_time_but_no_valuation_date():
+    adapter = _adapter()
+    read_at = datetime(2026, 10, 3, 11, 0, tzinfo=timezone.utc)
+
+    async def budget_only(_user_id):
+        return {"read_at": read_at, "bots": [{
+            "bot_id": 1, "name": "Paper", "symbol": "BTC", "cash": 0,
+            "budget_total": 1000, "portfolio_initialized": False,
+            "is_active": True, "is_live": False,
+        }]}
+
+    adapter.repository.get_portfolio_intelligence_context = budget_only
+    result = asyncio.run(adapter.execute(user_id=17))
+
+    assert result["as_of"] is None
+    assert result["data"].read_at == read_at
+    assert result["data"].valuation_available is False
+    assert result["data"].global_.total_equity is None
+    assert result["data"].global_.total_budget_limit == 1000
 
 
 def test_portfolio_tool_dispatch_passes_only_the_contract_derived_asset_filter():

@@ -546,6 +546,11 @@
       "noSummaryAvailable": "No summary is available yet."
     },
     "gauges": {
+      "scoreSourceNote": "Gespeicherte Scores sind kein aktuelles Handelssignal.",
+      "dailyReportDate": "Tagesbericht",
+      "masterReportDate": "Kombinierter Bericht",
+      "noSourceDate": "Kein Quelldatum verfügbar.",
+      "noScore": "Kein Score verfügbar",
       "macro": "Macro",
       "technical": "Technical",
       "market": "Market",
@@ -2123,7 +2128,7 @@
     },
     "budgetBar": {
       "noBudget": "Kein Budget konfiguriert",
-      "available": "Verfügbar"
+      "limitNotCash": "Dies ist ein Bot-Budgetlimit, kein Nachweis für verfügbares Guthaben."
     },
     "budgetForm": {
       "description": "Diese Budgetkonfiguration wirkt als harte Sicherheitsgrenze. Der Bot skaliert oder blockiert automatisch Trades, die darüber hinausgehen.",
@@ -2221,11 +2226,12 @@
       "filterPaper": "Paper",
       "filterLive": "Live",
       "activeBots": "Aktive Quellen",
-      "budgetUsage": "Kapitalallokation",
+      "budgetUsage": "Bot-Budgetlimits",
       "backendSource": "Portfoliodaten",
       "bitvavoCash": "Bitvavo-Guthaben",
-      "totalValue": "Gesamtwert",
-      "combinedBots": "Kombinierte Allokation",
+      "totalValue": "Positionswert",
+      "noValuation": "Für diese Position ist keine Marktbewertung verfügbar.",
+      "combinedBots": "Summe der Bot-Budgetlimits",
       "spentToday": "Heute ausgegeben",
       "dailyLimit": "Tageslimit",
       "maxPerTrade": "Summe max. pro Trade",
@@ -2581,6 +2587,10 @@
       "title": "Portfolioübersicht",
       "loading": "Portfoliodaten werden geladen...",
       "entryLog": "Momentaufnahme",
+      "recordedAt": "Letzte gespeicherte Momentaufnahme",
+      "snapshotLimit": "Eine Momentaufnahme belegt kein aktuell verfügbares Guthaben.",
+      "noVerifiedBalance": "Kein gespeicherter Portfoliowert verfügbar. Bot-Budgets sind weder Cash noch Vermögen.",
+      "loadFailed": "Der Portfolioverlauf konnte nicht geladen werden.",
       "modes": {
         "equity": "Eigenkapital",
         "cash": "Cash",

@@ -416,6 +416,9 @@ export const fetchPortfolioBalanceHistory = async ({
   return ensureArray(data);
 };
 
+export const fetchPortfolioSummary = async () =>
+  handleApi(fetchAuth(`/api/portfolio/summary`, { forceFresh: true }));
+
 /* =====================================================
    📈 12. BOT BALANCE HISTORY
 ===================================================== */

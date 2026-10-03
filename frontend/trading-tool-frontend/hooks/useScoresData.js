@@ -53,15 +53,16 @@ export function useScoresData(symbol = "BTC", options = {}) {
     score <= 25 ? adviceMap.bearish :
     adviceMap.neutral;
   const [scores, setScores] = useState({
-    macro: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
-    technical: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
-    market: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
-    setup: { score: 0, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
+    macro: { score: null, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
+    technical: { score: null, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
+    market: { score: null, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
+    setup: { score: null, uitleg: '', advies: adviceMap.neutral, top_contributors: [] },
     master: { 
-      score: 0, trend: '–', bias: '–', risk: '–', outlook: '–', summary: t?.dashboard?.brain?.noSpecificSignals,
+      score: null, trend: '–', bias: '–', risk: '–', outlook: '–', summary: t?.dashboard?.brain?.noSpecificSignals,
       weights: { ...DEFAULT_CONTEXT_WEIGHTS }
     },
-    history: []
+    history: [],
+    sourceDates: { daily: null, master: null },
   });
 
   const [loading, setLoading] = useState(true);
@@ -166,9 +167,15 @@ export function useScoresData(symbol = "BTC", options = {}) {
           risk: master?.master_risk ?? '–',
           outlook: master?.outlook ?? t?.dashboard?.brain?.noSpecificSignals,
           summary: master?.summary ?? t?.dashboard?.brain?.master_snippet,
-          weights
+          weights,
+          reportDate: daily?.report_date ?? null,
+          insightDate: master?.date ?? null,
         },
-        history
+        history,
+        sourceDates: {
+          daily: daily?.report_date ?? null,
+          master: master?.date ?? null,
+        },
       };
 
       return nextScores;
