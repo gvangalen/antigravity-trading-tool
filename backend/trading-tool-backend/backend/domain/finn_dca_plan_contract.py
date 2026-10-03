@@ -11,7 +11,7 @@ _AMOUNT_FIELDS = frozenset({
     "dca_amount_mode", "base_amount", "score_source", "low_threshold",
     "high_threshold", "low_score_percent", "mid_score_percent", "high_score_percent",
 })
-_SCORE_SOURCES = frozenset({"market_score", "benchmark_score"})
+_SCORE_SOURCES = frozenset({"benchmark_score"})
 BENCHMARK_COMPONENTS = ("market_score", "macro_score", "technical_score")
 EQUAL_BENCHMARK_WEIGHTS = {component: 1 / 3 for component in BENCHMARK_COMPONENTS}
 
@@ -82,7 +82,7 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
     elif mode == "score_bands":
         source = fields.get("score_source")
         if source not in _SCORE_SOURCES:
-            raise ValueError("score_source_required")
+            raise ValueError("benchmark_score_required")
         low = fields.get("low_threshold")
         high = fields.get("high_threshold")
         if (
@@ -100,7 +100,7 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
         multipliers = tuple(percent / 100 for percent in percents)
         strategy_fields["decision_curve"] = {
             "input": source,
-            **({"weights_policy": "current_user_preferences"} if source == "benchmark_score" else {}),
+            "weights_policy": "current_user_preferences",
             "interpolation": "step",
             "min_multiplier": 0.05,
             "max_multiplier": 3.0,

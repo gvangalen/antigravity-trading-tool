@@ -3123,7 +3123,6 @@
       "baseAmount": "Base amount (100%): {amount}",
       "smartTitle": "Smart DCA · score based amounts",
       "scoreSource": "Score source: {source}",
-      "marketSource": "market score",
       "benchmarkSource": "your benchmark (market + macro + technical)",
       "benchmarkWeights": "Weights follow your current Analysis settings (each ⅓ by default). Changes affect future amounts. All three scores are required on the decision date.",
       "sourceMissing": "to be selected",

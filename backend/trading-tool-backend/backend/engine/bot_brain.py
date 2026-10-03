@@ -488,21 +488,23 @@ def run_bot_brain(
                 source_availability,
             ) is not None
         else:
-            score_ready = (
-                isinstance(scores.get(score_source), (int, float))
-                and source_availability.get(score_source) is True
-            )
-        if (
-            not score_ready
-        ):
+            score_ready = False
+        if not score_ready:
             # The legacy score loader uses 10 as a display fallback. Never
             # turn that placeholder into a Smart DCA purchase amount.
             suggested_amount = 0.0
             position_size = 0.0
+            unsupported_source = score_source != "benchmark_score"
             setup_result = {
                 "action": "hold",
-                "reason": "Smart DCA score for this report date is unavailable",
-                "intent_note": "No verified score for the selected amount band",
+                "reason": (
+                    "Smart DCA requires the total benchmark score"
+                    if unsupported_source else "Smart DCA score for this report date is unavailable"
+                ),
+                "intent_note": (
+                    "Update the old market-only Smart DCA plan before buying"
+                    if unsupported_source else "No verified score for the selected amount band"
+                ),
                 "confidence_score": 0.0,
             }
 

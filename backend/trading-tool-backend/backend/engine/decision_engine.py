@@ -54,6 +54,12 @@ def decide_amount(
             raise DecisionEngineError("Custom mode vereist decision_curve")
 
         input_key = curve.get("input", "market_score")
+        if (
+            setup.get("setup_type") == "dca"
+            and setup.get("dca_amount_semantics") == "planned_exact"
+            and input_key != "benchmark_score"
+        ):
+            raise DecisionEngineError("Smart DCA requires the total benchmark score")
         if input_key == "benchmark_score" and curve.get("weights_policy") != "current_user_preferences":
             raise DecisionEngineError("Benchmark requires current preference weights")
         score_value = (

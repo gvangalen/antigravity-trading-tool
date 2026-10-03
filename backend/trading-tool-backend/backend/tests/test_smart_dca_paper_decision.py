@@ -27,7 +27,7 @@ def test_smart_dca_paper_amounts_follow_the_visible_score_bands(paper_engines, s
     _, strategy = split_confirmed_dca_plan({
         "setup_type": "dca", "name": "BTC Smart",
         "base_amount": 100,
-        "dca_amount_mode": "score_bands", "score_source": "market_score",
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
         "low_threshold": 40, "high_threshold": 70,
         "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
     })
@@ -35,8 +35,10 @@ def test_smart_dca_paper_amounts_follow_the_visible_score_bands(paper_engines, s
         user_id=1,
         setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
         scores={
-            "market_score": score, "macro_score": 80, "technical_score": 80,
-            "setup_score": 80, "_source_available": {"market_score": True},
+            "market_score": score, "macro_score": score, "technical_score": score,
+            "setup_score": 80,
+            "_benchmark_weights": {key: 1/3 for key in ("market_score", "macro_score", "technical_score")},
+            "_source_available": {key: True for key in ("market_score", "macro_score", "technical_score")},
         },
         portfolio_context={"active_strategy": {"setup_type": "dca", "confidence_score": 80}},
         backtest_mode=True,
@@ -50,7 +52,7 @@ def test_smart_dca_missing_score_cannot_turn_placeholder_into_a_buy(paper_engine
     _, strategy = split_confirmed_dca_plan({
         "setup_type": "dca", "name": "BTC Smart",
         "base_amount": 100,
-        "dca_amount_mode": "score_bands", "score_source": "market_score",
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
         "low_threshold": 40, "high_threshold": 70,
         "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
     })
@@ -59,7 +61,9 @@ def test_smart_dca_missing_score_cannot_turn_placeholder_into_a_buy(paper_engine
         setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
         scores={
             "market_score": 10, "macro_score": 80, "technical_score": 80,
-            "setup_score": 80, "_source_available": {"market_score": False},
+            "setup_score": 80,
+            "_benchmark_weights": {key: 1/3 for key in ("market_score", "macro_score", "technical_score")},
+            "_source_available": {"market_score": False, "macro_score": True, "technical_score": True},
         },
         portfolio_context={"active_strategy": {"setup_type": "dca", "confidence_score": 80}},
         backtest_mode=True,
@@ -67,6 +71,30 @@ def test_smart_dca_missing_score_cannot_turn_placeholder_into_a_buy(paper_engine
 
     assert result["action"] == "hold"
     assert result["amount_eur"] == 0
+
+
+def test_previous_market_only_smart_dca_plan_holds_even_with_a_valid_market_score(paper_engines):
+    result = bot_brain.run_bot_brain(
+        user_id=1,
+        setup={
+            "setup_type": "dca", "symbol": "BTC", "execution_mode": "custom",
+            "base_amount": 100, "dca_amount_semantics": "planned_exact",
+            "decision_curve": {
+                "input": "market_score", "interpolation": "step",
+                "points": [{"x": 0, "y": 0.5}, {"x": 100, "y": 1.5}],
+            },
+        },
+        scores={
+            "market_score": 80, "macro_score": 80, "technical_score": 80,
+            "setup_score": 80,
+            "_source_available": {"market_score": True, "macro_score": True, "technical_score": True},
+        },
+        portfolio_context={"active_strategy": {"setup_type": "dca", "confidence_score": 80}},
+        backtest_mode=True,
+    )
+    assert result["action"] == "hold"
+    assert result["amount_eur"] == 0
+    assert "total benchmark" in result["reason"]
 
 
 @pytest.mark.parametrize("weights,expected", [

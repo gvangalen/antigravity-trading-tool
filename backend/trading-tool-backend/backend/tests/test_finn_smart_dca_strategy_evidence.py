@@ -8,7 +8,7 @@ def test_linked_strategy_evidence_exposes_the_confirmed_smart_dca_rule():
     _, strategy = split_confirmed_dca_plan({
         "setup_type": "dca", "name": "BTC Smart",
         "base_amount": 100,
-        "dca_amount_mode": "score_bands", "score_source": "market_score",
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
         "low_threshold": 40, "high_threshold": 70,
         "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
     })
@@ -24,7 +24,8 @@ def test_linked_strategy_evidence_exposes_the_confirmed_smart_dca_rule():
     ))["data"]
 
     assert data.dca_amount_mode == "score_bands"
-    assert data.score_source == "market_score"
+    assert data.score_source == "benchmark_score"
+    assert data.score_weights_policy == "current_user_preferences"
     assert (data.low_threshold, data.high_threshold) == (40, 70)
     assert (data.low_score_percent, data.mid_score_percent, data.high_score_percent) == (50, 100, 150)
 

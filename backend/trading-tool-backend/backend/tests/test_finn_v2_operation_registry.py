@@ -208,12 +208,12 @@ def test_smart_dca_percentages_do_not_consume_adjacent_score_thresholds():
     supplied = FinnV2OperationStateService().explicit_inputs(
         contract=contract,
         message=("Maak Smart DCA met basis €100: onder score 40 50%, "
-                 "van 40 tot onder 70 100% en vanaf 70 150%. Gebruik de marktscore."),
+                 "van 40 tot onder 70 100% en vanaf 70 150%. Gebruik de totale benchmark."),
         explicit_asset="BTC",
     )
 
     assert [supplied[key] for key in ("low_score_percent", "mid_score_percent", "high_score_percent")] == [50, 100, 150]
-    assert supplied["score_source"] == "market_score"
+    assert supplied["score_source"] == "benchmark_score"
 
 
 def test_smart_dca_base_amount_100_percent_is_not_a_fourth_score_band():
@@ -221,7 +221,7 @@ def test_smart_dca_base_amount_100_percent_is_not_a_fourth_score_band():
     supplied = FinnV2OperationStateService().explicit_inputs(
         contract=contract,
         message=("Maak Smart DCA voor BTC op 1D. Elke maandag. "
-                 "Basisbedrag €100 is 100%. Gebruik de marktscore: "
+                 "Basisbedrag €100 is 100%. Gebruik de totale benchmark: "
                  "onder 40 koop ik 10%, van 40 tot onder 70 100% en vanaf 70 150%."),
         explicit_asset="BTC",
     )
@@ -236,7 +236,7 @@ def test_smart_dca_named_bands_need_not_be_spoken_in_score_order():
         contract=contract,
         message=("Smart DCA BTC: basis €100. Bij normale score 100%, "
                  "bij lage score 10% en bij hoge score 150%. "
-                 "Onder 40 laag, vanaf 70 hoog. Gebruik de marktscore."),
+                 "Onder 40 laag, vanaf 70 hoog. Gebruik de totale benchmark."),
         explicit_asset="BTC",
     )
 
@@ -261,6 +261,18 @@ def test_model_cannot_invent_dca_score_boundaries_or_minimum():
     assert "high_threshold" not in state.collected_inputs
     assert "min_investment" not in state.collected_inputs
     assert state.collected_inputs["score_source"] == "benchmark_score"
+
+
+def test_explicit_market_only_smart_dca_request_cannot_create_confirmable_source():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Maak Smart DCA voor BTC met basis €100, maar gebruik alleen de marktscore.",
+        explicit_asset="BTC",
+    )
+    assert supplied["dca_amount_mode"] == "score_bands"
+    assert "score_source" not in supplied
+    assert contract.allowed_values_for("score_source") == ("benchmark_score",)
 
 
 def test_create_dca_setup_binds_weekday_before_proposal_execution():

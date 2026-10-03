@@ -32,23 +32,28 @@ def test_smart_dca_splits_visible_tiers_into_discrete_engine_curve():
     setup, strategy = split_confirmed_dca_plan({
         **_schedule(), "dca_amount_mode": "score_bands",
         "base_amount": 100,
-        "score_source": "market_score", "low_threshold": 40,
+        "score_source": "benchmark_score", "low_threshold": 40,
         "high_threshold": 70, "low_score_percent": 50,
         "mid_score_percent": 100, "high_score_percent": 150,
     })
 
     assert "score_source" not in setup
     assert strategy["execution_mode"] == "custom"
-    assert strategy["decision_curve"]["input"] == "market_score"
+    assert strategy["decision_curve"]["input"] == "benchmark_score"
+    weights = normalize_benchmark_weights({})
     for score, amount in ((0, 50), (39.9, 50), (40, 100),
                           (69.9, 100), (70, 150), (100, 150)):
         result = decide_amount({**strategy, "setup_type": "dca"},
-                               {"market_score": score, "setup_score": score})
+                               {"market_score": score, "macro_score": score,
+                                "technical_score": score, "setup_score": score,
+                                "_benchmark_weights": weights,
+                                "_source_available": {key: True for key in weights}})
         assert result["final_amount"] == amount
 
 
 @pytest.mark.parametrize("overrides", [
     {"score_source": None},
+    {"score_source": "market_score"},
     {"low_threshold": None},
     {"low_threshold": 70, "high_threshold": 40},
     {"low_score_percent": 0},
@@ -59,7 +64,7 @@ def test_smart_dca_cannot_confirm_missing_or_conflicting_amount_rule(overrides):
     fields = {
         **_schedule(), "dca_amount_mode": "score_bands",
         "base_amount": 100,
-        "score_source": "market_score", "low_threshold": 40,
+        "score_source": "benchmark_score", "low_threshold": 40,
         "high_threshold": 70, "low_score_percent": 50,
         "mid_score_percent": 100, "high_score_percent": 150,
         **overrides,

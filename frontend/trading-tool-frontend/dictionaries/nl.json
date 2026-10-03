@@ -3186,7 +3186,6 @@
       "baseAmount": "Basisbedrag (100%): {amount}",
       "smartTitle": "Smart DCA · scoregestuurde bedragen",
       "scoreSource": "Scorebron: {source}",
-      "marketSource": "marktscore",
       "benchmarkSource": "eigen benchmark (markt + macro + technisch)",
       "benchmarkWeights": "De weging volgt je actuele instellingen in Analyse (standaard ieder ⅓). Wijzigingen beïnvloeden toekomstige bedragen. Alle drie scores zijn nodig op de beslisdatum.",
       "sourceMissing": "nog te kiezen",

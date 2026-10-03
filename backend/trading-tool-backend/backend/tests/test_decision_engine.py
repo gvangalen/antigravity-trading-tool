@@ -89,7 +89,8 @@ def test_confirmed_dca_score_bands_keep_exact_planned_amount(market_score, setup
         "base_amount": 100,
         "dca_amount_semantics": "planned_exact",
         "decision_curve": {
-            "input": "market_score",
+            "input": "benchmark_score",
+            "weights_policy": "current_user_preferences",
             "interpolation": "step",
             "points": [
                 {"x": 0, "y": 0.5},
@@ -100,9 +101,28 @@ def test_confirmed_dca_score_bands_keep_exact_planned_amount(market_score, setup
         },
     }
 
-    result = decide_amount(strategy, {"market_score": market_score, "setup_score": setup_score})
+    components = ("market_score", "macro_score", "technical_score")
+    result = decide_amount(strategy, {
+        **{key: market_score for key in components},
+        "setup_score": setup_score,
+        "_benchmark_weights": {key: 1/3 for key in components},
+        "_source_available": {key: True for key in components},
+    })
 
     assert result["sized_amount"] == result["final_amount"] == expected
+
+
+def test_previous_market_only_smart_dca_curve_cannot_size_a_purchase():
+    setup = {
+        "setup_type": "dca", "execution_mode": "custom", "base_amount": 100,
+        "dca_amount_semantics": "planned_exact",
+        "decision_curve": {
+            "input": "market_score", "interpolation": "step",
+            "points": [{"x": 0, "y": 0.5}, {"x": 100, "y": 1.5}],
+        },
+    }
+    with pytest.raises(Exception, match="requires the total benchmark"):
+        decide_amount(setup, {"market_score": 80, "setup_score": 80})
 
 
 def test_confirmed_fixed_dca_does_not_change_with_setup_score():

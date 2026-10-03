@@ -63,7 +63,7 @@ def test_confirmed_dca_creates_setup_and_strategy_in_one_transaction(monkeypatch
         "name": "BTC Smart", "symbol": "BTC", "timeframe": "1D", "setup_type": "dca",
         "dca_frequency": "weekly", "dca_day": "monday", "dca_amount_mode": "score_bands",
         "base_amount": 100,
-        "score_source": "market_score", "low_threshold": 40, "high_threshold": 70,
+        "score_source": "benchmark_score", "low_threshold": 40, "high_threshold": 70,
         "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
     }}}))
 

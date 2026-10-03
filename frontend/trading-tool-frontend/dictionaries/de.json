@@ -3206,7 +3206,6 @@
       "baseAmount": "Basisbetrag (100%): {amount}",
       "smartTitle": "Smart DCA · scoreabhängige Beträge",
       "scoreSource": "Scorequelle: {source}",
-      "marketSource": "Marktscore",
       "benchmarkSource": "eigene Benchmark (Markt + Makro + Technik)",
       "benchmarkWeights": "Die Gewichtung folgt den aktuellen Analyse-Einstellungen (standardmäßig je ⅓). Änderungen beeinflussen künftige Beträge. Alle drei Scores werden am Entscheidungstag benötigt.",
       "sourceMissing": "noch auszuwählen",

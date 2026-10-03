@@ -1366,12 +1366,12 @@ def _persist_decision_and_order(
         )
         available = (
             combined is not None if source == "benchmark_score"
-            else (scores.get("_source_available") or {}).get(source) is True if source else None
+            else (False if source else None)
         )
         scores_payload["dca_policy"] = {
             "score_source": source,
             "source_available": available,
-            "source_score": combined if source == "benchmark_score" else (scores.get("market") if source == "market_score" and available else None),
+            "source_score": combined,
             "weights": weights if source == "benchmark_score" else None,
             "weight_source": scores.get("_benchmark_weight_source") if source == "benchmark_score" else None,
             "components": components if source == "benchmark_score" and available else None,

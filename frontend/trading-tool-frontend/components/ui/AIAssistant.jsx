@@ -5276,11 +5276,10 @@ function AIAssistantContent({
     const humanValue = (value) => valueLabels[String(value || "").toLowerCase()] || value;
     const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = [humanValue(supplied.dca_frequency), humanValue(supplied.dca_day || supplied.dca_month_day)].filter(Boolean).join(" · ");
-    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "scorebron", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
     const euro = (value) => new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const scoreLabels = {
-      market_score: at("dcaDraft.marketSource", "marktscore"),
       benchmark_score: at("dcaDraft.benchmarkSource", "eigen benchmark (markt + macro + technisch)"),
     };
     const isSmartDca = supplied.setup_type === "dca" && supplied.dca_amount_mode === "score_bands";
