@@ -8,50 +8,47 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate and main CI, Auto Deploy, and public identity checks passed. |
-| Goal | Address the source date missing beside Analyse scores, the zero-quantity bots shown as positions, and the intermittent score-date coach failure without restoring broad answer overrides. |
-| Candidate branch | `codex/finn-score-date-and-positions` |
-| Candidate code SHA | `ca474f270a75f9ba819caf70e5f6308c9554d6b5`; source and frontend export. |
-| PR | [#47](https://github.com/gvangalen/antigravity-trading-tool/pull/47), merged. |
-| Production SHA | `e835f53f2cb908ce397d4ed0d86e60c820b9b61c`; backend and frontend both returned HTTP 200 with this SHA at 14:49 UTC on 2026-10-03. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
+| Phase | `CANDIDATE_VALIDATED`; production deployment pending. |
+| Goal | Smart DCA uses the total current Market, Macro and Technical benchmark for a percentage ladder around a base amount. Fixed DCA and paper execution remain distinct. |
+| Candidate branch | `codex/finn-smart-dca-contract` |
+| Candidate code SHA | `2ed4fdc837cb4d650b9faa9891879a53f97047f2` |
+| PR | [#49](https://github.com/gvangalen/antigravity-trading-tool/pull/49), draft at this stage. |
+| Production SHA | Pending Auto Deploy and public identity checks. |
 | Release owner | Build |
 | Last updated | 2026-10-03 |
 
-The user supplied independent authenticated live findings for the prior SHA. Build used synthetic local users only and did not access the protected QA fixture or sealed holdout. The exact failing score-date prompt and live trace were not supplied; the provider failure mechanism in that particular turn remains unproven.
+The user explicitly selected the existing combined benchmark as the only Smart DCA score source, using the current Analyse weights. There is no legacy market-only Smart DCA mode in this candidate. Build used synthetic local users and did not access the protected QA fixture or sealed holdout.
 
 ## Change
 
-- The Analyse score cards show the oldest source timestamp of the indicator rows used for each displayed score, or say when source dates are incomplete. They distinguish saved context scores from current trading signals. The combined score label comes from those same visible rows.
-- The lower bot portfolio section counts only bots with nonzero net quantity as open positions. When none exist, it says so instead of showing zero-valued positions; bot budget limits remain separate.
-- The score tool reads the latest saved owner-scoped daily report, including an older report, and preserves its report date. Daily-score freshness uses a one-day window.
-- A transient Responses provider failure after read evidence gets at most one retry within the request budget. The response remains model-authored. The default lifecycle deadline is 40 seconds. A typed plan-evaluation tool choice now stays consistent when the model has identified a plan concept.
-- The local coach-regression check no longer treats a statement that a favourable ratio **does not** prove profitability as unsupported positive advice.
+- FINN creates Smart DCA as a setup cadence plus a linked strategy with a base amount and score-to-percentage ladder. The proposal card shows the source, thresholds, and resulting amounts before confirmation.
+- The paper decision path uses the total Market/Macro/Technical benchmark and current weights. Missing score components prevent a score-based purchase. Fixed DCA remains separate from the Smart DCA ladder.
+- Setup, strategy and bot evidence expose the stored plan through typed contracts for later FINN readback.
 
 ## Local Build Evidence
 
-The isolated parity stack used PostgreSQL, Redis, API and prefork Celery with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`; selector evaluations used the configured `gpt-4o-mini` and do not prove that every model call used Luna.
+The isolated parity stack used PostgreSQL, Redis, API and Celery with synthetic users; the FINN chat path used the real Responses provider. No production account or live order was used.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| API/Celery/Responses score-date regression | Two read-only turns passed; latest saved report date and scores in typed evidence and answer; no proposal or false live signal. | `.local-finn-parity-artifacts/score-date-candidate-final.json`, SHA-256 `d54a2b317131f3e74f8fdeaa8f11ffcb2ecd164a73ca62a054f67d6554d23080`. |
-| API/Celery/Responses portfolio control | Two read-only turns passed; bot budget, retrieval date and cash boundary remained correct. | `.local-finn-parity-artifacts/score-date-portfolio-final.json`, SHA-256 `3d1ecf39b18924d1c35329278b002941e94438ab7e502b3155f8bf3d1ebf70a7`. |
-| API/Celery/Responses coach control | Four read-only cases passed, including stop-loss and risk/reward; no proposals or generic fallback. | `.local-finn-parity-artifacts/score-date-coach-corrected-final.json`, SHA-256 `fbe8530189faf8e68200916c0dfd05adda41d730d0a21bb21d7dd8d15e268314`. |
-| Worker-driven safe action contracts | `16/16`; no broker orders, live trading calls or live bots. | `.local-finn-parity-artifacts/score-date-actions-canonical-final.json`, SHA-256 `8fdaf3340a71cc601197a8e398bd916c091484666bcf4621fe707e83e5b8ffa6`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/score-date-selector-development-final.json`, SHA-256 `77313829bb107d0b4794c5f11de58bd90dbc4f67065a39845d92da6a37b96003`. |
-| Real-provider selector regression | `109/109` after the final tool-choice consistency change; zero provider, schema, parse, validation or timeout failures. The first pre-change run had one plan/setup misclassification (`108/109`); its unmodified repeat was `109/109`. | `.local-finn-parity-artifacts/score-date-selector-regression-final.json`, SHA-256 `805f72d87f0e174a5ae3b3659a9ed21e2d5cf931286ffae028e23a29a5a507d9`. |
-| Backend canonical suite | `3016 passed, 3 skipped` (30 warnings). | `python3 -m pytest -q`. |
-| Frontend canonical checks | Passed: `typecheck`, `lint:i18n`, `test:i18n` (8), `test:commands` (5), `audit:high` (0 vulnerabilities), production `build`. | Local Build run. |
+| API/Celery/Responses positive and negative Smart DCA path | Positive proposal and paper sizing exercised; market-only request produced no confirmable Smart DCA proposal. | Local parity artifacts. |
+| Paper sizing | Benchmark scores 32/60/80 gave €10/€100/€150; missing Macro held at €0; no duplicate buy. | Local paper probe artifact, SHA-256 `0b0eb18f9c89ee14ecb900366e5827e7eb6aa8da5b4327dcfc6125279e084d47`. |
+| Worker-driven safe action contracts | `16/16`; no broker orders, live trading calls or live bots. | `.local-finn-parity-artifacts/benchmark-only-action-matrix.json`, SHA-256 `1831d34c84649b062730bf0ff8a7954e6f9ac142a0546454d271bd68b4963860`. |
+| Real-provider selector development | `18/18`; no provider, schema, parse, validation or timeout failures. | Local selector development artifact. |
+| Real-provider selector regression | `109/109`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/benchmark-only-selector-regression.json`, SHA-256 `9148cbe5e4e1ff21b465fddc4488f6731ac7cc606e83864bcba179f05004b5c2`. |
+| Backend canonical suite | `3055 passed, 3 skipped`. | `python3 -m pytest -q`. |
+| Frontend canonical checks | `build`, `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high` passed. | Local Build run. |
 
-An additional legacy 37-case parity matrix completed with all 16 action contracts and 9 lineage cases passing, but its overall result was red: read-only cases expected selector operation IDs that the current model-led chat path did not return. Artifact `.local-finn-parity-artifacts/score-date-actions-final.json`, SHA-256 `4226ad13f8a72b5e7d958762557be95d1c67d397d5712cf4394682bb8c84b968`. This result is **not** counted as a green release gate and needs a separate contract review; the required canonical action matrix above passed.
+The daily score row date can be current even when an underlying indicator is older; component-level source freshness is not independently enforced in this candidate. QA should assess the visible score date and score-driven paper decision accordingly.
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [PR run 37130662523](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37130662523), all five jobs green. |
-| Main CI | `PASS`: [main run 37130805990](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37130805990), all five jobs green on `e835f53f2cb908ce397d4ed0d86e60c820b9b61c`. |
-| Auto Deploy | `PASS`: [run 37130931551](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37130931551) deployed `e835f53f2cb908ce397d4ed0d86e60c820b9b61c`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 with `e835f53f2cb908ce397d4ed0d86e60c820b9b61c` at 14:49 UTC on 2026-10-03. |
-| Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
+| Candidate CI | `PASS`: [PR run 37146476417](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37146476417), all five jobs green on candidate code SHA. Status-only candidate commit requires its own CI. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending. |
+| Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
-Local Build evidence and public identity checks establish deployment of this candidate. They do not establish authenticated production coach acceptance.
+Local Build evidence and CI do not establish authenticated production acceptance.
