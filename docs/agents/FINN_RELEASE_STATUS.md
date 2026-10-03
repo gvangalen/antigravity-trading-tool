@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; candidate CI and deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate and main CI, Auto Deploy, and public identity checks passed. |
 | Goal | Align FINN and the web UI on bot budget, portfolio valuation, retrieval dates and score source dates without restoring broad answer overrides. |
 | Candidate branch | `codex/finn-portfolio-evidence-alignment` |
 | Candidate code SHA | `34ab48a6` (the source and export commit; this status commit follows it). |
-| PR | Pending. |
-| Production SHA | Not yet verified for this candidate. |
+| PR | [#45](https://github.com/gvangalen/antigravity-trading-tool/pull/45), merged. |
+| Production SHA | `decf2cd8042b29af046acb55edc418ba6b14548e`; both public surfaces returned HTTP 200 with this SHA at 12:35 UTC on 2026-10-03. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-03 |
 
@@ -44,10 +44,10 @@ The isolated parity stack used PostgreSQL, Redis, API and prefork Celery with sy
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending for this candidate. |
+| Candidate CI | `PASS`: [PR run 37123119164](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37123119164), all five jobs green. |
+| Main CI | `PASS`: [main run 37123224534](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37123224534), all five jobs green on `decf2cd8042b29af046acb55edc418ba6b14548e`. |
+| Auto Deploy | `PASS`: [run 37123313968](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37123313968) deployed `decf2cd8042b29af046acb55edc418ba6b14548e`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 with `decf2cd8042b29af046acb55edc418ba6b14548e` at 12:35 UTC on 2026-10-03. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
-Local Build evidence supports creating one candidate. It does not establish authenticated production coach acceptance.
+Local Build evidence and public identity checks establish deployment of this candidate. They do not establish authenticated production coach acceptance.
