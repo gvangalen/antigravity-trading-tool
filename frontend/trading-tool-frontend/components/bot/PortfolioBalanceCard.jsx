@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -11,6 +11,7 @@ import {
 } from "recharts";
 
 import usePortfolioBalance from "@/hooks/usePortfolioBalance";
+import { fetchPortfolioSummary } from "@/lib/api/botApi";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDate, formatDateTime, formatNumber, getIntlLocale } from "@/lib/i18n";
 
@@ -63,8 +64,12 @@ function shortDate(ts, rangeKey, locale) {
    DELTA CALC
 ===================================================== */
 function calcDelta(series, mode) {
-  if (!Array.isArray(series) || series.length < 2) {
+  if (!Array.isArray(series) || series.length === 0) {
     return { last: 0, delta: 0, pct: null };
+  }
+
+  if (series.length === 1) {
+    return { last: Number(series[0]?.[mode] ?? 0), delta: 0, pct: null };
   }
 
   const first = Number(series[0]?.[mode] ?? 0);
@@ -88,37 +93,50 @@ export default function PortfolioBalanceCard({
   defaultRange = "1W",
   title = null,
   is_live = null,
-  fallbackSnapshot = null,
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.portfolioBalance || {};
   const [range, setRange] = useState(defaultRange);
   const [mode, setMode] = useState("equity");
+  const [summary, setSummary] = useState(null);
+  const [summaryError, setSummaryError] = useState(false);
 
   const rangeConfig =
     RANGES.find((r) => r.key === range) || RANGES[1];
 
-  const { data, loading, reload } = usePortfolioBalance({
+  const { data, loading, error, reload } = usePortfolioBalance({
     is_live,
     bucket: rangeConfig.bucket,
     limit: rangeConfig.limit,
   });
 
-  const hasMeaningfulHistory = useMemo(() => {
-    if (!Array.isArray(data) || data.length === 0) return false;
-    return data.some((point) =>
-      ["equity", "cash", "btc_value", "btc_qty", "invested", "unrealized_pnl"].some(
-        (key) => Math.abs(Number(point?.[key] ?? 0)) > 0
-      )
-    );
-  }, [data]);
+  const loadSummary = useCallback(async () => {
+    try {
+      const result = await fetchPortfolioSummary();
+      setSummary(result?.data ?? null);
+      setSummaryError(false);
+    } catch {
+      setSummary(null);
+      setSummaryError(true);
+    }
+  }, []);
+
+  useEffect(() => { loadSummary(); }, [loadSummary]);
+
+  const selectedBots = (summary?.bots ?? []).filter(
+    (bot) => is_live === null || bot.is_live === is_live
+  );
+  const valuationAvailable = selectedBots.length > 0 && selectedBots.every(
+    (bot) => bot.equity !== null && bot.equity !== undefined
+  );
+  const hasHistory = valuationAvailable && Array.isArray(data) && data.some((point) => point?.ts);
 
   /* =====================================================
      LIVE PORTFOLIO REFRESH
   ===================================================== */
 
   useEffect(() => {
-    const handler = () => reload();
+    const handler = () => { reload(); loadSummary(); };
 
     window.addEventListener("portfolio:updated", handler);
 
@@ -127,43 +145,13 @@ export default function PortfolioBalanceCard({
         "portfolio:updated",
         handler
       );
-  }, [reload]);
+  }, [reload, loadSummary]);
 
   /* =====================================================
      SERIES
   ===================================================== */
 
-  const series = useMemo(() => {
-    if (hasMeaningfulHistory) return data;
-
-    const now = new Date();
-    const points = [];
-    const fallbackPoint = {
-      equity: Number(fallbackSnapshot?.equity ?? 0),
-      cash: Number(fallbackSnapshot?.cash ?? 0),
-      btc_value: Number(fallbackSnapshot?.btc_value ?? 0),
-      btc_qty: Number(fallbackSnapshot?.btc_qty ?? 0),
-      invested: Number(fallbackSnapshot?.invested ?? 0),
-      unrealized_pnl: Number(fallbackSnapshot?.unrealized_pnl ?? 0),
-    };
-
-    for (let i = rangeConfig.limit - 1; i >= 0; i--) {
-      const d = new Date(now);
-
-      if (rangeConfig.bucket === "1h") {
-        d.setHours(now.getHours() - i);
-      } else {
-        d.setDate(now.getDate() - i);
-      }
-
-      points.push({
-        ts: d.toISOString(),
-        ...fallbackPoint,
-      });
-    }
-
-    return points;
-  }, [data, fallbackSnapshot, hasMeaningfulHistory, rangeConfig.bucket, rangeConfig.limit]);
+  const series = useMemo(() => hasHistory ? data : [], [data, hasHistory]);
 
   const { last, delta, pct } = useMemo(
     () => calcDelta(series, mode),
@@ -243,10 +231,17 @@ export default function PortfolioBalanceCard({
           </div>
 
           <div className="text-4xl font-black tracking-tighter text-foreground font-mono">
-            {formatValue(last)}
+            {hasHistory ? formatValue(last) : "—"}
           </div>
 
-          <div
+          <p className="text-xs text-secondary">
+            {hasHistory
+              ? `${copy.recordedAt || "Laatste momentopname"}: ${formatDateTime(new Date(series[series.length - 1].ts), locale)}`
+              : ((error || summaryError) ? copy.loadFailed : copy.noVerifiedBalance)}
+          </p>
+          {hasHistory && <p className="text-xs text-secondary">{copy.snapshotLimit}</p>}
+
+          {hasHistory && <div
             className={`flex items-center gap-2 text-xs font-black uppercase tracking-tight ${
               isDown
                 ? "text-red-500"
@@ -258,7 +253,7 @@ export default function PortfolioBalanceCard({
               {pct !== null ? fmtPct(pct) : ""}
             </div>
             <span className="font-mono tabular-nums opacity-80">({formatValue(delta)})</span>
-          </div>
+          </div>}
         </div>
 
         {/* 🛠 INSTRUMENT CONTROLS */}
@@ -306,7 +301,11 @@ export default function PortfolioBalanceCard({
           </div>
         )}
 
-        <ResponsiveContainer width="100%" height="100%">
+        {!hasHistory ? (
+          <div className="flex h-full items-center justify-center text-sm text-secondary">
+            {error ? copy.loadFailed : copy.noVerifiedBalance}
+          </div>
+        ) : <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={chartData}
             margin={{ left: 0, right: 0, top: 10, bottom: 0 }}
@@ -376,7 +375,7 @@ export default function PortfolioBalanceCard({
               activeDot={{ r: 5, fill: strokeColor, stroke: '#fff', strokeWidth: 2 }}
             />
           </AreaChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer>}
       </div>
     </div>
   );

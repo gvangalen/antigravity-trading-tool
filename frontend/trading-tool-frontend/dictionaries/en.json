@@ -545,6 +545,11 @@
       "noSummaryAvailable": "No summary is available yet."
     },
     "gauges": {
+      "scoreSourceNote": "Saved scores are not a current trading signal.",
+      "dailyReportDate": "Daily report",
+      "masterReportDate": "Combined report",
+      "noSourceDate": "No source date available.",
+      "noScore": "No score available",
       "macro": "Macro",
       "technical": "Technical",
       "market": "Market",
@@ -2122,7 +2127,7 @@
     },
     "budgetBar": {
       "noBudget": "No budget configured",
-      "available": "Available"
+      "limitNotCash": "This is a bot budget limit, not proof of available cash."
     },
     "budgetForm": {
       "description": "This budget configuration acts as a hard safety ceiling. The bot will automatically scale or block trades that exceed these limits.",
@@ -2220,11 +2225,12 @@
       "filterPaper": "Paper",
       "filterLive": "Live",
       "activeBots": "Active sources",
-      "budgetUsage": "Capital allocation",
+      "budgetUsage": "Bot budget limits",
       "backendSource": "Portfolio data",
       "bitvavoCash": "Bitvavo cash",
-      "totalValue": "Total value",
-      "combinedBots": "Combined allocation",
+      "totalValue": "Position value",
+      "noValuation": "No market valuation is available for this position.",
+      "combinedBots": "Total bot budget limits",
       "spentToday": "Spent today",
       "dailyLimit": "Daily limit",
       "maxPerTrade": "Sum max/trade",
@@ -2580,6 +2586,10 @@
       "title": "Portfolio overview",
       "loading": "Loading portfolio data...",
       "entryLog": "Snapshot",
+      "recordedAt": "Latest recorded snapshot",
+      "snapshotLimit": "A snapshot does not prove current spendable cash.",
+      "noVerifiedBalance": "No recorded portfolio value is available. Bot budgets are not cash or equity.",
+      "loadFailed": "Portfolio history could not be loaded.",
       "modes": {
         "equity": "Equity",
         "cash": "Cash",

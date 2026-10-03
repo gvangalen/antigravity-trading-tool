@@ -136,6 +136,8 @@ class FinnResponsesFrontDoor:
             "Lead the conversation: answer directly when general reasoning suffices, ask one "
             "useful follow-up when a choice is missing, and call one or more FINN tools when "
             "the answer needs saved account facts, a personal assessment, or current data. "
+            "For a question combining a saved plan, market context and portfolio or bot budget, "
+            "read each relevant source before saying that one of them is missing. "
             "For current indicator readings, use get_current_technical_snapshot. A saved "
             "indicator configuration or its evaluation does not provide current readings. "
             "For a question asking what entry, stop or target is saved, read the selected "
@@ -178,7 +180,8 @@ class FinnResponsesFrontDoor:
             "For a requested mutation, choose the registry-backed proposal tool. FINN validates "
             "inputs and dependencies; only explicit user confirmation can execute it. "
             "Never claim a write happened before confirmed execution, and never suggest a "
-            "broker order or live-bot activation. Hide internal IDs and error codes."
+            "broker order or live-bot activation. Hide internal IDs, field names and error codes; "
+            "explain dates and missing values in ordinary language."
         )
 
     def __init__(self, *, client: Any, session: Any = None, session_factory: Any = None, user_id: int, run_id: str, model_led_coach: bool = False) -> None:

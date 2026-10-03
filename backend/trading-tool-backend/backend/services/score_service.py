@@ -174,7 +174,8 @@ class ScoreService:
             macro=macro,
             technical=technical,
             market=market,
-            setup=setup
+            setup=setup,
+            report_date=scores.get("report_date"),
         )
 
     async def get_master_score(self, user_id: int, symbol: str = "BTC") -> MasterScoreResponse:

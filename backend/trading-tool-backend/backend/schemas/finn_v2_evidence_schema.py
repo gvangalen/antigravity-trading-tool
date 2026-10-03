@@ -213,11 +213,14 @@ class PortfolioBotData(BaseModel):
     budget_total_eur: Optional[float] = None
     is_active: Optional[bool] = None
     is_live: Optional[bool] = None
+    price_as_of: Optional[datetime] = None
 
 
 class PortfolioData(BaseModel):
     global_: PortfolioGlobalData = Field(default_factory=PortfolioGlobalData, alias="global")
     bots: List[PortfolioBotData] = Field(default_factory=list)
+    read_at: Optional[datetime] = None
+    valuation_available: bool = False
     covered_scopes: List[str] = Field(default_factory=list)
     excluded_scopes: List[str] = Field(default_factory=list)
 

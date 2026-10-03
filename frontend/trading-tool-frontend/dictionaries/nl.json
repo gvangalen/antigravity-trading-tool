@@ -546,6 +546,11 @@
       "noSummaryAvailable": "Nog geen samenvatting beschikbaar."
     },
     "gauges": {
+      "scoreSourceNote": "Opgeslagen scores zijn geen actueel handelssignaal.",
+      "dailyReportDate": "Dagrapport",
+      "masterReportDate": "Gecombineerd rapport",
+      "noSourceDate": "Geen brondatum beschikbaar.",
+      "noScore": "Geen score beschikbaar",
       "macro": "Macro",
       "technical": "Technisch",
       "market": "Markt",
@@ -2123,7 +2128,7 @@
     },
     "budgetBar": {
       "noBudget": "Geen budget ingesteld",
-      "available": "Beschikbaar"
+      "limitNotCash": "Dit is een botbudgetlimiet, geen bewijs van beschikbaar saldo."
     },
     "budgetForm": {
       "description": "Deze budgetconfiguratie werkt als een harde veiligheidsgrens. De bot schaalt of blokkeert automatisch trades die hier overheen gaan.",
@@ -2221,11 +2226,12 @@
       "filterPaper": "Paper",
       "filterLive": "Live",
       "activeBots": "Actieve bronnen",
-      "budgetUsage": "Kapitaalverdeling",
+      "budgetUsage": "Botbudgetlimieten",
       "backendSource": "Portfoliodata",
       "bitvavoCash": "Bitvavo cash",
-      "totalValue": "Totale waarde",
-      "combinedBots": "Gecombineerde allocatie",
+      "totalValue": "Waarde van posities",
+      "noValuation": "De positie heeft geen beschikbare marktwaardering.",
+      "combinedBots": "Som van botbudgetlimieten",
       "spentToday": "Vandaag besteed",
       "dailyLimit": "Daglimiet",
       "maxPerTrade": "Som max per trade",
@@ -2581,6 +2587,10 @@
       "title": "Portfolio-overzicht",
       "loading": "Portefeuilledata laden...",
       "entryLog": "Momentopname",
+      "recordedAt": "Laatste vastgelegde momentopname",
+      "snapshotLimit": "Een momentopname bewijst geen actueel vrij besteedbaar saldo.",
+      "noVerifiedBalance": "Geen vastgelegde portefeuillewaarde beschikbaar. Botbudgetten tellen niet als cash of vermogen.",
+      "loadFailed": "Portefeuillehistorie kon niet worden geladen.",
       "modes": {
         "equity": "Vermogen",
         "cash": "Cash",

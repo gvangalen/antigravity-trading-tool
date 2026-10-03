@@ -39,9 +39,12 @@ const getStructureLabel = (domain, score, labels) => {
  * Replaces large Gauge cards with a slim horizontal strip.
  */
 export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const fallbackSnapshot = useScoresData(symbol, { includeHistory: false });
-  const { macro, technical, market, setup, master, loading, saveWeights } = snapshot || fallbackSnapshot;
+  const { macro, technical, market, setup, master, loading, saveWeights, sourceDates } = snapshot || fallbackSnapshot;
+  const dailyDate = sourceDates?.daily;
+  const masterDate = sourceDates?.master;
+  const dateLabel = (value) => value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(locale) : null;
   const [isEditing, setIsEditing] = useState(false);
   const [localWeights, setLocalWeights] = useState({
      macro: 0.25,
@@ -99,12 +102,15 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
   };
 
   const structureLabels = t.dashboard.gauges.structure;
+  const structureFor = (domain, score) => Number.isFinite(score)
+    ? getStructureLabel(domain, score, structureLabels)
+    : t.dashboard.gauges.noScore;
 
   const items = [
-    { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro, structure: getStructureLabel('macro', macro.score, structureLabels) },
-    { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical, structure: getStructureLabel('technical', technical.score, structureLabels) },
-    { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market, structure: getStructureLabel('market', market.score, structureLabels) },
-    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup, structure: getStructureLabel('setup', setup.score, structureLabels) },
+    { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro, structure: structureFor('macro', macro.score) },
+    { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical, structure: structureFor('technical', technical.score) },
+    { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market, structure: structureFor('market', market.score) },
+    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup, structure: structureFor('setup', setup.score) },
   ];
 
   if (loading && !isEditing) {
@@ -122,6 +128,12 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
 
   return (
     <div className="space-y-4 w-full">
+      <p className="px-2 text-xs text-secondary">
+        {t.dashboard.gauges.scoreSourceNote} {dailyDate
+          ? `${t.dashboard.gauges.dailyReportDate}: ${dateLabel(dailyDate)}.`
+          : t.dashboard.gauges.noSourceDate}
+        {masterDate ? ` ${t.dashboard.gauges.masterReportDate}: ${dateLabel(masterDate)}.` : ""}
+      </p>
       <div className="flex items-center justify-between px-2">
          <div className="flex items-center gap-2">
             <div className="w-1 h-4 bg-blue-600 rounded-full" />
@@ -138,21 +150,21 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
         {items.map((item, idx) => {
-          const score = Math.round(item.score || 0);
+          const score = Number.isFinite(item.score) ? Math.round(item.score) : null;
           
           let colorClass = "text-secondary dark:text-slate-500";
           let bgClass = "bg-[var(--color-border-subtle)] dark:bg-slate-900";
           let borderClass = "border-slate-100 dark:border-slate-800";
 
-          if (score >= 75) {
+          if (score !== null && score >= 75) {
             colorClass = "text-emerald-600 dark:text-emerald-400";
             bgClass = "bg-emerald-50 dark:bg-emerald-950/30";
             borderClass = "border-emerald-100 dark:border-emerald-900/50";
-          } else if (score >= 50) {
+          } else if (score !== null && score >= 50) {
             colorClass = "text-blue-600 dark:text-blue-400";
             bgClass = "bg-blue-50 dark:bg-blue-950/30";
             borderClass = "border-blue-100 dark:border-blue-900/50";
-          } else if (score < 40) {
+          } else if (score !== null && score < 40) {
             colorClass = "text-rose-500 dark:text-rose-400";
             bgClass = "bg-rose-50 dark:bg-rose-950/30";
             borderClass = "border-rose-100 dark:border-rose-900/50";
@@ -192,7 +204,7 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
 
                     <div className="flex items-center justify-end shrink-0 min-w-[3.25rem] sm:min-w-[3.5rem]">
                     <span className={`text-xs sm:text-sm font-black font-mono ${colorClass}`}>
-                       {score}%
+                       {score === null ? "—" : `${score}%`}
                     </span>
                     </div>
                   </div>

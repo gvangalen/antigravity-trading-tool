@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import date, datetime
 
 class ActiveSetupResponse(BaseModel):
     id: int
@@ -39,6 +39,7 @@ class DailyCombinedScoreResponse(BaseModel):
     technical: CategoryScoreResponse
     market: CategoryScoreResponse
     setup: SetupScoreResponse
+    report_date: Optional[date] = None
 
 class MasterScoreResponse(BaseModel):
     master_score: float

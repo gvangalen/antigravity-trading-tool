@@ -7,6 +7,7 @@ from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
 from backend.services.bot_service import BotService
+from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.schemas.bot_schema import (
     BotConfigCreateSchema,
     BotConfigUpdateSchema,
@@ -240,6 +241,16 @@ async def get_trade_plan(
 # ==========================================================
 # 📈 BALANCE HISTORY (PRO)
 # ==========================================================
+@router.get("/portfolio/summary")
+async def get_portfolio_summary(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Expose the same owner-scoped valuation projection that FINN reads."""
+    result = await PortfolioToolAdapter(db).execute(user_id=current_user["id"])
+    return {"data": result["data"], "as_of": result["as_of"]}
+
+
 @router.get("/portfolio/balance-history")
 async def get_portfolio_balance_history(
     bucket: str = "1h",

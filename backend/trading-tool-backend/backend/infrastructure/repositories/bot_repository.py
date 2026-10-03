@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from datetime import date
+from datetime import date, datetime, timezone
 import json
 
 from backend.services.platform_metrics import increment_execution_safety_counter
@@ -509,6 +509,18 @@ class BotRepository:
             prices[symbol] = float(price) if price is not None else 0.0
         return prices
 
+    async def get_market_price_timestamps(self, symbols: List[str]) -> Dict[str, datetime]:
+        normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return {}
+        result = await self.session.execute(text("""
+            SELECT DISTINCT ON (symbol) symbol, timestamp
+            FROM market_data
+            WHERE symbol = ANY(:symbols) AND price IS NOT NULL AND price > 0
+            ORDER BY symbol, timestamp DESC
+        """), {"symbols": normalized})
+        return {str(row._mapping["symbol"]).upper(): row._mapping["timestamp"] for row in result.fetchall()}
+
     # ==========================
     # BOT TRADES
     # ==========================
@@ -562,10 +574,12 @@ class BotRepository:
         if not await self.check_table_exists("portfolio_balance_snapshots"):
             return []
         query = text("""
-            SELECT ts, equity_eur, cash_eur, btc_qty, btc_value_eur, invested_eur, unrealized_pnl_eur
-            FROM portfolio_balance_snapshots
-            WHERE user_id = :user_id AND bucket = :bucket
-            ORDER BY ts ASC LIMIT :limit
+            SELECT * FROM (
+                SELECT ts, equity_eur, cash_eur, btc_qty, btc_value_eur, invested_eur, unrealized_pnl_eur
+                FROM portfolio_balance_snapshots
+                WHERE user_id = :user_id AND bucket = :bucket
+                ORDER BY ts DESC LIMIT :limit
+            ) latest ORDER BY ts ASC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "bucket": bucket, "limit": limit})
         return [dict(r._mapping) for r in result.fetchall()]
@@ -574,10 +588,12 @@ class BotRepository:
         if not await self.check_table_exists("bot_portfolio_snapshots"):
             return []
         query = text("""
-            SELECT ts, equity_eur, cash_eur, net_qty, price_eur, invested_eur
-            FROM bot_portfolio_snapshots
-            WHERE user_id = :user_id AND bot_id = :bot_id AND bucket = :bucket
-            ORDER BY ts ASC LIMIT :limit
+            SELECT * FROM (
+                SELECT ts, equity_eur, cash_eur, net_qty, price_eur, invested_eur
+                FROM bot_portfolio_snapshots
+                WHERE user_id = :user_id AND bot_id = :bot_id AND bucket = :bucket
+                ORDER BY ts DESC LIMIT :limit
+            ) latest ORDER BY ts ASC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "bucket": bucket, "limit": limit})
         return [dict(r._mapping) for r in result.fetchall()]
@@ -588,7 +604,8 @@ class BotRepository:
         
         # We aggregate all snapshots for bots matching the is_live filter
         query = text("""
-            SELECT 
+            SELECT * FROM (
+            SELECT
                 s.ts,
                 SUM(s.equity_eur) as equity_eur,
                 SUM(s.cash_eur) as cash_eur,
@@ -599,8 +616,9 @@ class BotRepository:
             JOIN bot_configs b ON b.id = s.bot_id
             WHERE s.user_id = :user_id AND b.is_live = :is_live AND s.bucket = :bucket
             GROUP BY s.ts
-            ORDER BY s.ts ASC
+            ORDER BY s.ts DESC
             LIMIT :limit
+            ) latest ORDER BY ts ASC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "is_live": is_live, "bucket": bucket, "limit": limit})
         return [dict(r._mapping) for r in result.fetchall()]
@@ -641,6 +659,7 @@ class BotRepository:
         # Get unique symbols and retrieve their live market prices in one query
         symbols = [row._mapping["symbol"] for row in rows]
         prices = await self.get_market_prices(symbols)
+        price_timestamps = await self.get_market_price_timestamps(symbols)
             
         bot_states = []
         global_cash = 0.0
@@ -683,6 +702,7 @@ class BotRepository:
                 "bot_id": bot_id,
                 "portfolio_initialized": bool(mapping["portfolio_initialized"]),
                 "price_available": price_available,
+                "price_as_of": price_timestamps.get(sym) if qty != 0 and price_available else None,
                 "name": name,
                 "symbol": sym,
                 "cash": cash,
@@ -711,6 +731,7 @@ class BotRepository:
             allocations["Cash"] = 100.0
             
         return {
+            "read_at": datetime.now(timezone.utc),
             "global": {
                 "total_equity": global_equity,
                 "cash_balance": global_cash,

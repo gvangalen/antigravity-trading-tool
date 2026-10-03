@@ -21,8 +21,6 @@ export default function BotBudgetBar({
 
   const pct = total > 0 ? Math.min((spent / total) * 100, 100) : 0;
 
-  const remaining = Math.max(total - spent, 0);
-
   let barClass = "bg-green-500";
 
   if (pct > 90) barClass = "bg-red-500";
@@ -48,11 +46,7 @@ export default function BotBudgetBar({
         />
       </div>
 
-      {/* AVAILABLE */}
-      <div className="flex justify-between text-xs text-[var(--text-muted)]">
-        <span>{copy.available}</span>
-        <span>{formatCurrency(Number(remaining), locale, "EUR", { maximumFractionDigits: 0 })}</span>
-      </div>
+      <p className="text-xs text-[var(--text-muted)]">{copy.limitNotCash}</p>
 
     </div>
   );
