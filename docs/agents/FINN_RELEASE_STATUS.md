@@ -12,7 +12,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 | Goal | Address the source date missing beside Analyse scores, the zero-quantity bots shown as positions, and the intermittent score-date coach failure without restoring broad answer overrides. |
 | Candidate branch | `codex/finn-score-date-and-positions` |
 | Candidate code SHA | `ca474f270a75f9ba819caf70e5f6308c9554d6b5`; source and frontend export. |
-| PR | Pending. |
+| PR | [#47](https://github.com/gvangalen/antigravity-trading-tool/pull/47), candidate CI pending. |
 | Production SHA | Prior live QA tested `49e210b5fe5299e59ed76fb1dab8ac6420de56b7`; this candidate has not been deployed. |
 | Release owner | Build |
 | Last updated | 2026-10-03 |
