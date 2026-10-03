@@ -14,6 +14,7 @@ VALID_INPUTS = {
     "technical_score",
     "macro_score",
     "setup_score",
+    "benchmark_score",
 }
 
 

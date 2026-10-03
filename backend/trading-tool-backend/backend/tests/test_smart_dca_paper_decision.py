@@ -69,6 +69,39 @@ def test_smart_dca_missing_score_cannot_turn_placeholder_into_a_buy(paper_engine
     assert result["amount_eur"] == 0
 
 
+@pytest.mark.parametrize("weights,expected", [
+    ({"market_score": 1/3, "macro_score": 1/3, "technical_score": 1/3}, 100),
+    ({"market_score": 0.8, "macro_score": 0.1, "technical_score": 0.1}, 50),
+])
+def test_benchmark_smart_dca_uses_current_weights(paper_engines, weights, expected):
+    _, strategy = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "BTC Benchmark", "base_amount": 100,
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+        "low_threshold": 40, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
+    })
+    scores = {
+        "market_score": 20, "macro_score": 80, "technical_score": 80,
+        "setup_score": 80, "_benchmark_weights": weights,
+        "_source_available": {key: True for key in weights},
+    }
+    result = bot_brain.run_bot_brain(
+        user_id=1, setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
+        scores=scores, portfolio_context={"active_strategy": {"setup_type": "dca", "confidence_score": 80}},
+        backtest_mode=True,
+    )
+    assert result["action"] == "buy"
+    assert result["amount_eur"] == expected
+    scores["_source_available"]["technical_score"] = False
+    missing = bot_brain.run_bot_brain(
+        user_id=1, setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
+        scores=scores, portfolio_context={"active_strategy": {"setup_type": "dca", "confidence_score": 80}},
+        backtest_mode=True,
+    )
+    assert missing["action"] == "hold"
+    assert missing["amount_eur"] == 0
+
+
 def test_confirmed_dca_does_not_buy_if_guardrails_fail(paper_engines, monkeypatch):
     monkeypatch.setattr(bot_brain, "apply_guardrails", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("unavailable")))
     _, strategy = split_confirmed_dca_plan({

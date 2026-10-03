@@ -11,7 +11,46 @@ _AMOUNT_FIELDS = frozenset({
     "dca_amount_mode", "base_amount", "score_source", "low_threshold",
     "high_threshold", "low_score_percent", "mid_score_percent", "high_score_percent",
 })
-_SCORE_SOURCES = frozenset({"market_score"})
+_SCORE_SOURCES = frozenset({"market_score", "benchmark_score"})
+BENCHMARK_COMPONENTS = ("market_score", "macro_score", "technical_score")
+EQUAL_BENCHMARK_WEIGHTS = {component: 1 / 3 for component in BENCHMARK_COMPONENTS}
+
+
+def normalize_benchmark_weights(preferences: Any) -> dict[str, float] | None:
+    """Match Analyse's missing-field defaults without accepting invalid weights."""
+    if preferences is None or preferences == {}:
+        return dict(EQUAL_BENCHMARK_WEIGHTS)
+    if not isinstance(preferences, dict):
+        return None
+    values = {}
+    for component in BENCHMARK_COMPONENTS:
+        category = component.removesuffix("_score")
+        value = preferences.get(category, 1 / 3)
+        if type(value) not in {int, float} or not math.isfinite(value) or value < 0:
+            return None
+        values[component] = float(value)
+    total = sum(values.values())
+    if total <= 0:
+        return None
+    return {component: value / total for component, value in values.items()}
+
+
+def benchmark_score(scores: dict[str, Any], weights: dict[str, Any], availability: dict[str, Any]) -> float | None:
+    """Require all three same-report components before sizing an automated order."""
+    if set(weights or {}) != set(BENCHMARK_COMPONENTS):
+        return None
+    if any(availability.get(component) is not True for component in BENCHMARK_COMPONENTS):
+        return None
+    values = [scores.get(component) for component in BENCHMARK_COMPONENTS]
+    factors = [weights[component] for component in BENCHMARK_COMPONENTS]
+    if any(type(value) not in {int, float} or not math.isfinite(value) or not 0 <= value <= 100 for value in values):
+        return None
+    if any(type(weight) not in {int, float} or not math.isfinite(weight) or weight < 0 for weight in factors):
+        return None
+    total = sum(factors)
+    if total <= 0 or not math.isclose(total, 1, abs_tol=1e-6):
+        return None
+    return round(sum(value * weight for value, weight in zip(values, factors)), 1)
 
 
 def _positive_amount(value: Any, field: str) -> float:
@@ -61,6 +100,7 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
         multipliers = tuple(percent / 100 for percent in percents)
         strategy_fields["decision_curve"] = {
             "input": source,
+            **({"weights_policy": "current_user_preferences"} if source == "benchmark_score" else {}),
             "interpolation": "step",
             "min_multiplier": 0.05,
             "max_multiplier": 3.0,

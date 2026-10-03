@@ -200,7 +200,7 @@ def test_smart_dca_amount_staffel_is_not_stored_as_setup_minimum():
     assert supplied["base_amount"] == 100
     assert [supplied[key] for key in ("low_score_percent", "mid_score_percent", "high_score_percent")] == [50, 100, 150]
     assert "min_investment" not in supplied
-    assert supplied["score_source"] == "market_score"
+    assert supplied["score_source"] == "benchmark_score"
 
 
 def test_smart_dca_percentages_do_not_consume_adjacent_score_thresholds():
@@ -260,7 +260,7 @@ def test_model_cannot_invent_dca_score_boundaries_or_minimum():
     assert "low_threshold" not in state.collected_inputs
     assert "high_threshold" not in state.collected_inputs
     assert "min_investment" not in state.collected_inputs
-    assert state.collected_inputs["score_source"] == "market_score"
+    assert state.collected_inputs["score_source"] == "benchmark_score"
 
 
 def test_create_dca_setup_binds_weekday_before_proposal_execution():

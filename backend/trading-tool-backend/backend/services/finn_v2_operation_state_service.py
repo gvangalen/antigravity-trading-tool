@@ -630,10 +630,13 @@ class FinnV2OperationStateService:
                     values["dca_amount_mode"] = "score_bands"
                 elif fixed_amount and not smart_amount:
                     values["dca_amount_mode"] = "fixed"
-                if smart_amount and not any(alias in lowered for alias in (
-                    "macroscore", "macro score", "technische score", "technical score", "setupscore", "setup score"
-                )):
-                    values["score_source"] = "market_score"
+                if smart_amount:
+                    # A Smart DCA proposal uses all three owner-scoped daily
+                    # score components unless the user explicitly asks for
+                    # the original market-only policy.
+                    market_only = bool(re.search(r"\b(?:markt\s*score|marktscore|market\s*score|market_score)\b", lowered))
+                    multi_component = bool(re.search(r"\b(?:macro|technisch|technical|benchmark|gecombineerd|combined)\b", lowered))
+                    values["score_source"] = "market_score" if market_only and not multi_component else "benchmark_score"
                 amounts = re.findall(
                     r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
                     r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
@@ -852,6 +855,7 @@ class FinnV2OperationStateService:
         if field == "score_source":
             lowered = value.casefold().replace(" ", "_")
             for source, aliases in {
+                "benchmark_score": ("benchmark_score", "benchmarkscore", "benchmark", "gecombineerde_score", "combined_score"),
                 "market_score": ("market_score", "marktscore", "markt_score"),
                 "technical_score": ("technical_score", "technische_score", "technischescore"),
                 "macro_score": ("macro_score", "macroscore", "macro_score"),

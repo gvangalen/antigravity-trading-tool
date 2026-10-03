@@ -80,6 +80,8 @@ class StrategyToolAdapter:
             return {
                 "dca_amount_mode": "score_bands",
                 "score_source": curve.get("input"),
+                "score_weights": None,
+                "score_weights_policy": curve.get("weights_policy"),
                 "low_threshold": float(ordered[1]["x"]),
                 "high_threshold": float(ordered[2]["x"]),
                 "low_score_percent": round(100 * float(ordered[0]["y"]), 2),

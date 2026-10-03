@@ -27,3 +27,24 @@ def test_linked_strategy_evidence_exposes_the_confirmed_smart_dca_rule():
     assert data.score_source == "market_score"
     assert (data.low_threshold, data.high_threshold) == (40, 70)
     assert (data.low_score_percent, data.mid_score_percent, data.high_score_percent) == (50, 100, 150)
+
+
+def test_linked_strategy_evidence_explains_live_benchmark_weights():
+    _, strategy = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "BTC Benchmark", "base_amount": 100,
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+        "low_threshold": 40, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
+    })
+    data = asyncio.run(StrategyToolAdapter().execute(
+        strategy={
+            "id": 13, "setup_id": 11, "name": "BTC Benchmark Strategy",
+            "setup_type": "dca", "execution_mode": "custom",
+            "base_amount": strategy["base_amount"],
+            "decision_curve": strategy["decision_curve"],
+            "data": strategy,
+        },
+        resolution_source="setup_id",
+    ))["data"]
+    assert data.score_source == "benchmark_score"
+    assert data.score_weights_policy == "current_user_preferences"

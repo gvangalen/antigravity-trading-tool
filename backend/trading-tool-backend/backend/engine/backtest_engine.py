@@ -13,6 +13,7 @@ from backend.ai_agents.trading_bot_agent import (
     _get_strategy_setup_payload,
     _get_active_strategy_snapshot,
     _get_daily_scores,
+    _get_current_benchmark_weights,
     _build_setup_match,
     _ledger_deltas,
     _normalize_action,
@@ -186,6 +187,8 @@ def run_bot_backtest(
                 conn, user_id=user_id, strategy_id=strategy_id, 
                 setup_id=setup_id, setup_name=setup_type_raw, symbol=symbol
             )
+            if (setup_payload.get("decision_curve") or {}).get("input") == "benchmark_score":
+                scores["_benchmark_weights"], scores["_benchmark_weight_source"] = _get_current_benchmark_weights(conn, user_id, symbol)
             
             portfolio_value_eur = state["cash_eur"] + (state["asset_qty"] * price_close)
             portfolio_context = {

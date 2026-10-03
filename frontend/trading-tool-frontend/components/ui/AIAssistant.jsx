@@ -5279,7 +5279,10 @@ function AIAssistantContent({
     const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "scorebron", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
     const euro = (value) => new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
-    const scoreLabels = { market_score: "marktscore" };
+    const scoreLabels = {
+      market_score: at("dcaDraft.marketSource", "marktscore"),
+      benchmark_score: at("dcaDraft.benchmarkSource", "eigen benchmark (markt + macro + technisch)"),
+    };
     const isSmartDca = supplied.setup_type === "dca" && supplied.dca_amount_mode === "score_bands";
     return (
       <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
@@ -5295,6 +5298,7 @@ function AIAssistantContent({
         {isSmartDca && <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-200">
           <p className="font-semibold">{at("dcaDraft.smartTitle", "Smart DCA · scoregestuurde bedragen")}</p>
           <p className="mt-1">{at("dcaDraft.scoreSource", "Scorebron: {source}", { source: scoreLabels[supplied.score_source] || at("dcaDraft.sourceMissing", "nog te kiezen") })}</p>
+          {supplied.score_source === "benchmark_score" && <p className="mt-1 text-xs">{at("dcaDraft.benchmarkWeights", "De weging volgt je actuele instellingen in Analyse (standaard ieder ⅓). Wijzigingen beïnvloeden toekomstige bedragen. Alle drie scores zijn nodig op de beslisdatum.")}</p>}
           {supplied.base_amount != null && supplied.low_threshold != null && supplied.high_threshold != null && supplied.low_score_percent != null && supplied.mid_score_percent != null && supplied.high_score_percent != null && <ul className="mt-2 space-y-1">
             <li>{at("dcaDraft.below", "Score onder {threshold}: {percent}% = {amount}", { threshold: supplied.low_threshold, percent: supplied.low_score_percent, amount: euro(supplied.base_amount * supplied.low_score_percent / 100) })}</li>
             <li>{at("dcaDraft.between", "Score {low} tot onder {high}: {percent}% = {amount}", { low: supplied.low_threshold, high: supplied.high_threshold, percent: supplied.mid_score_percent, amount: euro(supplied.base_amount * supplied.mid_score_percent / 100) })}</li>

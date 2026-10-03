@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any, Dict, Optional
 
 from backend.engine.position_engine import calculate_position
+from backend.domain.finn_dca_plan_contract import benchmark_score
 from backend.engine.market_intelligence_engine import get_market_intelligence
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.engine.trade_plan_engine import build_trade_plan
@@ -59,6 +60,8 @@ def _normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
         "technical_score": _safe_float(scores.get("technical_score", scores.get("technical", 10)), 10.0) or 10.0,
         "market_score": _safe_float(scores.get("market_score", scores.get("market", 10)), 10.0) or 10.0,
         "setup_score": _safe_float(scores.get("setup_score", scores.get("setup", 10)), 10.0) or 10.0,
+        "_source_available": scores.get("_source_available") or {},
+        "_benchmark_weights": scores.get("_benchmark_weights") or {},
     }
 
 
@@ -478,9 +481,19 @@ def run_bot_brain(
     ):
         score_source = (setup.get("decision_curve") or {}).get("input")
         source_availability = scores.get("_source_available") or {}
+        if score_source == "benchmark_score":
+            score_ready = benchmark_score(
+                normalized_scores,
+                scores.get("_benchmark_weights") or {},
+                source_availability,
+            ) is not None
+        else:
+            score_ready = (
+                isinstance(scores.get(score_source), (int, float))
+                and source_availability.get(score_source) is True
+            )
         if (
-            not isinstance(scores.get(score_source), (int, float))
-            or source_availability.get(score_source) is not True
+            not score_ready
         ):
             # The legacy score loader uses 10 as a display fallback. Never
             # turn that placeholder into a Smart DCA purchase amount.

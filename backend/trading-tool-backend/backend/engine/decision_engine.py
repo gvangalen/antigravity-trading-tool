@@ -1,6 +1,7 @@
 from typing import Dict, Any
 
 from backend.engine.curve_engine import calculate_position_size
+from backend.domain.finn_dca_plan_contract import benchmark_score
 from backend.engine.exposure_engine import (
     compute_exposure_multiplier,
     apply_exposure_to_amount,
@@ -53,7 +54,12 @@ def decide_amount(
             raise DecisionEngineError("Custom mode vereist decision_curve")
 
         input_key = curve.get("input", "market_score")
-        score_value = scores.get(input_key)
+        if input_key == "benchmark_score" and curve.get("weights_policy") != "current_user_preferences":
+            raise DecisionEngineError("Benchmark requires current preference weights")
+        score_value = (
+            benchmark_score(scores, scores.get("_benchmark_weights") or {}, scores.get("_source_available") or {})
+            if input_key == "benchmark_score" else scores.get(input_key)
+        )
 
         if not isinstance(score_value, (int, float)):
             raise DecisionEngineError(

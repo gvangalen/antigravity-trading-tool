@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from backend.utils.db import get_db_connection
 # ✅ Engine brain (single source of truth)
 from backend.engine.bot_brain import run_bot_brain
+from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
 import asyncio
 from backend.services.exchange_service import ExchangeService
 from backend.services.platform_metrics import increment_execution_safety_counter
@@ -758,7 +759,7 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
 
     def available(value: Any) -> bool:
         try:
-            return value is not None and math.isfinite(float(value))
+            return value is not None and math.isfinite(float(value)) and 0 <= float(value) <= 100
         except (TypeError, ValueError):
             return False
 
@@ -774,6 +775,34 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
             "setup_score": available(setup),
         },
     }
+
+
+def _get_current_benchmark_weights(conn, user_id: int, symbol: str) -> tuple[dict[str, float] | None, str]:
+    """Use Analyse's current owner-scoped weights for this asset."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT ai_preferences FROM users WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+    if not row:
+        return None, "missing_user"
+    preferences = _safe_json(row[0], {}) if isinstance(row[0], str) else (row[0] or {})
+    if not isinstance(preferences, dict):
+        return None, "invalid_preferences"
+    custom = preferences.get("intelligence_weights")
+    if custom:
+        return normalize_benchmark_weights(custom), "user_preferences"
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT top_signals FROM ai_category_insights
+            WHERE user_id=%s AND symbol=%s AND category='master'
+            ORDER BY date DESC, id DESC LIMIT 1
+        """, (user_id, symbol))
+        master_row = cur.fetchone()
+    raw_meta = master_row[0] if master_row else None
+    meta = _safe_json(raw_meta, {}) if isinstance(raw_meta, str) else (raw_meta or {})
+    master_weights = meta.get("weights") if isinstance(meta, dict) else None
+    if master_weights:
+        return normalize_benchmark_weights(master_weights), "master_score"
+    return normalize_benchmark_weights({}), "equal_default"
 
 
 # =====================================================
@@ -1325,11 +1354,27 @@ def _persist_decision_and_order(
     }
     if decision.get("dca_amount_semantics") == "planned_exact":
         source = decision.get("score_source")
-        available = (scores.get("_source_available") or {}).get(source) is True if source else None
+        components = {
+            "market_score": scores.get("market"),
+            "macro_score": scores.get("macro"),
+            "technical_score": scores.get("technical"),
+        }
+        weights = scores.get("_benchmark_weights") or {}
+        combined = (
+            benchmark_score(components, weights, scores.get("_source_available") or {})
+            if source == "benchmark_score" else None
+        )
+        available = (
+            combined is not None if source == "benchmark_score"
+            else (scores.get("_source_available") or {}).get(source) is True if source else None
+        )
         scores_payload["dca_policy"] = {
             "score_source": source,
             "source_available": available,
-            "source_score": scores.get("market") if source == "market_score" and available else None,
+            "source_score": combined if source == "benchmark_score" else (scores.get("market") if source == "market_score" and available else None),
+            "weights": weights if source == "benchmark_score" else None,
+            "weight_source": scores.get("_benchmark_weight_source") if source == "benchmark_score" else None,
+            "components": components if source == "benchmark_score" and available else None,
             "planned_amount_eur": decision.get("requested_amount_eur"),
             "applied_amount_eur": amount_eur,
         }
@@ -1478,6 +1523,16 @@ def run_trading_bot_agent(
                 setup_name=bot.get("setup_type"),
                 symbol=symbol,
             )
+            if setup_payload.get("symbol") and setup_payload["symbol"].upper() != symbol:
+                logger.warning("Bot %s asset differs from linked strategy; skipping decision", bot["bot_id"])
+                continue
+            if (setup_payload.get("decision_curve") or {}).get("input") == "benchmark_score":
+                try:
+                    scores["_benchmark_weights"], scores["_benchmark_weight_source"] = _get_current_benchmark_weights(conn, user_id, symbol)
+                except Exception:
+                    logger.exception("Smart DCA weights unavailable for user_id=%s", user_id)
+                    scores["_benchmark_weights"] = None
+                    scores["_benchmark_weight_source"] = "unavailable"
 
             if setup_payload.get("dca_amount_semantics") == "planned_exact":
                 from backend.domain.finn_dca_plan_contract import dca_due_on_date
@@ -1561,6 +1616,7 @@ def run_trading_bot_agent(
                     "market_score": scores.get("market"),
                     "setup_score": scores.get("setup"),
                     "_source_available": scores.get("_source_available"),
+                    "_benchmark_weights": scores.get("_benchmark_weights"),
                 },
                 portfolio_context=portfolio_context,
             )
