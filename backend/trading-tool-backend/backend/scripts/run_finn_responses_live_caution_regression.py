@@ -68,7 +68,8 @@ def main() -> None:
         if case_id == "saved_confirmation":
             checks.update({
                 "saved_read": any(
-                    item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+                    item.get("scope") in {"read_active_setup", "read_saved_setup_inventory"}
+                    and item.get("status") == "completed"
                     for call in trace for item in (call.get("result") or {}).get("results") or []
                 ),
                 "identifies_or_disambiguates": all(

@@ -144,7 +144,7 @@ class FinnV2FlagService:
 
     def responses_lifecycle_deadline_seconds(self) -> int:
         """Allow selection, tool evidence, and answer composition one bounded budget."""
-        return max(15, min(30, self._env_int("FINN_V2_RESPONSES_LIFECYCLE_DEADLINE_SECONDS", 24)))
+        return max(15, min(30, self._env_int("FINN_V2_RESPONSES_LIFECYCLE_DEADLINE_SECONDS", 30)))
 
     def selector_phase_deadline_seconds(self) -> int:
         # A phase cannot consume more than the complete visible lifecycle.

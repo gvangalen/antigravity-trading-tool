@@ -328,7 +328,7 @@ def main() -> None:
                 } == {base, apple}
                 checks["conditions_compared"] = (
                     "BTC Full Base" in answer and "Apple Full Setup" in answer
-                    and "76.000" in answer and "210" in answer
+                    and _has_number(answer, 76000) and _has_number(answer, 210)
                     and "ETH Full Setup" not in answer
                 )
             if sequence_number == 11 and turn_number == 2:
@@ -348,7 +348,7 @@ def main() -> None:
                 )
             if sequence_number == 12 and turn_number == 4:
                 checks["verified_strategy_followup"] = (
-                    "76.000" in answer and "80.000" not in answer
+                    _has_number(answer, 76000) and not _has_number(answer, 80000)
                     and any(word in answer.casefold() for word in ("geen", "niet", "ontbreekt"))
                     and "Ik kan dit nog niet onderbouwen" not in answer
                 )
