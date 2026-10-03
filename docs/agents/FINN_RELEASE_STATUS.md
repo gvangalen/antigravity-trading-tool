@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_VALIDATED`; production deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate and main CI, Auto Deploy, and public identity checks passed. |
 | Goal | Smart DCA uses the total current Market, Macro and Technical benchmark for a percentage ladder around a base amount. Fixed DCA and paper execution remain distinct. |
 | Candidate branch | `codex/finn-smart-dca-contract` |
 | Candidate code SHA | `2ed4fdc837cb4d650b9faa9891879a53f97047f2` |
-| PR | [#49](https://github.com/gvangalen/antigravity-trading-tool/pull/49), draft at this stage. |
-| Production SHA | Pending Auto Deploy and public identity checks. |
+| PR | [#49](https://github.com/gvangalen/antigravity-trading-tool/pull/49), merged. |
+| Production SHA | `0fa302eafedf0c250205f2ee37c7c883dfea6682`; backend and frontend both returned HTTP 200 with this SHA at 19:34 UTC on 2026-10-03. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-03 |
 
@@ -39,16 +39,16 @@ The isolated parity stack used PostgreSQL, Redis, API and Celery with synthetic 
 | Backend canonical suite | `3055 passed, 3 skipped`. | `python3 -m pytest -q`. |
 | Frontend canonical checks | `build`, `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high` passed. | Local Build run. |
 
-The daily score row date can be current even when an underlying indicator is older; component-level source freshness is not independently enforced in this candidate. QA should assess the visible score date and score-driven paper decision accordingly.
+The daily score row date can be current even when an underlying indicator is older; component-level source freshness is not independently enforced in this candidate.
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [PR run 37146476417](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37146476417), all five jobs green on candidate code SHA. Status-only candidate commit requires its own CI. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending. |
+| Candidate CI | `PASS`: [PR run 37148039190](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37148039190), all five jobs green on the candidate including status. Earlier [run 37146476417](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37146476417) was also green on the code SHA. |
+| Main CI | `PASS`: [main run 37148192085](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37148192085), all five jobs green on `0fa302eafedf0c250205f2ee37c7c883dfea6682`. |
+| Auto Deploy | `PASS`: [run 37148317374](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37148317374) deployed `0fa302eafedf0c250205f2ee37c7c883dfea6682`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 with `0fa302eafedf0c250205f2ee37c7c883dfea6682` at 19:34 UTC on 2026-10-03. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence and CI do not establish authenticated production acceptance.
