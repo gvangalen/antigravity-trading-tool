@@ -34,7 +34,10 @@ from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnsw
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
-from backend.services.finn_v2_run_service import FinnV2RunService, _simple_coach_experiment_enabled
+from backend.services.finn_v2_run_service import (
+    FinnV2RunService, _simple_coach_experiment_enabled, _raw_coach_experiment_enabled,
+    _minimal_read_answer, _minimal_read_answers_enabled,
+)
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
@@ -64,6 +67,72 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
         mode="READ", content="Een direct antwoord.", response_source="v2_runtime",
         verifier_status="not_run",
     ).verifier_status == "not_run"
+
+
+def test_raw_coach_baseline_cannot_be_enabled_outside_local_fixture(monkeypatch):
+    monkeypatch.setenv("FINN_RAW_COACH_EXPERIMENT", "1")
+    monkeypatch.setenv("APP_ENV", "production")
+    assert _raw_coach_experiment_enabled() is False
+    monkeypatch.setenv("APP_ENV", "local_finn")
+    assert _raw_coach_experiment_enabled() is True
+
+
+def test_minimal_read_answers_uses_explicit_runtime_switch(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FINN_RAW_COACH_EXPERIMENT", "0")
+    monkeypatch.setenv("FINN_MINIMAL_READ_ANSWERS", "1")
+    assert _minimal_read_answers_enabled() is True
+    monkeypatch.setenv("FINN_MINIMAL_READ_ANSWERS", "0")
+    assert _minimal_read_answers_enabled() is False
+
+
+def test_raw_coach_keeps_general_answer_but_rejects_unread_saved_strategy_claim():
+    def prepared(text):
+        return SimpleNamespace(response=SimpleNamespace(
+            text=text, uses_previous_response=False, tool_trace=({
+                "result": {"results": [
+                    {"scope": "read_active_setup", "status": "completed",
+                     "data": {"name": "BTC Basis"}},
+                    {"scope": "read_linked_strategy", "status": "unavailable",
+                     "reason": "strategy_not_resolved"},
+                ]},
+            },),
+        ))
+
+    general = _minimal_read_answer(
+        message="Kan een kleinere positie een ruimere stop compenseren?",
+        prepared=prepared("Ja, voor hetzelfde maximumbedrag daalt de positie als de stopafstand groeit."),
+    )
+    assert general.status == "completed"
+    assert general.text.startswith("Ja, voor hetzelfde")
+    unsupported = _minimal_read_answer(
+        message="Wat moet ik doen terwijl ik wacht?",
+        prepared=prepared("Ik kan die regel niet uit je opgeslagen strategie halen."),
+    )
+    assert unsupported.status == "unavailable"
+    assert unsupported.reason == "saved_entity_type_unverified"
+
+
+def test_minimal_read_answer_can_reuse_previous_owner_scoped_strategy_only_for_same_asset():
+    previous = {
+        "terminal_status": "completed",
+        "turn_contract": {"targets": [{"evidence": {"symbol": "BTC"}}]},
+        "tool_trace": [{"result": {"results": [{
+            "scope": "read_linked_strategy", "status": "completed",
+            "data": {"name": "BTC Strategy"},
+        }]}}],
+    }
+    prepared = SimpleNamespace(
+        previous_response=previous,
+        response=SimpleNamespace(
+            text="Je opgeslagen strategie heeft een entryprijs.",
+            uses_previous_response=True, tool_trace=(),
+        ),
+    )
+    assert _minimal_read_answer(message="En die strategie?", prepared=prepared).status == "completed"
+    assert _minimal_read_answer(message="En mijn AAPL-strategie?", prepared=prepared).reason == (
+        "saved_entity_type_unverified"
+    )
 
 
 def test_factual_tool_result_experiment_cannot_enable_outside_local_fixture(monkeypatch):
@@ -2482,6 +2551,10 @@ def test_why_followup_can_quote_prior_user_amount_without_treating_it_as_saved()
     ).verify(message="Waarom?", result=result, previous_response=previous))
     assert verified.status == "completed"
     assert verified.text == answer_text
+    prior_context = next(item for item in semantic.verify_async.await_args.kwargs["compact_evidence"]
+                         if item.get("scope") == "previous_response")
+    assert prior_context["availability"] == "unavailable"
+    assert prior_context["data"]["terminal_status"] == "unavailable"
 
 
 def test_clarification_tool_accepts_one_natural_question_not_internal_fields():
@@ -2602,7 +2675,7 @@ def test_responses_provider_call_disables_sdk_retries_and_sets_timeout():
         message="Wat is RSI?", instructions="Use FINN contracts.",
     ))
     assert client.with_options.call_args.kwargs["max_retries"] == 0
-    assert 0 < client.with_options.call_args.kwargs["timeout"] <= 16
+    assert 0 < client.with_options.call_args.kwargs["timeout"] <= 20
 
 
 def test_invalid_sibling_operation_field_returns_registry_driven_repair_hint():
@@ -7313,6 +7386,151 @@ def test_previous_verified_answer_is_an_assistant_turn_not_user_instructions():
     ]
 
 
+def test_unavailable_coach_turn_is_not_presented_as_a_verified_prior_answer():
+    fake = FakeResponses(response("r1", text="Een ruimere stop vergt een kleinere positie."))
+
+    async def execute(_call):
+        raise AssertionError("no tool needed")
+
+    previous = project_verified_turn({
+        "answer": "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
+        "user_message": "Zou een kleinere positie met meer ruimte voor de stop verstandig zijn?",
+        "terminal_status": "unavailable",
+        "terminal_reason": "responses_evidence_not_verified",
+    })
+    asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message="Hoe houd ik hetzelfde maximale euroverlies?",
+        instructions="Answer the latest question.",
+        verified_turn_context=previous,
+        previous_terminal_status="unavailable",
+        model_led_coach=True,
+    ))
+    context = fake.requests[0]["input"][0]["content"]
+    assert "user saw only this fallback" in context
+    assert "none was shown" in context
+    assert "Immediately preceding verified FINN answer" not in context
+    assert "before a condition that user said must be met" not in context
+
+
+@pytest.mark.parametrize(("message", "draft"), [
+    (
+        "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. "
+        "Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?",
+        "Een stop-loss uit frustratie weghalen vergroot het mogelijke verlies. "
+        "Onderzoek eerst of de stop bij je handelsidee past; ik wijzig niets.",
+    ),
+    (
+        "Ik vind dat te streng. Zou een kleinere positie met meer ruimte voor de stop "
+        "niet verstandiger kunnen zijn? Denk kritisch mee zonder een nieuw niveau te verzinnen.",
+        "Een ruimere stop en een kleinere positie kunnen hetzelfde maximale verlies begrenzen. "
+        "De stop hoort bij het handelsidee; bepaal vooraf hoeveel verlies je accepteert.",
+    ),
+])
+def test_source_independent_coaching_does_not_need_second_opinion(message, draft):
+    semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=AssertionError("no second judge")))
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=message,
+        result=FinnResponsesResult(
+            draft, "coach-response", (), model_led_coach=True, model_owned_repair=True,
+            answer_kind="free_text", turn_contract={
+                "answer_type": "weigh", "targets": [], "saved_subject_reference": False,
+            },
+        ),
+        locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert verified.text == draft
+    assert verified.reason == "source_independent_coaching"
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_general_coaching_after_unavailable_read_keeps_model_answer():
+    semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=AssertionError("no second judge")))
+    draft = (
+        "Een ruimere stop vergroot je verlies per eenheid. "
+        "Een kleinere positie kan dat begrenzen, zolang je vooraf dezelfde verliesgrens kiest."
+    )
+    previous = {
+        "answer": "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
+        "user_message": "Ik wil mijn stop-loss weghalen.",
+        "terminal_status": "unavailable",
+        "tool_trace": [{"name": "get_my_profile_and_risk_style", "result": {"results": [{
+            "scope": "read_profile", "status": "completed", "source": "owner_profile",
+            "data": {"has_profile": True},
+        }]}}],
+    }
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Zou een kleinere positie met een ruimere stop verstandiger kunnen zijn?",
+        result=FinnResponsesResult(
+            draft, "coach-followup", (), model_led_coach=True,
+            model_owned_repair=True, uses_previous_response=True,
+            answer_kind="free_text", turn_contract={
+                "answer_type": "weigh", "targets": [], "saved_subject_reference": False,
+            },
+        ), previous_response=previous, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert verified.text == draft
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_general_coaching_with_current_profile_read_keeps_source_review():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    draft = "Een stop-loss impulsief weghalen kan je verlies vergroten. Onderzoek eerst de reden voor je uitstapgrens."
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Wat vind je van het weghalen van mijn stop-loss? Geef coaching, verander niets.",
+        result=FinnResponsesResult(
+            draft, "coach-with-read", ({
+                "name": "get_my_profile_and_risk_style", "result": {"results": [{
+                    "scope": "read_profile", "status": "completed", "source": "owner_profile",
+                    "data": {"has_profile": True},
+                }]},
+            },), model_led_coach=True, model_owned_repair=True,
+            answer_kind="free_text", turn_contract={
+                "answer_type": "weigh", "targets": [], "saved_subject_reference": False,
+            },
+        ), locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert verified.text == draft
+    semantic.verify_async.assert_awaited()
+
+
+@pytest.mark.parametrize("draft", [
+    "In jouw opgeslagen strategie staat een stop-loss op 72.000.",
+    "BTC stijgt vandaag, dus die stop is nu te krap.",
+    "BTC stijgt sterk, dus je kunt instappen.",
+])
+def test_source_dependent_coaching_still_requires_source_review(draft):
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["unsupported_saved_fact"],
+    )))
+    asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Hoe kijk je naar mijn stop-loss?",
+        result=FinnResponsesResult(
+            draft,
+            "coach-response", (), model_led_coach=True, answer_kind="free_text",
+        ), locale="nl",
+    ))
+    semantic.verify_async.assert_awaited()
+
+
+def test_source_independent_coaching_cannot_claim_a_write():
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Hoe kijk je naar mijn stop-loss?",
+        result=FinnResponsesResult(
+            "Ik heb je stop-loss gewijzigd.", "coach-response", (),
+            model_led_coach=True, answer_kind="free_text",
+        ), locale="nl",
+    ))
+    assert answer.status != "completed"
+    assert answer.reason != "source_independent_coaching"
+
+
 def test_invalid_read_arguments_get_one_schema_bound_repair_call():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "get_active_plan_and_strategy", {
@@ -9536,7 +9754,7 @@ def test_general_stop_size_tradeoff_survives_setup_ambiguity():
     assert answer.text == draft
 
 
-def test_general_risk_lesson_uses_model_answer_without_setup_clarification():
+def test_source_independent_risk_lesson_uses_model_answer_without_setup_clarification():
     question = (
         "Puur als algemene risicoles: hoe kan een kleinere positie bij een "
         "ruimere stop hetzelfde maximale verlies begrenzen?"
@@ -10335,6 +10553,9 @@ def test_saved_dca_setup_cannot_be_reported_as_saved_strategy():
     )
     assert not verifier._saved_entity_type_supported(
         "Wacht voordat u uw strategie aanpast.", evidence,
+    )
+    assert not verifier._saved_entity_type_supported(
+        "Ik kan die regel niet uit je opgeslagen strategie halen.", evidence,
     )
     assert not verifier._saved_entity_type_supported(
         "Ihre Strategie ist noch nicht geprüft.", evidence,

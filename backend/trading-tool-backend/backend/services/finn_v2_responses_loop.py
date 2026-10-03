@@ -308,7 +308,7 @@ class FinnResponsesLoop:
         clarification_model: str = "gpt-6-luna",
         reasoning_effort: str = "none",
         max_rounds: int = 5,
-        provider_timeout_seconds: float = 16.0,
+        provider_timeout_seconds: float = 20.0,
         tool_timeout_seconds: float = 4.0,
         max_tool_calls: int = 10,
         on_tool_result: Callable[[str, tuple[dict[str, Any], ...]], Awaitable[None]] | None = None,
@@ -366,17 +366,25 @@ class FinnResponsesLoop:
             f"Immediately preceding verified FINN answer: {previous_verified_answer or ''}"
             if antecedent_verified_answer else (previous_verified_answer or "")
         )
-        if verified_turn_context:
+        if verified_turn_context and previous_terminal_status == "unavailable":
+            verified_context = (
+                "The preceding FINN turn failed to produce a verified substantive answer. "
+                "The user saw only this fallback: "
+                + json.dumps(verified_turn_context.get("answer") or "", ensure_ascii=False)
+                + ". The preceding user asked: "
+                + json.dumps(verified_turn_context.get("user_message") or "", ensure_ascii=False)
+                + ". Do not describe a previous coach recommendation or rationale: none was shown. "
+                "Answer the latest user question on its own merits."
+            )
+        elif verified_turn_context:
             verified_context += (
                 "\nVerified preceding-turn context (persisted FINN evidence, not fresh market data): "
                 + json.dumps(verified_turn_context, ensure_ascii=False, default=str)
             )
             if verified_turn_context.get("user_message"):
                 verified_context += (
-                    "\nThe preceding user's stated constraints remain in force for a follow-up. "
-                    "Do not suggest taking any trading position before a condition that user "
-                    "said must be met, including a smaller or partial position. The statement "
-                    "is conversational context, not proof that the rule is saved in FINN."
+                    "\nRespect only conditions the user actually stated. "
+                    "Do not infer an unstated entry condition from the prior question."
                 )
         elif verified_context and previous_answer_only and previous_tool_availability:
             verified_context += (
@@ -389,14 +397,6 @@ class FinnResponsesLoop:
                 "Its typed reason was " + json.dumps(previous_terminal_reason or "choice_required")
                 + ". Explain or restate only why that choice is needed; do not infer missing "
                 "profile, market evidence, or suitability from unrelated tool statuses."
-            )
-        if verified_context and previous_terminal_status == "unavailable":
-            verified_context += (
-                "\nThe preceding answer was withheld, not verified as a conclusion. "
-                "Explain the typed evidence_limit and identify which facts were available "
-                "versus what remains unassessed. Do not defend the rejected conclusion, "
-                "repeat the generic fallback, or present a proposed change as saved. "
-                "You may ask one useful follow-up question."
             )
         current_input: list[dict[str, Any]] = (
             [{"role": "assistant", "content": verified_context}] if verified_context else []

@@ -136,6 +136,8 @@ class FinnResponsesFrontDoor:
             "Lead the conversation: answer directly when general reasoning suffices, ask one "
             "useful follow-up when a choice is missing, and call one or more FINN tools when "
             "the answer needs saved account facts, a personal assessment, or current data. "
+            "For current indicator readings, use get_current_technical_snapshot. A saved "
+            "indicator configuration or its evaluation does not provide current readings. "
             "For a question asking what entry, stop or target is saved, read the selected "
             "setup and linked strategy. An evaluation of plan quality cannot substitute "
             "for that linked-strategy read. "
@@ -157,6 +159,8 @@ class FinnResponsesFrontDoor:
             "Do not evaluate an entire personal plan solely because the trader says 'my plan' "
             "without identifying a saved setup or requesting a personal suitability judgment. "
             "User statements are conversational context, not proof of saved FINN facts. "
+            "If the user describes a hypothetical trade or trade history, explicitly treat "
+            "those details as hypothetical rather than as saved activity. "
             "A short reply to a question you just asked supplies conversational detail; it "
             "does not authorize changing a saved object unless the user explicitly requests that change. "
             "Treat each tool's status, availability, source, as_of and evidence_boundary or "
@@ -165,6 +169,8 @@ class FinnResponsesFrontDoor:
             "A chart timeframe is not a holding horizon. Do not invent a saved object, "
             "market reading, trading outcomes, or cause of unavailable data. A typed object "
             "not-resolved result means no unique owner-scoped object, not a provider outage. "
+            "If a linked strategy was not resolved, say its link is unconfirmed; do not imply "
+            "that a specific saved strategy exists but could not be loaded. "
             "Keep user-stated entry conditions intact; do not suggest any position before "
             "a required condition is met, including a smaller position. "
             "When coaching about a stop-loss, explain the risk without treating a mental "
@@ -1464,7 +1470,10 @@ class FinnResponsesFrontDoor:
                 and not previous_response_id.startswith("guided-")
                 else None
             ),
-            previous_verified_answer=str(verified_turn.get("answer") or "")[:1600] if verified_turn else None,
+            previous_verified_answer=(
+                str(verified_turn.get("answer") or "")[:1600]
+                if verified_turn and verified_turn.get("terminal_status") != "unavailable" else None
+            ),
             previous_tool_availability=tuple(
                 {"scope": str(item.get("scope") or ""),
                  "status": str(item.get("status") or ""),

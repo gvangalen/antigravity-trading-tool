@@ -68,6 +68,62 @@ def _simple_coach_experiment_enabled() -> bool:
     )
 
 
+def _raw_coach_experiment_enabled() -> bool:
+    """Local-only diagnostic switch for the minimal read-answer path."""
+    return (
+        os.getenv("APP_ENV") == "local_finn"
+        and os.getenv("FINN_RAW_COACH_EXPERIMENT") == "1"
+    )
+
+
+def _minimal_read_answers_enabled() -> bool:
+    """Use only typed source checks around model-led, read-only answers."""
+    return os.getenv("FINN_MINIMAL_READ_ANSWERS") == "1" or _raw_coach_experiment_enabled()
+
+
+def _minimal_read_answer(
+    *, message: str, prepared: FinnResponsesFrontDoorResult,
+) -> FinnResponsesVerifiedAnswer:
+    """Keep the model's wording; check only a concrete saved-object type error."""
+    evidence = tuple(
+        item
+        for call in prepared.response.tool_trace
+        for item in (call.get("result") or {}).get("results") or []
+        if isinstance(item, dict)
+    )
+    previous = getattr(prepared, "previous_response", None) or {}
+    previous_targets = (previous.get("turn_contract") or {}).get("targets") or []
+    previous_assets = {
+        str((target.get("evidence") or {}).get("symbol") or "").upper()
+        for target in previous_targets if isinstance(target, dict)
+    }
+    mentioned_assets = mentioned_catalog_symbols(message)
+    if (
+        prepared.response.uses_previous_response
+        and previous.get("terminal_status") == "completed"
+        and (not mentioned_assets or mentioned_assets <= previous_assets)
+    ):
+        evidence += tuple(
+            item
+            for call in previous.get("tool_trace") or []
+            for item in (call.get("result") or {}).get("results") or []
+            if isinstance(item, dict)
+        )
+    text = prepared.response.text.strip()
+    if not FinnResponsesAnswerVerifier._saved_entity_type_supported(
+        text, evidence, user_message=message,
+    ):
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
+            "saved_entity_type_unverified", evidence,
+            rejection_details={"unsupported_claims": {"saved_entity_type": text}},
+        )
+    return FinnResponsesVerifiedAnswer(
+        "completed", text, None, evidence,
+        used_previous_response=prepared.response.uses_previous_response,
+    )
+
+
 def _simple_coach_structural_violations(
     *, text: str, tool_trace: tuple[dict[str, Any], ...], message: str,
     horizon_classification_question: bool = False,
@@ -295,6 +351,8 @@ class FinnV2RunService:
         previous_response: dict[str, Any] | None = None,
         locale: str | None = None,
         model_only_experiment: bool = False,
+        persist_owner_bound_subject: bool = False,
+        minimal_source_boundary: bool = False,
     ) -> None:
         """Publish a verified free-chat read through the same polling/SSE model."""
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -326,6 +384,7 @@ class FinnV2RunService:
             "reasoning_provenance": {
                 "reasoning_source": "responses_tool_loop",
                 "provider_response_id": response_id,
+                **({"answer_boundary": "minimal_typed_source"} if minimal_source_boundary else {}),
                 **({"local_model_only_experiment": True} if model_only_experiment else {}),
             },
         }
@@ -337,7 +396,7 @@ class FinnV2RunService:
         contract_before_terminal = await self.runtime_contracts.get_for_run(run_id=run_id)
         exchange = dict((contract_before_terminal.state_json or {}).get("responses_exchange") or {})
         subject: dict[str, Any] | None = None
-        if status == "completed" and not model_only_experiment:
+        if status == "completed" and (not model_only_experiment or persist_owner_bound_subject):
             current_view = {
                 "terminal_status": "completed",
                 "terminal_kind": exchange.get("answer_kind"),
@@ -1521,10 +1580,19 @@ class FinnV2RunService:
                             monotonic() - responses_stage_started,
                         )
                         read_repair_used = False
+                        minimal_read_used = False
                         final_response_id: str | None = None
                         if prepared.proposal_analysis is None:
                             responses_stage_started = monotonic()
-                            if _simple_coach_experiment_enabled() and prepared.response.text.strip():
+                            if (
+                                _minimal_read_answers_enabled()
+                                and prepared.response.model_led_coach
+                                and prepared.response.answer_kind == "free_text"
+                                and prepared.response.text.strip()
+                            ):
+                                minimal_read_used = True
+                                answer = _minimal_read_answer(message=message, prepared=prepared)
+                            elif _simple_coach_experiment_enabled() and prepared.response.text.strip():
                                 answer, final_response_id, revised_text = await _simple_coach_experiment_answer(
                                     message=message, prepared=prepared,
                                 )
@@ -1601,6 +1669,14 @@ class FinnV2RunService:
                                 read_repair_used = True
                                 if prepared.proposal_analysis is not None:
                                     answer = None
+                                elif (
+                                    _minimal_read_answers_enabled()
+                                    and prepared.response.model_led_coach
+                                    and prepared.response.answer_kind == "free_text"
+                                    and prepared.response.text.strip()
+                                ):
+                                    minimal_read_used = True
+                                    answer = _minimal_read_answer(message=message, prepared=prepared)
                                 elif _simple_coach_experiment_enabled():
                                     answer, final_response_id, revised_text = await _simple_coach_experiment_answer(
                                         message=message, prepared=prepared,
@@ -1628,7 +1704,7 @@ class FinnV2RunService:
                         else:
                             answer = None
                     if answer is not None:
-                        if not prepared.response.model_owned_repair:
+                        if not prepared.response.model_owned_repair and not minimal_read_used:
                             answer = FinnResponsesAnswerVerifier.recover_read_only_coaching(
                                 message=message, result=prepared.response,
                                 answer=answer, locale=prepared.locale,
@@ -1640,7 +1716,12 @@ class FinnV2RunService:
                                 answer=answer,
                                 previous_response=prepared.previous_response,
                                 locale=prepared.locale,
-                                model_only_experiment=_simple_coach_experiment_enabled(),
+                                model_only_experiment=(
+                                    _simple_coach_experiment_enabled()
+                                    or (_raw_coach_experiment_enabled() and minimal_read_used)
+                                ),
+                                persist_owner_bound_subject=minimal_read_used,
+                                minimal_source_boundary=minimal_read_used,
                             )
                         return
 

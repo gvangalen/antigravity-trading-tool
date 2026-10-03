@@ -955,6 +955,7 @@ class FinnResponsesAnswerVerifier:
             r"\b(?:je hebt|jij hebt|you have|du hast|sie haben)\s+"
             r"(?:een|an|eine)\s+(?:(?!setup\b|geen\b|no\b|keine\b|ohne\b)\w+[ -]+){0,5}"
             r"(?:dca[- ]?)?strateg(?:ie|y)\b"
+            r"|\bje\s+opgeslagen\s+(?:dca[- ]?)?strateg(?:ie|y)\b"
             r"|\b(?:jouw|uw|your|dein(?:e|er|em|en|es)?|ihr(?:e|er|em|en|es)?)\s+"
             r"(?:(?:opgeslagen|huidige|actieve|saved|current|active|gespeicherte|aktuelle|aktive)\s+)?"
             r"(?:dca[- ]?)?strateg(?:ie|y)\b"
@@ -2728,7 +2729,7 @@ class FinnResponsesAnswerVerifier:
             previous_response = None
         previous_answer = str((previous_response or {}).get("answer") or "").strip()
         def quantities_supported(
-            text: str, *, general_risk_mechanics: bool = False,
+            text: str, *,
             source_evidence: tuple[dict[str, Any], ...] | None = None,
         ) -> bool:
             checked_evidence = evidence if source_evidence is None else source_evidence
@@ -2777,7 +2778,7 @@ class FinnResponsesAnswerVerifier:
                         for item in checked_evidence
                     ) else frozenset(),
                 )
-                and (general_risk_mechanics or not self._promises_unverified_trading_outcome(text))
+                and not self._promises_unverified_trading_outcome(text)
                 and not self._strategy_levels_attributed_to_setup(text, checked_evidence)
                 and self._saved_entity_type_supported(
                     text,
@@ -3182,9 +3183,13 @@ class FinnResponsesAnswerVerifier:
             compact.append({
                 "scope": "previous_response",
                 "source": "owner_scoped_runtime_contract",
-                "availability": "available",
+                "availability": (
+                    "unavailable" if (previous_response or {}).get("terminal_status") == "unavailable"
+                    else "available"
+                ),
                 "data": {
                     "answer": previous_answer,
+                    "terminal_status": (previous_response or {}).get("terminal_status"),
                     "terminal_reason": previous_clarification_reason or None,
                     "source_evidence": [] if previous_explanation_only else relevant_previous_source_evidence,
                 },
@@ -3818,42 +3823,58 @@ class FinnResponsesAnswerVerifier:
                 "completed", result.text, "source_bound_asset_transfer", evidence,
                 result.uses_previous_response,
             )
-        general_risk_lesson = (
+        # A read-only educational reply with no external claims needs no
+        # second model to judge its style or helpfulness. The model owns this
+        # answer; source-dependent claims still take the evidence path below.
+        source_independent_coaching = (
             result.model_led_coach
             and result.answer_kind == "free_text"
             and not selected_targets
-            and {"stop_distance", "position_size"} <= requested_facts
-            and (
-                contract.get("answer_type") == "weigh"
-                or re.search(r"\b(?:algeme\w*|general|allgemein\w*)\b", message, re.I)
-            )
-            and re.search(r"\b(?:stop\w*|exit\w*)\b", result.text, re.I)
-            and re.search(r"\b(?:positie\w*|omvang|grootte|inzet|aantal|size|units?)\b", result.text, re.I)
-            and not re.search(r"\b\d{2,}(?:[.,]\d+)?\b", result.text)
-            and not re.search(r"\b(?:koers|price|markt|market)\b[^.!?\n]{0,35}\b(?:nu|now|today|vandaag)\b", result.text, re.I)
+            and not contract.get("saved_subject_reference")
+            and not evidence
+            and all(call.get("name") == "answer_directly" for call in result.tool_trace)
             and not re.search(
-                r"\b(?:koop|verkoop|buy|sell|plaats|place|open)\b[^.!?\n]{0,50}"
-                r"\b(?:order|positie|position|trade)\b", result.text, re.I,
-            )
-            and not re.search(
-                r"\b(?:haal|verwijder|schrap|remove|delete)\b[^.!?\n]{0,30}"
-                r"\b(?:stop|stop.loss)\b", result.text, re.I,
-            )
-            and quantities_supported(result.text, general_risk_mechanics=True)
-            and self._assistant_does_not_claim_user_mutation(result.text)
-            and not self._unevaluated_positive_fit_claim(result.text)
-            and not self._ungrounded_level_advice(result.text)
-            and not re.search(
-                r"\b(?:winst|profit|succes|success|kans|chance|risicovrij|risk.free)\b"
-                r"[^.!?\n]{0,40}\b(?:garandeer\w*|guarantee\w*|zeker|certain)\b"
-                r"|\b(?:garandeer\w*|guarantee\w*)\b[^.!?\n]{0,40}"
-                r"\b(?:winst|profit|succes|success|risicovrij|risk.free)\b",
+                r"\b(?:opgeslagen|saved|gespeichert|setup|strateg\w*|profiel|profile|"
+                r"portfolio|rekening|account|saldo|balance|budget|cash|bot)\b",
                 result.text, re.I,
             )
+            and not re.search(r"\b\d{2,}(?:[.,]\d+)?\b", result.text)
+            and not re.search(
+                r"\b(?:nu|vandaag|momenteel|now|today|currently|aktuell|derzeit)\b",
+                result.text, re.I,
+            )
+            and not re.search(
+                r"\b(?:[A-Z]{2,6}|koers|prijs|markt|price|market)\b"
+                r"[^.!?\n]{0,50}\b(?:stijgt|daalt|noteert|rising|falling|trades?)\b",
+                result.text,
+            )
+            and not re.search(
+                r"\b(?:gewijzigd|verwijderd|opgeslagen|aangemaakt|toegevoegd|uitgevoerd|"
+                r"changed|modified|deleted|saved|created|added|executed|"
+                r"geändert|gelöscht|gespeichert|erstellt|ausgeführt)\b",
+                result.text, re.I,
+            )
+            and not re.search(
+                r"\b(?:koop|verkoop|buy|sell|plaats|place|open)\b[^.!?\n]{0,50}"
+                r"\b(?:order|positie|position|trade)\b"
+                r"|\b(?:haal|verwijder|schrap|remove|delete)\b[^.!?\n]{0,30}"
+                r"\b(?:stop|stop.loss)\b",
+                result.text, re.I,
+            )
+            and result.text.strip() != self._fallback_copy(
+                "responses_evidence_not_verified", message=message, locale=locale,
+            )
+            and quantities_supported(result.text)
+            and self._language_matches(result.text, locale)
+            and self._assistant_does_not_claim_user_mutation(result.text)
+            and self._proposal_speaker_is_user(result.text)
+            and not self._unevaluated_positive_fit_claim(result.text)
+            and not self._ungrounded_level_advice(result.text)
+            and not self._promises_unverified_trading_outcome(result.text)
         )
-        if general_risk_lesson:
+        if source_independent_coaching:
             return FinnResponsesVerifiedAnswer(
-                "completed", result.text, "general_risk_education", evidence,
+                "completed", result.text, "source_independent_coaching", evidence,
                 result.uses_previous_response,
             )
         async def verify_text(text: str):
