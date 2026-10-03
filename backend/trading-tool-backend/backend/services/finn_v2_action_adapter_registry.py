@@ -315,6 +315,33 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         raw_payload = dict(change.get("setup_fields") or {})
+        if str(raw_payload.get("setup_type") or "").strip().lower() == "dca":
+            from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
+
+            setup_fields, strategy_fields = split_confirmed_dca_plan(raw_payload)
+            # Keep the execution lifecycle row alive if either domain write
+            # fails. A full session rollback here expires the proposal and
+            # execution objects owned by FinnV2ExecutionService.
+            async with self.session.begin_nested():
+                setup_result = await self.setups.save_setup(
+                    SetupCreateSchema.parse_obj(setup_fields), setup_fields, user_id,
+                    commit=False,
+                )
+                strategy_fields["setup_id"] = setup_result["setup_id"]
+                strategy_result = await self.strategies.save_strategy(
+                    StrategyCreateSchema.parse_obj(strategy_fields), strategy_fields,
+                    user_id, commit=False,
+                )
+            await self.session.commit()
+            await self.setups._mark_setup_step_completed_best_effort(user_id)
+            try:
+                from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
+                await OnboardingRepository(self.session).mark_step_completed(user_id, "default", "strategy")
+            except Exception:
+                logger.warning("DCA plan saved, but strategy onboarding step was not updated")
+            setup_result["strategy_id"] = strategy_result["strategy_id"]
+            setup_result["strategy"] = strategy_result
+            return setup_result
         # FINN's typed contract accepts a user's trading style (for example
         # "swing") while SetupService persists its established execution
         # categories. Keep the original style as metadata and pass only the

@@ -70,6 +70,16 @@ def evaluate_curve(curve: Dict, x_value: float) -> float:
     if x_value is None:
         raise CurveEngineError("x_value ongeldig")
 
+    # A DCA score-band policy uses discrete amounts. Existing curves keep
+    # their established linear interpolation when this field is absent.
+    if curve.get("interpolation") == "step":
+        selected = points[0]
+        for point in points[1:]:
+            if x_value < point["x"]:
+                break
+            selected = point
+        return float(selected["y"])
+
     # -------------------------------------------------
     # Onder minimum → clamp
     # -------------------------------------------------

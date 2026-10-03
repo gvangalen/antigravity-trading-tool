@@ -131,6 +131,20 @@ class FinnV2OperationStateService:
             explicit.pop("timeframe", None)
             if explicit_chart_timeframe:
                 explicit["timeframe"] = explicit_chart_timeframe
+        if (
+            contract.operation_id == "create_setup"
+            and collected.get("setup_type") == "dca"
+            and collected.get("dca_amount_mode") == "fixed"
+            and "base_amount" not in explicit
+            and not re.search(r"\bminim(?:um|ale)\b", message.casefold())
+        ):
+            amounts = re.findall(
+                r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+                message.casefold(),
+            )
+            if len(amounts) == 1:
+                explicit["base_amount"] = self._numeric_value(amounts[0][0] or amounts[0][1])
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
@@ -148,6 +162,29 @@ class FinnV2OperationStateService:
         for key, value in (supplied_inputs or {}).items():
             if is_slot_turn:
                 continue
+            if contract.operation_id == "create_setup" and (
+                explicit.get("setup_type") == "dca" or collected.get("setup_type") == "dca"
+            ):
+                if key in {"dca_amount_mode", "score_source"} and key not in explicit:
+                    continue
+                if key == "min_investment" and "min_investment" not in explicit:
+                    continue
+                if key in {"base_amount", "low_score_percent", "mid_score_percent", "high_score_percent"} and key not in explicit:
+                    continue
+                if key in {"low_threshold", "high_threshold"}:
+                    # Score boundaries must occur in the user's own text.
+                    # Currency amounts do not count as boundary evidence.
+                    without_currency = re.sub(
+                        r"(?:€|eur)\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s*(?:€|eur|euros?|euro)(?!\d)",
+                        " ", message.casefold(),
+                    )
+                    without_currency = re.sub(r"\d+(?:[.,]\d+)?\s*%", " ", without_currency)
+                    number = self._typed_numeric_value(value)
+                    if number is None or not any(
+                        self._typed_numeric_value(token) == number
+                        for token in re.findall(r"\d+(?:[.,]\d+)?", without_currency)
+                    ):
+                        continue
             if key == "timeframe" and contract.operation_id == "create_setup" and model_tool_inputs:
                 continue
             if (
@@ -586,11 +623,63 @@ class FinnV2OperationStateService:
                     values["dca_month_day"] = self._requested_slot_value(
                         field="dca_month_day", text=month_day_match.group(1), contract=contract
                     )
+            if values.get("setup_type") == "dca":
+                smart_amount = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", lowered))
+                fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact)\b", lowered))
+                if smart_amount and not fixed_amount:
+                    values["dca_amount_mode"] = "score_bands"
+                elif fixed_amount and not smart_amount:
+                    values["dca_amount_mode"] = "fixed"
+                if smart_amount:
+                    market_only = re.search(
+                        r"\b(?:alleen|uitsluitend|only)\s+(?:de\s+)?(?:markt\s*score|marktscore|market\s*score)\b",
+                        lowered,
+                    )
+                    if not market_only:
+                        values["score_source"] = "benchmark_score"
+                amounts = re.findall(
+                    r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+                    lowered,
+                )
+                euro_amounts = [self._numeric_value(a or b) for a, b in amounts]
+                if len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", lowered):
+                    values["base_amount"] = euro_amounts[0]
+                if not smart_amount and len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", lowered):
+                    values["dca_amount_mode"] = "fixed"
+                if smart_amount:
+                    # A base-amount declaration may say "€100 is 100%". That
+                    # 100% describes the reference amount, not a score band.
+                    band_text = re.sub(
+                        r"\b(?:basisbedrag|base amount|basisbetrag)\b[^.!?;\n]{0,60}?\b100\s*%",
+                        " ", lowered, count=1,
+                    )
+                    percent_matches = list(re.finditer(r"(\d+(?:[.,]\d+)?)\s*%", band_text))
+                    if len(percent_matches) == 3:
+                        fields = ("low_score_percent", "mid_score_percent", "high_score_percent")
+                        labeled = {}
+                        labels = re.compile(
+                            r"\b(lage|zwakke|low|weak|normale|neutrale|middelste|mid|"
+                            r"hoge|sterke|high|strong)\s+(?:markt\s*)?score\b"
+                        )
+                        for match in percent_matches:
+                            preceding = band_text[max(0, match.start() - 80):match.start()]
+                            nearest = list(labels.finditer(preceding))
+                            if nearest:
+                                label = nearest[-1].group(1)
+                                field = (fields[0] if label in {"lage", "zwakke", "low", "weak"}
+                                         else fields[1] if label in {"normale", "neutrale", "middelste", "mid"}
+                                         else fields[2])
+                                labeled[field] = self._numeric_value(match.group(1))
+                        if len(labeled) == 3:
+                            values.update(labeled)
+                        else:
+                            values.update(zip(fields, (self._numeric_value(match.group(1)) for match in percent_matches)))
             if "min_investment" in accepted_inputs:
                 investment = re.search(
+                    r"\bminim(?:um|ale)\s*(?:investering|inleg|bedrag)?\s*(?:van|is|:|=)?\s*"
                     r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
-                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro))"
-                    r"(?:\s+(?:in|into|in\s+die|investeren\s+in|invest\s+in|anlegen\s+in))?",
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
                     lowered,
                 )
                 if investment:
@@ -756,6 +845,27 @@ class FinnV2OperationStateService:
             return FinnV2SetupInputCatalog.timeframe_from_text(value)
         if field == "setup_type":
             return FinnV2SetupInputCatalog.setup_type_from_text(value)
+        if field == "dca_amount_mode":
+            lowered = value.casefold()
+            if re.search(r"\b(?:smart|score|staffel|variab|custom)\w*\b", lowered):
+                return "score_bands"
+            if re.search(r"\b(?:fixed|vast|vaste|exact)\b", lowered):
+                return "fixed"
+            return None
+        if field == "score_source":
+            lowered = value.casefold().replace(" ", "_")
+            for source, aliases in {
+                "benchmark_score": ("benchmark_score", "benchmarkscore", "benchmark", "gecombineerde_score", "combined_score"),
+                "technical_score": ("technical_score", "technische_score", "technischescore"),
+                "macro_score": ("macro_score", "macroscore", "macro_score"),
+                "setup_score": ("setup_score", "setupscore", "setup_score"),
+            }.items():
+                if any(alias in lowered for alias in aliases):
+                    return source
+            return None
+        if field in {"base_amount", "low_score_percent", "mid_score_percent", "high_score_percent", "low_threshold", "high_threshold"}:
+            number = re.search(r"\d+(?:[.,]\d+)?", value)
+            return self._numeric_value(number.group(0)) if number else None
         if field == "execution_mode":
             return self._canonical_execution_mode(value)
         if field == "changed_fields":

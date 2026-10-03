@@ -195,6 +195,10 @@ class FinnV2ProposalService:
         """
         operation = proposal_input.operation_type
         change = proposal_input.change
+        if operation == "create_setup" and str((change.setup_fields or {}).get("setup_type") or "").lower() == "dca":
+            from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
+
+            split_confirmed_dca_plan(dict(change.setup_fields or {}))
         if operation == "create_strategy":
             strategy_fields = dict(change.strategy_fields or {})
             setup_id = strategy_fields.get("setup_id")

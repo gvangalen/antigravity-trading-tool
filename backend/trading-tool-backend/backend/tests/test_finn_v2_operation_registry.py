@@ -158,7 +158,7 @@ def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_con
 
     assert contract.required_inputs_for({"setup_type": "trade"}) == contract.required_inputs
     assert contract.required_inputs_for({"setup_type": "dca"}) == (
-        "setup_type", "timeframe", "name", "symbol", "dca_frequency",
+        "setup_type", "timeframe", "name", "symbol", "dca_frequency", "dca_amount_mode", "base_amount",
     )
     assert "dca_frequency" in contract.input_fields
     assert "min_investment" in contract.optional_inputs
@@ -182,8 +182,97 @@ def test_create_dca_setup_preserves_explicit_periodic_investment_amount():
         )
         assert supplied["setup_type"] == "dca"
         assert supplied["dca_frequency"] == "weekly"
-        assert supplied["min_investment"] == 150.0
+        assert supplied["base_amount"] == 150.0
+        assert supplied["dca_amount_mode"] == "fixed"
+        assert "min_investment" not in supplied
         assert "timeframe" not in supplied
+
+
+def test_smart_dca_amount_staffel_is_not_stored_as_setup_minimum():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Maak Smart DCA voor BTC: basis €100, bij lage score 50%, midden 100%, hoog 150%.",
+        explicit_asset="BTC",
+    )
+
+    assert supplied["dca_amount_mode"] == "score_bands"
+    assert supplied["base_amount"] == 100
+    assert [supplied[key] for key in ("low_score_percent", "mid_score_percent", "high_score_percent")] == [50, 100, 150]
+    assert "min_investment" not in supplied
+    assert supplied["score_source"] == "benchmark_score"
+
+
+def test_smart_dca_percentages_do_not_consume_adjacent_score_thresholds():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Maak Smart DCA met basis €100: onder score 40 50%, "
+                 "van 40 tot onder 70 100% en vanaf 70 150%. Gebruik de totale benchmark."),
+        explicit_asset="BTC",
+    )
+
+    assert [supplied[key] for key in ("low_score_percent", "mid_score_percent", "high_score_percent")] == [50, 100, 150]
+    assert supplied["score_source"] == "benchmark_score"
+
+
+def test_smart_dca_base_amount_100_percent_is_not_a_fourth_score_band():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Maak Smart DCA voor BTC op 1D. Elke maandag. "
+                 "Basisbedrag €100 is 100%. Gebruik de totale benchmark: "
+                 "onder 40 koop ik 10%, van 40 tot onder 70 100% en vanaf 70 150%."),
+        explicit_asset="BTC",
+    )
+
+    assert supplied["base_amount"] == 100
+    assert [supplied[key] for key in ("low_score_percent", "mid_score_percent", "high_score_percent")] == [10, 100, 150]
+
+
+def test_smart_dca_named_bands_need_not_be_spoken_in_score_order():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Smart DCA BTC: basis €100. Bij normale score 100%, "
+                 "bij lage score 10% en bij hoge score 150%. "
+                 "Onder 40 laag, vanaf 70 hoog. Gebruik de totale benchmark."),
+        explicit_asset="BTC",
+    )
+
+    assert [supplied[key] for key in ("low_score_percent", "mid_score_percent", "high_score_percent")] == [10, 100, 150]
+
+
+def test_model_cannot_invent_dca_score_boundaries_or_minimum():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Maak Smart DCA voor BTC: basis €100, zwak 50%, neutraal 100%, sterk 150%.",
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={
+            "setup_type": "dca", "symbol": "BTC", "score_source": "market_score",
+            "low_threshold": 40, "high_threshold": 70, "min_investment": 50,
+        },
+        model_tool_inputs=True,
+    )
+
+    assert "low_threshold" not in state.collected_inputs
+    assert "high_threshold" not in state.collected_inputs
+    assert "min_investment" not in state.collected_inputs
+    assert state.collected_inputs["score_source"] == "benchmark_score"
+
+
+def test_explicit_market_only_smart_dca_request_cannot_create_confirmable_source():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Maak Smart DCA voor BTC met basis €100, maar gebruik alleen de marktscore.",
+        explicit_asset="BTC",
+    )
+    assert supplied["dca_amount_mode"] == "score_bands"
+    assert "score_source" not in supplied
+    assert contract.allowed_values_for("score_source") == ("benchmark_score",)
 
 
 def test_create_dca_setup_binds_weekday_before_proposal_execution():
@@ -219,8 +308,8 @@ def test_create_dca_setup_binds_weekday_before_proposal_execution():
     )
 
     assert state.collected_inputs["dca_day"] == "monday"
-    assert state.missing_required_inputs == []
-    assert state.next_missing_input is None
+    assert state.missing_required_inputs == ["dca_amount_mode", "base_amount"]
+    assert state.next_missing_input == "dca_amount_mode"
 
 
 def test_create_dca_setup_extracts_compound_weekly_schedule_without_polluting_name():
@@ -240,7 +329,7 @@ def test_create_dca_setup_extracts_compound_weekly_schedule_without_polluting_na
     assert supplied["dca_frequency"] == "weekly"
     assert supplied["dca_day"] == "monday"
     assert contract.required_inputs_for(supplied) == (
-        "setup_type", "timeframe", "name", "symbol", "dca_frequency", "dca_day",
+        "setup_type", "timeframe", "name", "symbol", "dca_frequency", "dca_amount_mode", "base_amount", "dca_day",
     )
     assert FinnV2OperationStateService().explicit_inputs(
         contract=contract,
@@ -287,7 +376,7 @@ def test_runtime_contract_preserves_registry_conditional_inputs():
     )
 
     assert projected["supplied_inputs"]["dca_frequency"] == "daily"
-    assert projected["missing_inputs"] == []
+    assert projected["missing_inputs"] == ["dca_amount_mode", "base_amount"]
 
 
 def test_explicit_setup_duration_wins_over_dca_daily_cadence_word():

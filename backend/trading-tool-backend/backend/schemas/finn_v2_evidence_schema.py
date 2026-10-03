@@ -160,6 +160,15 @@ class LinkedStrategyData(BaseModel):
     base_amount: Optional[float] = None
     setup_name: Optional[str] = None
     setup_type: Optional[str] = None
+    dca_amount_mode: Optional[str] = None
+    score_source: Optional[str] = None
+    score_weights: Optional[Dict[str, float]] = None
+    score_weights_policy: Optional[str] = None
+    low_threshold: Optional[float] = None
+    high_threshold: Optional[float] = None
+    low_score_percent: Optional[float] = None
+    mid_score_percent: Optional[float] = None
+    high_score_percent: Optional[float] = None
 
 
 class LinkedBotData(BaseModel):

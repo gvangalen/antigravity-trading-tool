@@ -1,6 +1,7 @@
 from typing import Dict, Any
 
 from backend.engine.curve_engine import calculate_position_size
+from backend.domain.finn_dca_plan_contract import benchmark_score
 from backend.engine.exposure_engine import (
     compute_exposure_multiplier,
     apply_exposure_to_amount,
@@ -53,7 +54,18 @@ def decide_amount(
             raise DecisionEngineError("Custom mode vereist decision_curve")
 
         input_key = curve.get("input", "market_score")
-        score_value = scores.get(input_key)
+        if (
+            setup.get("setup_type") == "dca"
+            and setup.get("dca_amount_semantics") == "planned_exact"
+            and input_key != "benchmark_score"
+        ):
+            raise DecisionEngineError("Smart DCA requires the total benchmark score")
+        if input_key == "benchmark_score" and curve.get("weights_policy") != "current_user_preferences":
+            raise DecisionEngineError("Benchmark requires current preference weights")
+        score_value = (
+            benchmark_score(scores, scores.get("_benchmark_weights") or {}, scores.get("_source_available") or {})
+            if input_key == "benchmark_score" else scores.get(input_key)
+        )
 
         if not isinstance(score_value, (int, float)):
             raise DecisionEngineError(
@@ -79,7 +91,13 @@ def decide_amount(
 
     setup_score = scores.get("setup_score", scores.get("setup", 10))
 
-    if isinstance(setup_score, (int, float)):
+    exact_dca_amount = (
+        str(setup.get("setup_type") or "").lower() == "dca"
+        and setup.get("dca_amount_semantics") == "planned_exact"
+    )
+    if exact_dca_amount:
+        setup_reason = "DCA planned amount; setup conviction cannot raise or lower its score band"
+    elif isinstance(setup_score, (int, float)):
         if setup_score < 40:
             sized_amount *= 0.5
             setup_reason = "Weak setup → reduced size"
@@ -92,7 +110,11 @@ def decide_amount(
         setup_reason = "No setup score"
 
     # 🔥 FIX: clamp sized_amount (voorkomt extremes)
-    sized_amount = max(0.0, min(float(sized_amount), float(base_amount) * 2))
+    max_planned_multiplier = (
+        float((setup.get("decision_curve") or {}).get("max_multiplier", 3.0))
+        if exact_dca_amount else 2.0
+    )
+    sized_amount = max(0.0, min(float(sized_amount), float(base_amount) * max_planned_multiplier))
 
     # =================================================
     # 2️⃣ Exposure Layer (Regime Risk Control)
@@ -111,6 +133,10 @@ def decide_amount(
 
     # HARD SAFETY RANGE
     multiplier = max(0.0, min(multiplier, 2.0))
+    if exact_dca_amount:
+        # Portfolio safety may cap or suppress a planned DCA contribution,
+        # but may never increase the confirmed amount.
+        multiplier = min(multiplier, 1.0)
 
     final_amount = apply_exposure_to_amount(
         amount=sized_amount,

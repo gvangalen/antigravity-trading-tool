@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any, Dict, Optional
 
 from backend.engine.position_engine import calculate_position
+from backend.domain.finn_dca_plan_contract import benchmark_score
 from backend.engine.market_intelligence_engine import get_market_intelligence
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.engine.trade_plan_engine import build_trade_plan
@@ -59,6 +60,8 @@ def _normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
         "technical_score": _safe_float(scores.get("technical_score", scores.get("technical", 10)), 10.0) or 10.0,
         "market_score": _safe_float(scores.get("market_score", scores.get("market", 10)), 10.0) or 10.0,
         "setup_score": _safe_float(scores.get("setup_score", scores.get("setup", 10)), 10.0) or 10.0,
+        "_source_available": scores.get("_source_available") or {},
+        "_benchmark_weights": scores.get("_benchmark_weights") or {},
     }
 
 
@@ -181,6 +184,7 @@ def _build_action_decision(
     rules: Dict[str, float],
     live_price: Optional[float],
     final_amount: float,
+    planned_dca_amount: bool = False,
 ) -> Dict[str, Any]:
     confidence_score = _safe_float(
         snapshot.get("confidence_score") or snapshot.get("confidence"),
@@ -206,6 +210,18 @@ def _build_action_decision(
             "action": "hold",
             "reason": "No executable size from position engine",
             "intent_note": "Position sizing returned zero",
+            "confidence_score": confidence_score,
+        }
+
+    if setup_type == "dca" and planned_dca_amount:
+        # The confirmed cadence and score band already define the purchase
+        # intent. Generic trade confidence/market gates must not silently
+        # turn a low-score DCA band into a hold. Cash, budget, exposure and
+        # kill-switch limits are still applied by guardrails below.
+        return {
+            "action": "buy",
+            "reason": "Scheduled DCA amount selected from the confirmed plan",
+            "intent_note": "Pending independent cash and risk guardrails",
             "confidence_score": confidence_score,
         }
 
@@ -456,7 +472,41 @@ def run_bot_brain(
         rules=rules,
         live_price=live_price,
         final_amount=suggested_amount,
+        planned_dca_amount=setup.get("dca_amount_semantics") == "planned_exact",
     )
+    if (
+        setup_type == "dca"
+        and setup.get("dca_amount_semantics") == "planned_exact"
+        and setup.get("execution_mode") == "custom"
+    ):
+        score_source = (setup.get("decision_curve") or {}).get("input")
+        source_availability = scores.get("_source_available") or {}
+        if score_source == "benchmark_score":
+            score_ready = benchmark_score(
+                normalized_scores,
+                scores.get("_benchmark_weights") or {},
+                source_availability,
+            ) is not None
+        else:
+            score_ready = False
+        if not score_ready:
+            # The legacy score loader uses 10 as a display fallback. Never
+            # turn that placeholder into a Smart DCA purchase amount.
+            suggested_amount = 0.0
+            position_size = 0.0
+            unsupported_source = score_source != "benchmark_score"
+            setup_result = {
+                "action": "hold",
+                "reason": (
+                    "Smart DCA requires the total benchmark score"
+                    if unsupported_source else "Smart DCA score for this report date is unavailable"
+                ),
+                "intent_note": (
+                    "Update the old market-only Smart DCA plan before buying"
+                    if unsupported_source else "No verified score for the selected amount band"
+                ),
+                "confidence_score": 0.0,
+            }
 
     action = setup_result.get("action", "hold")
     strategy_reason = setup_result.get("reason", "No setup reason")
@@ -484,6 +534,13 @@ def run_bot_brain(
     # -------------------------------------------------
     try:
         proposed_amount = suggested_amount if action == "buy" else 0.0
+        macro_score_for_guardrail = float(normalized_scores.get("macro_score", 50.0))
+        if (
+            setup_type == "dca"
+            and setup.get("dca_amount_semantics") == "planned_exact"
+            and (scores.get("_source_available") or {}).get("macro_score") is not True
+        ):
+            macro_score_for_guardrail = None
 
         guardrails_result = apply_guardrails(
             proposed_amount_eur=proposed_amount,
@@ -503,14 +560,15 @@ def run_bot_brain(
             total_budget_eur=_safe_float(portfolio_context.get("total_budget_eur"), None),
             min_order_eur=_safe_float(portfolio_context.get("min_order_eur"), None),
             backtest_mode=backtest_mode,
-            global_macro_score=float(normalized_scores.get("macro_score", 50.0)),
+            global_macro_score=macro_score_for_guardrail,
         )
 
     except Exception as e:
         logger.warning("Guardrails fallback triggered: %s", e)
+        planned_dca = setup_type == "dca" and setup.get("dca_amount_semantics") == "planned_exact"
         guardrails_result = {
-            "allowed": suggested_amount > 0,
-            "adjusted_amount_eur": round(float(suggested_amount), 2),
+            "allowed": False if planned_dca else suggested_amount > 0,
+            "adjusted_amount_eur": 0.0 if planned_dca else round(float(suggested_amount), 2),
             "original_amount_eur": round(float(suggested_amount), 2),
             "warnings": [],
             "blocked_by": None,
@@ -523,6 +581,11 @@ def run_bot_brain(
         guardrails_result.get("adjusted_amount_eur"),
         suggested_amount,
     ) or 0.0
+    if setup_type == "dca" and setup.get("dca_amount_semantics") == "planned_exact":
+        adjusted_amount = (
+            max(0.0, min(adjusted_amount, suggested_amount))
+            if action == "buy" and guardrails_result.get("allowed") is True else 0.0
+        )
 
     guardrail_reason = (
         guardrails_result.get("blocked_by")

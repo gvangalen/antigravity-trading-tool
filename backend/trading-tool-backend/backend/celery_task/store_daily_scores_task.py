@@ -1,5 +1,6 @@
 import logging
 import json
+import math
 import os
 from celery import shared_task
 
@@ -17,6 +18,25 @@ RULE_BASED_SCORES_LEASE_SECONDS = 30 * 60
 def _jsonb(value):
     """Zorgt dat we altijd geldige JSON naar jsonb casten."""
     return json.dumps(value or [], ensure_ascii=False)
+
+
+def _confirmed_component_score(result):
+    """Do not persist the score engine's display fallback as trading evidence."""
+    score = result.get("total_score")
+    contributions = result.get("scores") or {}
+    if not isinstance(contributions, dict) or type(score) not in {int, float} or not math.isfinite(score):
+        return None
+    if not 0 <= score <= 100:
+        return None
+    if not any(
+        isinstance(entry, dict)
+        and type(entry.get("weight")) in {int, float}
+        and math.isfinite(entry["weight"])
+        and entry["weight"] > 0
+        for entry in contributions.values()
+    ):
+        return None
+    return score
 
 
 def _broker_client():
@@ -121,9 +141,12 @@ def build_daily_scores_for_user(user_id: int):
             technical = generate_scores_db("technical", user_id=user_id, symbol=symbol)
             market = generate_scores_db("market", user_id=user_id, symbol=symbol)
 
-            macro_score = macro.get("total_score", 50)
-            technical_score = technical.get("total_score", 50)
-            market_score = market.get("total_score", 50)
+            # The score engine returns a display fallback of 10 when there
+            # are no scored indicators. Persist NULL instead: an automated
+            # Smart DCA decision must distinguish missing evidence from 10.
+            macro_score = _confirmed_component_score(macro)
+            technical_score = _confirmed_component_score(technical)
+            market_score = _confirmed_component_score(market)
 
             # 🔥 Setup-score UIT setup agent (per asset?)
             # Voorlopig is setup agent nog globaal/per user. 
