@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_CI_PENDING`; Build local gates passed. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; Build local gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | Let Luna answer read-only coach questions with minimal FINN intervention, while retaining owner-scoped evidence and action boundaries. |
 | Candidate branch | `codex/finn-minimal-coach-answer` |
 | Candidate code SHA | `aa7ac7b42f5905089051b3f96964adce28992051` |
-| PR | [#43](https://github.com/gvangalen/antigravity-trading-tool/pull/43) |
-| Production SHA | To verify after Auto Deploy. |
+| PR | [#43](https://github.com/gvangalen/antigravity-trading-tool/pull/43), merged. |
+| Production code SHA | `bc48ecb36e78a35faf66e806b582ad31b8afe64e`; both public surfaces returned HTTP 200 with this SHA at 11:01 UTC on 2026-10-03. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-03 |
 
@@ -43,10 +43,10 @@ The isolated parity stack used PostgreSQL, Redis, API and prefork Celery with sy
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending. |
+| Candidate CI | `PASS`: [PR run 37118063028](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37118063028), all five jobs green. |
+| Main CI | `PASS`: [main run 37118163681](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37118163681), all five jobs green on `bc48ecb36e78a35faf66e806b582ad31b8afe64e`. |
+| Auto Deploy | `PASS`: [run 37118257436](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37118257436) deployed `bc48ecb36e78a35faf66e806b582ad31b8afe64e`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 with `bc48ecb36e78a35faf66e806b582ad31b8afe64e` at 11:01 UTC on 2026-10-03. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
 Local Build evidence supports deployment of this candidate; it does not establish authenticated production coach acceptance.
