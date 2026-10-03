@@ -8,46 +8,50 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate and main CI, Auto Deploy, and public identity checks passed. |
-| Goal | Align FINN and the web UI on bot budget, portfolio valuation, retrieval dates and score source dates without restoring broad answer overrides. |
-| Candidate branch | `codex/finn-portfolio-evidence-alignment` |
-| Candidate code SHA | `34ab48a6` (the source and export commit; this status commit follows it). |
-| PR | [#45](https://github.com/gvangalen/antigravity-trading-tool/pull/45), merged. |
-| Production SHA | `decf2cd8042b29af046acb55edc418ba6b14548e`; both public surfaces returned HTTP 200 with this SHA at 12:35 UTC on 2026-10-03. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
+| Phase | `LOCAL_VALIDATION_COMPLETE`; candidate CI and deployment pending. |
+| Goal | Address the source date missing beside Analyse scores, the zero-quantity bots shown as positions, and the intermittent score-date coach failure without restoring broad answer overrides. |
+| Candidate branch | `codex/finn-score-date-and-positions` |
+| Candidate code SHA | `ca474f270a75f9ba819caf70e5f6308c9554d6b5`; source and frontend export. |
+| PR | Pending. |
+| Production SHA | Prior live QA tested `49e210b5fe5299e59ed76fb1dab8ac6420de56b7`; this candidate has not been deployed. |
 | Release owner | Build |
 | Last updated | 2026-10-03 |
 
-The prior authenticated browser test on `271ffb22fa54b8ae29d2d91255415e7cef859f78` identified the bot budget, portfolio and date discrepancies. Build used synthetic local users only and did not access the protected QA fixture or sealed holdout.
+The user supplied independent authenticated live findings for the prior SHA. Build used synthetic local users only and did not access the protected QA fixture or sealed holdout. The exact failing score-date prompt and live trace were not supplied; the provider failure mechanism in that particular turn remains unproven.
 
 ## Change
 
-- FINN's owner-scoped portfolio tool now exposes a retrieval time separately from the timestamp of market prices. Budget is a limit and cannot fill cash or equity fields.
-- A read-only `/api/portfolio/summary` route uses the same portfolio adapter as FINN. The portfolio card requires that adapter's valuation availability before showing history; a historical snapshot is dated and is not presented as spendable cash.
-- Bot budget labels no longer call a calculated remainder “available”. The portfolio history queries return the most recent window in chronological chart order.
-- Daily scores expose their saved report date; score cards show source dates and avoid treating missing values as zero or a saved score as a current trade signal.
-- Guidance to Luna distinguishes combined plan/market/portfolio questions and keeps internal field names out of user-facing answers. The broad answer verifier remains bypassed for read-only coaching.
+- The Analyse score cards show the oldest source timestamp of the indicator rows used for each displayed score, or say when source dates are incomplete. They distinguish saved context scores from current trading signals. The combined score label comes from those same visible rows.
+- The lower bot portfolio section counts only bots with nonzero net quantity as open positions. When none exist, it says so instead of showing zero-valued positions; bot budget limits remain separate.
+- The score tool reads the latest saved owner-scoped daily report, including an older report, and preserves its report date. Daily-score freshness uses a one-day window.
+- A transient Responses provider failure after read evidence gets at most one retry within the request budget. The response remains model-authored. The default lifecycle deadline is 40 seconds. A typed plan-evaluation tool choice now stays consistent when the model has identified a plan concept.
+- The local coach-regression check no longer treats a statement that a favourable ratio **does not** prove profitability as unsupported positive advice.
 
 ## Local Build Evidence
 
-The isolated parity stack used PostgreSQL, Redis, API and prefork Celery with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`. Selector evaluations used configured `gpt-4o-mini` and do not claim that every model call used Luna.
+The isolated parity stack used PostgreSQL, Redis, API and prefork Celery with synthetic users. FINN chat used `gpt-6-luna` with reasoning `none`; selector evaluations used the configured `gpt-4o-mini` and do not prove that every model call used Luna.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| API/Celery/Responses portfolio regression | Two read-only turns passed; one dispatch and attempt each, no proposals. The shared summary route passed six budget, cash, valuation, date and ownership checks. | `.local-finn-parity-artifacts/portfolio-evidence-candidate-final.json`, SHA-256 `db0d695d21d0d2d739136a0fc085f6d9012d9951d28b6a598a96241813938596`. |
-| Worker-driven safe action contracts | `16/16`; no broker orders, live trading calls or live bots. | `.local-finn-parity-artifacts/portfolio-evidence-actions-final.json`, SHA-256 `bb462d20fc2d7ae8a99a9f2b56559d9e0cbd0a9a98d3d6c0401c6f7f517be373`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/portfolio-evidence-selector-development-final.json`, SHA-256 `a2f2395ac7e38aeeba3af1033f28044d83a8b08f8c0c7971090a3d75dfb043f4`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/portfolio-evidence-selector-regression-final.json`, SHA-256 `35fc3b86e14158ca6d3a97a5e65fbddad94da88b097f32f3766080936cd029fe`. |
-| Backend canonical suite | `3012 passed, 3 skipped` (30 warnings). | `python3 -m pytest -q`. |
+| API/Celery/Responses score-date regression | Two read-only turns passed; latest saved report date and scores in typed evidence and answer; no proposal or false live signal. | `.local-finn-parity-artifacts/score-date-candidate-final.json`, SHA-256 `d54a2b317131f3e74f8fdeaa8f11ffcb2ecd164a73ca62a054f67d6554d23080`. |
+| API/Celery/Responses portfolio control | Two read-only turns passed; bot budget, retrieval date and cash boundary remained correct. | `.local-finn-parity-artifacts/score-date-portfolio-final.json`, SHA-256 `3d1ecf39b18924d1c35329278b002941e94438ab7e502b3155f8bf3d1ebf70a7`. |
+| API/Celery/Responses coach control | Four read-only cases passed, including stop-loss and risk/reward; no proposals or generic fallback. | `.local-finn-parity-artifacts/score-date-coach-corrected-final.json`, SHA-256 `fbe8530189faf8e68200916c0dfd05adda41d730d0a21bb21d7dd8d15e268314`. |
+| Worker-driven safe action contracts | `16/16`; no broker orders, live trading calls or live bots. | `.local-finn-parity-artifacts/score-date-actions-canonical-final.json`, SHA-256 `8fdaf3340a71cc601197a8e398bd916c091484666bcf4621fe707e83e5b8ffa6`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/score-date-selector-development-final.json`, SHA-256 `77313829bb107d0b4794c5f11de58bd90dbc4f67065a39845d92da6a37b96003`. |
+| Real-provider selector regression | `109/109` after the final tool-choice consistency change; zero provider, schema, parse, validation or timeout failures. The first pre-change run had one plan/setup misclassification (`108/109`); its unmodified repeat was `109/109`. | `.local-finn-parity-artifacts/score-date-selector-regression-final.json`, SHA-256 `805f72d87f0e174a5ae3b3659a9ed21e2d5cf931286ffae028e23a29a5a507d9`. |
+| Backend canonical suite | `3016 passed, 3 skipped` (30 warnings). | `python3 -m pytest -q`. |
 | Frontend canonical checks | Passed: `typecheck`, `lint:i18n`, `test:i18n` (8), `test:commands` (5), `audit:high` (0 vulnerabilities), production `build`. | Local Build run. |
+
+An additional legacy 37-case parity matrix completed with all 16 action contracts and 9 lineage cases passing, but its overall result was red: read-only cases expected selector operation IDs that the current model-led chat path did not return. Artifact `.local-finn-parity-artifacts/score-date-actions-final.json`, SHA-256 `4226ad13f8a72b5e7d958762557be95d1c67d397d5712cf4394682bb8c84b968`. This result is **not** counted as a green release gate and needs a separate contract review; the required canonical action matrix above passed.
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [PR run 37123119164](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37123119164), all five jobs green. |
-| Main CI | `PASS`: [main run 37123224534](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37123224534), all five jobs green on `decf2cd8042b29af046acb55edc418ba6b14548e`. |
-| Auto Deploy | `PASS`: [run 37123313968](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37123313968) deployed `decf2cd8042b29af046acb55edc418ba6b14548e`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 with `decf2cd8042b29af046acb55edc418ba6b14548e` at 12:35 UTC on 2026-10-03. |
+| Candidate CI | Pending. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
-Local Build evidence and public identity checks establish deployment of this candidate. They do not establish authenticated production coach acceptance.
+Local Build evidence does not establish authenticated production coach acceptance.
