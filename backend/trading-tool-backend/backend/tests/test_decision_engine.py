@@ -75,3 +75,39 @@ def test_interpolation_mid_point():
 def test_invalid_setup_raises():
     with pytest.raises(Exception):
         decide_amount({}, {"market_score": 50})
+
+
+@pytest.mark.parametrize("market_score,setup_score,expected", [
+    (20, 20, 50.0),
+    (50, 50, 100.0),
+    (80, 80, 150.0),
+])
+def test_confirmed_dca_score_bands_keep_exact_planned_amount(market_score, setup_score, expected):
+    strategy = {
+        "setup_type": "dca",
+        "execution_mode": "custom",
+        "base_amount": 100,
+        "dca_amount_semantics": "planned_exact",
+        "decision_curve": {
+            "input": "market_score",
+            "interpolation": "step",
+            "points": [
+                {"x": 0, "y": 0.5},
+                {"x": 40, "y": 1.0},
+                {"x": 70, "y": 1.5},
+                {"x": 100, "y": 1.5},
+            ],
+        },
+    }
+
+    result = decide_amount(strategy, {"market_score": market_score, "setup_score": setup_score})
+
+    assert result["sized_amount"] == result["final_amount"] == expected
+
+
+def test_confirmed_fixed_dca_does_not_change_with_setup_score():
+    strategy = {"setup_type": "dca", "execution_mode": "fixed", "base_amount": 100,
+                "dca_amount_semantics": "planned_exact"}
+
+    assert decide_amount(strategy, {"market_score": 20, "setup_score": 20})["final_amount"] == 100
+    assert decide_amount(strategy, {"market_score": 80, "setup_score": 80})["final_amount"] == 100

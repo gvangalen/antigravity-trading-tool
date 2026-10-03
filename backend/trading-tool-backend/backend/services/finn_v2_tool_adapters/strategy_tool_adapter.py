@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from backend.schemas.finn_v2_evidence_schema import LinkedStrategyData
@@ -13,6 +14,7 @@ class StrategyToolAdapter:
             targets = [item.strip() for item in targets.split(",") if item.strip()]
         elif not isinstance(targets, list):
             targets = []
+        dca_rule = self._dca_amount_rule(strategy, raw_data)
         payload = LinkedStrategyData(
             strategy_id=strategy.get("id"),
             setup_id=strategy.get("setup_id"),
@@ -28,6 +30,7 @@ class StrategyToolAdapter:
             base_amount=self._coerce_float(strategy.get("base_amount")),
             setup_name=strategy.get("setup_name"),
             setup_type=strategy.get("existing_setup_type") or strategy.get("setup_type"),
+            **dca_rule,
         )
         return {
             "data": payload,
@@ -52,3 +55,36 @@ class StrategyToolAdapter:
             return float(value) if value is not None else None
         except (TypeError, ValueError):
             return None
+
+    def _dca_amount_rule(self, strategy: dict[str, Any], raw_data: dict[str, Any]) -> dict[str, Any]:
+        if raw_data.get("dca_amount_semantics") != "planned_exact":
+            return {}
+        base = self._coerce_float(strategy.get("base_amount"))
+        if base is None:
+            return {}
+        if strategy.get("execution_mode") == "fixed":
+            return {"dca_amount_mode": "fixed"}
+        curve = strategy.get("decision_curve") or raw_data.get("decision_curve")
+        if isinstance(curve, str):
+            try:
+                curve = json.loads(curve)
+            except (TypeError, ValueError):
+                return {}
+        if not isinstance(curve, dict) or curve.get("interpolation") != "step":
+            return {}
+        points = curve.get("points")
+        if not isinstance(points, list) or len(points) < 3:
+            return {}
+        try:
+            ordered = sorted(points, key=lambda point: float(point["x"]))
+            return {
+                "dca_amount_mode": "score_bands",
+                "score_source": curve.get("input"),
+                "low_threshold": float(ordered[1]["x"]),
+                "high_threshold": float(ordered[2]["x"]),
+                "low_score_percent": round(100 * float(ordered[0]["y"]), 2),
+                "mid_score_percent": round(100 * float(ordered[1]["y"]), 2),
+                "high_score_percent": round(100 * float(ordered[2]["y"]), 2),
+            }
+        except (TypeError, ValueError, KeyError):
+            return {}

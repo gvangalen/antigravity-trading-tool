@@ -2445,7 +2445,7 @@ def test_catalog_uses_registry_for_required_and_conditional_inputs():
         "create_dca_plan_proposal",
         {"operation_id": "create_setup", "inputs": {"setup_type": "dca", "symbol": "BTC"}},
     )
-    assert call.missing_inputs == ("timeframe", "name", "dca_frequency")
+    assert call.missing_inputs == ("timeframe", "name", "dca_frequency", "dca_amount_mode", "base_amount")
     assert call.operation_id == "create_setup"
     assert len(catalog.definitions()) == 1 + len(catalog.read_tools) + len(catalog.proposal_operations) + len(catalog.evaluation_contracts)
     assert "answer_directly" not in {item["name"] for item in catalog.definitions()}
@@ -2752,7 +2752,7 @@ def test_model_dca_proposal_uses_existing_guided_input_canonicalization():
         "operation_id": "create_setup", "draft_intent": "new", "inputs": {
             "name": "Build Smoke BTC", "symbol": "BTC", "timeframe": "4H",
             "setup_type": "DCA", "dca_frequency": "wekelijks", "dca_day": "maandag",
-            "min_investment": 100,
+            "dca_amount_mode": "fixed", "base_amount": 100,
         },
     })
     assert call.inputs["setup_type"] == "dca"
@@ -2835,7 +2835,7 @@ def test_proposal_candidate_uses_registry_contract_and_existing_guided_state():
     assert plan.operation_id == "create_setup"
     assert plan.selector_source == "responses_tool_call"
     assert plan.operation_state["collected_inputs"]["symbol"] == "BTC"
-    assert plan.missing_information == ["timeframe", "name", "dca_frequency"]
+    assert plan.missing_information == ["timeframe", "name", "dca_frequency", "dca_amount_mode", "base_amount"]
 
 
 def test_explicit_setup_name_overrides_truncated_model_candidate():
@@ -2997,7 +2997,7 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
         "collected_inputs": {
             "setup_type": "dca", "symbol": "BTC", "timeframe": "4H",
             "name": "Responses Revised 0923", "dca_frequency": "wekelijks",
-            "dca_day": "maandag", "min_investment": 150,
+            "dca_day": "maandag", "dca_amount_mode": "fixed", "base_amount": 150,
         },
         "missing_required_inputs": [],
     }
@@ -3007,7 +3007,7 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
     }}
     call = catalog.validate("create_dca_plan_proposal", {
         "operation_id": "create_setup", "draft_intent": "revise",
-        "inputs": {"min_investment": 100},
+        "inputs": {"base_amount": 100},
     })
     analysis = FinnResponsesProposalSelection().from_call(
         call=call, message="Maak er 100 euro per week van.",
@@ -3016,10 +3016,10 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
     state = analysis.request_plan.operation_state
     assert state["open_proposal_id"] == "proposal-owned-by-conversation"
     assert state["collected_inputs"]["name"] == "Responses Revised 0923"
-    assert state["collected_inputs"]["min_investment"] == 100
+    assert state["collected_inputs"]["base_amount"] == 100
     assert state["missing_required_inputs"] == []
     omitted_intent = catalog.validate("create_dca_plan_proposal", {
-        "operation_id": "create_setup", "inputs": {"min_investment": 100},
+        "operation_id": "create_setup", "inputs": {"base_amount": 100},
     })
     implicit_revision = FinnResponsesProposalSelection().from_call(
         call=omitted_intent, message="Maak er 100 euro per week van.",
@@ -3030,7 +3030,7 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
     assert implicit_revision["missing_required_inputs"] == []
     explicitly_new = catalog.validate("create_dca_plan_proposal", {
         "operation_id": "create_setup", "draft_intent": "new",
-        "inputs": {"setup_type": "dca", "min_investment": 100},
+        "inputs": {"setup_type": "dca", "base_amount": 100},
     })
     new_state = FinnResponsesProposalSelection().from_call(
         call=explicitly_new, message="Maak een nieuwe DCA setup.",
@@ -7978,7 +7978,7 @@ def test_front_door_prepares_existing_action_pipeline_without_writing():
     fake = FakeResponses(
         response("r1", calls=(tool_call("p1", "create_dca_plan_proposal", {
             "operation_id": "create_setup",
-            "inputs": {"setup_type": "dca", "symbol": "BTC", "timeframe": "4H", "name": "DCA test", "dca_frequency": "weekly", "dca_day": "monday"},
+            "inputs": {"setup_type": "dca", "symbol": "BTC", "timeframe": "4H", "name": "DCA test", "dca_frequency": "weekly", "dca_day": "monday", "dca_amount_mode": "fixed", "base_amount": 100},
         }),)),
         response("r2", text="Ik heb je DCA-concept voorbereid; bevestig nog niets."),
     )
@@ -7993,7 +7993,7 @@ def test_front_door_prepares_existing_action_pipeline_without_writing():
 
     front.reads = no_reads
     result = asyncio.run(front.run(
-        message="Maak een BTC DCA-setup op 4H met de naam DCA test, wekelijks op maandag.", instructions="Gebruik tools",
+        message="Maak een BTC DCA-setup op 4H met de naam DCA test, wekelijks op maandag voor 100 euro.", instructions="Gebruik tools",
         conversation_context={}, verified_asset="BTC",
     ))
     assert result.proposal_analysis.request_plan.operation_id == "create_setup"

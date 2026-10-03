@@ -239,6 +239,7 @@ class StrategyService:
         user_id: int,
         *,
         allow_incomplete_trade_draft: bool = False,
+        commit: bool = True,
     ):
         raw_data = self.normalize_strategy_payload(raw_data)
         execution_mode = payload.execution_mode.lower()
@@ -309,10 +310,10 @@ class StrategyService:
         raw_data["setup_name"] = setup_row.get("name")
 
         strategy_id = await self.repository.create_strategy(insert_payload, curve_id, raw_data, user_id)
-        await self.session.commit()
-        
-        from backend.services.onboarding_service import mark_step_completed
-        await mark_step_completed(user_id, "strategy", self.session)
+        if commit:
+            await self.session.commit()
+            from backend.services.onboarding_service import mark_step_completed
+            await mark_step_completed(user_id, "strategy", self.session)
         return {
             "id": strategy_id,
             "strategy_id": strategy_id,

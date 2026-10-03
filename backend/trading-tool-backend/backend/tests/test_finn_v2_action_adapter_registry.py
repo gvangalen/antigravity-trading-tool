@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 
 import pytest
 from types import SimpleNamespace
@@ -43,6 +44,68 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
         "user_id": 390,
         "symbol": "ETH",
     }
+
+
+def test_confirmed_dca_creates_setup_and_strategy_in_one_transaction(monkeypatch):
+    monkeypatch.setattr("backend.infrastructure.repositories.onboarding_repository.OnboardingRepository.mark_step_completed", AsyncMock())
+    @asynccontextmanager
+    async def savepoint():
+        yield
+
+    session = SimpleNamespace(commit=AsyncMock(), begin_nested=savepoint)
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_setup_changes_enabled = lambda: True
+    registry.setups.save_setup = AsyncMock(return_value={"setup_id": 91, "name": "BTC Smart"})
+    registry.setups._mark_setup_step_completed_best_effort = AsyncMock()
+    registry.strategies.save_strategy = AsyncMock(return_value={"strategy_id": 92})
+
+    result = asyncio.run(registry._create_setup(390, {"change": {"setup_fields": {
+        "name": "BTC Smart", "symbol": "BTC", "timeframe": "1D", "setup_type": "dca",
+        "dca_frequency": "weekly", "dca_day": "monday", "dca_amount_mode": "score_bands",
+        "base_amount": 100,
+        "score_source": "market_score", "low_threshold": 40, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
+    }}}))
+
+    assert result["setup_id"] == 91
+    assert result["strategy_id"] == 92
+    setup_args, setup_kwargs = registry.setups.save_setup.await_args
+    assert setup_kwargs == {"commit": False}
+    assert "low_score_percent" not in setup_args[1]
+    strategy_args, strategy_kwargs = registry.strategies.save_strategy.await_args
+    assert strategy_kwargs == {"commit": False}
+    assert strategy_args[1]["setup_id"] == 91
+    assert strategy_args[1]["decision_curve"]["interpolation"] == "step"
+    session.commit.assert_awaited_once()
+
+
+def test_failed_dca_strategy_write_rolls_back_the_setup():
+    events = []
+
+    @asynccontextmanager
+    async def savepoint():
+        events.append("begin")
+        try:
+            yield
+        except Exception:
+            events.append("rollback_to_savepoint")
+            raise
+
+    session = SimpleNamespace(commit=AsyncMock(), begin_nested=savepoint)
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_setup_changes_enabled = lambda: True
+    registry.setups.save_setup = AsyncMock(return_value={"setup_id": 91})
+    registry.strategies.save_strategy = AsyncMock(side_effect=ValueError("strategy_failed"))
+
+    with pytest.raises(ValueError, match="strategy_failed"):
+        asyncio.run(registry._create_setup(390, {"change": {"setup_fields": {
+            "name": "BTC Fixed", "symbol": "BTC", "timeframe": "1D", "setup_type": "dca",
+            "dca_frequency": "weekly", "dca_day": "monday",
+            "dca_amount_mode": "fixed", "base_amount": 100,
+        }}}))
+
+    assert events == ["begin", "rollback_to_savepoint"]
+    session.commit.assert_not_awaited()
 
 
 def test_watchlist_add_keeps_write_when_initial_twelve_data_snapshot_is_pending():

@@ -3182,6 +3182,17 @@
     }
   },
   "assistant": {
+    "dcaDraft": {
+      "baseAmount": "Basisbedrag (100%): {amount}",
+      "smartTitle": "Smart DCA · scoregestuurde bedragen",
+      "scoreSource": "Scorebron: {source}",
+      "sourceMissing": "nog te kiezen",
+      "below": "Score onder {threshold}: {percent}% = {amount}",
+      "between": "Score {low} tot onder {high}: {percent}% = {amount}",
+      "above": "Score vanaf {threshold}: {percent}% = {amount}",
+      "safetyNote": "Dit zijn geplande bedragen. Een ontbrekende score of veiligheidslimiet kan een aankoop tegenhouden of verlagen.",
+      "planOnly": "Bevestigen slaat de setup en strategie op. Er wordt geen bot gestart en geen aankoop gedaan."
+    },
     "surfaceStatus": {
       "active": "actief",
       "balanced": "gebalanceerd",

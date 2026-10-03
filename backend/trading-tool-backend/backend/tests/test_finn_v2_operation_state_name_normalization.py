@@ -25,7 +25,7 @@ def test_create_setup_recovers_explicit_timeframe_when_model_tool_omits_it():
     )
 
     assert state.collected_inputs["timeframe"] == "4H"
-    assert state.missing_required_inputs == []
+    assert state.missing_required_inputs == ["dca_amount_mode", "base_amount"]
 
 
 def test_setup_name_drops_broader_english_non_persistence_clause():

@@ -283,7 +283,8 @@ class SetupService:
             except (ValueError, TypeError):
                 raise HTTPException(400, "min_investment mag niet negatief zijn.")
 
-    async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int) -> dict:
+    async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int,
+                         *, commit: bool = True) -> dict:
         defaulted_score_fields = []
         for field, value in self.SETUP_SCORE_DEFAULTS.items():
             if raw_payload.get(field) is None:
@@ -314,8 +315,9 @@ class SetupService:
 
         # Use the raw dict directly because of the hybrid strategy
         setup_id = await self.repository.create_setup(raw_payload, user_id, tags)
-        await self.session.commit()
-        await self._mark_setup_step_completed_best_effort(user_id)
+        if commit:
+            await self.session.commit()
+            await self._mark_setup_step_completed_best_effort(user_id)
 
         created = await self.repository.get_setup_by_id(setup_id, user_id)
         return {

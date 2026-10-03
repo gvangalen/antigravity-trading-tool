@@ -5276,8 +5276,11 @@ function AIAssistantContent({
     const humanValue = (value) => valueLabels[String(value || "").toLowerCase()] || value;
     const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = [humanValue(supplied.dca_frequency), humanValue(supplied.dca_day || supplied.dca_month_day)].filter(Boolean).join(" · ");
-    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "bedrag" };
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "scorebron", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
+    const euro = (value) => new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
+    const scoreLabels = { market_score: "marktscore" };
+    const isSmartDca = supplied.setup_type === "dca" && supplied.dca_amount_mode === "score_bands";
     return (
       <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
         <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{at("draftCards.setupTitle", "Concept setup")}</div>
@@ -5287,7 +5290,19 @@ function AIAssistantContent({
           {contextLine && <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>}
         </div>
         {frequency && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">Frequentie: <span className="font-semibold">{frequency}</span></p>}
-        {supplied.min_investment != null && supplied.min_investment !== "" && <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">Bedrag: <span className="font-semibold">{new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(supplied.min_investment))}</span></p>}
+        {supplied.min_investment != null && supplied.min_investment !== "" && <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">Minimuminvestering: <span className="font-semibold">{euro(supplied.min_investment)}</span></p>}
+        {supplied.setup_type === "dca" && supplied.base_amount != null && <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{at("dcaDraft.baseAmount", "Basisbedrag (100%): {amount}", { amount: euro(supplied.base_amount) })}</p>}
+        {isSmartDca && <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-200">
+          <p className="font-semibold">{at("dcaDraft.smartTitle", "Smart DCA · scoregestuurde bedragen")}</p>
+          <p className="mt-1">{at("dcaDraft.scoreSource", "Scorebron: {source}", { source: scoreLabels[supplied.score_source] || at("dcaDraft.sourceMissing", "nog te kiezen") })}</p>
+          {supplied.base_amount != null && supplied.low_threshold != null && supplied.high_threshold != null && supplied.low_score_percent != null && supplied.mid_score_percent != null && supplied.high_score_percent != null && <ul className="mt-2 space-y-1">
+            <li>{at("dcaDraft.below", "Score onder {threshold}: {percent}% = {amount}", { threshold: supplied.low_threshold, percent: supplied.low_score_percent, amount: euro(supplied.base_amount * supplied.low_score_percent / 100) })}</li>
+            <li>{at("dcaDraft.between", "Score {low} tot onder {high}: {percent}% = {amount}", { low: supplied.low_threshold, high: supplied.high_threshold, percent: supplied.mid_score_percent, amount: euro(supplied.base_amount * supplied.mid_score_percent / 100) })}</li>
+            <li>{at("dcaDraft.above", "Score vanaf {threshold}: {percent}% = {amount}", { threshold: supplied.high_threshold, percent: supplied.high_score_percent, amount: euro(supplied.base_amount * supplied.high_score_percent / 100) })}</li>
+          </ul>}
+          <p className="mt-2 text-xs">{at("dcaDraft.safetyNote", "Dit zijn geplande bedragen. Een ontbrekende score of veiligheidslimiet kan een aankoop tegenhouden of verlagen.")}</p>
+        </div>}
+        {supplied.setup_type === "dca" && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{at("dcaDraft.planOnly", "Bevestigen slaat de setup en strategie op. Er wordt geen bot gestart en geen aankoop gedaan.")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, "setup")}</div>
       </div>

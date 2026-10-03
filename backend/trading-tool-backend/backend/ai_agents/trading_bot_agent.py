@@ -1,6 +1,7 @@
 # backend/ai_agents/trading_bot_agent.py
 import logging
 import json
+import math
 from datetime import date
 from typing import Any, Dict, List, Optional
 
@@ -394,7 +395,7 @@ def _get_strategy_setup_payload(
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT base_amount, execution_mode, decision_curve, setup_type
+            SELECT base_amount, execution_mode, decision_curve, setup_type, data
             FROM strategies
             WHERE id=%s AND user_id=%s
             LIMIT 1
@@ -413,7 +414,7 @@ def _get_strategy_setup_payload(
             "setup_type": "unknown",
         }
 
-    base_amount, execution_mode, decision_curve, setup_type = row
+    base_amount, execution_mode, decision_curve, setup_type, strategy_data = row
 
     # =====================================================
     # NORMALIZE VALUES
@@ -425,6 +426,7 @@ def _get_strategy_setup_payload(
 
     execution_mode = (execution_mode or "fixed").lower().strip()
     curve = _safe_json(decision_curve, {}) if decision_curve is not None else {}
+    stored_data = _safe_json(strategy_data, {}) if strategy_data is not None else {}
 
     raw_type = (setup_type or "").lower().strip()
 
@@ -449,6 +451,8 @@ def _get_strategy_setup_payload(
 
     if execution_mode == "custom":
         payload["decision_curve"] = curve or {}
+    if stored_data.get("dca_amount_semantics") == "planned_exact" and normalized_type == "dca":
+        payload["dca_amount_semantics"] = "planned_exact"
 
     return payload
 
@@ -592,7 +596,10 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
               s.setup_type,   -- ✅ FIX
               st.id           AS setup_id,
               st.symbol,
-              st.timeframe
+              st.timeframe,
+              st.dca_frequency,
+              st.dca_day,
+              st.dca_month_day
 
             FROM bot_configs b
             JOIN strategies s ON s.id = b.strategy_id
@@ -624,6 +631,9 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
             setup_id,
             symbol,
             timeframe,
+            dca_frequency,
+            dca_day,
+            dca_month_day,
         ) = r
 
         bots.append(
@@ -641,6 +651,9 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
                 "setup_id": setup_id,
                 "symbol": (symbol or DEFAULT_SYMBOL).upper(),
                 "timeframe": timeframe,
+                "dca_frequency": dca_frequency,
+                "dca_day": dca_day,
+                "dca_month_day": dca_month_day,
                 "last_run": last_run.isoformat() if last_run else None,
                 "budget": {
                     "total_eur": float(budget_total_eur or 0),
@@ -737,15 +750,29 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
         row = cur.fetchone()
 
     if not row:
-        return dict(macro=10.0, technical=10.0, market=10.0, setup=10.0)
+        return dict(macro=10.0, technical=10.0, market=10.0, setup=10.0,
+                    _source_available={"macro_score": False, "technical_score": False,
+                                       "market_score": False, "setup_score": False})
 
     macro, technical, market, setup = row
+
+    def available(value: Any) -> bool:
+        try:
+            return value is not None and math.isfinite(float(value))
+        except (TypeError, ValueError):
+            return False
 
     return {
         "macro": _clamp_score(macro, default=10),
         "technical": _clamp_score(technical, default=10),
         "market": _clamp_score(market, default=10),
         "setup": _clamp_score(setup, default=10),
+        "_source_available": {
+            "macro_score": available(macro),
+            "technical_score": available(technical),
+            "market_score": available(market),
+            "setup_score": available(setup),
+        },
     }
 
 
@@ -1296,6 +1323,16 @@ def _persist_decision_and_order(
         "monitoring": decision.get("monitoring"),
         "alerts_active": decision.get("alerts_active"),
     }
+    if decision.get("dca_amount_semantics") == "planned_exact":
+        source = decision.get("score_source")
+        available = (scores.get("_source_available") or {}).get(source) is True if source else None
+        scores_payload["dca_policy"] = {
+            "score_source": source,
+            "source_available": available,
+            "source_score": scores.get("market") if source == "market_score" and available else None,
+            "planned_amount_eur": decision.get("requested_amount_eur"),
+            "applied_amount_eur": amount_eur,
+        }
 
     with conn.cursor() as cur:
         cur.execute(
@@ -1442,6 +1479,28 @@ def run_trading_bot_agent(
                 symbol=symbol,
             )
 
+            if setup_payload.get("dca_amount_semantics") == "planned_exact":
+                from backend.domain.finn_dca_plan_contract import dca_due_on_date
+
+                if not dca_due_on_date(bot, report_date):
+                    continue
+                with conn.cursor() as cur:
+                    # Serialize runs for this owner and bot until the paper
+                    # decision and order commit. A second worker must observe
+                    # the first execution before considering another buy.
+                    cur.execute(
+                        "SELECT pg_advisory_xact_lock(%s, %s)",
+                        (user_id, bot["bot_id"]),
+                    )
+                    cur.execute(
+                        """SELECT 1 FROM bot_decisions
+                           WHERE user_id=%s AND bot_id=%s AND decision_date=%s
+                             AND status='executed' LIMIT 1""",
+                        (user_id, bot["bot_id"], report_date),
+                    )
+                    if cur.fetchone():
+                        continue
+
             if setup_payload.get("symbol"):
                 symbol = setup_payload.get("symbol").upper()
 
@@ -1501,6 +1560,7 @@ def run_trading_bot_agent(
                     "technical_score": scores.get("technical"),
                     "market_score": scores.get("market"),
                     "setup_score": scores.get("setup"),
+                    "_source_available": scores.get("_source_available"),
                 },
                 portfolio_context=portfolio_context,
             )
@@ -1557,8 +1617,10 @@ def run_trading_bot_agent(
 
                 "amount_eur": round(float(brain.get("amount_eur") or 0), 2),
                 "requested_amount_eur": round(
-                    float(brain.get("debug", {}).get("final_amount") or 0), 2
+                    float(brain.get("debug", {}).get("suggested_amount") or 0), 2
                 ),
+                "dca_amount_semantics": setup_payload.get("dca_amount_semantics"),
+                "score_source": (setup_payload.get("decision_curve") or {}).get("input"),
 
                 "base_amount": brain.get("base_amount") or setup_payload.get("base_amount"),
                 "execution_mode": setup_payload.get("execution_mode"),

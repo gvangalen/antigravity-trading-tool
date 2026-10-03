@@ -3119,6 +3119,17 @@
     }
   },
   "assistant": {
+    "dcaDraft": {
+      "baseAmount": "Base amount (100%): {amount}",
+      "smartTitle": "Smart DCA · score based amounts",
+      "scoreSource": "Score source: {source}",
+      "sourceMissing": "to be selected",
+      "below": "Score below {threshold}: {percent}% = {amount}",
+      "between": "Score {low} to below {high}: {percent}% = {amount}",
+      "above": "Score from {threshold}: {percent}% = {amount}",
+      "safetyNote": "These are planned amounts. A missing score or safety limit can prevent or reduce a purchase.",
+      "planOnly": "Confirming saves the setup and strategy. It does not start a bot or make a purchase."
+    },
     "surfaceStatus": {
       "active": "active",
       "balanced": "balanced",

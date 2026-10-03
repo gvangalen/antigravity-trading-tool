@@ -79,7 +79,13 @@ def decide_amount(
 
     setup_score = scores.get("setup_score", scores.get("setup", 10))
 
-    if isinstance(setup_score, (int, float)):
+    exact_dca_amount = (
+        str(setup.get("setup_type") or "").lower() == "dca"
+        and setup.get("dca_amount_semantics") == "planned_exact"
+    )
+    if exact_dca_amount:
+        setup_reason = "DCA planned amount; setup conviction cannot raise or lower its score band"
+    elif isinstance(setup_score, (int, float)):
         if setup_score < 40:
             sized_amount *= 0.5
             setup_reason = "Weak setup → reduced size"
@@ -92,7 +98,11 @@ def decide_amount(
         setup_reason = "No setup score"
 
     # 🔥 FIX: clamp sized_amount (voorkomt extremes)
-    sized_amount = max(0.0, min(float(sized_amount), float(base_amount) * 2))
+    max_planned_multiplier = (
+        float((setup.get("decision_curve") or {}).get("max_multiplier", 3.0))
+        if exact_dca_amount else 2.0
+    )
+    sized_amount = max(0.0, min(float(sized_amount), float(base_amount) * max_planned_multiplier))
 
     # =================================================
     # 2️⃣ Exposure Layer (Regime Risk Control)
@@ -111,6 +121,10 @@ def decide_amount(
 
     # HARD SAFETY RANGE
     multiplier = max(0.0, min(multiplier, 2.0))
+    if exact_dca_amount:
+        # Portfolio safety may cap or suppress a planned DCA contribution,
+        # but may never increase the confirmed amount.
+        multiplier = min(multiplier, 1.0)
 
     final_amount = apply_exposure_to_amount(
         amount=sized_amount,
