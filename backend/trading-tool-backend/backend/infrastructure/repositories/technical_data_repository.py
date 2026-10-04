@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete, Date, text
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.infrastructure.models import (
@@ -771,7 +771,8 @@ class TechnicalDataRepository:
         advies: str,
         uitleg: str,
         user_id: int,
-        symbol: str = "BTC"
+        symbol: str = "BTC",
+        observed_at: datetime | None = None,
     ) -> TechnicalDataIndicator:
         new_ind = TechnicalDataIndicator(
             indicator=name,
@@ -781,7 +782,12 @@ class TechnicalDataRepository:
             uitleg=uitleg,
             user_id=user_id,
             symbol=symbol,
-            timestamp=datetime.utcnow()
+            # SQLAlchemy's column default turns None into the ingestion time.
+            # Use an explicit stale sentinel when the provider has no source
+            # candle, so Smart DCA cannot mistake receipt time for evidence.
+            timestamp=(observed_at.astimezone(timezone.utc).replace(tzinfo=None)
+                       if getattr(observed_at, "tzinfo", None) is not None
+                       else observed_at or datetime(1970, 1, 1))
         )
         self.session.add(new_ind)
         # Flush to get the ID back immediately

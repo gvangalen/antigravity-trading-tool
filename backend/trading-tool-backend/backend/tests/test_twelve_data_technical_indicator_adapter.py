@@ -33,6 +33,45 @@ def test_provider_symbol_normalizes_crypto_pairs_for_twelve_data():
     assert adapter._provider_symbol(_asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")) == "AAPL"
 
 
+def test_technical_reading_carries_underlying_candle_date():
+    import asyncio
+
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    async def value(_asset, _indicator):
+        return 54.0
+
+    async def candles(_symbol):
+        return [{"close": 100.0, "source_time": "2026-10-02"}]
+
+    adapter.fetch_indicator_value = value
+    adapter._get_twelve_data_candles = candles
+    reading = asyncio.run(adapter.fetch_indicator_reading(
+        _asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock"), "rsi",
+    ))
+    assert reading["value"] == 54.0
+    assert reading["observed_at"].date().isoformat() == "2026-10-02"
+
+
+def test_crypto_technical_reading_uses_exchange_candle_time():
+    import asyncio
+
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="")
+    adapter.api_key = ""
+
+    async def value(_asset, _indicator):
+        return 48.0
+
+    async def candles(_symbol):
+        return [{"close": 100.0, "source_time": 1790985600000}]
+
+    adapter.fetch_indicator_value = value
+    adapter._get_binance_candles = candles
+    reading = asyncio.run(adapter.fetch_indicator_reading(_asset(), "rsi"))
+    assert reading["value"] == 48.0
+    assert reading["observed_at"] is not None
+
+
 def test_twelve_data_transport_does_not_log_query_parameter_credentials():
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
 

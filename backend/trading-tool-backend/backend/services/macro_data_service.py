@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import date, datetime, time
 from typing import List, Optional, Dict, Any
 from types import SimpleNamespace
 
@@ -278,6 +279,7 @@ class MacroDataService:
 
         # Get value
         value = payload_value
+        source_observed_at = None
         if value is None:
             # Dynamically fetch
             try:
@@ -291,6 +293,13 @@ class MacroDataService:
                     raise HTTPException(500, f"Geen waarde ontvangen voor '{indicator_name}'")
 
                 value = _extract_numeric_result(result)
+                if str(info.source or "").lower() == "fred":
+                    try:
+                        source_observed_at = datetime.combine(
+                            date.fromisoformat(str(result.get("observed_at") or "")), time.min,
+                        )
+                    except (AttributeError, TypeError, ValueError):
+                        raise HTTPException(503, f"Bronperiode ontbreekt voor '{indicator_name}'.")
             except HTTPException:
                 raise
             except Exception as e:
@@ -315,7 +324,8 @@ class MacroDataService:
             action=action,
             score=score,
             symbol=normalized_symbol,
-            user_id=user_id
+            user_id=user_id,
+            **({"timestamp": source_observed_at} if source_observed_at is not None else {}),
         )
         saved_record = await self.repository.add_macro_data(record)
 

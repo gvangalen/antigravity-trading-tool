@@ -727,6 +727,30 @@ class FinnResponsesFrontDoor:
                     "reason": call.inputs["reason"],
                     "question": call.inputs["question"],
                 }
+            if call.name == "get_open_dca_draft":
+                revision = dict(conversation_context.get("proposal_revision") or {})
+                guided_draft = dict(revision.get("guided_state") or {})
+                fields = dict(guided_draft.get("collected_inputs") or {})
+                if (
+                    revision.get("operation_id") != "create_setup"
+                    or guided_draft.get("open_proposal_id") != revision.get("proposal_id")
+                    or str(fields.get("setup_type") or "").lower() != "dca"
+                ):
+                    return {"status": "unavailable", "reason": "open_dca_draft_not_found"}
+                draft_read = {
+                    "status": "completed",
+                    "results": [{
+                        "scope": "read_open_dca_draft", "status": "completed",
+                        "data": {
+                            "confirmed": False,
+                            "saved": False,
+                            "fields": {key: value for key, value in fields.items() if not key.endswith("_id")},
+                            "missing_benchmark_component_policy": "hold_without_purchase",
+                        },
+                    }],
+                }
+                read_context.append(draft_read)
+                return draft_read
             should_check = (
                 not pending_operation
                 and not resuming_clarification
@@ -1528,6 +1552,8 @@ class FinnResponsesFrontDoor:
             force_read_repair=force_read_repair,
             rejection_feedback=rejection_feedback,
             model_led_coach=getattr(self, "model_led_coach", False),
+            read_only_turn=is_read_request,
+            open_draft_available=bool(conversation_context.get("proposal_revision")),
         )
         logger.info("FINN Responses tool loop completed in %.2fs", monotonic() - loop_started)
         if (
@@ -1540,6 +1566,7 @@ class FinnResponsesFrontDoor:
             and getattr(self, "model_led_coach", False)
             and not _hypothetical_trade_reflection(message)
             and not _read_only_stop_loss_coaching(message)
+            and not is_read_request
         ):
             action_contracts = []
             for contract in self.proposals.registry.list():

@@ -41,7 +41,7 @@ def test_sp500_fred_returns_last_csv_value(monkeypatch):
         link="fred:SP500",
     )
 
-    assert result == {"value": 7733.85}
+    assert result == {"value": 7733.85, "observed_at": "2026-08-06"}
 
 
 def test_sp500_legacy_fred_json_url_returns_last_value(monkeypatch):
@@ -57,7 +57,7 @@ def test_sp500_legacy_fred_json_url_returns_last_value(monkeypatch):
         link="https://api.stlouisfed.org/fred/series/observations?series_id=SP500&api_key=old-key&file_type=json",
     )
 
-    assert result == {"value": 7709.96}
+    assert result == {"value": 7709.96, "observed_at": "2026-08-06"}
 
 
 def test_vix_fred_skips_blank_rows(monkeypatch):
@@ -73,7 +73,7 @@ def test_vix_fred_skips_blank_rows(monkeypatch):
         link="fred:VIXCLS",
     )
 
-    assert result == {"value": 15.15}
+    assert result == {"value": 15.15, "observed_at": "2026-08-07"}
 
 
 def test_inflation_rate_uses_cpi_year_over_year(monkeypatch):
@@ -104,7 +104,7 @@ def test_inflation_rate_uses_cpi_year_over_year(monkeypatch):
         link="fred:CPIAUCSL",
     )
 
-    assert result == {"value": pytest.approx(((332.568 / 320.0) - 1.0) * 100.0)}
+    assert result == {"value": pytest.approx(((332.568 / 320.0) - 1.0) * 100.0), "observed_at": "2026-06-01"}
 
 
 def test_inflation_rate_legacy_fred_json_url_uses_year_over_year(monkeypatch):
@@ -135,7 +135,7 @@ def test_inflation_rate_legacy_fred_json_url_uses_year_over_year(monkeypatch):
         link="https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=old-key&file_type=json",
     )
 
-    assert result == {"value": pytest.approx(((332.568 / 320.0) - 1.0) * 100.0)}
+    assert result == {"value": pytest.approx(((332.568 / 320.0) - 1.0) * 100.0), "observed_at": "2026-06-01"}
 
 
 def test_gold_prefers_twelve_data_when_configured(monkeypatch):

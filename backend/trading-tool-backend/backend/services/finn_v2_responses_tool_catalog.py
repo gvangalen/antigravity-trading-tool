@@ -219,6 +219,19 @@ class FinnResponsesToolCatalog:
                     "additionalProperties": False,
                 },
             })
+        definitions.append({
+            "type": "function",
+            "name": "get_open_dca_draft",
+            "description": (
+                "Read the latest owner-scoped, unconfirmed DCA proposal in this conversation. "
+                "Use for questions about its staffel, base amount or hypothetical score, "
+                "including follow-ups after a coach answer. This is a draft, not a saved plan "
+                "or an instruction to buy. If a benchmark component is missing, Smart DCA "
+                "cannot compute a planned amount and must hold."
+            ),
+            "strict": True,
+            "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        })
         for contract in self.evaluation_contracts.values():
             optional_properties = {}
             if "hypothetical_change" in contract.optional_inputs:
@@ -379,6 +392,10 @@ class FinnResponsesToolCatalog:
             return FinnResponsesToolCall(name, None, {
                 "question": question.strip(), "reason": arguments["reason"],
             }, (), (), ())
+        if name == "get_open_dca_draft":
+            if arguments:
+                raise FinnResponsesToolError("draft_read_arguments_invalid")
+            return FinnResponsesToolCall(name, None, {}, (), (), ())
         if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
             if name in self.evaluation_contracts:

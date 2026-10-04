@@ -70,7 +70,14 @@ class FinnResponsesProposalSelection:
                 inputs["timeframe"] = explicit_timeframe
             elif not dict(conversation_context.get("active_guided_operation") or {}):
                 inputs.pop("timeframe", None)
-        mentioned_assets = mentioned_catalog_symbols(message)
+        # A correction such as "for ETH, not BTC" names two catalog assets,
+        # but only one is a candidate for the proposed object. Keep the
+        # conservative multi-asset guard for genuinely positive mentions.
+        positive_message = re.sub(
+            r"\b(?:niet|not|geen|kein)\s+[A-Za-z0-9]+(?:/[A-Za-z0-9]+)?",
+            " ", message, flags=re.IGNORECASE,
+        )
+        mentioned_assets = mentioned_catalog_symbols(positive_message)
         if len(mentioned_assets) > 1:
             raise ValueError("proposal_asset_ambiguous")
         raw_asset = inputs.get("asset") or inputs.get("symbol")

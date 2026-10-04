@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -67,7 +68,7 @@ def test_add_technical_indicator_uses_canonical_twelve_data_config_when_db_row_i
 
     async def fake_fetch_indicator_value(**kwargs):
         fetch_calls.append(kwargs)
-        return {"value": 23.4}
+        return {"value": 23.4, "observed_at": datetime(2026, 10, 2)}
 
     service._fetch_indicator_value = fake_fetch_indicator_value
 
@@ -102,6 +103,7 @@ def test_add_technical_indicator_uses_canonical_twelve_data_config_when_db_row_i
     ]
     assert result["id"] == 17
     assert result["score"] == 61.0
+    assert service.repository.add_indicator.await_args.kwargs["observed_at"] == datetime(2026, 10, 2)
 
 
 def test_resolve_effective_preferences_returns_empty_without_user_scope_rows():

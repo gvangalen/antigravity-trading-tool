@@ -185,6 +185,25 @@ def _extract_inflation_yoy_from_fred_json(payload: dict) -> float | None:
     return ((latest_value / prior_value) - 1.0) * 100.0
 
 
+def _fred_result(rows: list[tuple[str, str]], value: float | None) -> dict:
+    """Keep the observation period alongside a FRED value, not fetch time."""
+    return {"value": value, "observed_at": rows[-1][0] if rows else None}
+
+
+def _fred_csv_result(csv_text: str, *, inflation: bool) -> dict:
+    return _fred_result(
+        _extract_csv_rows(csv_text),
+        _extract_inflation_yoy_from_csv(csv_text) if inflation else _extract_last_csv_value(csv_text),
+    )
+
+
+def _fred_json_result(payload: dict, *, inflation: bool) -> dict:
+    return _fred_result(
+        _extract_fred_json_observations(payload),
+        _extract_inflation_yoy_from_fred_json(payload) if inflation else _extract_last_fred_json_value(payload),
+    )
+
+
 def _fetch_dxy_from_twelve_data(provider: TwelveDataMacroProvider):
     """
     Exacte DXY-reconstructie met de officiële componenten en exponenten:
@@ -380,33 +399,23 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             if effective_link.lower().startswith("fred:"):
                 series_id = effective_link.split(":", 1)[1]
                 csv_text = _fetch_text(_fred_csv_url(series_id), timeout=20)
-                if normalized == "inflation_rate":
-                    return {"value": _extract_inflation_yoy_from_csv(csv_text)}
-                return {"value": _extract_last_csv_value(csv_text)}
+                return _fred_csv_result(csv_text, inflation=normalized == "inflation_rate")
 
             if "fredgraph.csv" in effective_link.lower():
                 csv_text = _fetch_text(effective_link, timeout=20)
-                if normalized == "inflation_rate":
-                    return {"value": _extract_inflation_yoy_from_csv(csv_text)}
-                return {"value": _extract_last_csv_value(csv_text)}
+                return _fred_csv_result(csv_text, inflation=normalized == "inflation_rate")
 
             if "api.stlouisfed.org" in effective_link.lower() or "file_type=json" in effective_link.lower():
                 series_id = _extract_fred_series_id(effective_link)
                 if series_id:
                     csv_text = _fetch_text(_fred_csv_url(series_id), timeout=20)
-                    if normalized == "inflation_rate":
-                        return {"value": _extract_inflation_yoy_from_csv(csv_text)}
-                    return {"value": _extract_last_csv_value(csv_text)}
+                    return _fred_csv_result(csv_text, inflation=normalized == "inflation_rate")
 
                 payload = _fetch_json(effective_link, timeout=20)
-                if normalized == "inflation_rate":
-                    return {"value": _extract_inflation_yoy_from_fred_json(payload)}
-                return {"value": _extract_last_fred_json_value(payload)}
+                return _fred_json_result(payload, inflation=normalized == "inflation_rate")
 
             csv_text = _fetch_text(effective_link, timeout=20)
-            if normalized == "inflation_rate":
-                return {"value": _extract_inflation_yoy_from_csv(csv_text)}
-            return {"value": _extract_last_csv_value(csv_text)}
+            return _fred_csv_result(csv_text, inflation=normalized == "inflation_rate")
         except Exception:
             return {"value": None}
 

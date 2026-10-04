@@ -1441,3 +1441,19 @@ def test_setup_relation_name_stops_before_execution_details():
     )
 
     assert analysis.explicit_setup_name == "FINN Flow Setup 1655"
+
+
+def test_explicit_asset_selection_and_long_separable_update_remain_mutations():
+    preprocessor = FinnV2RequestPreprocessorService()
+
+    selection = preprocessor.preprocess(message="Selecteer SOL als mijn actieve asset.")
+    update = preprocessor.preprocess(
+        message="Werk mijn technische RSI indicatorconfiguratie voor BTC bij en zet de periode naar 21."
+    )
+    clarification = preprocessor.preprocess(message="Selecteer als categorie een trade.")
+    current_selection = preprocessor.preprocess(message="Welke asset heb ik geselecteerd?")
+
+    assert selection.action_polarity == "update"
+    assert update.action_polarity == "update"
+    assert clarification.discourse_act == "clarification_answer"
+    assert current_selection.action_polarity == "read"

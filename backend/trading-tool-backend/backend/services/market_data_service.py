@@ -566,6 +566,7 @@ class MarketDataService:
             raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor {symbol}.")
 
         # Bepaal value als deze leeg is
+        source_observed_at = None
         if value is None:
             snapshot = None if prefer_live_snapshot else await self.repository.get_latest_snapshot(symbol)
             if not snapshot:
@@ -573,6 +574,9 @@ class MarketDataService:
                 asset = AssetRecord(**asset_meta)
                 provider = self.provider_registry.resolve_for_asset(asset)
                 live_snapshot = await provider.fetch_latest_snapshot(asset)
+                source_observed_at = live_snapshot.observed_at
+                if source_observed_at is None:
+                    raise HTTPException(503, f"Brontijd ontbreekt voor {symbol} market_data.")
                 value_by_indicator = {
                     "price": live_snapshot.price,
                     "change_24h": live_snapshot.change_percent,
@@ -594,6 +598,9 @@ class MarketDataService:
                 if value is None:
                     raise HTTPException(404, f"Geen live {symbol} market_data gevonden.")
             else:
+                source_observed_at = snapshot.timestamp
+                if source_observed_at is None:
+                    raise HTTPException(503, f"Brontijd ontbreekt voor {symbol} market_data.")
                 lname = indicator_name.lower()
                 if "price" in lname:
                     value = snapshot.price
@@ -637,7 +644,9 @@ class MarketDataService:
             score=score,
             user_id=user_id,
             symbol=symbol,
-            timestamp=datetime.utcnow()
+            timestamp=(source_observed_at.astimezone(timezone.utc).replace(tzinfo=None)
+                       if getattr(source_observed_at, "tzinfo", None) is not None
+                       else source_observed_at or datetime.utcnow())
         )
         saved_record = await self.repository.add_market_data_indicator(new_record)
         await self.session.commit()

@@ -67,13 +67,13 @@ def sync_category_for_user(conn, user_id, category, global_table, user_table):
     # 1. Haal de laatste global readings op
     with conn.cursor() as cur:
         cur.execute(f"""
-            SELECT DISTINCT ON ({name_col}) {name_col}, value 
+            SELECT DISTINCT ON ({name_col}) {name_col}, value, timestamp
             FROM {global_table} 
             ORDER BY {name_col}, timestamp DESC
         """)
         readings = cur.fetchall()
         
-    for name, value in readings:
+    for name, value, source_timestamp in readings:
         if value is None: continue
         
         # 2. Pas de gebruikers-regels toe (Standard/Contrarian/Custom)
@@ -91,19 +91,19 @@ def sync_category_for_user(conn, user_id, category, global_table, user_table):
         if category == "technical":
             cur.execute("""
                 INSERT INTO technical_indicators (indicator, value, score, advies, uitleg, user_id, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, indicator, score_date) 
                 DO UPDATE SET 
                     value = EXCLUDED.value,
                     score = EXCLUDED.score,
                     advies = EXCLUDED.advies,
                     uitleg = EXCLUDED.uitleg,
-                    timestamp = NOW()
-            """, (name, value, scored['score'], scored['action'], scored['interpretation'], user_id))
+                    timestamp = EXCLUDED.timestamp
+            """, (name, value, scored['score'], scored['action'], scored['interpretation'], user_id, source_timestamp))
         else:
             cur.execute(f"""
                 INSERT INTO {user_table} (user_id, name, value, trend, interpretation, action, score, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, name, score_date)
                 DO UPDATE SET
                     value = EXCLUDED.value,
@@ -111,5 +111,5 @@ def sync_category_for_user(conn, user_id, category, global_table, user_table):
                     trend = EXCLUDED.trend,
                     interpretation = EXCLUDED.interpretation,
                     action = EXCLUDED.action,
-                    timestamp = NOW()
-            """, (user_id, name, value, scored['trend'], scored['interpretation'], scored['action'], scored['score']))
+                    timestamp = EXCLUDED.timestamp
+            """, (user_id, name, value, scored['trend'], scored['interpretation'], scored['action'], scored['score'], source_timestamp))

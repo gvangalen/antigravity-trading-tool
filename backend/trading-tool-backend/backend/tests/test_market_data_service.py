@@ -127,7 +127,8 @@ def test_add_user_market_indicator_uses_isolated_asset_scope_lookup(monkeypatch)
     )
     service.repository.check_indicator_exists = AsyncMock(return_value=False)
     service.repository.get_latest_snapshot = AsyncMock(
-        return_value=SimpleNamespace(price=100.0, change_24h=2.5, volume=5000)
+        return_value=SimpleNamespace(price=100.0, change_24h=2.5, volume=5000,
+                                     timestamp=datetime(2026, 8, 18, 12, 0, 0))
     )
     service.repository.add_market_data_indicator = AsyncMock(
         return_value=SimpleNamespace(
@@ -174,6 +175,7 @@ def test_add_user_market_indicator_uses_isolated_asset_scope_lookup(monkeypatch)
 
     assert result.name == "price"
     assert result.value == 100.0
+    assert service.repository.add_market_data_indicator.await_args.args[0].timestamp == datetime(2026, 8, 18, 12)
     service.preference_repository.ensure_user_config.assert_awaited_once_with(
         7,
         "price",

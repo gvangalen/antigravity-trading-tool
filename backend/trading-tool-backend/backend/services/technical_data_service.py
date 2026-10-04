@@ -291,8 +291,11 @@ class TechnicalDataService:
         asset = AssetRecord(**asset_meta)
         provider = self.provider_registry.resolve_for_asset(asset, name)
         if provider is not None:
+            read = getattr(provider, "fetch_indicator_reading", None)
+            if callable(read):
+                return await read(asset, name)
             value = await provider.fetch_indicator_value(asset, name)
-            return {"value": value}
+            return {"value": value, "observed_at": None}
 
         if isinstance(source, str) and source.strip().lower() == "twelve_data":
             raise ValueError(
@@ -365,6 +368,7 @@ class TechnicalDataService:
             uitleg=uitleg,
             user_id=user_id,
             symbol=symbol,
+            observed_at=(result.get("observed_at") if isinstance(result, dict) else None),
         )
         await mark_step_completed(user_id, "technical", self.session)
 

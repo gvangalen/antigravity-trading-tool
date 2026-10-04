@@ -33,7 +33,7 @@ def store_technical_score_db(payload: dict, user_id: int):
             cur.execute("""
                 INSERT INTO technical_indicators
                     (user_id, indicator, value, score, advies, uitleg, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
                 user_id,
                 payload["indicator"],
@@ -41,6 +41,7 @@ def store_technical_score_db(payload: dict, user_id: int):
                 payload["score"],
                 payload.get("advies"),
                 payload.get("uitleg"),
+                payload.get("observed_at"),
             ))
         conn.commit()
 
@@ -154,6 +155,7 @@ def fetch_and_process_technical(user_id: int):
                 "score": interpretation.get("score", 50),
                 "advies": interpretation.get("action", "–"),
                 "uitleg": interpretation.get("interpretation", "–"),
+                "observed_at": result.get("observed_at"),
             }
 
             logger.info(f"💾 Opslaan {name} voor user_id={user_id}")

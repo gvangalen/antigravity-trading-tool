@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
+from datetime import datetime, timezone
 
 import httpx
 
@@ -45,6 +46,31 @@ class TwelveDataTechnicalIndicatorAdapter:
                 return fallback
 
         return await self._fetch_twelve_data_indicator(asset, normalized)
+
+    async def fetch_indicator_reading(self, asset: AssetRecord, indicator_name: str) -> dict:
+        """Return the candle date used for the value so scoring can check age."""
+        value = await self.fetch_indicator_value(asset, indicator_name)
+        source_time = None
+        if asset.asset_class == "crypto":
+            try:
+                candles = await self._get_binance_candles(self._binance_symbol(asset))
+                source_time = candles[-1].get("source_time") if candles else None
+            except Exception:
+                pass
+        if source_time is None and self.api_key:
+            candles = await self._get_twelve_data_candles(self._provider_symbol(asset))
+            source_time = candles[-1].get("source_time") if candles else None
+        observed_at = None
+        try:
+            if isinstance(source_time, (int, float)):
+                observed_at = datetime.fromtimestamp(source_time / 1000, tz=timezone.utc)
+            elif source_time:
+                observed_at = datetime.fromisoformat(str(source_time).replace("Z", "+00:00"))
+                if observed_at.tzinfo is None:
+                    observed_at = observed_at.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError, OverflowError):
+            pass
+        return {"value": value, "observed_at": observed_at}
 
     async def _fetch_twelve_data_indicator(self, asset: AssetRecord, normalized: str) -> float:
         symbol = self._provider_symbol(asset)
@@ -117,6 +143,7 @@ class TwelveDataTechnicalIndicatorAdapter:
                         "close": float(raw["close"]),
                         "high": float(raw.get("high", raw["close"])),
                         "low": float(raw.get("low", raw["close"])),
+                        "source_time": str(raw.get("datetime") or raw.get("date") or ""),
                     },
                 ))
             except (KeyError, TypeError, ValueError):
@@ -244,6 +271,7 @@ class TwelveDataTechnicalIndicatorAdapter:
                     "low": float(row[3]),
                     "close": float(row[4]),
                     "volume": float(row[5]),
+                    "source_time": row[0],
                 }
                 for row in rows
             ]
