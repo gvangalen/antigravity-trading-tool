@@ -119,7 +119,7 @@ class FinnResponsesProposalSelection:
         if (
             correction.get("status") == "cancelled"
             and correction.get("operation_id") == contract.operation_id
-            and (correction_target in mentioned_assets or awaiting_instrument)
+            and (correction_target in mentioned_assets or awaiting_instrument or correction.get("corrected_name"))
         ):
             # The old proposal is irrevocably cancelled. Its owner-scoped,
             # user-supplied non-asset fields may seed a replacement after an
@@ -131,6 +131,8 @@ class FinnResponsesProposalSelection:
                 correction_inputs.pop("name", None)
             if correction_target:
                 correction_inputs["symbol"] = correction_target
+            if correction.get("corrected_name"):
+                correction_inputs["name"] = str(correction["corrected_name"])
         raw_asset = inputs.get("asset") or inputs.get("symbol")
         supplied_asset = resolve_catalog_symbol(raw_asset) or ""
         if awaiting_instrument and supplied_asset == old_asset:

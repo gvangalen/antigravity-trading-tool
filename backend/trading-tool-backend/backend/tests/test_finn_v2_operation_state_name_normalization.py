@@ -1001,6 +1001,26 @@ def test_shared_name_parser_stops_before_asset_and_timeframe_context():
     ) == "FINN DCA Flow 1759B"
 
 
+def test_requested_name_slot_extracts_only_name_from_followup_instructions():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    assert service._requested_slot_value(
+        field="name",
+        text="Noem de setup Apple DCA Nieuwe QA. Toon de conceptkaart, bevestig niets.",
+        contract=contract,
+    ) == "Apple DCA Nieuwe QA"
+    assert service._requested_slot_value(field="name", text="Bevestig niets", contract=contract) is None
+    assert service._requested_slot_value(field="name", text="Apple DCA Nieuwe QA", contract=contract) == "Apple DCA Nieuwe QA"
+
+
+def test_explicit_draft_rename_reads_name_without_followup_command():
+    parser = FinnV2OperationStateService
+    assert parser.explicit_draft_rename("De naam is alleen ‘Apple DCA Nieuwe QA’.") == "Apple DCA Nieuwe QA"
+    assert parser.explicit_draft_rename("de naam is alleen Apple DCA Nieuwe QA") == "Apple DCA Nieuwe QA"
+    assert parser.explicit_draft_rename("Noem de setup Apple DCA Nieuwe QA. Toon de kaart, bevestig niets.") == "Apple DCA Nieuwe QA"
+    assert parser.explicit_draft_rename("Wat vind je van de naam Apple DCA Nieuwe QA?") is None
+
+
 def test_clarification_follow_up_persists_the_requested_change():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("clarify_request")
