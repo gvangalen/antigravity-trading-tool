@@ -8,23 +8,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | An explicit correction without a replacement ticker must withdraw the old proposal, ask for the ticker, and continue the original DCA draft without reviving the old asset. |
-| Candidate branch | `codex/finn-unknown-asset-correction` |
-| Candidate implementation SHA | `1f421544b65c82e35038051c7969140286b91379`; followed by this release-status commit. |
-| PR | [#61](https://github.com/gvangalen/antigravity-trading-tool/pull/61), merged. |
-| Production SHA | `be018b3634373929198541697471148b6d228a88`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
+| Phase | `CANDIDATE_CI_PENDING`; local Build gates passed, candidate is not deployed. |
+| Goal | Keep a requested setup name separate from follow-up instructions, and replace an open proposal when the user corrects that name. |
+| Candidate branch | `codex/finn-dca-name-clarification` |
+| Candidate implementation SHA | `203d7951db6d729f25dace37ba9a3521cfc0da19`; followed by this release-status commit. |
+| PR | Pending. |
+| Production SHA | `5e2ffd25b8ceeb7dc7130936021a71ba30a67f4c`; public backend and frontend both reported it with HTTP 200 on 2026-10-04 before this repair. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
 ## Change And Limits
 
-- The user-provided live browser QA on `15ea7610bf3c481de48e816ca8eb1b1eca7e2a3e` found two confirmable ETH cards after “ik bedoel een aandeel in plaats van ETH”; no confirmation was clicked. That release was not accepted for this correction path.
-- A direct owner- and conversation-scoped asset correction cancels the old proposal before selecting a replacement. A category correction such as “een aandeel in plaats van ETH” now does the same even without a ticker.
-- A missing ticker stays a collecting slot. The previous asset cannot be inferred from the user's rejection clause or reused from the previous card. After a supported ticker, non-asset DCA fields remain available; if the old name contains the rejected ticker, FINN asks for a new name.
-- A provider-regression run exposed one unrelated typed-read omission: an explicit RSI mention could be absent from `read_indicator_configuration` entities. The selector now preserves the owner's explicit indicator concept; this does not modify the coach answer.
-- Hypothetical questions leave proposals untouched. The existing server confirmation boundary rejects cancelled proposals; no trade or plan was executed by Build.
-- Build validation uses synthetic local users. Independent authenticated production QA remains pending.
+- User-provided authenticated live QA on `5e2ffd25b8ceeb7dc7130936021a71ba30a67f4c` found that a requested setup name absorbed “Toon de conceptkaart, bevestig niets”. A subsequent name correction could become a wrong card name or an ordinary chat reply. No card was confirmed; that coach flow was not accepted.
+- The typed name collector now separates a named value from later instructions and rejects a bare safety command as a name. An explicit name correction to an open, owner-scoped proposal cancels its old confirmation boundary before building the replacement from the same non-name fields.
+- The previously fixed asset clarification remains intact. The corrected flow is asset-agnostic; no asset-specific name rule or coach-answer replacement was added.
+- One failed initial ETH proposal in the live QA report had no run-ID or server trace. Eight independent local first-turn proposals succeeded, so the specific cause remains unverified.
+- Build used synthetic local users only; no plan, bot or trade was executed. Authenticated production acceptance remains independent QA's responsibility.
 
 ## Local Build Evidence
 
@@ -32,20 +31,22 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| ETH → unspecified stock → AAPL → new name | Old ETH proposal `cancelled`; old publish HTTP 409; ticker and name requested; only a new AAPL draft created. | `.local-finn-parity-artifacts/proposal-unspecified-asset-result-release.json`, SHA-256 `8e88f34162dc11bb54e52f040991249d722deeaf82c6d07ae2fd5de7279c749f`. |
-| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/unspecified-asset-action-matrix-release.json`, SHA-256 `e7e8348fbd1d03a56fbe6a109c4d3e2c6abf9efd5823ad7085f00cac6ce4d150`. |
-| Real-provider selector development | `18/18` on final code; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/unspecified-asset-selector-development-release.json`, SHA-256 `6e2e95bd15e383bdf601643f03f016fda9c9c6cf263b041539ab4679faee75e8`. |
-| Real-provider selector regression | `109/109` on final code; zero provider, schema, parse, validation or timeout failures. The prior run's explicit RSI omission is covered. | `.local-finn-parity-artifacts/unspecified-asset-selector-regression-release.json`, SHA-256 `04c6fffd2ffeb9ab57b41f77fe077d83f1776f06e76bfe8f2e37e36c50d8e417`. |
-| Backend | `3083 passed, 3 skipped`; includes unspecified correction, hypothetical negative, multi-turn slot and explicit RSI read tests. | `pytest -q`. |
+| Five-turn ETH → stock → AAPL → name flow | Old ETH proposal withdrawn; AAPL remains selected; the draft name is exactly `Apple DCA Nieuwe QA`; no proposal was confirmed. | `.local-finn-parity-artifacts/proposal-name-followup-summary.json`, SHA-256 `8c51685f898c6e02e8e3ee5cf5f82a4503520dd85065d5a6fe6d075f258ff9f9`. |
+| Explicit rename of an open AAPL proposal | Old proposal `cancelled`, old publish HTTP 409; new AAPL draft has only the corrected name. | `.local-finn-parity-artifacts/proposal-rename-result-final.json`, SHA-256 `fc729038bc0a31548edcc03b1bfa19fafe8026bafa11f42146f2b5f32c5062af`. |
+| Repeated fresh ETH concepts | `8/8` first-turn drafts on two equivalent phrasings; this does not establish why the isolated live turn failed. | `.local-finn-parity-artifacts/dca-initial-reliability-final.json`, SHA-256 `b4b59826a1d4b05da7491857ee522c4e28873de0206b9584b911e8674c95d504`. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/proposal-name-action-matrix.json`, SHA-256 `8ffda9190b9d98f41e3864c96fcc07e3592582f70878dd77069c2f0f28656d72`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-name-selector-development.json`, SHA-256 `2167fd7b491a94c7fa69964b34ed4e5a2343dcaf8028e930fd27e97f518ed5aa`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-name-selector-regression.json`, SHA-256 `720efd74a159a0ff7a4e71e22fe4c5913465399612a90f1b0a6a9cf5eca0e7a2`. |
+| Backend | `3086 passed, 3 skipped`; includes typed name extraction and proposal correction regressions. | `pytest -q`. |
 | Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37217705166](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37217705166), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37217881723](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37217881723) and [Auto Deploy 37218000606](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37218000606) on `be018b3634373929198541697471148b6d228a88`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `be018b3634373929198541697471148b6d228a88`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Previous production SHA only; candidate pending. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.

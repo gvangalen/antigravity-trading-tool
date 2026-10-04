@@ -871,7 +871,19 @@ class FinnV2OperationStateService:
         if not value:
             return None
         if field == "name":
-            named = self._name_input_from_text(value) or value
+            named = self._name_input_from_text(value)
+            if named is None:
+                # A bare reply can fill a requested name. A second command
+                # such as "toon de kaart, bevestig niets" cannot be a name.
+                if (
+                    not self._is_short_slot_answer(value, requested_slot="name")
+                    or "," in value
+                    or re.search(r"\b(?:toon|show|zeige|bevestig|confirm|bestätige|sla\s+op|save|speicher|"
+                                 r"maak|create|erstelle|wijzig|change|ändere)\b", value, re.I)
+                    or re.search(r"[;!?\n]", value)
+                ):
+                    return None
+                named = value.strip(" .\"'“”‘’")
             return FinnV2SetupInputCatalog.display_name(named) if contract.operation_id == "create_setup" else named
         if field in {"asset", "symbol"}:
             return resolve_catalog_symbol_mention(value)
@@ -1072,16 +1084,32 @@ class FinnV2OperationStateService:
         named = re.search(
             r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|dem\s+namen|met\s+de\s+naam|namens|genannt|"
             r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
-            r"noem\s+(?:hem|haar|het|deze|dit)|ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
+            r"noem\s+(?:hem|haar|het|deze|dit|(?:de|het|een)\s+(?:setup|strategie|plan|bot))|"
+            r"ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
             r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
-            r"\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80}?)"
-            r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|[,;.!?\n]|$)",
+            r"\s*(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
+            r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|[\"'”’]?[,;.!?\n]|[\"'”’]?$)",
             text,
             re.IGNORECASE,
         )
         if not named:
             return None
-        return named.group(1).strip(" .\"'") or None
+        return named.group(1).strip(" .\"'“”‘’") or None
+
+    @classmethod
+    def explicit_draft_rename(cls, text: str) -> Optional[str]:
+        """A typed name correction to an open draft, never a read question."""
+        message = str(text or "")
+        if "?" in message or re.search(r"\b(?:maak|create|erstelle)\b.+\b(?:nieuw|nieuwe|new|andere|another)\b", message, re.I):
+            return None
+        if not re.search(
+            r"\b(?:noem\s+(?:de|het|een)\s+(?:setup|strategie|plan|bot)|"
+            r"(?:de|the)\s+(?:naam|name)\s+(?:is|moet|should)|"
+            r"(?:corrigeer|correct|correctie)\s+(?:de|the)?\s*(?:naam|name))\b",
+            message, re.I,
+        ):
+            return None
+        return cls._name_input_from_text(message)
 
     @classmethod
     def _natural_changed_fields(cls, text: str, *, contract: OperationContract) -> dict[str, object]:

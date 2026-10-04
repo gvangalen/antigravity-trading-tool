@@ -3011,6 +3011,35 @@ def test_unspecified_asset_correction_collects_ticker_without_reusing_rejected_a
     assert continued["open_proposal_id"] is None
 
 
+def test_open_dca_name_correction_keeps_fields_without_old_proposal_id():
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {"name": "Bevestig niets"}},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="De naam is alleen ‘Apple DCA Nieuwe QA’. Bevestig niets.",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-aapl-proposal", "status": "cancelled",
+            "operation_id": "create_setup", "previous_asset": "AAPL",
+            "requested_instrument": "AAPL", "corrected_name": "Apple DCA Nieuwe QA",
+            "prior_inputs": {
+                "name": "Noem de setup Apple DCA Nieuwe QA. Toon de conceptkaart, bevestig niets.",
+                "symbol": "AAPL", "setup_type": "dca", "timeframe": "1D",
+                "dca_frequency": "weekly", "dca_day": "monday", "base_amount": 80,
+                "dca_amount_mode": "fixed",
+            },
+        }},
+        verified_asset=None,
+    )
+    state = analysis.request_plan.operation_state
+    assert state["collected_inputs"]["name"] == "Apple DCA Nieuwe QA"
+    assert state["collected_inputs"]["symbol"] == "AAPL"
+    assert state["collected_inputs"]["base_amount"] == 80
+    assert state["open_proposal_id"] is None
+    assert state["missing_required_inputs"] == []
+
+
 def test_asset_correction_clarification_reuses_prior_dca_fields_without_old_proposal():
     call = FinnResponsesToolCatalog().validate(
         "create_dca_plan_proposal",
