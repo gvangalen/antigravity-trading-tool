@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; candidate CI and deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | Show the stored weekday immediately when opening an existing DCA setup in the editor. |
 | Candidate branch | `codex/finn-existing-dca-editor` |
 | Candidate implementation SHA | `9d787008`; followed by this release-status commit. |
-| PR | Pending. |
-| Production SHA | Pending. Previous authenticated QA tested `7cfbe07222211996d9403b472b54c59537a3d6db`. |
+| PR | [#69](https://github.com/gvangalen/antigravity-trading-tool/pull/69), merged. |
+| Production SHA | `ba8884826ed5c4d0b185d6dc91cc51b48c506e86`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
@@ -41,9 +41,9 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending. |
+| Candidate CI | `PASS`: [run 37232364861](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37232364861), all five jobs green. |
+| Main CI and Auto Deploy | `PASS`: [main CI 37232523493](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37232523493) and [Auto Deploy 37232641685](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37232641685) on `ba8884826ed5c4d0b185d6dc91cc51b48c506e86`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `ba8884826ed5c4d0b185d6dc91cc51b48c506e86`. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
