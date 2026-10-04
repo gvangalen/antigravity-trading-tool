@@ -2940,7 +2940,7 @@ def test_proposal_candidate_does_not_trust_an_unmentioned_model_asset():
 
 def test_unsupported_pair_is_reported_without_substituting_base_asset():
     from backend.services.asset_catalog_service import (
-        corrected_catalog_instrument, unsupported_catalog_pair_mention,
+        corrected_catalog_instrument, requests_unspecified_asset_correction, unsupported_catalog_pair_mention,
     )
 
     assert unsupported_catalog_pair_mention("ETH, niet ETH/EUR") is None
@@ -2957,6 +2957,10 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
     assert corrected_catalog_instrument("Wat betekent ETH/EUR?") is None
     assert corrected_catalog_instrument("Wat als ik AAPL gebruik in plaats van ETH?") is None
     assert corrected_catalog_instrument("Ik bedoel, hoe werkt AAPL naast mijn ETH-plan?") is None
+    assert requests_unspecified_asset_correction("Ik bedoel een aandeel in plaats van ETH.", "ETH")
+    assert requests_unspecified_asset_correction("I mean a stock instead of BTC.", "BTC")
+    assert not requests_unspecified_asset_correction("Wat als ik een aandeel gebruik in plaats van ETH?", "ETH")
+    assert not requests_unspecified_asset_correction("Ik bedoel een aandeel in plaats van BTC.", "ETH")
     call = FinnResponsesToolCatalog().validate(
         "create_dca_plan_proposal",
         {"operation_id": "create_setup", "inputs": {"setup_type": "dca", "symbol": "ETH"}},
@@ -2969,6 +2973,42 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
         )
     assert caught.value.details["requested_instrument"] == "ETH/EUR"
     assert caught.value.details["status"] == "unsupported"
+
+
+def test_unspecified_asset_correction_collects_ticker_without_reusing_rejected_asset():
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {"symbol": "ETH"}},
+    )
+    correction = {
+        "proposal_id": "old-eth-proposal", "status": "cancelled",
+        "operation_id": "create_setup", "previous_asset": "ETH",
+        "requested_instrument": None, "awaiting_instrument": True,
+        "prior_inputs": {
+            "name": "ETH Smart DCA", "setup_type": "dca", "timeframe": "1D",
+            "dca_frequency": "weekly", "dca_day": "monday", "base_amount": 80,
+            "dca_amount_mode": "fixed",
+        },
+    }
+    first = FinnResponsesProposalSelection().from_call(
+        call=call, message="Ik bedoel een aandeel in plaats van ETH.",
+        conversation_context={"proposal_correction_result": correction}, verified_asset=None,
+    )
+    state = first.request_plan.operation_state
+    assert state["collected_inputs"].get("symbol") is None
+    assert state["next_missing_input"] == "symbol"
+    assert state["open_proposal_id"] is None
+    second = FinnResponsesProposalSelection().from_call(
+        call=call, message="AAPL, het Apple-aandeel.",
+        conversation_context={
+            "proposal_correction_result": correction,
+            "active_guided_operation": state,
+        }, verified_asset=None,
+    )
+    continued = second.request_plan.operation_state
+    assert continued["collected_inputs"]["symbol"] == "AAPL"
+    assert "name" in continued["missing_required_inputs"]
+    assert continued["open_proposal_id"] is None
 
 
 def test_asset_correction_clarification_reuses_prior_dca_fields_without_old_proposal():

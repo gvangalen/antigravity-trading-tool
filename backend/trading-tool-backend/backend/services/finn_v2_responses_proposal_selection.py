@@ -96,6 +96,15 @@ class FinnResponsesProposalSelection:
         correction = dict(conversation_context.get("proposal_correction_result") or {})
         correction_target = str(correction.get("requested_instrument") or "").upper()
         mentioned_assets = mentioned_catalog_symbols(positive_message)
+        awaiting_instrument = bool(
+            correction.get("status") == "cancelled"
+            and correction.get("awaiting_instrument")
+            and correction.get("operation_id") == contract.operation_id
+        )
+        old_asset = str(correction.get("previous_asset") or "").upper()
+        if awaiting_instrument and old_asset in mentioned_assets:
+            # In "een aandeel in plaats van ETH", ETH is the rejected target.
+            mentioned_assets.discard(old_asset)
         if (
             correction.get("status") == "cancelled"
             and correction_target in mentioned_assets
@@ -110,7 +119,7 @@ class FinnResponsesProposalSelection:
         if (
             correction.get("status") == "cancelled"
             and correction.get("operation_id") == contract.operation_id
-            and correction_target in mentioned_assets
+            and (correction_target in mentioned_assets or awaiting_instrument)
         ):
             # The old proposal is irrevocably cancelled. Its owner-scoped,
             # user-supplied non-asset fields may seed a replacement after an
@@ -118,11 +127,16 @@ class FinnResponsesProposalSelection:
             correction_inputs = dict(correction.get("prior_inputs") or {})
             old_asset = str(correction.get("previous_asset") or "")
             old_name = str(correction_inputs.get("name") or "")
-            if old_asset and re.search(rf"(?<![A-Za-z0-9]){re.escape(old_asset)}(?![A-Za-z0-9])", old_name, re.IGNORECASE):
+            if correction_target and old_asset and re.search(rf"(?<![A-Za-z0-9]){re.escape(old_asset)}(?![A-Za-z0-9])", old_name, re.IGNORECASE):
                 correction_inputs.pop("name", None)
-            correction_inputs["symbol"] = correction_target
+            if correction_target:
+                correction_inputs["symbol"] = correction_target
         raw_asset = inputs.get("asset") or inputs.get("symbol")
         supplied_asset = resolve_catalog_symbol(raw_asset) or ""
+        if awaiting_instrument and supplied_asset == old_asset:
+            inputs.pop("asset", None)
+            inputs.pop("symbol", None)
+            supplied_asset = ""
         if raw_asset and (not supplied_asset or (supplied_asset not in mentioned_assets and supplied_asset != verified_asset)):
             inputs.pop("asset", None)
             inputs.pop("symbol", None)
@@ -133,6 +147,11 @@ class FinnResponsesProposalSelection:
             for field in ("asset", "symbol"):
                 if field in inputs:
                     inputs[field] = supplied_asset
+        replacement_asset = supplied_asset or (next(iter(mentioned_assets)) if len(mentioned_assets) == 1 else "")
+        if awaiting_instrument and replacement_asset and replacement_asset != old_asset:
+            prior_name = str(correction_inputs.get("name") or "")
+            if old_asset and re.search(rf"(?<![A-Za-z0-9]){re.escape(old_asset)}(?![A-Za-z0-9])", prior_name, re.I):
+                correction_inputs.pop("name", None)
         context = dict(conversation_context)
         revision = dict(context.get("proposal_revision") or {})
         revising_current_draft = (
@@ -154,6 +173,12 @@ class FinnResponsesProposalSelection:
         else:
             context.pop("proposal_revision", None)
         guided = dict(context.get("active_guided_operation") or {})
+        if awaiting_instrument and replacement_asset and replacement_asset != old_asset:
+            guided_inputs = dict(guided.get("collected_inputs") or {})
+            if old_asset and re.search(rf"(?<![A-Za-z0-9]){re.escape(old_asset)}(?![A-Za-z0-9])", str(guided_inputs.get("name") or ""), re.I):
+                guided_inputs.pop("name", None)
+                guided["collected_inputs"] = guided_inputs
+                context["active_guided_operation"] = guided
         prior_name = dict(guided.get("collected_inputs") or {}).get("name")
         read_object_names = {
             str(data["name"]).casefold()
@@ -189,8 +214,8 @@ class FinnResponsesProposalSelection:
             inputs.pop("name")
         state = self.states.resolve(
             contract=contract,
-            message=message,
-            explicit_asset=supplied_asset or verified_asset,
+            message="" if awaiting_instrument and not replacement_asset else message,
+            explicit_asset=(replacement_asset if awaiting_instrument else supplied_asset) or verified_asset,
             conversation_context=context,
             supplied_inputs=inputs,
             derived_inputs=correction_inputs,

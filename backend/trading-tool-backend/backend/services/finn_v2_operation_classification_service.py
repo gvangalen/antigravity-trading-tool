@@ -732,7 +732,9 @@ class FinnV2OperationClassificationService:
         # with the current user's explicit catalog-backed target.
         if target_resolution.target_asset:
             selected_entities["asset"] = target_resolution.target_asset
-        if operation_id == "explain_financial_concept" and facts.financial_concept:
+        if operation_id in {"explain_financial_concept", "read_indicator_configuration"} and facts.financial_concept:
+            # An indicator explicitly named by the owner is a typed read
+            # target even when the selector omits it from its entity frame.
             selected_entities["concept"] = facts.financial_concept
         supplied_inputs, derived_inputs, selected_missing_inputs = self._resolved_inputs(
             contract=contract,

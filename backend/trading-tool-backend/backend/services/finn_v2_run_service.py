@@ -53,7 +53,7 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services.finn_v2_verified_setup_reference import (
     references_selected_setup, verified_selected_setup, verified_selected_setup_asset,
 )
-from backend.services.asset_catalog_service import corrected_catalog_instrument, mentioned_catalog_symbols, resolve_catalog_symbol
+from backend.services.asset_catalog_service import corrected_catalog_instrument, mentioned_catalog_symbols, requests_unspecified_asset_correction, resolve_catalog_symbol
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -480,11 +480,19 @@ class FinnV2RunService:
             )
             corrected_instrument = corrected_catalog_instrument(message)
             asset_corrected_operation_id = None
-            if corrected_instrument and conversation_id:
+            unspecified_correction = False
+            if conversation_id:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
                 )
-                if latest_open is not None and latest_open[0].asset != corrected_instrument:
+                unspecified_correction = bool(
+                    latest_open is not None
+                    and requests_unspecified_asset_correction(message, latest_open[0].asset or "")
+                )
+                if latest_open is not None and (
+                    (corrected_instrument and latest_open[0].asset != corrected_instrument)
+                    or unspecified_correction
+                ):
                     # A correction supersedes the actionable card before the
                     # provider is called. A rejected or failed replacement
                     # must never leave the old asset confirmable.
@@ -498,7 +506,7 @@ class FinnV2RunService:
                     }
                     correction_inputs = FinnV2OperationStateService().explicit_inputs(
                         contract=FinnV2OperationRegistry().require_supported(latest_open[0].operation_type),
-                        message=message, explicit_asset=corrected_instrument,
+                        message=message if corrected_instrument else "", explicit_asset=corrected_instrument,
                     )
                     prior_inputs.update({
                         key: value for key, value in correction_inputs.items()
@@ -508,12 +516,13 @@ class FinnV2RunService:
                         "proposal_id": latest_open[0].id,
                         "previous_asset": latest_open[0].asset,
                         "requested_instrument": corrected_instrument,
+                        "awaiting_instrument": unspecified_correction,
                         "status": "cancelled",
                         "operation_id": latest_open[0].operation_type,
                         "prior_inputs": prior_inputs,
                     }
                     context["proposal_correction_result"] = correction_result
-                    if resolve_catalog_symbol(corrected_instrument):
+                    if unspecified_correction or resolve_catalog_symbol(corrected_instrument):
                         # The owner changed the instrument of this open
                         # proposal, not the active workspace asset. Reuse its
                         # operation contract for the replacement candidate.
@@ -645,7 +654,10 @@ class FinnV2RunService:
                     ancestor_run_id = ancestor_state.get("conversation_reference")
             guided = dict(context.get("active_guided_operation") or {})
             pending_clarification = dict(context.get("responses_clarification") or {})
-            if not pending_clarification and not corrected_instrument:
+            if not pending_clarification and not corrected_instrument and not unspecified_correction and not (
+                guided.get("missing_required_inputs")
+                and dict(context.get("proposal_correction_result") or {}).get("awaiting_instrument")
+            ):
                 context.pop("proposal_correction_result", None)
             guided_inputs = dict(guided.get("collected_inputs") or {})
             action_result = dict(context.get("previous_action_result") or {})
