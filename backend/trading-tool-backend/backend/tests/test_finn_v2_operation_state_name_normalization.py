@@ -28,6 +28,93 @@ def test_create_setup_recovers_explicit_timeframe_when_model_tool_omits_it():
     assert state.missing_required_inputs == ["dca_amount_mode", "base_amount"]
 
 
+def test_smart_dca_collects_full_ladder_from_first_turn_without_model_band_inputs():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak een Smart DCA-plan voor BTC met de naam BTC Smart DCA QA oktober: 1D, "
+            "elke maandag, basisbedrag €100. Gebruik de totale benchmarkscore van markt, "
+            "macro en technisch met mijn huidige Analyse-weging. Onder score 40 koop 50% "
+            "van het basisbedrag, van 40 tot onder 70 koop 100%, vanaf 70 koop 150%. "
+            "Toon eerst het voorstel; ik bevestig niets."
+        ),
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={"name": "BTC Smart DCA QA oktober", "low_threshold": 40, "high_threshold": 70},
+        model_tool_inputs=True,
+    )
+    assert state.missing_required_inputs == []
+    assert {key: state.collected_inputs[key] for key in (
+        "dca_frequency", "dca_day", "base_amount", "low_score_percent",
+        "mid_score_percent", "high_score_percent",
+    )} == {
+        "dca_frequency": "weekly", "dca_day": "monday", "base_amount": 100,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
+    }
+
+
+def test_smart_dca_guided_reply_fills_all_three_percentages_without_smart_keyword():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    existing = service.resolve(
+        contract=contract,
+        message="Maak Smart DCA voor BTC op 1D elke maandag met basisbedrag €100: onder score 40, van 40 tot onder 70, vanaf 70.",
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={"name": "BTC Smart DCA", "low_threshold": 40, "high_threshold": 70},
+        model_tool_inputs=True,
+    )
+    assert existing.next_missing_input == "low_score_percent"
+    continued = service.resolve(
+        contract=contract,
+        message="Lage score: 50%. Middenscore: 100%. Hoge score: 150%. Dit zijn percentages van het basisbedrag van €100.",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": existing.dict()},
+        supplied_inputs={},
+        model_tool_inputs=True,
+    )
+    assert continued.missing_required_inputs == []
+    assert [continued.collected_inputs[key] for key in (
+        "low_score_percent", "mid_score_percent", "high_score_percent",
+    )] == [50, 100, 150]
+
+
+def test_monthly_dca_collects_ordinal_month_day_from_first_turn():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak een vast DCA-plan voor ETH: naam ETH Maandelijkse DCA QA, "
+            "elke 5e van de maand €75 per aankoop, timeframe 1D. Toon alleen een voorstel; sla niets op."
+        ),
+        explicit_asset="ETH",
+        conversation_context={},
+        supplied_inputs={},
+        model_tool_inputs=True,
+    )
+    assert state.missing_required_inputs == []
+    assert state.collected_inputs["dca_month_day"] == "5"
+    assert state.collected_inputs["dca_frequency"] == "monthly"
+
+
+def test_smart_dca_keeps_named_base_amount_when_band_amounts_are_also_in_euros():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=(
+            "Maak Smart DCA voor BTC, elke maandag, basisbedrag €100. "
+            "Onder 40 koop 50% (€50), van 40 tot onder 70 koop 100% (€100), "
+            "vanaf 70 koop 150% (€150)."
+        ),
+        explicit_asset="BTC",
+    )
+    assert collected["base_amount"] == 100
+    assert [collected[key] for key in (
+        "low_score_percent", "mid_score_percent", "high_score_percent",
+    )] == [50, 100, 150]
+
+
 def test_setup_name_drops_broader_english_non_persistence_clause():
     assert FinnV2OperationStateService._trim_setup_name_clause(
         "Calm Builder without writing it yet"

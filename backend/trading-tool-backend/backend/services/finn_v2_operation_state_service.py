@@ -86,10 +86,15 @@ class FinnV2OperationStateService:
                 contract=contract, message=message, accepted_inputs=set(contract.input_fields)
             )
         elif is_slot_turn:
+            score_percentages = (
+                self._dca_score_percentages(message)
+                if contract.operation_id == "create_setup" and collected.get("dca_amount_mode") == "score_bands"
+                else {}
+            )
             slot_value = (
                 contract_asset
                 if requested_slot in {"asset", "symbol"} and contract_asset
-                else self._requested_slot_value(
+                else score_percentages.get(str(requested_slot)) or self._requested_slot_value(
                     field=str(requested_slot), text=message, contract=contract
                 )
             )
@@ -106,6 +111,9 @@ class FinnV2OperationStateService:
             missing_fields = set(existing.missing_required_inputs)
             for key, value in labelled.items():
                 if key in missing_fields and not self._is_missing(value):
+                    explicit.setdefault(key, value)
+            for key, value in score_percentages.items():
+                if key in missing_fields:
                     explicit.setdefault(key, value)
         else:
             # Strategy price, target and risk fields have an existing
@@ -615,14 +623,22 @@ class FinnV2OperationStateService:
                     values["dca_day"] = self._requested_slot_value(
                         field="dca_day", text=weekday_match.group(1), contract=contract
                     )
+                    values.setdefault("dca_frequency", "weekly")
                 month_day_match = re.search(
                     r"\b(?:day|dag|tag)\s+(?:of\s+the\s+month|van\s+de\s+maand|des\s+monats)?\s*(\d{1,2})\b",
                     lowered,
                 )
+                if month_day_match is None:
+                    month_day_match = re.search(
+                        r"\b(?:elke|iedere|every)\s+(\d{1,2})(?:e|ste|de|st|nd|rd|th)\b"
+                        r"(?:\s+van\s+de\s+maand|\s+of\s+the\s+month)?",
+                        lowered,
+                    )
                 if month_day_match and "dca_month_day" in accepted_inputs:
                     values["dca_month_day"] = self._requested_slot_value(
                         field="dca_month_day", text=month_day_match.group(1), contract=contract
                     )
+                    values.setdefault("dca_frequency", "monthly")
             if values.get("setup_type") == "dca":
                 smart_amount = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", lowered))
                 fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact)\b", lowered))
@@ -643,38 +659,19 @@ class FinnV2OperationStateService:
                     lowered,
                 )
                 euro_amounts = [self._numeric_value(a or b) for a, b in amounts]
+                named_base = re.search(
+                    r"\b(?:basisbedrag|basisinleg|base\s*amount|basisbetrag)\s*"
+                    r"(?:van|is|of|:|=)?\s*(?:€|eur)\s*(\d+(?:[.,]\d+)?)",
+                    lowered,
+                )
+                if named_base:
+                    values["base_amount"] = self._numeric_value(named_base.group(1))
                 if len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", lowered):
-                    values["base_amount"] = euro_amounts[0]
+                    values.setdefault("base_amount", euro_amounts[0])
                 if not smart_amount and len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", lowered):
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
-                    # A base-amount declaration may say "€100 is 100%". That
-                    # 100% describes the reference amount, not a score band.
-                    band_text = re.sub(
-                        r"\b(?:basisbedrag|base amount|basisbetrag)\b[^.!?;\n]{0,60}?\b100\s*%",
-                        " ", lowered, count=1,
-                    )
-                    percent_matches = list(re.finditer(r"(\d+(?:[.,]\d+)?)\s*%", band_text))
-                    if len(percent_matches) == 3:
-                        fields = ("low_score_percent", "mid_score_percent", "high_score_percent")
-                        labeled = {}
-                        labels = re.compile(
-                            r"\b(lage|zwakke|low|weak|normale|neutrale|middelste|mid|"
-                            r"hoge|sterke|high|strong)\s+(?:markt\s*)?score\b"
-                        )
-                        for match in percent_matches:
-                            preceding = band_text[max(0, match.start() - 80):match.start()]
-                            nearest = list(labels.finditer(preceding))
-                            if nearest:
-                                label = nearest[-1].group(1)
-                                field = (fields[0] if label in {"lage", "zwakke", "low", "weak"}
-                                         else fields[1] if label in {"normale", "neutrale", "middelste", "mid"}
-                                         else fields[2])
-                                labeled[field] = self._numeric_value(match.group(1))
-                        if len(labeled) == 3:
-                            values.update(labeled)
-                        else:
-                            values.update(zip(fields, (self._numeric_value(match.group(1)) for match in percent_matches)))
+                    values.update(self._dca_score_percentages(text))
             if "min_investment" in accepted_inputs:
                 investment = re.search(
                     r"\bminim(?:um|ale)\s*(?:investering|inleg|bedrag)?\s*(?:van|is|:|=)?\s*"
@@ -765,6 +762,42 @@ class FinnV2OperationStateService:
                 values["changed_fields"] = changes
         return values
 
+    @classmethod
+    def _dca_score_percentages(cls, text: str) -> dict[str, object]:
+        """Extract three explicitly supplied bands without eating the middle band.
+
+        A reference such as "basisbedrag €100 is 100%" is excluded only when
+        the percentage directly describes that reference. A later "koop 100%"
+        still belongs to the score ladder.
+        """
+        band_text = re.sub(
+            r"\b(?:basisbedrag|base\s*amount|basisbetrag)\s*"
+            r"(?:van|is|of|:|=)?\s*(?:€|eur)?\s*\d+(?:[.,]\d+)?\s*"
+            r"(?:is|=|equals|entspricht)\s*100\s*%",
+            " ", str(text or "").casefold(), count=1,
+        )
+        matches = list(re.finditer(r"(\d+(?:[.,]\d+)?)\s*%", band_text))
+        if len(matches) != 3:
+            return {}
+        fields = ("low_score_percent", "mid_score_percent", "high_score_percent")
+        labels = re.compile(
+            r"\b(lage|zwakke|low|weak|normale|neutrale|middelste|mid|"
+            r"hoge|sterke|high|strong)\s+(?:markt\s*)?score\b"
+        )
+        labeled: dict[str, object] = {}
+        for match in matches:
+            preceding = band_text[max(0, match.start() - 80):match.start()]
+            nearest = list(labels.finditer(preceding))
+            if nearest:
+                label = nearest[-1].group(1)
+                field = (fields[0] if label in {"lage", "zwakke", "low", "weak"}
+                         else fields[1] if label in {"normale", "neutrale", "middelste", "mid"}
+                         else fields[2])
+                labeled[field] = cls._numeric_value(match.group(1))
+        if len(labeled) == 3:
+            return labeled
+        return dict(zip(fields, (cls._numeric_value(match.group(1)) for match in matches)))
+
     @staticmethod
     def _is_short_slot_answer(text: str, *, requested_slot: str) -> bool:
         """Keep a focused clarification answer inside its requested slot.
@@ -838,6 +871,12 @@ class FinnV2OperationStateService:
             return self._canonical_dca_day(value)
         if field == "dca_month_day":
             match = re.fullmatch(r"(?:dag\s*)?(\d{1,2})(?:e|ste|de|st|nd|rd|th)?", value.casefold())
+            if match is None:
+                match = re.search(
+                    r"\b(?:dag\s+|elke\s+|iedere\s+|every\s+)"
+                    r"(\d{1,2})(?:e|ste|de|st|nd|rd|th)?\b",
+                    value.casefold(),
+                )
             if match and 1 <= int(match.group(1)) <= 28:
                 return str(int(match.group(1)))
             return None
