@@ -687,6 +687,24 @@ def unsupported_catalog_pair_mention(value: object) -> str | None:
     return pair if resolve_catalog_symbol(pair) is None else None
 
 
+def corrected_catalog_instrument(value: object) -> str | None:
+    """Return one explicitly corrected instrument, including unsupported pairs.
+
+    This identifies a user correction to an open proposal; it does not decide
+    how FINN should answer or turn a quoted pair into its base asset.
+    """
+    match = re.search(
+        r"\b(?:ik\s+bedoel(?:de)?|i\s+mean|ich\s+meine|actually|eigenlijk|"
+        r"corrigeer\s+(?:de\s+asset\s+)?naar|(?:verander|wijzig)\s+(?:de\s+asset\s+)?naar)"
+        r"\s+(?:(?:de|the)\s+asset\s+)?(?P<instrument>[A-Za-z0-9]{2,20}(?:/[A-Za-z0-9]{2,10})?)",
+        str(value or ""), flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    instrument = match.group("instrument")
+    return unsupported_catalog_pair_mention(instrument) or resolve_catalog_symbol(instrument)
+
+
 def resolve_catalog_symbol_in_text(value: object) -> str | None:
     """Resolve one catalog asset from a natural-language token or compound.
 

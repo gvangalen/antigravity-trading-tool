@@ -48,6 +48,7 @@ Verified commands:
 - `npm run lint:i18n`
 - `npm run test:i18n`
 - `npm run test:commands`
+- `npm run test:proposals`
 - `npm run audit:high`
 - `npm run start`
 

@@ -3748,6 +3748,7 @@
     "draftStatus": {
       "canceled": "✕ Concept canceled",
       "saved": "✓ Concept saved successfully!",
+      "proposalRetired": "Dieser Vorschlag wurde zurückgezogen und kann nicht mehr bestätigt werden.",
       "collectingDetails": "Finn sammelt zuerst die Kernentscheidungen und zeigt danach erst die vollstaendige Entwurfskarte."
     },
     "universalAction": {

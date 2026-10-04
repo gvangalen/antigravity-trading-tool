@@ -2939,10 +2939,17 @@ def test_proposal_candidate_does_not_trust_an_unmentioned_model_asset():
 
 
 def test_unsupported_pair_is_reported_without_substituting_base_asset():
-    from backend.services.asset_catalog_service import unsupported_catalog_pair_mention
+    from backend.services.asset_catalog_service import (
+        corrected_catalog_instrument, unsupported_catalog_pair_mention,
+    )
 
     assert unsupported_catalog_pair_mention("ETH, niet ETH/EUR") is None
     assert unsupported_catalog_pair_mention("ETH/EUR, niet ETH") == "ETH/EUR"
+    assert corrected_catalog_instrument("Ik bedoel ETH/EUR, niet ETH.") == "ETH/EUR"
+    assert corrected_catalog_instrument("I mean AAPL, not ETH.") == "AAPL"
+    assert corrected_catalog_instrument("Ik bedoel ETH, niet ETH/EUR.") == "ETH"
+    assert corrected_catalog_instrument("Wat betekent ETH/EUR?") is None
+    assert corrected_catalog_instrument("Ik bedoel, hoe werkt AAPL naast mijn ETH-plan?") is None
     call = FinnResponsesToolCatalog().validate(
         "create_dca_plan_proposal",
         {"operation_id": "create_setup", "inputs": {"setup_type": "dca", "symbol": "ETH"}},
