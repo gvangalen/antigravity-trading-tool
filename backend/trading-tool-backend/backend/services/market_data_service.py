@@ -468,7 +468,8 @@ class MarketDataService:
             low=snapshot.low,
             change_24h=snapshot.change_percent,
             volume=snapshot.volume,
-            timestamp=snapshot.observed_at.replace(tzinfo=None) if snapshot.observed_at else datetime.utcnow()
+            timestamp=snapshot.observed_at.replace(tzinfo=None) if snapshot.observed_at else datetime.utcnow(),
+            source_observed_at=snapshot.observed_at.replace(tzinfo=None) if snapshot.observed_at else None,
         )
         self.session.add(new_data)
         await self.session.commit()
@@ -569,6 +570,11 @@ class MarketDataService:
         source_observed_at = None
         if value is None:
             snapshot = None if prefer_live_snapshot else await self.repository.get_latest_snapshot(symbol)
+            if snapshot is not None and snapshot.source_observed_at is None:
+                # A legacy receipt timestamp is not provider evidence. Try a
+                # fresh provider snapshot instead of trapping this asset on
+                # its pre-migration row.
+                snapshot = None
             if not snapshot:
                 asset_meta = await self._get_asset_scope(symbol)
                 asset = AssetRecord(**asset_meta)
@@ -598,7 +604,7 @@ class MarketDataService:
                 if value is None:
                     raise HTTPException(404, f"Geen live {symbol} market_data gevonden.")
             else:
-                source_observed_at = snapshot.timestamp
+                source_observed_at = snapshot.source_observed_at
                 if source_observed_at is None:
                     raise HTTPException(503, f"Brontijd ontbreekt voor {symbol} market_data.")
                 lname = indicator_name.lower()
@@ -646,7 +652,10 @@ class MarketDataService:
             symbol=symbol,
             timestamp=(source_observed_at.astimezone(timezone.utc).replace(tzinfo=None)
                        if getattr(source_observed_at, "tzinfo", None) is not None
-                       else source_observed_at or datetime.utcnow())
+                       else source_observed_at or datetime.utcnow()),
+            source_observed_at=(source_observed_at.astimezone(timezone.utc).replace(tzinfo=None)
+                                if getattr(source_observed_at, "tzinfo", None) is not None
+                                else source_observed_at),
         )
         saved_record = await self.repository.add_market_data_indicator(new_record)
         await self.session.commit()

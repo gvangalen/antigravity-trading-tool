@@ -5,11 +5,13 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Sequence
 
-from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
+from backend.services.asset_catalog_service import (
+    mentioned_catalog_symbols, resolve_catalog_symbol, unsupported_catalog_pair_mention,
+)
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
-from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
+from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall, FinnResponsesToolError
 
 
 class FinnResponsesProposalSelection:
@@ -77,6 +79,20 @@ class FinnResponsesProposalSelection:
             r"\b(?:niet|not|geen|kein)\s+[A-Za-z0-9]+(?:/[A-Za-z0-9]+)?",
             " ", message, flags=re.IGNORECASE,
         )
+        unsupported_pair = unsupported_catalog_pair_mention(positive_message)
+        if unsupported_pair:
+            raise FinnResponsesToolError(
+                "asset_pair_not_in_catalog",
+                details={
+                    "status": "unsupported",
+                    "requested_instrument": unsupported_pair,
+                    "instruction": (
+                        f"The full instrument {unsupported_pair} is not in the asset catalog. "
+                        "Explain this clearly. Do not replace the pair with its base asset or "
+                        "create a proposal. The user may choose a supported catalog asset."
+                    ),
+                },
+            )
         mentioned_assets = mentioned_catalog_symbols(positive_message)
         if len(mentioned_assets) > 1:
             raise ValueError("proposal_asset_ambiguous")

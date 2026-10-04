@@ -32,8 +32,8 @@ def store_technical_score_db(payload: dict, user_id: int):
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO technical_indicators
-                    (user_id, indicator, value, score, advies, uitleg, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (user_id, indicator, value, score, advies, uitleg, timestamp, source_observed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 user_id,
                 payload["indicator"],
@@ -41,6 +41,7 @@ def store_technical_score_db(payload: dict, user_id: int):
                 payload["score"],
                 payload.get("advies"),
                 payload.get("uitleg"),
+                payload.get("observed_at"),
                 payload.get("observed_at"),
             ))
         conn.commit()

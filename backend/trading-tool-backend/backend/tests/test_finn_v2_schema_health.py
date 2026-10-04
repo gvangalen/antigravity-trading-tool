@@ -6,6 +6,10 @@ from backend.scripts.check_finn_v2_schema import FinnV2SchemaHealthError, assert
 
 
 RUNTIME_CONTRACT_METADATA = {
+    ("market_data", "source_observed_at"): ("timestamp without time zone", "timestamp", "YES", None),
+    ("macro_data", "source_observed_at"): ("timestamp without time zone", "timestamp", "YES", None),
+    ("market_data_indicators", "source_observed_at"): ("timestamp without time zone", "timestamp", "YES", None),
+    ("technical_indicators", "source_observed_at"): ("timestamp without time zone", "timestamp", "YES", None),
     ("finn_v2_runtime_contracts", "contract_id"): ("text", "text", "NO", None),
     ("finn_v2_runtime_contracts", "run_id"): ("text", "text", "NO", None),
     ("finn_v2_runtime_contracts", "conversation_id"): ("text", "text", "NO", None),

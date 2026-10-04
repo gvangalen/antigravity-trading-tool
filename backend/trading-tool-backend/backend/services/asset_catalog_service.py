@@ -666,6 +666,27 @@ def resolve_catalog_symbol(value: object) -> str | None:
     return None
 
 
+def unsupported_catalog_pair_mention(value: object) -> str | None:
+    """Identify an explicitly requested pair absent from the asset catalog.
+
+    A base ticker is never interchangeable with a quoted trading pair.
+    Return only an unambiguous single pair so ordinary multi-asset questions
+    stay with the model's normal target selection.
+    """
+    positive_text = re.sub(
+        r"\b(?:niet|not|geen|kein)\s+[A-Za-z0-9]{2,10}/[A-Za-z0-9]{2,10}",
+        " ", str(value or ""), flags=re.IGNORECASE,
+    )
+    pairs = {match.group(0).upper() for match in re.finditer(
+        r"(?<![A-Za-z0-9])(?:[A-Za-z0-9]{2,10})/(?:[A-Za-z0-9]{2,10})(?![A-Za-z0-9])",
+        positive_text,
+    )}
+    if len(pairs) != 1:
+        return None
+    pair = next(iter(pairs))
+    return pair if resolve_catalog_symbol(pair) is None else None
+
+
 def resolve_catalog_symbol_in_text(value: object) -> str | None:
     """Resolve one catalog asset from a natural-language token or compound.
 

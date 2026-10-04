@@ -44,7 +44,7 @@ def test_technical_reading_carries_underlying_candle_date():
     async def candles(_symbol):
         return [{"close": 100.0, "source_time": "2026-10-02"}]
 
-    adapter.fetch_indicator_value = value
+    adapter._fetch_twelve_data_indicator = value
     adapter._get_twelve_data_candles = candles
     reading = asyncio.run(adapter.fetch_indicator_reading(
         _asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock"), "rsi",
@@ -65,11 +65,37 @@ def test_crypto_technical_reading_uses_exchange_candle_time():
     async def candles(_symbol):
         return [{"close": 100.0, "source_time": 1790985600000}]
 
-    adapter.fetch_indicator_value = value
+    adapter._fetch_without_api_key = value
     adapter._get_binance_candles = candles
     reading = asyncio.run(adapter.fetch_indicator_reading(_asset(), "rsi"))
     assert reading["value"] == 48.0
     assert reading["observed_at"] is not None
+
+
+def test_technical_failover_uses_same_provider_for_value_and_source_time():
+    import asyncio
+
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    async def unavailable_exchange(_asset, _indicator):
+        raise ValueError("exchange_unavailable")
+
+    async def configured_provider(_asset, _indicator):
+        return 44.0
+
+    async def twelve_candles(_symbol):
+        return [{"source_time": "2026-10-02"}]
+
+    async def wrong_exchange_candles(_symbol):
+        raise AssertionError("Do not read exchange time for a Twelve Data value")
+
+    adapter._fetch_without_api_key = unavailable_exchange
+    adapter._fetch_twelve_data_indicator = configured_provider
+    adapter._get_twelve_data_candles = twelve_candles
+    adapter._get_binance_candles = wrong_exchange_candles
+    reading = asyncio.run(adapter.fetch_indicator_reading(_asset(), "rsi"))
+    assert reading["value"] == 44.0
+    assert reading["observed_at"].date().isoformat() == "2026-10-02"
 
 
 def test_twelve_data_transport_does_not_log_query_parameter_credentials():

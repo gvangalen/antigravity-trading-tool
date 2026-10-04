@@ -49,17 +49,29 @@ class TwelveDataTechnicalIndicatorAdapter:
 
     async def fetch_indicator_reading(self, asset: AssetRecord, indicator_name: str) -> dict:
         """Return the candle date used for the value so scoring can check age."""
-        value = await self.fetch_indicator_value(asset, indicator_name)
-        source_time = None
+        normalized = str(indicator_name or "").strip().lower()
+        value = None
+        source = None
         if asset.asset_class == "crypto":
             try:
-                candles = await self._get_binance_candles(self._binance_symbol(asset))
-                source_time = candles[-1].get("source_time") if candles else None
+                value = await self._fetch_without_api_key(asset, normalized)
+                if value is not None:
+                    source = "binance"
             except Exception:
-                pass
-        if source_time is None and self.api_key:
+                if not self.api_key:
+                    raise
+        if source is None:
+            if not self.api_key:
+                value = await self._fetch_without_api_key(asset, normalized)
+                source = "binance"
+            else:
+                value = await self._fetch_twelve_data_indicator(asset, normalized)
+                source = "twelve_data"
+        if source == "binance":
+            candles = await self._get_binance_candles(self._binance_symbol(asset))
+        else:
             candles = await self._get_twelve_data_candles(self._provider_symbol(asset))
-            source_time = candles[-1].get("source_time") if candles else None
+        source_time = candles[-1].get("source_time") if candles else None
         observed_at = None
         try:
             if isinstance(source_time, (int, float)):

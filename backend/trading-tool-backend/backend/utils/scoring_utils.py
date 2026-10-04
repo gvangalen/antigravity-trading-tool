@@ -113,10 +113,10 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 if configs:
                     # Haal nu de data op voor deze specifieke indicators en dit symbool
                     cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value, timestamp
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
                         FROM {data_table}
                         WHERE user_id = %s AND symbol = %s AND {name_col} = ANY(%s)
-                        ORDER BY {name_col}, timestamp DESC NULLS LAST
+                        ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
                     """, (user_id, symbol, configs))
                 else:
                     # Missing canonical preferences are not permission to score
@@ -126,17 +126,17 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             elif user_id is not None:
                 if category == "macro":
                     cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value, timestamp
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
                         FROM {data_table}
                         WHERE user_id = %s
-                        ORDER BY {name_col}, timestamp DESC NULLS LAST
+                        ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
                     """, (user_id,))
                 else:
                     cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value, timestamp
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
                         FROM {data_table}
                         WHERE user_id = %s AND symbol = %s
-                        ORDER BY {name_col}, timestamp DESC NULLS LAST
+                        ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
                     """, (user_id, symbol))
             else:
                 # 🌍 GLOBAL mode (fallback)

@@ -325,6 +325,7 @@ class MacroDataService:
             score=score,
             symbol=normalized_symbol,
             user_id=user_id,
+            source_observed_at=source_observed_at,
             **({"timestamp": source_observed_at} if source_observed_at is not None else {}),
         )
         saved_record = await self.repository.add_macro_data(record)

@@ -34,6 +34,13 @@ class BinanceMarketDataAdapter:
             response.raise_for_status()
             payload = response.json()
 
+        observed_at = None
+        try:
+            if payload.get("closeTime") is not None:
+                observed_at = datetime.fromtimestamp(int(payload["closeTime"]) / 1000, timezone.utc)
+        except (TypeError, ValueError, OverflowError):
+            pass
+
         return PriceSnapshotDTO(
             symbol=asset.symbol,
             provider=self.provider_name,
@@ -48,7 +55,7 @@ class BinanceMarketDataAdapter:
             volume=_float_or_none(payload.get("quoteVolume")),
             currency=asset.quote_currency,
             exchange=asset.exchange or "BINANCE",
-            observed_at=datetime.now(timezone.utc),
+            observed_at=observed_at,
             is_delayed=False,
             raw_payload=payload,
         )

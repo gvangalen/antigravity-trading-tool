@@ -154,6 +154,7 @@ class MarketData(Base):
     volume = Column(Numeric)
     is_updated = Column(Boolean, default=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    source_observed_at = Column(DateTime, nullable=True)
 
 class MarketDataIndicator(Base):
     __tablename__ = 'market_data_indicators'
@@ -168,6 +169,7 @@ class MarketDataIndicator(Base):
     symbol = Column(String, default="BTC")
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
+    source_observed_at = Column(DateTime, nullable=True)
 
 class MarketIndicatorRule(Base):
     """Regels voor het scoren van market indicators (zowel GLOBAAL als per USER)"""
@@ -221,6 +223,7 @@ class MacroData(Base):
     symbol = Column(String, default="BTC")
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
+    source_observed_at = Column(DateTime, nullable=True)
 
 class MacroIndicatorRule(Base):
     """Regels voor het scoren van macro indicators"""
@@ -251,6 +254,7 @@ class TechnicalDataIndicator(Base):
     symbol = Column(String, default="BTC")
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
+    source_observed_at = Column(DateTime, nullable=True)
 
 class TechnicalIndicatorRule(Base):
     """Regels voor het scoren van technical indicators"""

@@ -7,6 +7,7 @@ from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.providers.twelve_data_market_data_adapter import TwelveDataMarketDataAdapter
 from backend.services.providers.twelve_data_response_cache import TwelveDataResponseCache
 from backend.services.providers.twelve_data_technical_indicator_adapter import TwelveDataTechnicalIndicatorAdapter
+from backend.services.providers.binance_market_data_adapter import BinanceMarketDataAdapter
 
 
 @pytest.fixture(autouse=True)
@@ -88,6 +89,35 @@ def test_twelve_data_quote_is_normalized_for_persistent_market_snapshots(monkeyp
     assert snapshot.price == 221.40
     assert snapshot.change_percent == 0.63
     assert snapshot.volume == 1234567.0
+    assert snapshot.observed_at.isoformat() == "2026-09-20T14:30:00+00:00"
+
+
+def test_binance_snapshot_uses_provider_close_time_not_receipt_time(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"lastPrice": "100", "closeTime": 1790985600000}
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, *_args, **_kwargs):
+            return Response()
+
+    monkeypatch.setattr("backend.services.providers.binance_market_data_adapter.httpx.AsyncClient", Client)
+    asset = AssetRecord(symbol="BTC", display_name="Bitcoin", asset_class="crypto", provider="binance",
+                        provider_symbol="BTCUSDT")
+    snapshot = asyncio.run(BinanceMarketDataAdapter().fetch_latest_snapshot(asset))
+    assert snapshot.observed_at.timestamp() == 1790985600
 
 
 def test_twelve_data_rate_limit_is_a_typed_safe_provider_failure(monkeypatch):
