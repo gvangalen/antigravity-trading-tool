@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; candidate CI and deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | Correct the saved weekly DCA weekday display and read the linked strategy when explaining one named saved DCA plan. |
 | Candidate branch | `codex/finn-dca-weekday-readback` |
 | Candidate implementation SHA | `e04e0f84`; followed by this release-status commit. |
-| PR | Pending. |
-| Production SHA | Pending. Previous QA tested `a2c2411ddf9f8306be42fed063bb311a8821a9d8`. |
+| PR | [#67](https://github.com/gvangalen/antigravity-trading-tool/pull/67), merged. |
+| Production SHA | `d32b433a6499d9779e837a5188a4597b6d71abe3`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
@@ -42,9 +42,9 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending. |
+| Candidate CI | `PASS`: [run 37229966731](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37229966731), all five jobs green. |
+| Main CI and Auto Deploy | `PASS`: [main CI 37230213446](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37230213446) and [Auto Deploy 37230380390](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37230380390) on `d32b433a6499d9779e837a5188a4597b6d71abe3`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `d32b433a6499d9779e837a5188a4597b6d71abe3`. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
