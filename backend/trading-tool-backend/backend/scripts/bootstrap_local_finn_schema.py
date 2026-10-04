@@ -150,7 +150,7 @@ ALTER TABLE setups
     ADD COLUMN IF NOT EXISTS setup_type VARCHAR DEFAULT 'trade',
     ADD COLUMN IF NOT EXISTS dca_frequency VARCHAR,
     ADD COLUMN IF NOT EXISTS dca_day VARCHAR,
-    ADD COLUMN IF NOT EXISTS dca_month_day VARCHAR,
+    ADD COLUMN IF NOT EXISTS dca_month_day INTEGER,
     ADD COLUMN IF NOT EXISTS account_type VARCHAR,
     ADD COLUMN IF NOT EXISTS min_investment NUMERIC,
     ADD COLUMN IF NOT EXISTS trend VARCHAR,
@@ -167,6 +167,13 @@ ALTER TABLE setups
     ADD COLUMN IF NOT EXISTS max_market_score NUMERIC,
     ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS last_validated TIMESTAMP;
+
+-- Match production's INTEGER column even when an older disposable parity
+-- database was bootstrapped with VARCHAR. This catches asyncpg type errors
+-- during local confirmation instead of after deployment.
+ALTER TABLE setups
+    ALTER COLUMN dca_month_day TYPE INTEGER
+    USING NULLIF(dca_month_day::text, '')::integer;
 
 ALTER TABLE strategies
     ADD COLUMN IF NOT EXISTS name VARCHAR,

@@ -32,6 +32,37 @@ def test_create_setup_binds_tags_as_the_canonical_postgres_text_array():
     assert captured["params"]["tags"] == ["qa", "dca"]
 
 
+def test_monthly_dca_day_is_bound_as_integer_for_production_schema():
+    captured = {}
+
+    class Result:
+        def fetchone(self):
+            return (42,)
+
+    class Session:
+        async def execute(self, query, params):
+            captured["params"] = params
+            return Result()
+
+    repository = SetupRepository(Session())
+    asyncio.run(repository.create_setup({
+        "name": "ETH monthly DCA", "symbol": "ETH", "setup_type": "dca",
+        "dca_frequency": "monthly", "dca_month_day": "12",
+    }, user_id=7, tags=[]))
+
+    assert captured["params"]["dca_month_day"] == 12
+    assert type(captured["params"]["dca_month_day"]) is int
+
+    async def update_execute(query, params):
+        captured["update_params"] = params
+        return type("Result", (), {"rowcount": 1})()
+
+    repository.session.execute = update_execute
+    asyncio.run(repository.update_setup_safe(42, 7, {"dca_month_day": "15"}))
+    assert captured["update_params"]["dca_month_day"] == 15
+    assert type(captured["update_params"]["dca_month_day"]) is int
+
+
 def test_setup_name_checks_are_owner_scoped_and_canonicalized():
     captured = {}
 

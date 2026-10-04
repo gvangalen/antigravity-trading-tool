@@ -64,7 +64,9 @@ class SetupRepository:
             
             "dca_frequency": payload.get("dca_frequency"),
             "dca_day": self._as_optional_text(payload.get("dca_day")),
-            "dca_month_day": self._as_optional_text(payload.get("dca_month_day")),
+            # Production stores the monthly day as INTEGER. asyncpg does not
+            # coerce the string form accepted by the API to that column type.
+            "dca_month_day": int(payload["dca_month_day"]) if payload.get("dca_month_day") is not None else None,
             
             "account_type": payload.get("account_type"),
             "min_investment": payload.get("min_investment"),
@@ -179,6 +181,8 @@ class SetupRepository:
         query_str = f"UPDATE setups SET {', '.join(set_clauses)} WHERE id = :_id AND user_id = :_uid"
         
         params = updates.copy()
+        if params.get("dca_month_day") is not None:
+            params["dca_month_day"] = int(params["dca_month_day"])
         params["_id"] = setup_id
         params["_uid"] = user_id
         

@@ -8,22 +8,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Keep a requested setup name separate from follow-up instructions, and replace an open proposal when the user corrects that name. |
-| Candidate branch | `codex/finn-dca-name-clarification` |
-| Candidate implementation SHA | `203d7951db6d729f25dace37ba9a3521cfc0da19`; followed by this release-status commit. |
-| PR | [#63](https://github.com/gvangalen/antigravity-trading-tool/pull/63), merged. |
-| Production SHA | `8ee249f87d95381851e7c36f6a6ac48aef4d825c`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
+| Phase | `CANDIDATE_CI_PENDING`; local Build gates passed, candidate is not deployed. |
+| Goal | Confirm and persist monthly Smart DCA against the production integer month-day schema. |
+| Candidate branch | `codex/finn-smart-dca-confirm` |
+| Candidate implementation SHA | `a9e68bad22746d29467bf6f4728a582754e47757`; followed by this release-status commit. |
+| PR | Pending. |
+| Production SHA | `87bde0307c33448a41ab052868043147d47ecc0a` before this repair; public backend and frontend both reported it with HTTP 200 on 2026-10-04. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
 ## Change And Limits
 
-- User-provided authenticated live QA on `5e2ffd25b8ceeb7dc7130936021a71ba30a67f4c` found that a requested setup name absorbed “Toon de conceptkaart, bevestig niets”. A subsequent name correction could become a wrong card name or an ordinary chat reply. No card was confirmed; that coach flow was not accepted.
-- The typed name collector now separates a named value from later instructions and rejects a bare safety command as a name. An explicit name correction to an open, owner-scoped proposal cancels its old confirmation boundary before building the replacement from the same non-name fields.
-- The previously fixed asset clarification remains intact. The corrected flow is asset-agnostic; no asset-specific name rule or coach-answer replacement was added.
-- One failed initial ETH proposal in the live QA report had no run-ID or server trace. Eight independent local first-turn proposals succeeded, so the specific cause remains unverified.
-- Build used synthetic local users only; no plan, bot or trade was executed. Authenticated production acceptance remains independent QA's responsibility.
+- User-provided authenticated live QA on `87bde0307c33448a41ab052868043147d47ecc0a` confirmed fixed weekly ETH DCA, but two attempts to confirm a monthly ETH Smart DCA draft failed. The browser did not expose the typed error.
+- Build read the production execution errors for those two attempts at 18:30 and 18:31 UTC. Both failed in `INSERT INTO setups`: asyncpg rejected the string `'12'` for integer `dca_month_day`. The atomic setup/strategy write did not reach strategy creation. This is a schema/type mismatch, not a score-curve or provider failure.
+- SetupService now normalizes a monthly day to integer and SetupRepository binds it as integer for create and update. The disposable parity schema now uses and migrates to the production integer type, so the full local confirmation can catch this class of failure.
+- Build used only synthetic local users for writes. The production check was read-only diagnostic evidence. Authenticated production acceptance remains independent QA's responsibility.
 
 ## Local Build Evidence
 
@@ -31,22 +30,20 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Five-turn ETH → stock → AAPL → name flow | Old ETH proposal withdrawn; AAPL remains selected; the draft name is exactly `Apple DCA Nieuwe QA`; no proposal was confirmed. | `.local-finn-parity-artifacts/proposal-name-followup-summary.json`, SHA-256 `8c51685f898c6e02e8e3ee5cf5f82a4503520dd85065d5a6fe6d075f258ff9f9`. |
-| Explicit rename of an open AAPL proposal | Old proposal `cancelled`, old publish HTTP 409; new AAPL draft has only the corrected name. | `.local-finn-parity-artifacts/proposal-rename-result-final.json`, SHA-256 `fc729038bc0a31548edcc03b1bfa19fafe8026bafa11f42146f2b5f32c5062af`. |
-| Repeated fresh ETH concepts | `8/8` first-turn drafts on two equivalent phrasings; this does not establish why the isolated live turn failed. | `.local-finn-parity-artifacts/dca-initial-reliability-final.json`, SHA-256 `b4b59826a1d4b05da7491857ee522c4e28873de0206b9584b911e8674c95d504`. |
-| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/proposal-name-action-matrix.json`, SHA-256 `8ffda9190b9d98f41e3864c96fcc07e3592582f70878dd77069c2f0f28656d72`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-name-selector-development.json`, SHA-256 `2167fd7b491a94c7fa69964b34ed4e5a2343dcaf8028e930fd27e97f518ed5aa`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-name-selector-regression.json`, SHA-256 `720efd74a159a0ff7a4e71e22fe4c5913465399612a90f1b0a6a9cf5eca0e7a2`. |
-| Backend | `3086 passed, 3 skipped`; includes typed name extraction and proposal correction regressions. | `pytest -q`. |
+| Exact monthly ETH Smart DCA confirmation | Browser-style shared idempotency key; publish and confirm HTTP 200; execute HTTP 200 `succeeded`, replay `already_executed`; saved setup month day is integer `12`, strategy is `custom` with €80 base and 0.75/1.0/1.25 curve. | `.local-finn-parity-artifacts/smart-dca-confirm-repro.json`, SHA-256 `d32e653cdb6feaa12399d05f7ad8b815a094904022253217580059e6009a29fc`. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/smart-monthly-action-matrix.json`, SHA-256 `a9c6a3e77b3b3fe78e099e7c8528cb1ccceaf4d24214f09183d587247badc0f4`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/smart-monthly-selector-development.json`, SHA-256 `fc17dde1ae049ba94f02a8b4a03453907a195db8b67c13305788ead12da6b937`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/smart-monthly-selector-regression.json`, SHA-256 `1ea78a404ae96b43efa9fa4d89efbf42cf73be1e991d439846ff9eef761f2c1e`. |
+| Backend | `3087 passed, 3 skipped`; includes integer month-day insert/update binding regression. | `pytest -q`. |
 | Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37221131450](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37221131450), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37221250269](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37221250269) and [Auto Deploy 37221350987](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37221350987) on `8ee249f87d95381851e7c36f6a6ac48aef4d825c`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `8ee249f87d95381851e7c36f6a6ac48aef4d825c`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Candidate pending. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
