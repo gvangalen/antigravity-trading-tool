@@ -93,9 +93,34 @@ class FinnResponsesProposalSelection:
                     ),
                 },
             )
+        correction = dict(conversation_context.get("proposal_correction_result") or {})
+        correction_target = str(correction.get("requested_instrument") or "").upper()
         mentioned_assets = mentioned_catalog_symbols(positive_message)
+        if (
+            correction.get("status") == "cancelled"
+            and correction_target in mentioned_assets
+            and str(correction.get("previous_asset") or "").upper() in mentioned_assets
+        ):
+            # A superseded asset remains in the user's contrast or revocation
+            # sentence; it is not a second positive target for the new card.
+            mentioned_assets.discard(str(correction["previous_asset"]).upper())
         if len(mentioned_assets) > 1:
             raise ValueError("proposal_asset_ambiguous")
+        correction_inputs = {}
+        if (
+            correction.get("status") == "cancelled"
+            and correction.get("operation_id") == contract.operation_id
+            and correction_target in mentioned_assets
+        ):
+            # The old proposal is irrevocably cancelled. Its owner-scoped,
+            # user-supplied non-asset fields may seed a replacement after an
+            # asset clarification, without reviving the old proposal ID.
+            correction_inputs = dict(correction.get("prior_inputs") or {})
+            old_asset = str(correction.get("previous_asset") or "")
+            old_name = str(correction_inputs.get("name") or "")
+            if old_asset and re.search(rf"(?<![A-Za-z0-9]){re.escape(old_asset)}(?![A-Za-z0-9])", old_name, re.IGNORECASE):
+                correction_inputs.pop("name", None)
+            correction_inputs["symbol"] = correction_target
         raw_asset = inputs.get("asset") or inputs.get("symbol")
         supplied_asset = resolve_catalog_symbol(raw_asset) or ""
         if raw_asset and (not supplied_asset or (supplied_asset not in mentioned_assets and supplied_asset != verified_asset)):
@@ -168,6 +193,7 @@ class FinnResponsesProposalSelection:
             explicit_asset=supplied_asset or verified_asset,
             conversation_context=context,
             supplied_inputs=inputs,
+            derived_inputs=correction_inputs,
             model_tool_inputs=True,
         )
         inputs = dict(state.collected_inputs)

@@ -53,7 +53,7 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services.finn_v2_verified_setup_reference import (
     references_selected_setup, verified_selected_setup, verified_selected_setup_asset,
 )
-from backend.services.asset_catalog_service import corrected_catalog_instrument, mentioned_catalog_symbols
+from backend.services.asset_catalog_service import corrected_catalog_instrument, mentioned_catalog_symbols, resolve_catalog_symbol
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -479,6 +479,7 @@ class FinnV2RunService:
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
             corrected_instrument = corrected_catalog_instrument(message)
+            asset_corrected_operation_id = None
             if corrected_instrument and conversation_id:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
@@ -490,6 +491,33 @@ class FinnV2RunService:
                     await FinnV2ConfirmationService(session).cancel(
                         proposal_id=latest_open[0].id, user_id=user_id,
                     )
+                    origin_state = dict((latest_open[1].state_json or {}).get("guided_state") or {})
+                    prior_inputs = {
+                        key: value for key, value in dict(origin_state.get("collected_inputs") or {}).items()
+                        if not key.endswith("_id") and key not in {"asset", "symbol"}
+                    }
+                    correction_inputs = FinnV2OperationStateService().explicit_inputs(
+                        contract=FinnV2OperationRegistry().require_supported(latest_open[0].operation_type),
+                        message=message, explicit_asset=corrected_instrument,
+                    )
+                    prior_inputs.update({
+                        key: value for key, value in correction_inputs.items()
+                        if not key.endswith("_id") and key not in {"asset", "symbol"}
+                    })
+                    correction_result = {
+                        "proposal_id": latest_open[0].id,
+                        "previous_asset": latest_open[0].asset,
+                        "requested_instrument": corrected_instrument,
+                        "status": "cancelled",
+                        "operation_id": latest_open[0].operation_type,
+                        "prior_inputs": prior_inputs,
+                    }
+                    context["proposal_correction_result"] = correction_result
+                    if resolve_catalog_symbol(corrected_instrument):
+                        # The owner changed the instrument of this open
+                        # proposal, not the active workspace asset. Reuse its
+                        # operation contract for the replacement candidate.
+                        asset_corrected_operation_id = latest_open[0].operation_type
                     context.pop("proposal_revision", None)
                     context.pop("active_guided_operation", None)
                     stored_context = await orchestrator.conversations.get_context(
@@ -499,11 +527,12 @@ class FinnV2RunService:
                     if active_guided.get("open_proposal_id") == latest_open[0].id:
                         stored_context.pop("active_guided_operation", None)
                         stored_context.pop("operation_state", None)
-                        await orchestrator.conversations.update_context(
-                            conversation_id=conversation_id, user_id=user_id,
-                            context=stored_context,
-                        )
-                        await session.commit()
+                    stored_context["proposal_correction_result"] = correction_result
+                    await orchestrator.conversations.update_context(
+                        conversation_id=conversation_id, user_id=user_id,
+                        context=stored_context,
+                    )
+                    await session.commit()
             cursor = dict(context.get("responses_cursor") or {})
             locale = resolve_chat_locale(
                 (user.ai_preferences or {}).get("locale") if user else None,
@@ -616,6 +645,8 @@ class FinnV2RunService:
                     ancestor_run_id = ancestor_state.get("conversation_reference")
             guided = dict(context.get("active_guided_operation") or {})
             pending_clarification = dict(context.get("responses_clarification") or {})
+            if not pending_clarification and not corrected_instrument:
+                context.pop("proposal_correction_result", None)
             guided_inputs = dict(guided.get("collected_inputs") or {})
             action_result = dict(context.get("previous_action_result") or {})
             if action_result.get("owner_user_id") != user_id or action_result.get("result_status") != "succeeded":
@@ -666,7 +697,7 @@ class FinnV2RunService:
                     # A fresh request must not inherit an unrelated choice as its answer.
                     previous_response = None
         pending_guided = FinnV2OperationStateService.pending_operation_id(context)
-        corrected_guided_operation_id: str | None = None
+        corrected_guided_operation_id: str | None = asset_corrected_operation_id
         if pending_guided:
             contract = FinnV2OperationRegistry().require_supported(pending_guided)
             requested_slot = str(guided.get("next_missing_input") or "")

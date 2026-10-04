@@ -3666,6 +3666,7 @@
       "canceled": "✕ Concept canceled",
       "saved": "✓ Concept saved successfully!",
       "proposalRetired": "This proposal was withdrawn and can no longer be confirmed.",
+      "proposalSuspended": "Confirmation is paused until the clarification and proposal status are resolved.",
       "collectingDetails": "Finn first collects the core choices and only then shows the full draft card."
     },
     "universalAction": {

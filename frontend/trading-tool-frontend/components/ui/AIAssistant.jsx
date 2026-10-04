@@ -37,7 +37,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
-import { inactiveProposalIds, retireFinnProposalCards } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards } from "@/lib/finnProposalCardState.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -4454,7 +4454,7 @@ function AIAssistantContent({
     setMessages((prev) => retireFinnProposalCards(prev, proposalIds));
   };
 
-  const refreshProposalCards = async () => {
+  const refreshProposalCards = async ({ clarificationRequired = false } = {}) => {
     const proposalIds = [...new Set(messagesRef.current.flatMap((message) =>
       (message.actions || [])
         .filter((action) => action?.type === "v2_proposal" && action.proposal_id)
@@ -4463,6 +4463,10 @@ function AIAssistantContent({
     if (!proposalIds.length) return;
     const results = await Promise.allSettled(proposalIds.map(fetchFinnV2Proposal));
     retireProposalCards(inactiveProposalIds(proposalIds, results));
+    const suspended = suspendedProposalIds(proposalIds, results, clarificationRequired);
+    if (suspended.size) {
+      setMessages((prev) => suspendFinnProposalCards(prev, suspended));
+    }
   };
 
   async function pollPendingFinnV2Run(runId, streamId) {
@@ -4601,7 +4605,7 @@ function AIAssistantContent({
             }
           : message
       )));
-      await refreshProposalCards();
+      await refreshProposalCards({ clarificationRequired: run?.status === "clarification_required" });
       activeStreamIdRef.current = null;
       setLoading(false);
     };
@@ -5294,7 +5298,7 @@ function AIAssistantContent({
     }
     return (
       <>
-        <button type="button" onClick={() => void handleExecuteAction(proposal)} disabled={loading || executingAction} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+        <button type="button" onClick={() => void handleExecuteAction(proposal)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
           {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Bevestigen
         </button>
         <button type="button" onClick={() => handleChat(`Ik wil dit ${noun}voorstel aanpassen.`, false, message.state)} disabled={loading || executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Aanpassen</button>
@@ -5938,7 +5942,7 @@ function AIAssistantContent({
           {isIndicatorAction && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{[asset, category].filter(Boolean).join(" · ")}</p>}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {operationId.startsWith("delete_") ? "Verwijderen" : "Bevestigen"}
               </button>
             ))}
@@ -5967,7 +5971,7 @@ function AIAssistantContent({
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? "Verwijderen" : "Bevestigen"}
               </button>
             ))}
@@ -7137,6 +7141,11 @@ function AIAssistantContent({
                 {m.proposalRetired && m.isComplete !== false && (
                   <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                     {at("draftStatus.proposalRetired")}
+                  </div>
+                )}
+                {m.confirmationSuspended && !m.proposalRetired && m.isComplete !== false && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                    {at("draftStatus.proposalSuspended")}
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
