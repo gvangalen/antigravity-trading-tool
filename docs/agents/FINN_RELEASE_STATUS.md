@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_CI_PENDING`; local Build gates passed, candidate is not deployed. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | Keep a requested setup name separate from follow-up instructions, and replace an open proposal when the user corrects that name. |
 | Candidate branch | `codex/finn-dca-name-clarification` |
 | Candidate implementation SHA | `203d7951db6d729f25dace37ba9a3521cfc0da19`; followed by this release-status commit. |
-| PR | Pending. |
-| Production SHA | `5e2ffd25b8ceeb7dc7130936021a71ba30a67f4c`; public backend and frontend both reported it with HTTP 200 on 2026-10-04 before this repair. |
+| PR | [#63](https://github.com/gvangalen/antigravity-trading-tool/pull/63), merged. |
+| Production SHA | `8ee249f87d95381851e7c36f6a6ac48aef4d825c`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
@@ -44,9 +44,9 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Previous production SHA only; candidate pending. |
+| Candidate CI | `PASS`: [run 37221131450](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37221131450), all five jobs green. |
+| Main CI and Auto Deploy | `PASS`: [main CI 37221250269](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37221250269) and [Auto Deploy 37221350987](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37221350987) on `8ee249f87d95381851e7c36f6a6ac48aef4d825c`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `8ee249f87d95381851e7c36f6a6ac48aef4d825c`. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
