@@ -48,7 +48,7 @@ def test_weekly_dca_rejects_invalid_day():
 
 
 @pytest.mark.parametrize("raw_day", ["15", 15])
-def test_monthly_dca_month_day_is_normalized_to_text_number(raw_day):
+def test_monthly_dca_month_day_is_normalized_to_integer(raw_day):
     service = SetupService(None)
     payload = {
         "name": "BTC monthly DCA",
@@ -61,7 +61,7 @@ def test_monthly_dca_month_day_is_normalized_to_text_number(raw_day):
 
     service.validate_setup_payload(payload)
 
-    assert payload["dca_month_day"] == "15"
+    assert payload["dca_month_day"] == 15
     assert payload["dca_day"] is None
 
 

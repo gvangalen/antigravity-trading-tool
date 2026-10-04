@@ -82,13 +82,13 @@ class SetupService:
             raise ValueError()
         return str(day)
 
-    def _normalize_dca_month_day(self, value: Any) -> str:
+    def _normalize_dca_month_day(self, value: Any) -> int:
         if value is None or value == "":
             raise ValueError()
         month_day = int(value)
         if month_day < 1 or month_day > 31:
             raise ValueError()
-        return str(month_day)
+        return month_day
 
     def normalize_dca_fields(self, raw_payload: dict) -> None:
         setup_type = str(raw_payload.get("setup_type") or "").lower()
