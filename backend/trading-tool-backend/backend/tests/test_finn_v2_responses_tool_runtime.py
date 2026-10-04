@@ -866,6 +866,61 @@ def test_model_owned_comparison_binds_exact_owner_scoped_pair():
     assert result.response.model_owned_repair
 
 
+def test_single_saved_dca_explanation_reads_strategy_even_when_model_chooses_inventory():
+    question = (
+        "Lees mijn opgeslagen ETH Smart DCA Herhaal 0410 terug. Wat is het geplande bedrag "
+        "bij een complete benchmarkscore van 72, en is er nu al een bot of aankoop actief?"
+    )
+    fake = FakeResponses(
+        response("dca-inventory", calls=[tool_call("dca-call", "get_saved_setup_inventory", {
+            "asset": "ETH", "timeframe": "1D", "answer_mode": "explain",
+            "setup_names": ["ETH Smart DCA Herhaal 0410"],
+        })]),
+        response("dca-answer", text="De opgeslagen strategie plant €117 bij score 72; een aankoop is niet bewezen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="saved-dca-readback", model_led_coach=True,
+    )
+    reads = []
+
+    async def read(call):
+        reads.append(call)
+        if call.name == "get_active_plan_and_strategy":
+            assert call.inputs == {"setup_id": 41}
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {
+                    "setup_id": 41, "name": "ETH Smart DCA Herhaal 0410", "symbol": "ETH",
+                    "dca_frequency": "monthly", "dca_month_day": 19,
+                }},
+                {"scope": "read_linked_strategy", "status": "completed", "data": {
+                    "setup_id": 41, "strategy_id": 71, "base_amount": 90,
+                    "dca_amount_mode": "score_bands", "low_threshold": 35,
+                    "high_threshold": 65, "low_score_percent": 70,
+                    "mid_score_percent": 100, "high_score_percent": 130,
+                }},
+            ]}
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed", "data": {
+                "setups": [{"setup_id": 41, "name": "ETH Smart DCA Herhaal 0410",
+                            "symbol": "ETH", "timeframe": "1D", "setup_type": "dca"}],
+                "complete": True,
+            },
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+    ))
+    assert [call.name for call in reads] == [
+        "get_saved_setup_inventory", "get_active_plan_and_strategy",
+    ]
+    scopes = [item.get("scope") for item in result.response.tool_trace[0]["result"]["results"]]
+    assert scopes == ["read_saved_setup_inventory", "read_active_setup", "read_linked_strategy"]
+    assert "€117" in result.response.text
+
+
 def test_cross_asset_followup_binds_verified_source_and_unique_target():
     question = "Mag ik dezelfde BTC-regel ook voor Apple gebruiken?"
     fake = FakeResponses(

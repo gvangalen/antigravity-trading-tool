@@ -162,6 +162,8 @@ class FinnResponsesToolCatalog:
             if name == "get_active_plan_and_strategy":
                 description += (
                     " Returns one selected saved setup and its linked strategy, not a list or assessment. "
+                    "For a single saved DCA plan, read this tool to verify its base amount, score bands "
+                    "and a hypothetical planned amount; those fields belong to the linked strategy. "
                     "For all saved setups, counts, or questions about which of several setups has a field, "
                     "use get_saved_setup_inventory instead. "
                     "Use it for listing settings or static arithmetic from saved entry, "
@@ -172,12 +174,14 @@ class FinnResponsesToolCatalog:
             if name == "get_saved_setup_inventory":
                 description += (
                     " Returns an owner-scoped collection, optionally filtered by asset and timeframe; "
+                    "For one explicitly named DCA setup with answer_mode=explain, FINN also reads its "
+                    "linked strategy so the saved amount rule can be explained. "
                     "the typed complete flag reports whether repository pagination truncated it. "
                     "Use for all setup names, counts and comparisons, including a follow-up about "
                     "'those three' after listing setups. For a comparison of exactly two "
                     "user-selected setups, the server also reads each linked strategy and reports "
-                    "its availability separately. A list read does not select an active setup "
-                    "or read a linked strategy. For a comparison, provide answer_mode=compare and "
+                    "its availability separately. A general list read does not select an active setup "
+                    "or read linked strategies. For a comparison, provide answer_mode=compare and "
                     "the two user-named setup names in setup_names. The server resolves names to "
                     "owner-scoped records; do not invent an ID or replace one named setup with another. "
                     "When the user chooses one linked strategy for a comparison, pass its exact "

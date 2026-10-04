@@ -18,6 +18,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
+import { normalizeDcaWeekday } from "@/lib/setup/dcaWeekday.mjs";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
@@ -88,7 +89,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
       timeframe: initialData.timeframe ?? "1W",
 
       dcaFrequency: initialData.dca_frequency ?? "weekly",
-      dcaDay: initialData.dca_day ?? "monday",
+      dcaDay: normalizeDcaWeekday(initialData.dca_day) ?? "monday",
       dcaMonthDay: initialData.dca_month_day ?? 1,
     });
 
@@ -401,7 +402,9 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
                 value={formData.dcaDay}
                 onChange={handleChange}
                 className={fieldClass}
+                required
               >
+                <option value="" disabled>—</option>
                 <option value="monday">{copy.dayMonday}</option>
                 <option value="tuesday">{copy.dayTuesday}</option>
                 <option value="wednesday">{copy.dayWednesday}</option>
