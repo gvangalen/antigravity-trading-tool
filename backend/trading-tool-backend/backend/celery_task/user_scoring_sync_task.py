@@ -98,7 +98,8 @@ def sync_category_for_user(conn, user_id, category, global_table, user_table):
                     score = EXCLUDED.score,
                     advies = EXCLUDED.advies,
                     uitleg = EXCLUDED.uitleg,
-                    timestamp = EXCLUDED.timestamp
+                    timestamp = EXCLUDED.timestamp,
+                    source_observed_at = NULL
             """, (name, value, scored['score'], scored['action'], scored['interpretation'], user_id, source_timestamp))
         else:
             cur.execute(f"""
@@ -111,5 +112,6 @@ def sync_category_for_user(conn, user_id, category, global_table, user_table):
                     trend = EXCLUDED.trend,
                     interpretation = EXCLUDED.interpretation,
                     action = EXCLUDED.action,
-                    timestamp = EXCLUDED.timestamp
+                    timestamp = EXCLUDED.timestamp,
+                    source_observed_at = NULL
             """, (user_id, name, value, scored['trend'], scored['interpretation'], scored['action'], scored['score'], source_timestamp))

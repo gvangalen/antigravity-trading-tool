@@ -565,7 +565,7 @@ def fetch_and_process_market_indicators(user_id: int):
         # =====================================================
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT price, change_24h, timestamp
+                SELECT price, change_24h, source_observed_at
                 FROM market_data
                 ORDER BY timestamp DESC
                 LIMIT 1
@@ -599,12 +599,13 @@ def fetch_and_process_market_indicators(user_id: int):
 
                 cur.execute("""
                     INSERT INTO market_data_indicators
-                        (user_id, name, value, timestamp)
-                    VALUES (%s, %s, %s, %s)
+                        (user_id, name, value, timestamp, source_observed_at)
+                    VALUES (%s, %s, %s, %s, %s)
                 """, (
                     user_id,
                     name,
                     value,
+                    datetime.utcnow(),
                     source_timestamp,
                 ))
 

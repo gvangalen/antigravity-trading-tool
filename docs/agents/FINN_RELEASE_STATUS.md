@@ -8,23 +8,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Make Smart DCA work across catalog assets, retain an open concept for read-only coaching, and reject stale benchmark source data before score-driven execution. |
-| Candidate branch | `codex/finn-dca-cross-asset-coach-freshness` |
-| Candidate code SHA | `1df343280dfc0880650e22aea6385a3c06094f1d`. |
-| PR | [#53](https://github.com/gvangalen/antigravity-trading-tool/pull/53), merged. |
-| Production SHA | `2e40d567464808abeedcaa91a96e9fa499560ea4`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up will create a later deploy SHA; verify that final identity separately. |
+| Phase | `CANDIDATE_PENDING_CI`; local Build gates passed. Production deployment and independent QA are pending. |
+| Goal | Preserve the provider observation time for Smart DCA score inputs and explain unsupported quoted pairs without losing a guided request or mapping the pair to its base asset. |
+| Candidate branch | `codex/finn-dca-provenance-catalog` |
+| Candidate implementation SHA | `cd5e39deab2abd7f28fa221f5033446eebcb75b2`. The status commit will add a later branch SHA. |
+| PR | Pending. |
+| Production SHA | Previous verified release: `2e40d567464808abeedcaa91a96e9fa499560ea4`; this candidate is not deployed yet. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
 ## Change And Limits
 
-- An explicit positive asset survives a negative mention such as “ETH, not BTC”. This is catalog-wide rather than asset-specific.
-- An unconfirmed owner-scoped Smart DCA concept is available to later read-only turns in the same conversation. The model receives a read tool for the draft; the answer verifier does not supply a fixed coaching response.
-- Read-only turns cannot propose actions. Explicit asset selection and long separable update commands remain mutation requests.
-- Score generation and Smart DCA execution check the age of the underlying macro, market and technical readings. Ingestion now preserves source observation times where the provider supplies them; a missing technical source time is treated as stale.
-- `ETH/EUR` is not a separate catalog instrument. The current proposal flow still asks for an asset instead of explaining this capability boundary. No pair was silently mapped to ETH.
-- Historical indicator records written before this change may contain receipt timestamps rather than original source timestamps. Independent QA must not treat old rows as proof of source freshness. No authenticated production purchase or saved proposal was tested by Build.
+- Market, macro and technical readings now store `source_observed_at` separately from their receipt timestamp. The Smart DCA score and execution freshness checks read the source time.
+- The additive migration leaves historical source times null. A recent receipt timestamp no longer makes a historical reading appear fresh. New verified provider readings can repopulate the field; Smart DCA must wait while a required source time is missing or stale.
+- The catalog treats `ETH/EUR` and other unsupported quoted pairs as full instruments. FINN explains that boundary both on a complete request and after an asset clarification, and does not substitute ETH or create a proposal.
+- No proposal was confirmed, no purchase was executed, and no authenticated production QA was performed by Build. Local evidence does not establish production acceptance.
 
 ## Local Build Evidence
 
@@ -32,20 +30,20 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Cross-asset draft and coach probe | ETH correction retained ETH; AAPL and MSFT Smart DCA drafts completed. The AAPL draft supported a hypothetical 20/50/80 score follow-up (score 50, planned €60) and a missing-macro follow-up (hold without purchase). ETH/EUR remained a clarification. No proposal was confirmed. | `.local-finn-parity-artifacts/dca-cross-asset-probe.json`, SHA-256 `e8524f7481e293fdd5bdac36cb5ea2119f838c3fc503e254849b32d2cb49fce4`. |
-| Worker-driven safe action contracts on final code | `16/16`; zero broker orders, live trading calls or live bots. | `.local-finn-parity-artifacts/dca-cross-asset-final-action-matrix.json`, SHA-256 `b1077fda8616beffa7b37e18c0b44d1413801f9a6931fd51d5854fb6e0b9ad4a`. |
-| Real-provider selector development | `18/18`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-cross-asset-selector-development.json`, SHA-256 `0b07ac75a69dcaeb9039ed27cbdf80c9344f7a3e65b03ed323bf3fabdf17b62b`. |
-| Real-provider selector regression | `109/109`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-cross-asset-selector-regression.json`, SHA-256 `895c2328ebb3fbf7dbf8909fcca911c38dcda3e42db763751c7e4104cd0d6526`. |
-| Backend | `3072 passed, 3 skipped`; score-source and draft tests included. | `pytest -q`. |
+| Source provenance and catalog regressions | Historical rows with missing source time are rejected; provider candle and quote times remain separate from ingestion time; unsupported pair and negation paths covered. | `pytest -q`: `3078 passed, 3 skipped`, 31 warnings. |
+| Worker-driven safe action contracts on final code | `16/16`; zero broker orders, live trading calls, live bots or production connections. | `.local-finn-parity-artifacts/dca-provenance-final-action-matrix.json`, SHA-256 `18c3b1e053c8d4b9df1521de60811273930b2dcee1c9baf7a7e67a76fd4cf6ea`. |
+| Real-provider selector development | `18/18`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-provenance-selector-development.json`, SHA-256 `75a7e0f83c9528d066f7da93391186caf18f246bf9b8d0bb73955077e91a2088`. |
+| Real-provider selector regression | `109/109`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-provenance-selector-regression.json`, SHA-256 `a5d5350dd1ca857f55329e4636991902ed1ff0d003e77bd428e3d25318bcc0fc`. |
+| Full local runtime pair probes | Complete `ETH/EUR` request and two-turn clarification both completed with no proposal and an explicit catalog answer. | `.local-finn-parity-artifacts/dca-provenance-pair-final.json`, SHA-256 `5bf802f8e2f9a7ecb7674b84ca19a90ecc5c3fbbdf1036ed33c8717addad1000`; follow-up artifact SHA-256 `79b71e89dd46f011b500c32f1f108d760f860f70e911e71454885ed19dd08e06`. |
 | Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands and audit:high passed; zero high production dependency vulnerabilities. | Local script output; no frontend source was changed. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37190269634](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37190269634), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37190423504](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37190423504) and [Auto Deploy 37190526075](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37190526075) on `2e40d567464808abeedcaa91a96e9fa499560ea4`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `2e40d567464808abeedcaa91a96e9fa499560ea4`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending for this candidate. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence and CI do not establish authenticated production acceptance.

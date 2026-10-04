@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 from backend.utils.scoring_utils import score_source_is_fresh
 
 
-def test_unknown_provider_candle_never_gets_ingestion_timestamp():
+def test_unknown_provider_candle_has_no_verified_source_timestamp():
     from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 
     session = Mock()
@@ -14,8 +14,9 @@ def test_unknown_provider_candle_never_gets_ingestion_timestamp():
     row = asyncio.run(repository.add_indicator(
         "rsi", 50, 50, "", "", user_id=7, symbol="BTC", observed_at=None,
     ))
-    assert row.timestamp == datetime(1970, 1, 1)
-    assert not score_source_is_fresh("technical", "rsi", row.timestamp, symbol="BTC")
+    assert row.timestamp is not None
+    assert row.source_observed_at is None
+    assert not score_source_is_fresh("technical", "rsi", row.source_observed_at, symbol="BTC")
 
 
 def test_score_source_age_matches_release_cadence_and_asset_market():
@@ -25,6 +26,34 @@ def test_score_source_age_matches_release_cadence_and_asset_market():
     assert score_source_is_fresh("macro", "inflation_rate", now - timedelta(days=30), now=now)
     assert not score_source_is_fresh("macro", "inflation_rate", now - timedelta(days=90), now=now)
     assert not score_source_is_fresh("market", "fear_greed_index", None, now=now)
+
+
+def test_legacy_receipt_timestamp_does_not_substitute_for_source_observation(monkeypatch):
+    from backend.utils import scoring_utils
+
+    class Cursor:
+        def execute(self, sql, params):
+            assert "source_observed_at" in sql
+
+        def fetchall(self):
+            # Legacy row has a recent timestamp, but the new source field is NULL.
+            return [("fear_greed_index", 50, None)]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(scoring_utils, "get_db_connection", lambda: Connection())
+    assert scoring_utils.generate_scores_db("market", user_id=7, symbol="BTC")["scores"] == {}
 
 
 def test_user_score_sync_retains_global_source_timestamp(monkeypatch):

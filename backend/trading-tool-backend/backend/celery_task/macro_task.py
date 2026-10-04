@@ -138,8 +138,8 @@ def store_macro_data(payload: dict, user_id: int):
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO macro_data
-                    (user_id, name, value, trend, interpretation, action, score, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (user_id, name, value, trend, interpretation, action, score, timestamp, source_observed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 user_id,
                 payload["name"],
@@ -149,6 +149,7 @@ def store_macro_data(payload: dict, user_id: int):
                 payload["action"],
                 payload["score"],
                 payload.get("observed_at") or datetime.utcnow(),
+                payload.get("observed_at"),
             ))
 
         conn.commit()

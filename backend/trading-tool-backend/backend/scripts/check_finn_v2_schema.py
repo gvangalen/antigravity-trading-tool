@@ -36,6 +36,10 @@ class RequiredIndex:
 
 
 REQUIRED_FINN_V2_COLUMNS = (
+    RequiredColumn("market_data", "source_observed_at", "timestamp", True),
+    RequiredColumn("macro_data", "source_observed_at", "timestamp", True),
+    RequiredColumn("market_data_indicators", "source_observed_at", "timestamp", True),
+    RequiredColumn("technical_indicators", "source_observed_at", "timestamp", True),
     RequiredColumn("finn_v2_runtime_contracts", "contract_id", "text", False),
     RequiredColumn("finn_v2_runtime_contracts", "run_id", "text", False),
     RequiredColumn("finn_v2_runtime_contracts", "conversation_id", "text", False),

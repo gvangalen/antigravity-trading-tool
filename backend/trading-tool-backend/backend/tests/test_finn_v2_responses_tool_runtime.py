@@ -1821,6 +1821,9 @@ def test_rejected_proposal_does_not_override_later_valid_clarification():
         {"name": "ask_for_clarification", "status": "needs_input"},
     )
     assert not FinnV2RunService._unanalysed_proposal_selected(trace)
+    assert not FinnV2RunService._unanalysed_proposal_selected((
+        {"name": "create_dca_plan_proposal", "status": "unsupported"},
+    ))
     assert FinnV2RunService._unanalysed_proposal_selected((
         {"name": "create_or_update_trade_plan_proposal", "status": "needs_input"},
     ))
@@ -2933,6 +2936,25 @@ def test_proposal_candidate_does_not_trust_an_unmentioned_model_asset():
         FinnResponsesProposalSelection().from_call(
             call=call, message="Maak een BTC en ETH setup", conversation_context={}, verified_asset=None,
         )
+
+
+def test_unsupported_pair_is_reported_without_substituting_base_asset():
+    from backend.services.asset_catalog_service import unsupported_catalog_pair_mention
+
+    assert unsupported_catalog_pair_mention("ETH, niet ETH/EUR") is None
+    assert unsupported_catalog_pair_mention("ETH/EUR, niet ETH") == "ETH/EUR"
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "inputs": {"setup_type": "dca", "symbol": "ETH"}},
+    )
+    with pytest.raises(FinnResponsesToolError, match="asset_pair_not_in_catalog") as caught:
+        FinnResponsesProposalSelection().from_call(
+            call=call,
+            message="Maak een Smart DCA-plan voor ETH/EUR.",
+            conversation_context={}, verified_asset=None,
+        )
+    assert caught.value.details["requested_instrument"] == "ETH/EUR"
+    assert caught.value.details["status"] == "unsupported"
 
 
 def test_saved_object_update_is_not_treated_as_draft_revision():

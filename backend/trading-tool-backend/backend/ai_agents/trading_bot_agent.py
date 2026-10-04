@@ -792,19 +792,19 @@ def _benchmark_component_source_freshness(conn, user_id: int, symbol: str) -> di
             with conn.cursor() as cur:
                 if category == "technical":
                     cur.execute(
-                        "SELECT DISTINCT ON (indicator) indicator, timestamp "
+                        "SELECT DISTINCT ON (indicator) indicator, source_observed_at "
                         "FROM technical_indicators WHERE user_id = %s AND symbol = %s "
                         "AND indicator IN (SELECT indicator FROM user_indicator_configs "
                         "WHERE user_id = %s AND category = 'technical' AND symbol = %s AND enabled = TRUE) "
-                        "ORDER BY indicator, timestamp DESC NULLS LAST",
+                        "ORDER BY indicator, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST",
                         (user_id, symbol, user_id, symbol),
                     )
                 else:
                     cur.execute(
-                        f"SELECT DISTINCT ON ({name_col}) {name_col}, timestamp "
+                        f"SELECT DISTINCT ON ({name_col}) {name_col}, source_observed_at "
                         f"FROM {table} WHERE user_id = %s "
                         + ("AND symbol = %s " if asset_scoped else "")
-                        + f"ORDER BY {name_col}, timestamp DESC NULLS LAST",
+                        + f"ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST",
                         (user_id, symbol) if asset_scoped else (user_id,),
                     )
                 readings = cur.fetchall()

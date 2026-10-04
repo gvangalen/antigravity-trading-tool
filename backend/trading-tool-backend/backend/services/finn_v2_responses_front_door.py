@@ -12,6 +12,7 @@ from typing import Any, Mapping
 
 from backend.services.asset_catalog_service import (
     DEFAULT_ASSET_CATALOG, mentioned_catalog_symbols, resolve_catalog_symbol,
+    unsupported_catalog_pair_mention,
 )
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult
@@ -267,7 +268,9 @@ class FinnResponsesFrontDoor:
         pending_operation = FinnV2OperationStateService.pending_operation_id(conversation_context)
         guided_state = dict(conversation_context.get("active_guided_operation") or {})
         requested_slot = str(guided_state.get("next_missing_input") or "")
-        if pending_operation and requested_slot and not FinnV2OperationStateService.is_cancel_intent(message):
+        if (pending_operation and requested_slot
+                and not FinnV2OperationStateService.is_cancel_intent(message)
+                and not unsupported_catalog_pair_mention(message)):
             contract = self.proposals.registry.require_supported(pending_operation)
             states = self.proposals.states
             switches_operation = any(
@@ -307,6 +310,7 @@ class FinnResponsesFrontDoor:
         previous_kind = str((previous_response or {}).get("terminal_kind") or "")
         request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
         is_read_request = request_facts.action_polarity == "read"
+        unsupported_pair = unsupported_catalog_pair_mention(message)
         mentioned_assets = mentioned_catalog_symbols(message)
         mentioned_timeframes = {
             value.upper() for value in re.findall(r"\b(?:15m|30m|1h|4h|1d|1w)\b", message, re.I)
@@ -1488,6 +1492,12 @@ class FinnResponsesFrontDoor:
                    "identify unavailable linked strategies. Do not add derived level calculations "
                    "unless the user asks for a calculation."
                    if multiple_targets or pair_followup else "")
+                + ("\nCatalog lookup for this turn: the requested full instrument "
+                   f"'{unsupported_pair}' is not in the supported asset catalog. "
+                   "Do not substitute its base asset or the selected workspace asset. "
+                   "Explain the catalog boundary, state that no proposal was made, "
+                   "and ask for a supported catalog asset only if the user wants to continue."
+                   if unsupported_pair else "")
                 if getattr(self, "model_led_coach", False) else instructions
             ),
             verified_turn_context=verified_turn,
@@ -1519,7 +1529,7 @@ class FinnResponsesFrontDoor:
                 str(previous_response.get("antecedent_verified_answer") or "")[:1600]
                 if previous_response and use_verified_turn else None
             ),
-            guided_operation_id=pending_operation,
+            guided_operation_id=None if unsupported_pair else pending_operation,
             resuming_clarification=resuming_clarification,
             resumed_clarification_reason=(
                 str(pending_clarification.get("reason") or "") or None
@@ -1552,8 +1562,9 @@ class FinnResponsesFrontDoor:
             force_read_repair=force_read_repair,
             rejection_feedback=rejection_feedback,
             model_led_coach=getattr(self, "model_led_coach", False),
-            read_only_turn=is_read_request,
+            read_only_turn=is_read_request or bool(unsupported_pair),
             open_draft_available=bool(conversation_context.get("proposal_revision")),
+            catalog_boundary_only=bool(unsupported_pair),
         )
         logger.info("FINN Responses tool loop completed in %.2fs", monotonic() - loop_started)
         if (
@@ -1567,6 +1578,7 @@ class FinnResponsesFrontDoor:
             and not _hypothetical_trade_reflection(message)
             and not _read_only_stop_loss_coaching(message)
             and not is_read_request
+            and not unsupported_pair
         ):
             action_contracts = []
             for contract in self.proposals.registry.list():
@@ -1601,7 +1613,7 @@ class FinnResponsesFrontDoor:
             and selected is None
         ):
             result = replace(result, uses_previous_response=True)
-        if pending_operation and selected is None:
+        if pending_operation and selected is None and not unsupported_pair:
             raise FinnResponsesError("guided_proposal_tool_call_required")
         if getattr(self, "model_led_coach", False) and selected is None:
             contract_trace = (*prior_tool_trace, *result.tool_trace)

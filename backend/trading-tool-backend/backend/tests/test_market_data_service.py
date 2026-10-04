@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from fastapi import HTTPException
 
@@ -128,7 +128,8 @@ def test_add_user_market_indicator_uses_isolated_asset_scope_lookup(monkeypatch)
     service.repository.check_indicator_exists = AsyncMock(return_value=False)
     service.repository.get_latest_snapshot = AsyncMock(
         return_value=SimpleNamespace(price=100.0, change_24h=2.5, volume=5000,
-                                     timestamp=datetime(2026, 8, 18, 12, 0, 0))
+                                     timestamp=datetime(2026, 8, 18, 12, 0, 0),
+                                     source_observed_at=datetime(2026, 8, 18, 12, 0, 0))
     )
     service.repository.add_market_data_indicator = AsyncMock(
         return_value=SimpleNamespace(
@@ -391,3 +392,41 @@ def test_market_asset_scope_falls_back_when_isolated_session_factory_fails(monke
     result = asyncio.run(run())
 
     assert result == {"asset_class": "crypto"}
+
+
+def test_legacy_market_snapshot_triggers_provider_refresh_before_scoring(monkeypatch):
+    session = AsyncMock()
+    service = MarketDataService(session)
+    service._get_asset_scope = AsyncMock(return_value={
+        "symbol": "BTC", "display_name": "Bitcoin", "asset_class": "crypto",
+        "provider": "binance", "provider_symbol": "BTCUSDT",
+    })
+    service.preference_repository = SimpleNamespace(ensure_user_config=AsyncMock())
+    service.repository.check_indicator_exists = AsyncMock(return_value=False)
+    service.repository.get_latest_snapshot = AsyncMock(return_value=SimpleNamespace(
+        price=99.0, timestamp=datetime(2026, 10, 4, 12), source_observed_at=None,
+    ))
+    source_time = datetime(2026, 10, 4, 13)
+    provider = SimpleNamespace(fetch_latest_snapshot=AsyncMock(return_value=SimpleNamespace(
+        price=100.0, change_percent=1.0, volume=1000.0, observed_at=source_time,
+    )))
+    service.provider_registry.resolve_for_asset = Mock(return_value=provider)
+    service.repository.add_market_data_indicator = AsyncMock(return_value=SimpleNamespace(
+        id=7, name="price", value=100.0, trend="neutral", interpretation="ok",
+        action="hold", score=55, user_id=7, symbol="BTC", timestamp=source_time,
+    ))
+    monkeypatch.setattr(
+        "backend.services.market_data_service.sync_score_indicator",
+        lambda *_args, **_kwargs: {"score": 55, "trend": "neutral", "interpretation": "ok", "action": "hold"},
+    )
+
+    async def run():
+        from unittest.mock import patch
+        with patch("backend.services.onboarding_service.mark_step_completed", AsyncMock()):
+            return await service.add_user_market_indicator(7, "price", None, symbol="BTC")
+
+    result = asyncio.run(run())
+    assert result.value == 100.0
+    provider.fetch_latest_snapshot.assert_awaited_once()
+    written = service.repository.add_market_data_indicator.await_args.args[0]
+    assert written.source_observed_at == source_time

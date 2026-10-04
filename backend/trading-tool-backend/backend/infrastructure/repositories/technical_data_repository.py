@@ -782,12 +782,13 @@ class TechnicalDataRepository:
             uitleg=uitleg,
             user_id=user_id,
             symbol=symbol,
-            # SQLAlchemy's column default turns None into the ingestion time.
-            # Use an explicit stale sentinel when the provider has no source
-            # candle, so Smart DCA cannot mistake receipt time for evidence.
+            # Keep the existing timestamp for UI sorting. Source freshness is
+            # established only by the separate nullable provider candle time.
             timestamp=(observed_at.astimezone(timezone.utc).replace(tzinfo=None)
                        if getattr(observed_at, "tzinfo", None) is not None
-                       else observed_at or datetime(1970, 1, 1))
+                       else observed_at or datetime.utcnow()),
+            source_observed_at=(observed_at.astimezone(timezone.utc).replace(tzinfo=None)
+                                if getattr(observed_at, "tzinfo", None) is not None else observed_at),
         )
         self.session.add(new_ind)
         # Flush to get the ID back immediately

@@ -115,4 +115,5 @@ class MarketDataIngestionService:
             change_24h=snapshot.change_percent,
             volume=snapshot.volume,
             timestamp=observed_at or datetime.utcnow(),
+            source_observed_at=observed_at,
         )

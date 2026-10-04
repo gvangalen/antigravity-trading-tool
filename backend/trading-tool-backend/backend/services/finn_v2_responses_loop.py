@@ -356,6 +356,7 @@ class FinnResponsesLoop:
         model_led_coach: bool = False,
         read_only_turn: bool = False,
         open_draft_available: bool = False,
+        catalog_boundary_only: bool = False,
         rejection_feedback: dict[str, Any] | None = None,
     ) -> FinnResponsesResult:
         # The latest user turn decides whether previous context is relevant.
@@ -451,6 +452,8 @@ class FinnResponsesLoop:
             )
             if not open_draft_available:
                 definitions = [item for item in definitions if item["name"] != "get_open_dca_draft"]
+            if catalog_boundary_only:
+                definitions = []
             if model_led_coach and not guided_operation_id:
                 # Conversational clarification belongs in the model's answer.
                 # A separate tool turns a useful answer plus one follow-up
@@ -1119,7 +1122,12 @@ class FinnResponsesLoop:
                     if isinstance(exc, FinnResponsesToolError):
                         output.update(exc.details)
                         recommended = exc.details.get("recommended_tool_name")
-                        if recommended in {definition["name"] for definition in definitions}:
+                        if output.get("status") == "unsupported":
+                            # A catalog capability boundary is a final tool
+                            # fact, not an argument-shape error to retry.
+                            repair_tool_name = None
+                            repair_exhausted = True
+                        elif recommended in {definition["name"] for definition in definitions}:
                             output["instruction"] = (
                                 "The selected tool is incompatible with the existing action contract. "
                                 "No proposal was created. Call the recommended registry-backed tool "

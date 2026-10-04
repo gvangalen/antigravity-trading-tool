@@ -283,7 +283,7 @@ class FinnV2RunService:
     def _unanalysed_proposal_selected(tool_trace: tuple[dict[str, Any], ...]) -> bool:
         return any(
             str(call.get("name") or "").endswith("_proposal")
-            and str(call.get("status") or "") not in {"retry", "unavailable", "error"}
+            and str(call.get("status") or "") not in {"retry", "unavailable", "unsupported", "error"}
             for call in tool_trace
         )
 

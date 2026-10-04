@@ -79,7 +79,7 @@ class TwelveDataMarketDataAdapter:
         if price is None:
             raise ValueError("twelve_data_snapshot_missing_price")
 
-        observed_at = _parse_datetime(payload.get("datetime")) or datetime.now(timezone.utc)
+        observed_at = _parse_datetime(payload.get("datetime"))
         return PriceSnapshotDTO(
             symbol=asset.symbol,
             provider=self.provider_name,
