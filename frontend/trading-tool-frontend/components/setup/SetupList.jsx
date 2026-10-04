@@ -520,6 +520,7 @@ export default function SetupList({
         {editingSetup ? (
           <div className="space-y-6 pt-4">
             <SetupForm
+              key={editingSetup.id}
               ref={setupFormRef}
               mode="edit"
               initialData={editingSetup}
