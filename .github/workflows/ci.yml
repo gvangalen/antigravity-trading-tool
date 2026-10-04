@@ -152,6 +152,7 @@ jobs:
           npm run lint:i18n
           npm run test:i18n
           npm run test:commands
+          npm run test:proposals
 
       - name: Run frontend build
         working-directory: frontend/trading-tool-frontend

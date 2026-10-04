@@ -3728,6 +3728,7 @@
     "draftStatus": {
       "canceled": "✕ Concept geannuleerd",
       "saved": "✓ Concept succesvol opgeslagen!",
+      "proposalRetired": "Dit voorstel is ingetrokken en kan niet meer worden bevestigd.",
       "collectingDetails": "Finn verzamelt eerst de kernkeuzes en laat daarna pas de volledige conceptkaart zien."
     },
     "universalAction": {

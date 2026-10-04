@@ -8,21 +8,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Preserve the provider observation time for Smart DCA score inputs and explain unsupported quoted pairs without losing a guided request or mapping the pair to its base asset. |
-| Candidate branch | `codex/finn-dca-provenance-catalog` |
-| Candidate implementation SHA | `cd5e39deab2abd7f28fa221f5033446eebcb75b2`. The status commit will add a later branch SHA. |
-| PR | [#55](https://github.com/gvangalen/antigravity-trading-tool/pull/55), merged. |
-| Production SHA | `dd9e452d565512e7fa179522197860ced7645787`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up will create a later deploy SHA; verify that final identity separately. |
+| Phase | `CANDIDATE_PENDING_CI`; local Build gates passed. CI, Auto Deploy and independent QA are pending. |
+| Goal | Withdraw a superseded FINN proposal after an explicit asset correction and remove its confirmation card. |
+| Candidate branch | `codex/finn-proposal-correction-invalidation` |
+| Candidate implementation SHA | `f2fab0432fa337c3406641a9fb1a3b9240211e5c`; the status commit will add a later branch SHA. |
+| PR | Pending. |
+| Production SHA | Previous verified release `cfead052da0f6e90bf8ba05cb1e14f84c1c1ce3b`; this candidate is not deployed yet. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
 ## Change And Limits
 
-- Market, macro and technical readings now store `source_observed_at` separately from their receipt timestamp. The Smart DCA score and execution freshness checks read the source time.
-- The additive migration leaves historical source times null. A recent receipt timestamp no longer makes a historical reading appear fresh. New verified provider readings can repopulate the field; Smart DCA must wait while a required source time is missing or stale.
-- The catalog treats `ETH/EUR` and other unsupported quoted pairs as full instruments. FINN explains that boundary both on a complete request and after an asset clarification, and does not substitute ETH or create a proposal.
-- No proposal was confirmed, no purchase was executed, and no authenticated production QA was performed by Build. Local evidence does not establish production acceptance.
+- An explicit correction to a different catalog instrument cancels the latest owner-scoped, conversation-scoped open proposal before the provider answers. This includes an unsupported full pair such as `ETH/EUR`; the pair is not substituted with ETH.
+- Cancellation revokes any already issued confirmation token. The original proposal cannot be published or confirmed after correction.
+- The chat temporarily disables confirmation while a turn is pending, re-reads visible proposal statuses after the turn, removes retired cards and checks the server again before confirming. OpenAI remains responsible for the conversational answer.
+- No saved plan, bot or trade was changed by Build's local probes. Build did not use the protected QA fixture. Authenticated production acceptance remains independent QA's responsibility.
 
 ## Local Build Evidence
 
@@ -30,20 +30,21 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Source provenance and catalog regressions | Historical rows with missing source time are rejected; provider candle and quote times remain separate from ingestion time; unsupported pair and negation paths covered. | `pytest -q`: `3078 passed, 3 skipped`, 31 warnings. |
-| Worker-driven safe action contracts on final code | `16/16`; zero broker orders, live trading calls, live bots or production connections. | `.local-finn-parity-artifacts/dca-provenance-final-action-matrix.json`, SHA-256 `18c3b1e053c8d4b9df1521de60811273930b2dcee1c9baf7a7e67a76fd4cf6ea`. |
-| Real-provider selector development | `18/18`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-provenance-selector-development.json`, SHA-256 `75a7e0f83c9528d066f7da93391186caf18f246bf9b8d0bb73955077e91a2088`. |
-| Real-provider selector regression | `109/109`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-provenance-selector-regression.json`, SHA-256 `a5d5350dd1ca857f55329e4636991902ed1ff0d003e77bd428e3d25318bcc0fc`. |
-| Full local runtime pair probes | Complete `ETH/EUR` request and two-turn clarification both completed with no proposal and an explicit catalog answer. | `.local-finn-parity-artifacts/dca-provenance-pair-final.json`, SHA-256 `5bf802f8e2f9a7ecb7674b84ca19a90ecc5c3fbbdf1036ed33c8717addad1000`; follow-up artifact SHA-256 `79b71e89dd46f011b500c32f1f108d760f860f70e911e71454885ed19dd08e06`. |
-| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands and audit:high passed; zero high production dependency vulnerabilities. | Local script output; no frontend source was changed. |
+| ETH to unsupported pair, with an already issued token | Completed answer, no replacement proposal; old ETH proposal `cancelled`; old publish and token confirmation both HTTP 409. | `.local-finn-parity-artifacts/proposal-correction-final-probe.json`, SHA-256 `5eba7b26c3b1f598f0301fa04c1aa0df71f1929fddf4f44634c47275cc7cc14f`. |
+| ETH to supported AAPL correction | Old ETH proposal `cancelled`; new AAPL proposal `draft` in the same conversation. | `.local-finn-parity-artifacts/proposal-supported-correction-final-probe.json`, SHA-256 `7a0de9d039c41ea153c34a112f002e68c21f831a63b4ffb4f168118e4a745480`. |
+| Worker-driven safe action contracts on final code | `16/16`; zero broker orders, live trading calls, live bots or production connections. | `.local-finn-parity-artifacts/proposal-correction-final-action-matrix.json`, SHA-256 `a8e833732c715aa927c8657963695bd21f83b45233d37dc5cf7b437ba7bb231b`. |
+| Real-provider selector development | `18/18`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-correction-final-selector-development.json`, SHA-256 `9d76711864b423d695bdf9378df12e5c62c1bbf0d565a48a0890dee4fa1a1bcf`. |
+| Real-provider selector regression | `109/109`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-correction-final-selector-regression.json`, SHA-256 `b50a16326b0df1d2667e9d98de86226a776bdfb3333cfa4398f7963c21f28906`. |
+| Backend | `3078 passed, 3 skipped`; explicit correction parsing and negative case included. | `pytest -q`. |
+| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, new test:proposals and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37193560051](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37193560051), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37193706746](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37193706746) and [Auto Deploy 37193799941](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37193799941) on `dd9e452d565512e7fa179522197860ced7645787`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `dd9e452d565512e7fa179522197860ced7645787`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending for this candidate. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence and CI do not establish authenticated production acceptance.

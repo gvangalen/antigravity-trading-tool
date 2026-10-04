@@ -37,6 +37,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
+import { inactiveProposalIds, retireFinnProposalCards } from "@/lib/finnProposalCardState.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -486,6 +487,7 @@ function AIAssistantContent({
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const messagesRef = useRef(messages);
   const [preferences, setPreferences] = useState({});
   const [insight, setInsight] = useState(null);
   const [insightLoading, setInsightLoading] = useState(false);
@@ -527,6 +529,7 @@ function AIAssistantContent({
   const forceNewFinnConversationRef = useRef(false);
   const activeFinnSessionIdRef = useRef(null);
   const [showReasoning, setShowReasoning] = useState(false);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
   const at = createAssistantTranslator(t);
   const activeQuery = queryValue !== undefined ? queryValue : query;
   const updateQuery = onQueryChange || setQuery;
@@ -4446,6 +4449,22 @@ function AIAssistantContent({
     }
   }
 
+  const retireProposalCards = (proposalIds) => {
+    if (!proposalIds.size) return;
+    setMessages((prev) => retireFinnProposalCards(prev, proposalIds));
+  };
+
+  const refreshProposalCards = async () => {
+    const proposalIds = [...new Set(messagesRef.current.flatMap((message) =>
+      (message.actions || [])
+        .filter((action) => action?.type === "v2_proposal" && action.proposal_id)
+        .map((action) => action.proposal_id)
+    ))];
+    if (!proposalIds.length) return;
+    const results = await Promise.allSettled(proposalIds.map(fetchFinnV2Proposal));
+    retireProposalCards(inactiveProposalIds(proposalIds, results));
+  };
+
   async function pollPendingFinnV2Run(runId, streamId) {
     const terminalStatuses = new Set(["completed", "blocked", "failed", "canceled", "unavailable", "downgraded", "rejected", "clarification_required"]);
     const sseController = new AbortController();
@@ -4582,7 +4601,9 @@ function AIAssistantContent({
             }
           : message
       )));
+      await refreshProposalCards();
       activeStreamIdRef.current = null;
+      setLoading(false);
     };
     for (let attempt = 0; attempt < 60; attempt += 1) {
       if (activeStreamIdRef.current !== streamId) {
@@ -4617,6 +4638,14 @@ function AIAssistantContent({
       await new Promise((resolve) => window.setTimeout(resolve, delayMs));
     }
     sseController.abort();
+    if (activeStreamIdRef.current === streamId) {
+      await refreshProposalCards();
+      setMessages((prev) => prev.map((message) => message.streamId === streamId
+        ? { ...message, text: "FINN kon dit antwoord niet afronden. Probeer het opnieuw.", isError: true, isComplete: true }
+        : message));
+      activeStreamIdRef.current = null;
+      setLoading(false);
+    }
   }
 
   async function handleChat(directQuery, isSilent = false, overrideContext = null) {
@@ -4747,6 +4776,7 @@ function AIAssistantContent({
             }
             return copy;
           });
+          await refreshProposalCards();
           activeStreamIdRef.current = null;
 
           if (indicatorModalRequest && typeof window !== "undefined") {
@@ -4855,7 +4885,7 @@ function AIAssistantContent({
       });
       activeStreamIdRef.current = null;
     } finally {
-      if (activeStreamIdRef.current === streamId || activeStreamIdRef.current === null) {
+      if (activeStreamIdRef.current === null) {
         setLoading(false);
       }
     }
@@ -4969,6 +4999,12 @@ function AIAssistantContent({
 
     try {
       if (action.type === "v2_proposal") {
+        const latestProposal = await fetchFinnV2Proposal(action.proposal_id);
+        if (!["draft", "pending_confirmation"].includes(latestProposal?.status)) {
+          retireProposalCards(new Set([action.proposal_id]));
+          showSnackbar("Dit voorstel is niet meer bevestigbaar.", "info");
+          return;
+        }
         const result = await confirmAndExecuteFinnV2Proposal(action.proposal_id);
         const execution = result?.execution || {};
         if (!["succeeded", "already_executed"].includes(execution.status)) {
@@ -5258,7 +5294,7 @@ function AIAssistantContent({
     }
     return (
       <>
-        <button type="button" onClick={() => void handleExecuteAction(proposal)} disabled={executingAction} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+        <button type="button" onClick={() => void handleExecuteAction(proposal)} disabled={loading || executingAction} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
           {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Bevestigen
         </button>
         <button type="button" onClick={() => handleChat(`Ik wil dit ${noun}voorstel aanpassen.`, false, message.state)} disabled={loading || executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Aanpassen</button>
@@ -5902,7 +5938,7 @@ function AIAssistantContent({
           {isIndicatorAction && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{[asset, category].filter(Boolean).join(" · ")}</p>}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={executingAction} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {operationId.startsWith("delete_") ? "Verwijderen" : "Bevestigen"}
               </button>
             ))}
@@ -5931,7 +5967,7 @@ function AIAssistantContent({
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={executingAction} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? "Verwijderen" : "Bevestigen"}
               </button>
             ))}
@@ -5978,7 +6014,7 @@ function AIAssistantContent({
             <button
               key={`${action.type}-${action.id || index}`}
               onClick={() => handleExecuteAction(action)}
-              disabled={executingAction}
+              disabled={loading || executingAction}
               className={actionButtonStyles({
                 variant: "primary",
                 className: "w-full justify-center gap-2 px-4 py-3 rounded-xl text-[11px] tracking-widest shadow-sm",
@@ -7096,6 +7132,11 @@ function AIAssistantContent({
                 {m.draft && m.draftExecuted && m.isComplete !== false && (
                   <div className="mt-3 p-3 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/30 rounded-xl text-center text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest flex items-center justify-center gap-1.5 animate-pulse">
                     {at("draftStatus.saved")}
+                  </div>
+                )}
+                {m.proposalRetired && m.isComplete !== false && (
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                    {at("draftStatus.proposalRetired")}
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}

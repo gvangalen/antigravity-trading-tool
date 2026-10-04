@@ -53,7 +53,9 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services.finn_v2_verified_setup_reference import (
     references_selected_setup, verified_selected_setup, verified_selected_setup_asset,
 )
-from backend.services.asset_catalog_service import mentioned_catalog_symbols
+from backend.services.asset_catalog_service import corrected_catalog_instrument, mentioned_catalog_symbols
+from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.utils import openai_client
 
@@ -476,6 +478,32 @@ class FinnV2RunService:
                 conversation_id=conversation_id, user_id=user_id, run_id=run_id,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
+            corrected_instrument = corrected_catalog_instrument(message)
+            if corrected_instrument and conversation_id:
+                latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
+                    conversation_id=conversation_id, user_id=user_id,
+                )
+                if latest_open is not None and latest_open[0].asset != corrected_instrument:
+                    # A correction supersedes the actionable card before the
+                    # provider is called. A rejected or failed replacement
+                    # must never leave the old asset confirmable.
+                    await FinnV2ConfirmationService(session).cancel(
+                        proposal_id=latest_open[0].id, user_id=user_id,
+                    )
+                    context.pop("proposal_revision", None)
+                    context.pop("active_guided_operation", None)
+                    stored_context = await orchestrator.conversations.get_context(
+                        conversation_id=conversation_id, user_id=user_id,
+                    )
+                    active_guided = dict(stored_context.get("active_guided_operation") or {})
+                    if active_guided.get("open_proposal_id") == latest_open[0].id:
+                        stored_context.pop("active_guided_operation", None)
+                        stored_context.pop("operation_state", None)
+                        await orchestrator.conversations.update_context(
+                            conversation_id=conversation_id, user_id=user_id,
+                            context=stored_context,
+                        )
+                        await session.commit()
             cursor = dict(context.get("responses_cursor") or {})
             locale = resolve_chat_locale(
                 (user.ai_preferences or {}).get("locale") if user else None,
