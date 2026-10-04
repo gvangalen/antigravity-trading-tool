@@ -8,43 +8,42 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Correct the saved weekly DCA weekday display and read the linked strategy when explaining one named saved DCA plan. |
-| Candidate branch | `codex/finn-dca-weekday-readback` |
-| Candidate implementation SHA | `e04e0f84`; followed by this release-status commit. |
-| PR | [#67](https://github.com/gvangalen/antigravity-trading-tool/pull/67), merged. |
-| Production SHA | `d32b433a6499d9779e837a5188a4597b6d71abe3`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
+| Phase | `LOCAL_VALIDATED`; candidate CI and deployment pending. |
+| Goal | Show the stored weekday immediately when opening an existing DCA setup in the editor. |
+| Candidate branch | `codex/finn-existing-dca-editor` |
+| Candidate implementation SHA | `9d787008`; followed by this release-status commit. |
+| PR | Pending. |
+| Production SHA | Pending. Previous authenticated QA tested `7cfbe07222211996d9403b472b54c59537a3d6db`. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
 ## Change And Limits
 
-- Authenticated live QA on `a2c2411d...` saved a fixed ETH DCA for Friday. The stored weekday was `5`, but the setup editor expected a weekday name and therefore showed Monday after refresh. The editor now maps ISO weekday codes to its choices and rejects an unknown saved code instead of silently presenting Monday. The saved inventory also exposes a weekday name alongside the raw code.
-- For the exact saved Smart-DCA question supplied by the user, the production read trace selected `get_saved_setup_inventory` in `answer_mode=explain`. That route returned the named setup but did not read its linked strategy, so the model could not verify the saved €90 base and 70/100/130% curve. The inventory route now loads linked strategy evidence for an explanation of one selected DCA plan. It does not replace the model's answer.
-- A six-run local real-model probe of that exact follow-up selected `get_active_plan_and_strategy` every time and read the saved curve in all six runs. A forced inventory-path regression covers the different route observed live. This is Build evidence, not authenticated production acceptance.
-- Build used synthetic local users for writes and read-only production diagnostics. It did not access protected QA fixtures or the sealed holdout.
+- Authenticated live QA confirmed new fixed and Smart DCA create, confirm, persistence, and saved-strategy readback on `7cfbe072...`. The previously saved `ETH Vaste DCA Herhaal 0410` still appeared as Monday in the editor, while the new Friday plan appeared correctly.
+- Read-only production DB inspection found weekday code `5` for both the old setup record 80 and the new setup record 82. Both values have the same text type and byte representation. The list API returns the persisted field without a per-record conversion. No plan was edited.
+- The edit form previously initialized to Monday and loaded the selected plan only in an effect after the first paint. It now initializes from the selected plan before the first paint and remounts when switching to a different setup. A test passes both old and new record shapes through the initializer and expects Friday. This addresses the observed UI path; independent authenticated browser QA must verify the old plan after deployment.
+- The QA run did not prove an actual score-driven purchase because current complete ETH benchmark scores were unavailable. No live trading claim is made.
 
 ## Local Build Evidence
 
-The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and the real Responses provider. The chat model was `gpt-6-luna` with reasoning `none`; the selector evaluation gate used its configured `gpt-4o-mini`.
+The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and the real Responses provider. The chat model was `gpt-6-luna` with reasoning `none`; the selector gate used its configured `gpt-4o-mini`. Build did not access protected QA fixtures or the sealed holdout.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Exact saved Smart-DCA question, six real-model conversations | `6/6` read the linked strategy and answered the €117 planned amount; all six selected the direct combined read. | `.local-finn-parity-artifacts/dca-saved-readback-variation.json`, SHA-256 `c01b03cd540d494036d4b3f144dee208190586c643cd3962abf54b5f4faa24c9`. |
-| Forced inventory path | Exact user prompt; owner-scoped inventory followed by linked setup/strategy read. | `test_single_saved_dca_explanation_reads_strategy_even_when_model_chooses_inventory`. |
-| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/dca-weekday-readback-action-matrix.json`, SHA-256 `08c8cbd300d3f85a5d07c81f5b090336138ab4ddea6d1fd3731d9ce92b716a2f`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-weekday-readback-selector-development.json`, SHA-256 `3a45b8e201242f866a2a673e064fccc4b426617d66298a0352008ae0dcffc9f1`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-weekday-readback-selector-regression.json`, SHA-256 `cbbda5e4e62a678b179808e329eb47ddd2e3d9abb5ce18192942ff0959efde93`. |
-| Backend | `3089 passed, 3 skipped`; includes saved weekday and inventory readback regressions. | `pytest -q`. |
-| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals, new CI `test:setups`, and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
+| Existing Friday form initialization | Both old and new saved record shapes with `dca_day=5` initialize as Friday; new-plan default remains Monday. | `npm run test:setups`: 3/3. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/existing-dca-editor-action-matrix.json`, SHA-256 `7ae01b28fe153cc4ee115d2a675987122e622287b030336f35d35cbdac3899c0`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/existing-dca-editor-selector-development.json`, SHA-256 `755f7ec55058802998b87b5b636f48ec0129b9d8faaa8e8ce5147775a39b6585`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/existing-dca-editor-selector-regression.json`, SHA-256 `f1bb24d354f8ec2b57e18ee104770498556bbb8dc8caf8b13cc68f8321d5b62f`. |
+| Backend | `3089 passed, 3 skipped`. | `pytest -q`. |
+| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals, test:setups and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37229966731](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37229966731), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37230213446](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37230213446) and [Auto Deploy 37230380390](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37230380390) on `d32b433a6499d9779e837a5188a4597b6d71abe3`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `d32b433a6499d9779e837a5188a4597b6d71abe3`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.

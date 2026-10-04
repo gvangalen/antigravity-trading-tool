@@ -18,7 +18,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
-import { normalizeDcaWeekday } from "@/lib/setup/dcaWeekday.mjs";
+import { initialSetupFormState } from "@/lib/setup/setupFormState.mjs";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
@@ -45,18 +45,11 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   // ----------------------------------------------------
   // STATE
   // ----------------------------------------------------
-  const emptyForm = {
-    name: "",
-    symbol: "BTC",
-    setupType: "dca", // ✅ nu alleen dca of trade
-    timeframe: "1W",
-
-    dcaFrequency: "weekly",
-    dcaDay: "monday",
-    dcaMonthDay: 1,
-  };
-
-  const [formData, setFormData] = useState(emptyForm);
+  // The selected plan must be correct on the first paint. Loading it only in
+  // an effect briefly showed the default Monday for existing Friday plans.
+  const [formData, setFormData] = useState(() =>
+    initialSetupFormState(isEdit ? initialData : null)
+  );
   const [macroScore, setMacroScore] = useState([30, 70]);
   const [technicalScore, setTechnicalScore] = useState([40, 80]);
   const [marketScore, setMarketScore] = useState([20, 60]);
@@ -82,16 +75,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   useEffect(() => {
     if (!initialData) return;
 
-    setFormData({
-      name: initialData.name ?? "",
-      symbol: initialData.symbol ?? "BTC",
-      setupType: initialData.setup_type ?? "dca",
-      timeframe: initialData.timeframe ?? "1W",
-
-      dcaFrequency: initialData.dca_frequency ?? "weekly",
-      dcaDay: normalizeDcaWeekday(initialData.dca_day) ?? "monday",
-      dcaMonthDay: initialData.dca_month_day ?? 1,
-    });
+    setFormData(initialSetupFormState(initialData));
 
     setMacroScore([
       initialData.min_macro_score ?? 30,
