@@ -8,42 +8,43 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Confirm and persist monthly Smart DCA against the production integer month-day schema. |
-| Candidate branch | `codex/finn-smart-dca-confirm` |
-| Candidate implementation SHA | `a9e68bad22746d29467bf6f4728a582754e47757`; followed by this release-status commit. |
-| PR | [#65](https://github.com/gvangalen/antigravity-trading-tool/pull/65), merged. |
-| Production SHA | `2ea92c244b4fe81855db81c4c98c97ff758add58`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
+| Phase | `LOCAL_VALIDATED`; candidate CI and deployment pending. |
+| Goal | Correct the saved weekly DCA weekday display and read the linked strategy when explaining one named saved DCA plan. |
+| Candidate branch | `codex/finn-dca-weekday-readback` |
+| Candidate implementation SHA | `e04e0f84`; followed by this release-status commit. |
+| PR | Pending. |
+| Production SHA | Pending. Previous QA tested `a2c2411ddf9f8306be42fed063bb311a8821a9d8`. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
 ## Change And Limits
 
-- User-provided authenticated live QA on `87bde0307c33448a41ab052868043147d47ecc0a` confirmed fixed weekly ETH DCA, but two attempts to confirm a monthly ETH Smart DCA draft failed. The browser did not expose the typed error.
-- Build read the production execution errors for those two attempts at 18:30 and 18:31 UTC. Both failed in `INSERT INTO setups`: asyncpg rejected the string `'12'` for integer `dca_month_day`. The atomic setup/strategy write did not reach strategy creation. This is a schema/type mismatch, not a score-curve or provider failure.
-- SetupService now normalizes a monthly day to integer and SetupRepository binds it as integer for create and update. The disposable parity schema now uses and migrates to the production integer type, so the full local confirmation can catch this class of failure.
-- Build used only synthetic local users for writes. The production check was read-only diagnostic evidence. Authenticated production acceptance remains independent QA's responsibility.
+- Authenticated live QA on `a2c2411d...` saved a fixed ETH DCA for Friday. The stored weekday was `5`, but the setup editor expected a weekday name and therefore showed Monday after refresh. The editor now maps ISO weekday codes to its choices and rejects an unknown saved code instead of silently presenting Monday. The saved inventory also exposes a weekday name alongside the raw code.
+- For the exact saved Smart-DCA question supplied by the user, the production read trace selected `get_saved_setup_inventory` in `answer_mode=explain`. That route returned the named setup but did not read its linked strategy, so the model could not verify the saved €90 base and 70/100/130% curve. The inventory route now loads linked strategy evidence for an explanation of one selected DCA plan. It does not replace the model's answer.
+- A six-run local real-model probe of that exact follow-up selected `get_active_plan_and_strategy` every time and read the saved curve in all six runs. A forced inventory-path regression covers the different route observed live. This is Build evidence, not authenticated production acceptance.
+- Build used synthetic local users for writes and read-only production diagnostics. It did not access protected QA fixtures or the sealed holdout.
 
 ## Local Build Evidence
 
-The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and the real Responses provider. The chat model was `gpt-6-luna` with reasoning `none`; the selector evaluation gate used its configured `gpt-4o-mini`. Build did not access protected QA fixtures or the sealed holdout.
+The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and the real Responses provider. The chat model was `gpt-6-luna` with reasoning `none`; the selector evaluation gate used its configured `gpt-4o-mini`.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Exact monthly ETH Smart DCA confirmation | Browser-style shared idempotency key; publish and confirm HTTP 200; execute HTTP 200 `succeeded`, replay `already_executed`; saved setup month day is integer `12`, strategy is `custom` with €80 base and 0.75/1.0/1.25 curve. | `.local-finn-parity-artifacts/smart-dca-confirm-repro.json`, SHA-256 `d32e653cdb6feaa12399d05f7ad8b815a094904022253217580059e6009a29fc`. |
-| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/smart-monthly-action-matrix.json`, SHA-256 `a9c6a3e77b3b3fe78e099e7c8528cb1ccceaf4d24214f09183d587247badc0f4`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/smart-monthly-selector-development.json`, SHA-256 `fc17dde1ae049ba94f02a8b4a03453907a195db8b67c13305788ead12da6b937`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/smart-monthly-selector-regression.json`, SHA-256 `1ea78a404ae96b43efa9fa4d89efbf42cf73be1e991d439846ff9eef761f2c1e`. |
-| Backend | `3087 passed, 3 skipped`; includes integer month-day insert/update binding regression. | `pytest -q`. |
-| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
+| Exact saved Smart-DCA question, six real-model conversations | `6/6` read the linked strategy and answered the €117 planned amount; all six selected the direct combined read. | `.local-finn-parity-artifacts/dca-saved-readback-variation.json`, SHA-256 `c01b03cd540d494036d4b3f144dee208190586c643cd3962abf54b5f4faa24c9`. |
+| Forced inventory path | Exact user prompt; owner-scoped inventory followed by linked setup/strategy read. | `test_single_saved_dca_explanation_reads_strategy_even_when_model_chooses_inventory`. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/dca-weekday-readback-action-matrix.json`, SHA-256 `08c8cbd300d3f85a5d07c81f5b090336138ab4ddea6d1fd3731d9ce92b716a2f`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-weekday-readback-selector-development.json`, SHA-256 `3a45b8e201242f866a2a673e064fccc4b426617d66298a0352008ae0dcffc9f1`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-weekday-readback-selector-regression.json`, SHA-256 `cbbda5e4e62a678b179808e329eb47ddd2e3d9abb5ce18192942ff0959efde93`. |
+| Backend | `3089 passed, 3 skipped`; includes saved weekday and inventory readback regressions. | `pytest -q`. |
+| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals, new CI `test:setups`, and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37226489447](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37226489447), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37226621502](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37226621502) and [Auto Deploy 37226744560](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37226744560) on `2ea92c244b4fe81855db81c4c98c97ff758add58`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `2ea92c244b4fe81855db81c4c98c97ff758add58`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.

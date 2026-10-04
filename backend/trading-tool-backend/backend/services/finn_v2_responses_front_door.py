@@ -1184,18 +1184,30 @@ class FinnResponsesFrontDoor:
                         tool_trace=({"name": call.name, "result": read_result},),
                         previous_contract=previous_turn_contract,
                     ).get("answer_type") == "compare"
+                    selected_dca_explanation = (
+                        verified_answer_mode == "explain"
+                        and len(resolved_setup_ids) == 1
+                        and any(
+                            isinstance(row, dict)
+                            and row.get("setup_id") == resolved_setup_ids[0]
+                            and str(row.get("setup_type") or "").lower() == "dca"
+                            for item in projected_results if isinstance(item, dict)
+                            for row in (item.get("data") or {}).get("setups") or []
+                        )
+                    )
                     if (
                         getattr(self, "model_led_coach", False)
                         and (
                             comparison and len(resolved_setup_ids) == 2
                             and len(set(resolved_setup_ids)) == 2
                             or selected_strategy_name and len(resolved_setup_ids) == 1
+                            or selected_dca_explanation
                         )
                         and read_result.get("status") == "completed"
                     ):
-                        # A comparison or explicitly named strategy read needs
-                        # linked evidence. Inventory metadata alone cannot
-                        # establish strategy entry or risk conditions.
+                        # A comparison, selected strategy or explanation of a
+                        # single saved DCA plan needs linked evidence. The
+                        # inventory alone cannot establish its amount rule.
                         details: list[dict[str, Any]] = []
                         selected_names = {
                             row["setup_id"]: str(row.get("name") or "")

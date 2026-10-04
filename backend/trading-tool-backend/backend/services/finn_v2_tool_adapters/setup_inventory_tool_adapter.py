@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.schemas.finn_v2_evidence_schema import SavedSetupInventoryData
+from backend.services.finn_v2_tool_adapters.setup_tool_adapter import _dca_day_name
 
 
 class SetupInventoryToolAdapter:
@@ -16,6 +17,7 @@ class SetupInventoryToolAdapter:
                 "setup_type": row.get("setup_type"),
                 "dca_frequency": row.get("dca_frequency"),
                 "dca_day": row.get("dca_day"),
+                "dca_day_name": _dca_day_name(row.get("dca_day")),
                 "dca_month_day": row.get("dca_month_day"),
                 "min_investment": row.get("min_investment"),
             }

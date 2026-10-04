@@ -14,6 +14,7 @@
     "test:i18n": "node --test tests/i18n-hardening.test.mjs",
     "test:commands": "node --test tests/finn-command-search.test.mjs",
     "test:proposals": "node --test tests/finn-proposal-card-state.test.mjs",
+    "test:setups": "node --test tests/dca-weekday.test.mjs",
     "audit:high": "npm audit --omit=dev --audit-level=high",
     "ios:sync": "npm run build && npx cap sync ios",
     "start": "next start"
