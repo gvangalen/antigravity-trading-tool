@@ -1074,6 +1074,24 @@ def test_financial_concept_entity_is_canonicalized_after_structured_selection():
     assert result.selected_missing_inputs == ()
 
 
+def test_explicit_indicator_read_keeps_named_concept_when_selector_omits_entity():
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="read_indicator_configuration", confidence=0.95,
+                entities={"asset": "BTC", "concept": ""}, target_asset="BTC",
+                conversation_reference=None, missing_inputs=(), ambiguity_reason=None,
+                semantic_frame={"goal": "read", "object": "indicator"},
+            ), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Welke persoonlijke RSI-instelling hoort bij mijn bitcoinaccount?"
+    )
+    assert result.operation_id == "read_indicator_configuration"
+    assert result.selected_entities["asset"] == "BTC"
+    assert result.selected_entities["concept"] == "RSI"
+
+
 def test_complete_setup_slots_remove_model_reported_missing_inputs():
     result = CLASSIFIER.classify(
         message="Werk voor DOT een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."

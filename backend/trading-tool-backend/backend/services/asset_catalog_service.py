@@ -717,6 +717,31 @@ def corrected_catalog_instrument(value: object) -> str | None:
     return None
 
 
+def requests_unspecified_asset_correction(value: object, previous_asset: str) -> bool:
+    """Recognize an explicit replacement of a draft asset without a new ticker.
+
+    The old asset in a contrast clause is never evidence for the new asset.
+    Questions and hypothetical comparisons do not revoke an open proposal.
+    """
+    text = str(value or "").strip()
+    if not text or "?" in text or corrected_catalog_instrument(text):
+        return False
+    old = re.escape(str(previous_asset or ""))
+    if not old or not re.search(rf"(?<![A-Za-z0-9]){old}(?![A-Za-z0-9])", text, re.I):
+        return False
+    if not re.search(r"\b(?:ik\s+bedoel|correctie|i\s+mean|actually|eigenlijk|gebruik|use|vervang|replace)\b", text, re.I):
+        return False
+    if not re.search(rf"\b(?:in\s+plaats\s+van|instead\s+of|niet|not)\s+{old}\b", text, re.I):
+        return False
+    # A category such as 'een aandeel' identifies what to ask about, not an
+    # instrument to silently replace the prior ticker with.
+    return bool(re.search(
+        r"\b(?:een|a|another)(?:\s+(?:ander|andere|other))?\s+(?:aandeel|stock|asset|crypto|munt|coin)\b"
+        r"|\b(?:ander|andere)\s+(?:aandeel|stock|asset|crypto|munt|coin)\b",
+        text, re.I,
+    ))
+
+
 def resolve_catalog_symbol_in_text(value: object) -> str | None:
     """Resolve one catalog asset from a natural-language token or compound.
 

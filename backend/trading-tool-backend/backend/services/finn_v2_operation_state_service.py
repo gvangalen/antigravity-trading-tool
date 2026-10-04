@@ -10,6 +10,7 @@ from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.domain.market_indicator_catalog import get_active_market_indicator_definitions
+from backend.services.asset_catalog_service import resolve_catalog_symbol_mention
 from backend.schemas.finn_v2_orchestrator_schema import FinnV2OperationState
 
 
@@ -872,6 +873,8 @@ class FinnV2OperationStateService:
         if field == "name":
             named = self._name_input_from_text(value) or value
             return FinnV2SetupInputCatalog.display_name(named) if contract.operation_id == "create_setup" else named
+        if field in {"asset", "symbol"}:
+            return resolve_catalog_symbol_mention(value)
         if field == "dca_frequency":
             return self._canonical_dca_frequency(value)
         if field == "dca_day":
