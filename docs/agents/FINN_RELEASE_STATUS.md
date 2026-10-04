@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_CI_PENDING`; local Build gates passed, candidate is not deployed. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | An explicit correction without a replacement ticker must withdraw the old proposal, ask for the ticker, and continue the original DCA draft without reviving the old asset. |
 | Candidate branch | `codex/finn-unknown-asset-correction` |
 | Candidate implementation SHA | `1f421544b65c82e35038051c7969140286b91379`; followed by this release-status commit. |
-| PR | Pending. |
-| Production SHA | `15ea7610bf3c481de48e816ca8eb1b1eca7e2a3e`; public backend and frontend both reported it with HTTP 200 on 2026-10-04 before this repair. |
+| PR | [#61](https://github.com/gvangalen/antigravity-trading-tool/pull/61), merged. |
+| Production SHA | `be018b3634373929198541697471148b6d228a88`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
@@ -43,9 +43,9 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Previous production SHA only; candidate pending. |
+| Candidate CI | `PASS`: [run 37217705166](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37217705166), all five jobs green. |
+| Main CI and Auto Deploy | `PASS`: [main CI 37217881723](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37217881723) and [Auto Deploy 37218000606](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37218000606) on `be018b3634373929198541697471148b6d228a88`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `be018b3634373929198541697471148b6d228a88`. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
