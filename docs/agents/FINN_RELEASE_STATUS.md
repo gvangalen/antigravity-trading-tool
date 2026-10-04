@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_VALIDATED`; production deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate and main CI, Auto Deploy, and public identity checks passed. |
 | Goal | Preserve already supplied fixed and Smart DCA inputs across the first proposal, clarification and retry after a failed turn. |
 | Candidate branch | `codex/finn-dca-conversation-recovery` |
 | Candidate code SHA | `20252252ae265ec9fc32623c9cbae75ac37caa9d` |
-| PR | [#51](https://github.com/gvangalen/antigravity-trading-tool/pull/51), draft at this stage. |
-| Production SHA | Pending Auto Deploy and public identity checks. |
+| PR | [#51](https://github.com/gvangalen/antigravity-trading-tool/pull/51), merged. |
+| Production SHA | `d90a9d8af469d563dbb96be3ffa04a660a39aa10`; backend and frontend both returned HTTP 200 with this SHA at 07:14 UTC on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
@@ -45,10 +45,10 @@ The failed-turn recovery is covered at the runtime-contract continuation boundar
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS` on code SHA: [PR run 37183857041](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37183857041), all five jobs green. Status-only candidate commit requires its own CI. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending. |
+| Candidate CI | `PASS`: [PR run 37184917818](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37184917818), all five jobs green including candidate status. Earlier [run 37183857041](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37183857041) was green on the code SHA. |
+| Main CI | `PASS`: [main run 37185052641](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37185052641), all five jobs green on `d90a9d8af469d563dbb96be3ffa04a660a39aa10`. |
+| Auto Deploy | `PASS`: [run 37185145998](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37185145998) deployed `d90a9d8af469d563dbb96be3ffa04a660a39aa10`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 with `d90a9d8af469d563dbb96be3ffa04a660a39aa10` at 07:14 UTC on 2026-10-04. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence and CI do not establish authenticated production acceptance.
