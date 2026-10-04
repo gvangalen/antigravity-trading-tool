@@ -81,7 +81,14 @@ class FinnV2OperationStateService:
         # projection cannot silently overwrite a user-supplied slot.
         is_slot_turn = existing is not None and bool(requested_slot)
         is_correction = is_slot_turn and self._is_explicit_correction(message)
-        if is_slot_turn and is_correction:
+        if is_slot_turn and requested_slot == "name" and self._name_input_from_text(message):
+            # A name may itself contain a word such as "Correctie". That is
+            # still the answer to the pending name slot, not an instruction
+            # to discard the slot in favor of a field-correction parser.
+            explicit = {"name": self._requested_slot_value(
+                field="name", text=message, contract=contract,
+            )}
+        elif is_slot_turn and is_correction:
             explicit = self._explicit_correction_inputs(
                 contract=contract, message=message, accepted_inputs=set(contract.input_fields)
             )

@@ -3729,6 +3729,7 @@
       "canceled": "✕ Concept geannuleerd",
       "saved": "✓ Concept succesvol opgeslagen!",
       "proposalRetired": "Dit voorstel is ingetrokken en kan niet meer worden bevestigd.",
+      "proposalSuspended": "Bevestigen is gepauzeerd totdat de verduidelijking en voorstelstatus zijn afgerond.",
       "collectingDetails": "Finn verzamelt eerst de kernkeuzes en laat daarna pas de volledige conceptkaart zien."
     },
     "universalAction": {

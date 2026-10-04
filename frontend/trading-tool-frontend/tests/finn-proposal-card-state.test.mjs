@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, retireFinnProposalCards } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards } from "../lib/finnProposalCardState.mjs";
 
 test("retired server proposal loses its confirmation card while a new draft remains", () => {
   const oldCard = {
@@ -31,4 +31,17 @@ test("a failed status read does not invent a cancellation", () => {
     { status: "rejected", reason: new Error("network") },
   ]);
   assert.equal(retired.size, 0);
+});
+
+test("a clarification or failed status read cannot reactivate the previous card", () => {
+  const cards = [{
+    role: "assistant", canConfirm: true,
+    actions: [{ type: "v2_proposal", proposal_id: "old" }],
+  }];
+  const openResults = [{ status: "fulfilled", value: { status: "draft" } }];
+  const suspended = suspendedProposalIds(["old"], openResults, true);
+  assert.equal(suspended.has("old"), true);
+  assert.equal(suspendFinnProposalCards(cards, suspended)[0].confirmationSuspended, true);
+  assert.equal(suspendedProposalIds(["old"], openResults).size, 0);
+  assert.equal(suspendedProposalIds(["old"], [{ status: "rejected" }]).has("old"), true);
 });

@@ -693,16 +693,28 @@ def corrected_catalog_instrument(value: object) -> str | None:
     This identifies a user correction to an open proposal; it does not decide
     how FINN should answer or turn a quoted pair into its base asset.
     """
-    match = re.search(
-        r"\b(?:ik\s+bedoel(?:de)?|i\s+mean|ich\s+meine|actually|eigenlijk|"
-        r"corrigeer\s+(?:de\s+asset\s+)?naar|(?:verander|wijzig)\s+(?:de\s+asset\s+)?naar)"
-        r"\s+(?:(?:de|the)\s+asset\s+)?(?P<instrument>[A-Za-z0-9]{2,20}(?:/[A-Za-z0-9]{2,10})?)",
-        str(value or ""), flags=re.IGNORECASE,
+    text = str(value or "")
+    instrument = r"[A-Za-z0-9]{2,20}(?:/[A-Za-z0-9]{2,10})?"
+    patterns = (
+        rf"\b(?:ik\s+bedoel(?:de)?|i\s+mean|ich\s+meine|actually|eigenlijk|"
+        rf"corrigeer\s+(?:de\s+asset\s+)?naar|(?:verander|wijzig)\s+(?:de\s+asset\s+)?naar)"
+        rf"\s+(?:(?:de|the)\s+asset\s+)?(?P<instrument>{instrument})",
+        rf"^\s*(?:correctie\s*:\s*)?(?:niet|not|kein)\s+{instrument}\s*,?\s*(?:maar|but|sondern)\s+"
+        rf"(?P<instrument>{instrument})\b",
+        rf"^\s*(?:correctie\s*:\s*)?(?:ik\s+wil|i\s+want|gebruik|use|voor|for)\s+(?:toch\s+)?"
+        rf"(?P<instrument>{instrument})\b[^.!?]*\b(?:in\s+plaats\s+van|instead\s+of|"
+        rf"niet|not)\s+{instrument}\b",
+        rf"\b(?:maak|create|erstelle)\b[^.!?]*\b(?:voor|for|für)\s+"
+        rf"(?P<instrument>{instrument})\b[^.!?]*\b(?:niet|not|kein)\s+(?:(?:voor|for|für)\s+)?{instrument}\b",
     )
-    if not match:
-        return None
-    instrument = match.group("instrument")
-    return unsupported_catalog_pair_mention(instrument) or resolve_catalog_symbol(instrument)
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            candidate = match.group("instrument")
+            resolved = unsupported_catalog_pair_mention(candidate) or resolve_catalog_symbol(candidate)
+            if resolved:
+                return resolved
+    return None
 
 
 def resolve_catalog_symbol_in_text(value: object) -> str | None:

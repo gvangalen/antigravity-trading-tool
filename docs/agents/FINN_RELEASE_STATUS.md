@@ -8,43 +8,44 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Withdraw a superseded FINN proposal after an explicit asset correction and remove its confirmation card. |
-| Candidate branch | `codex/finn-proposal-correction-invalidation` |
-| Candidate implementation SHA | `f2fab0432fa337c3406641a9fb1a3b9240211e5c`; the status commit will add a later branch SHA. |
-| PR | [#57](https://github.com/gvangalen/antigravity-trading-tool/pull/57), merged. |
-| Production SHA | `f8a5644011297fe2b1a324287f76c96b3ea2a826`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up will create a later deploy SHA; verify that final identity separately. |
+| Phase | `CANDIDATE_PENDING_CI`; local Build gates passed. CI, deployment and independent QA have not run for this candidate. |
+| Goal | Keep an old FINN proposal withdrawn through an explicit asset correction, a clarification turn and the replacement proposal. |
+| Candidate branch | `codex/finn-proposal-asset-correction-followup` |
+| Candidate implementation SHA | `03206d0b4a49a6fdd219cdbab6236cc50d794d26`; this status commit adds a later branch SHA. |
+| Production SHA | Pending. Live `125c78725324024ba425e08a8da9ce1e71de2df4` is the preceding, QA-cautioned release. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
 ## Change And Limits
 
-- An explicit correction to a different catalog instrument cancels the latest owner-scoped, conversation-scoped open proposal before the provider answers. This includes an unsupported full pair such as `ETH/EUR`; the pair is not substituted with ETH.
-- Cancellation revokes any already issued confirmation token. The original proposal cannot be published or confirmed after correction.
-- The chat temporarily disables confirmation while a turn is pending, re-reads visible proposal statuses after the turn, removes retired cards and checks the server again before confirming. OpenAI remains responsible for the conversational answer.
-- No saved plan, bot or trade was changed by Build's local probes. Build did not use the protected QA fixture. Authenticated production acceptance remains independent QA's responsibility.
+- Explicit correction phrases, including the live QA wording `Correctie: gebruik AAPL (Apple) in plaats van ETH`, cancel the old owner- and conversation-scoped proposal before selection. Hypothetical comparison questions do not cancel it.
+- A supported correction stays on the original proposal operation (`create_setup` for DCA), rather than becoming an active-asset change. The cancelled proposal ID and any issued confirmation token remain unusable.
+- The owner's earlier non-asset fields and any explicitly named replacement are carried into a clarification turn. FINN receives the verified cancellation status as tool context. No replacement is claimed before its proposal contract succeeds.
+- In the UI, an old card remains unconfirmable while a clarification is open or a proposal-status read fails. A cancelled card is retired after the authoritative status read.
+- Build used synthetic local users only. No saved plan, bot or trade was executed. Authenticated production acceptance belongs to independent QA.
 
 ## Local Build Evidence
 
-The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and the real Responses provider with synthetic users. It did not access protected QA fixtures or the sealed holdout.
+The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and the real Responses provider. The chat model was `gpt-6-luna` with reasoning `none`; the existing selector evaluation gate used its configured `gpt-4o-mini`. Build did not access protected QA fixtures or the sealed holdout.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| ETH to unsupported pair, with an already issued token | Completed answer, no replacement proposal; old ETH proposal `cancelled`; old publish and token confirmation both HTTP 409. | `.local-finn-parity-artifacts/proposal-correction-final-probe.json`, SHA-256 `5eba7b26c3b1f598f0301fa04c1aa0df71f1929fddf4f44634c47275cc7cc14f`. |
-| ETH to supported AAPL correction | Old ETH proposal `cancelled`; new AAPL proposal `draft` in the same conversation. | `.local-finn-parity-artifacts/proposal-supported-correction-final-probe.json`, SHA-256 `7a0de9d039c41ea153c34a112f002e68c21f831a63b4ffb4f168118e4a745480`. |
-| Worker-driven safe action contracts on final code | `16/16`; zero broker orders, live trading calls, live bots or production connections. | `.local-finn-parity-artifacts/proposal-correction-final-action-matrix.json`, SHA-256 `a8e833732c715aa927c8657963695bd21f83b45233d37dc5cf7b437ba7bb231b`. |
-| Real-provider selector development | `18/18`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-correction-final-selector-development.json`, SHA-256 `9d76711864b423d695bdf9378df12e5c62c1bbf0d565a48a0890dee4fa1a1bcf`. |
-| Real-provider selector regression | `109/109`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-correction-final-selector-regression.json`, SHA-256 `b50a16326b0df1d2667e9d98de86226a776bdfb3333cfa4398f7963c21f28906`. |
-| Backend | `3078 passed, 3 skipped`; explicit correction parsing and negative case included. | `pytest -q`. |
-| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, new test:proposals and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
+| Full ETH to AAPL correction | Old ETH `cancelled`; new AAPL `create_setup` draft; no save or execution. | `.local-finn-parity-artifacts/proposal-apple-final-full.json`, SHA-256 `39ca6fd41c4bc48a0f8342f7390068a2fc2f94e94b4763b044d19565746d10ac`. |
+| ETH to AAPL across a name clarification | Old ETH `cancelled` before clarification; after the name answer, new AAPL `create_setup` draft. | `.local-finn-parity-artifacts/proposal-apple-final-clarification.json`, SHA-256 `ac13a1b37fcaeea4b51f3643a32bd1fca05c660be49ea28aa00311b0493a7061`. |
+| ETH to unsupported ETH/EUR | Old ETH `cancelled`; no replacement; old publish and token confirmation both HTTP 409. | `.local-finn-parity-artifacts/proposal-apple-final-unsupported.json`, SHA-256 `5e154d7cc50b91435f059623d9ecf2826b6d3dbad59cb2d0b4b97581efb85895`. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/proposal-apple-final-action-matrix.json`, SHA-256 `1dd47ec608bf9e5193facb60ffb3be722e2eb60c8fcfee445abb8931ef612215`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-apple-final-selector-development.json`, SHA-256 `e2476c225d0c7631310dc28f905b477ed45d9b9e4f40b7d616b03e254cd94f21`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/proposal-apple-final-selector-regression.json`, SHA-256 `4ab06ad19a0bb91450e5be0ce5176da2ba71a6c000f8bd849d838293d2b4b9f0`. |
+| Backend | `3081 passed, 3 skipped`; includes the exact QA correction wording, a name containing “Correctie” and a hypothetical negative case. | `pytest -q`. |
+| Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37199819738](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37199819738), all five jobs green after adding the required tracked frontend export. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37199954664](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37199954664) and [Auto Deploy 37200039750](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37200039750) on `f8a5644011297fe2b1a324287f76c96b3ea2a826`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `f8a5644011297fe2b1a324287f76c96b3ea2a826`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending for this candidate. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
-Local Build evidence and CI do not establish authenticated production acceptance.
+Local Build evidence does not establish authenticated production acceptance.

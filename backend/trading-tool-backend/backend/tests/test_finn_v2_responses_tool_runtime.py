@@ -2948,7 +2948,14 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
     assert corrected_catalog_instrument("Ik bedoel ETH/EUR, niet ETH.") == "ETH/EUR"
     assert corrected_catalog_instrument("I mean AAPL, not ETH.") == "AAPL"
     assert corrected_catalog_instrument("Ik bedoel ETH, niet ETH/EUR.") == "ETH"
+    assert corrected_catalog_instrument("Niet ETH maar AAPL (Apple-aandelen).") == "AAPL"
+    assert corrected_catalog_instrument("Ik wil toch AAPL als Apple-aandelen in plaats van ETH.") == "AAPL"
+    assert corrected_catalog_instrument("Maak dit plan voor AAPL, niet voor ETH.") == "AAPL"
+    assert corrected_catalog_instrument(
+        "Correctie: gebruik AAPL (Apple) in plaats van ETH voor dit vaste DCA-concept."
+    ) == "AAPL"
     assert corrected_catalog_instrument("Wat betekent ETH/EUR?") is None
+    assert corrected_catalog_instrument("Wat als ik AAPL gebruik in plaats van ETH?") is None
     assert corrected_catalog_instrument("Ik bedoel, hoe werkt AAPL naast mijn ETH-plan?") is None
     call = FinnResponsesToolCatalog().validate(
         "create_dca_plan_proposal",
@@ -2962,6 +2969,126 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
         )
     assert caught.value.details["requested_instrument"] == "ETH/EUR"
     assert caught.value.details["status"] == "unsupported"
+
+
+def test_asset_correction_clarification_reuses_prior_dca_fields_without_old_proposal():
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {
+            "setup_type": "dca", "symbol": "AAPL",
+        }},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Ja, AAPL is Apple-aandelen.",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-eth-proposal", "status": "cancelled",
+            "operation_id": "create_setup", "previous_asset": "ETH",
+            "requested_instrument": "AAPL", "prior_inputs": {
+                "name": "ETH Smart DCA", "setup_type": "dca", "timeframe": "1D",
+                "dca_frequency": "weekly", "dca_day": "monday",
+                "dca_amount_mode": "score_bands", "base_amount": 80,
+                "score_source": "benchmark_score", "low_threshold": 40,
+                "high_threshold": 70, "low_score_percent": 75,
+                "mid_score_percent": 100, "high_score_percent": 125,
+            },
+        }},
+        verified_asset=None,
+    )
+    state = analysis.request_plan.operation_state
+    assert state["collected_inputs"]["symbol"] == "AAPL"
+    assert state["collected_inputs"]["timeframe"] == "1D"
+    assert state["collected_inputs"]["base_amount"] == 80
+    assert state["collected_inputs"]["high_score_percent"] == 125
+    assert "name" in state["missing_required_inputs"]
+    assert state["open_proposal_id"] is None
+
+
+def test_asset_correction_clarification_keeps_explicit_replacement_name():
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+    from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+
+    correction = (
+        "Correctie: gebruik AAPL (Apple) in plaats van ETH voor dit vaste DCA-concept. "
+        "Houd 1D, elke maandag en €80 per aankoop; noem het Apple DCA Correctie QA. "
+        "Toon een nieuw voorstel, bevestig niets."
+    )
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    explicit = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=correction, explicit_asset="AAPL",
+    )
+    assert explicit["name"] == "Apple DCA Correctie QA"
+    assert explicit["base_amount"] == 80
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {"symbol": "AAPL"}},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Ja, ik bedoel Apple-aandelen met ticker AAPL. Maak een nieuw voorstel.",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-eth-proposal", "status": "cancelled",
+            "operation_id": "create_setup", "previous_asset": "ETH",
+            "requested_instrument": "AAPL", "prior_inputs": {
+                "name": "ETH DCA Correctie QA", "setup_type": "dca", "timeframe": "1D",
+                "dca_frequency": "weekly", "dca_day": "monday", "base_amount": 80,
+                **{key: value for key, value in explicit.items() if key not in {"symbol", "asset"}},
+            },
+        }},
+        verified_asset=None,
+    )
+    state = analysis.request_plan.operation_state
+    assert state["collected_inputs"]["name"] == "Apple DCA Correctie QA"
+    assert state["collected_inputs"]["symbol"] == "AAPL"
+    assert state["collected_inputs"]["base_amount"] == 80
+    assert state["missing_required_inputs"] == []
+    direct = FinnResponsesProposalSelection().from_call(
+        call=call, message=correction,
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-eth-proposal", "status": "cancelled",
+            "operation_id": "create_setup", "previous_asset": "ETH",
+            "requested_instrument": "AAPL", "prior_inputs": {
+                "name": "Apple DCA Correctie QA", "setup_type": "dca",
+                "timeframe": "1D", "dca_frequency": "weekly",
+                "dca_day": "monday", "base_amount": 80,
+            },
+        }}, verified_asset=None,
+    )
+    assert direct.request_plan.operation_state["collected_inputs"]["symbol"] == "AAPL"
+
+
+def test_asset_correction_name_slot_accepts_name_containing_correction_word():
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+    from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    states = FinnV2OperationStateService()
+    first = states.resolve(
+        contract=contract,
+        message="Correctie: gebruik AAPL in plaats van ETH.",
+        explicit_asset="AAPL",
+        conversation_context={},
+        derived_inputs={
+            "symbol": "AAPL", "setup_type": "dca", "timeframe": "1D",
+            "dca_frequency": "weekly", "dca_day": "monday", "base_amount": 80,
+            "dca_amount_mode": "fixed",
+        },
+        model_tool_inputs=True,
+    )
+    assert first.missing_required_inputs == ["name"]
+    second = states.resolve(
+        contract=contract,
+        message="Ja, ik bedoel AAPL. Noem het Apple DCA Correctie QA.",
+        explicit_asset="AAPL",
+        conversation_context={
+            "conversation_state_version": states.CONTEXT_STATE_VERSION,
+            "active_guided_operation": first.dict(),
+        },
+        model_tool_inputs=True,
+    )
+    assert second.collected_inputs["name"] == "Apple DCA Correctie QA"
+    assert second.missing_required_inputs == []
 
 
 def test_saved_object_update_is_not_treated_as_draft_revision():
