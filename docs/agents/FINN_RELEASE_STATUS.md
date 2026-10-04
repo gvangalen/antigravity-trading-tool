@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_PENDING_CI`; local Build gates passed, production deployment and independent QA pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | Make Smart DCA work across catalog assets, retain an open concept for read-only coaching, and reject stale benchmark source data before score-driven execution. |
 | Candidate branch | `codex/finn-dca-cross-asset-coach-freshness` |
-| Candidate code SHA | Resolve the commit containing this status from Git. |
-| PR | Pending. |
-| Production SHA | The user reported `f4f7354cbfccc4830155ae0a8feb7b42e094496f` before this candidate. No new production identity is claimed here. |
+| Candidate code SHA | `1df343280dfc0880650e22aea6385a3c06094f1d`. |
+| PR | [#53](https://github.com/gvangalen/antigravity-trading-tool/pull/53), merged. |
+| Production SHA | `2e40d567464808abeedcaa91a96e9fa499560ea4`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up will create a later deploy SHA; verify that final identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-04 |
 
@@ -43,9 +43,9 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending for this candidate. |
+| Candidate CI | `PASS`: [run 37190269634](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37190269634), all five jobs green. |
+| Main CI and Auto Deploy | `PASS`: [main CI 37190423504](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37190423504) and [Auto Deploy 37190526075](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37190526075) on `2e40d567464808abeedcaa91a96e9fa499560ea4`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `2e40d567464808abeedcaa91a96e9fa499560ea4`. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence and CI do not establish authenticated production acceptance.
