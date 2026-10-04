@@ -8,47 +8,47 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate and main CI, Auto Deploy, and public identity checks passed. |
-| Goal | Smart DCA uses the total current Market, Macro and Technical benchmark for a percentage ladder around a base amount. Fixed DCA and paper execution remain distinct. |
-| Candidate branch | `codex/finn-smart-dca-contract` |
-| Candidate code SHA | `2ed4fdc837cb4d650b9faa9891879a53f97047f2` |
-| PR | [#49](https://github.com/gvangalen/antigravity-trading-tool/pull/49), merged. |
-| Production SHA | `0fa302eafedf0c250205f2ee37c7c883dfea6682`; backend and frontend both returned HTTP 200 with this SHA at 19:34 UTC on 2026-10-03. This status-only follow-up creates a later deploy SHA; verify that identity separately. |
+| Phase | `CANDIDATE_VALIDATED`; production deployment pending. |
+| Goal | Preserve already supplied fixed and Smart DCA inputs across the first proposal, clarification and retry after a failed turn. |
+| Candidate branch | `codex/finn-dca-conversation-recovery` |
+| Candidate code SHA | `20252252ae265ec9fc32623c9cbae75ac37caa9d` |
+| PR | [#51](https://github.com/gvangalen/antigravity-trading-tool/pull/51), draft at this stage. |
+| Production SHA | Pending Auto Deploy and public identity checks. |
 | Release owner | Build |
-| Last updated | 2026-10-03 |
+| Last updated | 2026-10-04 |
 
-The user explicitly selected the existing combined benchmark as the only Smart DCA score source, using the current Analyse weights. There is no legacy market-only Smart DCA mode in this candidate. Build used synthetic local users and did not access the protected QA fixture or sealed holdout.
+The user supplied independent, read-only live chat findings on `ea7ca16326217b907e85fb6a1f03e26581df6eb9`: a full Smart DCA request lost its three percentages, “elke 5e van de maand” lost the day, and a failed turn lost the earlier collecting draft. The first two failures were reproduced in the local input parser. The exact cause of the live “FINN kon dit antwoord niet afronden” turn remains unproven without its run trace. Build used only synthetic local users and did not access protected QA fixtures or sealed material.
 
 ## Change
 
-- FINN creates Smart DCA as a setup cadence plus a linked strategy with a base amount and score-to-percentage ladder. The proposal card shows the source, thresholds, and resulting amounts before confirmation.
-- The paper decision path uses the total Market/Macro/Technical benchmark and current weights. Missing score components prevent a score-based purchase. Fixed DCA remains separate from the Smart DCA ladder.
-- Setup, strategy and bot evidence expose the stored plan through typed contracts for later FINN readback.
+- FINN retains all three explicitly stated Smart DCA percentages and a named base amount even when calculated euro amounts also appear.
+- Weekly weekdays and ordinal monthly days are collected from the initial DCA request.
+- A percentage clarification can fill all three pending bands in one turn. After a failed or unavailable turn, a still collecting owner-scoped draft remains available for retry.
+- The score source, paper execution and action confirmation boundaries are unchanged.
 
 ## Local Build Evidence
 
-The isolated parity stack used PostgreSQL, Redis, API and Celery with synthetic users; the FINN chat path used the real Responses provider. No production account or live order was used.
+The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and the real Responses provider with synthetic users. No production account or live order was used.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| API/Celery/Responses positive and negative Smart DCA path | Positive proposal and paper sizing exercised; market-only request produced no confirmable Smart DCA proposal. | Local parity artifacts. |
-| Paper sizing | Benchmark scores 32/60/80 gave €10/€100/€150; missing Macro held at €0; no duplicate buy. | Local paper probe artifact, SHA-256 `0b0eb18f9c89ee14ecb900366e5827e7eb6aa8da5b4327dcfc6125279e084d47`. |
-| Worker-driven safe action contracts | `16/16`; no broker orders, live trading calls or live bots. | `.local-finn-parity-artifacts/benchmark-only-action-matrix.json`, SHA-256 `1831d34c84649b062730bf0ff8a7954e6f9ac142a0546454d271bd68b4963860`. |
-| Real-provider selector development | `18/18`; no provider, schema, parse, validation or timeout failures. | Local selector development artifact. |
-| Real-provider selector regression | `109/109`; no provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/benchmark-only-selector-regression.json`, SHA-256 `9148cbe5e4e1ff21b465fddc4488f6731ac7cc606e83864bcba179f05004b5c2`. |
-| Backend canonical suite | `3055 passed, 3 skipped`. | `python3 -m pytest -q`. |
-| Frontend canonical checks | `build`, `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high` passed. | Local Build run. |
+| API/Celery/Responses DCA conversation probe | Exact Smart DCA request and ordinal monthly request each produced a complete proposal in one turn; an incomplete Smart DCA request followed by all three percentages produced a complete proposal. Polling/SSE parity passed; no proposal was confirmed. | `.local-finn-parity-artifacts/dca-conversation-probe.json`, SHA-256 `7f65e80946b7c2ce6cb6591730cd093dae9d79fbeafdf060b37ea6ffd1138275`. |
+| Worker-driven safe action contracts | `16/16`; no broker orders, live trading calls or live bots. | `.local-finn-parity-artifacts/dca-conversation-action-matrix.json`, SHA-256 `bf87d415fe35d0344e583afe2040184129e8b9911a0c639b3f32ae401ddde5c5`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-conversation-selector-development.json`, SHA-256 `873612a250af2e15c4a5711eb714b532ab53de1049d01c16f7f7761bad7148fa`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/dca-conversation-selector-regression.json`, SHA-256 `f8eff871774ce9b90bacf50ea2de8d2754a11ed81ec191322a6c9991ad9083a0`. |
+| Backend canonical suite | `3060 passed, 3 skipped`. | `python3 -m pytest -q`. |
+| Frontend and other CI checks | No frontend source changed; PR CI all five jobs passed on the code SHA. | [PR run 37183857041](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37183857041). |
 
-The daily score row date can be current even when an underlying indicator is older; component-level source freshness is not independently enforced in this candidate.
+The failed-turn recovery is covered at the runtime-contract continuation boundary. The specific live provider error was not reproduced locally, so this evidence proves draft recovery after a failed contract, not elimination of every provider failure.
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [PR run 37148039190](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37148039190), all five jobs green on the candidate including status. Earlier [run 37146476417](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37146476417) was also green on the code SHA. |
-| Main CI | `PASS`: [main run 37148192085](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37148192085), all five jobs green on `0fa302eafedf0c250205f2ee37c7c883dfea6682`. |
-| Auto Deploy | `PASS`: [run 37148317374](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37148317374) deployed `0fa302eafedf0c250205f2ee37c7c883dfea6682`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 with `0fa302eafedf0c250205f2ee37c7c883dfea6682` at 19:34 UTC on 2026-10-03. |
+| Candidate CI | `PASS` on code SHA: [PR run 37183857041](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37183857041), all five jobs green. Status-only candidate commit requires its own CI. |
+| Main CI | Pending. |
+| Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence and CI do not establish authenticated production acceptance.
