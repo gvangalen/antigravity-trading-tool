@@ -407,6 +407,33 @@ def test_continuation_context_uses_the_persisted_parent_contract_state():
     assert context["active_guided_operation"] == expected_flow
 
 
+def test_failed_turn_preserves_last_collecting_dca_draft_for_retry():
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    draft = {
+        "operation_id": "create_setup", "status": "collecting",
+        "collected_inputs": {"name": "BTC Smart DCA", "base_amount": 100},
+        "missing_required_inputs": ["low_score_percent"],
+        "next_missing_input": "low_score_percent",
+    }
+
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {"active_guided_operation": draft}
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return SimpleNamespace(state_json={"terminal_status": "failed", "guided_state": {}})
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
+    context = asyncio.run(service._load_continuation_context(
+        conversation_id="smart-dca-retry", user_id=7, run_id="retry-run",
+    ))
+    assert context["active_guided_operation"] == draft
+
+
 def test_successful_action_result_closes_stale_guided_indicator_state():
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 

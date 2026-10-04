@@ -1085,6 +1085,14 @@ class FinnV2OrchestratorService:
                 exclude_run_id=run_id,
             )
         guided_state = dict(previous_state.get("guided_state") or {})
+        if not guided_state and previous_state.get("terminal_status") in {"failed", "unavailable"}:
+            # A failed Responses turn has no new guided draft to persist. The
+            # owner-scoped conversation projection still holds the last
+            # successfully released collecting draft, so a retry can fill it.
+            # Never revive it after a completed or confirmed action.
+            projected = dict(context.get("active_guided_operation") or {})
+            if projected.get("status") == "collecting" and projected.get("missing_required_inputs"):
+                guided_state = projected
         is_collecting_guided_state = bool(
             guided_state.get("operation_id")
             and guided_state.get("status") in {None, "collecting"}
