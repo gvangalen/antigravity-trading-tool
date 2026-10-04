@@ -407,6 +407,41 @@ def test_continuation_context_uses_the_persisted_parent_contract_state():
     assert context["active_guided_operation"] == expected_flow
 
 
+def test_read_only_turn_recovers_the_open_dca_draft_from_its_owner_contract(monkeypatch):
+    from backend.services import finn_v2_orchestrator_service as module
+
+    guided = {
+        "operation_id": "create_setup", "open_proposal_id": "owned-draft",
+        "collected_inputs": {"name": "Apple Smart", "symbol": "AAPL", "base_amount": 60},
+    }
+
+    class Conversations:
+        async def get_context(self, **_kwargs):
+            return {}
+
+    class Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return SimpleNamespace(run_id="read-only-turn", state_json={"guided_state": {}})
+
+    class Proposals:
+        async def get_latest_open_for_conversation(self, **kwargs):
+            assert kwargs == {"conversation_id": "conversation-1", "user_id": 7}
+            return (
+                SimpleNamespace(id="owned-draft", operation_type="create_setup"),
+                SimpleNamespace(state_json={"guided_state": guided}),
+            )
+
+    monkeypatch.setattr(module, "FinnV2ProposalRepository", lambda _session: Proposals())
+    service = object.__new__(module.FinnV2OrchestratorService)
+    service.session = SimpleNamespace(execute=lambda: None)
+    service.conversations = Conversations()
+    service.runtime_contracts = Contracts()
+    context = asyncio.run(service._load_continuation_context(
+        conversation_id="conversation-1", user_id=7, run_id="current-run",
+    ))
+    assert context["proposal_revision"]["guided_state"]["collected_inputs"]["symbol"] == "AAPL"
+
+
 def test_failed_turn_preserves_last_collecting_dca_draft_for_retry():
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 

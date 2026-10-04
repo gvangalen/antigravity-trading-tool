@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
 from backend.utils.db import get_db_connection
@@ -12,6 +13,35 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def score_source_is_fresh(category: str, indicator: str, timestamp: Any, *,
+                          symbol: str = "BTC", now: datetime | None = None) -> bool:
+    """Apply source-specific age limits before a score can size Smart DCA.
+
+    Monthly macro releases remain usable through their next release window;
+    daily sources have a weekend allowance. Crypto technical/market data is
+    expected more frequently than exchange-traded asset data.
+    """
+    if not isinstance(timestamp, datetime):
+        return False
+    current = now or datetime.now(timezone.utc)
+    observed = timestamp.replace(tzinfo=timezone.utc) if timestamp.tzinfo is None else timestamp.astimezone(timezone.utc)
+    if category == "macro" and normalize_indicator_name(indicator) in {"interest_rate", "inflation_rate"}:
+        # FRED stamps monthly series with the period start, which precedes
+        # publication by weeks. Allow the current release window, not a new
+        # receipt timestamp on each fetch.
+        limit = timedelta(days=75)
+    elif category == "macro":
+        limit = timedelta(days=4)
+    elif category in {"technical", "market"}:
+        from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+        asset_class = DEFAULT_ASSET_CATALOG.get(str(symbol).upper(), {}).get("asset_class")
+        limit = timedelta(hours=36 if asset_class == "crypto" else 96)
+    else:
+        return False
+    age = current - observed
+    return timedelta(0) <= age <= limit
 
 # =========================================================
 # 🧩 Naam-aliases
@@ -83,10 +113,10 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 if configs:
                     # Haal nu de data op voor deze specifieke indicators en dit symbool
                     cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value, timestamp
                         FROM {data_table}
                         WHERE user_id = %s AND symbol = %s AND {name_col} = ANY(%s)
-                        ORDER BY {name_col}, timestamp DESC
+                        ORDER BY {name_col}, timestamp DESC NULLS LAST
                     """, (user_id, symbol, configs))
                 else:
                     # Missing canonical preferences are not permission to score
@@ -96,17 +126,17 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             elif user_id is not None:
                 if category == "macro":
                     cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value, timestamp
                         FROM {data_table}
                         WHERE user_id = %s
-                        ORDER BY {name_col}, timestamp DESC
+                        ORDER BY {name_col}, timestamp DESC NULLS LAST
                     """, (user_id,))
                 else:
                     cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value
+                        SELECT DISTINCT ON ({name_col}) {name_col}, value, timestamp
                         FROM {data_table}
                         WHERE user_id = %s AND symbol = %s
-                        ORDER BY {name_col}, timestamp DESC
+                        ORDER BY {name_col}, timestamp DESC NULLS LAST
                     """, (user_id, symbol))
             else:
                 # 🌍 GLOBAL mode (fallback)
@@ -114,10 +144,13 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
 
             rows = cur.fetchall()
 
-        data = {
-            normalize_indicator_name(r[0]): float(r[1])
-            for r in rows if r[1] is not None
-        }
+        # A newly stamped daily_scores row must not launder an old component
+        # into fresh trading evidence. Fail the whole component rather than
+        # silently reweighting it around missing/stale configured indicators.
+        if any(not score_source_is_fresh(category, r[0], r[2], symbol=symbol) for r in rows):
+            logger.warning("Stale %s score inputs for user=%s symbol=%s", category, user_id, symbol)
+            return {"scores": {}, "total_score": 10, "top_contributors": []}
+        data = {normalize_indicator_name(r[0]): float(r[1]) for r in rows if r[1] is not None}
 
         if not data:
             logger.warning(f"⚠️ Geen data voor {category} (user_id={user_id})")

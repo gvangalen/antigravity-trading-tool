@@ -9,6 +9,7 @@ from backend.utils.db import get_db_connection
 # ✅ Engine brain (single source of truth)
 from backend.engine.bot_brain import run_bot_brain
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
+from backend.utils.scoring_utils import score_source_is_fresh
 import asyncio
 from backend.services.exchange_service import ExchangeService
 from backend.services.platform_metrics import increment_execution_safety_counter
@@ -763,18 +764,58 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
         except (TypeError, ValueError):
             return False
 
+    source_fresh = _benchmark_component_source_freshness(conn, user_id, symbol)
     return {
         "macro": _clamp_score(macro, default=10),
         "technical": _clamp_score(technical, default=10),
         "market": _clamp_score(market, default=10),
         "setup": _clamp_score(setup, default=10),
         "_source_available": {
-            "macro_score": available(macro),
-            "technical_score": available(technical),
-            "market_score": available(market),
+            "macro_score": available(macro) and source_fresh["macro_score"],
+            "technical_score": available(technical) and source_fresh["technical_score"],
+            "market_score": available(market) and source_fresh["market_score"],
             "setup_score": available(setup),
         },
     }
+
+
+def _benchmark_component_source_freshness(conn, user_id: int, symbol: str) -> dict[str, bool]:
+    """Fail closed when a daily score is newer than its underlying readings."""
+    sources = {
+        "macro_score": ("macro", "macro_data", "name", False),
+        "technical_score": ("technical", "technical_indicators", "indicator", True),
+        "market_score": ("market", "market_data_indicators", "name", True),
+    }
+    result: dict[str, bool] = {}
+    for component, (category, table, name_col, asset_scoped) in sources.items():
+        try:
+            with conn.cursor() as cur:
+                if category == "technical":
+                    cur.execute(
+                        "SELECT DISTINCT ON (indicator) indicator, timestamp "
+                        "FROM technical_indicators WHERE user_id = %s AND symbol = %s "
+                        "AND indicator IN (SELECT indicator FROM user_indicator_configs "
+                        "WHERE user_id = %s AND category = 'technical' AND symbol = %s AND enabled = TRUE) "
+                        "ORDER BY indicator, timestamp DESC NULLS LAST",
+                        (user_id, symbol, user_id, symbol),
+                    )
+                else:
+                    cur.execute(
+                        f"SELECT DISTINCT ON ({name_col}) {name_col}, timestamp "
+                        f"FROM {table} WHERE user_id = %s "
+                        + ("AND symbol = %s " if asset_scoped else "")
+                        + f"ORDER BY {name_col}, timestamp DESC NULLS LAST",
+                        (user_id, symbol) if asset_scoped else (user_id,),
+                    )
+                readings = cur.fetchall()
+            result[component] = bool(readings) and all(
+                score_source_is_fresh(category, name, timestamp, symbol=symbol)
+                for name, timestamp in readings
+            )
+        except Exception:
+            logger.exception("Cannot verify %s source freshness for Smart DCA", component)
+            result[component] = False
+    return result
 
 
 def _get_current_benchmark_weights(conn, user_id: int, symbol: str) -> tuple[dict[str, float] | None, str]:

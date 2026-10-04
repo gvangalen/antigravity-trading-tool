@@ -6,7 +6,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.infrastructure.models import FinnV2Proposal
+from backend.infrastructure.models import FinnV2Proposal, FinnV2RuntimeContract
 from backend.infrastructure.repositories.finn_v2_repository_transaction_mixin import FinnV2RepositoryTransactionMixin
 
 
@@ -25,6 +25,25 @@ class FinnV2ProposalRepository(FinnV2RepositoryTransactionMixin):
             statement
         )
         return result.scalars().first()
+
+    async def get_latest_open_for_conversation(
+        self, *, conversation_id: str, user_id: int,
+    ) -> Optional[tuple[FinnV2Proposal, FinnV2RuntimeContract]]:
+        """Find the latest unexpired draft through its owner-scoped run contract."""
+        result = await self.session.execute(
+            select(FinnV2Proposal, FinnV2RuntimeContract)
+            .join(FinnV2RuntimeContract, FinnV2RuntimeContract.run_id == FinnV2Proposal.run_id)
+            .where(
+                FinnV2Proposal.user_id == user_id,
+                FinnV2RuntimeContract.user_id == user_id,
+                FinnV2RuntimeContract.conversation_id == conversation_id,
+                FinnV2Proposal.status.in_(("draft", "pending_confirmation")),
+                FinnV2Proposal.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(FinnV2Proposal.created_at.desc())
+            .limit(1)
+        )
+        return result.first()
 
     async def get_by_idempotency_key_for_user(self, *, idempotency_key: str, user_id: int) -> Optional[FinnV2Proposal]:
         result = await self.session.execute(

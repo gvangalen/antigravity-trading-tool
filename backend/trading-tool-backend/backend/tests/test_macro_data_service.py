@@ -107,7 +107,7 @@ def test_add_macro_indicator_uses_canonical_macro_source_when_db_row_is_stale():
 
     def fake_fetch(indicator_name, source, link):
         fetch_calls.append((indicator_name, source, link))
-        return {"value": 7733.85}
+        return {"value": 7733.85, "observed_at": "2026-08-06"}
 
     service._sync_fetch_macro_value = fake_fetch
 
@@ -130,6 +130,8 @@ def test_add_macro_indicator_uses_canonical_macro_source_when_db_row_is_stale():
 
     assert fetch_calls == [("sp500", "fred", "fred:SP500")]
     assert result.value == 7733.85
+    saved = service.repository.add_macro_data.await_args.args[0]
+    assert saved.timestamp.date().isoformat() == "2026-08-06"
 
 
 def test_all_active_macro_indicators_resolve_to_catalog_definition_when_db_row_is_stale():

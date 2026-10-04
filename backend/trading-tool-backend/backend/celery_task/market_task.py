@@ -565,7 +565,7 @@ def fetch_and_process_market_indicators(user_id: int):
         # =====================================================
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT price, change_24h
+                SELECT price, change_24h, timestamp
                 FROM market_data
                 ORDER BY timestamp DESC
                 LIMIT 1
@@ -576,7 +576,7 @@ def fetch_and_process_market_indicators(user_id: int):
             logger.warning("⚠️ Geen market_data snapshot")
             return
 
-        price_now, change_24h = row
+        price_now, change_24h, source_timestamp = row
 
         indicator_value_map = {
             "change_24h": float(change_24h),
@@ -600,11 +600,12 @@ def fetch_and_process_market_indicators(user_id: int):
                 cur.execute("""
                     INSERT INTO market_data_indicators
                         (user_id, name, value, timestamp)
-                    VALUES (%s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s)
                 """, (
                     user_id,
                     name,
                     value,
+                    source_timestamp,
                 ))
 
                 inserted += 1

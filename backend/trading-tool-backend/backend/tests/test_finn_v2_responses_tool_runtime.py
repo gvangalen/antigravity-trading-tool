@@ -2447,7 +2447,7 @@ def test_catalog_uses_registry_for_required_and_conditional_inputs():
     )
     assert call.missing_inputs == ("timeframe", "name", "dca_frequency", "dca_amount_mode", "base_amount")
     assert call.operation_id == "create_setup"
-    assert len(catalog.definitions()) == 1 + len(catalog.read_tools) + len(catalog.proposal_operations) + len(catalog.evaluation_contracts)
+    assert len(catalog.definitions()) == 2 + len(catalog.read_tools) + len(catalog.proposal_operations) + len(catalog.evaluation_contracts)
     assert "answer_directly" not in {item["name"] for item in catalog.definitions()}
     proposal = next(item for item in catalog.definitions() if item["name"] == "create_dca_plan_proposal")
     assert proposal["parameters"]["properties"]["payload"]["properties"]["inputs"]["properties"]["min_investment"]["type"] == "number"
@@ -5828,6 +5828,52 @@ def test_dca_revision_does_not_turn_weekly_frequency_into_chart_timeframe():
         conversation_context=context, verified_asset="BTC", read_context=[],
     )
     assert analysis.request_plan.operation_state["collected_inputs"]["timeframe"] == "4H"
+
+
+def test_dca_proposal_uses_explicit_asset_when_another_asset_is_negated():
+    from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
+
+    call = FinnResponsesToolCatalog().validate("create_dca_plan_proposal", {
+        "payload": {"operation_id": "create_setup", "draft_intent": "new", "inputs": {
+            "name": "ETH Smart Test", "symbol": "ETH", "timeframe": "1D",
+            "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "monday",
+            "dca_amount_mode": "score_bands", "base_amount": 100,
+            "score_source": "benchmark_score", "low_threshold": 40,
+            "high_threshold": 70, "low_score_percent": 50,
+            "mid_score_percent": 100, "high_score_percent": 150,
+        }},
+    })
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Maak Smart DCA voor ETH, niet BTC: naam ETH Smart Test, timeframe 1D, "
+                "iedere maandag, basisbedrag €100. Onder 40 50%, 40 tot 70 100%, "
+                "vanaf 70 150% van de totale benchmarkscore.",
+        conversation_context={}, verified_asset=None, read_context=[],
+    )
+    assert analysis.request_plan.operation_state["collected_inputs"]["symbol"] == "ETH"
+    assert analysis.request_plan.operation_state["missing_required_inputs"] == []
+
+
+def test_read_only_question_about_open_dca_draft_has_no_proposal_tool():
+    from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
+
+    fake = FakeResponses(response("draft-coach", text="Bij score 50 geldt de middenstaffel."))
+
+    async def execute(_call):
+        raise AssertionError("no tool call expected")
+
+    asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message="Wat betekent score 50 voor dit open Smart DCA-concept?",
+        instructions="Coach over het open concept.", model_led_coach=True,
+        read_only_turn=True, open_draft_available=True,
+    ))
+    names = {tool["name"] for tool in fake.requests[0]["tools"]}
+    assert "get_active_plan_and_strategy" in names
+    assert "get_open_dca_draft" in names
+    assert "create_dca_plan_proposal" not in names
+    assert FinnResponsesToolCatalog().validate("get_open_dca_draft", {}).name == "get_open_dca_draft"
 
 
 def test_new_dca_weekly_cadence_cannot_supply_missing_chart_timeframe():

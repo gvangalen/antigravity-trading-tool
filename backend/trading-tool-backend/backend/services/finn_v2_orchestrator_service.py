@@ -1009,6 +1009,28 @@ class FinnV2OrchestratorService:
                     "operation_id": prior_proposal.operation_type,
                     "guided_state": prior_guided,
                 }
+        if (
+            conversation_id and not context.get("proposal_revision")
+            and callable(getattr(getattr(self, "session", None), "execute", None))
+        ):
+            # A read-only coach turn has no guided_state of its own. Recover
+            # the still-open draft from its original sealed, owner-scoped run
+            # contract so later questions can use it without saving it.
+            latest_open = await FinnV2ProposalRepository(self.session).get_latest_open_for_conversation(
+                conversation_id=conversation_id, user_id=user_id,
+            )
+            if latest_open is not None:
+                open_proposal, origin_contract = latest_open
+                origin_guided = dict((origin_contract.state_json or {}).get("guided_state") or {})
+                if (
+                    origin_guided.get("open_proposal_id") == open_proposal.id
+                    and origin_guided.get("operation_id") == open_proposal.operation_type
+                ):
+                    context["proposal_revision"] = {
+                        "proposal_id": open_proposal.id,
+                        "operation_id": open_proposal.operation_type,
+                        "guided_state": origin_guided,
+                    }
         # Contract state is authoritative for new runs; context_json remains
         # only a compatible delivery projection for historical consumers.
         context.update(dict(previous_state.get("lineage_state") or {}))

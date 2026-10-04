@@ -354,12 +354,14 @@ class FinnResponsesLoop:
         locale: str | None = None,
         force_read_repair: bool = False,
         model_led_coach: bool = False,
+        read_only_turn: bool = False,
+        open_draft_available: bool = False,
         rejection_feedback: dict[str, Any] | None = None,
     ) -> FinnResponsesResult:
         # The latest user turn decides whether previous context is relevant.
         # Topic words must not silently erase a verified conversation cursor.
         read_only_coaching = model_led_coach and (
-            _read_only_stop_loss_coaching(message) or _hypothetical_trade_reflection(message)
+            read_only_turn or _read_only_stop_loss_coaching(message) or _hypothetical_trade_reflection(message)
         )
         verified_context = (
             f"Earlier verified FINN answer: {antecedent_verified_answer}\n"
@@ -447,6 +449,8 @@ class FinnResponsesLoop:
                 retry_target_domain=retry_target_domain,
                 retry_operation_id=retry_operation_id,
             )
+            if not open_draft_available:
+                definitions = [item for item in definitions if item["name"] != "get_open_dca_draft"]
             if model_led_coach and not guided_operation_id:
                 # Conversational clarification belongs in the model's answer.
                 # A separate tool turns a useful answer plus one follow-up
@@ -455,7 +459,7 @@ class FinnResponsesLoop:
                     item for item in definitions
                     if item["name"] != "ask_for_clarification"
                 ]
-            if read_only_coaching and not guided_operation_id:
+            if read_only_coaching and (read_only_turn or not guided_operation_id):
                 # Limit side-effect capabilities for an explicitly read-only
                 # turn while leaving read choice and composition to the model.
                 definitions = [

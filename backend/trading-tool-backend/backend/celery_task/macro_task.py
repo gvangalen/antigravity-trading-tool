@@ -1,4 +1,5 @@
 import logging
+from datetime import date, datetime, time
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 from celery import shared_task
@@ -8,6 +9,7 @@ from backend.utils.scoring_utils import (
     generate_scores_db,
     normalize_indicator_name,
 )
+from backend.utils.macro_interpreter import fetch_macro_value
 
 # ✅ AI-agent logica blijft gescheiden
 from backend.ai_agents.macro_ai_agent import run_macro_agent
@@ -137,7 +139,7 @@ def store_macro_data(payload: dict, user_id: int):
             cur.execute("""
                 INSERT INTO macro_data
                     (user_id, name, value, trend, interpretation, action, score, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 user_id,
                 payload["name"],
@@ -146,6 +148,7 @@ def store_macro_data(payload: dict, user_id: int):
                 payload["interpretation"],
                 payload["action"],
                 payload["score"],
+                payload.get("observed_at") or datetime.utcnow(),
             ))
 
         conn.commit()
@@ -186,11 +189,22 @@ def fetch_and_process_macro(user_id: int):
 
         try:
 
-            value = fetch_value_from_source(ind)
+            reading = fetch_macro_value(name, source=ind.get("source"), link=ind.get("link"))
+            value = reading.get("value") if isinstance(reading, dict) else None
 
             if value is None:
                 skipped += 1
                 continue
+            observed_at = None
+            if str(ind.get("source") or "").lower() == "fred":
+                try:
+                    observed_at = datetime.combine(
+                        date.fromisoformat(str(reading.get("observed_at") or "")), time.min,
+                    )
+                except (TypeError, ValueError):
+                    skipped += 1
+                    logger.warning("Skipping FRED %s without observation date", name)
+                    continue
 
             score = scores.get(name)
 
@@ -206,6 +220,7 @@ def fetch_and_process_macro(user_id: int):
                 "trend": score["trend"],
                 "interpretation": score["interpretation"],
                 "action": score["action"],
+                "observed_at": observed_at,
             }
 
             store_macro_data(payload, user_id)

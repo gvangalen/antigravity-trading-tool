@@ -580,7 +580,13 @@ class FinnV2RequestPreprocessorService:
         # Dutch separable update verbs can place the object between their
         # parts ("werk die bot bij").  This is grammatical normalization of
         # a mutation act, not a bot-specific route.
-        if re.search(r"\bwerk(?:\s+\w+){0,5}\s+bij\b", text):
+        if re.search(r"\bwerk\b[^.!?]{0,160}\bbij\b", text):
+            return "update"
+        # Selecting the active asset is an explicit state change, even when
+        # the user does not use a generic create or update verb.
+        if re.search(r"\b(?:selecteer|select|w[aä]hle)\b", text) and re.search(
+            r"\b(?:asset|markt|symbool|symbol|coin|instrument)\b", text
+        ):
             return "update"
         if re.search(r"\b(?:deactiveer\w*|deactivate\w*|deaktivier\w*|schakel(?:\s+\w+){0,5}\s+uit)\b", text):
             return "deactivate"

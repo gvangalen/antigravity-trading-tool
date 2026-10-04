@@ -1,5 +1,6 @@
 import logging
 import httpx
+from datetime import datetime, timezone
 
 from backend.utils.scoring_utils import (
     normalize_indicator_name,
@@ -72,21 +73,26 @@ async def fetch_technical_value(name: str, source: str = None, link: str = None,
 
             if not closes:
                 return None
+            observed_at = None
+            try:
+                observed_at = datetime.fromtimestamp(float(data[-1][0]) / 1000, tz=timezone.utc)
+            except (IndexError, TypeError, ValueError, OverflowError):
+                pass
 
             if "rsi" in lname:
                 value = calculate_rsi(closes)
-                return {"value": value}
+                return {"value": value, "observed_at": observed_at}
 
             if "ma200" in lname or "ma_200" in lname:
                 if len(closes) >= 200:
                     ma = sum(closes[-200:]) / 200
-                    return {"value": closes[-1] / ma}
+                    return {"value": closes[-1] / ma, "observed_at": observed_at}
 
             if "volume" in lname:
-                return {"value": sum(volumes[-10:])}
+                return {"value": sum(volumes[-10:]), "observed_at": observed_at}
 
             if lname == "close":
-                return {"value": closes[-1]}
+                return {"value": closes[-1], "observed_at": observed_at}
 
         # JSON fallback
         if isinstance(data, dict):
