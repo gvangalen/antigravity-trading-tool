@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; candidate CI and Auto Deploy pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | Explain an open, unconfirmed DCA concept during a coach follow-up without treating it as an absent saved plan. |
 | Candidate branch | `codex/finn-open-dca-draft-read` |
 | Candidate implementation SHA | `6fc4bc4643015aebbd86eb8381ad88d6928d2339`; followed by this release-status commit. |
-| PR | Pending. |
-| Production SHA | Current pre-candidate SHA `41fb2aa734a5cfb869d163e5ec4b1c44b5d505d6` as reported by the authenticated QA handoff; candidate not deployed yet. |
+| PR | [#71](https://github.com/gvangalen/antigravity-trading-tool/pull/71), merged. |
+| Production SHA | `c928622bbe6a5b67d44bdd9bc4c7112f5b26003b`; public backend and frontend both reported it with HTTP 200 on 2026-10-05. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-05 |
 
@@ -42,9 +42,9 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending candidate deployment. |
+| Candidate CI | `PASS`: [run 37266074879](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37266074879), all five jobs green. |
+| Main CI and Auto Deploy | `PASS`: [main CI 37266209368](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37266209368) and [Auto Deploy 37266347102](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37266347102) on `c928622bbe6a5b67d44bdd9bc4c7112f5b26003b`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `c928622bbe6a5b67d44bdd9bc4c7112f5b26003b`. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
