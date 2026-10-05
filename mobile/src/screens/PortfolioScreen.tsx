@@ -1815,20 +1815,16 @@ function TradeActionSheet({
     { key: 'dca', label: translate(language, 'portfolio.tradeAction.dca'), body: translate(language, 'portfolio.tradeAction.dcaBody') },
     { key: 'bot', label: translate(language, 'portfolio.tradeAction.bot'), body: translate(language, 'portfolio.tradeAction.botBody') },
   ];
-  const setupScore = clampScore(overview?.setup_score);
-  const conviction = Math.round(
-    (clampScore(overview?.macro_score) +
-      clampScore(overview?.market_score) +
-      clampScore(overview?.technical_score) +
-      setupScore) /
-      4,
-  );
+  const setupScore = overview?.setup_match_score;
+  const conviction = overview?.benchmark_score == null ? null : Math.round(overview.benchmark_score);
   const exposurePct = bot?.budgetTotal ? Math.min(100, (bot.positionValue / bot.budgetTotal) * 100) : 0;
-  const riskTone: StatusTone = stale || exposurePct > 75 ? 'warning' : setupScore >= 55 && conviction >= 55 ? 'success' : 'neutral';
+  const riskTone: StatusTone = stale || exposurePct > 75 ? 'warning' : setupScore != null && setupScore >= 55 && conviction != null && conviction >= 55 ? 'success' : 'neutral';
   const riskLabel = stale
     ? translate(language, 'portfolio.dataStale')
     : exposurePct > 75
       ? translate(language, 'portfolio.exposureHigh')
+      : setupScore == null
+        ? translate(language, 'portfolio.dataStale')
       : setupScore >= 55
         ? translate(language, 'portfolio.guardrailsOk')
         : translate(language, 'portfolio.setupWeak');
@@ -1856,8 +1852,8 @@ function TradeActionSheet({
       </View>
 
       <View style={styles.tradeOverviewGrid}>
-        <TradeContextStat label="Setup" value={setupScore > 0 ? `${setupScore}` : '—'} tone={setupScore >= 60 ? 'success' : 'warning'} />
-        <TradeContextStat label="Conviction" value={`${conviction}`} tone={conviction >= 70 ? 'success' : conviction >= 50 ? 'warning' : 'danger'} />
+        <TradeContextStat label="Setup" value={setupScore == null ? '—' : `${setupScore}`} tone={setupScore != null && setupScore >= 60 ? 'success' : 'warning'} />
+        <TradeContextStat label="Conviction" value={conviction == null ? '—' : `${conviction}`} tone={conviction == null ? 'neutral' : conviction >= 70 ? 'success' : conviction >= 50 ? 'warning' : 'danger'} />
         <TradeContextStat label="Exposure" value={`${Math.round(exposurePct)}%`} tone={exposurePct > 75 ? 'warning' : 'accent'} />
         <TradeContextStat label={translate(language, 'portfolio.maxOrder')} value={formatEUR(bot?.budgetMaxOrder ?? 0)} tone="neutral" />
       </View>
@@ -2117,7 +2113,7 @@ function buildTradePrefill({
   overview?: MobileOverviewResponse['watchlist'][number];
 }) {
   const scoreLine = overview
-    ? `macro ${clampScore(overview.macro_score)}, market ${clampScore(overview.market_score)}, technical ${clampScore(overview.technical_score)}, setup ${clampScore(overview.setup_score)}`
+    ? `macro ${clampScore(overview.macro_score)}, market ${clampScore(overview.market_score)}, technical ${clampScore(overview.technical_score)}, benchmark ${overview.benchmark_score ?? 'niet beschikbaar'}, setupmatch ${overview.setup_match_score ?? 'niet beschikbaar'}`
     : 'geen scoredata beschikbaar';
   const requestedAmount = amountValue.trim() ? `${amountValue.trim()} ${amountUnit}` : 'nog geen bedrag gekozen';
 

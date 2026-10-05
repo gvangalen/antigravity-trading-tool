@@ -106,7 +106,7 @@ def fetch_recent_points(user_id: int, lookback_days: int = 14) -> List[DailyPoin
             # daily_scores
             cur.execute(
                 """
-                SELECT report_date, macro_score, market_score, technical_score, setup_score
+                SELECT report_date, macro_score, market_score, technical_score
                 FROM daily_scores
                 WHERE user_id = %s
                   AND report_date >= %s
@@ -125,7 +125,7 @@ def fetch_recent_points(user_id: int, lookback_days: int = 14) -> List[DailyPoin
                     macro=_to_float(r[1]),
                     market=_to_float(r[2]),
                     technical=_to_float(r[3]),
-                    setup=_to_float(r[4]),
+                    setup=None,  # Historical AI setup scores are not comparable matches.
                 )
 
             # market snapshots

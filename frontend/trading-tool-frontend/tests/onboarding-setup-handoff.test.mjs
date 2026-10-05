@@ -83,9 +83,8 @@ test("setup management duplicates through the established creation form without 
   assert.match(workflow, /duplicateSetup/);
 });
 
-test("all active-setup consumers preserve setup_id as the canonical identifier", async () => {
-  const [brain, assistant, provider, setupApi, strategies, strategyForm] = await Promise.all([
-    readSource("components/dashboard/TradingBrain.jsx"),
+test("active-setup consumers preserve setup_id as the canonical identifier", async () => {
+  const [assistant, provider, setupApi, strategies, strategyForm] = await Promise.all([
     readSource("components/ui/AIAssistant.jsx"),
     readSource("app/providers/SetupProvider.tsx"),
     readSource("lib/api/setups.js"),
@@ -93,7 +92,6 @@ test("all active-setup consumers preserve setup_id as the canonical identifier",
     readSource("components/strategy/StrategyForm.jsx"),
   ]);
 
-  assert.match(brain, /useSetupStrategy\(getActiveSetupId\(activeSetup\)\)/);
   assert.match(assistant, /setup_id:\s*getActiveSetupId\(activeSetup\)/);
   assert.match(provider, /normalizeSetupSaveResponse\(resActive\?\.active \?\? null\)/);
   assert.match(setupApi, /const normalizePublicSetup/);

@@ -16,6 +16,7 @@ from backend.schemas.score_schema import (
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.setup_market_match_service import SetupMarketMatchService
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class ScoreService:
                         "technical_interpretation": "Runtime technical scan",
                         "market": mark_res.get("total_score", 50),
                         "market_interpretation": "Runtime market scan",
-                        "setup": 0.0
+                        "setup": None
                     }
                 )
                 await self.repository.db.commit()
@@ -139,11 +140,19 @@ class ScoreService:
                     return []
             return []
 
-        active_setups_raw = await self.repository.fetch_active_setups(user_id)
-        
-        active_setups = [
-            ActiveSetupResponse(**s) for s in active_setups_raw
-        ]
+        assessment = await SetupMarketMatchService(self.repository.db).for_asset(user_id, symbol)
+        active_setups = [ActiveSetupResponse(
+            id=match["setup_id"],
+            name=match["name"] or "Setup",
+            symbol=match["symbol"] or symbol,
+            timeframe=match["timeframe"] or "",
+            setup_type=match["setup_type"],
+            explanation="Berekend uit opgeslagen scorevoorwaarden en actuele benchmarkgegevens.",
+            score=match["score"],
+            is_active=match["is_active"],
+            breakdown=match["components"],
+            status=match["status"],
+        ) for match in assessment["matches"]]
 
         macro = CategoryScoreResponse(
             score=float(scores.get("macro_score") or 0),
@@ -164,10 +173,11 @@ class ScoreService:
         )
 
         setup = SetupScoreResponse(
-            score=float(scores.get("setup_score") or 0),
-            interpretation="Actieve setups" if active_setups else "Geen actieve setups",
+            score=next((item.score for item in active_setups if item.is_active), None),
+            interpretation="Passende setups" if any(item.is_active for item in active_setups) else "Geen bewezen passende setup",
             top_contributors=[s.name for s in active_setups if s.is_active],
-            active_setups=active_setups
+            active_setups=active_setups,
+            source_status=assessment["source_status"],
         )
 
         return DailyCombinedScoreResponse(
@@ -176,9 +186,14 @@ class ScoreService:
             market=market,
             setup=setup,
             report_date=scores.get("report_date"),
+            benchmark_score=assessment["benchmark_score"],
+            benchmark_weights=assessment["benchmark_weights"],
         )
 
     async def get_master_score(self, user_id: int, symbol: str = "BTC") -> MasterScoreResponse:
+        from backend.domain.finn_dca_plan_contract import normalize_benchmark_weights
+
+        assessment = await SetupMarketMatchService(self.repository.db).for_asset(user_id, symbol, setups=[])
         insight = await self.repository.get_master_score(user_id, symbol=symbol)
         
         # --- NEW: User Weights Logic ---
@@ -188,19 +203,25 @@ class ScoreService:
             if user and user.ai_preferences:
                 user_weights = user.ai_preferences.get("intelligence_weights", {})
 
+        normalized_weights = normalize_benchmark_weights(user_weights or None)
+        display_weights = {
+            key.removesuffix("_score"): value
+            for key, value in (normalized_weights or {}).items()
+        }
+
         if not insight:
             return MasterScoreResponse(
-                master_score=50.0,
+                master_score=assessment["benchmark_score"],
                 master_trend="–",
                 master_bias="–",
                 master_risk="–",
                 alignment_score=0.0,
                 outlook="Nog geen master-outlook",
-                weights=user_weights or {},
-                data_warnings=[],
+                weights=display_weights,
+                data_warnings=[] if assessment["benchmark_score"] is not None else ["De huidige benchmarkscore is niet beschikbaar."],
                 domains={},
-                summary="Nog geen master score beschikbaar",
-                date=None
+                summary="De actuele benchmark wordt uit markt-, macro- en technische scores berekend." if assessment["benchmark_score"] is not None else "Nog geen actuele benchmarkscore beschikbaar",
+                date=str(assessment["as_of"]) if assessment["benchmark_score"] is not None else None
             )
 
         meta = insight.top_signals or {}
@@ -210,22 +231,29 @@ class ScoreService:
             except Exception:
                 meta = {}
 
-        # If user has custom weights, we might need to re-calculate or just pass them
-        # For now, we prioritize user_weights in the response so the UI shows them.
-        final_weights = user_weights if user_weights else meta.get("weights", {})
+        # Keep the numeric master tied to the measured benchmark. Old AI
+        # commentary may describe a different day and must not look current.
+        final_weights = display_weights
+        current_narrative = (
+            assessment["benchmark_score"] is not None
+            and str(insight.date) == str(assessment["as_of"])
+        )
+        warnings = list(meta.get("data_warnings") or [])
+        if not current_narrative:
+            warnings.append("AI-duiding is niet actueel en wordt niet als huidige benchmark gebruikt.")
 
         return MasterScoreResponse(
-            master_score=float(insight.avg_score or 0),
-            master_trend=insight.trend or "–",
-            master_bias=insight.bias or "–",
-            master_risk=insight.risk or "–",
-            alignment_score=float(meta.get("alignment_score", 0)),
-            outlook=meta.get("outlook", "Geen outlook"),
+            master_score=assessment["benchmark_score"],
+            master_trend=(insight.trend or "–") if current_narrative else "–",
+            master_bias=(insight.bias or "–") if current_narrative else "–",
+            master_risk=(insight.risk or "–") if current_narrative else "–",
+            alignment_score=float(meta.get("alignment_score", 0)) if current_narrative else 0.0,
+            outlook=meta.get("outlook", "Geen outlook") if current_narrative else "Geen actuele AI-duiding",
             weights=final_weights,
-            data_warnings=meta.get("data_warnings", []),
-            domains=meta.get("domains", {}),
-            summary=insight.summary or "",
-            date=str(insight.date) if insight.date else None
+            data_warnings=warnings,
+            domains=meta.get("domains", {}) if current_narrative else {},
+            summary=(insight.summary or "") if current_narrative else "De actuele benchmark wordt uit markt-, macro- en technische scores berekend.",
+            date=str(assessment["as_of"]) if assessment["benchmark_score"] is not None else None
         )
 
     async def get_score_history(self, user_id: int, days: int = 30, symbol: str = "BTC") -> List[Dict[str, Any]]:
@@ -241,7 +269,9 @@ class ScoreService:
                 "macro": float(h["macro_score"] or 0),
                 "technical": float(h["technical_score"] or 0),
                 "market": float(h["market_score"] or 0),
-                "setup": float(h["setup_score"] or 0),
+                # Historical rows predate the match contract and are not
+                # comparable with today's setup match. Do not relabel them.
+                "setup": None,
                 "btc_price": float(h["btc_price"]) if h["btc_price"] else None,
                 "asset_price": float(h["asset_price"]) if "asset_price" in h and h["asset_price"] else None
             })

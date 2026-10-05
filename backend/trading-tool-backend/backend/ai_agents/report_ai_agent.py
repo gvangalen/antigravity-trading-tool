@@ -10,6 +10,7 @@ from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_text
 from backend.ai_agents.report_model import TRADING_REPORT_MODEL, TRADING_REPORT_REASONING_EFFORT
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.engine.transition_detector import compute_transition_detector
+from backend.services.setup_market_match_sync import current_setup_market_assessment
 
 
 # =====================================================
@@ -194,10 +195,11 @@ def _watchlist_focus_summary(watchlist_data: Optional[List[Dict[str, Any]]]) -> 
                 "symbol": item.get("symbol"),
                 "technical": to_float(scores.get("technical_score")) or 0.0,
                 "market": to_float(scores.get("market_score")) or 0.0,
-                "setup": to_float(scores.get("setup_score")) or 0.0,
+                "setup": to_float(scores.get("setup_score")),
             }
         )
 
+    ranked = [entry for entry in ranked if entry["setup"] is not None]
     ranked.sort(key=lambda entry: (entry["setup"], entry["technical"], entry["market"]), reverse=True)
     leader = ranked[0] if ranked else None
     if not leader:
@@ -323,7 +325,7 @@ def _build_setup_validation_fallback(
 ) -> str:
     if not best_setup:
         return (
-            f"De setup-laag blijft {_score_bucket(scores.get('setup_score'))}, maar zonder één duidelijke kandidaat die breed genoeg wordt gedragen door markt en techniek. "
+            "Er is nu geen setup met een bevestigde actuele match uit de volledige benchmark. "
             "Dat betekent dat selectiviteit hier een feature is in plaats van een gemis: de data dwingt nog geen nieuwe positie af. "
             "De juiste vervolgstap is daarom setups blijven reviewen op bevestiging, niet op haast."
         )
@@ -454,7 +456,7 @@ def get_daily_deltas(user_id: int) -> Dict[str, Any]:
             # Pak laatste 2 dagen scores (beschikbaar voor user)
             cur.execute(
                 """
-                SELECT report_date, macro_score, technical_score, market_score, setup_score
+                SELECT report_date, macro_score, technical_score, market_score
                 FROM daily_scores
                 WHERE user_id = %s
                 ORDER BY report_date DESC
@@ -467,8 +469,8 @@ def get_daily_deltas(user_id: int) -> Dict[str, Any]:
             if not rows or len(rows) < 2:
                 return {}
 
-            today_date, today_macro, today_tech, today_market, today_setup = rows[0]
-            prev_date, prev_macro, prev_tech, prev_market, prev_setup = rows[1]
+            today_date, today_macro, today_tech, today_market = rows[0]
+            prev_date, prev_macro, prev_tech, prev_market = rows[1]
 
             # Markt snapshots per datum (laatste snapshot die dag)
             today_m = _get_latest_market_row_for_date(cur, today_date)
@@ -478,7 +480,7 @@ def get_daily_deltas(user_id: int) -> Dict[str, Any]:
             macro_delta = to_float(today_macro) - to_float(prev_macro) if (today_macro is not None and prev_macro is not None) else None
             technical_delta = to_float(today_tech) - to_float(prev_tech) if (today_tech is not None and prev_tech is not None) else None
             market_delta = to_float(today_market) - to_float(prev_market) if (today_market is not None and prev_market is not None) else None
-            setup_delta = to_float(today_setup) - to_float(prev_setup) if (today_setup is not None and prev_setup is not None) else None
+            setup_delta = None  # No comparable historical match snapshots yet.
 
             # Deltas market (price/change/volume)
             price_delta = None
@@ -798,24 +800,18 @@ def get_daily_scores(user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
     if not conn:
         return {}
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT macro_score, technical_score, market_score, setup_score
-                FROM daily_scores
-                WHERE user_id = %s AND symbol = %s
-                ORDER BY report_date DESC
-                LIMIT 1;
-                """,
-                (user_id, symbol),
-            )
-            row = cur.fetchone()
-
+        assessment = current_setup_market_assessment(conn, user_id, symbol)
+        scores = assessment["component_scores"] or {}
+        best = next((item for item in assessment["matches"] if item["is_best"]), None)
         return {
-            "macro_score": to_float(row[0]) if row else None,
-            "technical_score": to_float(row[1]) if row else None,
-            "market_score": to_float(row[2]) if row else None,
-            "setup_score": to_float(row[3]) if row else None,
+            "macro_score": to_float(scores.get("macro")),
+            "technical_score": to_float(scores.get("technical")),
+            "market_score": to_float(scores.get("market")),
+            "setup_score": best["score"] if best else None,
+            "benchmark_score": assessment["benchmark_score"],
+            "setup_match_status": best["status"] if best else "no_active_match",
+            "source_status": assessment["source_status"],
+            "as_of": str(assessment["as_of"]) if assessment["as_of"] else None,
         }
     finally:
         conn.close()
@@ -1002,44 +998,24 @@ def get_setup_snapshot(user_id: int) -> Dict[str, Any]:
         return {}
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT s.id, s.name, s.symbol, s.timeframe, d.score
-                FROM daily_setup_scores d
-                JOIN setups s ON s.id = d.setup_id
-                WHERE d.user_id = %s
-                ORDER BY d.report_date DESC, d.is_best DESC, d.score DESC
-                LIMIT 1;
-                """,
-                (user_id,),
-            )
-            best = cur.fetchone()
-
-            cur.execute(
-                """
-                SELECT s.id, s.name, d.score
-                FROM daily_setup_scores d
-                JOIN setups s ON s.id = d.setup_id
-                WHERE d.user_id = %s
-                ORDER BY d.report_date DESC, d.score DESC
-                LIMIT 5;
-                """,
-                (user_id,),
-            )
-            rows = cur.fetchall()
-
-        if not best:
-            return {}
-
+            cur.execute("SELECT DISTINCT symbol FROM setups WHERE user_id=%s AND symbol IS NOT NULL", (user_id,))
+            symbols = [row[0] for row in cur.fetchall()]
+        matches = []
+        for symbol in symbols:
+            assessment = current_setup_market_assessment(conn, user_id, symbol)
+            matches.extend({**match, "as_of": assessment["as_of"],
+                            "source_status": assessment["source_status"]}
+                           for match in assessment["matches"])
+        matches.sort(key=lambda item: (item["is_active"], item["score"] if item["score"] is not None else -1), reverse=True)
+        best = next((item for item in matches if item["is_active"]), None)
         return {
-            "best_setup": {
-                "id": best[0],
-                "name": best[1],
-                "symbol": best[2],
-                "timeframe": best[3],
-                "score": to_float(best[4]),
-            },
-            "top_setups": [{"id": r[0], "name": r[1], "score": to_float(r[2])} for r in rows],
+            "best_setup": {"id": best["setup_id"], "name": best["name"],
+                           "symbol": best["symbol"], "timeframe": best["timeframe"],
+                           "score": best["score"], "status": best["status"]} if best else None,
+            "top_setups": [{"id": item["setup_id"], "name": item["name"],
+                            "score": item["score"], "status": item["status"],
+                            "symbol": item["symbol"], "timeframe": item["timeframe"],
+                            "score_semantics": "benchmark_setup_match_v1"} for item in matches[:5]],
         }
     finally:
         conn.close()
@@ -1347,6 +1323,9 @@ def generate_daily_report_sections(user_id: int) -> Dict[str, Any]:
 
     setup_snapshot = get_setup_snapshot(user_id)
     best_setup = setup_snapshot.get("best_setup")
+    # The report's setup score describes its selected setup across the
+    # watchlist, rather than an unrelated default-BTC match.
+    scores["setup_score"] = best_setup.get("score") if best_setup else None
     active_strategy = get_active_strategy_snapshot(user_id)
     bot_snapshot = get_bot_daily_snapshot(user_id)
     portfolio_health = get_portfolio_health_snapshot(user_id)
@@ -1499,6 +1478,7 @@ Keys:
         "outlook": get_section("outlook"),
         "watchlist": watchlist_data,
         "best_setup": best_setup,
+        "top_setups": setup_snapshot.get("top_setups", []),
         "transition": transition,
         "price": market.get("price"),
         "change_24h": market.get("change_24h"),

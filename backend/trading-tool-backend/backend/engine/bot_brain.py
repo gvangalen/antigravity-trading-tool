@@ -59,7 +59,8 @@ def _normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
         "macro_score": _safe_float(scores.get("macro_score", scores.get("macro", 10)), 10.0) or 10.0,
         "technical_score": _safe_float(scores.get("technical_score", scores.get("technical", 10)), 10.0) or 10.0,
         "market_score": _safe_float(scores.get("market_score", scores.get("market", 10)), 10.0) or 10.0,
-        "setup_score": _safe_float(scores.get("setup_score", scores.get("setup", 10)), 10.0) or 10.0,
+        # Missing match is neutral for sizing, never a fabricated weak match.
+        "setup_score": _safe_float(scores.get("setup_score", scores.get("setup")), 50.0),
         "_source_available": scores.get("_source_available") or {},
         "_benchmark_weights": scores.get("_benchmark_weights") or {},
     }
@@ -622,7 +623,7 @@ def run_bot_brain(
     trade_context = {
         "risk_environment": round(_clamp(risk_environment, 0.0, 1.0), 4),
         "trend_strength_reference": round(_clamp(trend_strength, 0.0, 1.0), 4),
-        "setup_score_reference": float(normalized_scores.get("setup_score", 10.0)),
+        "setup_score_reference": scores.get("setup_score", scores.get("setup")),
     }
 
     # -------------------------------------------------

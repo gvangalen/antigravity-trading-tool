@@ -636,15 +636,14 @@ function AnalysisContextScores({
   onRefreshScores: () => void;
   workspaceAsset?: WorkspaceAssetResponse;
 }) {
-  const { appearance, language } = useAppPreferences();
+  const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const [tuningVisible, setTuningVisible] = useState(false);
   const [savingWeights, setSavingWeights] = useState(false);
-  const visibleScores = buildVisibleWorkspaceScores(asset.symbol, workspaceAsset, hiddenIndicatorKeys);
-  const marketScore = visibleScores.market ?? Math.round(asset.market_score);
-  const macroScore = visibleScores.macro ?? Math.round(asset.macro_score);
-  const technicalScore = visibleScores.technical ?? Math.round(asset.technical_score);
-  const combinedScore = visibleScores.combined ?? compositeScore(asset);
+  const marketScore = roundScore(asset.market_score);
+  const macroScore = roundScore(asset.macro_score);
+  const technicalScore = roundScore(asset.technical_score);
+  const combinedScore = compositeScore(asset);
   const serverWeights = useMemo(
     () => normalizeIntelligenceWeights(workspaceAsset?.master),
     [workspaceAsset?.master],
@@ -660,12 +659,12 @@ function AnalysisContextScores({
   }, [serverWeights, tuningVisible]);
 
   const items = [
-    { label: 'Market', value: marketScore, tone: toneForScore(marketScore) },
-    { label: 'Macro', value: macroScore, tone: toneForScore(macroScore) },
-    { label: 'Technical', value: technicalScore, tone: toneForScore(technicalScore) },
-    { label: 'Combined', value: combinedScore, tone: intelligence.marketPostureTone },
+    { label: 'Market', value: marketScore ?? '—', tone: toneForMaybeScore(marketScore) },
+    { label: 'Macro', value: macroScore ?? '—', tone: toneForMaybeScore(macroScore) },
+    { label: 'Technical', value: technicalScore ?? '—', tone: toneForMaybeScore(technicalScore) },
+    { label: 'Combined', value: combinedScore ?? '—', tone: combinedScore == null ? 'neutral' : intelligence.marketPostureTone },
   ];
-  const weightItems: Array<{ key: IntelligenceWeightKey; label: string; score: number }> = [
+  const weightItems: Array<{ key: IntelligenceWeightKey; label: string; score: number | null }> = [
     { key: 'market', label: 'Market', score: marketScore },
     { key: 'macro', label: 'Macro', score: macroScore },
     { key: 'technical', label: 'Technical', score: technicalScore },
@@ -723,7 +722,7 @@ function AnalysisContextScores({
                 ]}
               >
                 <Text style={styles.scoreOverviewLabel}>{item.label}</Text>
-                <Text style={[styles.scoreOverviewValue, { color: colorForTone(item.tone) }]}>{item.value}/100</Text>
+                <Text style={[styles.scoreOverviewValue, { color: colorForTone(item.tone) }]}>{item.value === '—' ? '—' : `${item.value}/100`}</Text>
               </View>
             ))}
           </View>
@@ -773,7 +772,7 @@ function AnalysisContextScores({
                   <View>
                     <Text style={styles.contextWeightLabel}>{item.label}</Text>
                     <Text style={[styles.contextWeightMeta, { color: colors.textDim }]}>
-                      Weight · {item.score}/100
+                      Weight · {item.score == null ? '—' : `${item.score}/100`}
                     </Text>
                   </View>
                   <Text style={[styles.contextWeightPercent, { color: colors.text }]}>
@@ -850,8 +849,8 @@ function AnalysisWorkspaceMissionControl({
   onRefreshScores: () => void;
 }) {
   const { language } = useAppPreferences();
-  const reviewCount = assets.filter((asset) => asset.setup_score < 55).length;
-  const riskCount = assets.filter((asset) => asset.setup_score < 40 || asset.technical_score < 40).length;
+  const reviewCount = assets.filter((asset) => setupBelow(asset, 55)).length;
+  const riskCount = assets.filter((asset) => setupBelow(asset, 40) || scoreBelow(asset.technical_score, 40)).length;
   const performanceCount = assets.filter((asset) => (asset.change_24h ?? 0) >= 0).length;
   const summary = localizedBackendText(
     language,
@@ -925,7 +924,7 @@ function AnalysisWatchlistCard({
           const score = compositeScore(asset);
           const price = typeof asset.price === 'number' ? formatPrice(asset.price) : '—';
           const change = typeof asset.change_24h === 'number' ? asset.change_24h : 0;
-          const chipTone = toneForScore(score);
+          const chipTone = toneForMaybeScore(score);
 
           return (
             <SwipeActionRow
@@ -976,7 +975,7 @@ function AnalysisWatchlistCard({
 
                 <View style={styles.watchlistScoreBlock}>
                   <Text style={styles.watchlistScoreLabel}>{translate(language, 'analysis.score')}</Text>
-                  <Text style={[styles.watchlistScoreValue, { color: colors.text }]}>{score}</Text>
+                  <Text style={[styles.watchlistScoreValue, { color: colors.text }]}>{score ?? '—'}</Text>
                 </View>
 
                 <View style={styles.watchlistStateBlock}>
@@ -1128,8 +1127,8 @@ type AssetIntelligence = {
   change: string;
   changeTone: StatusTone;
   headline: string;
-  setupScore: number;
-  technicalScore: number;
+  setupScore: number | null;
+  technicalScore: number | null;
   marketPosture: string;
   marketPostureTone: StatusTone;
   setupState: string;
@@ -1167,8 +1166,8 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
       </View>
 
       <View style={styles.scoreStrip}>
-        <MiniMetric label="Setup" value={String(intelligence.setupScore)} tone={toneForScore(intelligence.setupScore)} />
-        <MiniMetric label="Technical" value={String(intelligence.technicalScore)} tone={toneForScore(intelligence.technicalScore)} />
+        <MiniMetric label="Setup" value={intelligence.setupScore == null ? '—' : String(intelligence.setupScore)} tone={intelligence.setupScore == null ? 'neutral' : toneForScore(intelligence.setupScore)} />
+        <MiniMetric label="Technical" value={intelligence.technicalScore == null ? '—' : String(intelligence.technicalScore)} tone={toneForMaybeScore(intelligence.technicalScore)} />
         <MiniMetric label="Marktbeeld" value={intelligence.marketPosture} tone={intelligence.marketPostureTone} />
       </View>
     </CardShell>
@@ -1182,30 +1181,30 @@ function AnalysisEvidenceGrid({ asset }: { asset: MobileOverviewAsset }) {
     {
       key: 'macro',
       label: 'Macro',
-      score: Math.round(asset.macro_score),
+      score: roundScore(asset.macro_score) ?? '—',
       summary: asset.macro_label || 'Macro context from the active workspace.',
-      tone: toneForScore(asset.macro_score),
+      tone: toneForMaybeScore(asset.macro_score),
     },
     {
       key: 'market',
       label: 'Market',
-      score: Math.round(asset.market_score),
+      score: roundScore(asset.market_score) ?? '—',
       summary: asset.market_label || 'Market evidence and flow confirmation.',
-      tone: toneForScore(asset.market_score),
+      tone: toneForMaybeScore(asset.market_score),
     },
     {
       key: 'technical',
       label: 'Technical',
-      score: Math.round(asset.technical_score),
+      score: roundScore(asset.technical_score) ?? '—',
       summary: asset.technical_label || 'Trend and momentum confirmation.',
-      tone: toneForScore(asset.technical_score),
+      tone: toneForMaybeScore(asset.technical_score),
     },
     {
       key: 'setup',
       label: 'Setup',
-      score: Math.round(asset.setup_score),
+      score: verifiedSetupScore(asset) == null ? '—' : Math.round(verifiedSetupScore(asset)!),
       summary: stateForAsset(asset),
-      tone: toneForScore(asset.setup_score),
+      tone: verifiedSetupScore(asset) == null ? 'neutral' : toneForScore(verifiedSetupScore(asset)!),
     },
   ];
 
@@ -1332,7 +1331,7 @@ function AnalysisEvidenceSectionCard({
   section: {
     key: string;
     title: string;
-    score: number;
+    score: number | null;
     summary: string;
     rows: Array<{ label: string; value: string; development: string; assessment: string; tone: StatusTone }>;
   };
@@ -1357,7 +1356,7 @@ function AnalysisEvidenceSectionCard({
       <View style={styles.evidenceSectionHeader}>
         <View style={styles.evidenceSectionTitleWrap}>
           <Text style={[styles.evidenceSectionTitle, { color: colors.text }]}>{section.title}</Text>
-          <Text style={styles.evidenceSectionScore}>{section.score}/100</Text>
+          <Text style={styles.evidenceSectionScore}>{section.score == null ? '—' : `${section.score}/100`}</Text>
         </View>
         <Feather color={colors.textDim} name="chevron-down" size={16} />
       </View>
@@ -1761,8 +1760,8 @@ function ScannerRow({
         {change >= 0 ? '+' : ''}
         {change.toFixed(2)}%
       </Text>
-      <Text style={[styles.rowSetup, { color: colorForTone(toneForScore(asset.setup_score)) }]}>{Math.round(asset.setup_score)}</Text>
-      <Text style={[styles.rowAiState, { color: colorForTone(toneForScore(score)) }]} numberOfLines={1}>
+      <Text style={[styles.rowSetup, { color: colorForTone(verifiedSetupScore(asset) == null ? 'neutral' : toneForScore(verifiedSetupScore(asset)!)) }]}>{verifiedSetupScore(asset) == null ? '—' : Math.round(verifiedSetupScore(asset)!)}</Text>
+      <Text style={[styles.rowAiState, { color: colorForTone(toneForMaybeScore(score)) }]} numberOfLines={1}>
         {state}
       </Text>
     </Pressable>
@@ -1861,7 +1860,7 @@ function TerminalAssetCard({
 
       <View style={styles.terminalMetricsRow}>
         <Text style={[styles.terminalMetricText, { color: colors.textDim }]}>
-          {intel.posture}  ·  {intel.structure}  ·  {intel.conviction}%  ·  <Text style={{ color: colorForTone(riskTone), fontWeight: '700' }}>{intel.riskState}</Text>
+          {intel.posture}  ·  {intel.structure}  ·  {intel.conviction == null ? 'score onbekend' : `${intel.conviction}%`}  ·  <Text style={{ color: colorForTone(riskTone), fontWeight: '700' }}>{intel.riskState}</Text>
         </Text>
       </View>
     </Pressable>
@@ -1956,8 +1955,8 @@ function buildAssetIntelligence(
 ): AssetIntelligence {
   const latestPrice = readNumber(latest, ['price'], asset.price ?? 0);
   const latestChange = readNumber(latest, ['change_24h'], asset.change_24h ?? 0);
-  const setupScore = Math.round(asset.setup_score);
-  const technicalScore = Math.round(asset.technical_score);
+  const setupScore = verifiedSetupScore(asset) == null ? null : Math.round(verifiedSetupScore(asset)!);
+  const technicalScore = roundScore(asset.technical_score);
   const posture = String(asset.posture ?? '').trim() || postureForAsset(asset, latestChange);
   const setupState = setupStateForAsset(asset);
   const riskState = String(asset.risk_state ?? '').trim() || riskStateForAsset(asset, latestChange);
@@ -1965,7 +1964,7 @@ function buildAssetIntelligence(
   const aiCopy = conciseInsight(insightText(insight?.market_insight));
   const finnText =
     aiCopy ||
-    `${headline}. Setup ${setupScore}. Technical ${technicalScore}.`;
+    `${headline}. Setup ${setupScore ?? 'niet beschikbaar'}. Technical ${technicalScore ?? 'niet beschikbaar'}.`;
 
   return {
     change: `${latestChange >= 0 ? '+' : ''}${latestChange.toFixed(2)}%`,
@@ -1974,13 +1973,13 @@ function buildAssetIntelligence(
     headline,
     logoUrl: asset.logo_url,
     marketPosture: posture,
-    marketPostureTone: latestChange >= 0 && technicalScore >= 60 ? 'success' : latestChange < -3 ? 'danger' : 'accent',
+    marketPostureTone: latestChange >= 0 && scoreAtLeast(technicalScore, 60) ? 'success' : latestChange < -3 ? 'danger' : 'accent',
     price: latestPrice > 0 ? formatPrice(latestPrice) : '—',
     riskState,
     riskStateTone: riskState === 'High risk' || riskState === 'Weak risk/reward' ? 'danger' : riskState === 'Wait' ? 'warning' : 'success',
     setupScore,
     setupState,
-    setupStateTone: toneForScore(setupScore),
+    setupStateTone: setupScore == null ? 'neutral' : toneForScore(setupScore),
     symbol: asset.symbol,
     technicalScore,
   };
@@ -2001,7 +2000,9 @@ function deriveSuggestedPlan(source: unknown, asset: MobileOverviewAsset) {
 
   if (!match) return null;
 
-  const score = Math.round(Number(match.score ?? match.setup_score ?? asset.setup_score ?? 0));
+  const rawScore = match.score ?? match.setup_match_score ?? verifiedSetupScore(asset);
+  if (rawScore == null || !Number.isFinite(Number(rawScore))) return null;
+  const score = Math.round(Number(rawScore));
   return {
     action: String(match.action ?? 'Review'),
     name: String(match.setup_name ?? match.name ?? 'Best matching plan'),
@@ -2010,10 +2011,44 @@ function deriveSuggestedPlan(source: unknown, asset: MobileOverviewAsset) {
   };
 }
 
+function verifiedSetupScore(asset: MobileOverviewAsset): number | null {
+  const value = asset.setup_match_score ?? asset.setup_score;
+  return ['matches', 'outside_conditions'].includes(asset.setup_match_status ?? '')
+    && typeof value === 'number' && Number.isFinite(value)
+    ? value : null;
+}
+
+function setupAtLeast(asset: MobileOverviewAsset, threshold: number): boolean {
+  const value = verifiedSetupScore(asset);
+  return value !== null && value >= threshold;
+}
+
+function setupBelow(asset: MobileOverviewAsset, threshold: number): boolean {
+  const value = verifiedSetupScore(asset);
+  return value !== null && value < threshold;
+}
+
+function scoreAtLeast(value: number | null, threshold: number): boolean {
+  return value !== null && value >= threshold;
+}
+
+function scoreBelow(value: number | null, threshold: number): boolean {
+  return value !== null && value < threshold;
+}
+
+function roundScore(value: number | null): number | null {
+  return value === null ? null : Math.round(value);
+}
+
+function toneForMaybeScore(value: number | null): StatusTone {
+  return value === null ? 'neutral' : toneForScore(value);
+}
+
 function stateForAsset(asset: MobileOverviewAsset) {
-  if (asset.setup_score >= 80) return 'Near Trigger';
-  if (asset.setup_score >= 65 && asset.technical_score >= 60) return 'Constructive';
-  if (asset.setup_score < 45 || asset.technical_score < 45) return 'Weak Structure';
+  if (setupAtLeast(asset, 80)) return 'Setup past; controleer instapregel';
+  if (setupAtLeast(asset, 65) && scoreAtLeast(asset.technical_score, 60)) return 'Setup past';
+  if (setupBelow(asset, 45) || scoreBelow(asset.technical_score, 45)) return 'Weak Structure';
+  if (verifiedSetupScore(asset) === null) return 'Setupmatch niet bewezen';
   return 'Neutral';
 }
 
@@ -2031,22 +2066,22 @@ function desktopLikeIntelligence(asset: MobileOverviewAsset) {
 }
 
 function terminalPostureForAsset(asset: MobileOverviewAsset, change: number) {
-  if (asset.setup_score >= 80 && asset.technical_score >= 65) return 'Momentum Rising';
-  if (asset.technical_score >= 70 && change >= 0) return 'Compression';
-  if (asset.technical_score < 45 || change < -3) return 'Expansion';
-  if (asset.market_score >= 65) return 'Compression';
+  if (setupAtLeast(asset, 80) && scoreAtLeast(asset.technical_score, 65)) return 'Momentum Rising';
+  if (scoreAtLeast(asset.technical_score, 70) && change >= 0) return 'Compression';
+  if (scoreBelow(asset.technical_score, 45) || change < -3) return 'Expansion';
+  if (scoreAtLeast(asset.market_score, 65)) return 'Compression';
   return 'Rangebound';
 }
 
 function terminalStructureForAsset(asset: MobileOverviewAsset) {
-  if (asset.setup_score >= 65 && asset.technical_score >= 60) return 'Bullish Structure';
-  if (asset.setup_score < 45 || asset.technical_score < 45) return 'Weak Structure';
+  if (setupAtLeast(asset, 65) && scoreAtLeast(asset.technical_score, 60)) return 'Bullish Structure';
+  if (setupBelow(asset, 45) || scoreBelow(asset.technical_score, 45)) return 'Weak Structure';
   return 'Neutral Structure';
 }
 
 function terminalRiskForAsset(asset: MobileOverviewAsset, change: number) {
-  if (asset.setup_score < 45 || asset.technical_score < 45 || change <= -3) return 'Risk Elevated';
-  if (asset.setup_score >= 70 && asset.technical_score >= 60) return 'Laag / Stabiel';
+  if (setupBelow(asset, 45) || scoreBelow(asset.technical_score, 45) || change <= -3) return 'Risk Elevated';
+  if (setupAtLeast(asset, 70) && scoreAtLeast(asset.technical_score, 60)) return 'Laag / Stabiel';
   return 'Gematigd';
 }
 
@@ -2057,33 +2092,34 @@ function riskToneForTerminal(value: string): StatusTone {
 }
 
 function postureForAsset(asset: MobileOverviewAsset, change: number) {
-  if (asset.setup_score >= 80 && change > 0) return 'Near trigger';
-  if (asset.technical_score >= 70 && change >= 0) return 'Momentum improving';
-  if (asset.technical_score < 45 || change < -3) return 'Weak structure';
-  if (asset.setup_score >= 65) return 'Risk-on selective';
+  if (setupAtLeast(asset, 80) && change > 0) return 'Setup past';
+  if (scoreAtLeast(asset.technical_score, 70) && change >= 0) return 'Momentum improving';
+  if (scoreBelow(asset.technical_score, 45) || change < -3) return 'Weak structure';
+  if (setupAtLeast(asset, 65)) return 'Risk-on selective';
   return 'Waiting confirmation';
 }
 
 function setupStateForAsset(asset: MobileOverviewAsset) {
-  if (asset.setup_score >= 80) return 'Near trigger';
-  if (asset.setup_score >= 65) return 'Setup valid';
-  if (asset.setup_score < 40) return 'Setup weak';
+  if (setupAtLeast(asset, 80)) return 'Setup past';
+  if (setupAtLeast(asset, 65)) return 'Setup valid';
+  if (setupBelow(asset, 40)) return 'Setup weak';
+  if (verifiedSetupScore(asset) === null) return 'Setupmatch niet bewezen';
   return 'Wait confirm';
 }
 
 function riskStateForAsset(asset: MobileOverviewAsset, change: number) {
-  if (asset.setup_score < 40 || asset.technical_score < 40) return 'High risk';
+  if (setupBelow(asset, 40) || scoreBelow(asset.technical_score, 40)) return 'High risk';
   if (change < -3) return 'Weak risk/reward';
-  if (asset.setup_score < 65) return 'Wait';
+  if (setupBelow(asset, 65)) return 'Wait';
   return 'Controlled';
 }
 
 function headlineForAsset(asset: MobileOverviewAsset, change: number) {
-  if (asset.setup_score >= 82 && asset.technical_score >= 65) return 'Near trigger';
-  if (change >= 1.5 && asset.technical_score >= 60) return 'Constructive recovery';
-  if (asset.technical_score < 45 || change <= -3) return 'Weak structure';
-  if (asset.market_score >= 70 && asset.setup_score >= 65) return 'Risk-on, selective';
-  if (asset.technical_score >= 65) return 'Momentum improving';
+  if (setupAtLeast(asset, 82) && scoreAtLeast(asset.technical_score, 65)) return 'Setup past';
+  if (change >= 1.5 && scoreAtLeast(asset.technical_score, 60)) return 'Constructive recovery';
+  if (scoreBelow(asset.technical_score, 45) || change <= -3) return 'Weak structure';
+  if (scoreAtLeast(asset.market_score, 70) && setupAtLeast(asset, 65)) return 'Risk-on, selective';
+  if (scoreAtLeast(asset.technical_score, 65)) return 'Momentum improving';
   return 'Waiting confirmation';
 }
 
@@ -2099,7 +2135,7 @@ function conciseInsight(value: string) {
 }
 
 function compositeScore(asset: MobileOverviewAsset) {
-  return Math.round((asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4);
+  return asset.benchmark_score == null ? null : Math.round(asset.benchmark_score);
 }
 
 function buildFallbackAnalysisAsset(
@@ -2110,7 +2146,7 @@ function buildFallbackAnalysisAsset(
   const marketScore = readWorkspaceScore(workspaceAsset?.categories?.market?.score?.score);
   const macroScore = readWorkspaceScore(workspaceAsset?.categories?.macro?.score?.score);
   const technicalScore = readWorkspaceScore(workspaceAsset?.categories?.technical?.score?.score);
-  const combinedScore = readWorkspaceScore(workspaceAsset?.combined?.score);
+  const combinedScore = readWorkspaceScore(workspaceAsset?.daily?.benchmark_score);
   const latestPrice = readNumber(latest, ['price'], NaN);
   const latestChange = readNumber(latest, ['change_24h'], NaN);
 
@@ -2125,10 +2161,10 @@ function buildFallbackAnalysisAsset(
 
   if (!hasAnyBackendSignal) return null;
 
-  const safeMarket = marketScore ?? combinedScore ?? 50;
-  const safeMacro = macroScore ?? combinedScore ?? 50;
-  const safeTechnical = technicalScore ?? combinedScore ?? 50;
-  const safeSetup = combinedScore ?? Math.round((safeMarket + safeMacro + safeTechnical) / 3);
+  const safeMarket = marketScore;
+  const safeMacro = macroScore;
+  const safeTechnical = technicalScore;
+  const safeBenchmark = combinedScore ?? null;
 
   return {
     symbol,
@@ -2137,7 +2173,10 @@ function buildFallbackAnalysisAsset(
     macro_score: safeMacro,
     technical_score: safeTechnical,
     market_score: safeMarket,
-    setup_score: safeSetup,
+    setup_score: null,
+    setup_match_score: null,
+    setup_match_status: 'insufficient_data',
+    benchmark_score: safeBenchmark,
     macro_label: workspaceAsset?.categories?.macro?.score?.status ?? null,
     technical_label: workspaceAsset?.categories?.technical?.score?.status ?? null,
     market_label: workspaceAsset?.categories?.market?.score?.status ?? null,
@@ -2192,12 +2231,10 @@ function buildWorkspaceEvidenceSections(
     const visibleRows = (payload?.rows ?? []).filter(
       (row) => !hiddenIndicatorKeys.includes(buildIndicatorKey(symbol, category.key, humanizeIndicatorName(row.name))),
     );
-    const visibleScore = averageVisibleIndicatorScore(visibleRows);
-
     return {
       key: category.key,
       title: category.title,
-      score: visibleScore ?? readWorkspaceScore(payload?.score?.score) ?? 0,
+      score: readWorkspaceScore(payload?.score?.score),
       summary: deriveWorkspaceSummary(payload, category.summaryFallback),
       rows: visibleRows.map((row) => ({
         label: humanizeIndicatorName(row.name),
@@ -2209,39 +2246,6 @@ function buildWorkspaceEvidenceSections(
       })),
     };
   });
-}
-
-function buildVisibleWorkspaceScores(
-  symbol: string,
-  workspaceAsset?: WorkspaceAssetResponse,
-  hiddenIndicatorKeys: string[] = [],
-) {
-  const sections = buildWorkspaceEvidenceSections(symbol, workspaceAsset, hiddenIndicatorKeys);
-  const market = sections.find((section) => section.key === 'market')?.score ?? null;
-  const macro = sections.find((section) => section.key === 'macro')?.score ?? null;
-  const technical = sections.find((section) => section.key === 'technical')?.score ?? null;
-  const visibleSectionScores = [market, macro, technical].filter(
-    (value): value is number => typeof value === 'number' && Number.isFinite(value),
-  );
-
-  return {
-    market,
-    macro,
-    technical,
-    combined: visibleSectionScores.length
-      ? Math.round(visibleSectionScores.reduce((sum, value) => sum + value, 0) / visibleSectionScores.length)
-      : null,
-  };
-}
-
-function averageVisibleIndicatorScore(
-  rows: Array<{ score?: number | null }>,
-) {
-  const scores = rows
-    .map((row) => row.score)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  if (!scores.length) return null;
-  return Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length);
 }
 
 function readWorkspaceScore(value: unknown) {

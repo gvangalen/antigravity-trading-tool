@@ -18,7 +18,7 @@ from backend.infrastructure.repositories.finn_v2_tool_call_repository import Fin
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.schemas.finn_v2_tool_schema import ToolExecutionEnvelope
-from backend.schemas.finn_v2_evidence_schema import LinkedStrategyCollectionData
+from backend.schemas.finn_v2_evidence_schema import LinkedStrategyCollectionData, SetupMarketMatchesData
 from backend.schemas.finn_v2_orchestrator_schema import ToolPlan
 from backend.services.finn_v2_evidence_ingestion_service import FinnV2EvidenceIngestionService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
@@ -42,6 +42,7 @@ from backend.services.finn_v2_tool_adapters.setup_inventory_tool_adapter import 
 from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_adapters.watchlist_tool_adapter import WatchlistToolAdapter
+from backend.services.setup_market_match_service import SetupMarketMatchService
 from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistryService
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
@@ -553,6 +554,27 @@ class FinnV2ToolExecutionService:
         if tool_name == "read_asset_scores":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.score_adapter.execute(user_id=user_id, asset=asset_state["asset"])
+        if tool_name == "read_setup_market_matches":
+            match_service = SetupMarketMatchService(self.session)
+            requested_asset = selector.get("asset") if isinstance(selector, dict) else None
+            if requested_asset:
+                asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
+                assessment = await match_service.for_asset(user_id, asset_state["asset"])
+            else:
+                assessment = await match_service.for_all_assets(user_id)
+            payload = SetupMarketMatchesData(**assessment)
+            return {
+                "data": payload,
+                "summary": {"title": "setup_market_matches", "symbol": assessment["symbol"],
+                            "count": len(assessment["matches"])},
+                "as_of": assessment["as_of"],
+                "resolution_source": "owner_setup_market_match",
+                "source": "daily_scores_and_source_indicators",
+                "schema_name": "SetupMarketMatchesData",
+                "entity_type": "setup_collection",
+                "entity_id": None,
+                "asset": assessment["symbol"],
+            }
         if tool_name == "read_market_snapshot":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.market_adapter.execute(asset=asset_state["asset"])

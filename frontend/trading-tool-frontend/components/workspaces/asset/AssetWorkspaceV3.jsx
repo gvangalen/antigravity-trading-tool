@@ -2403,73 +2403,20 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [activeSymbol]);
 
   const planBridgeCandidate = useMemo(() => {
-    const activeSetups = Array.isArray(workspace?.daily?.setup?.active_setups)
-      ? workspace.daily.setup.active_setups
-      : [];
-
-    const matchingSetups = activeSetups
-      .filter((item) => String(item?.symbol || "").toUpperCase() === activeSymbol)
-      .map((item) => ({
-        ...item,
-        resolvedSetupId: item?.id ?? item?.setup_id ?? null,
-        resolvedScore: normalizeScore(item?.score),
-      }))
-      .filter((item) => item.resolvedSetupId !== null)
-      .sort((left, right) => Number(right.resolvedScore ?? -1) - Number(left.resolvedScore ?? -1));
-
-    const linkedStrategiesBySetupId = new Map();
-    strategies.forEach((strategy) => {
-      const setupId = strategy?.setup_id ?? strategy?.setup?.id ?? null;
-      if (setupId === null || setupId === undefined) return;
-      const key = String(setupId);
-      const current = linkedStrategiesBySetupId.get(key);
-      if (!current || strategy?.is_active) {
-        linkedStrategiesBySetupId.set(key, strategy);
-      }
-    });
-
-    if (!matchingSetups.length) {
-      const runtimeSetupId = marketBestSetup?.setup_id ?? marketBestSetup?.id ?? null;
-      const linkedStrategy = runtimeSetupId == null
-        ? null
-        : linkedStrategiesBySetupId.get(String(runtimeSetupId)) || null;
-
-      if (!marketBestSetup) return null;
-
-      return {
-        ...marketBestSetup,
-        resolvedSetupId: runtimeSetupId,
-        score: normalizeScore(marketBestSetup?.score),
-        strategyId: linkedStrategy?.id ?? null,
-        displayName:
-          linkedStrategy?.name ||
-          marketBestSetup?.name ||
-          ui.planBridgeTitle,
-      };
-    }
-
-    const linkedMatch = matchingSetups.find((item) =>
-      linkedStrategiesBySetupId.has(String(item.resolvedSetupId))
+    if (!marketBestSetup?.is_active || String(marketBestSetup.symbol || "").toUpperCase() !== activeSymbol) return null;
+    const runtimeSetupId = marketBestSetup.setup_id ?? marketBestSetup.id ?? null;
+    const linkedStrategies = strategies.filter((strategy) =>
+      String(strategy?.setup_id ?? strategy?.setup?.id ?? "") === String(runtimeSetupId)
     );
-    const runtimeSetupId = marketBestSetup?.setup_id ?? marketBestSetup?.id ?? null;
-    const runtimeMatch = runtimeSetupId == null
-      ? null
-      : matchingSetups.find((item) => String(item.resolvedSetupId) === String(runtimeSetupId));
-    const bestMatch = runtimeMatch || linkedMatch || matchingSetups[0];
-    const linkedStrategy = linkedStrategiesBySetupId.get(String(bestMatch.resolvedSetupId)) || null;
-    const fallbackScore = normalizeScore(marketBestSetup?.score);
-
+    const linkedStrategy = linkedStrategies.find((strategy) => strategy?.is_active) || linkedStrategies[0];
     return {
-      ...bestMatch,
-      score: bestMatch.resolvedScore ?? fallbackScore,
+      ...marketBestSetup,
+      resolvedSetupId: runtimeSetupId,
+      score: normalizeScore(marketBestSetup.score),
       strategyId: linkedStrategy?.id ?? null,
-      displayName:
-        linkedStrategy?.name ||
-        bestMatch?.name ||
-        marketBestSetup?.name ||
-        ui.planBridgeTitle,
+      displayName: linkedStrategy?.name || marketBestSetup.name || ui.planBridgeTitle,
     };
-  }, [activeSymbol, marketBestSetup?.id, marketBestSetup?.name, marketBestSetup?.score, marketBestSetup?.setup_id, strategies, ui.planBridgeTitle, workspace?.daily?.setup?.active_setups]);
+  }, [activeSymbol, marketBestSetup, strategies, ui.planBridgeTitle]);
 
   const addMarket = async (name) => {
     await marketIndicatorAdd(name, activeSymbol);
@@ -2799,6 +2746,12 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [activeSymbol, hiddenIndicatorKeys, isFallbackWorkspace, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
 
   const combinedSummary = useMemo(() => {
+    if (Object.values(periods).every((period) => period === "day")) {
+      const currentBenchmark = normalizeScore(workspace?.daily?.benchmark_score);
+      if (currentBenchmark === null) return summarizeContextScores([], ui);
+      const tone = scoreTone(currentBenchmark, ui);
+      return { score: currentBenchmark, confidence: null, bias: tone.label, tone };
+    }
     const visibleScores = {
       market: sections.find((section) => section.id === "market")?.score ?? null,
       macro: sections.find((section) => section.id === "macro")?.score ?? null,
@@ -2809,7 +2762,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
     if (!hasVisibleScores) return summarizeContextScores([], ui);
     return summary;
-  }, [master, sections, ui]);
+  }, [master, periods, sections, ui, workspace?.daily?.benchmark_score]);
 
   const handleAssetSelect = (symbol) => {
     const nextSymbol = String(symbol || activeSymbol).toUpperCase();

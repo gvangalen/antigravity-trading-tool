@@ -104,7 +104,6 @@ def test_run_onboarding_pipeline_queues_expected_workflow(monkeypatch):
         "generate_macro_insight",
         "run_market_agent_daily",
         "run_technical_agent_daily",
-        "run_setup_agent_daily",
         "run_daily_strategy_snapshot",
         "generate_daily_report",
         "enqueue_first_dashboard_briefing",
@@ -118,7 +117,6 @@ def test_bootstrap_agents_task_queues_report_and_first_dashboard_briefing(monkey
     monkeypatch.setattr(bootstrap_tasks, "fetch_market_data", lambda: calls.append(("fetch_market_data",)))
     monkeypatch.setattr(bootstrap_tasks, "fetch_macro_data", lambda user_id: calls.append(("fetch_macro_data", user_id)))
     monkeypatch.setattr(bootstrap_tasks, "fetch_technical_data_day", lambda user_id: calls.append(("fetch_technical_data_day", user_id)))
-    monkeypatch.setattr(bootstrap_tasks, "run_setup_agent_daily", lambda user_id: calls.append(("run_setup_agent_daily", user_id)))
     monkeypatch.setattr(bootstrap_tasks, "run_market_agent_daily", lambda user_id: calls.append(("run_market_agent_daily", user_id)))
     monkeypatch.setattr(bootstrap_tasks, "snapshot_all_for_user", lambda user_id: calls.append(("snapshot_all_for_user", user_id)))
     monkeypatch.setattr(bootstrap_tasks, "generate_daily_report", _DelayStub("generate_daily_report", calls))

@@ -85,7 +85,6 @@ def test_daily_score_storage_keeps_missing_macro_as_null(monkeypatch):
 
     conn = Connection()
     monkeypatch.setattr(task_module, "get_db_connection", lambda: conn)
-    monkeypatch.setattr(task_module, "fetch_setup_score_from_setup_agent", lambda *_: None)
     monkeypatch.setattr(task_module, "generate_scores_db", lambda category, **_: {
         "scores": {} if category == "macro" else {"signal": {"score": 70, "weight": 1}},
         "total_score": 10 if category == "macro" else 70,
@@ -94,6 +93,7 @@ def test_daily_score_storage_keeps_missing_macro_as_null(monkeypatch):
     task_module.build_daily_scores_for_user(7)
 
     assert conn.saved[:5] == (7, "AAPL", None, 70, 70)
+    assert conn.saved[5] is None  # The retired AI setup score is never stored.
     assert task_module._confirmed_component_score({
         "total_score": 10, "scores": {"unused": {"weight": 0}},
     }) is None

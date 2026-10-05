@@ -29,28 +29,7 @@ export const fetchSetups = async ({ setup_type = '' } = {}) => {
 
 //
 // =========================================================
-// 2. TOP SETUPS
-// =========================================================
-export const fetchTopSetups = async (limit = 3) => {
-  let safe = parseInt(limit);
-  if (isNaN(safe) || safe < 1) safe = 3;
-  if (safe > 100) safe = 100;
-
-  try {
-    const result = await fetchAuth(`/api/setups/top?limit=${safe}`, {
-      method: 'GET',
-    });
-    return Array.isArray(result) ? result.map(normalizePublicSetup) : [];
-  } catch (err) {
-    console.error('❌ [fetchTopSetups] Fout:', err);
-    toast.error('Top setups laden mislukt.');
-    return [];
-  }
-};
-
-//
-// =========================================================
-// 3. SETUP UPDATEN
+// SETUP UPDATEN
 // =========================================================
 export const updateSetup = async (id, updatedData) => {
   try {
@@ -104,26 +83,7 @@ export const saveNewSetup = async (newData) => {
 
 //
 // =========================================================
-// 6. AI-UITLEG GENEREREN
-// =========================================================
-export const generateExplanation = async (setupId, reload = null) => {
-  try {
-    const res = await fetchAuth(`/api/setups/explanation/${setupId}`, {
-      method: 'POST',
-    });
-
-    if (reload) await reload();
-    return res;
-  } catch (err) {
-    console.error('❌ [generateExplanation] Fout:', err);
-    toast.error('AI-uitleg genereren mislukt.');
-    return { explanation: '' };
-  }
-};
-
-//
-// =========================================================
-// 7. CHECK OF NAAM BESTAAT
+// CHECK OF NAAM BESTAAT
 // =========================================================
 export const checkSetupNameExists = async (name) => {
   try {
@@ -171,16 +131,16 @@ export const fetchActiveSetup = async (symbol = "BTC") => {
 // =========================================================
 // 10. DAGELIJKSE SETUP SCORES
 // =========================================================
-export const fetchDailySetupScores = async () => {
+export const fetchSetupMarketMatches = async () => {
   try {
-    const res = await fetchAuth('/api/setups/daily-scores', {
+    const res = await fetchAuth('/api/setups/market-matches', {
       method: 'GET',
     });
 
     return Array.isArray(res) ? res : [];
   } catch (err) {
-    console.error('❌ [fetchDailySetupScores] Fout:', err);
-    toast.error('Daily setup scores laden mislukt.');
+    console.error('❌ [fetchSetupMarketMatches] Fout:', err);
+    toast.error('Setupmatches laden mislukt.');
     return [];
   }
 };

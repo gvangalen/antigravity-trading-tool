@@ -1635,7 +1635,7 @@ function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileRepo
       macro_score: readReportNumber(fullReport, ['macro_score']) ?? 0,
       market_score: readReportNumber(fullReport, ['market_score']) ?? 0,
       price: readReportNumber(fullReport, ['price', 'bitcoin_price']) ?? 0,
-      setup_score: readReportNumber(fullReport, ['setup_score']) ?? 0,
+      setup_score: readReportNumber(fullReport, ['setup_score']),
       technical_score: readReportNumber(fullReport, ['technical_score']) ?? 0,
       volume: readReportNumber(fullReport, ['volume', 'total_volume']) ?? 0,
     },

@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from fastapi import HTTPException
 from datetime import datetime
-import asyncio
 
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
@@ -32,14 +31,6 @@ WEEKDAY_TO_NUMBER = {
     "sunday": 7,
     "zondag": 7,
 }
-
-# =========================================================
-# SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS
-# =========================================================
-
-def sync_generate_setup_explanation(setup_id: int, user_id: int) -> str:
-    from backend.ai_agents.setup_ai_agent import generate_setup_explanation
-    return generate_setup_explanation(setup_id, user_id)
 
 class SetupService:
     # These are product defaults for a setup created without explicit score
@@ -356,24 +347,15 @@ class SetupService:
         rows = await self.repository.get_dca_setups(user_id)
         return [self._format_setup(r) for r in rows]
 
-    async def get_daily_setup_scores(self, user_id: int, symbol: str = "BTC") -> List[dict]:
-        # Bereken dynamisch voor het gevraagde symbool
-        active_res = await self.get_active_setup(user_id, symbol)
-        active = active_res.get("active")
-        
-        if not active:
-            return []
-            
-        return [
-            {
-                "setup_id": active["setup_id"],
-                "score": active["score"],
-                "is_best": True,
-                "name": active["name"],
-                "symbol": symbol,
-                "timeframe": active["timeframe"],
-            }
-        ]
+    async def get_market_matches(self, user_id: int, symbol: str | None = None) -> List[dict]:
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        service = SetupMarketMatchService(self.session)
+        if not symbol:
+            return (await service.for_all_assets(user_id))["matches"]
+        assessment = await service.for_asset(user_id, symbol)
+        return [{**match, "as_of": assessment["as_of"],
+                 "source_status": assessment["source_status"]} for match in assessment["matches"]]
 
     async def update_setup(self, setup_id: int, raw_payload: dict, user_id: int) -> dict:
         row = await self.repository.get_setup_by_id(setup_id, user_id)
@@ -457,18 +439,6 @@ class SetupService:
         exists = await self.repository.simple_check_name(name, user_id)
         return {"exists": exists}
 
-    async def ai_explanation(self, setup_id: int, user_id: int) -> dict:
-        explanation = await asyncio.to_thread(sync_generate_setup_explanation, setup_id, user_id)
-        if not explanation:
-            raise HTTPException(500, "AI uitleg kon niet worden gegenereerd")
-
-        updated = await self.repository.update_ai_explanation(setup_id, user_id, explanation)
-        if updated == 0:
-            raise HTTPException(404, "Setup niet gevonden")
-            
-        await self.session.commit()
-        return {"explanation": explanation}
-
     async def get_top_setups(self, user_id: int, limit: int) -> List[dict]:
         rows = await self.repository.get_top_setups(user_id, limit)
         return [self._format_setup(r) for r in rows]
@@ -480,150 +450,32 @@ class SetupService:
         return self._format_setup(row)
 
     async def get_active_setup(self, user_id: int, symbol: str = "BTC") -> dict:
-        from backend.ai_agents.setup_ai_agent import score_overlap
-        from sqlalchemy import text
-        
-        symbol = symbol.upper()
-        
-        # 1. Haal huidige scores op voor deze asset
-        query_scores = text("""
-            SELECT macro_score, technical_score, market_score
-            FROM daily_scores
-            WHERE user_id = :user_id AND symbol = :symbol
-            ORDER BY report_date DESC LIMIT 1
-        """)
-        res_scores = await self.session.execute(query_scores, {"user_id": user_id, "symbol": symbol})
-        row_scores = res_scores.fetchone()
-        
-        macro = float(row_scores[0]) if row_scores and row_scores[0] is not None else 50.0
-        technical = float(row_scores[1]) if row_scores and row_scores[1] is not None else 50.0
-        market = float(row_scores[2]) if row_scores and row_scores[2] is not None else 50.0
+        from backend.services.setup_market_match_service import SetupMarketMatchService
 
-        # 2. Haal alleen setups op voor dit asset. Zonder deze filter kan
-        # /setups/active?symbol=BTC een ETH-setup teruggeven met BTC-scores.
-        setups = [
-            dict(s)
-            for s in await self.repository.get_all_setups(user_id)
-            if str(s.get("symbol") or "").upper() == symbol
-        ]
-        if not setups:
-            return {"active": None}
-
-        # 3. Bereken overlap score runtime
-        best_setup = None
-        best_score = -1
-
-        for s in setups:
-            m = score_overlap(macro, s.get("min_macro_score"), s.get("max_macro_score"))
-            t = score_overlap(technical, s.get("min_technical_score"), s.get("max_technical_score"))
-            mk = score_overlap(market, s.get("min_market_score"), s.get("max_market_score"))
-
-            active_components = 0
-            total_score = 0
-            
-            if s.get("min_macro_score") is not None or s.get("max_macro_score") is not None:
-                active_components += 1
-                total_score += m
-            if s.get("min_technical_score") is not None or s.get("max_technical_score") is not None:
-                active_components += 1
-                total_score += t
-            if s.get("min_market_score") is not None or s.get("max_market_score") is not None:
-                active_components += 1
-                total_score += mk
-                
-            if active_components == 0:
-                raw_score = round((m + t + mk) / 3)
-            else:
-                raw_score = round(total_score / active_components)
-
-            score = max(25, raw_score)
-
-            if score > best_score:
-                best_score = score
-                best_setup = s
-
-        if not best_setup:
-            return {"active": None}
-            
-        # Return de beste
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, symbol, setups=await self.repository.get_all_setups(user_id)
+        )
+        best = next((match for match in assessment["matches"] if match["is_best"]), None)
+        if best is None:
+            return {"active": None, "source_status": assessment["source_status"], "as_of": assessment["as_of"]}
         return {
-            "active": {
-                "setup_id": best_setup.get("id"),
-                "score": best_score,
-                "ai_explanation": "Berekend via dynamische overlap.",
-                "name": best_setup.get("name"),
-                "symbol": symbol,
-                "timeframe": best_setup.get("timeframe"),
-                "trend": best_setup.get("trend"),
-                "setup_type": best_setup.get("setup_type"),
-                "min_investment": best_setup.get("min_investment"),
-                "tags": best_setup.get("tags"),
-                "favorite": best_setup.get("favorite"),
-                "action": best_setup.get("action"),
-                "setup_explanation": best_setup.get("explanation"),
-            }
+            "active": {**best, "ai_explanation": "Berekend uit de opgeslagen scorevoorwaarden."},
+            "source_status": assessment["source_status"],
+            "as_of": assessment["as_of"],
         }
 
     async def explain_setup_status(self, setup_id: int, user_id: int) -> dict:
-        from backend.ai_agents.setup_ai_agent import score_overlap
-        from sqlalchemy import text
-        
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
         setup = await self.get_setup_by_id(setup_id, user_id)
-        symbol = setup["symbol"]
-        
-        query_scores = text("""
-            SELECT macro_score, technical_score, market_score
-            FROM daily_scores
-            WHERE user_id = :user_id AND symbol = :symbol
-            ORDER BY report_date DESC LIMIT 1
-        """)
-        res_scores = await self.session.execute(query_scores, {"user_id": user_id, "symbol": symbol})
-        row_scores = res_scores.fetchone()
-        
-        macro = float(row_scores[0]) if row_scores and row_scores[0] is not None else 50.0
-        technical = float(row_scores[1]) if row_scores and row_scores[1] is not None else 50.0
-        market = float(row_scores[2]) if row_scores and row_scores[2] is not None else 50.0
-
-        reasons = []
-        is_active = True
-        
-        if setup.get("min_macro_score") is not None and macro < float(setup["min_macro_score"]):
-            reasons.append(f"macro score ({macro}) onder minimum ({setup['min_macro_score']})")
-            is_active = False
-        if setup.get("max_macro_score") is not None and macro > float(setup["max_macro_score"]):
-            reasons.append(f"macro score ({macro}) boven maximum ({setup['max_macro_score']})")
-            is_active = False
-            
-        if setup.get("min_technical_score") is not None and technical < float(setup["min_technical_score"]):
-            reasons.append(f"technical score ({technical}) onder minimum ({setup['min_technical_score']})")
-            is_active = False
-        if setup.get("max_technical_score") is not None and technical > float(setup["max_technical_score"]):
-            reasons.append(f"technical score ({technical}) boven maximum ({setup['max_technical_score']})")
-            is_active = False
-            
-        if setup.get("min_market_score") is not None and market < float(setup["min_market_score"]):
-            reasons.append(f"market score ({market}) onder minimum ({setup['min_market_score']})")
-            is_active = False
-        if setup.get("max_market_score") is not None and market > float(setup["max_market_score"]):
-            reasons.append(f"market score ({market}) boven maximum ({setup['max_market_score']})")
-            is_active = False
-
-        m_overlap = score_overlap(macro, setup.get("min_macro_score"), setup.get("max_macro_score"))
-        t_overlap = score_overlap(technical, setup.get("min_technical_score"), setup.get("max_technical_score"))
-        mk_overlap = score_overlap(market, setup.get("min_market_score"), setup.get("max_market_score"))
-        
-        match_pct = round((m_overlap + t_overlap + mk_overlap) / 3)
-        
-        advice = "Niet kopen volgens je eigen plan" if not is_active else "Plan is actief, je kunt kopen."
-        
+        assessment = await SetupMarketMatchService(self.session).for_asset(user_id, setup["symbol"], setups=[setup])
+        match = assessment["matches"][0]
         return {
-            "status": "active" if is_active else "inactive",
-            "match_percentage": match_pct,
-            "reasons": reasons if not is_active else ["Alle scores vallen binnen de ranges."],
-            "advice": advice,
-            "current_scores": {
-                "macro": macro,
-                "technical": technical,
-                "market": market
-            }
+            "status": match["status"],
+            "match_percentage": match["score"],
+            "reasons": match["reasons"],
+            "advice": "Bekijk de instap- en risicovoorwaarden afzonderlijk." if match["is_active"] else "Wacht op passende en actuele gegevens.",
+            "current_scores": {key: value["score"] for key, value in match["components"].items()},
+            "as_of": assessment["as_of"],
+            "source_status": assessment["source_status"],
         }

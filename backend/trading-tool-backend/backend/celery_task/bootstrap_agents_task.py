@@ -4,7 +4,6 @@ from celery import shared_task
 from backend.celery_task.market_task import fetch_market_data
 from backend.celery_task.macro_task import fetch_macro_data
 from backend.celery_task.technical_task import fetch_technical_data_day
-from backend.celery_task.setup_task import run_setup_agent_daily
 from backend.celery_task.market_task import run_market_agent_daily
 from backend.celery_task.daily_report_task import generate_daily_report
 from backend.celery_task.onboarding_task import enqueue_first_dashboard_briefing
@@ -37,9 +36,7 @@ def bootstrap_agents_task(self, user_id: int):
         logger.info("📈 Fetching technical indicators")
         fetch_technical_data_day(user_id=user_id)
 
-        # 4️⃣ Setup validation
-        logger.info("🧠 Running setup agent")
-        run_setup_agent_daily(user_id=user_id)
+        # Setup match is computed from the canonical score components.
 
         # 5️⃣ AI insights
         logger.info("🤖 Running market AI agent")

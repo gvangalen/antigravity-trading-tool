@@ -17,6 +17,8 @@ class _FakeSetupRepo:
         return None
 
     async def get_user_setups(self, user_id):
+        if user_id == 388:
+            return [{"id": 293, "symbol": "BTC", "timeframe": "4H"}]
         if user_id == 389:
             return [{"id": 294, "symbol": "AAPL", "timeframe": "1D"}]
         return []
@@ -94,35 +96,71 @@ def test_entity_resolution_prefers_explicit_graph_links_for_asset():
     assert from_bot == {"asset": "BTC", "resolution_source": "explicit_bot_link"}
 
 
-def test_entity_resolution_can_resolve_setup_without_explicit_asset():
+def test_entity_resolution_can_resolve_setup_without_explicit_asset(monkeypatch):
+    class _MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_all_assets(self, user_id, *, setups):
+            return {"matches": [{"setup_id": 293, "is_active": True}] if user_id == 388 else []}
+
+    monkeypatch.setattr("backend.services.finn_v2_entity_resolution_service.SetupMarketMatchService", _MatchService)
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()
 
     active = asyncio.run(service.resolve_setup(user_id=388, selector={}, asset=None))
     single = asyncio.run(service.resolve_setup(user_id=389, selector={}, asset=None))
 
-    assert active["setup"]["setup_id"] == 293
+    assert active["setup"]["id"] == 293
     assert active["resolution_source"] == "active_setup"
     assert single["setup"]["id"] == 294
     assert single["resolution_source"] == "single_user_setup"
 
 
-def test_entity_resolution_selects_the_asset_specific_active_setup_before_other_candidates():
+def test_entity_resolution_selects_the_asset_specific_active_setup_before_other_candidates(monkeypatch):
+    class _MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, asset, *, setups):
+            assert asset == "ETH"
+            return {"matches": [{"setup_id": 294, "is_active": True}]}
+
+    monkeypatch.setattr("backend.services.finn_v2_entity_resolution_service.SetupMarketMatchService", _MatchService)
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()
 
-    service.setups.get_active_setup = lambda _user_id: asyncio.sleep(0, result={"setup_id": 293, "symbol": "BTC"})
     service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
-        {"id": 294, "symbol": "ETH", "is_active": True},
+        {"id": 294, "symbol": "ETH"},
         {"id": 295, "symbol": "ETH"},
     ])
 
     resolved = asyncio.run(service.resolve_setup(user_id=388, selector={}, asset="ETH"))
 
     assert resolved == {
-        "setup": {"id": 294, "symbol": "ETH", "is_active": True},
-        "resolution_source": "asset_active_setup",
+        "setup": {"id": 294, "symbol": "ETH"},
+        "resolution_source": "active_setup",
     }
+
+
+def test_legacy_active_flag_cannot_select_a_setup_without_a_current_match(monkeypatch):
+    class _MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, _user_id, _asset, *, setups):
+            return {"matches": [{"setup_id": 294, "is_active": False}]}
+
+    monkeypatch.setattr("backend.services.finn_v2_entity_resolution_service.SetupMarketMatchService", _MatchService)
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 294, "symbol": "ETH", "is_active": True, "score": 99},
+        {"id": 295, "symbol": "ETH"},
+    ])
+
+    with pytest.raises(LookupError, match="setup_ambiguous"):
+        asyncio.run(service.resolve_setup(user_id=388, selector={}, asset="ETH"))
 
 
 def test_entity_resolution_resolves_explicit_quoted_names_owner_scoped():

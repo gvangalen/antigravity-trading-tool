@@ -34,7 +34,7 @@ def _normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
         "macro_score": scores.get("macro_score", scores.get("macro", 10)),
         "technical_score": scores.get("technical_score", scores.get("technical", 10)),
         "market_score": scores.get("market_score", scores.get("market", 10)),
-        "setup_score": scores.get("setup_score", scores.get("setup", 10)),
+        "setup_score": scores.get("setup_score", scores.get("setup", 50)),
     }
 
 

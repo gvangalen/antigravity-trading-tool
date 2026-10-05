@@ -1,7 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, text
-from backend.infrastructure.models import AiCategoryInsight, DailyScore, Setup, DailySetupScore
-from datetime import date
+from backend.infrastructure.models import AiCategoryInsight, DailyScore, Setup
 from typing import List, Dict, Any, Optional
 
 class ScoreRepository:
@@ -9,44 +8,27 @@ class ScoreRepository:
         self.db = db
 
     async def fetch_active_setups(self, user_id: int) -> List[Dict[str, Any]]:
-        today = date.today()
-        stmt = text("""
-            SELECT DISTINCT ON (s.id)
-                   s.id,
-                   s.name,
-                   COALESCE(s.symbol, 'BTC') AS symbol,
-                   COALESCE(s.timeframe, '1D') AS timeframe,
-                   COALESCE(s.setup_type, 'trade') AS setup_type,
-                   s.dca_frequency,
-                   s.dca_day,
-                   s.dca_month_day,
-                   s.min_macro_score,
-                   s.max_macro_score,
-                   s.min_technical_score,
-                   s.max_technical_score,
-                   s.min_market_score,
-                   s.max_market_score,
-                   COALESCE(s.explanation, '') AS explanation,
-                   s.created_at AS timestamp,
-                   COALESCE(ds.score, 0) AS score,
-                   COALESCE(ds.active, false) AS is_active,
-                   COALESCE(ds.breakdown::jsonb, '{}'::jsonb) AS breakdown
-            FROM setups s
-            LEFT JOIN daily_setup_scores ds
-                ON ds.setup_id = s.id
-                AND ds.report_date = :today
-            WHERE s.user_id = :user_id
-            ORDER BY s.id, ds.report_date DESC
-            LIMIT 100
-        """)
-        
-        result = await self.db.execute(stmt, {"today": today, "user_id": user_id})
-        
-        # Build dictionary from rows
-        mapped = []
-        for row in result.mappings():
-            mapped.append(dict(row))
-        return mapped
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        owned = [dict(row) for row in await SetupRepository(self.db).get_all_setups(user_id)]
+        assessments = await SetupMarketMatchService(self.db).for_all_assets(user_id, setups=owned)
+        by_id = {int(item["setup_id"]): item for item in assessments["matches"]}
+        rows = []
+        for setup in owned:
+            match = by_id.get(int(setup["id"]))
+            rows.append({
+                **setup,
+                "timestamp": setup.get("created_at"),
+                "score": match["score"] if match else None,
+                "is_active": match["is_active"] if match else False,
+                "is_best": match["is_best"] if match else False,
+                "status": match["status"] if match else "insufficient_data",
+                "breakdown": match["components"] if match else {},
+                "score_semantics": "benchmark_setup_match_v1",
+            })
+        rows.sort(key=lambda row: (row["is_active"], row["score"] if row["score"] is not None else -1), reverse=True)
+        return rows
 
     async def get_master_score(self, user_id: int, symbol: str = "BTC") -> Optional[AiCategoryInsight]:
         # Filter by user, category and symbol (Master scores are now partitioned by symbol)
@@ -213,7 +195,7 @@ class ScoreRepository:
             "macro": scores.get("macro", 0),
             "technical": scores.get("technical", 0),
             "market": scores.get("market", 0),
-            "setup": scores.get("setup", 0),
+            "setup": None,  # Setup matches are calculated from saved conditions.
             "macro_int": scores.get("macro_interpretation", ""),
             "tech_int": scores.get("technical_interpretation", ""),
             "market_int": scores.get("market_interpretation", "")

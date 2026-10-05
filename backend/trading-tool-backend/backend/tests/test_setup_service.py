@@ -1,10 +1,12 @@
 import asyncio
+from datetime import date
 
 import pytest
 from fastapi import HTTPException
 
 from backend.schemas.trading_schema import SetupCreateSchema
 from backend.services.setup_service import SetupService
+from backend.services.setup_market_match_service import SetupMarketMatchService
 from backend.services.strategy_service import normalize_weekday
 
 
@@ -188,10 +190,18 @@ def test_get_active_setup_filters_candidates_by_symbol(monkeypatch):
     class Session:
         async def execute(self, *args, **kwargs):
             class Result:
-                def fetchone(self):
-                    return (50, 50, 50)
+                def mappings(self):
+                    return self
+
+                def first(self):
+                    return {"report_date": date.today(), "macro_score": 50,
+                            "technical_score": 50, "market_score": 50}
             return Result()
 
+    async def fresh(*_args):
+        return True
+
+    monkeypatch.setattr(SetupMarketMatchService, "_source_is_fresh", fresh)
     service.repository = Repo()
     service.session = Session()
 

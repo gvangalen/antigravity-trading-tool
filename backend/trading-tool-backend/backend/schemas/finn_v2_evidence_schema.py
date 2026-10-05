@@ -74,7 +74,6 @@ class DailyScoresData(BaseModel):
     macro_score: Optional[float] = None
     technical_score: Optional[float] = None
     market_score: Optional[float] = None
-    setup_score: Optional[float] = None
     report_date: Optional[date] = None
 
 
@@ -82,6 +81,15 @@ class AssetScoresData(BaseModel):
     symbol: str
     daily_scores: Optional[DailyScoresData] = None
     master_score: Optional[MasterScoreData] = None
+
+
+class SetupMarketMatchesData(BaseModel):
+    symbol: str
+    as_of: Optional[date] = None
+    source_status: str
+    benchmark_score: Optional[float] = None
+    benchmark_weights: Optional[Dict[str, float]] = None
+    matches: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class MarketSnapshotData(BaseModel):
@@ -132,7 +140,6 @@ class ActiveSetupData(BaseModel):
     dca_day_name: Optional[str] = None
     dca_month_day: Optional[int] = None
     min_investment: Optional[float] = None
-    score: Optional[float] = None
     setups: List[Dict[str, object]] = Field(default_factory=list)
     setup_count: Optional[int] = None
 
@@ -267,6 +274,7 @@ ToolDataUnion = Union[
     ActiveAssetData,
     IndicatorConfigurationData,
     AssetScoresData,
+    SetupMarketMatchesData,
     MarketSnapshotData,
     MacroSnapshotData,
     TechnicalSnapshotData,
@@ -287,6 +295,7 @@ TOOL_DATA_MODEL_BY_NAME = {
     "ActiveAssetData": ActiveAssetData,
     "IndicatorConfigurationData": IndicatorConfigurationData,
     "AssetScoresData": AssetScoresData,
+    "SetupMarketMatchesData": SetupMarketMatchesData,
     "MarketSnapshotData": MarketSnapshotData,
     "MacroSnapshotData": MacroSnapshotData,
     "TechnicalSnapshotData": TechnicalSnapshotData,
@@ -307,6 +316,7 @@ PAYLOAD_TYPE_TO_SCHEMA_NAME = {
     "active_asset": "ActiveAssetData",
     "indicator_configuration": "IndicatorConfigurationData",
     "asset_scores": "AssetScoresData",
+    "setup_market_matches": "SetupMarketMatchesData",
     "market_snapshot": "MarketSnapshotData",
     "macro_snapshot": "MacroSnapshotData",
     "technical_snapshot": "TechnicalSnapshotData",

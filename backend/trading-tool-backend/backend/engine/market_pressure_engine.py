@@ -13,10 +13,9 @@ logger.setLevel(logging.INFO)
 # =========================================================
 
 DEFAULT_WEIGHTS = {
-    "market_score": 0.35,
-    "technical_score": 0.25,
-    "macro_score": 0.25,
-    "setup_score": 0.15,
+    "market_score": 0.35 / 0.85,
+    "technical_score": 0.25 / 0.85,
+    "macro_score": 0.25 / 0.85,
 }
 
 BASELINE_PRESSURE = 0.5

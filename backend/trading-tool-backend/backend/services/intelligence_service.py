@@ -89,13 +89,17 @@ class IntelligenceService:
                 "source": "daily_scores",
             }
 
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        assessment = await SetupMarketMatchService(self.repository.db).for_asset(user_id, symbol)
         score_values = {
             "macro": daily_score.macro_score,
             "technical": daily_score.technical_score,
             "market": daily_score.market_score,
-            "setup": daily_score.setup_score,
         }
         missing = [name for name, value in score_values.items() if value is None]
+        if assessment["source_status"] != "available":
+            missing.append("benchmark_sources")
         if missing:
             return {
                 "available": False,
@@ -119,7 +123,9 @@ class IntelligenceService:
                 "source": "daily_scores",
             }
 
+        best = next((match for match in assessment["matches"] if match["is_best"]), None)
         scores = {name: float(value) for name, value in score_values.items()}
+        scores["setup"] = best["score"] if best else 50.0
 
         # 3. Execute heavy engine in threadpool with Semaphore protection
         # logger.info(f"⚙️ Cache MISS: Berekenen Market Intelligence in nieuwe thread (user: {user_id})")
@@ -130,5 +136,8 @@ class IntelligenceService:
                 scores=scores
             )
 
+        result.setdefault("metrics", {})["setup_quality"] = best["score"] if best else None
+        result["setup_match_status"] = best["status"] if best else "no_active_match"
+        result["benchmark_score"] = assessment["benchmark_score"]
         self.store_cached_result(user_id, symbol, result)
         return result

@@ -129,34 +129,6 @@ class SetupRepository:
         result = await self.session.execute(query, {"user_id": user_id})
         return result.mappings().all()
 
-    async def get_daily_scores(self, user_id: int) -> List[dict]:
-        query = text("""
-            SELECT ds.setup_id, ds.score, ds.is_best, 
-                   s.name, s.symbol, s.timeframe
-            FROM daily_setup_scores ds
-            JOIN setups s ON s.id = ds.setup_id
-            WHERE ds.user_id = :user_id AND ds.report_date = CURRENT_DATE
-            ORDER BY ds.score DESC
-        """)
-        result = await self.session.execute(query, {"user_id": user_id})
-        return result.mappings().all()
-
-    async def get_active_setup(self, user_id: int) -> dict:
-        query = text("""
-            SELECT ds.setup_id, ds.score, ds.explanation as ai_explanation,
-                   s.name, s.symbol, s.timeframe, s.trend, s.setup_type,
-                   s.min_investment, s.dca_frequency, s.dca_day, s.dca_month_day,
-                   s.tags, s.favorite, s.action, s.explanation as setup_explanation
-            FROM daily_setup_scores ds
-            JOIN setups s ON s.id = ds.setup_id
-            WHERE ds.report_date = CURRENT_DATE
-              AND ds.user_id = :user_id
-              AND ds.is_best = TRUE
-            LIMIT 1
-        """)
-        result = await self.session.execute(query, {"user_id": user_id})
-        return result.mappings().first()
-
     async def get_top_setups(self, user_id: int, limit: int) -> List[dict]:
         query = text("SELECT * FROM setups WHERE user_id = :user_id ORDER BY created_at DESC LIMIT :limit")
         result = await self.session.execute(query, {"user_id": user_id, "limit": limit})
@@ -193,13 +165,4 @@ class SetupRepository:
     async def delete_setup(self, setup_id: int, user_id: int) -> int:
         query = text("DELETE FROM setups WHERE id = :id AND user_id = :user_id")
         result = await self.session.execute(query, {"id": setup_id, "user_id": user_id})
-        return result.rowcount
-
-    async def update_ai_explanation(self, setup_id: int, user_id: int, explanation: str) -> int:
-        query = text("""
-            UPDATE setups
-            SET explanation = :explanation, last_validated = NOW()
-            WHERE id = :id AND user_id = :user_id
-        """)
-        result = await self.session.execute(query, {"explanation": explanation, "id": setup_id, "user_id": user_id})
         return result.rowcount

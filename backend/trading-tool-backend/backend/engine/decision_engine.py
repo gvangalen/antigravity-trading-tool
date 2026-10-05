@@ -89,7 +89,7 @@ def decide_amount(
     # 1.5️⃣ Setup Influence (Conviction Layer)
     # =================================================
 
-    setup_score = scores.get("setup_score", scores.get("setup", 10))
+    setup_score = scores.get("setup_score", scores.get("setup"))
 
     exact_dca_amount = (
         str(setup.get("setup_type") or "").lower() == "dca"

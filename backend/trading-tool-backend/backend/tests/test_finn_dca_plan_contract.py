@@ -141,6 +141,6 @@ def test_benchmark_weight_loader_prefers_user_settings_then_asset_master_score()
 
     master = Connection({})
     weights, source = _get_current_benchmark_weights(master, 7, "AAPL")
-    assert source == "master_score"
-    assert weights == {"market_score": 0.2, "macro_score": 0.3, "technical_score": 0.5}
-    assert master.queries[1][1] == (7, "AAPL")
+    assert source == "equal_default"
+    assert all(abs(value - 1 / 3) < 1e-9 for value in weights.values())
+    assert len(master.queries) == 1

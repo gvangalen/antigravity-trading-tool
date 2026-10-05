@@ -129,7 +129,6 @@ python3 -c "
 from ai_agents.market_ai_agent import run_market_agent
 from ai_agents.macro_ai_agent import run_macro_agent
 from ai_agents.technical_ai_agent import run_technical_agent
-from ai_agents.setup_ai_agent import run_setup_agent
 
 UID = 30
 print('➡️ Market AI Agent...')
@@ -144,9 +143,6 @@ print('➡️ Technical AI Agent...')
 try: run_technical_agent(user_id=UID); print('✅ Technical OK')
 except Exception as e: print(f'❌ Technical Error: {e}')
 
-print('➡️ Setup AI Agent...')
-try: run_setup_agent(user_id=UID); print('✅ Setup OK')
-except Exception as e: print(f'❌ Setup Error: {e}')
 "
 
 echo ""

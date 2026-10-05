@@ -38,7 +38,9 @@ def _get_structure_label(score: Optional[float], category: str) -> str:
         res = get_market_semantics(score)
         return f"{res['posture']} · Conviction {res['conviction']}%"
     else: # setup
-        val = 0.0 if score is None else float(score)
+        if score is None:
+            return "Setupmatch niet beschikbaar"
+        val = float(score)
         if val >= 70: return f"Premium Alignment · Conviction {int(val)}%"
         if val >= 50: return f"Standard Setup · Conviction {int(val)}%"
         return f"Sub-optimal Alignment · Conviction {int(val)}%"
@@ -46,6 +48,29 @@ def _get_structure_label(score: Optional[float], category: str) -> str:
 class ReportService:
     def __init__(self, repository: ReportRepository):
         self.repository = repository
+
+    @staticmethod
+    def _mark_daily_setup_semantics(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Keep pre-migration report scores distinct from measured matches."""
+        import json
+
+        items = row.get("top_setups") or []
+        if isinstance(items, str):
+            try:
+                items = json.loads(items)
+            except (TypeError, ValueError):
+                items = []
+        canonical = isinstance(items, list) and any(
+            isinstance(item, dict) and item.get("score_semantics") == "benchmark_setup_match_v1"
+            for item in items
+        )
+        result = dict(row)
+        result["setup_score_semantics"] = "benchmark_setup_match_v1" if canonical else "legacy_or_unavailable"
+        if not canonical:
+            result["setup_score"] = None
+            result["best_setup"] = None
+            result["top_setups"] = []
+        return result
 
     @staticmethod
     def _get_cached_daily_preview(user_id: int) -> Optional[Dict[str, Any]]:
@@ -114,7 +139,7 @@ class ReportService:
             macro_sc = meta.get("macro_score") or report.get("macro_score")
             tech_sc = meta.get("technical_score") or report.get("technical_score")
             mkt_sc = meta.get("market_score") or report.get("market_score")
-            stp_sc = meta.get("setup_score") or report.get("setup_score")
+            stp_sc = report.get("setup_score") if report.get("setup_score_semantics") == "legacy_or_unavailable" else meta.get("setup_score", report.get("setup_score"))
             
             kpi_metrics = {
                 "macro_score": macro_sc,
@@ -131,8 +156,8 @@ class ReportService:
             }
             
             watchlist = safe_json_parse(meta.get("watchlist") or report.get("watchlist") or [])
-            best_setup = safe_json_parse(meta.get("best_setup") or report.get("best_setup"))
-            top_setups = safe_json_parse(meta.get("top_setups") or report.get("top_setups") or [])
+            best_setup = safe_json_parse(report.get("best_setup")) if report.get("setup_score_semantics") == "legacy_or_unavailable" else safe_json_parse(meta.get("best_setup") or report.get("best_setup"))
+            top_setups = safe_json_parse(report.get("top_setups") or []) if report.get("setup_score_semantics") == "legacy_or_unavailable" else safe_json_parse(meta.get("top_setups") or report.get("top_setups") or [])
             bot_snapshot = safe_json_parse(meta.get("bot_snapshot") or report.get("bot_snapshot"))
             active_strategy = safe_json_parse(meta.get("active_strategy") or report.get("active_strategy"))
             
@@ -303,15 +328,7 @@ class ReportService:
                 return {"_status": "pending"}
                 
         if table_name == "daily_reports":
-            from backend.infrastructure.repositories.score_repository import ScoreRepository
-            score_repo = ScoreRepository(self.repository.db)
-            target_symbol = symbol or "BTC"
-            daily_scores = await score_repo.fetch_daily_scores(user_id, symbol=target_symbol)
-            if daily_scores:
-                row["macro_score"] = daily_scores.get("macro_score", row.get("macro_score"))
-                row["technical_score"] = daily_scores.get("technical_score", row.get("technical_score"))
-                row["market_score"] = daily_scores.get("market_score", row.get("market_score"))
-                row["setup_score"] = daily_scores.get("setup_score", row.get("setup_score"))
+            row = self._mark_daily_setup_semantics(row)
 
         # Format for mobile if requested
         if format_type == "mobile":
@@ -329,14 +346,7 @@ class ReportService:
             raise ValueError(f"Report niet gevonden voor {date_str}")
 
         if table_name == "daily_reports":
-            from backend.infrastructure.repositories.score_repository import ScoreRepository
-            score_repo = ScoreRepository(self.repository.db)
-            daily_scores = await score_repo.fetch_daily_scores(user_id, symbol="BTC")
-            if daily_scores:
-                row["macro_score"] = daily_scores.get("macro_score", row.get("macro_score"))
-                row["technical_score"] = daily_scores.get("technical_score", row.get("technical_score"))
-                row["market_score"] = daily_scores.get("market_score", row.get("market_score"))
-                row["setup_score"] = daily_scores.get("setup_score", row.get("setup_score"))
+            row = self._mark_daily_setup_semantics(row)
 
         # Format for mobile if requested
         if format_type == "mobile":

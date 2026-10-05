@@ -18,10 +18,11 @@ class ActiveSetupResponse(BaseModel):
     min_market_score: Optional[float] = None
     max_market_score: Optional[float] = None
     explanation: str
-    timestamp: datetime
-    score: float
+    timestamp: Optional[datetime] = None
+    score: Optional[float] = None
     is_active: bool
     breakdown: Dict[str, Any]
+    status: Optional[str] = None
 
 class CategoryScoreResponse(BaseModel):
     score: float
@@ -29,10 +30,11 @@ class CategoryScoreResponse(BaseModel):
     top_contributors: List[str]
 
 class SetupScoreResponse(BaseModel):
-    score: float
+    score: Optional[float] = None
     interpretation: str
     top_contributors: List[str]
     active_setups: List[ActiveSetupResponse]
+    source_status: Optional[str] = None
 
 class DailyCombinedScoreResponse(BaseModel):
     macro: CategoryScoreResponse
@@ -40,9 +42,11 @@ class DailyCombinedScoreResponse(BaseModel):
     market: CategoryScoreResponse
     setup: SetupScoreResponse
     report_date: Optional[date] = None
+    benchmark_score: Optional[float] = None
+    benchmark_weights: Optional[Dict[str, float]] = None
 
 class MasterScoreResponse(BaseModel):
-    master_score: float
+    master_score: Optional[float] = None
     master_trend: str
     master_bias: str
     master_risk: str

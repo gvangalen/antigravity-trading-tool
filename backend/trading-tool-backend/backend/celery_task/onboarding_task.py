@@ -151,7 +151,6 @@ def run_onboarding_pipeline(self, user_id: int):
         from backend.celery_task.macro_task import generate_macro_insight
         from backend.celery_task.market_task import run_market_agent_daily
         from backend.celery_task.technical_task import run_technical_agent_daily
-        from backend.celery_task.setup_task import run_setup_agent_daily
 
         # 🔥 JUISTE STRATEGY TASK
         from backend.celery_task.strategy_task import (
@@ -172,10 +171,8 @@ def run_onboarding_pipeline(self, user_id: int):
             run_market_agent_daily.si(user_id),
             run_technical_agent_daily.si(user_id),
 
-            # 5️⃣ Setup agent → beste setup van de dag
-            run_setup_agent_daily.si(user_id),
-
-            # 6️⃣ Strategy agent → daily snapshot
+            # Setup matches are calculated from measured scores when read.
+            # Strategy snapshot uses the same match contract.
             run_daily_strategy_snapshot.si(user_id),
 
             # 7️⃣ Dagrapport

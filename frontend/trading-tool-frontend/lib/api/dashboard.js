@@ -24,13 +24,7 @@ export const fetchTradingAdvice = async (symbol = 'BTC') =>
   });
 
 // ============================================================
-// 🏆 4) Top Setups
-// ============================================================
-export const fetchTopSetups = async () =>
-  fetchAuth(`/api/top_setups`, { method: 'GET' });
-
-// ============================================================
-// 🧪 5) Test route (developer only)
+// 🧪 Test route (developer only)
 // ============================================================
 export const testDashboardAPI = async () =>
   fetchAuth(`/api/dashboard/test`, { method: 'GET' });

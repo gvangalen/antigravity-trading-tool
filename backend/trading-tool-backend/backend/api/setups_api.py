@@ -72,16 +72,16 @@ async def get_dca_setups(
     return await service.get_dca_setups(user_id)
 
 # ============================================================
-# 🔟 Daily setup scores
+# Current setup matches against the weighted Analyse benchmark
 # ============================================================
-@router.get("/setups/daily-scores")
-async def get_daily_setup_scores(
-    symbol: str = Query("BTC"),
+@router.get("/setups/market-matches")
+async def get_setup_market_matches(
+    symbol: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
     service: SetupService = Depends(get_setup_service)
 ):
     user_id = current_user["id"]
-    return await service.get_daily_setup_scores(user_id, symbol.upper())
+    return await service.get_market_matches(user_id, symbol.upper() if symbol else None)
 
 # ============================================================
 # 4️⃣ Setup bijwerken
@@ -120,18 +120,6 @@ async def check_name(
 ):
     user_id = current_user["id"]
     return await service.check_name(name, user_id)
-
-# ============================================================
-# 7️⃣ AI explanation
-# ============================================================
-@router.post("/setups/explanation/{setup_id}")
-async def ai_explanation(
-    setup_id: int, 
-    current_user: dict = Depends(get_current_user),
-    service: SetupService = Depends(get_setup_service)
-):
-    user_id = current_user["id"]
-    return await service.ai_explanation(setup_id, user_id)
 
 # ============================================================
 # 8️⃣ Top setups
