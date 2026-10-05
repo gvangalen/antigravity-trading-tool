@@ -210,6 +210,21 @@ class FinnV2ProposalService:
                 asset=proposal_input.target.asset,
             )
             setup = dict(resolved["setup"] or {})
+            if str(setup.get("setup_type") or "").lower() == "dca":
+                from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
+
+                desired_name = strategy_fields.get("name")
+                _, amount_strategy = split_confirmed_dca_plan({
+                    "setup_type": "dca",
+                    "name": setup.get("name"),
+                    "min_investment": setup.get("min_investment"),
+                    **strategy_fields,
+                })
+                strategy_fields = {
+                    **amount_strategy,
+                    "setup_id": setup_id,
+                    "name": desired_name,
+                }
             strategy_fields.setdefault("symbol", setup.get("symbol"))
             strategy_fields.setdefault("timeframe", setup.get("timeframe"))
             strategy_fields.setdefault("setup_name", setup.get("name"))

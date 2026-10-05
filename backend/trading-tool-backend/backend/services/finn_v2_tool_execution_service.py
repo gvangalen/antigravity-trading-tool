@@ -18,6 +18,7 @@ from backend.infrastructure.repositories.finn_v2_tool_call_repository import Fin
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.schemas.finn_v2_tool_schema import ToolExecutionEnvelope
+from backend.schemas.finn_v2_evidence_schema import LinkedStrategyCollectionData
 from backend.schemas.finn_v2_orchestrator_schema import ToolPlan
 from backend.services.finn_v2_evidence_ingestion_service import FinnV2EvidenceIngestionService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
@@ -185,7 +186,7 @@ class FinnV2ToolExecutionService:
         )
 
         selector = self.redaction.redact_selector(selector or {})
-        if tool_name in {"read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
+        if tool_name in {"read_active_setup", "read_linked_strategies", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
             selector = await self.resolver.enrich_tool_selector_from_message(
                 user_id=user_id,
                 selector=selector,
@@ -599,6 +600,32 @@ class FinnV2ToolExecutionService:
             resolved = await self.resolver.resolve_strategy(user_id=user_id, selector=selector, setup=setup_state["setup"])
             shared_state.update(resolved)
             return await self.strategy_adapter.execute(**resolved)
+        if tool_name == "read_linked_strategies":
+            setup_state = await self._ensure_setup(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
+            setup = setup_state["setup"]
+            setup_id = int(setup.get("setup_id") or setup["id"])
+            rows = [
+                row for row in await self.resolver.strategies.query_strategies(user_id, {"setup_id": setup_id})
+                if row.get("setup_id") == setup_id and row.get("user_id") == user_id
+            ]
+            strategies = [
+                (await self.strategy_adapter.execute(strategy=row, resolution_source="setup_collection"))["data"]
+                for row in rows
+            ]
+            return {
+                "data": LinkedStrategyCollectionData(
+                    setup_id=setup_id, setup_name=setup.get("name"),
+                    strategies=strategies, strategy_count=len(strategies), complete=True,
+                ),
+                "summary": {"title": "linked_strategies", "setup_id": setup_id, "strategy_count": len(strategies)},
+                "as_of": None,
+                "resolution_source": setup_state.get("resolution_source"),
+                "source": "strategies",
+                "schema_name": "LinkedStrategyCollectionData",
+                "entity_type": "setup",
+                "entity_id": str(setup_id),
+                "asset": setup.get("symbol"),
+            }
         if tool_name == "read_linked_bot":
             strategy_state = await self._ensure_strategy(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             resolved = await self.resolver.resolve_bot(user_id=user_id, selector=selector, strategy=strategy_state["strategy"])

@@ -98,6 +98,7 @@ class FinnResponsesToolCatalog:
         # Collection reads have a distinct typed read adapter. They do not
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
+        self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
         self.evaluation_contracts = {
             contract.operation_id: contract
             for contract in self.registry.list()
@@ -187,19 +188,29 @@ class FinnResponsesToolCatalog:
                     "When the user chooses one linked strategy for a comparison, pass its exact "
                     "name in strategy_name; FINN checks its owner and setup relation."
                 )
+            if name == "get_linked_strategies":
+                description += (
+                    " Use when the user asks which or how many strategies belong to one saved setup. "
+                    "Returns every owner-scoped linked strategy, without silently choosing one. "
+                    "Pass the setup name visible in this request; for a follow-up, use the prior "
+                    "verified setup reference. Do not substitute a different setup."
+                )
             properties = {
                 "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
                 "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
             }
-            if name == "get_active_plan_and_strategy":
+            if name in {"get_active_plan_and_strategy", "get_linked_strategies"}:
                 properties.update({
                     "setup_name": {"type": ["string", "null"],
                                    "description": "Saved setup name explicitly selected by the user. FINN resolves ownership server-side."},
-                    "strategy_name": {"type": ["string", "null"],
-                                      "description": "Saved strategy name explicitly selected by the user, only when named in the latest request. FINN verifies its owner and setup link."},
                     "reference": {"type": ["string", "null"],
                                   "enum": ["current_request", "previous_response", None],
                                   "description": "Use previous_response only to revisit the owner-scoped setup read in the preceding verified answer."},
+                })
+            if name == "get_active_plan_and_strategy":
+                properties.update({
+                    "strategy_name": {"type": ["string", "null"],
+                                      "description": "Saved strategy name explicitly selected by the user, only when named in the latest request. FINN verifies its owner and setup link."},
                 })
             if name == "get_saved_setup_inventory":
                 properties.update({
@@ -288,7 +299,7 @@ class FinnResponsesToolCatalog:
             for contract in contracts:
                 field_types: dict[str, str] = {}
                 for field in contract.input_fields:
-                    if field in _FORBIDDEN_MODEL_FIELDS:
+                    if field in _FORBIDDEN_MODEL_FIELDS or field in contract.server_resolved_inputs:
                         continue
                     field_type = contract.input_json_type(field)
                     if field_type is None:
@@ -404,8 +415,10 @@ class FinnResponsesToolCatalog:
             allowed = {"asset", "timeframe"}
             if name in self.evaluation_contracts:
                 allowed.update(self.evaluation_contracts[name].optional_inputs)
+            if name in {"get_active_plan_and_strategy", "get_linked_strategies"}:
+                allowed.update({"setup_name", "reference"})
             if name == "get_active_plan_and_strategy":
-                allowed.update({"setup_name", "strategy_name", "reference"})
+                allowed.add("strategy_name")
             if name == "get_saved_setup_inventory":
                 allowed.update({"answer_mode", "setup_names", "strategy_name"})
             if set(arguments).difference(allowed):
@@ -472,6 +485,8 @@ class FinnResponsesToolCatalog:
         supplied = arguments.get("inputs")
         if not isinstance(supplied, dict):
             raise FinnResponsesToolError("proposal_inputs_invalid")
+        if set(supplied).intersection(contract.server_resolved_inputs):
+            raise FinnResponsesToolError("server_resolved_input_in_model_arguments")
         if (_FORBIDDEN_MODEL_FIELDS - _SERVER_RESOLVED_ENTITY_FIELDS).intersection(supplied):
             raise FinnResponsesToolError("server_owned_identity_in_model_arguments")
         # A model may echo an ID returned by a read tool, but it cannot select

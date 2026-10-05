@@ -217,11 +217,10 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
         fixtures = {
             "setup_update": _insert_setup(connection, user_id, "Matrix Update Setup"),
             "setup_delete": _insert_setup(connection, user_id, "Matrix Delete Setup"),
-            # The existing create_strategy action contract requires only a
-            # setup, execution mode and base amount. A DCA parent is the
-            # supported minimal path; trade setups intentionally require
-            # additional risk fields in StrategyService.
-            "strategy_parent_setup": _insert_setup(connection, user_id, "Matrix Strategy Parent", setup_type="dca"),
+            # This case supplies entry, stop, targets and risk, so its parent
+            # must be a trade setup. DCA strategy creation has its own
+            # type-aware contract and must not require those trade fields.
+            "strategy_parent_setup": _insert_setup(connection, user_id, "Matrix Strategy Parent", setup_type="trade"),
             "strategy_update_setup": _insert_setup(connection, user_id, "Matrix Strategy Update Parent"),
             "strategy_delete_setup": _insert_setup(connection, user_id, "Matrix Strategy Delete Parent"),
             "bot_create_setup": _insert_setup(connection, user_id, "Matrix Bot Create Parent"),

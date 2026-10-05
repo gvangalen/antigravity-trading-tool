@@ -8,7 +8,7 @@ import json
 import pytest
 
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
-from backend.schemas.finn_v2_proposal_schema import ManualOrderChange, ProposalTarget, SetupChange, StrategyChange, ValidatedProposalInput
+from backend.schemas.finn_v2_proposal_schema import ManualOrderChange, ProposalTarget, SetupChange, StrategyChange, StrategyCreateChange, ValidatedProposalInput
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
 
 
@@ -127,6 +127,43 @@ def test_update_setup_proposal_uses_existing_domain_fields_and_persists_before_s
     assert hydrated.change.requested_state == {"timeframe": "4h", "name": "ETH swing"}
     assert len(hydrated.change.target_revision) == 64
     assert hydrated.change.snapshot_timestamp.tzinfo is not None
+
+
+@pytest.mark.parametrize("amount_fields,expected_mode", [
+    ({"dca_amount_mode": "fixed"}, "fixed"),
+    ({"dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+      "low_threshold": 40, "high_threshold": 70,
+      "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150}, "custom"),
+])
+def test_second_dca_strategy_uses_parent_cadence_and_typed_amount_rule(amount_fields, expected_mode):
+    service = FinnV2ProposalService(session=object())
+    service.resolver.resolve_setup = lambda **_kwargs: asyncio.sleep(0, result={
+        "setup": {"id": 42, "name": "ETH Existing DCA", "symbol": "ETH",
+                  "timeframe": "1D", "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday"},
+    })
+    proposal_input = ValidatedProposalInput(
+        operation_type="create_strategy",
+        target=ProposalTarget(target_type="setup", target_id="42", asset="ETH"),
+        change=StrategyCreateChange(strategy_fields={
+            "setup_id": 42, "name": "ETH Second Strategy", "base_amount": 80, **amount_fields,
+        }),
+        impact_summary="impact", risk_summary="risk",
+        source_run_id="run-1", source_snapshot_id="snapshot-1",
+        source_validation_id="validation-1", evidence_set_hash="hash",
+        idempotency_key="d" * 16,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    hydrated = asyncio.run(service._hydrate_domain_change(user_id=7, proposal_input=proposal_input))
+    fields = hydrated.change.strategy_fields
+    assert fields["setup_id"] == 42
+    assert fields["name"] == "ETH Second Strategy"
+    assert fields["base_amount"] == 80
+    assert fields["execution_mode"] == expected_mode
+    assert fields["dca_amount_semantics"] == "planned_exact"
+    assert not {"entry", "stop_loss", "targets"}.intersection(fields)
+    if expected_mode == "custom":
+        assert fields["decision_curve"]["input"] == "benchmark_score"
+        assert fields["decision_curve"]["weights_policy"] == "current_user_preferences"
 
 
 def test_terminal_proposal_scopes_key_before_comparing_a_new_before_state():

@@ -146,9 +146,9 @@ class FinnResponsesFrontDoor:
             "setup and linked strategy. An evaluation of plan quality cannot substitute "
             "for that linked-strategy read. "
             "Keep source ownership explicit: entry, stop and targets read from a strategy "
-            "are strategy fields, not setup fields. If more than one strategy is linked "
-            "to a setup and none was selected, do not pick one silently; ask which "
-            "strategy the trader means. "
+            "are strategy fields, not setup fields. If asked which strategies are linked "
+            "to a setup, use get_linked_strategies to read the full owner-scoped list. "
+            "When one strategy must be selected and several exist, ask which one. "
             "If a general boundary can be answered without the exact saved rule, answer "
             "that boundary first. For example, a rule for one asset does not automatically "
             "apply to another; ask which rule only for a detailed comparison. "
@@ -211,10 +211,39 @@ class FinnResponsesFrontDoor:
             for alias in other.aliases
         ):
             return False
-        return (
-            states._requested_slot_value(field=requested_slot, text=message, contract=contract) is not None
-            and states._is_short_slot_answer(message, requested_slot=requested_slot)
+        slot_value = states._requested_slot_value(field=requested_slot, text=message, contract=contract)
+        return slot_value is not None and (
+            requested_slot == "name" and states._name_input_from_text(message) is not None
+            or states._is_short_slot_answer(message, requested_slot=requested_slot)
         )
+
+    async def _verified_strategy_parent(
+        self, *, message: str, conversation_context: Mapping[str, object],
+    ) -> dict[str, object]:
+        """Bind a strategy draft to the owner's existing setup and its real type."""
+        session_factory = getattr(getattr(self, "reads", None), "session_factory", None)
+        if session_factory is None:
+            return {}
+        guided = dict(conversation_context.get("active_guided_operation") or {})
+        guided_inputs = dict(guided.get("collected_inputs") or {}) if guided.get("operation_id") == "create_strategy" else {}
+        async with session_factory() as session:
+            resolver = FinnV2EntityResolutionService(session)
+            target = await resolver.resolve_canonical_target(
+                user_id=self.user_id, entity_type="setup", message=message,
+                conversation_context=dict(conversation_context),
+                selector={"setup_id": guided_inputs["setup_id"]} if guided_inputs.get("setup_id") else {},
+            )
+            if target.resolution_status != "resolved" or target.entity_id is None:
+                return {}
+            setup = await resolver.setups.get_setup_by_id(target.entity_id, self.user_id)
+            if not setup:
+                return {}
+            return {
+                "setup_id": target.entity_id,
+                "setup_type": str(setup.get("setup_type") or "").lower(),
+                "symbol": setup.get("symbol"),
+                "timeframe": setup.get("timeframe"),
+            }
 
     async def run(
         self,
@@ -294,6 +323,11 @@ class FinnResponsesFrontDoor:
                     ),
                     message=message, conversation_context=conversation_context,
                     verified_asset=verified_asset,
+                    verified_parent_setup=(
+                        await self._verified_strategy_parent(
+                            message=message, conversation_context=conversation_context,
+                        ) if pending_operation == "create_strategy" else {}
+                    ),
                 )
                 return FinnResponsesFrontDoorResult(
                     FinnResponsesResult(
@@ -957,7 +991,7 @@ class FinnResponsesFrontDoor:
                     previous_setup_target = {
                         "entity_type": "setup", "entity_id": previous_focused_setup_id,
                     }
-                if call.name == "get_active_plan_and_strategy":
+                if call.name in {"get_active_plan_and_strategy", "get_linked_strategies"}:
                     # The model can express the choice, but only the user's text
                     # and owner-scoped persisted evidence may select the object.
                     reference = call.inputs.get("reference")
@@ -1070,7 +1104,7 @@ class FinnResponsesFrontDoor:
                                 },
                             )
                         if target.resolution_status == "resolved" and (
-                            call.name == "get_active_plan_and_strategy"
+                            call.name in {"get_active_plan_and_strategy", "get_linked_strategies"}
                             or target.source == "explicit_name"
                             or (subject_reference and target.source == "active_runtime_context")
                         ):
@@ -1078,7 +1112,7 @@ class FinnResponsesFrontDoor:
                                 {"setup_id": target.entity_id,
                                  **({"strategy_name": call.inputs["strategy_name"]}
                                     if call.inputs.get("strategy_name") else {})}
-                                if call.name == "get_active_plan_and_strategy"
+                                if call.name in {"get_active_plan_and_strategy", "get_linked_strategies"}
                                 else {**call.inputs, "setup_id": target.entity_id}
                             ))
                     if (
@@ -1411,6 +1445,11 @@ class FinnResponsesFrontDoor:
                 conversation_context=conversation_context,
                 verified_asset=verified_asset,
                 read_context=read_context,
+                verified_parent_setup=(
+                    await self._verified_strategy_parent(
+                        message=message, conversation_context=conversation_context,
+                    ) if call.operation_id == "create_strategy" else {}
+                ),
             )
             state = analysis.request_plan.operation_state
             if (

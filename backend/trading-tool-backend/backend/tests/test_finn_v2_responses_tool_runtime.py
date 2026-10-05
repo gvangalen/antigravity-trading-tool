@@ -2069,7 +2069,7 @@ def test_local_per_operation_proposal_tools_keep_registry_as_contract_authority(
         assert payload["properties"]["operation_id"]["enum"] == [operation_id]
         contract = catalog.registry.require_supported(operation_id)
         assert set(payload["properties"]["inputs"]["properties"]) == (
-            set(contract.input_fields) - _FORBIDDEN_MODEL_FIELDS
+            set(contract.input_fields) - _FORBIDDEN_MODEL_FIELDS - set(contract.server_resolved_inputs)
         )
     guided = catalog.definitions(guided_operation_id="update_setup")
     assert [item["name"] for item in guided] == ["propose_update_setup"]
@@ -3730,6 +3730,7 @@ def test_guided_turn_boundary_separates_slot_answers_from_new_requests(
     ("Lösche die in diesem Ablauf erstellte Strategie.", "bot_id", False),
     ("Wat vind je van mijn plan?", "base_amount", False),
     ("Verwijder mijn bot.", "name", False),
+    ("Noem de nieuwe strategie ETH Extra Variant. Toon de kaart, bevestig niets.", "name", True),
 ])
 def test_persisted_guided_slot_answer_is_bound_before_model_context_switch(
     message, requested_slot, expected,

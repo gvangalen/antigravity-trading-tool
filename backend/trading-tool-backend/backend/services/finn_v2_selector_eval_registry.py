@@ -157,6 +157,9 @@ def _operation_contract_hash(contract: object) -> str:
     # selection-contract hash without rewriting the published corpus.
     payload.pop("input_json_types", None)
     payload.pop("input_allowed_values", None)
+    # Parent type is bound after selection from an owner-scoped saved setup.
+    # It cannot affect a historical selector decision or corpus erratum.
+    payload.pop("server_resolved_inputs", None)
     # Evidence coverage is evaluated after selection and does not alter the
     # historical selector contract to which published errata are pinned.
     payload.pop("evidence_dimensions", None)
