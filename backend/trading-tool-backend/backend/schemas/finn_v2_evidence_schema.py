@@ -126,6 +126,7 @@ class ActiveSetupData(BaseModel):
     symbol: Optional[str] = None
     timeframe: Optional[str] = None
     setup_type: Optional[str] = None
+    description: Optional[str] = None
     dca_frequency: Optional[str] = None
     dca_day: Optional[str] = None
     dca_day_name: Optional[str] = None

@@ -15,6 +15,7 @@ class SetupInventoryToolAdapter:
                 "symbol": row.get("symbol"),
                 "timeframe": row.get("timeframe"),
                 "setup_type": row.get("setup_type"),
+                "description": row.get("description"),
                 "dca_frequency": row.get("dca_frequency"),
                 "dca_day": row.get("dca_day"),
                 "dca_day_name": _dca_day_name(row.get("dca_day")),

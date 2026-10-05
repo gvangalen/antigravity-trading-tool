@@ -130,6 +130,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
 
     const payload = {
       name: formData.name?.trim(),
+      description: formData.description?.trim() || null,
       symbol: formData.symbol,
       setup_type: formData.setupType,
       timeframe: formData.timeframe,
@@ -166,8 +167,8 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         savedSetup = await saveNewSetup(payload);
         showSnackbar(copy.savedSuccess, "success");
         setFormData({
-          ...emptyForm,
-          symbol: selectedAsset || emptyForm.symbol,
+          ...initialSetupFormState(),
+          symbol: selectedAsset || "BTC",
         });
         setMacroScore([30, 70]);
         setTechnicalScore([40, 80]);
@@ -292,6 +293,23 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           className={fieldClass}
           required
         />
+
+        <div className="space-y-1.5">
+          <label htmlFor="setup-description" className="text-[10px] font-black uppercase text-[var(--text-light)] ml-1">
+            {copy.descriptionLabel}
+          </label>
+          <textarea
+            id="setup-description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            maxLength={1000}
+            rows={4}
+            placeholder={copy.descriptionPlaceholder}
+            className={fieldClass}
+          />
+          <p className="text-xs text-[var(--text-soft)]">{copy.descriptionHelp}</p>
+        </div>
 
         {/* 🧬 BLUEPRINT TYPE SELECTOR */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -3,6 +3,7 @@ import { normalizeDcaWeekday } from "./dcaWeekday.mjs";
 export function initialSetupFormState(setup = null) {
   return {
     name: setup?.name ?? "",
+    description: setup?.description ?? "",
     symbol: setup?.symbol ?? "BTC",
     setupType: setup?.setup_type ?? "dca",
     timeframe: setup?.timeframe ?? "1W",

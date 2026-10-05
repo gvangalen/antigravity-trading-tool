@@ -340,6 +340,11 @@ export default function SetupList({
                   {setup.setup_type === 'dca' ? <Rocket size={10} /> : <Target size={10} />}
                   {setup.setup_type || copy.customBlueprint} {copy.blueprintSuffix}
                 </p>
+                {setup.description ? (
+                  <p className="mt-3 line-clamp-4 whitespace-pre-wrap break-words text-sm font-medium text-[var(--text-soft)]">
+                    {setup.description}
+                  </p>
+                ) : null}
               </div>
 
               {/* SCORE RANGES */}

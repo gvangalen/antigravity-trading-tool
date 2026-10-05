@@ -8,21 +8,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Let users add optional text about how they want to trade and make it available as owner-scoped coaching context for FINN. |
-| Candidate branch | `codex/finn-trader-context` |
-| Candidate implementation SHA | `01b5fa0f9b638a150200e7085845a448f6d2816c`; this status commit follows it. |
-| PR | [#75](https://github.com/gvangalen/antigravity-trading-tool/pull/75), merged. |
-| Production SHA | `ecb0c9f0aa8bd794eebbfb45bc561246fd5dad16`; public backend and frontend both reported it with HTTP 200 on 2026-10-05. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
+| Phase | `LOCAL_VALIDATED`; candidate CI and deployment pending. |
+| Goal | Give each setup an optional, user-written rationale and make it available as owner-scoped FINN coaching context. |
+| Candidate branch | `codex/finn-setup-thesis` |
+| Candidate implementation SHA | `2829fa42ab4e22b9be10b9afe3a242776676f3aa`; status commits follow it. |
+| Production SHA | Pending. |
 | Release owner | Build |
 | Last updated | 2026-10-05 |
 
 ## Change And Limits
 
-- Onboarding and Mijn profiel now offer one optional, 1,000-character trader-context field. It persists under the authenticated user's existing `users.ai_preferences.trader_context`; no database migration is needed.
-- The owner-scoped `read_profile` tool exposes the note as a separate typed field. FINN can use it for coaching while keeping it distinct from structured profile choices, verified plan rules, account balances and market facts.
-- A profile with only free text is marked as user context only; it does not establish a structured trading style or risk tolerance. The text is not included in the compact profile summary.
-- Local real Responses testing saved the note through the API, read it back, received a FINN answer quoting the saved note, then cleared the field and verified the empty value. This is local evidence, not authenticated production acceptance.
+- The setup form in My Plan and onboarding offers an optional, 1,000-character text field explaining the idea behind that specific setup. The text appears on its card and loads in the editor for later changes.
+- The field uses the existing owner-scoped `setups.description` column. No database migration is needed. The setup API validates length and type on create and update.
+- FINN's active-setup and saved-setup inventory tools now expose the description as user-written context. It is not a verified entry trigger, strategy rule, market observation, or order permission.
+- The existing trader-context field remains separate: that describes the person; this field describes one setup.
+- This change covers manual setup create/edit and FINN read/coach routes. It does not add a natural-language FINN action for writing the rationale.
 
 ## Local Build Evidence
 
@@ -30,20 +30,20 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Owner-scoped profile runtime | Authenticated local save/read/clear returned HTTP 200; FINN quoted the stored note and did not infer unset style or risk fields. | `.local-finn-parity-artifacts/trader-context-probe.json`, SHA-256 `943e9a1881702191331310b5d1e81f75d4d397e63cd5824545a5c519c12b5f34`. |
-| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/trader-context-action-matrix.json`, SHA-256 `8893e42f94ef30c5046f4f138416a46f18d0b22cdf297e132964ce2d01140e1e`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/trader-context-selector-development.json`, SHA-256 `677ddfcb6bfb1a82ec45c3c96c779cda8ac9f7c0c21b7242f83a4be72e00e5ef`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/trader-context-selector-regression.json`, SHA-256 `a3f36f7325ecba17e92da48f241abb09b103e7f214aa9c4eb38f2ea5854f6b52`. |
-| Backend | `3100 passed, 3 skipped`; includes field bound, typed read, and context semantics. | `pytest -q`; `.local-finn-parity-artifacts/trader-context-pytest-final.log`. |
-| Frontend | Typecheck, i18n lint and tests, command/proposal/setup tests, build and high-severity audit passed; zero high production dependency vulnerabilities. | `.local-finn-parity-artifacts/trader-context-frontend.log` and `trader-context-frontend-full.log`. |
+| Owner-scoped setup runtime | Authenticated local create/read/update returned HTTP 200; a second user received HTTP 404; FINN cited the saved rationale and said it was not a proven entry rule. | `.local-finn-parity-artifacts/setup-description-probe.json`, SHA-256 `e900b1894f13966a36ba1cb7d2991bafbc8352d4d3d451f669ee91b59d9b8a73`. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/setup-description-action-matrix.json`, SHA-256 `9ca358fc5832a3bc998208a9e49119c45dfcdf784e4b5991f03c250197b7fb13`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/setup-description-selector-development.json`, SHA-256 `e67868df056ffd5c12c75d5f7e9edfb413937be61d03c8f45ea024cb578415f9`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/setup-description-selector-regression.json`, SHA-256 `9aa556e52200875f2ec6decf081006ebbd4e978f871cd7d2f4e4c0fb1193a3b3`. |
+| Backend | `3103 passed, 3 skipped`; includes length validation and typed setup evidence. | `pytest -q --disable-warnings`; `.local-finn-parity-artifacts/setup-description-pytest.log`, SHA-256 `cee9e3f7c54c3714d8bb7cd27af6a2f47b304dad4273b134939fc784a0c20c50`. |
+| Frontend | Typecheck, i18n lint and tests, command/proposal/setup tests, build and high-severity audit passed; zero high production dependency vulnerabilities. | Local `npm` commands in `frontend/trading-tool-frontend`; generated `out/` is committed. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37300298893](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37300298893), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37300525582](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37300525582) and [Auto Deploy 37300701292](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37300701292) on `ecb0c9f0aa8bd794eebbfb45bc561246fd5dad16`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `ecb0c9f0aa8bd794eebbfb45bc561246fd5dad16`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
