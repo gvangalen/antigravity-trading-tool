@@ -186,6 +186,16 @@ class SetupService:
         """
         self.normalize_dca_fields(raw_payload)
 
+        if "description" in raw_payload:
+            description = raw_payload["description"]
+            if description is not None and not isinstance(description, str):
+                raise HTTPException(400, "Setup-toelichting moet tekst zijn.")
+            if isinstance(description, str):
+                description = description.strip()
+                if len(description) > 1000:
+                    raise HTTPException(400, "Setup-toelichting mag maximaal 1000 tekens bevatten.")
+                raw_payload["description"] = description or None
+
         # 1. Non-empty string validations for name and symbol
         if not is_update or "name" in raw_payload:
             name = raw_payload.get("name")
@@ -380,6 +390,8 @@ class SetupService:
             merged_payload[k] = v
 
         self.validate_setup_payload(merged_payload, is_update=True)
+        if "description" in raw_payload:
+            raw_payload["description"] = merged_payload["description"]
         for field in ("setup_type", "dca_frequency", "dca_day", "dca_month_day"):
             if field in raw_payload and field in merged_payload:
                 raw_payload[field] = merged_payload[field]

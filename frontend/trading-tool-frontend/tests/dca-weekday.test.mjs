@@ -27,3 +27,13 @@ test("existing and newly saved Friday plans initialize the editor on Friday", ()
   }
   assert.equal(initialSetupFormState().dcaDay, "monday");
 });
+
+test("setup rationale loads into the editor without changing plan fields", () => {
+  const form = initialSetupFormState({
+    name: "BTC pullback", symbol: "BTC", setup_type: "trade",
+    timeframe: "4H", description: "Wait for a retest; avoid chasing a rise.",
+  });
+  assert.equal(form.description, "Wait for a retest; avoid chasing a rise.");
+  assert.equal(form.timeframe, "4H");
+  assert.equal(initialSetupFormState().description, "");
+});

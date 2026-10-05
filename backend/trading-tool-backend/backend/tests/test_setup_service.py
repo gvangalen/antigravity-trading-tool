@@ -47,6 +47,18 @@ def test_weekly_dca_rejects_invalid_day():
     assert "dca_day" in exc.value.detail
 
 
+def test_setup_description_is_optional_trimmed_and_bounded():
+    service = SetupService(None)
+    payload = _weekly_payload("monday") | {"description": "  Wait for a pullback.  "}
+    service.validate_setup_payload(payload)
+    assert payload["description"] == "Wait for a pullback."
+
+    payload = _weekly_payload("monday") | {"description": "x" * 1001}
+    with pytest.raises(HTTPException) as exc:
+        service.validate_setup_payload(payload)
+    assert exc.value.status_code == 400
+
+
 @pytest.mark.parametrize("raw_day", ["15", 15])
 def test_monthly_dca_month_day_is_normalized_to_integer(raw_day):
     service = SetupService(None)

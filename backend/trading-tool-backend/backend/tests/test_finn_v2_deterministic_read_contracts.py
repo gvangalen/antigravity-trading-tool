@@ -442,6 +442,20 @@ def test_setup_collection_survives_the_persisted_evidence_schema():
     assert [setup["name"] for setup in persisted.setups] == ["BTC DCA", "BTC Swing"]
 
 
+def test_setup_rationale_survives_typed_read_evidence():
+    import asyncio
+
+    rationale = "Only consider this setup after a pullback; this is not an entry trigger."
+    result = asyncio.run(SetupToolAdapter().execute(
+        setup={"id": 326, "name": "BTC DCA", "symbol": "BTC", "description": rationale},
+        setups=[{"id": 326, "name": "BTC DCA", "symbol": "BTC", "description": rationale}],
+        resolution_source="explicit_setup_name",
+    ))
+    persisted = parse_tool_payload(result["schema_name"], result["data"].dict())
+    assert persisted.description == rationale
+    assert persisted.setups[0]["description"] == rationale
+
+
 def test_setup_read_preserves_confirmed_dca_fields_in_typed_evidence():
     import asyncio
 
