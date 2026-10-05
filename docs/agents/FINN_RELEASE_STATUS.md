@@ -12,7 +12,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 | Goal | Use one owner-scoped, source-checked market, macro and technical benchmark and setupmatch across FINN, My Plan, Analyse, mobile, reports and bot score input. |
 | Candidate branch | `codex/setup-market-match` |
 | Candidate implementation SHA | `ffdb6b5d97186c96dabbdf6dd91b915d8ade8dc0`; documentation/status commits follow it. |
-| PR | Pending. |
+| PR | [#80](https://github.com/gvangalen/antigravity-trading-tool/pull/80). |
 | Production SHA | Not this candidate; verify after Auto Deploy. |
 | Release owner | Build |
 | Last updated | 2026-10-05 |
@@ -45,7 +45,7 @@ All artifacts below are from an isolated local parity stack or repository-local 
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending PR. |
+| Candidate CI | Pending PR #80 checks. |
 | Main CI and Auto Deploy | Not run for this candidate. |
 | Public backend health and frontend build-info | Not verified for this candidate. |
 | Independent authenticated live QA | Not started for this candidate; QA owns fixture, execution and verdict. |
