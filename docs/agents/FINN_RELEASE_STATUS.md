@@ -8,21 +8,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | List every strategy linked to one setup and create a second fixed or Smart DCA strategy through a complete FINN conversation. |
-| Candidate branch | `codex/finn-multi-strategy-flow` |
-| Candidate implementation SHA | `b38fda2504f209ed7b3f177900fdb14e41bd20fe`; this status commit follows it. |
-| PR | [#73](https://github.com/gvangalen/antigravity-trading-tool/pull/73), merged. |
-| Production SHA | `b37d3ba9c1ee2afab9214e3f57f6c6d0f7611a32`; public backend and frontend both reported it with HTTP 200 on 2026-10-05. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
+| Phase | `LOCAL_VALIDATED`; CI, Auto Deploy, public identity checks and independent QA pending. |
+| Goal | Let users add optional text about how they want to trade and make it available as owner-scoped coaching context for FINN. |
+| Candidate branch | `codex/finn-trader-context` |
+| Candidate implementation SHA | `01b5fa0f9b638a150200e7085845a448f6d2816c`; this status commit follows it. |
+| PR | Pending. |
+| Production SHA | Not yet this candidate. The preceding verified release was `132cb622636d81825243938d01e944caa763dd00`. |
 | Release owner | Build |
 | Last updated | 2026-10-05 |
 
 ## Change And Limits
 
-- The user-supplied authenticated browser QA on `41fb2aa7...` found that FINN could store and target two strategies under one setup, but could not list both. A separate second-strategy request under an existing ETH-DCA setup asked for trade-only entry, stop and targets and lost the strategy concept after clarification.
-- The owner-scoped `get_linked_strategies` read now returns the complete linked collection instead of selecting one row. A verified parent setup determines whether a new strategy uses trade fields or DCA amount and benchmark curve fields. The DCA follow-up keeps its setup and the name slot across turns. The concept card displays the resulting amount rule and states that confirmation does not start a bot or purchase.
-- Local real Responses tests listed two BTC strategies by name, confirmed a second fixed ETH-DCA strategy and a second Smart ETH-DCA strategy under their existing setups, and completed the missing-name clarification without switching object type. All writes were to synthetic local users. These tests do not establish authenticated production acceptance.
-- This batch did not change bot activation or purchase logic. Actual Smart-DCA score-driven execution remains outside this release claim.
+- Onboarding and Mijn profiel now offer one optional, 1,000-character trader-context field. It persists under the authenticated user's existing `users.ai_preferences.trader_context`; no database migration is needed.
+- The owner-scoped `read_profile` tool exposes the note as a separate typed field. FINN can use it for coaching while keeping it distinct from structured profile choices, verified plan rules, account balances and market facts.
+- A profile with only free text is marked as user context only; it does not establish a structured trading style or risk tolerance. The text is not included in the compact profile summary.
+- Local real Responses testing saved the note through the API, read it back, received a FINN answer quoting the saved note, then cleared the field and verified the empty value. This is local evidence, not authenticated production acceptance.
 
 ## Local Build Evidence
 
@@ -30,20 +30,20 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Multi-strategy real-provider runtime | Two linked BTC strategies returned; fixed and Smart ETH-DCA second strategies confirmed and persisted with owner isolation and idempotent replay; guided name follow-up completed. | `.local-finn-parity-artifacts/multi-strategy-local-probe.json` SHA-256 `feecfecc332da78edcaf03bbbf74420cfc28c5b9c81ef98c99f58408430133aa`; `multi-strategy-smart-probe.json` SHA-256 `2d80eff43a93320aa3430a401330ee9fbb6cddc46b7e8dcdd4e7d34adf09b1a0`; `multi-strategy-followup-probe.json` SHA-256 `ad6d2bf6c8a5cba15bbbe5994828e46c6b0ed3367cd455c2761ab463751e3f0b`. |
-| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. The trade-strategy fixture's parent was corrected from DCA to trade to match its existing entry/stop/targets prompt; the checks and pass criteria were unchanged. | `.local-finn-parity-artifacts/multi-strategy-action-matrix-rerun.json`, SHA-256 `529b50bdf772b78025e70e489e10eee23318bd23753ee411cba20c20af0826c7`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/multi-strategy-selector-development.json`, SHA-256 `49f5dbdad03b1866ac8aed4b1f9ea12ac9eb8fee8083cd33ed0106d0111747b9`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/multi-strategy-selector-regression.json`, SHA-256 `7bd144aad0cdcc63a3aaf35031843049b725d53167265b3dd61f52b27c4a4bd4`. |
-| Backend | `3097 passed, 3 skipped`; focused strategy/read tests included. | `pytest -q`; `.local-finn-parity-artifacts/multi-strategy-pytest.log`. |
-| Frontend | Typecheck, i18n lint, i18n tests, command tests, proposal tests, setup tests, build and production high-severity audit passed; zero high dependency vulnerabilities. | `.local-finn-parity-artifacts/frontend-gates.log` and `frontend-additional.log`. |
+| Owner-scoped profile runtime | Authenticated local save/read/clear returned HTTP 200; FINN quoted the stored note and did not infer unset style or risk fields. | `.local-finn-parity-artifacts/trader-context-probe.json`, SHA-256 `943e9a1881702191331310b5d1e81f75d4d397e63cd5824545a5c519c12b5f34`. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/trader-context-action-matrix.json`, SHA-256 `8893e42f94ef30c5046f4f138416a46f18d0b22cdf297e132964ce2d01140e1e`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/trader-context-selector-development.json`, SHA-256 `677ddfcb6bfb1a82ec45c3c96c779cda8ac9f7c0c21b7242f83a4be72e00e5ef`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/trader-context-selector-regression.json`, SHA-256 `a3f36f7325ecba17e92da48f241abb09b103e7f214aa9c4eb38f2ea5854f6b52`. |
+| Backend | `3100 passed, 3 skipped`; includes field bound, typed read, and context semantics. | `pytest -q`; `.local-finn-parity-artifacts/trader-context-pytest-final.log`. |
+| Frontend | Typecheck, i18n lint and tests, command/proposal/setup tests, build and high-severity audit passed; zero high production dependency vulnerabilities. | `.local-finn-parity-artifacts/trader-context-frontend.log` and `trader-context-frontend-full.log`. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37286566584](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37286566584), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37286800275](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37286800275) and [Auto Deploy 37287014015](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37287014015) on `b37d3ba9c1ee2afab9214e3f57f6c6d0f7611a32`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `b37d3ba9c1ee2afab9214e3f57f6c6d0f7611a32`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending for this candidate. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.

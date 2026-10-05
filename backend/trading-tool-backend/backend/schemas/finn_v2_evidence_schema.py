@@ -13,6 +13,7 @@ SCHEMA_VERSION = "2026-08-17.block3"
 
 class TraderProfileData(BaseModel):
     trader_profile: dict[str, List[str]] = Field(default_factory=dict)
+    trader_context: Optional[str] = None
     has_profile: bool = False
 
 

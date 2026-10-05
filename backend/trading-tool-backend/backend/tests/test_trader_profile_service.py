@@ -1,8 +1,19 @@
 from backend.services.trader_profile_service import (
     build_trader_profile_context,
     build_trader_profile_summary,
+    normalize_trader_context,
     normalize_trader_profile_preferences,
 )
+
+
+def test_optional_trader_context_is_bounded_and_available_for_coaching():
+    text = "Ik wil in het weekend handelen en bij FOMO wachten."
+    context = build_trader_profile_context({"trader_context": f"  {text}  "})
+
+    assert context["trader_context"] == text
+    assert context["trader_profile_used"] is True
+    assert context["profile_match_mode"] == "user_context_only"
+    assert normalize_trader_context("x" * 1001) == "x" * 1000
 
 
 def test_build_trader_profile_context_uses_missing_profile_fallback():
