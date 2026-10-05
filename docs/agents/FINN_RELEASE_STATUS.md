@@ -8,11 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; candidate CI and deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
 | Goal | Give each setup an optional, user-written rationale and make it available as owner-scoped FINN coaching context. |
 | Candidate branch | `codex/finn-setup-thesis` |
 | Candidate implementation SHA | `2829fa42ab4e22b9be10b9afe3a242776676f3aa`; status commits follow it. |
-| Production SHA | Pending. |
+| PR | [#77](https://github.com/gvangalen/antigravity-trading-tool/pull/77), merged. |
+| Production SHA | `e9eac8781260b80fad6267237cbfbf657753c8dd`; public backend and frontend both reported it with HTTP 200 on 2026-10-05. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
 | Release owner | Build |
 | Last updated | 2026-10-05 |
 
@@ -41,9 +42,9 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending. |
+| Candidate CI | `PASS`: [run 37324244362](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37324244362), all five jobs green. |
+| Main CI and Auto Deploy | `PASS`: [main CI 37324537240](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37324537240) and [Auto Deploy 37324896234](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37324896234) on `e9eac8781260b80fad6267237cbfbf657753c8dd`. |
+| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `e9eac8781260b80fad6267237cbfbf657753c8dd`. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
