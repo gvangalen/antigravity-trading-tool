@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 from backend.utils.db import get_db_connection
 from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_text
+from backend.ai_agents.report_model import TRADING_REPORT_MODEL, TRADING_REPORT_REASONING_EFFORT
 from backend.ai_core.system_prompt_builder import build_system_prompt
 
 # =====================================================
@@ -83,7 +84,12 @@ def reduce_repetition(text: str, seen: list[str]) -> str:
 
 def generate_text(prompt: str, fallback: str, seen: list[str]) -> str:
     system_prompt = build_system_prompt(agent="report", task=REPORT_TASK)
-    raw = ask_gpt_text(prompt, system_role=system_prompt)
+    raw = ask_gpt_text(
+        prompt=prompt,
+        system_role=system_prompt,
+        model_override=TRADING_REPORT_MODEL,
+        reasoning_effort=TRADING_REPORT_REASONING_EFFORT,
+    )
 
     if not raw or len(raw.strip()) < 10:
         return fallback

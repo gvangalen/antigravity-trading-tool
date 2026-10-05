@@ -12,6 +12,10 @@ PRICING = {
     "gpt-4o-mini": {
         "input": 0.15,
         "output": 0.60
+    },
+    "gpt-6-luna": {
+        "input": 0.10,
+        "output": 0.50
     }
 }
 
