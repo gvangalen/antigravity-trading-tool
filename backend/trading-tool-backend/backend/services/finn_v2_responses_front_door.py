@@ -689,6 +689,62 @@ class FinnResponsesFrontDoor:
             item["name"]: item.get("description", "")
             for item in FinnResponsesToolCatalog().definitions()
         }
+        revision = dict(conversation_context.get("proposal_revision") or {})
+        guided_draft = dict(revision.get("guided_state") or {})
+        draft_fields = dict(guided_draft.get("collected_inputs") or {})
+        open_dca_draft = (
+            revision.get("operation_id") == "create_setup"
+            and guided_draft.get("open_proposal_id") == revision.get("proposal_id")
+            and str(draft_fields.get("setup_type") or "").lower() == "dca"
+        )
+
+        def read_open_dca_draft() -> dict[str, Any]:
+            if not open_dca_draft:
+                return {"status": "unavailable", "reason": "open_dca_draft_not_found"}
+            draft_read = {
+                "status": "completed",
+                "results": [{
+                    "scope": "read_open_dca_draft", "status": "completed",
+                    "data": {
+                        "confirmed": False,
+                        "saved": False,
+                        "fields": {
+                            key: value for key, value in draft_fields.items()
+                            if not key.endswith("_id")
+                        },
+                        "missing_benchmark_component_policy": (
+                            "hold_without_purchase"
+                            if str(draft_fields.get("dca_amount_mode") or "").lower() == "score_bands"
+                            else "not_required_to_determine_fixed_amount"
+                        ),
+                    },
+                }],
+            }
+            read_context.append(draft_read)
+            return draft_read
+
+        def saved_read_targets_open_draft(call: FinnResponsesToolCall) -> bool:
+            if not open_dca_draft or call.name not in {
+                "get_saved_setup_inventory", "get_active_plan_and_strategy",
+            } or call.answer_mode in {"list", "compare"}:
+                return False
+            draft_name = str(draft_fields.get("name") or "").strip()
+            named_targets = call.setup_names or (
+                (str(call.inputs.get("setup_name")),)
+                if call.inputs.get("setup_name") else ()
+            )
+            if named_targets:
+                return (
+                    len(named_targets) == 1
+                    and bool(draft_name)
+                    and named_targets[0].casefold() == draft_name.casefold()
+                )
+            latest = message.casefold()
+            if draft_name and draft_name.casefold() in latest:
+                return True
+            if re.search(r"\b(vergelijk|compare|opgeslagen plannen|saved plans|bestaande plannen)\b", latest):
+                return False
+            return bool(re.search(r"\b(deze|dit|die|genoemde|concept|voorstel|kaart|this|that|draft)\b", latest))
 
         async def execute(call: FinnResponsesToolCall) -> dict[str, Any]:
             nonlocal selected, target_retry_used, relevance_retry_used, recommended_read_operation
@@ -733,29 +789,12 @@ class FinnResponsesFrontDoor:
                     "question": call.inputs["question"],
                 }
             if call.name == "get_open_dca_draft":
-                revision = dict(conversation_context.get("proposal_revision") or {})
-                guided_draft = dict(revision.get("guided_state") or {})
-                fields = dict(guided_draft.get("collected_inputs") or {})
-                if (
-                    revision.get("operation_id") != "create_setup"
-                    or guided_draft.get("open_proposal_id") != revision.get("proposal_id")
-                    or str(fields.get("setup_type") or "").lower() != "dca"
-                ):
-                    return {"status": "unavailable", "reason": "open_dca_draft_not_found"}
-                draft_read = {
-                    "status": "completed",
-                    "results": [{
-                        "scope": "read_open_dca_draft", "status": "completed",
-                        "data": {
-                            "confirmed": False,
-                            "saved": False,
-                            "fields": {key: value for key, value in fields.items() if not key.endswith("_id")},
-                            "missing_benchmark_component_policy": "hold_without_purchase",
-                        },
-                    }],
-                }
-                read_context.append(draft_read)
-                return draft_read
+                return read_open_dca_draft()
+            if saved_read_targets_open_draft(call):
+                # The model may select a saved-plan read for the name of the
+                # still-open proposal. Bind the source, not the answer, to
+                # the verified proposal in this conversation.
+                return read_open_dca_draft()
             should_check = (
                 not pending_operation
                 and not resuming_clarification

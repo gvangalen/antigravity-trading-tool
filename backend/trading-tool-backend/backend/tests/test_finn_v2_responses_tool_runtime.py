@@ -921,6 +921,118 @@ def test_single_saved_dca_explanation_reads_strategy_even_when_model_chooses_inv
     assert "€117" in result.response.text
 
 
+def test_named_open_dca_draft_is_read_even_when_model_chooses_saved_inventory():
+    name = "ETH Vast Concept Coach"
+    context = {"proposal_revision": {
+        "operation_id": "create_setup", "proposal_id": "owned-draft",
+        "guided_state": {
+            "operation_id": "create_setup", "open_proposal_id": "owned-draft",
+            "collected_inputs": {
+                "name": name, "symbol": "ETH", "setup_type": "dca",
+                "dca_frequency": "weekly", "dca_day": "friday",
+                "dca_amount_mode": "fixed", "base_amount": 75,
+            },
+        },
+    }}
+    fake = FakeResponses(
+        response("wrong-read", calls=[tool_call("wrong-call", "get_saved_setup_inventory", {
+            "asset": "ETH", "timeframe": None, "answer_mode": "explain",
+            "setup_names": [name], "strategy_name": None,
+        })]),
+        response("draft-answer", text="De open conceptkaart koopt elke vrijdag voor €75; hij is nog niet opgeslagen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="open-dca-draft-read", model_led_coach=True,
+    )
+
+    async def unexpected_saved_read(_call):
+        raise AssertionError("an open draft must not be read as a saved setup")
+
+    front.reads = unexpected_saved_read
+    result = asyncio.run(front.run(
+        message=f"Kun je {name} uitleggen: is het bedrag altijd €75?",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context=context, verified_asset=None,
+    ))
+    evidence = result.response.tool_trace[0]["result"]["results"][0]
+    assert evidence["scope"] == "read_open_dca_draft"
+    assert evidence["data"]["saved"] is False
+    assert evidence["data"]["fields"]["base_amount"] == 75
+    assert evidence["data"]["missing_benchmark_component_policy"] == "not_required_to_determine_fixed_amount"
+    assert "€75" in result.response.text
+
+
+def test_open_smart_dca_draft_holds_when_benchmark_component_is_missing():
+    context = {"proposal_revision": {
+        "operation_id": "create_setup", "proposal_id": "smart-draft",
+        "guided_state": {
+            "operation_id": "create_setup", "open_proposal_id": "smart-draft",
+            "collected_inputs": {
+                "name": "ETH Smart Concept", "symbol": "ETH",
+                "setup_type": "dca", "dca_amount_mode": "score_bands",
+                "base_amount": 75,
+            },
+        },
+    }}
+    fake = FakeResponses(
+        response("smart-read", calls=[tool_call("smart-call", "get_open_dca_draft", {})]),
+        response("smart-answer", text="Zonder complete benchmarkscore berekent dit concept geen aankoopbedrag."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="open-smart-dca-policy", model_led_coach=True,
+    )
+    result = asyncio.run(front.run(
+        message="Wat doet dit open Smart DCA-concept zonder macro-score?",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context=context, verified_asset=None,
+    ))
+    evidence = result.response.tool_trace[0]["result"]["results"][0]
+    assert evidence["data"]["missing_benchmark_component_policy"] == "hold_without_purchase"
+
+
+def test_open_dca_draft_does_not_replace_a_different_named_saved_setup():
+    context = {"proposal_revision": {
+        "operation_id": "create_setup", "proposal_id": "open-draft",
+        "guided_state": {
+            "open_proposal_id": "open-draft",
+            "collected_inputs": {
+                "name": "ETH Open Concept", "symbol": "ETH", "setup_type": "dca",
+                "dca_amount_mode": "fixed", "base_amount": 75,
+            },
+        },
+    }}
+    fake = FakeResponses(
+        response("saved-read", calls=[tool_call("saved-call", "get_saved_setup_inventory", {
+            "asset": "ETH", "timeframe": None, "answer_mode": "explain",
+            "setup_names": ["ETH Bestaand Plan"], "strategy_name": None,
+        })]),
+        response("saved-answer", text="ETH Bestaand Plan is opgeslagen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="saved-plan-beside-open-draft", model_led_coach=True,
+    )
+    reads = []
+
+    async def read(call):
+        reads.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 41, "name": "ETH Bestaand Plan", "symbol": "ETH"}]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Wat weet je over mijn opgeslagen ETH Bestaand Plan?",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context=context, verified_asset=None,
+    ))
+    assert len(reads) == 1
+    assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_saved_setup_inventory"
+
+
 def test_cross_asset_followup_binds_verified_source_and_unique_target():
     question = "Mag ik dezelfde BTC-regel ook voor Apple gebruiken?"
     fake = FakeResponses(
