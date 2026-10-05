@@ -27,6 +27,7 @@ class FinnResponsesProposalSelection:
         conversation_context: Mapping[str, object],
         verified_asset: str | None,
         read_context: Sequence[Mapping[str, Any]] = (),
+        verified_parent_setup: Mapping[str, object] | None = None,
     ) -> RequestAnalysisResult:
         if call.operation_id is None:
             raise ValueError("proposal_operation_required")
@@ -220,7 +221,7 @@ class FinnResponsesProposalSelection:
             explicit_asset=(replacement_asset if awaiting_instrument else supplied_asset) or verified_asset,
             conversation_context=context,
             supplied_inputs=inputs,
-            derived_inputs=correction_inputs,
+            derived_inputs={**correction_inputs, **dict(verified_parent_setup or {})},
             model_tool_inputs=True,
         )
         inputs = dict(state.collected_inputs)

@@ -388,6 +388,29 @@ def test_active_setup_read_resolves_the_single_owner_setup_without_a_workspace_a
     )
 
 
+def test_linked_strategy_collection_reads_every_owner_strategy_without_selecting_one():
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    service._ensure_setup = AsyncMock(return_value={
+        "setup": {"id": 42, "name": "BTC Breakout Full", "symbol": "BTC"},
+        "resolution_source": "explicit_setup_name",
+    })
+    service.resolver.strategies.query_strategies = AsyncMock(return_value=[
+        {"id": 71, "setup_id": 42, "user_id": 7, "name": "BTC Breakout Full Strategy", "base_amount": 250},
+        {"id": 72, "setup_id": 42, "user_id": 7, "name": "BTC Breakout Variant", "base_amount": 130},
+        {"id": 73, "setup_id": 42, "user_id": 8, "name": "Foreign Strategy", "base_amount": 999},
+    ])
+    result = asyncio.run(service._dispatch_tool(
+        tool_name="read_linked_strategies", user_id=7, selector={"setup_name": "BTC Breakout Full"},
+        run=SimpleNamespace(workspace_hints_json={}, client_context_json={}), shared_state={},
+    ))
+    assert result["data"].strategy_count == 2
+    assert [item.name for item in result["data"].strategies] == [
+        "BTC Breakout Full Strategy", "BTC Breakout Variant",
+    ]
+    assert result["data"].complete is True
+    service.resolver.strategies.query_strategies.assert_awaited_once_with(7, {"setup_id": 42})
+
+
 def test_tool_redaction_service_serializes_nested_objects():
     service = FinnV2ToolRedactionService()
 

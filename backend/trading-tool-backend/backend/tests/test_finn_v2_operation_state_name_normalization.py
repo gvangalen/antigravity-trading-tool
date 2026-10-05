@@ -540,6 +540,22 @@ def test_create_strategy_model_placeholders_remain_missing_before_proposal():
     assert contract.allowed_values_for("risk_profile") == ("conservative", "balanced", "aggressive")
 
 
+def test_second_strategy_for_verified_dca_setup_never_asks_for_trade_levels():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Maak een tweede vaste DCA-strategie voor deze setup: ETH Variant, €80 per aankoop.",
+        explicit_asset="ETH", conversation_context={},
+        supplied_inputs={"name": "ETH Variant", "base_amount": 80, "entry": 2000, "stop_loss": 1900},
+        derived_inputs={"setup_id": 42, "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert state.collected_inputs["setup_type"] == "dca"
+    assert state.collected_inputs["dca_amount_mode"] == "fixed"
+    assert state.collected_inputs["base_amount"] == 80
+    assert not {"entry", "stop_loss", "targets"}.intersection(state.collected_inputs)
+    assert state.missing_required_inputs == []
+
+
 def test_create_strategy_does_not_treat_risk_percentage_as_a_target():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
@@ -1011,6 +1027,12 @@ def test_requested_name_slot_extracts_only_name_from_followup_instructions():
     ) == "Apple DCA Nieuwe QA"
     assert service._requested_slot_value(field="name", text="Bevestig niets", contract=contract) is None
     assert service._requested_slot_value(field="name", text="Apple DCA Nieuwe QA", contract=contract) == "Apple DCA Nieuwe QA"
+    strategy_contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    assert service._requested_slot_value(
+        field="name",
+        text="Noem de nieuwe strategie ETH Extra Variant. Toon de kaart, bevestig niets.",
+        contract=strategy_contract,
+    ) == "ETH Extra Variant"
 
 
 def test_explicit_draft_rename_reads_name_without_followup_command():

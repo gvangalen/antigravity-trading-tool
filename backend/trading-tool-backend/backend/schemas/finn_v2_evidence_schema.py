@@ -171,6 +171,16 @@ class LinkedStrategyData(BaseModel):
     high_score_percent: Optional[float] = None
 
 
+class LinkedStrategyCollectionData(BaseModel):
+    """Every saved strategy for one owner-scoped setup; no strategy is selected."""
+
+    setup_id: int
+    setup_name: Optional[str] = None
+    strategies: List[LinkedStrategyData] = Field(default_factory=list)
+    strategy_count: int
+    complete: bool = True
+
+
 class LinkedBotData(BaseModel):
     bot_id: int
     name: Optional[str] = None

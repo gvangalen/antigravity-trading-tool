@@ -5371,11 +5371,22 @@ function AIAssistantContent({
       : isBot
         ? `Paper · gekoppeld aan ${linkedName}`
         : [supplied.asset || context.symbol, isIndicator ? ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
-    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget" };
+    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
     const formatValue = (value) => formatDraftCardValue(value, locale);
+    const euro = (value) => new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
+    const dcaBand = (percent) => supplied.base_amount != null && percent != null
+      ? `${percent}% · ${euro(supplied.base_amount * percent / 100)}`
+      : null;
     const rows = isStrategy
-      ? [["Uitvoering", [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
+      ? supplied.setup_type === "dca"
+        ? [["Bedragregel", supplied.dca_amount_mode === "score_bands" ? "Smart DCA" : supplied.dca_amount_mode === "fixed" ? "Vast bedrag" : null],
+          ["Basisbedrag (100%)", supplied.base_amount != null ? euro(supplied.base_amount) : null],
+          ["Scorebron", supplied.score_source === "benchmark_score" ? "Totale benchmark (markt, macro en technisch)" : null],
+          [supplied.low_threshold != null ? `Score onder ${supplied.low_threshold}` : "Lage score", dcaBand(supplied.low_score_percent)],
+          [supplied.low_threshold != null && supplied.high_threshold != null ? `Score ${supplied.low_threshold} tot onder ${supplied.high_threshold}` : "Middenscore", dcaBand(supplied.mid_score_percent)],
+          [supplied.high_threshold != null ? `Score vanaf ${supplied.high_threshold}` : "Hoge score", dcaBand(supplied.high_score_percent)]]
+        : [["Uitvoering", [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
       : isBot
         ? [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]]
         : isIndicator
@@ -5405,6 +5416,7 @@ function AIAssistantContent({
             <div key={label} className="flex min-w-0 items-start justify-between gap-4 py-2 first:pt-0 last:pb-0"><dt className="shrink-0 text-slate-500 dark:text-slate-400">{label}</dt><dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{formatValue(value)}</dd></div>
           ))}
         </dl>
+        {isStrategy && supplied.setup_type === "dca" && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.dcaStrategyOnly", "Bevestigen slaat alleen deze extra strategie op onder de bestaande DCA-setup. Er wordt geen bot gestart en geen aankoop gedaan.")}</p>}
         {isBot && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, isStrategy ? "strategie" : isBot ? "paper-bot" : isIndicator ? "indicator" : "watchlist")}</div>

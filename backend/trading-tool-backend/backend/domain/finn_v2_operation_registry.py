@@ -80,6 +80,10 @@ _MODEL_TOOL_INPUT_TYPES: dict[str, tuple[tuple[str, str], ...]] = {
         ("entry", "number"), ("stop_loss", "number"),
         ("targets", "array"), ("risk_profile", "string"),
         ("symbol", "string"), ("timeframe", "string"),
+        ("setup_type", "string"), ("dca_amount_mode", "string"),
+        ("score_source", "string"), ("low_threshold", "number"),
+        ("high_threshold", "number"), ("low_score_percent", "number"),
+        ("mid_score_percent", "number"), ("high_score_percent", "number"),
     ),
     "update_strategy": (("strategy_id", "integer"), ("changed_fields", "object")),
     "delete_strategy": (("strategy_id", "integer"),),
@@ -183,6 +187,7 @@ class OperationContract:
     selection_priority: int = 0
     required_inputs: tuple[str, ...] = ()
     optional_inputs: tuple[str, ...] = ()
+    server_resolved_inputs: tuple[str, ...] = ()
     # Types for model-visible action inputs live on this immutable contract.
     # The Responses surface derives its JSON schema here, never from a
     # second tool-specific field catalog.
@@ -250,6 +255,8 @@ class OperationContract:
             raise FinnV2OperationContractError(f"scope_overlap:{self.operation_id}")
         if set(self.required_inputs).intersection(self.optional_inputs):
             raise FinnV2OperationContractError(f"input_overlap:{self.operation_id}")
+        if set(self.server_resolved_inputs).difference(self.optional_inputs):
+            raise FinnV2OperationContractError(f"server_resolved_input_not_optional:{self.operation_id}")
         typed_fields = dict(self.input_json_types)
         if len(typed_fields) != len(self.input_json_types):
             raise FinnV2OperationContractError(f"duplicate_input_json_type:{self.operation_id}")
@@ -331,6 +338,14 @@ class OperationContract:
 
     def required_inputs_for(self, supplied_inputs: Mapping[str, object]) -> tuple[str, ...]:
         """Return required fields after evaluating registry-owned conditions."""
+        if self.operation_id == "create_strategy" and supplied_inputs.get("setup_type") == "dca":
+            required = ["setup_id", "name", "dca_amount_mode", "base_amount"]
+            if supplied_inputs.get("dca_amount_mode") == "score_bands":
+                required.extend((
+                    "score_source", "low_threshold", "high_threshold",
+                    "low_score_percent", "mid_score_percent", "high_score_percent",
+                ))
+            return tuple(required)
         required = list(self.required_inputs)
         for field, dependency, expected in self.conditional_required_inputs:
             actual = str(supplied_inputs.get(dependency) or "").strip().casefold()
@@ -785,7 +800,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("setup",),
     },
     "create_strategy": {
-        "semantic_description": "Prepare a typed, confirmable strategy draft for an identified existing setup. Generation is internal to this single create_strategy contract and never persists before confirmation.",
+        "semantic_description": "Prepare a typed, confirmable strategy draft for an identified existing setup. Trade strategies require entry, stop and targets; DCA strategies use a fixed base amount or a complete benchmark score curve and do not require trade price levels. Generation is internal to this single create_strategy contract and never persists before confirmation.",
         "any_entities": ("strategy",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("create",),
@@ -1034,7 +1049,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("delete_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("verwijder setup", "delete setup", "lösche setup"), action_polarity=ActionPolarity.DELETE, required_inputs=("setup_id",), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="delete_setup", confirmation_required=True, execution_adapter="delete_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     _read("read_linked_strategy", "strategy", ("active_asset", "active_setup", "linked_strategy"), ("welke strategie", "strategie"), ("setup", "strategy")),
-    OperationContract("create_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("maak strategie", "create strategy", "erstelle strategie"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_id", "name", "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"), optional_inputs=("symbol", "timeframe"), input_allowed_values=(("risk_profile", ("conservative", "balanced", "aggressive")),), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), optional_scopes=("profile", "preferences", "indicator_configuration", "linked_strategy", "market_snapshot"), model_policy="required", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_strategy", confirmation_required=True, execution_adapter="create_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_created_for_user_setup_name"),
+    OperationContract("create_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("maak strategie", "create strategy", "erstelle strategie"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_id", "name", "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"), optional_inputs=("symbol", "timeframe", "setup_type", "dca_amount_mode", "score_source", "low_threshold", "high_threshold", "low_score_percent", "mid_score_percent", "high_score_percent"), server_resolved_inputs=("setup_type",), input_allowed_values=(("risk_profile", ("conservative", "balanced", "aggressive")), ("dca_amount_mode", ("fixed", "score_bands")), ("score_source", ("benchmark_score",))), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), optional_scopes=("profile", "preferences", "indicator_configuration", "linked_strategy", "market_snapshot"), model_policy="required", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_strategy", confirmation_required=True, execution_adapter="create_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_created_for_user_setup_name"),
     OperationContract("update_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("wijzig strategie", "update strategy", "strategie andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("strategy_id", "changed_fields"), contextual_reference_inputs=("strategy_id",), required_scopes=("active_asset", "active_setup", "linked_strategy"), proposal_type="update_strategy", confirmation_required=True, execution_adapter="update_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_updated_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("verwijder strategie", "delete strategy", "lösche strategie"), action_polarity=ActionPolarity.DELETE, required_inputs=("strategy_id",), contextual_reference_inputs=("strategy_id",), required_scopes=("active_asset", "active_setup", "linked_strategy"), proposal_type="delete_strategy", confirmation_required=True, execution_adapter="delete_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     # A strategy review compares the persisted strategy with its owning setup

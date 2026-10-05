@@ -63,6 +63,10 @@ class FinnV2OperationStateService:
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
+        dca_strategy = (
+            contract.operation_id == "create_strategy"
+            and str((derived_inputs or {}).get("setup_type") or collected.get("setup_type") or "").lower() == "dca"
+        )
         requested_slot = (
             existing.next_missing_input
             or next(iter(existing.missing_required_inputs or ()), None)
@@ -96,7 +100,8 @@ class FinnV2OperationStateService:
         elif is_slot_turn:
             score_percentages = (
                 self._dca_score_percentages(message)
-                if contract.operation_id == "create_setup" and collected.get("dca_amount_mode") == "score_bands"
+                if (contract.operation_id == "create_setup" or dca_strategy)
+                and collected.get("dca_amount_mode") == "score_bands"
                 else {}
             )
             slot_value = (
@@ -138,6 +143,29 @@ class FinnV2OperationStateService:
                 if contract.operation_id in {"create_setup", "create_strategy"} or not model_tool_inputs
                 else {}
             )
+        if dca_strategy:
+            # The parent setup, not the model's phrasing, determines that
+            # entry, stop and targets are inapplicable to this strategy.
+            for field in ("entry", "stop_loss", "targets", "risk_profile"):
+                explicit.pop(field, None)
+            lowered = message.casefold()
+            smart = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|variab\w*)\b", lowered))
+            fixed = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact)\b", lowered))
+            if smart and not fixed:
+                explicit["dca_amount_mode"] = "score_bands"
+                explicit["score_source"] = "benchmark_score"
+            elif fixed and not smart:
+                explicit["dca_amount_mode"] = "fixed"
+            if "base_amount" not in explicit and not re.search(r"\bminim(?:um|ale)\b", lowered):
+                amounts = re.findall(
+                    r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+                    lowered,
+                )
+                if len(amounts) == 1:
+                    explicit["base_amount"] = self._numeric_value(amounts[0][0] or amounts[0][1])
+            if collected.get("dca_amount_mode") == "score_bands" or explicit.get("dca_amount_mode") == "score_bands":
+                explicit.update(self._dca_score_percentages(message))
         explicit_chart_timeframe = (
             FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(message)
             if contract.operation_id == "create_setup" and model_tool_inputs and not is_slot_turn
@@ -178,9 +206,11 @@ class FinnV2OperationStateService:
         for key, value in (supplied_inputs or {}).items():
             if is_slot_turn:
                 continue
-            if contract.operation_id == "create_setup" and (
+            if dca_strategy and key in {"entry", "stop_loss", "targets", "risk_profile", "setup_type"}:
+                continue
+            if (contract.operation_id == "create_setup" and (
                 explicit.get("setup_type") == "dca" or collected.get("setup_type") == "dca"
-            ):
+            )) or dca_strategy:
                 if key in {"dca_amount_mode", "score_source"} and key not in explicit:
                     continue
                 if key == "min_investment" and "min_investment" not in explicit:
@@ -1084,7 +1114,7 @@ class FinnV2OperationStateService:
         named = re.search(
             r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|dem\s+namen|met\s+de\s+naam|namens|genannt|"
             r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
-            r"noem\s+(?:hem|haar|het|deze|dit|(?:de|het|een)\s+(?:setup|strategie|plan|bot))|"
+            r"noem\s+(?:hem|haar|het|deze|dit|(?:de|het|een)\s+(?:(?:nieuw|nieuwe)\s+)?(?:setup|strategie|plan|bot))|"
             r"ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
             r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
             r"\s*(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
