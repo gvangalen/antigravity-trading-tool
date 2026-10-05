@@ -8,21 +8,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local Build gates, CI, Auto Deploy and public identity checks passed. |
-| Goal | Show the stored weekday immediately when opening an existing DCA setup in the editor. |
-| Candidate branch | `codex/finn-existing-dca-editor` |
-| Candidate implementation SHA | `9d787008`; followed by this release-status commit. |
-| PR | [#69](https://github.com/gvangalen/antigravity-trading-tool/pull/69), merged. |
-| Production SHA | `ba8884826ed5c4d0b185d6dc91cc51b48c506e86`; public backend and frontend both reported it with HTTP 200 on 2026-10-04. This status-only follow-up creates a later deploy SHA; verify that final identity separately. |
+| Phase | `LOCAL_VALIDATED`; candidate CI and Auto Deploy pending. |
+| Goal | Explain an open, unconfirmed DCA concept during a coach follow-up without treating it as an absent saved plan. |
+| Candidate branch | `codex/finn-open-dca-draft-read` |
+| Candidate implementation SHA | `6fc4bc4643015aebbd86eb8381ad88d6928d2339`; followed by this release-status commit. |
+| PR | Pending. |
+| Production SHA | Current pre-candidate SHA `41fb2aa734a5cfb869d163e5ec4b1c44b5d505d6` as reported by the authenticated QA handoff; candidate not deployed yet. |
 | Release owner | Build |
-| Last updated | 2026-10-04 |
+| Last updated | 2026-10-05 |
 
 ## Change And Limits
 
-- Authenticated live QA confirmed new fixed and Smart DCA create, confirm, persistence, and saved-strategy readback on `7cfbe072...`. The previously saved `ETH Vaste DCA Herhaal 0410` still appeared as Monday in the editor, while the new Friday plan appeared correctly.
-- Read-only production DB inspection found weekday code `5` for both the old setup record 80 and the new setup record 82. Both values have the same text type and byte representation. The list API returns the persisted field without a per-record conversion. No plan was edited.
-- The edit form previously initialized to Monday and loaded the selected plan only in an effect after the first paint. It now initializes from the selected plan before the first paint and remounts when switching to a different setup. A test passes both old and new record shapes through the initializer and expects Friday. This addresses the observed UI path; independent authenticated browser QA must verify the old plan after deployment.
-- The QA run did not prove an actual score-driven purchase because current complete ETH benchmark scores were unavailable. No live trading claim is made.
+- Authenticated browser QA on `41fb2aa7...` confirmed new fixed and Smart ETH-DCA concept, confirmation, persistence, Friday/month-day editor display, and stored-strategy readback. The remaining coach defect was that a question about an unconfirmed fixed-DCA card said the plan could not be found among saved plans.
+- Local real Responses replay reproduced the failure: for a named open €75 Friday draft, the model selected `get_saved_setup_inventory` and answered that no saved plan existed. The verified proposal was available in the same conversation. The read boundary now supplies that open draft as typed evidence when a saved-plan tool is selected for the draft itself. It does not write the draft or replace the model's answer. An explicitly different named saved plan still uses the saved-plan read.
+- The draft evidence now distinguishes fixed from Smart DCA: a fixed amount does not require a benchmark score to determine its amount; a Smart score curve holds without complete benchmark components. Neither statement proves that a trade will execute.
+- Post-change local real Responses replay answered four varied named follow-ups as €75 on Friday and correctly identified the draft as unconfirmed. The wider fixed-DCA coach variation also passed. This is local evidence, not authenticated production acceptance.
+- The actual score-driven purchase path remains unproven in live QA because complete current ETH benchmark scores were unavailable. No purchase or bot activation was performed by Build.
 
 ## Local Build Evidence
 
@@ -30,20 +31,20 @@ The isolated parity stack used PostgreSQL, Redis, FastAPI, prefork Celery and th
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Existing Friday form initialization | Both old and new saved record shapes with `dca_day=5` initialize as Friday; new-plan default remains Monday. | `npm run test:setups`: 3/3. |
-| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/existing-dca-editor-action-matrix.json`, SHA-256 `7ae01b28fe153cc4ee115d2a675987122e622287b030336f35d35cbdac3899c0`. |
-| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/existing-dca-editor-selector-development.json`, SHA-256 `755f7ec55058802998b87b5b636f48ec0129b9d8faaa8e8ce5147775a39b6585`. |
-| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/existing-dca-editor-selector-regression.json`, SHA-256 `f1bb24d354f8ec2b57e18ee104770498556bbb8dc8caf8b13cc68f8321d5b62f`. |
-| Backend | `3089 passed, 3 skipped`. | `pytest -q`. |
+| Open draft coach replays | Four varied named follow-ups passed; model still sometimes chose a saved read, but received the verified open draft and answered correctly. | `.local-finn-parity-artifacts/open-fixed-dca-coach-repeat.json`, SHA-256 `610386f1c77d28cac3ccd4f6e9b6059a2be49b6b45e4e3216d97e33a94d5cb26`. |
+| Worker-driven safe action contracts | `16/16`; zero broker orders, live bots, live trading calls or production connections. | `.local-finn-parity-artifacts/open-dca-draft-read-action-matrix.json`, SHA-256 `67e104a2ea34b1b710db2683c160d2d8283a4007275fa0e9cb651a54fb93ae33`. |
+| Real-provider selector development | `18/18`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/open-dca-draft-read-selector-development.json`, SHA-256 `213b6e680bfbf4912e06ab023b314ead84b5ee46fbc8941b92671d1042cfac3e`. |
+| Real-provider selector regression | `109/109`; zero provider, schema, parse, validation or timeout failures. | `.local-finn-parity-artifacts/open-dca-draft-read-selector-regression.json`, SHA-256 `0932bd2703cd10db477b1c83411c4d19f721e0b653e8d7c4d4effe6236f8b573`. |
+| Backend | `3092 passed, 3 skipped`; focused open-draft tests `4 passed`. | `pytest -q`; `.local-finn-parity-artifacts/open-dca-draft-read-pytest.log`. |
 | Frontend | Build, typecheck, lint:i18n, test:i18n, test:commands, test:proposals, test:setups and audit:high passed; zero high production dependency vulnerabilities. | Canonical local script output. |
 
 ## Release And Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: [run 37232364861](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37232364861), all five jobs green. |
-| Main CI and Auto Deploy | `PASS`: [main CI 37232523493](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37232523493) and [Auto Deploy 37232641685](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37232641685) on `ba8884826ed5c4d0b185d6dc91cc51b48c506e86`. |
-| Public backend health and frontend build-info | `PASS`: both HTTP 200 and SHA `ba8884826ed5c4d0b185d6dc91cc51b48c506e86`. |
+| Candidate CI | Pending. |
+| Main CI and Auto Deploy | Pending. |
+| Public backend health and frontend build-info | Pending candidate deployment. |
 | Independent authenticated live QA | Pending; QA owns its protected fixture and verdict. |
 
 Local Build evidence does not establish authenticated production acceptance.
