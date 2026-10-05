@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from backend.utils.db import get_db_connection
 from backend.utils.openai_client import ask_gpt_text, ask_gpt_json, ask_gpt_text
+from backend.ai_agents.report_model import TRADING_REPORT_MODEL, TRADING_REPORT_REASONING_EFFORT
 from backend.ai_core.system_prompt_builder import build_system_prompt
 from backend.engine.transition_detector import compute_transition_detector
 
@@ -699,6 +700,8 @@ def generate_text(prompt: str, fallback: str) -> str:
         raw = ask_gpt_text(
             prompt=prompt,
             system_role=SYSTEM_PROMPT,
+            model_override=TRADING_REPORT_MODEL,
+            reasoning_effort=TRADING_REPORT_REASONING_EFFORT,
         )
     except Exception as e:
         logger.exception("❌ AI call failed")
@@ -1401,7 +1404,13 @@ Keys:
 
     batched_result = {}
     try:
-        raw_json = ask_gpt_json(prompt=batched_prompt, system_role=SYSTEM_PROMPT, max_tokens=3000)
+        raw_json = ask_gpt_json(
+            prompt=batched_prompt,
+            system_role=SYSTEM_PROMPT,
+            max_tokens=3000,
+            model_override=TRADING_REPORT_MODEL,
+            reasoning_effort=TRADING_REPORT_REASONING_EFFORT,
+        )
         if isinstance(raw_json, dict):
             batched_result = raw_json
     except Exception:

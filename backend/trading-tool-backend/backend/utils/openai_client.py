@@ -676,6 +676,8 @@ def ask_gpt_json(
     retries: int = 2,
     max_tokens: Optional[int] = None,
     client_max_retries: Optional[int] = None,
+    model_override: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Genereert een gestructureerde JSON response."""
     
@@ -709,23 +711,32 @@ def ask_gpt_json(
             started = start_timer()
             
             active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
-            response = active_client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=JSON_TEMP,
-                max_tokens=max_tokens or MAX_TOKENS,
-                response_format={"type": "json_object"}
-            )
-
-            content = response.choices[0].message.content
+            if model_override:
+                response = active_client.responses.create(
+                    model=model_override,
+                    input=messages,
+                    reasoning={"effort": reasoning_effort or "none"},
+                    max_output_tokens=max_tokens or MAX_TOKENS,
+                    text={"format": {"type": "json_object"}},
+                )
+                content = response.output_text
+            else:
+                response = active_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=JSON_TEMP,
+                    max_tokens=max_tokens or MAX_TOKENS,
+                    response_format={"type": "json_object"}
+                )
+                content = response.choices[0].message.content
             parsed = sanitize_json_output(content)
 
             if parsed:
                 usage = getattr(response, "usage", None)
                 _log_openai_usage(
-                    model_name=str(getattr(response, "model", None) or model),
-                    prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-                    completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                    model_name=str(getattr(response, "model", None) or model_override or model),
+                    prompt_tokens=int(getattr(usage, "input_tokens" if model_override else "prompt_tokens", 0) or 0),
+                    completion_tokens=int(getattr(usage, "output_tokens" if model_override else "completion_tokens", 0) or 0),
                     response_time_ms=elapsed_ms(started),
                 )
                 return parsed
@@ -1084,6 +1095,8 @@ def ask_gpt_text(
     retries: int = 2,
     max_tokens: Optional[int] = None,
     client_max_retries: Optional[int] = None,
+    model_override: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> str:
     """Genereert een platte tekst response."""
     
@@ -1117,20 +1130,28 @@ def ask_gpt_text(
             started = start_timer()
             
             active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
-            response = active_client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=TEXT_TEMP,
-                max_tokens=max_tokens or MAX_TOKENS
-            )
-
-            content = response.choices[0].message.content
+            if model_override:
+                response = active_client.responses.create(
+                    model=model_override,
+                    input=messages,
+                    reasoning={"effort": reasoning_effort or "none"},
+                    max_output_tokens=max_tokens or MAX_TOKENS,
+                )
+                content = response.output_text
+            else:
+                response = active_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=TEXT_TEMP,
+                    max_tokens=max_tokens or MAX_TOKENS
+                )
+                content = response.choices[0].message.content
             if content:
                 usage = getattr(response, "usage", None)
                 _log_openai_usage(
-                    model_name=str(getattr(response, "model", None) or model),
-                    prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-                    completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                    model_name=str(getattr(response, "model", None) or model_override or model),
+                    prompt_tokens=int(getattr(usage, "input_tokens" if model_override else "prompt_tokens", 0) or 0),
+                    completion_tokens=int(getattr(usage, "output_tokens" if model_override else "completion_tokens", 0) or 0),
                     response_time_ms=elapsed_ms(started),
                 )
                 return content.strip()
