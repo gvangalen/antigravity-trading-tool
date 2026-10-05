@@ -106,6 +106,7 @@ export function normalizeTraderProfilePreferences(preferences = {}) {
     experience_levels: experienceLevels,
     risk_profiles: riskProfiles,
     behavior_flags: behaviorFlags,
+    trader_context: typeof preferences.trader_context === "string" ? preferences.trader_context.slice(0, 1000) : "",
   };
 }
 
@@ -128,5 +129,6 @@ export function serializeTraderProfilePreferences(form = {}) {
     risk_profiles: riskProfiles,
     risk_profile: riskProfiles[0] || "",
     behavior_flags: behaviorFlags,
+    trader_context: typeof form.trader_context === "string" ? form.trader_context.trim().slice(0, 1000) : "",
   };
 }

@@ -297,7 +297,7 @@ class FinnV2ReasoningContextService:
 
     def _sanitize_facts(self, payload: Dict[str, Any], tool_name: str) -> Dict[str, Any]:
         if tool_name == "read_profile":
-            return {"trader_profile": payload.get("trader_profile", {}), "has_profile": payload.get("has_profile")}
+            return {"trader_profile": payload.get("trader_profile", {}), "trader_context": payload.get("trader_context"), "has_profile": payload.get("has_profile")}
         if tool_name == "read_user_preferences":
             return {key: payload.get(key) for key in ["experience_level", "risk_profile", "selected_asset", "active_asset", "detail_level", "coaching_style"] if payload.get(key) is not None}
         if tool_name == "read_active_asset":

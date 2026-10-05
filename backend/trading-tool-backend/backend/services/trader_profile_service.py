@@ -55,6 +55,11 @@ def _normalize(values: List[str], allowed: List[str]) -> List[str]:
     return [value for value in values if value in allowed_set]
 
 
+def normalize_trader_context(value: Any) -> str:
+    """Keep optional user-authored coaching context bounded and textual."""
+    return value.strip()[:1000] if isinstance(value, str) else ""
+
+
 def normalize_trader_profile_preferences(preferences: Optional[dict]) -> Dict[str, List[str]]:
     prefs = preferences or {}
     return {
@@ -173,13 +178,17 @@ def build_trader_profile_context(
     query: Optional[str] = None,
 ) -> Dict[str, Any]:
     profile = normalize_trader_profile_preferences(preferences)
-    used = has_trader_profile(profile)
+    trader_context = normalize_trader_context((preferences or {}).get("trader_context"))
+    used = has_trader_profile(profile) or bool(trader_context)
     request_style = _infer_request_style(request_context, query)
     multiple_styles = len(set(profile.get("trader_types") or [])) > 1
     conflict = used and _profile_conflicts_with_request(profile, request_style)
     if not used:
         match_mode = "profile_missing_fallback"
         match_reason = "No stored trader profile; FINN should fall back to page and entity context."
+    elif not has_trader_profile(profile):
+        match_mode = "user_context_only"
+        match_reason = "Only user-written coaching context is stored; do not infer structured trader style or risk tolerance from it."
     elif conflict:
         match_mode = "profile_conflict_detected"
         match_reason = (
@@ -194,6 +203,7 @@ def build_trader_profile_context(
         match_reason = "Stored trader profile aligns directly with the current page and action context."
     return {
         "trader_profile": profile,
+        "trader_context": trader_context,
         "trader_profile_summary": build_trader_profile_summary(profile) if used else "",
         "trader_profile_used": used,
         "profile_match_mode": match_mode,

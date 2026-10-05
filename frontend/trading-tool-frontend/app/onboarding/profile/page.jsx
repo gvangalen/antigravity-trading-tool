@@ -7,6 +7,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
+import TraderContextField from "@/components/profile/TraderContextField";
 import {
   getAssetFocusOptions,
   getBehaviorFlagOptions,
@@ -65,6 +66,7 @@ export default function OnboardingProfilePage() {
     experience_levels: [],
     risk_profiles: [],
     behavior_flags: [],
+    trader_context: "",
   });
 
   useEffect(() => {
@@ -239,6 +241,11 @@ export default function OnboardingProfilePage() {
           options={behaviorOptions}
           values={form.behavior_flags}
           onToggle={(value) => toggleMulti("behavior_flags", value)}
+        />
+        <TraderContextField
+          value={form.trader_context}
+          onChange={(trader_context) => setForm((current) => ({ ...current, trader_context }))}
+          copy={t?.traderProfile?.groups?.traderContext}
         />
       </div>
 

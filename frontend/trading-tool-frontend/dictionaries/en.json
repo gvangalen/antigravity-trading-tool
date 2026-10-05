@@ -841,6 +841,11 @@
       "behavior": {
         "title": "Which coaching patterns should Finn watch for?",
         "subtitle": "Select the behaviors that most often trip you up. This helps Finn coach more directly without changing governance."
+      },
+      "traderContext": {
+        "title": "What should FINN know about you as a trader? (optional)",
+        "subtitle": "Describe how you want to trade, the time you have, and where FINN should help you. Your structured choices above remain the saved profile facts.",
+        "placeholder": "For example: I only trade on weekends and want FINN to slow me down when FOMO makes me abandon my plan."
       }
     },
     "onboardingStep": {

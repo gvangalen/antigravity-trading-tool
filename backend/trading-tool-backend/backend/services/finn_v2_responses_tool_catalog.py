@@ -156,6 +156,8 @@ class FinnResponsesToolCatalog:
                 description += (
                     " Call only when the answer needs this user's saved profile or risk style. "
                     "A general explanation of a trading concept does not need this read. "
+                    "Optional trader_context is user-written coaching preference, not proof of a saved trade rule, "
+                    "account balance or market fact. "
                     "This returns preferences, not a judgment about whether a specific plan "
                     "or proposed amount fits them; use the registry-backed evaluate_plan "
                     "tool for that assessment."

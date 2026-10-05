@@ -4,6 +4,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { getLocaleLabel } from "@/lib/i18n";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
+import TraderContextField from "@/components/profile/TraderContextField";
 import Link from "next/link";
 import {
   createOptionLabelMap,
@@ -70,6 +71,7 @@ export default function ProfilePage() {
     experience_levels: [],
     risk_profiles: [],
     behavior_flags: [],
+    trader_context: "",
   });
 
   if (!user) {
@@ -464,6 +466,11 @@ export default function ProfilePage() {
                 values={profileForm.behavior_flags}
                 onToggle={(value) => toggleMulti("behavior_flags", value)}
               />
+              <TraderContextField
+                value={profileForm.trader_context}
+                onChange={(trader_context) => setProfileForm((current) => ({ ...current, trader_context }))}
+                copy={t?.traderProfile?.groups?.traderContext}
+              />
             </div>
 
             {profileError ? (
@@ -624,6 +631,12 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
+              {profileForm.trader_context ? (
+                <div className="mt-5 border-t border-slate-100 pt-5">
+                  <div className="text-sm font-black text-slate-900">{t?.traderProfile?.groups?.traderContext?.title}</div>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-600">{profileForm.trader_context}</p>
+                </div>
+              ) : null}
             </section>
           </div>
         )}

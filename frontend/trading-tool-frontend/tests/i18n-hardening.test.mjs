@@ -10,6 +10,7 @@ import {
   getExperienceLevelOptions,
   getRiskProfileOptions,
   getBehaviorFlagOptions,
+  normalizeTraderProfilePreferences,
   serializeTraderProfilePreferences,
 } from "../lib/traderProfileOptions.js";
 
@@ -113,6 +114,7 @@ test("serialized trader profile payload keeps canonical keys only", () => {
     experience_levels: ["intermediate"],
     risk_profiles: ["balanced"],
     behavior_flags: ["fomo", "takes_profit_too_early"],
+    trader_context: "  Ik wil geen impulsieve trades.  ",
   });
 
   assert.deepEqual(payload, {
@@ -127,7 +129,17 @@ test("serialized trader profile payload keeps canonical keys only", () => {
     risk_profiles: ["balanced"],
     risk_profile: "balanced",
     behavior_flags: ["fomo", "takes_profit_too_early"],
+    trader_context: "Ik wil geen impulsieve trades.",
   });
+});
+
+test("optional trader context survives profile load and can be cleared", () => {
+  assert.equal(normalizeTraderProfilePreferences({ trader_context: "Alleen weekendtrades" }).trader_context, "Alleen weekendtrades");
+  assert.equal(serializeTraderProfilePreferences({ trader_context: "   " }).trader_context, "");
+  for (const dictionary of [nl, en, de]) {
+    assert.ok(dictionary.traderProfile.groups.traderContext.title);
+    assert.ok(dictionary.traderProfile.groups.traderContext.placeholder);
+  }
 });
 
 test("profile option values stay canonical and labels stay translated", () => {

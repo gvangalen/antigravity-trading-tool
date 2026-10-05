@@ -842,6 +842,11 @@
       "behavior": {
         "title": "Op welke coachingspatronen moet Finn letten?",
         "subtitle": "Selecteer het gedrag waar je het vaakst op vastloopt. Zo kan Finn directer coachen zonder governance te veranderen."
+      },
+      "traderContext": {
+        "title": "Wat moet FINN over jou als trader weten? (optioneel)",
+        "subtitle": "Vertel bijvoorbeeld hoe je wilt handelen, hoeveel tijd je hebt en waarbij FINN je moet helpen. Je keuzes hierboven blijven leidend voor opgeslagen profielgegevens.",
+        "placeholder": "Bijvoorbeeld: ik handel alleen in het weekend en wil dat FINN me afremt als ik uit FOMO mijn plan wil loslaten."
       }
     },
     "onboardingStep": {
