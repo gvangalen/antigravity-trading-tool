@@ -8,18 +8,20 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`. CI, deployment and independent authenticated QA are pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and production identity checks passed; independent authenticated QA is pending. |
 | Goal | Show the persisted pending-source explanation for an indicator with no reading after a hard refresh in Analyse. |
-| Candidate branch | `codex/technical-pending-evidence` |
-| Candidate implementation SHA | Pending commit. |
-| PR | Pending. |
+| Candidate branch | `codex/technical-pending-evidence`, merged to `main` in `24f7959d8d5925b6d69d452881aec963cfbda642`. |
+| Candidate implementation SHA | `7a63c85771fb50d35c48290eea648768513b258e` |
+| PR | [#93](https://github.com/gvangalen/antigravity-trading-tool/pull/93), merged. |
 | Previous live SHA | `8a8a061e8c7285322f66dbe54d28bfe9392b2b46`; targeted live QA confirmed MA 200 remains configured with zero readings and no score after refresh, but saw only generic insufficient-data text. No real provider 429 occurred in that run. |
-| Production SHA | Pending deployment. |
+| Production SHA | `24f7959d8d5925b6d69d452881aec963cfbda642` observed on public backend and frontend after Auto Deploy. This status-only update creates a later SHA; QA must bind to the current public backend/frontend SHA. |
 | Last updated | 2026-10-06 |
 
 The Analyse workspace already receives `data_status: pending_refresh` for configured indicators without a reading. The row renderer previously collapsed that status to a generic insufficient-data detail. This change keeps score and value absent while explaining that the source will be read again on a later data refresh. It does not claim that an observed 429 caused every pending row. The scheduled configured-source sync remains responsible for retrying the read; a browser refresh alone does not create a measurement.
 
 Measured local evidence: root pytest **3155 passed, 3 skipped**, `.local-finn-parity-artifacts/technical-pending-copy-pytest.log` SHA-256 `70256762dc7a18ef88ba6c4ac4c3851c2103aa92aad5de4e185078557408728b`; frontend build, typecheck, i18n lint/tests, command/proposal tests, pending-evidence tests and high-severity dependency audit passed, `.local-finn-parity-artifacts/technical-pending-copy-frontend-build.log` SHA-256 `b16d04531c984824cfffee9ee28091d96cb18eef3b8b9937b51ab2040b94697f`. Isolated prefork Celery/Responses safe-action matrix passed **16/16**, with zero prohibited executions, `.local-finn-parity-artifacts/technical-pending-copy-full-action-matrix.json` SHA-256 `d1c9507e33b4999815bfb557b96bb7e2cf81950797bebe2f3bc4424e9a1b00f7`. Real-provider selector development passed **18/18**, `.local-finn-parity-artifacts/technical-pending-copy-selector-development.json` SHA-256 `4b068867a37c49496b7c7a398da919fb5fbde854112f4f5458d91240350856f3`; regression passed **109/109**, `.local-finn-parity-artifacts/technical-pending-copy-selector-regression.json` SHA-256 `00f4779b93ef947510a8f54ae88f70f8afe0f8469089339c7bbf3a475e3e6a90`. Both had zero provider, schema, parse, validation or timeout failures. This does not prove an actual production 429, a positive setupmatch with complete fresh sources, or a score-driven Paper decision.
+
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37522979863) and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37523303510) completed success. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37523609123) completed success for `24f7959d8d5925b6d69d452881aec963cfbda642`; public backend health and frontend build-info both returned HTTP 200 and that SHA on 2026-10-06. Build has not run authenticated live QA. QA should check that an unmeasured configured indicator shows the pending-source explanation after refresh and, if a genuine provider 429 occurs, that the pending route remains usable. A positive setupmatch and score-driven Paper decision still require complete fresh sources.
 
 ## Previous Release (technical source limit)
 
