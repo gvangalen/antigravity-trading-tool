@@ -89,7 +89,7 @@ class ScoreRepository:
                 macro_score, macro_interpretation, macro_top_contributors,
                 technical_score, technical_interpretation, technical_top_contributors,
                 market_score, market_interpretation, market_top_contributors,
-                setup_score, report_date
+                setup_score, report_date, calculated_at, indicator_evidence
             FROM daily_scores
             WHERE user_id = :user_id AND report_date = CURRENT_DATE AND symbol = :symbol
             LIMIT 1
@@ -134,6 +134,8 @@ class ScoreRepository:
                 "market_score": row.market_score,
                 "setup_score": row.setup_score,
                 "report_date": row.report_date,
+                "calculated_at": row.calculated_at,
+                "indicator_evidence": row.indicator_evidence,
             }
             for row in result.scalars().all()
         }
@@ -163,41 +165,3 @@ class ScoreRepository:
         """)
         result = await self.db.execute(stmt, {"user_id": user_id, "days": days, "symbol": symbol})
         return [dict(row) for row in result.mappings()]
-
-    async def save_daily_combined_score(self, user_id: int, symbol: str, scores: Dict[str, Any]):
-        """
-        Persist aggregated scores to daily_scores table (UPSERT).
-        """
-        stmt = text("""
-            INSERT INTO daily_scores (
-                user_id, symbol, report_date,
-                macro_score, technical_score, market_score, setup_score,
-                macro_interpretation, technical_interpretation, market_interpretation
-            )
-            VALUES (
-                :user_id, :symbol, CURRENT_DATE,
-                :macro, :technical, :market, :setup,
-                :macro_int, :tech_int, :market_int
-            )
-            ON CONFLICT (user_id, symbol, report_date)
-            DO UPDATE SET
-                macro_score = EXCLUDED.macro_score,
-                technical_score = EXCLUDED.technical_score,
-                market_score = EXCLUDED.market_score,
-                setup_score = EXCLUDED.setup_score,
-                macro_interpretation = EXCLUDED.macro_interpretation,
-                technical_interpretation = EXCLUDED.technical_interpretation,
-                market_interpretation = EXCLUDED.market_interpretation
-        """)
-        await self.db.execute(stmt, {
-            "user_id": user_id,
-            "symbol": symbol,
-            "macro": scores.get("macro", 0),
-            "technical": scores.get("technical", 0),
-            "market": scores.get("market", 0),
-            "setup": None,  # Setup matches are calculated from saved conditions.
-            "macro_int": scores.get("macro_interpretation", ""),
-            "tech_int": scores.get("technical_interpretation", ""),
-            "market_int": scores.get("market_interpretation", "")
-        })
-        await self.db.commit()

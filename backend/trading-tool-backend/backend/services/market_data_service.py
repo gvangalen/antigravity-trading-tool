@@ -56,14 +56,21 @@ FORWARD_RETURN_SYMBOL_SUPPORT: dict[str, dict[str, Any]] = {
 # =========================================================
 # SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS
 # =========================================================
-def sync_score_indicator(category: str, indicator: str, value: float, user_id: int) -> Dict[str, Any]:
+def sync_score_indicator(category: str, indicator: str, value: float, user_id: int,
+                         symbol: str = "BTC") -> Dict[str, Any]:
     from backend.utils.db import get_db_connection
     from backend.utils.scoring_engine import score_indicator
+    from backend.utils.market_interpreter import normalize_market_value_with_history
     conn = get_db_connection()
     try:
         if not conn:
             raise RuntimeError("Geen databaseverbinding voor scoring engine.")
-        return score_indicator(conn=conn, category=category, indicator=indicator, value=value, user_id=user_id)
+        normalized_value = normalize_market_value_with_history(conn, symbol, indicator, value)
+        if normalized_value is None:
+            raise HTTPException(422, "Onvoldoende historische marktdata voor deze indicatorscore.")
+        return score_indicator(conn=conn, category=category, indicator=indicator,
+                               value=normalized_value,
+                               user_id=user_id, symbol=symbol)
     finally:
         if conn:
             conn.close()
@@ -628,7 +635,8 @@ class MarketDataService:
 
         # Bereken score asynchroon in thread
         normalized = normalize_indicator_name(indicator_name)
-        scored = await asyncio.to_thread(sync_score_indicator, "market", normalized, value, int(user_id))
+        scored = await asyncio.to_thread(sync_score_indicator, "market", normalized, value,
+                                         int(user_id), symbol)
 
         score = require_indicator_score(scored, indicator_name)
         trend = scored.get("trend") or "neutral"

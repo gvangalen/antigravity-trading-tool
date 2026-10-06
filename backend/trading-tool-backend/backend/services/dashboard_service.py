@@ -87,9 +87,14 @@ class DashboardService:
             # Execute Sync Scoring Request
             scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id, symbol)
             
-            macro_score = scores.get("macro_score", 0)
-            technical_score = scores.get("technical_score", 0)
-            market_score = scores.get("market_score", 0)
+            from backend.services.setup_market_match_service import SetupMarketMatchService
+            score_assessment = await SetupMarketMatchService(self.session).for_asset(
+                user_id, symbol, setups=[],
+            )
+            component_status = score_assessment["component_source_status"]
+            macro_score = scores.get("macro_score") if component_status["macro_score"] == "fresh" else None
+            technical_score = scores.get("technical_score") if component_status["technical_score"] == "fresh" else None
+            market_score = scores.get("market_score") if component_status["market_score"] == "fresh" else None
             
             # GET DYNAMIC SETUP SCORE
             from backend.services.setup_service import SetupService
@@ -274,10 +279,14 @@ class DashboardService:
                 scores = {}
 
             price_info = prices_data.get(sym, {}) if isinstance(prices_data, dict) else {}
-            macro_val = float(scores["macro_score"]) if scores.get("macro_score") is not None else None
-            tech_val = float(scores["technical_score"]) if scores.get("technical_score") is not None else None
-            mkt_val = float(scores["market_score"]) if scores.get("market_score") is not None else None
             assessment = await match_service.for_asset(user_id, sym, setups=owned_setups)
+            component_status = assessment["component_source_status"]
+            macro_val = (float(scores["macro_score"]) if component_status["macro_score"] == "fresh"
+                         and scores.get("macro_score") is not None else None)
+            tech_val = (float(scores["technical_score"]) if component_status["technical_score"] == "fresh"
+                        and scores.get("technical_score") is not None else None)
+            mkt_val = (float(scores["market_score"]) if component_status["market_score"] == "fresh"
+                       and scores.get("market_score") is not None else None)
             ranked_match = assessment["matches"][0] if assessment["matches"] else None
             setup_match_score = ranked_match["score"] if ranked_match else None
             setup_match_status = ranked_match["status"] if ranked_match else (

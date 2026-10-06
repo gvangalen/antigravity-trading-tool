@@ -43,6 +43,17 @@ def test_provider_fetches_quote_value(monkeypatch):
     assert provider.fetch_latest_value("gold_price") == pytest.approx(4333.46)
 
 
+def test_provider_preserves_quote_observation_time(monkeypatch):
+    def fake_get(url, params=None, timeout=10, headers=None):
+        return _Response({"close": "2000", "timestamp": 1791266400})
+
+    monkeypatch.setattr("backend.services.providers.twelve_data_macro_provider.requests.get", fake_get)
+    reading = TwelveDataMacroProvider(api_key="test-key").fetch_quote_reading("XAU/USD")
+
+    assert reading["value"] == 2000
+    assert reading["observed_at"].timestamp() == 1791266400
+
+
 def test_provider_returns_none_for_non_twelve_data_macro():
     provider = TwelveDataMacroProvider(api_key="test-key")
 

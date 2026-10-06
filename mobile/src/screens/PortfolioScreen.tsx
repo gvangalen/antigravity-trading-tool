@@ -2113,7 +2113,7 @@ function buildTradePrefill({
   overview?: MobileOverviewResponse['watchlist'][number];
 }) {
   const scoreLine = overview
-    ? `macro ${clampScore(overview.macro_score)}, market ${clampScore(overview.market_score)}, technical ${clampScore(overview.technical_score)}, benchmark ${overview.benchmark_score ?? 'niet beschikbaar'}, setupmatch ${overview.setup_match_score ?? 'niet beschikbaar'}`
+    ? `macro ${overview.macro_score == null ? 'niet beschikbaar' : clampScore(overview.macro_score)}, market ${overview.market_score == null ? 'niet beschikbaar' : clampScore(overview.market_score)}, technical ${overview.technical_score == null ? 'niet beschikbaar' : clampScore(overview.technical_score)}, benchmark ${overview.benchmark_score ?? 'niet beschikbaar'}, setupmatch ${overview.setup_match_score ?? 'niet beschikbaar'}`
     : 'geen scoredata beschikbaar';
   const requestedAmount = amountValue.trim() ? `${amountValue.trim()} ${amountUnit}` : 'nog geen bedrag gekozen';
 

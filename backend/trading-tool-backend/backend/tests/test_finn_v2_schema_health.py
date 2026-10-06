@@ -6,6 +6,8 @@ from backend.scripts.check_finn_v2_schema import FinnV2SchemaHealthError, assert
 
 
 RUNTIME_CONTRACT_METADATA = {
+    ("daily_scores", "calculated_at"): ("timestamp with time zone", "timestamptz", "YES", None),
+    ("daily_scores", "indicator_evidence"): ("jsonb", "jsonb", "YES", None),
     ("market_data", "source_observed_at"): ("timestamp without time zone", "timestamp", "YES", None),
     ("macro_data", "source_observed_at"): ("timestamp without time zone", "timestamp", "YES", None),
     ("market_data_indicators", "source_observed_at"): ("timestamp without time zone", "timestamp", "YES", None),

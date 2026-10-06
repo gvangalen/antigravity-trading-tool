@@ -82,7 +82,7 @@ def _release_rule_based_scores_lease(client) -> None:
 # =========================================================
 # 1️⃣ BUILD DAILY SCORES (RULE-BASED) — PER USER
 # =========================================================
-def build_daily_scores_for_user(user_id: int):
+def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
     """
     Bouwt daily_scores voor de assets in de watchlist van de user.
     """
@@ -95,19 +95,27 @@ def build_daily_scores_for_user(user_id: int):
 
     try:
         # 1. Haal watchlist op
-        with conn.cursor() as cur:
-            cur.execute("SELECT symbol FROM watchlists WHERE user_id = %s", (user_id,))
-            watchlist = [r[0] for r in cur.fetchall()]
+        if symbols is None:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT symbol FROM watchlists WHERE user_id = %s
+                    UNION SELECT symbol FROM setups WHERE user_id = %s
+                    UNION SELECT symbol FROM user_indicator_configs
+                          WHERE user_id = %s AND enabled = TRUE AND symbol IS NOT NULL
+                """, (user_id, user_id, user_id))
+                watchlist = [str(row[0]).upper() for row in cur.fetchall() if row[0]]
+        else:
+            watchlist = list(dict.fromkeys(str(item).strip().upper() for item in symbols if item))
 
         # 2. Als er geen watchlist is, doen we een fallback naar BTC (of niks?)
-        if not watchlist:
+        if not watchlist and symbols is None:
             logger.info(f"ℹ️ Geen watchlist voor user {user_id}. Gebruik BTC als fallback.")
             watchlist = ["BTC"]
 
         for symbol in watchlist:
             logger.info(f"🔍 Scannen van asset {symbol} voor user {user_id}")
             
-            macro = generate_scores_db("macro", user_id=user_id) # Macro is vaak global maar kan symbol-aware zijn
+            macro = generate_scores_db("macro", user_id=user_id, symbol=symbol)
             technical = generate_scores_db("technical", user_id=user_id, symbol=symbol)
             market = generate_scores_db("market", user_id=user_id, symbol=symbol)
 
@@ -125,13 +133,15 @@ def build_daily_scores_for_user(user_id: int):
                         report_date, user_id, symbol,
                         macro_score, technical_score, market_score, setup_score,
                         macro_interpretation, technical_interpretation, market_interpretation,
-                        macro_top_contributors, technical_top_contributors, market_top_contributors
+                        macro_top_contributors, technical_top_contributors, market_top_contributors,
+                        calculated_at, indicator_evidence
                     )
                     VALUES (
                         CURRENT_DATE, %s, %s,
                         %s, %s, %s, %s,
                         %s, %s, %s,
-                        %s::jsonb, %s::jsonb, %s::jsonb
+                        %s::jsonb, %s::jsonb, %s::jsonb,
+                        CURRENT_TIMESTAMP, %s::jsonb
                     )
                     ON CONFLICT (user_id, symbol, report_date)
                     DO UPDATE SET
@@ -144,7 +154,9 @@ def build_daily_scores_for_user(user_id: int):
                         market_interpretation = EXCLUDED.market_interpretation,
                         macro_top_contributors = EXCLUDED.macro_top_contributors,
                         technical_top_contributors = EXCLUDED.technical_top_contributors,
-                        market_top_contributors = EXCLUDED.market_top_contributors;
+                        market_top_contributors = EXCLUDED.market_top_contributors,
+                        calculated_at = EXCLUDED.calculated_at,
+                        indicator_evidence = EXCLUDED.indicator_evidence;
                     """,
                     (
                         user_id, symbol,
@@ -153,6 +165,9 @@ def build_daily_scores_for_user(user_id: int):
                         _jsonb(list(macro.get("scores", {}).keys())),
                         _jsonb(list(technical.get("scores", {}).keys())),
                         _jsonb(list(market.get("scores", {}).keys())),
+                        _jsonb({category: result.get("scores", {}) for category, result in (
+                            ("macro", macro), ("technical", technical), ("market", market)
+                        )}),
                     ),
                 )
         

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import date, datetime
 
@@ -25,9 +25,10 @@ class ActiveSetupResponse(BaseModel):
     status: Optional[str] = None
 
 class CategoryScoreResponse(BaseModel):
-    score: float
+    score: Optional[float] = None
     interpretation: str
     top_contributors: List[str]
+    source_status: Optional[str] = None
 
 class SetupScoreResponse(BaseModel):
     score: Optional[float] = None
@@ -44,6 +45,8 @@ class DailyCombinedScoreResponse(BaseModel):
     report_date: Optional[date] = None
     benchmark_score: Optional[float] = None
     benchmark_weights: Optional[Dict[str, float]] = None
+    calculated_at: Optional[datetime] = None
+    indicator_evidence: Dict[str, Any] = Field(default_factory=dict)
 
 class MasterScoreResponse(BaseModel):
     master_score: Optional[float] = None

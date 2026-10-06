@@ -356,12 +356,18 @@ def test_source_freshness_rejects_missing_configured_indicator():
     async def run():
         now = datetime.now(timezone.utc)
         results = [
-            SimpleNamespace(fetchall=lambda: [("rsi",), ("macd",)]),
-            SimpleNamespace(fetchall=lambda: [("rsi", now - timedelta(hours=1))]),
+            SimpleNamespace(fetchall=lambda: [("rsi", now - timedelta(hours=2)),
+                                              ("macd", now - timedelta(hours=2))]),
+            SimpleNamespace(fetchall=lambda: [("rsi", 45, now - timedelta(hours=1))]),
         ]
         session = SimpleNamespace(execute=AsyncMock(side_effect=results))
         service = SetupMarketMatchService(session)
-        assert await service._source_is_fresh(7, "BTC", "technical") is False
+        assert await service._source_is_fresh(7, "BTC", "technical", {
+            "calculated_at": now,
+            "indicator_evidence": {"technical": {
+                "rsi": {"value": 45, "source_observed_at": (now - timedelta(hours=1)).isoformat()},
+            }},
+        }) is False
 
     asyncio.run(run())
 

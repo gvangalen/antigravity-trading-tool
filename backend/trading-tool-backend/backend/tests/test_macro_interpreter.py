@@ -143,9 +143,11 @@ def test_gold_prefers_twelve_data_when_configured(monkeypatch):
         def supports_indicator(self, indicator_name):
             return indicator_name == "gold_price"
 
-        def fetch_latest_value(self, indicator_name):
-            assert indicator_name == "gold_price"
-            return 4333.46
+        SYMBOL_MAP = {"gold_price": "XAU/USD"}
+
+        def fetch_quote_reading(self, provider_symbol):
+            assert provider_symbol == "XAU/USD"
+            return {"value": 4333.46}
 
     monkeypatch.setattr("backend.utils.macro_interpreter.TwelveDataMacroProvider", lambda: FakeProvider())
 
@@ -178,7 +180,7 @@ def test_google_trends_returns_latest_interest_value(monkeypatch):
                 )
             return FakeResponse(
                 """)]}'
-{"default":{"timelineData":[{"value":[42]},{"value":[55]}]}}"""
+{"default":{"timelineData":[{"time":"1770000000","value":[42]},{"time":"1780000000","value":[55]}]}}"""
             )
 
     monkeypatch.setattr("backend.utils.macro_interpreter.requests.Session", FakeSession)
@@ -189,7 +191,7 @@ def test_google_trends_returns_latest_interest_value(monkeypatch):
         link="https://trends.google.com/trends/api/widgetdata/multiline",
     )
 
-    assert result == {"value": 55.0}
+    assert result == {"value": 55.0, "observed_at": "1780000000"}
 
 
 def test_etf_bitcoin_inflow_returns_latest_total_from_bitbo_table(monkeypatch):
@@ -220,13 +222,13 @@ def test_etf_bitcoin_inflow_returns_latest_total_from_bitbo_table(monkeypatch):
         link="https://api.farside.co.uk/v1/etf/btc/latest",
     )
 
-    assert result == {"value": 274.3}
+    assert result == {"value": 274.3, "observed_at": "2026-08-05"}
 
 
 def test_dxy_derived_uses_twelve_data_before_other_routes(monkeypatch):
     class FakeProvider:
-        def fetch_derived_dxy(self):
-            return 99.86
+        def fetch_derived_dxy_reading(self):
+            return {"value": 99.86}
 
     monkeypatch.setattr("backend.utils.macro_interpreter.TwelveDataMacroProvider", lambda: FakeProvider())
 

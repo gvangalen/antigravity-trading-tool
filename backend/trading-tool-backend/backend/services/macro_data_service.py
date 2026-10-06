@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import List, Optional, Dict, Any
 from types import SimpleNamespace
 
@@ -204,6 +204,7 @@ class MacroDataService:
                     payload_value=None,
                     symbol=normalized_symbol,
                     persist_preference=False,
+                    refresh_existing=True,
                 )
                 results["synced"].append({"indicator": indicator_name, "payload": payload.dict()})
             except HTTPException as exc:
@@ -222,7 +223,8 @@ class MacroDataService:
         from backend.utils.macro_interpreter import fetch_macro_value
         return fetch_macro_value(name, source=source, link=link)
 
-    def _sync_score_indicator(self, category: str, indicator: str, value: float, user_id: int):
+    def _sync_score_indicator(self, category: str, indicator: str, value: float,
+                              user_id: int, symbol: str = "BTC", observed_at=None):
         from backend.utils.db import get_db_connection
         from backend.utils.scoring_engine import score_indicator
         
@@ -230,7 +232,15 @@ class MacroDataService:
         if not conn:
             return {}
         try:
-            return score_indicator(conn=conn, category=category, indicator=indicator, value=value, user_id=user_id)
+            from backend.utils.macro_interpreter import normalize_macro_value_with_history
+            normalized = normalize_macro_value_with_history(conn, user_id, indicator, value, observed_at)
+            if normalized is None:
+                return {"score": None, "trend": None,
+                        "interpretation": "Nog onvoldoende gedateerde meetpunten voor deze indicator.",
+                        "action": None, "source_status": "insufficient_indicator_history"}
+            return score_indicator(conn=conn, category=category, indicator=indicator,
+                                   value=normalized,
+                                   user_id=user_id, symbol=symbol)
         finally:
             conn.close()
 
@@ -249,6 +259,7 @@ class MacroDataService:
         symbol: Optional[str] = None,
         *,
         persist_preference: bool = True,
+        refresh_existing: bool = False,
     ) -> MacroAddResponse:
         indicator_name = raw_name.strip()
         if not indicator_name:
@@ -266,7 +277,7 @@ class MacroDataService:
             )
 
         exists = await self.repository.check_indicator_exists(user_id, indicator_name, symbol=normalized_symbol)
-        if exists:
+        if exists and not refresh_existing:
             raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor deze gebruiker en asset.")
 
         # Get config
@@ -293,10 +304,27 @@ class MacroDataService:
                     raise HTTPException(500, f"Geen waarde ontvangen voor '{indicator_name}'")
 
                 value = _extract_numeric_result(result)
-                if str(info.source or "").lower() == "fred":
+                observed = result.get("observed_at") if isinstance(result, dict) else None
+                try:
+                    if isinstance(observed, datetime):
+                        source_observed_at = observed.astimezone(timezone.utc).replace(tzinfo=None) if observed.tzinfo else observed
+                    elif isinstance(observed, (int, float)):
+                        source_observed_at = datetime.fromtimestamp(float(observed), timezone.utc).replace(tzinfo=None)
+                    elif observed:
+                        observed_text = str(observed).strip()
+                        source_observed_at = (
+                            datetime.fromtimestamp(float(observed_text), timezone.utc).replace(tzinfo=None)
+                            if observed_text.isdigit()
+                            else datetime.fromisoformat(observed_text.replace("Z", "+00:00"))
+                        )
+                        if source_observed_at.tzinfo:
+                            source_observed_at = source_observed_at.astimezone(timezone.utc).replace(tzinfo=None)
+                except (TypeError, ValueError, OverflowError):
+                    source_observed_at = None
+                if str(info.source or "").lower() == "fred" and source_observed_at is None:
                     try:
                         source_observed_at = datetime.combine(
-                            date.fromisoformat(str(result.get("observed_at") or "")), time.min,
+                            date.fromisoformat(str(observed or "")), time.min,
                         )
                     except (AttributeError, TypeError, ValueError):
                         raise HTTPException(503, f"Bronperiode ontbreekt voor '{indicator_name}'.")
@@ -305,12 +333,29 @@ class MacroDataService:
             except Exception as e:
                 logger.error("Error fetching value macro for '%s': %s", indicator_name, e)
                 raise HTTPException(500, f"Fout bij ophalen dynamische waarde.")
+        if refresh_existing and source_observed_at is None:
+            raise HTTPException(503, f"Bronmoment ontbreekt voor '{indicator_name}'.")
+        if refresh_existing and exists:
+            latest = await self.repository.get_latest_indicator(
+                user_id, indicator_name, symbol=normalized_symbol,
+            )
+            if latest and (
+                latest.source_observed_at == source_observed_at
+                and float(latest.value) == float(value)
+            ):
+                return MacroAddResponse(
+                    message=f"Indicator '{indicator_name}' is al actueel.",
+                    value=value, score=latest.score, trend=latest.trend,
+                    interpretation=latest.interpretation, action=latest.action,
+                )
 
         # Score the value
         normalized = normalize_indicator_name(indicator_name)
 
-        scored = await asyncio.to_thread(self._sync_score_indicator, "macro", normalized, value, user_id)
-        score = require_indicator_score(scored, indicator_name)
+        scored = await asyncio.to_thread(self._sync_score_indicator, "macro", normalized,
+                                         value, user_id, normalized_symbol or "BTC", source_observed_at)
+        score = (None if scored.get("source_status") == "insufficient_indicator_history"
+                 else require_indicator_score(scored, indicator_name))
         trend = scored.get("trend") or "neutral"
         interpretation = scored.get("interpretation") or "Geen interpretatie beschikbaar"
         action = scored.get("action") or "Geen actie"
@@ -326,7 +371,6 @@ class MacroDataService:
             symbol=normalized_symbol,
             user_id=user_id,
             source_observed_at=source_observed_at,
-            **({"timestamp": source_observed_at} if source_observed_at is not None else {}),
         )
         saved_record = await self.repository.add_macro_data(record)
 
