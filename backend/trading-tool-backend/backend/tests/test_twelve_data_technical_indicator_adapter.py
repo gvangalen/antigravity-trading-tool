@@ -4,6 +4,7 @@ import pytest
 
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.providers.twelve_data_technical_indicator_adapter import (
+    TechnicalSourceRateLimited,
     TwelveDataTechnicalIndicatorAdapter,
 )
 from backend.services.providers.twelve_data_response_cache import TwelveDataResponseCache
@@ -100,6 +101,93 @@ def test_technical_failover_uses_same_provider_for_value_and_source_time():
 
 def test_twelve_data_transport_does_not_log_query_parameter_credentials():
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+
+
+def test_twelve_data_http_429_is_typed_as_temporary_source_limit(monkeypatch):
+    import asyncio
+    import httpx
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, params):
+            return httpx.Response(429, request=httpx.Request("GET", url, params=params))
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_technical_indicator_adapter.httpx.AsyncClient",
+        _Client,
+    )
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    with pytest.raises(TechnicalSourceRateLimited):
+        asyncio.run(adapter._get_twelve_data_candles("AAPL"))
+
+
+def test_twelve_data_payload_429_is_typed_as_temporary_source_limit(monkeypatch):
+    import asyncio
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"status": "error", "code": 429}
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, *_args, **_kwargs):
+            return _Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_technical_indicator_adapter.httpx.AsyncClient",
+        _Client,
+    )
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    with pytest.raises(TechnicalSourceRateLimited):
+        asyncio.run(adapter._get_twelve_data_candles("AAPL"))
+
+
+def test_binance_http_429_is_typed_as_temporary_source_limit(monkeypatch):
+    import asyncio
+    import httpx
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, params):
+            return httpx.Response(429, request=httpx.Request("GET", url, params=params))
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_technical_indicator_adapter.httpx.AsyncClient",
+        _Client,
+    )
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    with pytest.raises(TechnicalSourceRateLimited):
+        asyncio.run(adapter._get_binance_candles("BTCUSDT"))
 
 
 def test_crypto_indicator_falls_back_to_binance_without_twelve_data_key():

@@ -14,6 +14,7 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.technical_indicator_provider_registry import TechnicalIndicatorProviderRegistry
+from backend.services.providers.twelve_data_technical_indicator_adapter import TechnicalSourceRateLimited
 from backend.utils.technical_interpreter import fetch_technical_value
 from backend.utils.technical_interpreter import normalize_technical_value
 from backend.utils.scoring_engine import score_indicator
@@ -223,6 +224,7 @@ class TechnicalDataService:
             user_id,
             symbol=symbol,
             persist_preference=True,
+            allow_pending_source=True,
         )
 
     async def _reset_symbol_indicator_rows(self, user_id: int, symbol: str) -> None:
@@ -322,9 +324,17 @@ class TechnicalDataService:
         *,
         symbol: str = "BTC",
         persist_preference: bool = True,
+        allow_pending_source: bool = False,
     ) -> Dict[str, Any]:
         name = normalize_indicator_name(name_raw)
         asset_scope = await self._get_asset_scope(symbol)
+
+        cfg = self._resolve_indicator_config(
+            name,
+            await self.repository.get_indicator_config(name),
+        )
+        if not cfg:
+            raise ValueError(f"Indicator '{name}' niet gevonden of niet actief.")
 
         if persist_preference:
             await self.repository.ensure_user_config(
@@ -334,19 +344,27 @@ class TechnicalDataService:
                 asset_class=asset_scope.get("asset_class"),
             )
 
-        cfg = self._resolve_indicator_config(
-            name,
-            await self.repository.get_indicator_config(name),
-        )
-        if not cfg:
-            raise ValueError(f"Indicator '{name}' niet gevonden of niet actief.")
-
-        result = await self._fetch_indicator_value(
-            name=name,
-            source=cfg.source,
-            link=cfg.link,
-            symbol=symbol,
-        )
+        try:
+            result = await self._fetch_indicator_value(
+                name=name,
+                source=cfg.source,
+                link=cfg.link,
+                symbol=symbol,
+            )
+        except TechnicalSourceRateLimited:
+            if not allow_pending_source or not persist_preference:
+                raise
+            # The saved owner-scoped configuration is useful even while the
+            # provider refuses a measurement. The workspace projects it with
+            # null value/score until a later refresh succeeds.
+            return {
+                "status": "pending_source",
+                "indicator": name,
+                "symbol": symbol,
+                "value": None,
+                "score": None,
+                "message": "Indicator opgeslagen; meetwaarde wacht op de databron. Probeer later te verversen.",
+            }
         if not result:
             raise ValueError(f"Geen waarde ontvangen voor '{name}' ({symbol}).")
 

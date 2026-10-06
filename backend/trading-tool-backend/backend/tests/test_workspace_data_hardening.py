@@ -326,6 +326,7 @@ def test_workspace_projects_configured_technical_without_live_observation():
     assert [row["name"] for row in rows] == ["rsi", "ma_200"]
     assert all(row["configured"] is True for row in rows)
     assert all(row["data_status"] == "pending_refresh" for row in rows)
+    assert all(row["value"] is None and row["score"] is None for row in rows)
 
 
 def test_workspace_projects_arbitrary_configured_market_indicator_without_live_observation():

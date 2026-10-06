@@ -419,17 +419,19 @@ export default function IndicatorConfigModal({
     setSaveError("");
 
     try {
-      await persistIndicatorConfiguration({
+      const result = await persistIndicatorConfiguration({
         mode, indicator, category, assetSymbol, draft,
         onSubmitAction, saveCustomRules, updateIndicatorSettings,
       });
 
       if (showSuccessSnackbar) {
         showSnackbar(
-          mode === "edit"
+          result?.pendingSource
+            ? `${indicatorLabel} is ingesteld. De meetwaarde wacht op de databron; er is nog geen score.`
+            : mode === "edit"
             ? copy.saved.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel)
             : copy.added.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel),
-          "success"
+          result?.pendingSource ? "info" : "success"
         );
       }
 
@@ -438,6 +440,7 @@ export default function IndicatorConfigModal({
         category,
         assetSymbol,
         draft,
+        pendingSource: result?.pendingSource,
       });
 
       onClose?.();

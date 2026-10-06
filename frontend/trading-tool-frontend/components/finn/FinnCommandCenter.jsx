@@ -401,7 +401,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
           if (category === "macro") return macroDataAdd(indicator, assetSymbol);
           if (category === "market") return marketIndicatorAdd(indicator, assetSymbol);
         }}
-        onCompleted={({ category, indicator, assetSymbol, partial, error }) => {
+        onCompleted={({ category, indicator, assetSymbol, partial, error, pendingSource }) => {
           const params = new URLSearchParams({
             symbol: assetSymbol,
             context: category,
@@ -419,7 +419,12 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
           router.push(withVariant(`/asset?${params.toString()}`, activeVariant), { scroll: false });
           setPendingIndicator(null);
           onQueryChange("");
-          showSnackbar(partial ? error : `${String(indicator).toUpperCase()} ${copy.added}.`, partial ? "danger" : "success");
+          showSnackbar(
+            partial ? error : pendingSource
+              ? `${String(indicator).toUpperCase()} is ingesteld. De meetwaarde wacht op de databron; er is nog geen score.`
+              : `${String(indicator).toUpperCase()} ${copy.added}.`,
+            partial ? "danger" : pendingSource ? "info" : "success"
+          );
         }}
       />
     </>

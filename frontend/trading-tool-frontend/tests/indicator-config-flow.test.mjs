@@ -31,6 +31,22 @@ test("custom settings save all five rules and chosen weight in one request", asy
   }]);
 });
 
+test("temporary source limit preserves pending indicator through settings save", async () => {
+  const events = [];
+  const result = await persistIndicatorConfiguration({
+    ...input, indicator: "ma_200", category: "technical",
+    draft: { score_mode: "standard", weight: 1.3 },
+    onSubmitAction: async () => {
+      events.push("configured");
+      return { status: "pending_source", value: null, score: null };
+    },
+    saveCustomRules: async () => events.push("unexpected rules"),
+    updateIndicatorSettings: async () => events.push("settings"),
+  });
+  assert.deepEqual(events, ["configured", "settings"]);
+  assert.deepEqual(result, { pendingSource: true });
+});
+
 test("validation error shows server detail; failed settings after add are described accurately", async () => {
   const validation = Object.assign(new Error("invalid"), {
     status: 422, body: JSON.stringify({ detail: "Onvoldoende historische metingen." }),

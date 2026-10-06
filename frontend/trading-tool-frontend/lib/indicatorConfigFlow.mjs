@@ -4,9 +4,10 @@ export async function persistIndicatorConfiguration({
 }) {
   const input = { indicator, category, assetSymbol, draft };
   let indicatorCreated = false;
+  let addResult = null;
   try {
     if (mode === "add" && onSubmitAction) {
-      await onSubmitAction(input);
+      addResult = await onSubmitAction(input);
       indicatorCreated = true;
     }
 
@@ -24,6 +25,7 @@ export async function persistIndicatorConfiguration({
     }
 
     if (mode !== "add") await onSubmitAction?.(input);
+    return { pendingSource: addResult?.status === "pending_source" };
   } catch (error) {
     throw Object.assign(error instanceof Error ? error : new Error(String(error)), { indicatorCreated });
   }
