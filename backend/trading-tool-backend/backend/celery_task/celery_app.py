@@ -212,11 +212,6 @@ celery_app.conf.beat_schedule = {
         crontab(minute="*/15"),
     ),
 
-    "dispatch_setup_agent": build_dispatch_schedule_entry(
-        "backend.celery_task.setup_task.run_setup_agent_daily",
-        crontab(minute="*/15"),
-    ),
-
     "dispatch_trading_bot": build_dispatch_schedule_entry(
         "backend.celery_task.trading_bot_task.run_daily_trading_bot",
         crontab(minute="*/15"),
@@ -275,7 +270,6 @@ celery_app.conf.beat_schedule = {
 
 LEGACY_PERIODIC_AI_SCHEDULES = frozenset(
     {
-        "dispatch_setup_agent",
         "macro_ai",
         "market_ai",
         "technical_ai",

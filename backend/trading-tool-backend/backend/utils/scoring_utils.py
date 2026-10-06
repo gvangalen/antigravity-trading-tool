@@ -233,9 +233,7 @@ def get_scores_for_symbol(user_id: int, symbol: str = "BTC", include_metadata: b
 
                     market_score,
                     market_interpretation,
-                    market_top_contributors,
-
-                    setup_score
+                    market_top_contributors
                 FROM daily_scores
                 WHERE user_id = %s
                   AND report_date = CURRENT_DATE
@@ -259,8 +257,6 @@ def get_scores_for_symbol(user_id: int, symbol: str = "BTC", include_metadata: b
             "market_score": row[6],
             "market_interpretation": row[7],
             "market_top_contributors": row[8] or [],
-
-            "setup_score": row[9],
         }
 
     finally:

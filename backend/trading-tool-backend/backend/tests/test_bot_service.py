@@ -634,30 +634,28 @@ def test_live_order_portfolio_exposure_reports_asset_projection_when_asset_does_
     assert projection["would_block"] is False
 
 
-def test_live_order_risk_context_requires_ack_for_blocked_setup(monkeypatch):
-    class FakeScoreRepository:
+def test_live_order_preflight_reports_setup_match_without_blocking(monkeypatch):
+    class FakeMatchService:
         def __init__(self, session):
             pass
 
-        async def fetch_active_setups(self, user_id):
-            return [{"id": 42, "is_active": False, "score": 0}]
+        async def for_asset(self, user_id, symbol):
+            assert (user_id, symbol) == (1, "BTC")
+            return {"source_status": "available", "matches": [
+                {"setup_id": 42, "status": "outside_conditions", "score": 35},
+            ]}
 
-    monkeypatch.setattr("backend.infrastructure.repositories.score_repository.ScoreRepository", FakeScoreRepository)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", FakeMatchService)
     service = BotService(_FakeSession())
     repo = _ManualOrderRepo(bot_setup_id=42)
     service.repository = repo
     bot = asyncio.run(repo.get_bot_config(1, 9))
     payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000)
 
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
-
-    assert exc.value.status_code == 409
-    assert exc.value.detail["code"] == "LIVE_SETUP_BLOCK_ACK_REQUIRED"
-
-    payload.setup_block_acknowledged = True
     result = asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
-    assert any(check["code"] == "blocked_setup_ack" for check in result["checks"])
+    assert {"code": "setup_match_information", "ok": True, "setup_id": 42,
+            "status": "outside_conditions", "setup_match_score": 35,
+            "source_status": "available", "execution_blocked": False} in result["checks"]
 
 
 def test_fresh_live_market_price_context_returns_snapshot():

@@ -33,7 +33,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
       </div>
       <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1">{label}</div>
       <div className={`text-2xl font-black tracking-tighter tabular-nums ${
-        value >= 70 ? "text-green-600" : value <= 30 ? "text-red-500" : "text-foreground"
+        value == null ? "text-secondary" : value >= 70 ? "text-green-600" : value <= 30 ? "text-red-500" : "text-foreground"
       }`}>
         {value ?? "—"}
       </div>

@@ -715,19 +715,19 @@ class BotService:
 
         setup_id = bot.get("setup_id")
         if setup_id:
-            from backend.infrastructure.repositories.score_repository import ScoreRepository
-            setups = await ScoreRepository(self.session).fetch_active_setups(user_id)
-            setup = next((item for item in setups if int(item.get("id") or 0) == int(setup_id)), None)
-            if setup and not bool(setup.get("is_active")):
-                if not payload.setup_block_acknowledged:
-                    raise HTTPException(409, {
-                        "code": "LIVE_SETUP_BLOCK_ACK_REQUIRED",
-                        "message": "Deze live order hoort bij een setup die vandaag niet actief is. Bevestig bewust met setup_block_acknowledged=true.",
-                        "setup_id": setup_id,
-                        "setup_score": float(setup.get("score") or 0),
-                        "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "live order terwijl setup vandaag blokkeert"),
-                    })
-                checks.append({"code": "blocked_setup_ack", "ok": True, "setup_id": setup_id, "setup_score": float(setup.get("score") or 0)})
+            from backend.services.setup_market_match_service import SetupMarketMatchService
+            matches = await SetupMarketMatchService(self.session).for_asset(user_id, symbol)
+            setup_match = next(
+                (item for item in matches["matches"] if int(item.get("setup_id") or 0) == int(setup_id)),
+                None,
+            )
+            checks.append({
+                "code": "setup_match_information", "ok": True, "setup_id": setup_id,
+                "status": setup_match["status"] if setup_match else "not_found",
+                "setup_match_score": setup_match["score"] if setup_match else None,
+                "source_status": matches["source_status"],
+                "execution_blocked": False,
+            })
 
         return {"ok": True, "checks": checks}
 

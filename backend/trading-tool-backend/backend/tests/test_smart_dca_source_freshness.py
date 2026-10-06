@@ -163,7 +163,7 @@ def test_smart_dca_execution_rejects_freshly_stamped_score_with_old_component():
             self.sql = sql
 
         def fetchone(self):
-            return (60, 60, 60, 60)
+            return (60, 60, 60)
 
         def fetchall(self):
             return [("fear_greed_index", old)]

@@ -15,6 +15,7 @@ from backend.infrastructure.repositories.strategy_repository import StrategyRepo
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.finn_v2_active_plan_resolver import FinnV2ActivePlanResolver
+from backend.services.setup_market_match_service import SetupMarketMatchService
 
 
 EntityType = Literal["setup", "strategy", "bot"]
@@ -754,10 +755,21 @@ class FinnV2EntityResolutionService:
                         return {"setup": dict(row), "resolution_source": "explicit_bot_link"}
             raise LookupError("setup_not_resolved")
 
+        candidates = [
+            {key: value for key, value in dict(row).items() if key not in {"is_active", "is_best", "score"}}
+            for row in await self.setups.get_user_setups(user_id)
+        ]
+        matcher = SetupMarketMatchService(self.session)
+        assessment = (
+            await matcher.for_asset(user_id, asset, setups=candidates)
+            if asset else await matcher.for_all_assets(user_id, setups=candidates)
+        )
+        best = next((match for match in assessment["matches"] if match["is_active"]), None)
+        active_setup = next(
+            (row for row in candidates if best and row.get("id") == best["setup_id"]), None
+        )
         resolution = self.active_plans.resolve(
-            asset=asset,
-            active_setup=await self.setups.get_active_setup(user_id),
-            candidates=await self.setups.get_user_setups(user_id),
+            asset=asset, active_setup=active_setup, candidates=candidates,
         )
         if resolution.setup is not None:
             return {"setup": resolution.setup, "resolution_source": resolution.source}

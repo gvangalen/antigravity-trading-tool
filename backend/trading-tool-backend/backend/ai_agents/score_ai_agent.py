@@ -20,11 +20,6 @@ logger.setLevel(logging.INFO)
 DOMAIN_CATEGORIES = ["macro", "market", "technical", "setup", "strategy"]
 MASTER_CATEGORY = "master"
 
-# Zet dit op True als je master-agent óók daily_scores wil vullen
-# (meestal niet nodig als macro/market/technical/setup agents dat al doen)
-WRITE_DAILY_SCORES = False
-
-
 # ============================================================
 # ⚙️ Helpers
 # ============================================================
@@ -164,19 +159,6 @@ def fetch_today_insights(conn, user_id: int, symbol: str = "BTC") -> Dict[str, d
                 insights[cat] = result
 
     return insights
-
-
-# ============================================================
-# ✅ Helper: Setup-score ophalen (UIT SETUP agent insights)
-# ============================================================
-def fetch_setup_score_from_insights(insights: Dict[str, dict]) -> Optional[float]:
-    try:
-        v = insights.get("setup", {}).get("avg_score")
-        if v is None:
-            return None
-        return float(v)
-    except Exception:
-        return None
 
 
 # ============================================================
@@ -528,88 +510,6 @@ def store_master_result(conn, result: dict, user_id: int, symbol: str = "BTC"):
 
 
 # ============================================================
-# 🕗 (OPTIONEEL) daily_scores vullen
-# ============================================================
-def store_daily_scores(conn, insights: Dict[str, dict], user_id: int):
-    macro = insights.get("macro", {}).get("avg_score")
-    market = insights.get("market", {}).get("avg_score")
-    technical = insights.get("technical", {}).get("avg_score")
-    setup_score = fetch_setup_score_from_insights(insights)
-
-    if macro is None or market is None or technical is None:
-        logger.warning(
-            f"⚠️ daily_scores niet bijgewerkt (macro/market/technical missen) user_id={user_id}"
-        )
-        return
-
-    # Vraag de actieve domeinen op voor deze berekening
-    has_macro = has_market = has_tech = True
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT min_macro_score, max_macro_score,
-                   min_market_score, max_market_score,
-                   min_technical_score, max_technical_score
-            FROM setups
-            WHERE user_id = %s
-        """, (user_id,))
-        setup_rows = cur.fetchall()
-        if setup_rows:
-            has_macro = any(r[0] is not None or r[1] is not None for r in setup_rows)
-            has_market = any(r[2] is not None or r[3] is not None for r in setup_rows)
-            has_tech = any(r[4] is not None or r[5] is not None for r in setup_rows)
-
-    # ✅ STRATEGY SCORE = Slim gemiddelde op basis van actieve setup domeinen
-    strategy_score = calculate_strategy_score(
-        macro=macro,
-        market=market,
-        technical=technical,
-        setup=setup_score,
-        has_macro=has_macro,
-        has_market=has_market,
-        has_tech=has_tech,
-    )
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO daily_scores
-                (
-                    report_date,
-                    user_id,
-                    macro_score,
-                    market_score,
-                    technical_score,
-                    setup_score,
-                    strategy_score
-                )
-            VALUES (
-                CURRENT_DATE,
-                %s,
-                %s, %s, %s, %s, %s
-            )
-            ON CONFLICT (report_date, user_id)
-            DO UPDATE SET
-                macro_score = EXCLUDED.macro_score,
-                market_score = EXCLUDED.market_score,
-                technical_score = EXCLUDED.technical_score,
-                setup_score = EXCLUDED.setup_score,
-                strategy_score = EXCLUDED.strategy_score;
-            """,
-            (
-                user_id,
-                macro,
-                market,
-                technical,
-                setup_score,
-                strategy_score,
-            ),
-        )
-
-    logger.info(
-        f"💾 daily_scores bijgewerkt incl. strategy_score={strategy_score} user_id={user_id}"
-    )
-    
-# ============================================================
 # 🚀 Per-user runner
 # ============================================================
 def generate_master_score_for_user(user_id: int, symbol: str = "BTC"):
@@ -764,9 +664,6 @@ RICHTLIJNEN:
         # 5️⃣ OPSLAAN
         # ======================================================
         store_master_result(conn, result, user_id=user_id, symbol=symbol)
-
-        if WRITE_DAILY_SCORES:
-            store_daily_scores(conn, insights, user_id=user_id)
 
         conn.commit()
         logger.info("✅ Master score opgeslagen | user_id=%s symbol=%s", user_id, symbol)

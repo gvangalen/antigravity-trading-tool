@@ -23,25 +23,21 @@ def test_fetch_auth_uses_method_aware_cache_policy():
     assert "Cache-Control" in source
 
 
-def test_dashboard_polling_is_visibility_aware_and_single_flight():
-    source = (FRONTEND_ROOT / "hooks" / "useDashboardData.js").read_text()
-
-    assert "FOREGROUND_POLL_INTERVAL_MS = 120000" in source
-    assert "BACKGROUND_POLL_INTERVAL_MS = 300000" in source
-    assert "document.visibilityState" in source
-    assert "visibilitychange" in source
-    assert "loadingRef.current" in source
-    assert "setInterval(load, 60000)" not in source
-
-
-def test_top_setups_polling_uses_visibility_and_single_flight():
-    source = (FRONTEND_ROOT / "components" / "setup" / "TopSetupsMini.jsx").read_text()
+def test_active_asset_workspace_polling_uses_visibility_and_shared_request_cache():
+    source = (FRONTEND_ROOT / "hooks" / "useAssetWorkspaceData.js").read_text()
+    cache = (FRONTEND_ROOT / "lib" / "clientDataCache.js").read_text()
 
     assert "useVisibilityPolling" in source
-    assert "loadingRef.current" in source
-    assert "backgroundIntervalMs: 180000" in source
-    assert "runImmediately: true" in source
-    assert "setInterval(() => loadTopSetups(), 60000)" not in source
+    assert "backgroundIntervalMs: 300_000" in source
+    assert "if (!forceFresh && entry.inflight)" in cache
+
+
+def test_my_plan_refreshes_setup_matches_only_while_visible():
+    source = (FRONTEND_ROOT / "components" / "workflows" / "MyPlanWorkflow.jsx").read_text()
+
+    assert 'document.visibilityState !== "visible"' in source
+    assert 'document.addEventListener("visibilitychange", refreshIfVisible)' in source
+    assert "fetchSetupMarketMatches()" in source
 
 
 def test_market_live_price_fetch_dedupes_same_symbol_requests():

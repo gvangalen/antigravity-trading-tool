@@ -35,13 +35,7 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       try {
         const resActive = await fetchAuth('/api/setups/active', { method: 'GET' });
         const active = normalizeSetupSaveResponse(resActive?.active ?? null);
-        if (active) {
-          setActiveSetup(active);
-        } else {
-          const resLast = await fetchAuth('/api/setups/last', { method: 'GET' });
-          const last = normalizeSetupSaveResponse(resLast?.setup ?? null);
-          setActiveSetup(last || null);
-        }
+        setActiveSetup(active || null);
       } catch (err) {
         console.error("❌ SetupProvider initial setup error:", err);
         setActiveSetup(null);

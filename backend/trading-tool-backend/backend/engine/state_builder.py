@@ -56,7 +56,7 @@ def fetch_latest_scores(user_id: int) -> Dict[str, Optional[float]]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT macro_score, market_score, technical_score, setup_score
+                SELECT macro_score, market_score, technical_score
                 FROM daily_scores
                 WHERE user_id = %s
                 ORDER BY report_date DESC
@@ -78,7 +78,7 @@ def fetch_latest_scores(user_id: int) -> Dict[str, Optional[float]]:
             "macro_score": _to_float(row[0]),
             "market_score": _to_float(row[1]),
             "technical_score": _to_float(row[2]),
-            "setup_score": _to_float(row[3]),
+            "setup_score": None,
         }
 
     finally:

@@ -6,7 +6,7 @@ class ScoresSchema(BaseModel):
     macro: float
     technical: float
     market: float
-    setup: float
+    setup: Optional[float] = None
 
 class ExplanationSchema(BaseModel):
     macro: str
@@ -15,7 +15,7 @@ class ExplanationSchema(BaseModel):
 
 class TopSetupSchema(BaseModel):
     name: str
-    score: float
+    score: Optional[float] = None
     timeframe: Optional[str] = None
     symbol: Optional[str] = None
     explanation: Optional[str] = None
@@ -52,10 +52,16 @@ class MobileAssetWatchlistSchema(BaseModel):
     logo_url: Optional[str] = None
     price: Optional[float] = None
     change_24h: Optional[float] = None
-    macro_score: float
-    technical_score: float
-    market_score: float
-    setup_score: float
+    macro_score: Optional[float] = None
+    technical_score: Optional[float] = None
+    market_score: Optional[float] = None
+    # Compatibility alias for older mobile clients; both values are the same
+    # measured setup match, never the retired AI setup score.
+    setup_score: Optional[float] = None
+    setup_match_score: Optional[float] = None
+    setup_match_status: Optional[str] = None
+    benchmark_score: Optional[float] = None
+    score_as_of: Optional[str] = None
     macro_label: Optional[str] = None
     technical_label: Optional[str] = None
     market_label: Optional[str] = None

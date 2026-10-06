@@ -42,10 +42,15 @@ export type MobileOverviewAsset = {
   logo_url?: string | null;
   price?: number | null;
   change_24h?: number | null;
-  macro_score: number;
-  technical_score: number;
-  market_score: number;
-  setup_score: number;
+  macro_score: number | null;
+  technical_score: number | null;
+  market_score: number | null;
+  /** Compatibility alias for setup_match_score. Null means no verified match. */
+  setup_score: number | null;
+  setup_match_score?: number | null;
+  setup_match_status?: string | null;
+  benchmark_score?: number | null;
+  score_as_of?: string | null;
   macro_label?: string | null;
   technical_label?: string | null;
   market_label?: string | null;

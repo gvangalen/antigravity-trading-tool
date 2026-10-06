@@ -18,7 +18,7 @@ def test_score_adapter_reads_latest_saved_report_with_its_actual_date():
                 "market_score": 100,
                 "macro_score": 100,
                 "technical_score": 75,
-                "setup_score": None,
+                "setup_score": 99,
             }}
 
         async def get_master_score(self, user_id, asset):
@@ -35,4 +35,4 @@ def test_score_adapter_reads_latest_saved_report_with_its_actual_date():
     assert result["data"].daily_scores.market_score == 100
     assert result["data"].daily_scores.macro_score == 100
     assert result["data"].daily_scores.technical_score == 75
-    assert result["data"].daily_scores.setup_score is None
+    assert "setup_score" not in result["data"].daily_scores.dict()

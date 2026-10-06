@@ -71,7 +71,6 @@ def evaluate_policy(
     mkt = _score(scores, "market_score")
     tech = _score(scores, "technical_score")
     macro = _score(scores, "macro_score")
-    setup = _score(scores, "setup_score")
 
     notes: List[str] = []
     label = _normalize_label(regime_label)
@@ -160,19 +159,10 @@ def evaluate_policy(
     if risk_mode in ("risk_on", "neutral"):
         allowed = ["buy", "hold"]
 
-    # Setup gate
-    if setup is not None and setup < 40 and "buy" in allowed:
-
-        allowed = ["hold"]
-        notes.append("Setup score weak → buy blocked.")
-
     # High instability gate
     if transition_risk >= 0.65 and "buy" in allowed:
-
-        if setup is None or setup < 75:
-
-            allowed = ["hold"]
-            notes.append("High transition risk → only buy with strong setup.")
+        allowed = ["hold"]
+        notes.append("High transition risk → buy blocked.")
 
     # ------------------------------------------------------------
     # Exposure caps

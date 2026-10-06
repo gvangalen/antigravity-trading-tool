@@ -2,10 +2,6 @@ from datetime import date
 from pathlib import Path
 
 from backend.ai_agents.score_ai_agent import fetch_today_insights
-from backend.ai_agents.setup_ai_agent import (
-    _reuse_or_generate_explanation,
-    _setup_input_hash,
-)
 from backend.celery_task.strategy_task import (
     input_is_unchanged,
     stable_input_hash,
@@ -14,35 +10,6 @@ from backend.services import ai_usage_observability_service as usage
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_unchanged_setup_input_never_evaluates_ai_generator():
-    calls = []
-
-    def generate():
-        calls.append("called")
-        return "new explanation"
-
-    explanation, reused = _reuse_or_generate_explanation("stored explanation", generate)
-
-    assert explanation == "stored explanation"
-    assert reused is True
-    assert calls == []
-
-
-def test_setup_hash_ignores_small_score_noise_but_changes_materially():
-    base = {
-        "setup_id": 9,
-        "name": "Swing",
-        "setup_type": "trade",
-        "score": 41,
-        "components": {"m": 41, "mk": 51, "t": 61},
-    }
-    noisy = {**base, "score": 42, "components": {"m": 42, "mk": 52, "t": 62}}
-    changed = {**base, "score": 47}
-
-    assert _setup_input_hash("BTC", base) == _setup_input_hash("BTC", noisy)
-    assert _setup_input_hash("BTC", base) != _setup_input_hash("BTC", changed)
 
 
 def test_strategy_hash_is_stable_and_reuse_decision_is_deterministic():

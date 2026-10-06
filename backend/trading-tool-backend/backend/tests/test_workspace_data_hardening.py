@@ -118,7 +118,7 @@ def test_intelligence_read_only_mode_returns_pending_without_running_engine(monk
         setup_score=40,
         report_date=date(2026, 8, 11),
     )
-    repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=daily_score))
+    repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=daily_score), db=object())
     service = IntelligenceService(repository)
     service.invalidate_cached_result(7, "BTC")
     invoked = False
@@ -129,6 +129,12 @@ def test_intelligence_read_only_mode_returns_pending_without_running_engine(monk
         raise AssertionError("market intelligence engine should not run in read-only mode")
 
     monkeypatch.setattr("backend.services.intelligence_service.get_market_intelligence", fail_if_engine_runs)
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService",
+        lambda _db: SimpleNamespace(for_asset=AsyncMock(return_value={
+            "source_status": "available", "matches": [], "benchmark_score": 55,
+        })),
+    )
 
     result = asyncio.run(service.get_market_intelligence(7, "BTC", allow_compute=False))
 
@@ -139,8 +145,36 @@ def test_intelligence_read_only_mode_returns_pending_without_running_engine(monk
     assert result["symbol"] == "BTC"
 
 
-def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
+def test_intelligence_uses_current_setup_match_without_legacy_daily_score(monkeypatch):
+    daily_score = SimpleNamespace(
+        macro_score=50, technical_score=60, market_score=70,
+        setup_score=99, report_date=date.today(),
+    )
+    repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=daily_score), db=object())
+    service = IntelligenceService(repository)
+    service.invalidate_cached_result(8, "ETH")
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService",
+        lambda _db: SimpleNamespace(for_asset=AsyncMock(return_value={
+            "source_status": "available", "matches": [], "benchmark_score": 60,
+        })),
+    )
+    observed = {}
+
+    def engine(**kwargs):
+        observed.update(kwargs)
+        return {"metrics": {"setup_quality": 50}}
+
+    monkeypatch.setattr("backend.services.intelligence_service.get_market_intelligence", engine)
+    result = asyncio.run(service.get_market_intelligence(8, "ETH"))
+    assert observed["scores"]["setup"] == 50
+    assert result["metrics"]["setup_quality"] is None
+    assert result["setup_match_status"] == "no_active_match"
+
+
+def test_watchlist_uses_one_batch_for_quotes_and_scores_then_assesses_each_asset(monkeypatch):
     service = object.__new__(WorkspaceDataService)
+    service.session = None
     service.market = SimpleNamespace(
         get_latest_snapshots=AsyncMock(
             return_value=[
@@ -160,7 +194,7 @@ def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
                     "market_score": Decimal("40"),
                     "macro_score": Decimal("50"),
                     "technical_score": Decimal("60"),
-                    "report_date": date(2026, 7, 19),
+                    "report_date": date.today(),
                 }
             }
         )
@@ -174,6 +208,18 @@ def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
             )
         )
     )
+    class FakeMatchService:
+        def __init__(self, _session, *, daily_rows):
+            self.daily_rows = daily_rows
+
+        async def for_asset(self, _user_id, symbol, *, setups):
+            assert setups == []
+            row = self.daily_rows.get(symbol)
+            return {"benchmark_score": 53.0 if row else None,
+                    "source_status": "available" if row else "missing_scores",
+                    "as_of": row["report_date"] if row else None}
+
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", FakeMatchService)
 
     result = asyncio.run(service.get_watchlist(7, ["btc", "BTC", "eth"]))
 
@@ -183,7 +229,7 @@ def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
     assert result["ai_calls"] == 0
     assert result["rows"][0]["score"] == 53.0
     assert result["rows"][1]["score"] is None
-    assert result["rows"][1]["score_status"] == "insufficient_data"
+    assert result["rows"][1]["score_status"] == "missing_scores"
     assert result["rows"][0]["score_freshness"]["source"] == "daily_scores"
 
 
@@ -311,7 +357,7 @@ def test_workspace_constructor_uses_category_services_for_saved_preferences():
     assert callable(service.technical_service.resolve_effective_preferences)
 
 
-def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back():
+def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back(monkeypatch):
     class ExpiringQuote:
         def __init__(self, symbol: str, price: Decimal):
             self._symbol = symbol
@@ -369,6 +415,15 @@ def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back(
             quote.expired = True
             return {}
 
+    class FakeMatchService:
+        def __init__(self, _session, *, daily_rows):
+            self.daily_rows = daily_rows
+
+        async def for_asset(self, _user_id, symbol, *, setups):
+            return {"benchmark_score": None, "source_status": "stale_scores",
+                    "as_of": self.daily_rows[symbol]["report_date"]}
+
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", FakeMatchService)
     with patch("backend.services.workspace_data_service.AssetCatalogService", FakeAssetCatalogService):
         result = asyncio.run(service._build_watchlist_payload(7, ["BTC"]))
 
@@ -585,7 +640,6 @@ def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
 def test_each_explicit_review_flow_uses_one_ai_request():
     root = Path(__file__).resolve().parents[4] / "frontend" / "trading-tool-frontend"
     review_surfaces = [
-        root / "components" / "setup" / "SetupList.jsx",
         root / "components" / "strategy" / "StrategyCard.jsx",
     ]
 
@@ -593,6 +647,10 @@ def test_each_explicit_review_flow_uses_one_ai_request():
         source = surface.read_text()
         assert source.count("assistantChat(") == 1, surface
         assert "Promise.all([\n          assistantChat(" not in source
+
+    plan_workflow = (root / "components" / "workflows" / "MyPlanWorkflow.jsx").read_text()
+    assert "openFinnContext({" in plan_workflow
+    assert "assistantChat(" not in plan_workflow
 
     order_preview = (root / "components" / "bot" / "OrderPreviewModal.jsx").read_text()
     assert "assistantChat(" not in order_preview

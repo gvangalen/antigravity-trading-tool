@@ -784,25 +784,21 @@ def run_daily_strategy_snapshot(user_id: int):
         # =====================================================
         # 1️⃣ BEST SETUP
         # =====================================================
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT setup_id
-                FROM daily_setup_scores
-                WHERE user_id = %s
-                  AND report_date = %s
-                  AND is_best = TRUE
-                LIMIT 1;
-                """,
-                (user_id, today),
-            )
-            row = cur.fetchone()
+        from backend.services.setup_market_match_sync import current_setup_market_assessment
 
-        if not row:
+        with conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT symbol FROM setups WHERE user_id=%s AND symbol IS NOT NULL", (user_id,))
+            symbols = [row[0] for row in cur.fetchall()]
+        candidates = []
+        for symbol in symbols:
+            candidates.extend(current_setup_market_assessment(conn, user_id, symbol)["matches"])
+        best = max((match for match in candidates if match["is_active"]),
+                   key=lambda match: match["score"], default=None)
+        if best is None:
             logger.warning("⚠️ Geen best-of-day setup")
             return
 
-        setup_id = row[0]
+        setup_id = best["setup_id"]
         setup = load_setup_from_db(setup_id, user_id)
         setup_symbol = str(setup.get("symbol") or "BTC").upper()
 

@@ -31,7 +31,7 @@ function readScore(scores, aliases) {
         ? rawValue.score ?? rawValue.value
         : rawValue;
 
-    if (Number.isFinite(Number(value))) return Number(value);
+    if (value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value))) return Number(value);
   }
 
   return null;
@@ -103,7 +103,7 @@ export default function BotScores({
   const recommendedStrategy = strategies.find(
     (item) => String(item?.setup_id ?? item?.setup?.id ?? "") === String(recommendedSetupId ?? "")
   ) || null;
-  const recommendedScore = Number.isFinite(Number(recommendedSetup?.score))
+  const recommendedScore = recommendedSetup?.score != null && Number.isFinite(Number(recommendedSetup.score))
     ? Math.round(Number(recommendedSetup.score))
     : null;
   const currentSetupScoreLabel = setupScore === null ? copy.notAvailable : `${Math.round(setupScore)}/100`;

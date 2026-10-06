@@ -22,7 +22,6 @@ class ScoreToolAdapter:
                 macro_score=float(daily.get("macro_score")) if daily and daily.get("macro_score") is not None else None,
                 technical_score=float(daily.get("technical_score")) if daily and daily.get("technical_score") is not None else None,
                 market_score=float(daily.get("market_score")) if daily and daily.get("market_score") is not None else None,
-                setup_score=float(daily.get("setup_score")) if daily and daily.get("setup_score") is not None else None,
                 report_date=daily.get("report_date") if daily else None,
             ) if daily else None,
             "master_score": MasterScoreData(

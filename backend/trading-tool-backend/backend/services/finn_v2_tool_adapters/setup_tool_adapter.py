@@ -43,7 +43,6 @@ class SetupToolAdapter:
             dca_day_name=_dca_day_name(setup.get("dca_day")),
             dca_month_day=setup.get("dca_month_day"),
             min_investment=setup.get("min_investment"),
-            score=float(setup.get("score") or 0) if setup.get("score") is not None else None,
             setups=collection,
             setup_count=len(collection) if collection else None,
         )

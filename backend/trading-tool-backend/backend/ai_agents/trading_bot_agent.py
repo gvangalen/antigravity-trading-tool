@@ -9,7 +9,7 @@ from backend.utils.db import get_db_connection
 # ✅ Engine brain (single source of truth)
 from backend.engine.bot_brain import run_bot_brain
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
-from backend.utils.scoring_utils import score_source_is_fresh
+from backend.domain.setup_market_match import match_setup_from_daily_scores
 import asyncio
 from backend.services.exchange_service import ExchangeService
 from backend.services.platform_metrics import increment_execution_safety_counter
@@ -485,6 +485,7 @@ def _build_setup_match(
     bot: Dict[str, Any],
     scores: Dict[str, float],
     snapshot: Optional[Dict[str, Any]] = None,
+    current_match: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     UI-CONTRACT (KEIHARD):
@@ -493,6 +494,30 @@ def _build_setup_match(
     - status + UI-tekst komen UITSLUITEND uit de backend
     - frontend mag NIETS interpreteren
     """
+
+    if current_match is not None:
+        status = current_match["status"]
+        summary = {
+            "matches": "Opgeslagen scorevoorwaarden passen bij de actuele benchmark.",
+            "outside_conditions": "Opgeslagen scorevoorwaarden passen nu niet.",
+            "insufficient_data": "Actuele benchmarkgegevens zijn niet volledig beschikbaar.",
+            "unconfigured": "Deze setup heeft geen scorevoorwaarden.",
+        }.get(status, "Setupmatch niet beschikbaar.")
+        return {
+            "name": current_match.get("name") or bot.get("setup_type") or "Setup",
+            "symbol": current_match.get("symbol") or bot.get("symbol", DEFAULT_SYMBOL),
+            "timeframe": current_match.get("timeframe") or bot.get("timeframe") or "—",
+            "score": current_match["score"],
+            "status": status,
+            "is_active": current_match["is_active"],
+            "summary": summary,
+            "detail": " ".join(current_match["reasons"]) or summary,
+            "components": current_match["components"],
+            "as_of": scores.get("_report_date"),
+            "source": "owner_setup_market_match",
+            "match_buy": False,
+            "match_hold": False,
+        }
 
     macro = _clamp_score(scores.get("macro", 10), default=10)
     technical = _clamp_score(scores.get("technical", 10), default=10)
@@ -740,7 +765,7 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT macro_score, technical_score, market_score, setup_score
+            SELECT macro_score, technical_score, market_score
             FROM daily_scores
             WHERE user_id=%s
               AND report_date=%s
@@ -752,11 +777,12 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
         row = cur.fetchone()
 
     if not row:
-        return dict(macro=10.0, technical=10.0, market=10.0, setup=10.0,
+        return dict(macro=10.0, technical=10.0, market=10.0, setup=None,
+                    _report_date=report_date.isoformat(),
                     _source_available={"macro_score": False, "technical_score": False,
                                        "market_score": False, "setup_score": False})
 
-    macro, technical, market, setup = row
+    macro, technical, market = row
 
     def available(value: Any) -> bool:
         try:
@@ -769,57 +795,34 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
         "macro": _clamp_score(macro, default=10),
         "technical": _clamp_score(technical, default=10),
         "market": _clamp_score(market, default=10),
-        "setup": _clamp_score(setup, default=10),
+        "setup": None,
+        "_report_date": report_date.isoformat(),
         "_source_available": {
             "macro_score": available(macro) and source_fresh["macro_score"],
             "technical_score": available(technical) and source_fresh["technical_score"],
             "market_score": available(market) and source_fresh["market_score"],
-            "setup_score": available(setup),
+            "setup_score": False,
         },
     }
 
 
 def _benchmark_component_source_freshness(conn, user_id: int, symbol: str) -> dict[str, bool]:
-    """Fail closed when a daily score is newer than its underlying readings."""
-    sources = {
-        "macro_score": ("macro", "macro_data", "name", False),
-        "technical_score": ("technical", "technical_indicators", "indicator", True),
-        "market_score": ("market", "market_data_indicators", "name", True),
-    }
+    """Use the same raw-source freshness rule as FINN and reports."""
+    from backend.services.setup_market_match_sync import _fresh
+
     result: dict[str, bool] = {}
-    for component, (category, table, name_col, asset_scoped) in sources.items():
+    for category in ("macro", "technical", "market"):
+        component = f"{category}_score"
         try:
-            with conn.cursor() as cur:
-                if category == "technical":
-                    cur.execute(
-                        "SELECT DISTINCT ON (indicator) indicator, source_observed_at "
-                        "FROM technical_indicators WHERE user_id = %s AND symbol = %s "
-                        "AND indicator IN (SELECT indicator FROM user_indicator_configs "
-                        "WHERE user_id = %s AND category = 'technical' AND symbol = %s AND enabled = TRUE) "
-                        "ORDER BY indicator, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST",
-                        (user_id, symbol, user_id, symbol),
-                    )
-                else:
-                    cur.execute(
-                        f"SELECT DISTINCT ON ({name_col}) {name_col}, source_observed_at "
-                        f"FROM {table} WHERE user_id = %s "
-                        + ("AND symbol = %s " if asset_scoped else "")
-                        + f"ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST",
-                        (user_id, symbol) if asset_scoped else (user_id,),
-                    )
-                readings = cur.fetchall()
-            result[component] = bool(readings) and all(
-                score_source_is_fresh(category, name, timestamp, symbol=symbol)
-                for name, timestamp in readings
-            )
+            result[component] = _fresh(conn, user_id, symbol, category)
         except Exception:
-            logger.exception("Cannot verify %s source freshness for Smart DCA", component)
+            logger.exception("Cannot verify %s source freshness", component)
             result[component] = False
     return result
 
 
 def _get_current_benchmark_weights(conn, user_id: int, symbol: str) -> tuple[dict[str, float] | None, str]:
-    """Use Analyse's current owner-scoped weights for this asset."""
+    """Use the same current Analyse preferences as FINN and My Plan."""
     with conn.cursor() as cur:
         cur.execute("SELECT ai_preferences FROM users WHERE id = %s", (user_id,))
         row = cur.fetchone()
@@ -829,21 +832,24 @@ def _get_current_benchmark_weights(conn, user_id: int, symbol: str) -> tuple[dic
     if not isinstance(preferences, dict):
         return None, "invalid_preferences"
     custom = preferences.get("intelligence_weights")
-    if custom:
-        return normalize_benchmark_weights(custom), "user_preferences"
+    return normalize_benchmark_weights(custom), "user_preferences" if custom else "equal_default"
+
+
+def _get_saved_setup_conditions(conn, user_id: int, setup_id: int | None) -> dict | None:
+    if not setup_id:
+        return None
+    columns = (
+        "id", "name", "symbol", "timeframe", "setup_type",
+        "min_macro_score", "max_macro_score", "min_technical_score",
+        "max_technical_score", "min_market_score", "max_market_score",
+    )
     with conn.cursor() as cur:
-        cur.execute("""
-            SELECT top_signals FROM ai_category_insights
-            WHERE user_id=%s AND symbol=%s AND category='master'
-            ORDER BY date DESC, id DESC LIMIT 1
-        """, (user_id, symbol))
-        master_row = cur.fetchone()
-    raw_meta = master_row[0] if master_row else None
-    meta = _safe_json(raw_meta, {}) if isinstance(raw_meta, str) else (raw_meta or {})
-    master_weights = meta.get("weights") if isinstance(meta, dict) else None
-    if master_weights:
-        return normalize_benchmark_weights(master_weights), "master_score"
-    return normalize_benchmark_weights({}), "equal_default"
+        cur.execute(
+            f"SELECT {', '.join(columns)} FROM setups WHERE id=%s AND user_id=%s LIMIT 1",
+            (setup_id, user_id),
+        )
+        row = cur.fetchone()
+    return dict(zip(columns, row)) if row else None
 
 
 # =====================================================
@@ -1374,7 +1380,8 @@ def _persist_decision_and_order(
         "macro": _clamp_score(scores.get("macro", 10)),
         "technical": _clamp_score(scores.get("technical", 10)),
         "market": _clamp_score(scores.get("market", 10)),
-        "setup": _clamp_score(scores.get("setup", 10)),
+        "setup": (scores.get("_setup_match") or {}).get("score"),
+        "setup_match": decision.get("setup_match"),
 
         # ✅ GEEN FAKE SCORE MEER
         "combined": _clamp_score(decision.get("score", 10)),
@@ -1567,13 +1574,21 @@ def run_trading_bot_agent(
             if setup_payload.get("symbol") and setup_payload["symbol"].upper() != symbol:
                 logger.warning("Bot %s asset differs from linked strategy; skipping decision", bot["bot_id"])
                 continue
-            if (setup_payload.get("decision_curve") or {}).get("input") == "benchmark_score":
-                try:
-                    scores["_benchmark_weights"], scores["_benchmark_weight_source"] = _get_current_benchmark_weights(conn, user_id, symbol)
-                except Exception:
-                    logger.exception("Smart DCA weights unavailable for user_id=%s", user_id)
-                    scores["_benchmark_weights"] = None
-                    scores["_benchmark_weight_source"] = "unavailable"
+            try:
+                scores["_benchmark_weights"], scores["_benchmark_weight_source"] = _get_current_benchmark_weights(conn, user_id, symbol)
+            except Exception:
+                logger.exception("Analyse weights unavailable for user_id=%s", user_id)
+                scores["_benchmark_weights"] = None
+                scores["_benchmark_weight_source"] = "unavailable"
+            saved_setup = _get_saved_setup_conditions(conn, user_id, bot.get("setup_id"))
+            if saved_setup and str(saved_setup.get("symbol") or "").upper() == symbol:
+                current_match = match_setup_from_daily_scores(saved_setup, scores, scores.get("_benchmark_weights"))
+            else:
+                current_match = match_setup_from_daily_scores({}, scores, scores.get("_benchmark_weights"))
+            scores["_setup_match"] = current_match
+            # Neutral input preserves existing execution rules when a match is
+            # unavailable. Only a measured match may influence sizing.
+            scores["setup"] = current_match["score"] if current_match["score"] is not None else 50
 
             if setup_payload.get("dca_amount_semantics") == "planned_exact":
                 from backend.domain.finn_dca_plan_contract import dca_due_on_date
@@ -1671,6 +1686,7 @@ def run_trading_bot_agent(
                 bot=bot,
                 scores=scores,
                 snapshot=snapshot,
+                current_match=scores["_setup_match"],
             )
 
             # =========================
@@ -1726,7 +1742,7 @@ def run_trading_bot_agent(
                 "exposure_multiplier": float(brain.get("exposure_multiplier") or 1.0),
 
                 # V1: UI gebruikt setup score
-                "score": scores.get("setup"),
+                "score": scores["_setup_match"].get("score"),
 
                 "strategy_reason": brain.get("reason"),
                 "regime": brain.get("regime"),

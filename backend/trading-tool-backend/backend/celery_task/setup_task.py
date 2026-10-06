@@ -1,114 +1,22 @@
+"""Compatibility tombstone for queued jobs from the retired Setup AI Agent.
+
+The live setup match is calculated from owner-scoped setup conditions and
+measured benchmark components when read. Old queued Celery messages must not
+write a second, incompatible daily setup score after the migration.
+"""
+
 import logging
+
 from celery import shared_task
 
-from backend.ai_agents.setup_ai_agent import run_setup_agent
-from backend.services.ai_usage_observability_service import ai_usage_context
-from backend.services.legacy_ai_runtime import legacy_periodic_ai_enabled
-from backend.utils.db import get_db_connection
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
-# ============================================================
-# 🤖 Celery Task — Setup Agent (PER USER)
-# ============================================================
+
 @shared_task(name="backend.celery_task.setup_task.run_setup_agent_daily")
 def run_setup_agent_daily(user_id: int):
-    """
-    Draait de Setup AI Agent per gebruiker.
-
-    Flow:
-    1. Haalt unieke assets uit setups
-    2. Roept Setup AI Agent aan per asset
-
-    Output:
-    - daily_setup_scores
-    - ai_category_insights
-    """
-
-    if not legacy_periodic_ai_enabled():
-        logger.info(
-            "Legacy Setup-Agent overgeslagen voor user_id=%s; gebruik FINN specialist on-demand.",
-            user_id,
-        )
-        return {
-            "status": "disabled",
-            "reason": "legacy_periodic_ai_disabled",
-            "user_id": user_id,
-        }
-
-    logger.info(f"🤖 [Setup-Task] Start Setup-Agent voor user_id={user_id}")
-
-    conn = get_db_connection()
-    if not conn:
-        logger.error("❌ Geen databaseverbinding in Setup-Task")
-        return
-
-    try:
-        # ----------------------------------------------------
-        # 1️⃣ Unieke assets ophalen (clean)
-        # ----------------------------------------------------
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT DISTINCT symbol
-                FROM setups
-                WHERE user_id = %s
-                  AND symbol IS NOT NULL
-                  AND TRIM(symbol) <> '';
-            """, (user_id,))
-            rows = cur.fetchall()
-
-        assets = [r[0].strip() for r in rows if r[0]]
-
-    except Exception:
-        logger.error("❌ Fout bij ophalen assets in Setup-Task", exc_info=True)
-        return
-
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
-
-    # ----------------------------------------------------
-    # ⚠️ Geen setups → skip
-    # ----------------------------------------------------
-    if not assets:
-        logger.info(f"ℹ️ Geen setups/assets gevonden voor user_id={user_id}")
-        return
-
-    logger.info(f"📊 [Setup-Task] Assets gevonden: {assets}")
-
-    # ----------------------------------------------------
-    # 2️⃣ Per asset Setup AI Agent draaien
-    # ----------------------------------------------------
-    for asset in assets:
-
-        logger.info(
-            f"🔄 [Setup-Task] Run Setup-Agent user_id={user_id}, asset={asset}"
-        )
-
-        try:
-            with ai_usage_context(
-                user_id=user_id,
-                symbol=asset,
-                request_source="background_job",
-                run_kind="scheduled",
-                entry_point="celery_task.setup_task:run_setup_agent_daily",
-                caller_tag="celery_task.setup_task:run_setup_agent_daily",
-                job_name="run_setup_agent_daily",
-                job_id=getattr(getattr(run_setup_agent_daily, "request", None), "id", None),
-            ):
-                run_setup_agent(user_id=user_id, asset=asset)
-
-            logger.info(
-                f"✅ [Setup-Task] Setup-Agent voltooid user_id={user_id}, asset={asset}"
-            )
-
-        except Exception:
-            logger.error(
-                f"❌ [Setup-Task] Fout in Setup-Agent user_id={user_id}, asset={asset}",
-                exc_info=True,
-            )
-
-    logger.info(f"🎯 [Setup-Task] Alle Setup-Agent runs voltooid user_id={user_id}")
+    logger.info("Retired Setup AI Agent task ignored for user_id=%s", user_id)
+    return {
+        "status": "disabled",
+        "reason": "retired_setup_ai_agent",
+        "user_id": user_id,
+    }

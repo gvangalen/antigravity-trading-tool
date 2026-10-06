@@ -55,10 +55,13 @@ type SetupSummary = {
   trend: string;
   action: string;
   score: number;
+  scoreAvailable: boolean;
   explanation: string;
   tone: StatusTone;
   status?: string;
 };
+
+const setupScoreLabel = (setup: SetupSummary) => setup.scoreAvailable ? String(setup.score) : '—';
 
 type BotActionMeta = {
   botId?: number;
@@ -645,7 +648,7 @@ function FinnSetupBriefingCard({
   topSetups: SetupSummary[];
 }) {
   const { language } = useAppPreferences();
-  const reviewCount = topSetups.filter((item) => item.score < 70).length + (setup.score < 70 ? 1 : 0);
+  const reviewCount = topSetups.filter((item) => item.scoreAvailable && item.score < 70).length + (setup.scoreAvailable && setup.score < 70 ? 1 : 0);
   const queueItems = [
     {
       key: 'tasks',
@@ -662,7 +665,7 @@ function FinnSetupBriefingCard({
     {
       key: 'risks',
       label: translate(language, 'queue.label.risks'),
-      value: topSetups.filter((item) => item.score < 50).length + (setup.score < 50 ? 1 : 0),
+      value: topSetups.filter((item) => item.scoreAvailable && item.score < 50).length + (setup.scoreAvailable && setup.score < 50 ? 1 : 0),
       body: translate(language, 'queue.body.weakPlansSlowing'),
     },
     {
@@ -683,7 +686,7 @@ function FinnSetupBriefingCard({
       : decisionState.score >= 50
         ? translate(language, 'myPlan.selective')
         : translate(language, 'myPlan.defensive'),
-    `${setup.score}% match`,
+    setup.scoreAvailable ? `${setup.score}% match` : 'Match niet beschikbaar',
     translate(language, 'myPlan.reviewPoints', { count: reviewCount }),
   ];
 
@@ -748,9 +751,9 @@ function ActivePlanWorkspaceCard({
           icon="layers"
           title={translate(language, 'myPlan.setupLabel')}
           description={setup.name}
-          summary={`${setup.score}% match`}
-          statusLabel={setup.score >= 70 ? translate(language, 'myPlan.active') : translate(language, 'common.monitor')}
-          statusTone={setup.score >= 70 ? 'success' : 'warning'}
+          summary={setup.scoreAvailable ? `${setup.score}% match` : 'Match niet beschikbaar'}
+          statusLabel={setup.scoreAvailable && setup.score >= 70 ? translate(language, 'myPlan.active') : translate(language, 'common.monitor')}
+          statusTone={setup.scoreAvailable && setup.score >= 70 ? 'success' : 'warning'}
           onPress={onOpenSetup}
         />
         <PlanOverviewRow
@@ -1077,7 +1080,7 @@ function BestMatchingSetupCard({ setup, onPress }: { setup: SetupSummary; onPres
           </Text>
         </View>
         <View style={styles.matchBadge}>
-          <Text style={styles.matchBadgeScore}>{setup.score}</Text>
+          <Text style={styles.matchBadgeScore}>{setupScoreLabel(setup)}</Text>
           <Text style={styles.matchBadgeLabel}>MATCH</Text>
         </View>
       </View>
@@ -1089,7 +1092,7 @@ function BestMatchingSetupCard({ setup, onPress }: { setup: SetupSummary; onPres
       <View style={styles.setupFactsRow}>
         <SetupFact label="TREND" value={setup.trend || 'neutral'} />
         <SetupFact label="ACTION" value={setup.action || 'Monitor'} />
-        <SetupFact label="STATUS" value={setup.score >= 65 ? 'Active...' : 'Wait...'} />
+        <SetupFact label="STATUS" value={!setup.scoreAvailable ? 'Geen actuele match' : setup.score >= 65 ? 'Active...' : 'Wait...'} />
       </View>
     </Pressable>
   );
@@ -1107,17 +1110,17 @@ function WhyFinnSelectedCard({
   const drivers = [
     {
       label: 'Macro drivers',
-      score: clampScore(asset?.macro_score ?? 0),
+      score: asset?.macro_score == null ? '—' : clampScore(asset.macro_score),
       text: driverCopy('macro', asset?.macro_score),
     },
     {
       label: 'Technical drivers',
-      score: clampScore(asset?.technical_score ?? 0),
+      score: asset?.technical_score == null ? '—' : clampScore(asset.technical_score),
       text: driverCopy('technical', asset?.technical_score),
     },
     {
       label: 'Market drivers',
-      score: clampScore(asset?.market_score ?? 0),
+      score: asset?.market_score == null ? '—' : clampScore(asset.market_score),
       text: driverCopy('market', asset?.market_score),
     },
   ];
@@ -1162,7 +1165,7 @@ function NextBestMatchesCard({ setups }: { setups: SetupSummary[] }) {
                 {setup.timeframe} · {setup.type}
               </Text>
             </View>
-            <Text style={[styles.setupScoreOrange]}>{setup.score}</Text>
+            <Text style={[styles.setupScoreOrange]}>{setupScoreLabel(setup)}</Text>
           </View>
         ))}
       </View>
@@ -1240,7 +1243,7 @@ function DecisionStateCard({ state, stale }: { state: ReturnType<typeof mapDecis
         {state.scores.map((score) => (
           <View key={score.label} style={[styles.scoreTile, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
             <Text style={[styles.scoreLabel, { color: colors.textDim }]}>{score.label}</Text>
-            <Text style={[styles.scoreValue, { color: colorForScore(score.value) }]}>{score.value}</Text>
+            <Text style={[styles.scoreValue, { color: typeof score.value === 'number' ? colorForScore(score.value) : colors.textDim }]}>{score.value}</Text>
           </View>
         ))}
       </View>
@@ -1273,7 +1276,7 @@ function ActiveSetupCard({ setup, onPress }: { setup: SetupSummary; onPress: () 
             </Text>
           </View>
           <View style={[styles.scoreBadge, { backgroundColor: palette.background, borderColor: palette.border }]}>
-            <Text style={[styles.scoreBadgeValue, { color: palette.color }]}>{setup.score}</Text>
+            <Text style={[styles.scoreBadgeValue, { color: palette.color }]}>{setupScoreLabel(setup)}</Text>
             <Text style={styles.scoreBadgeLabel}>match</Text>
           </View>
         </View>
@@ -1324,7 +1327,7 @@ function TopSetupsCard({ setups }: { setups: SetupSummary[] }) {
                 {setup.symbol} · {setup.timeframe} · {setup.type}
               </Text>
             </View>
-            <Text style={[styles.setupScore, { color: colorForScore(setup.score) }]}>{setup.score}</Text>
+            <Text style={[styles.setupScore, { color: colorForScore(setup.score) }]}>{setupScoreLabel(setup)}</Text>
           </View>
         ))}
       </View>
@@ -1344,7 +1347,7 @@ function SetupSheet({ setup }: { setup: SetupSummary }) {
         <MiniMetric label="Symbol" value={setup.symbol} />
         <MiniMetric label="Timeframe" value={setup.timeframe} />
         <MiniMetric label="Type" value={setup.type} />
-        <MiniMetric label="Match score" value={`${setup.score}`} />
+        <MiniMetric label="Match score" value={setupScoreLabel(setup)} />
       </View>
     </View>
   );
@@ -1801,7 +1804,7 @@ function RiskSheet({
     <View style={styles.sheetStack}>
       <Text style={[styles.sheetTitle, { color: colors.text }]}>{riskTitle(decisionState.score, '')}</Text>
       <Text style={[styles.bodyText, { color: colors.textMuted }]}>
-        De gecombineerde score is {decisionState.score}. Setup match is {setup.score}. Mobile toont context en
+        De benchmarkscore is {decisionState.benchmarkAvailable ? decisionState.score : 'niet beschikbaar'}. Setup match is {setupScoreLabel(setup)}. Mobile toont context en
         status; uitvoering blijft expliciet en review-first.
       </Text>
       <View style={styles.ruleList}>
@@ -1982,7 +1985,7 @@ function PlanDecisionMatrix({
           <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>Decision matrix</Text>
           <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>{decisionState.title}</Text>
         </View>
-        <FilledStatusBadge label={`${decisionState.score}/100`} tone={decisionState.tone} />
+        <FilledStatusBadge label={decisionState.benchmarkAvailable ? `${decisionState.score}/100` : '—'} tone={decisionState.benchmarkAvailable ? decisionState.tone : 'neutral'} />
       </View>
       <View style={styles.matrixGrid}>
         {decisionState.scores.map((item) => (
@@ -2046,7 +2049,9 @@ function pushPrefill(type: string, symbol: string) {
 
 function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewResponse['watchlist'][number]): SetupSummary {
   const active = extractActiveSetup(source);
-  const score = clampScore(readNumber(active, ['score', 'match_score'], overviewAsset?.setup_score ?? 0));
+  const rawScore = readOptionalNumber(active, ['score', 'match_score']) ?? overviewAsset?.setup_match_score;
+  const scoreAvailable = typeof rawScore === 'number' && Number.isFinite(rawScore);
+  const score = scoreAvailable ? clampScore(rawScore) : 0;
   const symbol = readString(active, ['symbol'], overviewAsset?.symbol ?? '');
   const name = readString(active, ['name', 'setup_name'], active ? (symbol ? `${symbol} setup` : 'Actieve setup') : 'Geen actieve setup');
 
@@ -2060,6 +2065,7 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
     id: readOptionalNumber(active, ['id', 'setup_id']),
     name,
     score,
+    scoreAvailable,
     symbol,
     timeframe: readString(active, ['timeframe'], ''),
     tone: toneForScore(score),
@@ -2071,13 +2077,16 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
 
 function mapTopSetups(source?: SetupResponse): SetupSummary[] {
   return asArray(source).slice(0, 12).map((item) => {
-    const score = clampScore(readNumber(item, ['score', 'match_score', 'setup_score'], 50));
+    const rawScore = readOptionalNumber(item, ['score', 'match_score', 'setup_score']);
+    const scoreAvailable = typeof rawScore === 'number' && Number.isFinite(rawScore);
+    const score = scoreAvailable ? clampScore(rawScore) : 0;
     return {
       action: readString(item, ['action'], 'Review'),
       explanation: readString(item, ['explanation', 'setup_explanation'], 'Setup uit backend-ranking.'),
       id: readOptionalNumber(item, ['id', 'setup_id']),
       name: readString(item, ['name', 'setup_name'], 'Setup'),
       score,
+      scoreAvailable,
       symbol: readString(item, ['symbol'], ''),
       timeframe: readString(item, ['timeframe'], ''),
       tone: toneForScore(score),
@@ -2093,11 +2102,12 @@ function mapDecisionState(
   setup: SetupSummary,
   botAction: string,
 ) {
-  const macro = clampScore(asset?.macro_score ?? 0);
-  const technical = clampScore(asset?.technical_score ?? 0);
-  const market = clampScore(asset?.market_score ?? 0);
-  const setupScore = clampScore(setup.score || asset?.setup_score || 0);
-  const score = clampScore((macro + technical + market + setupScore) / 4);
+  const macro = asset?.macro_score == null ? null : clampScore(asset.macro_score);
+  const technical = asset?.technical_score == null ? null : clampScore(asset.technical_score);
+  const market = asset?.market_score == null ? null : clampScore(asset.market_score);
+  const setupScore = setup.scoreAvailable ? setup.score : null;
+  const score = asset?.benchmark_score == null ? 50 : clampScore(asset.benchmark_score);
+  const benchmarkAvailable = asset?.benchmark_score != null;
   const tone = toneForScore(score);
   const action = botAction.toLowerCase();
   const status =
@@ -2108,13 +2118,14 @@ function mapDecisionState(
       action.includes('buy') || action.includes('sell')
         ? 'Open de bot review sheet en bevestig pas na risk check.'
         : 'Wacht op betere bevestiging of vraag FINN om de blokkade uit te leggen.',
-    reason: `${asset?.symbol ?? setup.symbol} combineert macro ${macro}, technical ${technical}, market ${market} en setup ${setupScore}. Botactie: ${botAction}.`,
+    reason: `${asset?.symbol ?? setup.symbol} heeft benchmark ${benchmarkAvailable ? score : 'niet beschikbaar'} en setupmatch ${setupScore ?? 'niet beschikbaar'}. Botactie: ${botAction}.`,
     score,
+    benchmarkAvailable,
     scores: [
-      { label: 'Macro', value: macro },
-      { label: 'Technical', value: technical },
-      { label: 'Market', value: market },
-      { label: 'Setup', value: setupScore },
+      { label: 'Macro', value: macro ?? '—' },
+      { label: 'Technical', value: technical ?? '—' },
+      { label: 'Market', value: market ?? '—' },
+      { label: 'Setup', value: setupScore ?? '—' },
     ],
     status,
     title: score >= 70 ? 'Setup valid, stay selective' : score >= 50 ? 'Review before action' : 'Defensive posture',
@@ -2201,7 +2212,7 @@ function riskTitle(score: number, action: string) {
 }
 
 function riskBody(setup: SetupSummary, strategyStatus: string, botReason: string) {
-  return `${setup.name} heeft match ${setup.score}. Strategy status: ${strategyStatus}. Bot rationale: ${botReason}`;
+  return `${setup.name} heeft match ${setupScoreLabel(setup)}. Strategy status: ${strategyStatus}. Bot rationale: ${botReason}`;
 }
 
 function riskLabelForScore(score: number) {

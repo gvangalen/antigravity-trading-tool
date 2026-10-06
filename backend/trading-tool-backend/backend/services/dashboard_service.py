@@ -96,7 +96,7 @@ class DashboardService:
             setup_service = SetupService(self.session)
             active_setup_dict = await setup_service.get_active_setup(user_id, symbol)
             active_setup = active_setup_dict.get("active")
-            setup_score = active_setup.get("score", 0) if active_setup else 0
+            setup_score = active_setup.get("score") if active_setup else None
             
             # Logic & Explanations formatting
             macro_explanation = (
@@ -155,11 +155,14 @@ class DashboardService:
         return row
 
     async def get_top_setups(self, user_id: int) -> List[dict]:
-        rows = await self.repository.get_top_setups(user_id)
-        for row in rows:
-            if row.get("timestamp") and hasattr(row["timestamp"], "isoformat"):
-                row["timestamp"] = row["timestamp"].isoformat()
-        return rows
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        assessment = await SetupMarketMatchService(self.session).for_all_assets(user_id)
+        return [{"name": match["name"], "symbol": match["symbol"],
+                 "timeframe": match["timeframe"], "score": match["score"],
+                 "status": match["status"],
+                 "explanation": "; ".join(match["reasons"]), "timestamp": None}
+                for match in assessment["matches"][:5]]
 
     async def get_setup_summary(self, user_id: int) -> List[dict]:
         rows = await self.repository.get_user_setups_summary(user_id)
@@ -257,7 +260,12 @@ class DashboardService:
 
         # 5. PRIORITEIT 1: Process watchlist scores dynamically via standard score engine
         from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+
         watchlist_items = []
+        match_service = SetupMarketMatchService(self.session)
+        owned_setups = await SetupRepository(self.session).get_all_setups(user_id)
         for sym in symbols:
             try:
                 scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id, sym)
@@ -266,13 +274,19 @@ class DashboardService:
                 scores = {}
 
             price_info = prices_data.get(sym, {}) if isinstance(prices_data, dict) else {}
-            macro_val = float(scores.get("macro_score", 0))
-            tech_val = float(scores.get("technical_score", 0))
-            mkt_val = float(scores.get("market_score", 0))
+            macro_val = float(scores["macro_score"]) if scores.get("macro_score") is not None else None
+            tech_val = float(scores["technical_score"]) if scores.get("technical_score") is not None else None
+            mkt_val = float(scores["market_score"]) if scores.get("market_score") is not None else None
+            assessment = await match_service.for_asset(user_id, sym, setups=owned_setups)
+            ranked_match = assessment["matches"][0] if assessment["matches"] else None
+            setup_match_score = ranked_match["score"] if ranked_match else None
+            setup_match_status = ranked_match["status"] if ranked_match else (
+                "no_setups" if not assessment["matches"] else assessment["source_status"]
+            )
 
-            macro_sem = get_macro_semantics(macro_val)
-            tech_sem = get_technical_semantics(tech_val)
-            mkt_sem = get_market_semantics(mkt_val)
+            macro_sem = get_macro_semantics(macro_val) if macro_val is not None else {"regime": "Niet beschikbaar", "risk_state": "Onbekend"}
+            tech_sem = get_technical_semantics(tech_val) if tech_val is not None else {"structure": "Niet beschikbaar"}
+            mkt_sem = get_market_semantics(mkt_val) if mkt_val is not None else {"posture": "Niet beschikbaar"}
             asset_meta = asset_catalog_map.get(sym, {})
 
             watchlist_items.append(MobileAssetWatchlistSchema(
@@ -285,14 +299,18 @@ class DashboardService:
                 macro_score=macro_val,
                 technical_score=tech_val,
                 market_score=mkt_val,
-                setup_score=float(scores.get("setup_score", 0)),
+                setup_score=setup_match_score,
+                setup_match_score=setup_match_score,
+                setup_match_status=setup_match_status,
+                benchmark_score=assessment["benchmark_score"],
+                score_as_of=str(assessment["as_of"]) if assessment["as_of"] else None,
                 macro_label=macro_sem["regime"],
                 technical_label=tech_sem["structure"],
                 market_label=mkt_sem["posture"],
                 # Desktop Parity Fields
                 posture=mkt_sem["posture"],
                 structure=tech_sem["structure"],
-                conviction=float(int((macro_val + tech_val + mkt_val) / 3)),
+                conviction=assessment["benchmark_score"],
                 risk_state=macro_sem["risk_state"]
             ))
 

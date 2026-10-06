@@ -29,7 +29,7 @@ import StrategyForm from "@/components/strategy/StrategyForm";
 import Drawer from "@/components/ui/Drawer";
 import { invalidateStrategyDataCaches, useStrategyData } from "@/hooks/useStrategyData";
 import { fetchBotConfigs } from "@/lib/api/botApi";
-import { deleteSetup, fetchActiveSetup } from "@/lib/api/setups";
+import { deleteSetup, fetchActiveSetup, fetchSetupMarketMatches } from "@/lib/api/setups";
 import { getSetupId } from "@/lib/setup/activeSetup";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
@@ -47,8 +47,17 @@ const COPY = {
     planHelp: "De combinatie die klaarstaat voor uitvoering.",
     finnLabel: "FINN planadvies",
     finishPlan: "Plan afmaken",
-    activePlan: "Actief plan",
+    activePlan: "Uitgelicht plan",
     bestForMarket: "Beste match voor huidige markt",
+    matchScore: "Setupmatch",
+    conditionsMatch: "Voorwaarden passen",
+    benchmarkScore: "Benchmark",
+    outsideConditions: "Voorwaarden passen niet",
+    missingScores: "Actuele scores ontbreken",
+    loadingScores: "Scores laden",
+    noScoreConditions: "Geen scorevoorwaarden",
+    scoreDate: "Scoredatum",
+    matchHint: "Een setupmatch is geen instapsignaal.",
     selectedAsset: "Asset en ritme",
     execution: "Uitvoering",
     readyForAutomation: "Klaar voor Automation",
@@ -65,7 +74,7 @@ const COPY = {
     strategyQuestion: "Beoordeel deze strategie en leg uit of deze goed bij de gekoppelde setup past.",
     planQuestion: "Beoordeel dit volledige plan en geef één concreet advies voor de volgende stap.",
     plansTitle: "Mijn plannen",
-    plansIntro: "Setup en strategie blijven zichtbaar als twee onderdelen van hetzelfde plan.",
+    plansIntro: "Alle plannen blijven zichtbaar. Passende setups staan bovenaan; de score is geen instapsignaal.",
     allPlans: "Alle plannen",
     plans: "plannen",
     plan: "plan",
@@ -118,8 +127,17 @@ const COPY = {
     planHelp: "The combination that is ready for execution.",
     finnLabel: "FINN plan check",
     finishPlan: "Finish plan",
-    activePlan: "Active plan",
+    activePlan: "Featured plan",
     bestForMarket: "Best match for current market",
+    matchScore: "Setup match",
+    conditionsMatch: "Conditions match",
+    benchmarkScore: "Benchmark",
+    outsideConditions: "Conditions do not match",
+    missingScores: "Current scores unavailable",
+    loadingScores: "Loading scores",
+    noScoreConditions: "No score conditions",
+    scoreDate: "Score date",
+    matchHint: "A setup match is not an entry signal.",
     selectedAsset: "Asset and cadence",
     execution: "Execution",
     readyForAutomation: "Ready for Automation",
@@ -136,7 +154,7 @@ const COPY = {
     strategyQuestion: "Review this strategy and explain whether it fits the linked setup.",
     planQuestion: "Review this complete plan and give one concrete recommendation for the next step.",
     plansTitle: "My plans",
-    plansIntro: "Setup and strategy remain visible as two parts of the same plan.",
+    plansIntro: "All plans remain visible. Matching setups come first; the score is not an entry signal.",
     allPlans: "All plans",
     plans: "plans",
     plan: "plan",
@@ -189,8 +207,17 @@ const COPY = {
     planHelp: "Die Kombination, die zur Ausführung bereitsteht.",
     finnLabel: "FINN Planprüfung",
     finishPlan: "Plan vervollständigen",
-    activePlan: "Aktiver Plan",
+    activePlan: "Plan im Fokus",
     bestForMarket: "Beste Uebereinstimmung fuer den aktuellen Markt",
+    matchScore: "Setup-Abgleich",
+    conditionsMatch: "Bedingungen passen",
+    benchmarkScore: "Benchmark",
+    outsideConditions: "Bedingungen passen nicht",
+    missingScores: "Aktuelle Scores fehlen",
+    loadingScores: "Scores werden geladen",
+    noScoreConditions: "Keine Score-Bedingungen",
+    scoreDate: "Score-Datum",
+    matchHint: "Ein Setup-Abgleich ist kein Einstiegssignal.",
     selectedAsset: "Asset und Rhythmus",
     execution: "Ausführung",
     readyForAutomation: "Bereit für Automation",
@@ -207,7 +234,7 @@ const COPY = {
     strategyQuestion: "Bewerte diese Strategie und erkläre, ob sie zum verknüpften Setup passt.",
     planQuestion: "Bewerte diesen vollständigen Plan und gib eine konkrete Empfehlung für den nächsten Schritt.",
     plansTitle: "Meine Pläne",
-    plansIntro: "Setup und Strategie bleiben als zwei Teile desselben Plans sichtbar.",
+    plansIntro: "Alle Pläne bleiben sichtbar. Passende Setups stehen oben; der Score ist kein Einstiegssignal.",
     allPlans: "Alle Pläne",
     plans: "Pläne",
     plan: "Plan",
@@ -341,6 +368,37 @@ function PlanStatus({ plan, copy }) {
   );
 }
 
+function SetupMatchStatus({ match, copy, loading = false }) {
+  const hasScore = match?.score !== null && match?.score !== undefined;
+  const label = loading
+    ? copy.loadingScores
+    : match?.status === "matches"
+      ? hasScore ? `${copy.matchScore} ${match.score}%` : copy.conditionsMatch
+      : match?.status === "outside_conditions"
+        ? hasScore ? `${copy.matchScore} ${match.score}% · ${copy.outsideConditions}` : copy.outsideConditions
+        : match?.status === "unconfigured"
+          ? copy.noScoreConditions
+          : copy.missingScores;
+  const tone = match?.status === "matches"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
+    : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300";
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold ${tone}`}
+      title={`${match?.as_of ? `${copy.scoreDate}: ${match.as_of}. ` : ""}${copy.matchHint}`}>
+      {label}
+    </span>
+  );
+}
+
+function BenchmarkStatus({ match, copy }) {
+  if (match?.benchmark_score === null || match?.benchmark_score === undefined) return null;
+  return (
+    <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300">
+      {copy.benchmarkScore} {match.benchmark_score}
+    </span>
+  );
+}
+
 export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const searchParams = useSearchParams();
   const { locale } = useTranslation();
@@ -350,6 +408,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const { openConfirm, showSnackbar } = useModal();
   const [bots, setBots] = useState([]);
   const [marketBestSetup, setMarketBestSetup] = useState(null);
+  const [setupMatches, setSetupMatches] = useState(null);
   const {
     strategies,
     setups,
@@ -387,6 +446,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       loadSetups(true),
       loadStrategies(true),
       refreshMarketBestSetup(),
+      fetchSetupMarketMatches().then((rows) => setSetupMatches(Array.isArray(rows) ? rows : [])),
     ]);
     setBots(await fetchBotConfigs().catch(() => []));
   };
@@ -434,6 +494,14 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       cancelled = true;
     };
   }, [activeSymbol]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSetupMarketMatches().then((rows) => {
+      if (!cancelled) setSetupMatches(Array.isArray(rows) ? rows : []);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -487,26 +555,30 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   };
 
   const plans = useMemo(() => {
-    const result = buildPlans(setups, strategies, bots);
+    const matchesBySetupId = new Map((setupMatches || []).map((match) => [normalizeId(match.setup_id), match]));
+    const result = buildPlans(setups, strategies, bots).map((plan) => ({
+      ...plan,
+      match: matchesBySetupId.get(normalizeId(getSetupId(plan.setup))) || null,
+    }));
     const activeSetupId = normalizeId(getSetupId(marketBestSetup) || getSetupId(activeSetup));
     return result.sort((a, b) => {
+      if (Boolean(a.match?.is_active) !== Boolean(b.match?.is_active)) {
+        return Number(Boolean(b.match?.is_active)) - Number(Boolean(a.match?.is_active));
+      }
+      const aScore = a.match?.score ?? -1;
+      const bScore = b.match?.score ?? -1;
+      if (aScore !== bScore) return bScore - aScore;
       const aActive = Number(Boolean(a.bot?.is_active)) + Number(normalizeId(getSetupId(a.setup)) === activeSetupId);
       const bActive = Number(Boolean(b.bot?.is_active)) + Number(normalizeId(getSetupId(b.setup)) === activeSetupId);
       if (aActive !== bActive) return bActive - aActive;
       if (a.complete !== b.complete) return Number(b.complete) - Number(a.complete);
       return getPlanName(a, copy).localeCompare(getPlanName(b, copy));
     });
-  }, [activeSetup, bots, copy, marketBestSetup, setups, strategies]);
+  }, [activeSetup, bots, copy, marketBestSetup, setupMatches, setups, strategies]);
 
   const marketBestPlan = useMemo(() => {
-    const setupId = normalizeId(getSetupId(marketBestSetup));
-    if (!setupId) return null;
-
-    return plans.find((plan) => plan.complete && normalizeId(getSetupId(plan.setup)) === setupId)
-      || plans.find((plan) => plan.hasStrategy && normalizeId(getSetupId(plan.setup)) === setupId)
-      || plans.find((plan) => normalizeId(getSetupId(plan.setup)) === setupId)
-      || null;
-  }, [marketBestSetup, plans]);
+    return plans.find((plan) => plan.match?.is_active) || null;
+  }, [plans]);
 
   const activePlan = useMemo(() => {
     const setupId = normalizeId(getSetupId(activeSetup));
@@ -655,6 +727,10 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">{copy.activePlan}</div>
                 <h3 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 dark:text-white">{getPlanName(activePlan, copy)}</h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <SetupMatchStatus match={activePlan.match} copy={copy} loading={setupMatches === null} />
+                  <BenchmarkStatus match={activePlan.match} copy={copy} />
+                </div>
                 {marketBestPlan && activePlan?.key === marketBestPlan.key ? (
                   <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -755,6 +831,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                 key={plan.key}
                 plan={plan}
                 copy={copy}
+                matchesLoading={setupMatches === null}
                 onEditSetup={() => setDrawer({ type: "edit-setup", setup: plan.setup, strategy: plan.strategy })}
                 onDuplicateSetup={() => duplicateSetup(plan.setup)}
                 onEditStrategy={() => openStrategyDrawer(plan.setup, plan.strategy, plan.strategy ? "edit-strategy" : "new-strategy")}
@@ -849,13 +926,15 @@ function PlanPart({
   );
 }
 
-function PlanRow({ plan, copy, onEditSetup, onDuplicateSetup, onEditStrategy, onAskFinn, onDelete }) {
+function PlanRow({ plan, copy, matchesLoading, onEditSetup, onDuplicateSetup, onEditStrategy, onAskFinn, onDelete }) {
   return (
     <div className="group grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-900/40 lg:grid-cols-[1.1fr_1fr_1fr_auto_auto] lg:items-center lg:px-6">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="truncate text-sm font-black text-slate-950 dark:text-white">{getPlanName(plan, copy)}</h4>
           <PlanStatus plan={plan} copy={copy} />
+          <SetupMatchStatus match={plan.match} copy={copy} loading={matchesLoading} />
+          <BenchmarkStatus match={plan.match} copy={copy} />
         </div>
         <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{plan.setup?.symbol || plan.strategy?.symbol || "–"} · {plan.setup?.timeframe || plan.strategy?.timeframe || "–"}</p>
         <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">

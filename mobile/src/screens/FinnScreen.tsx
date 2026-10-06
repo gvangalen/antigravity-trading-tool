@@ -805,13 +805,13 @@ function buildActiveBriefingText(
     return `Hoi Henk, ${symbol} is nu de actieve context. Ik laad de briefing opnieuw zodat mijn analyse op deze asset aansluit.`;
   }
 
-  const score = Math.round((asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4);
+  const score = asset.benchmark_score == null ? 'onbekend' : Math.round(asset.benchmark_score);
   const change =
     typeof asset.change_24h === 'number'
       ? `${asset.change_24h >= 0 ? '+' : ''}${asset.change_24h.toFixed(2)}%`
       : '—';
   const risk =
-    asset.setup_score < 45 || asset.technical_score < 45
+    (asset.setup_match_score != null && asset.setup_match_score < 45) || (asset.technical_score != null && asset.technical_score < 45)
       ? 'De structuur is nog zwak, dus ik zou wachten op bevestiging.'
       : 'De context is bruikbaar, maar ik blijf risico en setup-validiteit bewaken.';
 

@@ -84,10 +84,6 @@ export function mapMobileOverviewMarket(overview?: MobileOverviewResponse, symbo
 
   const change = asset.change_24h;
   const tone = typeof change === 'number' ? (change >= 0 ? 'success' : 'warning') : 'neutral';
-  const compositeScore = Math.round(
-    (asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4,
-  );
-
   return {
     change24h: typeof change === 'number' ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : EMPTY_VALUE,
     interpretation: '',
@@ -108,16 +104,14 @@ export function mapMobileOverviewDecision(overview?: MobileOverviewResponse) {
     };
   }
 
-  const score = clampScore(
-    (asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4,
-  );
+  const score = asset.benchmark_score == null ? null : clampScore(asset.benchmark_score);
   const state =
     asset.macro_label ||
-    (score >= 70
+    (score !== null && score >= 70
       ? 'Constructive, selective'
-      : score >= 50
+      : score !== null && score >= 50
         ? 'Neutral, wait for confirmation'
-        : 'Defensive, review risk');
+        : score === null ? 'Benchmark unavailable' : 'Defensive, review risk');
 
   return {
     reason: '',
@@ -203,14 +197,19 @@ export function mapDailyScores(scores?: UnknownRecord): DomainScore[] {
     ['Setup', ['setup', 'setup_score']],
   ];
 
-  return domains.map(([label, keys], index) => {
+  return domains.flatMap(([label, keys]) => {
     const raw = firstRecord(scores, keys);
+    if (label === 'Setup' && !Number.isFinite(
+      readNumber(raw, ['score', 'value', 'normalized_score'], readNumber(scores, keys, NaN)),
+    )) {
+      return [];
+    }
     const fallback = { score: 0, summary: '', trend: EMPTY_VALUE };
     const value = clampScore(
       readNumber(raw, ['score', 'value', 'normalized_score'], readNumber(scores, keys, fallback.score)),
     );
 
-    return {
+    return [{
       label,
       score: value,
       summary:
@@ -220,7 +219,7 @@ export function mapDailyScores(scores?: UnknownRecord): DomainScore[] {
       trend:
         readString(raw, ['trend', 'bias', 'status'], '') ||
         fallback.trend,
-    };
+    }];
   });
 }
 

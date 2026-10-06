@@ -20,7 +20,7 @@ def test_legacy_setup_task_stops_before_agent_work(monkeypatch):
 
     assert result == {
         "status": "disabled",
-        "reason": "legacy_periodic_ai_disabled",
+        "reason": "retired_setup_ai_agent",
         "user_id": 42,
     }
 

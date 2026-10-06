@@ -80,36 +80,6 @@ def _release_rule_based_scores_lease(client) -> None:
 
 
 # =========================================================
-# 🔎 Setup-score ophalen UIT SETUP AGENT
-# =========================================================
-def fetch_setup_score_from_setup_agent(conn, user_id: int):
-    """
-    Setup-score is BRON:
-    ai_category_insights WHERE category='setup'
-    (gevuld door run_setup_agent)
-    """
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT avg_score
-            FROM ai_category_insights
-            WHERE user_id = %s
-              AND category = 'setup'
-              AND date = CURRENT_DATE
-            LIMIT 1;
-            """,
-            (user_id,),
-        )
-        row = cur.fetchone()
-
-    if not row or row[0] is None:
-        logger.warning(f"⚠️ Geen setup-score gevonden (user_id={user_id})")
-        return None
-
-    return float(row[0])
-
-
-# =========================================================
 # 1️⃣ BUILD DAILY SCORES (RULE-BASED) — PER USER
 # =========================================================
 def build_daily_scores_for_user(user_id: int):
@@ -148,11 +118,6 @@ def build_daily_scores_for_user(user_id: int):
             technical_score = _confirmed_component_score(technical)
             market_score = _confirmed_component_score(market)
 
-            # 🔥 Setup-score UIT setup agent (per asset?)
-            # Voorlopig is setup agent nog globaal/per user. 
-            # TODO: Setup agent symbol-aware maken indien nodig.
-            setup_score = fetch_setup_score_from_setup_agent(conn, user_id)
-
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -183,7 +148,7 @@ def build_daily_scores_for_user(user_id: int):
                     """,
                     (
                         user_id, symbol,
-                        macro_score, technical_score, market_score, setup_score,
+                        macro_score, technical_score, market_score, None,
                         "Rule-based macro scan", "Rule-based technical scan", "Rule-based market scan",
                         _jsonb(list(macro.get("scores", {}).keys())),
                         _jsonb(list(technical.get("scores", {}).keys())),
@@ -227,9 +192,7 @@ def run_rule_based_daily_scores():
     """
     Draait rule-based scoring voor alle users.
 
-    ⚠️ BELANGRIJK:
-    Deze task VERWACHT dat de setup agent
-    AL GEDRAAID heeft voor vandaag.
+    De setupmatch wordt bij het lezen uit deze drie componentscores berekend.
     """
 
     lease_client = _try_acquire_rule_based_scores_lease()

@@ -152,7 +152,7 @@ class AssistantContextRepository:
         if not setup_record:
             active_resolution = FinnV2ActivePlanResolver().resolve(
                 asset=resolved_symbol,
-                active_setup=await self.setup_repo.get_active_setup(user_id),
+                active_setup=next((setup for setup in active_setups if setup.get("is_active")), None),
                 candidates=active_setups,
             )
             if active_resolution.setup is not None:

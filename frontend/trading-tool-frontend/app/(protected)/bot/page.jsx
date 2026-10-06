@@ -115,13 +115,13 @@ function getBotChainState(bot, strategies = []) {
 }
 
 function getBotMarketFitScore(decision) {
-  const setupMatchScore = Number(
+  const rawScore =
     decision?.setup_match?.score ??
     decision?.scores_json?.setup_match?.score ??
     decision?.scores_json?.setup_score ??
     decision?.setup_score ??
-    NaN
-  );
+    null;
+  const setupMatchScore = rawScore == null ? NaN : Number(rawScore);
 
   return Number.isFinite(setupMatchScore) ? setupMatchScore : -1;
 }

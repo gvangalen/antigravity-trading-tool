@@ -374,7 +374,7 @@ class WorkspaceDataService:
             "technical": self._category_payload(technical_rows, periods["technical"], STALE_AFTER_SECONDS[periods["technical"]], "technical_indicators"),
         }
         master_payload = master.model_dump() if hasattr(master, "model_dump") else master.dict()
-        if not master_payload.get("date"):
+        if master_payload.get("master_score") is None:
             master_payload.update({
                 "master_score": None,
                 "status": "insufficient_data",
@@ -386,6 +386,9 @@ class WorkspaceDataService:
             {category: payload["score"]["score"] for category, payload in categories.items()},
             master_payload.get("weights"),
         )
+        canonical_day = all(period == "day" for period in periods.values())
+        if canonical_day:
+            combined = (daily or {}).get("benchmark_score")
         effective_watchlist_symbols = (
             watchlist_symbols
             if watchlist_symbols
@@ -427,7 +430,7 @@ class WorkspaceDataService:
             "combined": {
                 "score": combined,
                 "periods": periods,
-                "basis": "weighted_category_average",
+                "basis": "current_benchmark" if canonical_day else "weighted_period_average",
                 "weights": _normalized_weights(master_payload.get("weights")),
                 "status": "available" if combined is not None else "insufficient_data",
             },
@@ -470,24 +473,20 @@ class WorkspaceDataService:
             }
 
         quote_map = await self._resolve_quote_map(normalized)
-        scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
+        daily_rows = await self.scores.fetch_daily_scores_batch(user_id, normalized)
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        match_service = SetupMarketMatchService(self.session, daily_rows=daily_rows)
         session = getattr(self, "session", None)
         asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
         rows = []
         for symbol in normalized:
             quote = quote_map.get(symbol)
-            daily = scores.get(symbol)
+            assessment = await match_service.for_asset(user_id, symbol, setups=[])
             asset_meta = asset_catalog.get(symbol, {})
-            category_scores = [
-                _number(daily.get(key)) if daily else None
-                for key in ("market_score", "macro_score", "technical_score")
-            ]
-            combined = _weighted_score(
-                dict(zip(("market", "macro", "technical"), category_scores)),
-                weights,
-            )
+            combined = assessment["benchmark_score"]
             score_freshness = _freshness(
-                daily.get("report_date") if daily else None,
+                assessment["as_of"],
                 STALE_AFTER_SECONDS["day"],
                 "daily_scores",
             )
@@ -501,7 +500,7 @@ class WorkspaceDataService:
                 "change_24h": quote.get("change_24h") if quote else None,
                 "score": combined,
                 "score_period": "day",
-                "score_status": "available" if combined is not None else "insufficient_data",
+                "score_status": assessment["source_status"],
                 "quote": _freshness(quote.get("timestamp") if quote else None, STALE_AFTER_SECONDS["quote"], "market_data"),
                 "score_freshness": score_freshness,
             })

@@ -222,7 +222,8 @@ def fetch_daily_reports_window(user_id: int, start: date, end: date) -> List[Dic
                     macro_score,
                     technical_score,
                     market_score,
-                    setup_score
+                    setup_score,
+                    top_setups
                 FROM daily_reports
                 WHERE user_id = %s
                   AND report_date BETWEEN %s AND %s
@@ -246,7 +247,12 @@ def fetch_daily_reports_window(user_id: int, start: date, end: date) -> List[Dic
                 "macro_score": to_float(r[10]),
                 "technical_score": to_float(r[11]),
                 "market_score": to_float(r[12]),
-                "setup_score": to_float(r[13]),
+                # Old reports contain a different AI-generated setup score.
+                "setup_score": to_float(r[13]) if any(
+                    item.get("score_semantics") == "benchmark_setup_match_v1"
+                    for item in (safe_json(r[14]) or []) if isinstance(item, dict)
+                ) else None,
+                "top_setups": safe_json(r[14]) or [],
             })
         return out
     finally:
@@ -258,7 +264,7 @@ def fetch_daily_scores_window(user_id: int, start: date, end: date) -> List[Dict
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT report_date, macro_score, technical_score, market_score, setup_score
+                SELECT report_date, macro_score, technical_score, market_score
                 FROM daily_scores
                 WHERE user_id = %s
                   AND report_date BETWEEN %s AND %s
@@ -271,43 +277,40 @@ def fetch_daily_scores_window(user_id: int, start: date, end: date) -> List[Dict
             "macro_score": to_float(r[1]),
             "technical_score": to_float(r[2]),
             "market_score": to_float(r[3]),
-            "setup_score": to_float(r[4]),
+            "setup_score": None,
         } for r in rows]
     finally:
         conn.close()
 
 
 def fetch_setup_scores_window(user_id: int, start: date, end: date) -> List[Dict[str, Any]]:
-    """
-    Dagelijkse setup scores over de periode.
-    """
+    """Only versioned setup-match snapshots from daily reports are comparable."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT
-                    d.report_date,
-                    s.id,
-                    s.name,
-                    s.timeframe,
-                    d.score,
-                    d.is_best
-                FROM daily_setup_scores d
-                JOIN setups s ON s.id = d.setup_id
-                WHERE d.user_id = %s
-                  AND d.report_date BETWEEN %s AND %s
-                ORDER BY d.report_date ASC, d.score DESC;
+                SELECT report_date, top_setups, best_setup
+                FROM daily_reports
+                WHERE user_id = %s AND report_date BETWEEN %s AND %s
+                ORDER BY report_date ASC;
             """, (user_id, start, end))
             rows = cur.fetchall()
 
-        return [{
-            "report_date": r[0].isoformat() if r[0] else None,
-            "setup_id": r[1],
-            "name": r[2],
-            "timeframe": r[3],
-            "score": to_float(r[4]),
-            "is_best": bool(r[5]) if r[5] is not None else False,
-        } for r in rows]
+        snapshots = []
+        for report_date, raw_items, raw_best in rows:
+            items = safe_json(raw_items) or []
+            best = safe_json(raw_best) or {}
+            for item in items if isinstance(items, list) else []:
+                if not isinstance(item, dict) or item.get("score_semantics") != "benchmark_setup_match_v1":
+                    continue
+                snapshots.append({
+                    "report_date": report_date.isoformat() if report_date else None,
+                    "setup_id": item.get("id"), "name": item.get("name"),
+                    "timeframe": item.get("timeframe"), "score": to_float(item.get("score")),
+                    "is_best": bool(item.get("status") == "matches" and
+                                    isinstance(best, dict) and best.get("id") == item.get("id")),
+                })
+        return snapshots
     finally:
         conn.close()
 
@@ -629,7 +632,7 @@ def generate_weekly_report_sections(user_id: int) -> Dict[str, Any]:
     macro_vals = [r.get("macro_score") for r in daily_scores] if daily_scores else [r.get("macro_score") for r in daily_reports]
     tech_vals = [r.get("technical_score") for r in daily_scores] if daily_scores else [r.get("technical_score") for r in daily_reports]
     market_vals = [r.get("market_score") for r in daily_scores] if daily_scores else [r.get("market_score") for r in daily_reports]
-    setup_vals = [r.get("setup_score") for r in daily_scores] if daily_scores else [r.get("setup_score") for r in daily_reports]
+    setup_vals = [r.get("setup_score") for r in daily_reports]
 
     meta = {
         "user_id": user_id,

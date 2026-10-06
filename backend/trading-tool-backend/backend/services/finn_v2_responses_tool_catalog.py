@@ -98,6 +98,7 @@ class FinnResponsesToolCatalog:
         # Collection reads have a distinct typed read adapter. They do not
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
+        self.read_tools["get_setup_market_matches"] = ("read_setup_market_matches",)
         self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
         self.evaluation_contracts = {
             contract.operation_id: contract
@@ -189,6 +190,14 @@ class FinnResponsesToolCatalog:
                     "owner-scoped records; do not invent an ID or replace one named setup with another. "
                     "When the user chooses one linked strategy for a comparison, pass its exact "
                     "name in strategy_name; FINN checks its owner and setup relation."
+                )
+            if name == "get_setup_market_matches":
+                description += (
+                    " Use for questions about which of the user's setups currently matches measured "
+                    "market conditions or deserves attention. Distinguish benchmark_score, weighted "
+                    "by the owner's current Analyse preferences, from each setup's weighted fit to its "
+                    "saved score ranges. Neither establishes an entry trigger, strategy readiness "
+                    "or permission to trade. If source_status is not available, explain the data gap."
                 )
             if name == "get_linked_strategies":
                 description += (
