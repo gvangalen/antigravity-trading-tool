@@ -561,6 +561,10 @@ class MarketDataService:
         if not indicator_name:
             raise HTTPException(400, "❌ Indicator mag niet leeg zijn.")
 
+        exists = await self.repository.check_indicator_exists(indicator_name, user_id, symbol=symbol)
+        if exists and not refresh_existing:
+            raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor {symbol}.")
+
         asset_scope = await self._get_asset_scope(symbol)
         if persist_preference:
             await self.preference_repository.ensure_user_config(
@@ -570,10 +574,6 @@ class MarketDataService:
                 symbol=symbol,
                 asset_class=asset_scope.get("asset_class"),
             )
-
-        exists = await self.repository.check_indicator_exists(indicator_name, user_id, symbol=symbol)
-        if exists and not refresh_existing:
-            raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor {symbol}.")
 
         # Bepaal value als deze leeg is
         source_observed_at = None

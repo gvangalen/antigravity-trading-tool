@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 from fastapi import HTTPException
+import pytest
 
 from backend.services.market_data_service import MarketDataService
 
@@ -214,6 +215,20 @@ def test_add_market_indicator_saves_measurement_without_inventing_score(monkeypa
     assert result.score is None
     assert "Onvoldoende gedateerde metingen" in result.interpretation
     session.commit.assert_awaited_once()
+
+
+def test_duplicate_market_indicator_does_not_touch_configuration():
+    service = MarketDataService(AsyncMock())
+    service.repository.check_indicator_exists = AsyncMock(return_value=True)
+    service.preference_repository = SimpleNamespace(ensure_user_config=AsyncMock())
+    service._get_asset_scope = AsyncMock()
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(service.add_user_market_indicator(7, "price", None, symbol="BTC"))
+
+    assert error.value.status_code == 409
+    service.preference_repository.ensure_user_config.assert_not_awaited()
+    service._get_asset_scope.assert_not_awaited()
 
 
 def test_market_preference_sync_refreshes_existing_evidence_from_the_live_provider():

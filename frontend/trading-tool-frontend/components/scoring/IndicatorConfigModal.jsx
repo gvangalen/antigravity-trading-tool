@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/indicatorConfig";
 import { getAssistantPreferences } from "@/lib/api/ai";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
+import { persistIndicatorConfiguration, indicatorConfigFailureMessage } from "@/lib/indicatorConfigFlow.mjs";
 
 const NAME_ALIASES = {
   fear_and_greed_index: "fear_greed_index",
@@ -418,28 +419,9 @@ export default function IndicatorConfigModal({
     setSaveError("");
 
     try {
-      if (draft.score_mode === "custom") {
-        await saveCustomRules({
-        category,
-        indicator,
-        symbol: assetSymbol,
-          rules: Array.isArray(draft.rules) ? draft.rules : [],
-        });
-      }
-
-      await updateIndicatorSettings({
-          category,
-          indicator,
-          symbol: assetSymbol,
-          score_mode: draft.score_mode || "standard",
-        weight: typeof draft.weight === "number" ? draft.weight : 1,
-      });
-
-      await onSubmitAction?.({
-        indicator,
-        category,
-        assetSymbol,
-        draft,
+      await persistIndicatorConfiguration({
+        mode, indicator, category, assetSymbol, draft,
+        onSubmitAction, saveCustomRules, updateIndicatorSettings,
       });
 
       if (showSuccessSnackbar) {
@@ -461,18 +443,17 @@ export default function IndicatorConfigModal({
       onClose?.();
     } catch (error) {
       console.error("Failed to confirm indicator config modal:", error);
-      let detail = "";
-      try {
-        const parsed = JSON.parse(error?.body || "{}");
-        detail = typeof parsed?.detail === "string" ? parsed.detail : "";
-      } catch {}
-      const message = error?.status === 409
-        ? `${indicatorLabel} is al toegevoegd voor ${assetSymbol}. Bewerk de bestaande indicator.`
-        : error?.status === 422 && detail
-          ? detail
-          : copy.actionFailed.replace("{indicator}", indicatorLabel);
-      setSaveError(message);
-      showSnackbar(message, "danger");
+      const message = indicatorConfigFailureMessage({
+        error, indicatorLabel, assetSymbol,
+        actionFailed: copy.actionFailed.replace("{indicator}", indicatorLabel),
+      });
+      if (error?.indicatorCreated) {
+        onCompleted?.({ indicator, category, assetSymbol, draft, partial: true, error: message });
+        onClose?.();
+      } else {
+        setSaveError(message);
+        showSnackbar(message, "danger");
+      }
     } finally {
       setSaving(false);
     }

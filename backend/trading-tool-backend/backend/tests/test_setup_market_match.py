@@ -309,6 +309,51 @@ def test_asset_match_is_owner_scoped_and_requires_fresh_sources():
     asyncio.run(run())
 
 
+def test_positive_match_uses_saved_evidence_for_each_selected_source():
+    now = datetime.now(timezone.utc)
+    observed = now - timedelta(hours=1)
+    readings = {"market": ("price", 76000), "macro": ("dxy", 100), "technical": ("rsi", 55)}
+    evidence = {
+        category: {name: {"value": value, "source_observed_at": observed.isoformat()}}
+        for category, (name, value) in readings.items()
+    }
+    row = {"report_date": date.today(), "calculated_at": now,
+           "market_score": 70, "macro_score": 50, "technical_score": 75,
+           "indicator_evidence": evidence}
+
+    async def execute(statement, params):
+        sql = str(statement)
+        if "FROM user_indicator_configs" in sql:
+            name, _ = readings[params["category"]]
+            return SimpleNamespace(fetchall=lambda: [(name, now - timedelta(hours=2))])
+        category = next(category for category, table in (
+            ("market", "market_data_indicators"), ("macro", "macro_data"),
+            ("technical", "technical_indicators")) if f"FROM {table}" in sql)
+        name, value = readings[category]
+        return SimpleNamespace(fetchall=lambda: [(name, value, observed)])
+
+    async def run():
+        service = SetupMarketMatchService(SimpleNamespace(execute=execute), daily_rows={"BTC": row})
+        service._weights_by_user[7] = {"market_score": 1 / 3, "macro_score": 1 / 3,
+                                       "technical_score": 1 / 3}
+        owned = [setup(1, "BTC", min_market_score=60, max_market_score=80),
+                 setup(2, "AAPL", min_market_score=60)]
+        result = await service.for_asset(7, "BTC", setups=owned)
+        assert result["source_status"] == "available"
+        assert result["benchmark_score"] == 65
+        assert [item["setup_id"] for item in result["matches"]] == [1]
+        assert result["matches"][0]["status"] == "matches"
+        assert result["matches"][0]["is_best"] is True
+
+        row["indicator_evidence"] = {**evidence, "macro": {"dxy": {
+            "value": 100, "source_observed_at": (observed - timedelta(days=14)).isoformat()}}}
+        stale = await service.for_asset(7, "BTC", setups=owned)
+        assert stale["benchmark_score"] is None
+        assert stale["matches"][0]["status"] == "insufficient_data"
+
+    asyncio.run(run())
+
+
 def test_all_asset_match_keeps_each_asset_and_source_status():
     async def run():
         service = SetupMarketMatchService(SimpleNamespace(), daily_rows={})
