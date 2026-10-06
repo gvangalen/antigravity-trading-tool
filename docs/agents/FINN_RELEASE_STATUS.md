@@ -8,14 +8,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED_PENDING_CI`; production deploy and independent live QA have not run. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; Build gates and production identity checks passed. Independent live QA has not run. |
 | Goal | Use one owner-scoped, source-checked market, macro and technical benchmark and setupmatch across FINN, My Plan, Analyse, mobile, reports and bot score input. |
-| Candidate branch | `codex/setup-market-match` |
-| Candidate implementation SHA | `ffdb6b5d97186c96dabbdf6dd91b915d8ade8dc0`; documentation/status commits follow it. |
-| PR | [#80](https://github.com/gvangalen/antigravity-trading-tool/pull/80). |
-| Production SHA | Not this candidate; verify after Auto Deploy. |
+| Candidate branch | Merged to `main`. |
+| Candidate implementation SHA | `ffdb6b5d97186c96dabbdf6dd91b915d8ade8dc0`; merged in `a34069d9f50ff788fd8bfa2b385189396eeb7e6d`. The security lockfile update is merged in `a51603b565d7ccf7a9922d1b551b67ed83c75a31`. |
+| PR | [#80](https://github.com/gvangalen/antigravity-trading-tool/pull/80) and [#81](https://github.com/gvangalen/antigravity-trading-tool/pull/81), both merged. |
+| Production SHA | `a51603b565d7ccf7a9922d1b551b67ed83c75a31` observed on both public surfaces after Auto Deploy. A later status-only commit changes the SHA; QA must bind to the current public backend/frontend SHA. |
 | Release owner | Build |
-| Last updated | 2026-10-05 |
+| Last updated | 2026-10-06 |
 
 The previous setup-rationale release reached `READY_FOR_INDEPENDENT_QA` on production SHA `e9eac8781260b80fad6267237cbfbf657753c8dd`. No independent acceptance verdict was recorded in this file. The user explicitly requested deployment of the setupmatch change for live testing; this candidate replaces the pending release target.
 
@@ -26,6 +26,7 @@ The previous setup-rationale release reached `READY_FOR_INDEPENDENT_QA` on produ
 - Bot execution uses a proven match only as score input for existing sizing and risk logic. A missing match does not block existing execution. Smart DCA still needs a complete, fresh benchmark for a score-driven amount.
 - The old Setup AI Agent was removed. A no-write Celery tombstone remains to drain previously queued messages safely.
 - The [live QA test plan](../operations/setup-market-match-live-test-plan.md) lists the required cross-surface and execution checks. Build-local evidence does not establish authenticated production acceptance.
+- Main CI initially failed when new npm advisories affected Capacitor and source-map-js. [PR #81](https://github.com/gvangalen/antigravity-trading-tool/pull/81) updated the lockfile and tracked frontend export; the fresh production dependency audit reports zero vulnerabilities.
 
 ## Local Build Evidence
 
@@ -45,7 +46,7 @@ All artifacts below are from an isolated local parity stack or repository-local 
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending PR #80 checks. |
-| Main CI and Auto Deploy | Not run for this candidate. |
-| Public backend health and frontend build-info | Not verified for this candidate. |
+| Candidate CI | [PR #80 CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37368831098) completed success after hosted-runner rerun; [PR #81 CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37413754628) completed success. |
+| Main CI and Auto Deploy | [Final main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37413888897) completed success; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37414053146) completed success for `a51603b565d7ccf7a9922d1b551b67ed83c75a31`. |
+| Public backend health and frontend build-info | On 2026-10-06 both returned HTTP 200 and SHA `a51603b565d7ccf7a9922d1b551b67ed83c75a31`. |
 | Independent authenticated live QA | Not started for this candidate; QA owns fixture, execution and verdict. |
