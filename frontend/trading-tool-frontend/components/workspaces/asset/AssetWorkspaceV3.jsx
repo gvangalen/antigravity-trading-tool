@@ -155,6 +155,7 @@ function getUiCopy(locale = "nl") {
       negative: "Negative",
       neutral: "Neutral",
       unavailable: "Insufficient data",
+      pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
       market: "Market",
       macro: "Macro",
       technical: "Technical",
@@ -292,6 +293,7 @@ function getUiCopy(locale = "nl") {
       negative: "Negativ",
       neutral: "Neutral",
       unavailable: "Unzureichende Daten",
+      pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
       market: "Markt",
       macro: "Makro",
       technical: "Technisch",
@@ -428,6 +430,7 @@ function getUiCopy(locale = "nl") {
     negative: "Negatief",
     neutral: "Neutraal",
     unavailable: "Onvoldoende data",
+    pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
     market: "Markt",
     macro: "Macro",
     technical: "Technisch",
@@ -1273,7 +1276,9 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
           direction,
           ui,
         })
-      : ui.unavailable;
+      : !hasValue && item?.data_status === "pending_refresh"
+        ? ui.pendingSource
+        : ui.unavailable;
     const detail = scoreConflict
       ? ui.positiveMoveWeakScore(value, Math.round(score))
       : shouldUseBackendDetail
