@@ -25,3 +25,14 @@ test("FINN headings render as emphasis instead of raw hash markers", () => {
     { text: " de niveaus zijn opgeslagen.", bold: false },
   ]);
 });
+
+test("FINN renders single-star setup names without exposing markers", () => {
+  assert.deepEqual(parseFinnChatText("De match voor *BTC Breakout Full* is onbewezen."), [
+    { text: "De match voor ", bold: false },
+    { text: "BTC Breakout Full", bold: true },
+    { text: " is onbewezen.", bold: false },
+  ]);
+  assert.deepEqual(parseFinnChatText("Risico = 2 * 3 * 4"), [
+    { text: "Risico = 2 * 3 * 4", bold: false },
+  ]);
+});

@@ -100,13 +100,21 @@ class IndicatorConfigService:
     async def update_indicator_settings(self, category: str, indicator: str, user_id: int, symbol: str, score_mode: str, weight: float):
         score_mode = (score_mode or "").strip().lower()
         weight = _clamp_weight(weight)
-        
+        metadata = {"score_mode": score_mode, "weight": weight}
+        if score_mode == "custom":
+            configured = await self.product_repository.get_user_configs(user_id, category, symbol=symbol)
+            row = next((item for item in configured if item.indicator == indicator), None)
+            rules = (getattr(row, "config_json", None) or {}).get("rules") if row else None
+            if not isinstance(rules, list) or len(rules) != 5:
+                raise ValueError("Aangepaste scoremodus vereist vijf opgeslagen regels.")
+            metadata["rules"] = rules
+
         await self.product_repository.set_indicator_config_metadata(
             user_id,
             indicator,
             category,
             symbol=symbol,
-            config_json={"score_mode": score_mode, "weight": weight},
+            config_json=metadata,
         )
         await self.repository.db.commit()
 

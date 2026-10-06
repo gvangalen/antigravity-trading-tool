@@ -54,6 +54,7 @@ export async function saveCustomRules({
   indicator,
   symbol,
   rules,
+  weight,
 }) {
   try {
     return await fetchAuth(`/api/indicator_config/custom`, {
@@ -63,6 +64,7 @@ export async function saveCustomRules({
         indicator,
         symbol,
         rules,
+        weight,
       }),
     });
   } catch (err) {
