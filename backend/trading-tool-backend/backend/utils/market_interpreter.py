@@ -1,4 +1,5 @@
 import logging
+from statistics import median
 from backend.utils.scoring_utils import (
     get_score_rule_from_db,
     normalize_indicator_name,
@@ -35,7 +36,7 @@ def normalize_market_value(indicator: str, value: float) -> float:
         # -------------------------------------------------
         # BTC Volume (% afwijking t.o.v. 30d gemiddelde)
         # -------------------------------------------------
-        if indicator == "btc_volume":
+        if indicator in {"btc_volume", "volume_change"}:
             abs_dev = abs(value)
             cap = 80  # 80% afwijking = extreem
             return min(100, (abs_dev / cap) * 100)
@@ -43,10 +44,10 @@ def normalize_market_value(indicator: str, value: float) -> float:
         # -------------------------------------------------
         # 24h price change (%)
         # -------------------------------------------------
-        if indicator == "btc_change_24h":
-            abs_dev = abs(value)
-            cap = 20  # 20% daily move = extreem
-            return min(100, (abs_dev / cap) * 100)
+        if indicator in {"btc_change_24h", "change_24h"}:
+            # Preserve direction: -20% maps to 0, unchanged to 50,
+            # +20% to 100. Absolute magnitude made drops and rallies equal.
+            return max(0, min(100, 50 + value * 2.5))
 
         # -------------------------------------------------
         # Volatility (%)
@@ -70,6 +71,37 @@ def normalize_market_value(indicator: str, value: float) -> float:
     except Exception:
         logger.error("❌ Normalisatie fout", exc_info=True)
         return 0
+
+
+def normalize_market_value_with_history(conn, symbol: str, indicator: str,
+                                        value: float) -> float | None:
+    """Use asset-relative context for absolute price and volume readings.
+
+    A EUR or USD price and a trading volume are not percentages. Without a
+    measured history they cannot safely select one of the 0–100 rule buckets.
+    """
+    if indicator not in {"price", "volume"}:
+        return normalize_market_value(indicator, value)
+    column = "price" if indicator == "price" else "volume"
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            SELECT DISTINCT ON (source_observed_at::date) {column}
+            FROM market_data
+            WHERE symbol = %s AND source_observed_at >= NOW() - INTERVAL '30 days'
+              AND source_observed_at IS NOT NULL AND {column} IS NOT NULL
+            ORDER BY source_observed_at::date, source_observed_at DESC
+        """, (symbol,))
+        history = [float(row[0]) for row in cur.fetchall()]
+    if len(history) < 5:
+        return None
+    current = float(value)
+    if indicator == "price":
+        low, high = min(history), max(history)
+        return 50.0 if high == low else max(0.0, min(100.0, 100 * (current - low) / (high - low)))
+    typical = median(history)
+    if typical <= 0:
+        return None
+    return max(0.0, min(100.0, 50 * current / typical))
 
 
 # =========================================================

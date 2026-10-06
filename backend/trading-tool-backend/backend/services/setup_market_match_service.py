@@ -9,7 +9,7 @@ from sqlalchemy import text
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
 from backend.domain.setup_market_match import rank_matches
 from backend.infrastructure.repositories.setup_repository import SetupRepository
-from backend.utils.scoring_utils import score_source_is_fresh
+from backend.utils.scoring_utils import score_snapshot_is_current
 
 
 class SetupMarketMatchService:
@@ -17,7 +17,6 @@ class SetupMarketMatchService:
         self.session = session
         self.setups = SetupRepository(session)
         self.daily_rows = daily_rows
-        self._macro_fresh_by_user: dict[int, bool] = {}
         self._weights_by_user: dict[int, dict[str, float] | None] = {}
 
     async def _benchmark_weights(self, user_id: int) -> dict[str, float] | None:
@@ -45,45 +44,39 @@ class SetupMarketMatchService:
         self._weights_by_user[user_id] = weights
         return weights
 
-    async def _source_is_fresh(self, user_id: int, symbol: str, category: str) -> bool:
-        if category == "macro" and user_id in self._macro_fresh_by_user:
-            return self._macro_fresh_by_user[user_id]
+    async def _source_is_fresh(self, user_id: int, symbol: str, category: str,
+                               row: dict) -> bool:
         table, name_column = {
             "macro": ("macro_data", "name"),
             "technical": ("technical_indicators", "indicator"),
             "market": ("market_data_indicators", "name"),
         }[category]
         parameters = {"user_id": user_id, "symbol": symbol}
-        configured = None
-        if category == "technical":
-            configured_result = await self.session.execute(text("""
-                SELECT indicator FROM user_indicator_configs
-                WHERE user_id = :user_id AND category = 'technical'
-                  AND symbol = :symbol AND enabled = TRUE
-            """), parameters)
-            configured = {row[0] for row in configured_result.fetchall()}
-            if not configured:
-                return False
+        configured_result = await self.session.execute(text("""
+            SELECT indicator, updated_at FROM user_indicator_configs
+            WHERE user_id = :user_id AND category = :category
+              AND symbol = :symbol AND enabled = TRUE
+        """), {**parameters, "category": category})
+        configured = configured_result.fetchall()
         asset_clause = "" if category == "macro" else "AND symbol = :symbol"
         # Table and column names are selected from the constant map above.
         result = await self.session.execute(text(f"""
-            SELECT DISTINCT ON ({name_column}) {name_column}, source_observed_at
+            SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at
             FROM {table}
             WHERE user_id = :user_id {asset_clause}
             ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
         """), parameters)
-        rows = result.fetchall()
-        if configured is not None:
-            rows = [row for row in rows if row[0] in configured]
-            if {row[0] for row in rows} != configured:
-                return False
-        fresh = bool(rows) and all(
-            score_source_is_fresh(category, row[0], row[1], symbol=symbol)
-            for row in rows
+        evidence = row.get("indicator_evidence") or {}
+        if isinstance(evidence, str):
+            try:
+                evidence = json.loads(evidence)
+            except json.JSONDecodeError:
+                evidence = {}
+        return score_snapshot_is_current(
+            category, symbol, configured, result.fetchall(),
+            evidence.get(category) if isinstance(evidence, dict) else None,
+            row.get("calculated_at"),
         )
-        if category == "macro":
-            self._macro_fresh_by_user[user_id] = fresh
-        return fresh
 
     async def for_asset(self, user_id: int, symbol: str, *, setups=None) -> dict:
         symbol = str(symbol or "").strip().upper()
@@ -95,7 +88,8 @@ class SetupMarketMatchService:
             row = self.daily_rows.get(symbol)
         else:
             result = await self.session.execute(text("""
-                SELECT report_date, macro_score, technical_score, market_score
+                SELECT report_date, macro_score, technical_score, market_score,
+                       calculated_at, indicator_evidence
                 FROM daily_scores
                 WHERE user_id = :user_id AND symbol = :symbol AND report_date = CURRENT_DATE
                 LIMIT 1
@@ -129,7 +123,7 @@ class SetupMarketMatchService:
                 value = reported_scores[score_key]
                 if value is not None:
                     component_source_status[score_key] = (
-                        "fresh" if await self._source_is_fresh(user_id, symbol, category)
+                        "fresh" if await self._source_is_fresh(user_id, symbol, category, row)
                         else "stale_source"
                     )
             if weights is not None and all(
@@ -169,7 +163,8 @@ class SetupMarketMatchService:
         symbols = sorted({str(row.get("symbol") or "").upper() for row in owned if row.get("symbol")})
         if self.daily_rows is None and symbols:
             result = await self.session.execute(text("""
-                SELECT symbol, report_date, macro_score, technical_score, market_score
+                SELECT symbol, report_date, macro_score, technical_score, market_score,
+                       calculated_at, indicator_evidence
                 FROM daily_scores WHERE user_id = :user_id AND report_date = CURRENT_DATE
                   AND symbol = ANY(:symbols)
             """), {"user_id": user_id, "symbols": symbols})

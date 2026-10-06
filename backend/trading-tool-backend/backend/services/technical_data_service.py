@@ -52,7 +52,8 @@ class TechnicalDataService:
             )
             return AssetCatalogService(self.session)._fallback_asset(normalized_symbol)
 
-    def _score_indicator_with_fallback(self, *, name: str, value: float, user_id: int) -> Dict[str, Any]:
+    def _score_indicator_with_fallback(self, *, name: str, value: float,
+                                       user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
         conn = get_db_connection()
         if not conn:
             raise RuntimeError("Geen database verbinding voor scoring engine.")
@@ -65,6 +66,7 @@ class TechnicalDataService:
                 indicator=normalized,
                 value=normalized_value,
                 user_id=user_id,
+                symbol=symbol,
             )
         finally:
             conn.close()
@@ -355,6 +357,7 @@ class TechnicalDataService:
             name=name,
             value=val,
             user_id=user_id,
+            symbol=symbol,
         )
         score = float(scored["score"])
         advies = scored.get("trend") or "neutral"

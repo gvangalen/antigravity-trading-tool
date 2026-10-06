@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
@@ -67,6 +68,50 @@ def normalize_indicator_name(name: str) -> str:
     return NAME_ALIASES.get(normalized, normalized)
 
 
+def score_snapshot_is_current(category: str, symbol: str, configurations,
+                              readings, evidence, calculated_at) -> bool:
+    """Verify that a saved category still describes the selected inputs.
+
+    Source freshness alone is insufficient after a user changes indicator
+    rules or a provider publishes a new value before the next score job.
+    """
+    if not isinstance(calculated_at, datetime) or not isinstance(evidence, dict):
+        return False
+    calculation_time = (calculated_at.replace(tzinfo=timezone.utc)
+                        if calculated_at.tzinfo is None else calculated_at.astimezone(timezone.utc))
+    configured = {}
+    for name, updated_at in configurations:
+        key = normalize_indicator_name(name)
+        if not isinstance(updated_at, datetime):
+            return False
+        update_time = (updated_at.replace(tzinfo=timezone.utc)
+                       if updated_at.tzinfo is None else updated_at.astimezone(timezone.utc))
+        if update_time > calculation_time:
+            return False
+        configured[key] = True
+    if not configured or set(evidence) != set(configured):
+        return False
+    current = {normalize_indicator_name(name): (value, observed_at)
+               for name, value, observed_at in readings
+               if normalize_indicator_name(name) in configured}
+    if set(current) != set(configured):
+        return False
+    for name, (value, observed_at) in current.items():
+        saved = evidence.get(name)
+        if not isinstance(saved, dict) or not score_source_is_fresh(
+            category, name, observed_at, symbol=symbol,
+        ):
+            return False
+        try:
+            if not math.isclose(float(saved["value"]), float(value), rel_tol=1e-12):
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
+        if saved.get("source_observed_at") != observed_at.isoformat():
+            return False
+    return True
+
+
 # =========================================================
 # 🔢 SCORE ENGINE (USER-AWARE)
 # =========================================================
@@ -94,87 +139,82 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
 
     conn = get_db_connection()
     if not conn:
-        return {"scores": {}, "total_score": 10, "top_contributors": []}
+        return {"scores": {}, "total_score": None, "top_contributors": []}
 
     try:
         with conn.cursor() as cur:
-            # ✅ NEW: Use Global Config if available
-            if user_id is not None and category == "technical":
-                # Haal eerst de config op
-                cur.execute("""
-                    SELECT indicator FROM user_indicator_configs
-                    WHERE user_id = %s
-                      AND category = %s
-                      AND symbol = %s
-                      AND enabled = TRUE
-                """, (user_id, category, symbol))
-                configs = [r[0] for r in cur.fetchall()]
-                
-                if configs:
-                    # Haal nu de data op voor deze specifieke indicators en dit symbool
-                    cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
-                        FROM {data_table}
-                        WHERE user_id = %s AND symbol = %s AND {name_col} = ANY(%s)
-                        ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
-                    """, (user_id, symbol, configs))
-                else:
-                    # Missing canonical preferences are not permission to score
-                    # unrelated indicator data for this user and asset.
-                    return {"scores": {}, "total_score": 10, "top_contributors": []}
-            
-            elif user_id is not None:
-                if category == "macro":
-                    cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
-                        FROM {data_table}
-                        WHERE user_id = %s
-                        ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
-                    """, (user_id,))
-                else:
-                    cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
-                        FROM {data_table}
-                        WHERE user_id = %s AND symbol = %s
-                        ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
-                    """, (user_id, symbol))
-            else:
-                # 🌍 GLOBAL mode (fallback)
-                pass
-
-            rows = cur.fetchall()
+            cur.execute("""
+                SELECT indicator FROM user_indicator_configs
+                WHERE user_id = %s AND category = %s AND symbol = %s AND enabled = TRUE
+            """, (user_id, category, symbol))
+            configured = {normalize_indicator_name(row[0]) for row in cur.fetchall()}
+            if not configured:
+                return {"scores": {}, "total_score": None, "top_contributors": [],
+                        "source_status": "missing_configuration"}
+            # Macro measurements are global to the owner, while the owner's
+            # selected macro indicators and weights remain asset-scoped.
+            cur.execute(f"""
+                SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
+                FROM {data_table}
+                WHERE user_id = %s {' ' if category == 'macro' else 'AND symbol = %s'}
+                ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
+            """, (user_id,) if category == "macro" else (user_id, symbol))
+            rows = {normalize_indicator_name(row[0]): row for row in cur.fetchall()
+                    if normalize_indicator_name(row[0]) in configured}
 
         # A newly stamped daily_scores row must not launder an old component
         # into fresh trading evidence. Fail the whole component rather than
         # silently reweighting it around missing/stale configured indicators.
-        if any(not score_source_is_fresh(category, r[0], r[2], symbol=symbol) for r in rows):
+        if set(rows) != configured or any(
+            row[1] is None or not score_source_is_fresh(category, row[0], row[2], symbol=symbol)
+            for row in rows.values()
+        ):
             logger.warning("Stale %s score inputs for user=%s symbol=%s", category, user_id, symbol)
-            return {"scores": {}, "total_score": 10, "top_contributors": []}
-        data = {normalize_indicator_name(r[0]): float(r[1]) for r in rows if r[1] is not None}
+            return {"scores": {}, "total_score": None, "top_contributors": [],
+                    "source_status": "missing_or_stale_indicator"}
+        data = {name: (float(row[1]), row[2]) for name, row in rows.items()}
 
         if not data:
             logger.warning(f"⚠️ Geen data voor {category} (user_id={user_id})")
-            return {"scores": {}, "total_score": 10, "top_contributors": []}
+            return {"scores": {}, "total_score": None, "top_contributors": []}
 
         scores: Dict[str, Any] = {}
         weighted_total = 0.0
         total_weight = 0.0
 
-        for indicator, value in data.items():
+        # Import here: interpreters also use scoring_utils for rule lookups.
+        from backend.utils.macro_interpreter import normalize_macro_value_with_history
+        from backend.utils.market_interpreter import normalize_market_value_with_history
+        from backend.utils.technical_interpreter import normalize_technical_value
+        normalizers = {"technical": normalize_technical_value}
+        for indicator, (value, observed_at) in data.items():
             logger.info(f"DEBUG: Scoring {category} indicator: {indicator} = {value}")
-            # ✅ CRUCIAAL: user_id meegeven
+            if category == "market":
+                normalized_value = normalize_market_value_with_history(conn, symbol, indicator, value)
+            elif category == "macro":
+                normalized_value = normalize_macro_value_with_history(conn, user_id, indicator, value)
+            else:
+                normalized_value = normalizers[category](indicator, value)
+            if normalized_value is None:
+                return {"scores": {}, "total_score": None, "top_contributors": [],
+                        "source_status": "insufficient_indicator_history"}
             scored = score_indicator(
                 conn=conn,
                 category=category,
                 indicator=indicator,
-                value=value,
-                user_id=user_id,   # ← NIEUW
+                value=normalized_value,
+                user_id=user_id,
+                symbol=symbol,
             )
-
+            if scored.get("matched_rule_id") is None:
+                return {"scores": {}, "total_score": None, "top_contributors": [],
+                        "source_status": "missing_rule"}
             weight = float(scored.get("weight", 1))
 
             scores[indicator] = {
                 "value": value,
+                "normalized_value": normalized_value,
+                "source_observed_at": observed_at.isoformat(),
                 "score": scored["score"],
                 "trend": scored["trend"],
                 "interpretation": scored["interpretation"],
@@ -186,7 +226,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             weighted_total += scored["score"] * weight
             total_weight += weight
 
-        avg_score = round(weighted_total / total_weight) if total_weight else 10
+        avg_score = round(weighted_total / total_weight) if total_weight else None
 
         top_contributors: List[str] = [
             name for name, _ in sorted(
@@ -200,11 +240,12 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             "scores": scores,
             "total_score": avg_score,
             "top_contributors": top_contributors,
+            "source_status": "available" if total_weight > 0 else "missing_weight",
         }
 
     except Exception:
         logger.exception(f"❌ Score generatie fout ({category})")
-        return {"scores": {}, "total_score": 10, "top_contributors": []}
+        return {"scores": {}, "total_score": None, "top_contributors": []}
 
     finally:
         conn.close()

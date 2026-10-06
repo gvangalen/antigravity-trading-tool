@@ -32,12 +32,13 @@ async def get_score_service(db: AsyncSession = Depends(get_db)):
 # =========================================================
 @router.get("/score/macro")
 async def get_macro_score(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: ScoreService = Depends(get_score_service)
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_macro_score(user_id=user_id)
+        return await service.get_macro_score(user_id=user_id, symbol=symbol)
     except Exception as e:
         logger.error(f"❌ /score/macro: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen macro-score")
@@ -48,12 +49,13 @@ async def get_macro_score(
 # =========================================================
 @router.get("/score/technical")
 async def get_technical_score(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: ScoreService = Depends(get_score_service)
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_technical_score(user_id=user_id)
+        return await service.get_technical_score(user_id=user_id, symbol=symbol)
     except Exception as e:
         logger.error(f"❌ /score/technical: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen technische score")
@@ -64,12 +66,13 @@ async def get_technical_score(
 # =========================================================
 @router.get("/score/market")
 async def get_market_score(
+    symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: ScoreService = Depends(get_score_service)
 ):
     try:
         user_id = current_user["id"]
-        return await service.get_market_score(user_id=user_id)
+        return await service.get_market_score(user_id=user_id, symbol=symbol)
     except Exception as e:
         logger.error(f"❌ /score/market: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij ophalen market-score")

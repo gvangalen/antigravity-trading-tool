@@ -64,6 +64,16 @@ class MacroDataRepository:
         )
         return list(result.scalars().all())
 
+    async def get_latest_indicator(self, user_id: int, name: str, symbol: Optional[str] = None) -> Optional[MacroData]:
+        result = await self.session.execute(
+            select(MacroData).where(
+                MacroData.user_id == user_id,
+                MacroData.symbol == symbol,
+                func.lower(MacroData.name) == func.lower(name),
+            ).order_by(MacroData.source_observed_at.desc().nulls_last(), MacroData.timestamp.desc()).limit(1)
+        )
+        return result.scalars().first()
+
     async def get_active_day_macro_data(self, user_id: int, symbol: Optional[str] = None) -> List[MacroData]:
         subq = (
             select(

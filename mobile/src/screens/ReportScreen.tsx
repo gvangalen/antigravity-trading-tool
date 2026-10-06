@@ -1632,11 +1632,11 @@ function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileRepo
     highlights,
     kpi_metrics: {
       change_24h: readReportNumber(fullReport, ['change_24h', 'price_change_24h']) ?? 0,
-      macro_score: readReportNumber(fullReport, ['macro_score']) ?? 0,
-      market_score: readReportNumber(fullReport, ['market_score']) ?? 0,
+      macro_score: readReportNumber(fullReport, ['macro_score']),
+      market_score: readReportNumber(fullReport, ['market_score']),
       price: readReportNumber(fullReport, ['price', 'bitcoin_price']) ?? 0,
       setup_score: readReportNumber(fullReport, ['setup_score']),
-      technical_score: readReportNumber(fullReport, ['technical_score']) ?? 0,
+      technical_score: readReportNumber(fullReport, ['technical_score']),
       volume: readReportNumber(fullReport, ['volume', 'total_volume']) ?? 0,
     },
     market_analysis_compact: normalizeReportText(
@@ -1700,11 +1700,17 @@ function unavailableReport(period: ReportPeriod, language: AppLanguage): MappedR
 
 function scoresFromKpis(kpis?: Record<string, unknown> | null) {
   if (!kpis) return [];
+  const scoreOrNull = (key: string) => {
+    const value = kpis[key];
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.round(parsed) : null;
+  };
   const items = [
-    ['Macro', readNumber(kpis, 'macro_score')],
-    ['Technical', readNumber(kpis, 'technical_score')],
-    ['Market', readNumber(kpis, 'market_score')],
-    ['Setup', readNumber(kpis, 'setup_score')],
+    ['Macro', scoreOrNull('macro_score')],
+    ['Technical', scoreOrNull('technical_score')],
+    ['Market', scoreOrNull('market_score')],
+    ['Setup', scoreOrNull('setup_score')],
   ].filter((item): item is [string, number] => typeof item[1] === 'number' && Number.isFinite(item[1]));
 
   return items.map(([label, value]) => ({

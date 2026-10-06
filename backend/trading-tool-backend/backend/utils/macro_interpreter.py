@@ -3,7 +3,7 @@ import requests
 import csv
 import json
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from io import StringIO
 from urllib.parse import parse_qs, urlparse
 
@@ -213,7 +213,7 @@ def _fetch_dxy_from_twelve_data(provider: TwelveDataMacroProvider):
     return provider.fetch_derived_dxy()
 
 
-def _fetch_google_trends_value(keyword: str = "Bitcoin", timeframe: str = "today 3-m") -> float | None:
+def _fetch_google_trends_reading(keyword: str = "Bitcoin", timeframe: str = "today 3-m") -> dict | None:
     session = requests.Session()
     session.headers.update(REQUEST_HEADERS)
 
@@ -255,11 +255,16 @@ def _fetch_google_trends_value(keyword: str = "Bitcoin", timeframe: str = "today
         if isinstance(values, list) and values:
             value = _coerce_first_numeric(values[0])
             if value is not None:
-                return value
+                return {"value": value, "observed_at": row.get("time")}
     return None
 
 
-def _fetch_bitbo_btc_etf_inflow_value() -> float | None:
+def _fetch_google_trends_value(keyword: str = "Bitcoin", timeframe: str = "today 3-m") -> float | None:
+    reading = _fetch_google_trends_reading(keyword, timeframe)
+    return reading.get("value") if reading else None
+
+
+def _fetch_bitbo_btc_etf_inflow_reading() -> dict | None:
     html = _fetch_text(BITBO_BTC_ETF_FLOWS_URL, timeout=20)
     table_match = re.search(r'<table class="stats-table larger-table">(.*?)</table>', html, re.I | re.S)
     if not table_match:
@@ -283,7 +288,16 @@ def _fetch_bitbo_btc_etf_inflow_value() -> float | None:
     if len(cleaned_cells) < 2:
         return None
 
-    return _coerce_first_numeric(cleaned_cells[-1])
+    try:
+        observed_at = datetime.strptime(cleaned_cells[0], "%b %d, %Y").date().isoformat()
+    except ValueError:
+        observed_at = None
+    return {"value": _coerce_first_numeric(cleaned_cells[-1]), "observed_at": observed_at}
+
+
+def _fetch_bitbo_btc_etf_inflow_value() -> float | None:
+    reading = _fetch_bitbo_btc_etf_inflow_reading()
+    return reading.get("value") if reading else None
 
 
 # ============================================================
@@ -308,9 +322,11 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     twelve_data_provider = TwelveDataMacroProvider()
     if use_twelve_data and twelve_data_provider.supports_indicator(normalized):
         try:
-            value = twelve_data_provider.fetch_latest_value(normalized)
-            if value is not None:
-                return {"value": value}
+            reading = twelve_data_provider.fetch_quote_reading(
+                twelve_data_provider.SYMBOL_MAP[normalized]
+            )
+            if reading is not None:
+                return reading
         except Exception:
             logger.warning("Twelve Data macro fallback mislukt voor %s", normalized, exc_info=True)
 
@@ -327,9 +343,9 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     # 🟦 Derived DXY basket
     if normalized == "dxy" and source_lower == "derived":
         try:
-            value = _fetch_dxy_from_twelve_data(twelve_data_provider)
-            if value is not None:
-                return {"value": value}
+            reading = twelve_data_provider.fetch_derived_dxy_reading()
+            if reading is not None:
+                return reading
         except Exception:
             logger.warning("Twelve Data DXY fallback mislukt", exc_info=True)
 
@@ -351,7 +367,9 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
                 meta.get("chartPreviousClose"),
                 _extract_last_non_null(quote.get("close") or []),
             )
-            return {"value": value}
+            timestamps = payload.get("timestamp") or []
+            observed_at = timestamps[-1] if timestamps else meta.get("regularMarketTime")
+            return {"value": value, "observed_at": observed_at}
         except Exception:
             return {"value": None}
 
@@ -361,7 +379,8 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             r = _http_get(ALT_FNG, timeout=10)
             r.raise_for_status()
             fg = r.json()
-            return {"value": float(fg["data"][0]["value"])}
+            reading = fg["data"][0]
+            return {"value": float(reading["value"]), "observed_at": reading.get("timestamp")}
         except Exception:
             return {"value": None}
 
@@ -371,15 +390,16 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             r = _http_get("https://api.coingecko.com/api/v3/global", timeout=10)
             r.raise_for_status()
             data = r.json()
-            return {"value": float(data["data"]["market_cap_percentage"]["btc"])}
+            global_data = data["data"]
+            return {"value": float(global_data["market_cap_percentage"]["btc"]),
+                    "observed_at": global_data.get("updated_at")}
         except Exception:
             return {"value": None}
 
     # 🟫 Google Trends (Bitcoin interest, 0-100)
     if normalized == "google_trends":
         try:
-            value = _fetch_google_trends_value(keyword="Bitcoin")
-            return {"value": value}
+            return _fetch_google_trends_reading(keyword="Bitcoin") or {"value": None}
         except Exception:
             logger.warning("Google Trends fetch mislukt", exc_info=True)
             return {"value": None}
@@ -387,8 +407,7 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     # 🟫 BTC ETF net inflow (latest daily total, USD millions)
     if normalized == "etf_bitcoin_inflow":
         try:
-            value = _fetch_bitbo_btc_etf_inflow_value()
-            return {"value": value}
+            return _fetch_bitbo_btc_etf_inflow_reading() or {"value": None}
         except Exception:
             logger.warning("Bitbo ETF inflow fetch mislukt", exc_info=True)
             return {"value": None}
@@ -429,8 +448,12 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             if value is None and normalized == "sp500" and effective_link != YAHOO_SP500_GSPC:
                 fallback_response = _http_get(YAHOO_SP500_GSPC, timeout=10)
                 fallback_response.raise_for_status()
-                value = _extract_yahoo_chart_value(fallback_response.json())
-            return {"value": value}
+                data = fallback_response.json()
+                value = _extract_yahoo_chart_value(data)
+            result = (data.get("chart", {}).get("result") or [{}])[0]
+            timestamps = result.get("timestamp") or []
+            return {"value": value, "observed_at": timestamps[-1] if timestamps else
+                    (result.get("meta") or {}).get("regularMarketTime")}
         except Exception:
             return {"value": None}
 
@@ -442,7 +465,7 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             data = r.json()
             for key in ("value", "price", "index"):
                 if key in data:
-                    return {"value": float(data[key])}
+                    return {"value": float(data[key]), "observed_at": data.get("observed_at") or data.get("timestamp")}
         except Exception:
             pass
 
@@ -507,6 +530,36 @@ def normalize_macro_value(indicator: str, value: float) -> float:
     except Exception:
         logger.error("Macro normalisatie fout", exc_info=True)
         return 0
+
+
+def normalize_macro_value_with_history(conn, user_id: int, indicator: str,
+                                       value: float, observed_at=None) -> float | None:
+    """Rank absolute index/commodity levels against dated owner readings.
+
+    Fixed ranges such as a 3000 gold ceiling eventually turn every new
+    observation into 100. Until enough distinct observations exist, leave
+    this indicator unscored instead of manufacturing a benchmark component.
+    """
+    if indicator not in {"dxy", "sp500", "gold_price", "oil_price"}:
+        return normalize_macro_value(indicator, value)
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (source_observed_at::date) source_observed_at::date, value
+            FROM macro_data
+            WHERE user_id = %s AND LOWER(name) = LOWER(%s)
+              AND source_observed_at >= NOW() - INTERVAL '90 days'
+              AND source_observed_at IS NOT NULL AND value IS NOT NULL
+            ORDER BY source_observed_at::date, source_observed_at DESC, timestamp DESC
+        """, (user_id, indicator))
+        dated_history = {row[0]: float(row[1]) for row in cur.fetchall()}
+    if observed_at is not None:
+        dated_history[observed_at.date()] = float(value)
+    history = list(dated_history.values())
+    if len(history) < 5:
+        return None
+    current = float(value)
+    low, high = min(history), max(history)
+    return 50.0 if low == high else max(0.0, min(100.0, 100.0 * (current - low) / (high - low)))
 
 
 # ============================================================

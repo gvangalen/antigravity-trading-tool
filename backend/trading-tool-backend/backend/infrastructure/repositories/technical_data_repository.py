@@ -406,15 +406,16 @@ class TechnicalDataRepository:
             existing_mapping = dict(existing._mapping)
             update_params = dict(params)
             update_sets: list[str] = []
-            if "priority" in columns:
+            if "priority" in columns and int(existing_mapping.get("priority") or 100) != priority:
                 update_sets.append("priority = :priority")
                 update_params["priority"] = priority
-            if "enabled" in columns:
+            if "enabled" in columns and existing_mapping.get("enabled") is False:
                 update_sets.append("enabled = TRUE")
-            if "asset_class" in columns and normalized_asset_class is not None:
+            if ("asset_class" in columns and normalized_asset_class is not None
+                    and existing_mapping.get("asset_class") != normalized_asset_class):
                 update_sets.append("asset_class = :asset_class")
                 update_params["asset_class"] = normalized_asset_class
-            if "updated_at" in columns:
+            if update_sets and "updated_at" in columns:
                 update_sets.append("updated_at = CURRENT_TIMESTAMP")
 
             if update_sets:

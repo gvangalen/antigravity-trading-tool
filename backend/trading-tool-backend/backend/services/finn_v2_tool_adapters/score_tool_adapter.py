@@ -23,6 +23,8 @@ class ScoreToolAdapter:
                 technical_score=float(daily.get("technical_score")) if daily and daily.get("technical_score") is not None else None,
                 market_score=float(daily.get("market_score")) if daily and daily.get("market_score") is not None else None,
                 report_date=daily.get("report_date") if daily else None,
+                calculated_at=daily.get("calculated_at") if daily else None,
+                indicator_evidence=(daily.get("indicator_evidence") or {}) if daily else {},
             ) if daily else None,
             "master_score": MasterScoreData(
                 score=float(getattr(master, "avg_score", 0) or 0),

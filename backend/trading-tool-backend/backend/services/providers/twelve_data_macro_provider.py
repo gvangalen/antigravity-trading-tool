@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import math
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -48,6 +49,10 @@ class TwelveDataMacroProvider:
         return self.fetch_quote_value(provider_symbol)
 
     def fetch_quote_value(self, provider_symbol: str) -> float | None:
+        reading = self.fetch_quote_reading(provider_symbol)
+        return reading["value"] if reading else None
+
+    def fetch_quote_reading(self, provider_symbol: str) -> dict | None:
         if not self.api_key:
             return None
 
@@ -79,7 +84,33 @@ class TwelveDataMacroProvider:
         if raw_value is None:
             return None
 
-        return raw_value
+        observed_at = None
+        timestamp = payload.get("timestamp")
+        try:
+            if timestamp is not None:
+                observed_at = datetime.fromtimestamp(float(timestamp), timezone.utc)
+            elif payload.get("last_update_at"):
+                observed_at = datetime.fromisoformat(
+                    str(payload["last_update_at"]).replace("Z", "+00:00")
+                ).astimezone(timezone.utc)
+        except (TypeError, ValueError, OverflowError):
+            observed_at = None
+        return {"value": raw_value, "observed_at": observed_at}
+
+    def fetch_derived_dxy_reading(self) -> dict | None:
+        if not self.api_key:
+            return None
+        weighted_product = DXY_BASE_FACTOR
+        observations = []
+        for provider_symbol, (_, exponent) in DXY_COMPONENT_WEIGHTS.items():
+            reading = self.fetch_quote_reading(provider_symbol)
+            if not reading or reading["value"] in (None, 0):
+                return None
+            weighted_product *= math.pow(float(reading["value"]), exponent)
+            if reading.get("observed_at") is not None:
+                observations.append(reading["observed_at"])
+        return {"value": weighted_product,
+                "observed_at": min(observations) if len(observations) == len(DXY_COMPONENT_WEIGHTS) else None}
 
     def fetch_derived_dxy(self) -> float | None:
         if not self.api_key:

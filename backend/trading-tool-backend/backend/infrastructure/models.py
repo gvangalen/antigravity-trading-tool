@@ -331,6 +331,8 @@ class DailyScore(Base):
     market_score = Column(Numeric)
     setup_score = Column(Numeric)
     symbol = Column(String, default="BTC")
+    calculated_at = Column(DateTime(timezone=True), nullable=True)
+    indicator_evidence = Column(JSON, nullable=True)
 
 class AiCategoryInsight(Base):
     __tablename__ = 'ai_category_insights'

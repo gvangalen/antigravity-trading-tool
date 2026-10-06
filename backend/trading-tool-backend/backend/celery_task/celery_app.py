@@ -177,24 +177,9 @@ celery_app.conf.beat_schedule = {
         crontab(hour="*/6", minute=35),
     ),
 
-    # =====================================================
-    # 2️⃣ INDICATORS (SPREAD OUT)
-    # =====================================================
-    "dispatch_macro_indicators": build_dispatch_schedule_entry(
-        "backend.celery_task.macro_task.fetch_macro_data",
-        crontab(hour="*/2", minute=5),
-    ),
-
-    "dispatch_technical_indicators": build_dispatch_schedule_entry(
-        "backend.celery_task.technical_task.fetch_technical_data_day",
-        crontab(hour="*/2", minute=25),
-    ),
-
-    "dispatch_market_indicators": build_dispatch_schedule_entry(
-        "backend.celery_task.market_task.fetch_market_indicators",
-        crontab(hour="*/2", minute=45),
-    ),
-
+    # Owner-scoped indicator refresh is handled by
+    # sync_configured_market_snapshots above. The former per-user jobs wrote
+    # unscoped measurements and could race the canonical asset-scoped writer.
     # =====================================================
     # 3️⃣ RULE BASED SCORES (NO AI)
     # =====================================================

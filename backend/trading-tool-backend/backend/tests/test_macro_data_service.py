@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -17,7 +18,7 @@ def test_add_macro_indicator_normalizes_name_before_scoring_and_preference_save(
         add_macro_data=AsyncMock(),
     )
     service._mark_onboarding = AsyncMock()
-    service._sync_score_indicator = lambda category, indicator, value, user_id: {
+    service._sync_score_indicator = lambda category, indicator, value, user_id, symbol, observed_at=None: {
         "score": 55,
         "trend": "neutral",
         "interpretation": "ok",
@@ -96,7 +97,7 @@ def test_add_macro_indicator_uses_canonical_macro_source_when_db_row_is_stale():
         add_macro_data=AsyncMock(),
     )
     service._mark_onboarding = AsyncMock()
-    service._sync_score_indicator = lambda category, indicator, value, user_id: {
+    service._sync_score_indicator = lambda category, indicator, value, user_id, symbol, observed_at=None: {
         "score": 80,
         "trend": "bullish",
         "interpretation": "ok",
@@ -131,7 +132,42 @@ def test_add_macro_indicator_uses_canonical_macro_source_when_db_row_is_stale():
     assert fetch_calls == [("sp500", "fred", "fred:SP500")]
     assert result.value == 7733.85
     saved = service.repository.add_macro_data.await_args.args[0]
-    assert saved.timestamp.date().isoformat() == "2026-08-06"
+    assert saved.source_observed_at.date().isoformat() == "2026-08-06"
+
+
+def test_macro_refresh_keeps_configuration_and_parses_provider_unix_timestamp():
+    service = MacroDataService(AsyncMock())
+    service.repository = SimpleNamespace(
+        check_indicator_exists=AsyncMock(return_value=True),
+        get_latest_indicator=AsyncMock(return_value=None),
+        get_indicator_info=AsyncMock(return_value=SimpleNamespace(
+            name="fear_greed_index", source="alternative", link="https://example.test/fng",
+        )),
+        add_macro_data=AsyncMock(),
+    )
+    service.preference_repository = SimpleNamespace(ensure_user_config=AsyncMock())
+    service._mark_onboarding = AsyncMock()
+    service._sync_fetch_macro_value = lambda *_args: {
+        "value": 42.0, "observed_at": "1780000000",
+    }
+    service._sync_score_indicator = lambda *_args: {
+        "score": 50, "trend": "neutral", "interpretation": "ok", "action": "hold",
+    }
+
+    async def run():
+        from unittest.mock import patch
+        with patch("backend.services.macro_data_service.AssetCatalogService") as catalog:
+            catalog.return_value.get_asset = AsyncMock(return_value={"asset_class": "crypto"})
+            return await service.add_macro_indicator(
+                7, "fear_greed_index", None, symbol="BTC",
+                persist_preference=False, refresh_existing=True,
+            )
+
+    result = asyncio.run(run())
+    assert result.score == 50
+    service.preference_repository.ensure_user_config.assert_not_awaited()
+    saved = service.repository.add_macro_data.await_args.args[0]
+    assert saved.source_observed_at == datetime.fromtimestamp(1780000000, timezone.utc).replace(tzinfo=None)
 
 
 def test_all_active_macro_indicators_resolve_to_catalog_definition_when_db_row_is_stale():
@@ -218,7 +254,7 @@ def test_add_macro_indicator_uses_isolated_asset_scope_lookup(monkeypatch):
         add_macro_data=AsyncMock(),
     )
     service._mark_onboarding = AsyncMock()
-    service._sync_score_indicator = lambda category, indicator, value, user_id: {
+    service._sync_score_indicator = lambda category, indicator, value, user_id, symbol, observed_at=None: {
         "score": 55,
         "trend": "neutral",
         "interpretation": "ok",

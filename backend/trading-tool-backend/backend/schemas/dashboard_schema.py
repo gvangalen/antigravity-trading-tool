@@ -3,9 +3,9 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 class ScoresSchema(BaseModel):
-    macro: float
-    technical: float
-    market: float
+    macro: Optional[float] = None
+    technical: Optional[float] = None
+    market: Optional[float] = None
     setup: Optional[float] = None
 
 class ExplanationSchema(BaseModel):

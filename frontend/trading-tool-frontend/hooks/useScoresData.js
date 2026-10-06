@@ -108,20 +108,16 @@ export function useScoresData(symbol = "BTC", options = {}) {
         return null;
       };
 
-      const macroScore = toFiniteScore(daily.macro?.score, mData.score);
-      const technicalScore = toFiniteScore(daily.technical?.score, tData.score);
-      const marketScore = toFiniteScore(daily.market?.score, mkData.score);
-      const setupScore = toFiniteScore(daily.setup?.score, sData.score);
+      // Historical AI narrative domains never fill a missing measured score.
+      const macroScore = toFiniteScore(daily.macro?.score);
+      const technicalScore = toFiniteScore(daily.technical?.score);
+      const marketScore = toFiniteScore(daily.market?.score);
+      const setupScore = toFiniteScore(daily.setup?.score);
 
-      const weights = normalizeContextWeights(master?.weights);
-      const hasCompleteContext = [macroScore, technicalScore, marketScore].every(Number.isFinite);
-      const calculatedMasterScore = hasCompleteContext
-        ? Math.round(
-            macroScore * weights.macro +
-            technicalScore * weights.technical +
-            marketScore * weights.market
-          )
-        : null;
+      // The backend validates source freshness and config revisions before publishing a benchmark.
+      // A browser-side average of category scores could resurrect an invalidated snapshot.
+      const weights = normalizeContextWeights(daily?.benchmark_weights ?? master?.weights);
+      const calculatedMasterScore = toFiniteScore(daily?.benchmark_score);
 
       const nextScores = {
         macro: {
@@ -176,6 +172,8 @@ export function useScoresData(symbol = "BTC", options = {}) {
           daily: daily?.report_date ?? null,
           master: master?.date ?? null,
         },
+        indicatorEvidence: daily?.indicator_evidence || {},
+        calculatedAt: daily?.calculated_at || null,
       };
 
       return nextScores;

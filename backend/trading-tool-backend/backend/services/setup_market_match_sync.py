@@ -12,7 +12,7 @@ from typing import Any
 
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
 from backend.domain.setup_market_match import rank_matches
-from backend.utils.scoring_utils import score_source_is_fresh
+from backend.utils.scoring_utils import score_snapshot_is_current
 
 
 SETUP_COLUMNS = (
@@ -22,39 +22,38 @@ SETUP_COLUMNS = (
 )
 
 
-def _fresh(conn, user_id: int, symbol: str, category: str) -> bool:
+def _fresh(conn, user_id: int, symbol: str, category: str, row: dict) -> bool:
     table, name_column = {
         "macro": ("macro_data", "name"),
         "technical": ("technical_indicators", "indicator"),
         "market": ("market_data_indicators", "name"),
     }[category]
-    configured = None
     with conn.cursor() as cur:
-        if category == "technical":
-            cur.execute(
-                "SELECT indicator FROM user_indicator_configs "
-                "WHERE user_id=%s AND category='technical' AND symbol=%s AND enabled=TRUE",
-                (user_id, symbol),
-            )
-            configured = {row[0] for row in cur.fetchall()}
-            if not configured:
-                return False
+        cur.execute(
+            "SELECT indicator, updated_at FROM user_indicator_configs "
+            "WHERE user_id=%s AND category=%s AND symbol=%s AND enabled=TRUE",
+            (user_id, category, symbol),
+        )
+        configured = cur.fetchall()
         # Identifiers come only from the fixed map above.
         cur.execute(
-            f"SELECT DISTINCT ON ({name_column}) {name_column}, source_observed_at "
+            f"SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at "
             f"FROM {table} WHERE user_id=%s "
             + ("" if category == "macro" else "AND symbol=%s ")
             + f"ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST",
             (user_id,) if category == "macro" else (user_id, symbol),
         )
         rows = cur.fetchall()
-    if configured is not None:
-        rows = [row for row in rows if row[0] in configured]
-        if {row[0] for row in rows} != configured:
-            return False
-    return bool(rows) and all(
-        score_source_is_fresh(category, name, observed_at, symbol=symbol)
-        for name, observed_at in rows
+    evidence = row.get("indicator_evidence") or {}
+    if isinstance(evidence, str):
+        try:
+            evidence = json.loads(evidence)
+        except json.JSONDecodeError:
+            evidence = {}
+    return score_snapshot_is_current(
+        category, symbol, configured, rows,
+        evidence.get(category) if isinstance(evidence, dict) else None,
+        row.get("calculated_at"),
     )
 
 
@@ -64,7 +63,8 @@ def current_setup_market_assessment(conn, user_id: int, symbol: str) -> dict[str
         cur.execute("SELECT ai_preferences FROM users WHERE id=%s", (user_id,))
         user_row = cur.fetchone()
         cur.execute(
-            "SELECT report_date, macro_score, technical_score, market_score "
+            "SELECT report_date, macro_score, technical_score, market_score, "
+            "calculated_at, indicator_evidence "
             "FROM daily_scores WHERE user_id=%s AND symbol=%s AND report_date=CURRENT_DATE LIMIT 1",
             (user_id, symbol),
         )
@@ -86,12 +86,13 @@ def current_setup_market_assessment(conn, user_id: int, symbol: str) -> dict[str
         preferences.get("intelligence_weights") if isinstance(preferences, dict) else
         None if preferences is None else False
     ) if user_row else None
-    row = dict(zip(("report_date", "macro_score", "technical_score", "market_score"), daily_row)) if daily_row else None
+    row = dict(zip(("report_date", "macro_score", "technical_score", "market_score",
+                    "calculated_at", "indicator_evidence"), daily_row)) if daily_row else None
     scores = None
     status = "invalid_weights" if weights is None else "missing_scores"
     if weights is not None and row and all(row[f"{key}_score"] is not None for key in ("macro", "technical", "market")):
         status = "stale_sources"
-        if all(_fresh(conn, user_id, symbol, key) for key in ("macro", "technical", "market")):
+        if all(_fresh(conn, user_id, symbol, key, row) for key in ("macro", "technical", "market")):
             scores = {key: row[f"{key}_score"] for key in ("macro", "technical", "market")}
             status = "available"
     total = benchmark_score(

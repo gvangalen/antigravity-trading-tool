@@ -681,7 +681,9 @@ function FinnSetupBriefingCard({
     translate(language, 'finn.noBriefingReady'),
   );
   const metaItems = [
-    decisionState.score >= 70
+    !decisionState.benchmarkAvailable
+      ? 'Benchmark niet beschikbaar'
+      : decisionState.score >= 70
       ? translate(language, 'myPlan.constructive')
       : decisionState.score >= 50
         ? translate(language, 'myPlan.selective')
@@ -769,12 +771,16 @@ function ActivePlanWorkspaceCard({
           icon="shield"
           title={translate(language, 'myPlan.riskExecutionLabel')}
           description={
-            decisionState.score >= 70
+            !decisionState.benchmarkAvailable
+              ? 'Geen actuele benchmark beschikbaar'
+              : decisionState.score >= 70
               ? translate(language, 'myPlan.constructivePosition')
               : translate(language, 'myPlan.defensivePosition')
           }
           summary={
-            decisionState.score >= 70
+            !decisionState.benchmarkAvailable
+              ? 'Controleer de ontbrekende scorebronnen'
+              : decisionState.score >= 70
               ? translate(language, 'myPlan.readyForReview')
               : translate(language, 'myPlan.waitForConfirmation')
           }
@@ -998,7 +1004,7 @@ function PlanRulesCard({
   const entryValue = hasLinkedStrategy
     ? strategy.entryZone
     : translate(language, 'myPlan.entryOnlyAfterConfirmation');
-  const riskValue = decisionState.score >= 70 ? 'Max. 1.5%' : 'Max. 1%';
+  const riskValue = 'Volg je opgeslagen risicolimiet';
   const exitValue = hasLinkedStrategy
     ? translate(language, 'myPlan.exitFollowActiveStrategy')
     : translate(language, 'myPlan.exitFollowConfirmedStrategy');
@@ -2106,11 +2112,12 @@ function mapDecisionState(
   const technical = asset?.technical_score == null ? null : clampScore(asset.technical_score);
   const market = asset?.market_score == null ? null : clampScore(asset.market_score);
   const setupScore = setup.scoreAvailable ? setup.score : null;
-  const score = asset?.benchmark_score == null ? 50 : clampScore(asset.benchmark_score);
+  const score = asset?.benchmark_score == null ? -1 : clampScore(asset.benchmark_score);
   const benchmarkAvailable = asset?.benchmark_score != null;
-  const tone = toneForScore(score);
+  const tone: StatusTone = benchmarkAvailable ? toneForScore(score) : 'neutral';
   const action = botAction.toLowerCase();
   const status =
+    !benchmarkAvailable ? 'Unknown' :
     score >= 70 ? 'Constructive' : score >= 50 ? 'Selective' : action.includes('hold') ? 'Hold' : 'Defensive';
 
   return {
@@ -2128,7 +2135,8 @@ function mapDecisionState(
       { label: 'Setup', value: setupScore ?? '—' },
     ],
     status,
-    title: score >= 70 ? 'Setup valid, stay selective' : score >= 50 ? 'Review before action' : 'Defensive posture',
+    title: !benchmarkAvailable ? 'Benchmark unavailable' :
+      score >= 70 ? 'Setup valid, stay selective' : score >= 50 ? 'Review before action' : 'Defensive posture',
     tone,
   };
 }
@@ -2200,12 +2208,14 @@ function mapPlanStrategySummary(source?: StrategyResponse): PlanStrategySummary 
 }
 
 function riskSeverity(score: number, action: string) {
+  if (score < 0) return 'info' as const;
   if (score < 45) return 'high' as const;
   if (action.toLowerCase().includes('buy') || action.toLowerCase().includes('sell')) return 'caution' as const;
   return 'info' as const;
 }
 
 function riskTitle(score: number, action: string) {
+  if (score < 0) return 'Benchmark niet beschikbaar';
   if (score < 45) return 'Risk first: weak confirmation';
   if (action.toLowerCase().includes('buy') || action.toLowerCase().includes('sell')) return 'Execution requires explicit review';
   return 'Hold is also a decision';

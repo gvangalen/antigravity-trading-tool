@@ -47,10 +47,9 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
   const dateLabel = (value) => value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(locale) : null;
   const [isEditing, setIsEditing] = useState(false);
   const [localWeights, setLocalWeights] = useState({
-     macro: 0.25,
-     market: 0.25,
-     technical: 0.25,
-     setup: 0.25
+     macro: 1 / 3,
+     market: 1 / 3,
+     technical: 1 / 3,
   });
 
   useEffect(() => {
@@ -110,7 +109,7 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
     { id: 'macro', title: t.dashboard.gauges.macro, icon: <Globe2 size={14} />, score: macro.score, weight: localWeights.macro, structure: structureFor('macro', macro.score) },
     { id: 'technical', title: t.dashboard.gauges.technical, icon: <LineChart size={14} />, score: technical.score, weight: localWeights.technical, structure: structureFor('technical', technical.score) },
     { id: 'market', title: t.dashboard.gauges.market, icon: <DollarSign size={14} />, score: market.score, weight: localWeights.market, structure: structureFor('market', market.score) },
-    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, weight: localWeights.setup, structure: structureFor('setup', setup.score) },
+    { id: 'setup', title: t.dashboard.gauges.setup, icon: <Settings2 size={14} />, score: setup.score, structure: structureFor('setup', setup.score) },
   ];
 
   if (loading && !isEditing) {
@@ -210,7 +209,7 @@ export default function CompactGauges({ symbol = "BTC", snapshot = null }) {
                   </div>
                </div>
 
-               {isEditing && (
+               {isEditing && item.weight !== undefined && (
                   <div className="px-2 space-y-1 animate-in slide-in-from-top-2 duration-300">
                      <div className="flex justify-between text-[9px] font-bold text-secondary uppercase tracking-widest px-1">
                         <span>{t.dashboard.gauges.weight}</span>

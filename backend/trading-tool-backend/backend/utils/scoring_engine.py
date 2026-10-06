@@ -1,5 +1,6 @@
 # backend/utils/scoring_engine.py
 import logging
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -208,6 +209,7 @@ def fetch_rules_for_indicator(
     user_id: Optional[int] = None,  # ✅ nieuw
     only_active: bool = True,
     enforce_fixed_buckets: bool = True,
+    symbol: Optional[str] = None,
 ) -> List[RuleRow]:
     rules_table, _ = _table_names(category)
     indicator = (indicator or "").strip()
@@ -265,6 +267,79 @@ def fetch_rules_for_indicator(
                 )
             return cur.fetchall()
 
+    # Asset-scoped product settings are authoritative when an asset is known.
+    # Legacy user rules have no asset identity and must not override them.
+    if user_id is not None and symbol:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, config_json, priority FROM user_indicator_configs
+                   WHERE user_id = %s AND symbol = %s AND category = %s
+                     AND LOWER(indicator) = LOWER(%s) AND enabled = TRUE
+                   LIMIT 1""",
+                (user_id, symbol.upper(), category, indicator),
+            )
+            config = cur.fetchone()
+        if config is None:
+            # An indicator may be scored while its new selection is still in
+            # the writer's uncommitted transaction. Daily aggregation itself
+            # requires a committed canonical selection.
+            rows = _run_query("user_id IS NULL", (indicator,))
+            template = [RuleRow(
+                id=int(row[0]), indicator=str(row[1]), range_min=float(row[2]),
+                range_max=float(row[3]), score=int(row[4]), trend=row[5],
+                interpretation=row[6], action=row[7], score_mode="standard",
+                is_active=bool(row[9]), weight=1.0, user_id=None,
+            ) for row in rows]
+            return _force_fixed_buckets(indicator, template) if enforce_fixed_buckets else template
+        config_id, metadata, priority = config
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+        metadata = metadata if isinstance(metadata, dict) else {}
+        mode = str(metadata.get("score_mode") or "standard").lower()
+        try:
+            weight = float(metadata.get("weight", float(priority or 100) / 100))
+        except (TypeError, ValueError):
+            weight = 1.0
+        weight = max(0.0, min(weight, 3.0))
+        configured_rules = metadata.get("rules") if mode == "custom" else None
+        if mode == "custom" and not configured_rules:
+            return []
+        if configured_rules:
+            rules = []
+            for item in configured_rules:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    rules.append(RuleRow(
+                        id=int(config_id), indicator=indicator,
+                        range_min=float(item["range_min"]), range_max=float(item["range_max"]),
+                        score=int(item["score"]), trend=item.get("trend"),
+                        interpretation=item.get("interpretation"), action=item.get("action"),
+                        score_mode="custom", is_active=True, weight=weight, user_id=user_id,
+                    ))
+                except (KeyError, TypeError, ValueError):
+                    return []
+            if len(rules) != len(FIXED_BUCKETS) or {
+                _bucket_key(rule.range_min, rule.range_max) for rule in rules
+            } != {_bucket_key(*bucket) for bucket in FIXED_BUCKETS}:
+                return []
+            return sorted(rules, key=lambda rule: rule.range_min)
+        # Only system templates supply standard/contrarian bucket values.
+        rows = _run_query("user_id IS NULL", (indicator,))
+        rules = [RuleRow(
+            id=int(row[0]), indicator=str(row[1]), range_min=float(row[2]),
+            range_max=float(row[3]), score=int(row[4]), trend=row[5],
+            interpretation=row[6], action=row[7], score_mode=mode,
+            is_active=bool(row[9]), weight=weight, user_id=user_id,
+        ) for row in rows]
+        if not rules:
+            rules = _fallback_fixed_rules(indicator, mode, weight)
+        return _force_fixed_buckets(indicator, rules) if enforce_fixed_buckets else rules
+
+    # Legacy callers without an asset retain their old behavior.
     # 1️⃣ user rules eerst
     rows: List[tuple] = []
     if user_id is not None:
@@ -328,6 +403,7 @@ def score_indicator(
     indicator: str,
     value: Any,
     user_id: Optional[int] = None,  # ✅ nieuw
+    symbol: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Engine contract:
@@ -344,6 +420,7 @@ def score_indicator(
         user_id=user_id,
         only_active=True,
         enforce_fixed_buckets=True,
+        symbol=symbol,
     )
     rule = pick_rule_for_value(rules, v)
 
@@ -365,7 +442,7 @@ def score_indicator(
     final_score = _apply_score_mode(base_score, rule.score_mode)
 
     w = float(rule.weight if rule.weight is not None else 1.0)
-    if w <= 0:
+    if w < 0:
         w = 1.0
 
     return {

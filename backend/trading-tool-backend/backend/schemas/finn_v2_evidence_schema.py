@@ -75,6 +75,8 @@ class DailyScoresData(BaseModel):
     technical_score: Optional[float] = None
     market_score: Optional[float] = None
     report_date: Optional[date] = None
+    calculated_at: Optional[datetime] = None
+    indicator_evidence: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AssetScoresData(BaseModel):
