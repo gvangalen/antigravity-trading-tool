@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from backend.services.technical_data_service import TechnicalDataService
+from backend.services.providers.twelve_data_technical_indicator_adapter import TechnicalSourceRateLimited
+from backend.api.technical_data_api import add_technical_indicator as add_technical_indicator_api
 
 
 def test_get_all_technical_indicators_merges_canonical_catalog_with_db_rows():
@@ -104,6 +106,72 @@ def test_add_technical_indicator_uses_canonical_twelve_data_config_when_db_row_i
     assert result["id"] == 17
     assert result["score"] == 61.0
     assert service.repository.add_indicator.await_args.kwargs["observed_at"] == datetime(2026, 10, 2)
+
+
+def test_rate_limited_user_add_keeps_configuration_without_inventing_a_score():
+    service = TechnicalDataService(AsyncMock())
+    service.repository = SimpleNamespace(
+        ensure_user_config=AsyncMock(),
+        get_indicator_config=AsyncMock(return_value=None),
+        add_indicator=AsyncMock(),
+    )
+    service._get_asset_scope = AsyncMock(return_value={"asset_class": "stock"})
+    service._fetch_indicator_value = AsyncMock(side_effect=TechnicalSourceRateLimited())
+
+    result = asyncio.run(service.add_technical_indicator("MA 200", 7, symbol="AAPL"))
+
+    assert result["status"] == "pending_source"
+    assert result["value"] is None
+    assert result["score"] is None
+    service.repository.ensure_user_config.assert_awaited_once_with(
+        7, "ma_200", symbol="AAPL", asset_class="stock",
+    )
+    service.repository.add_indicator.assert_not_awaited()
+
+
+def test_rate_limited_refresh_remains_a_failed_read():
+    service = TechnicalDataService(AsyncMock())
+    service.repository = SimpleNamespace(
+        get_indicator_config=AsyncMock(return_value=None),
+        add_indicator=AsyncMock(),
+    )
+    service._get_asset_scope = AsyncMock(return_value={"asset_class": "stock"})
+    service._fetch_indicator_value = AsyncMock(side_effect=TechnicalSourceRateLimited())
+
+    try:
+        asyncio.run(service._add_technical_indicator(
+            "MA 200", 7, symbol="AAPL", persist_preference=False,
+        ))
+    except TechnicalSourceRateLimited:
+        pass
+    else:
+        raise AssertionError("A refresh must not report a rate-limited read as synced")
+
+    service.repository.add_indicator.assert_not_awaited()
+
+
+def test_rate_limited_add_api_commits_pending_configuration():
+    from unittest.mock import patch
+
+    session = AsyncMock()
+    request = SimpleNamespace(json=AsyncMock(return_value={
+        "indicator": "MA 200", "symbol": "AAPL",
+    }))
+    service = SimpleNamespace(add_technical_indicator=AsyncMock(return_value={
+        "status": "pending_source", "indicator": "ma_200", "score": None,
+    }))
+
+    async def run():
+        with patch("backend.api.technical_data_api.TechnicalDataService", return_value=service):
+            return await add_technical_indicator_api(
+                request, current_user={"id": 7}, session=session,
+            )
+
+    result = asyncio.run(run())
+    assert result["status"] == "pending_source"
+    assert result["score"] is None
+    session.commit.assert_awaited_once()
+    session.rollback.assert_not_awaited()
 
 
 def test_resolve_effective_preferences_returns_empty_without_user_scope_rows():

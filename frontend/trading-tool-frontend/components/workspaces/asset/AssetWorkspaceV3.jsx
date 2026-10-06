@@ -2431,8 +2431,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     await refreshWorkspaceOnce();
   };
   const addTechnicalIndicator = async (name) => {
-    await technicalDataAdd(name, activeSymbol);
+    const result = await technicalDataAdd(name, activeSymbol);
     await refreshWorkspaceOnce();
+    if (result?.status === "pending_source") {
+      showSnackbar(`${name} is ingesteld. De meetwaarde wacht op de databron; er is nog geen score.`, "info");
+    }
   };
   const saveWeights = async (weights) => {
     const result = await updateIntelligenceWeights(weights);

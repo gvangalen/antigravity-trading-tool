@@ -17,6 +17,10 @@ from backend.utils.technical_interpreter import calculate_rsi
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
+class TechnicalSourceRateLimited(RuntimeError):
+    """A technical source refused this read temporarily; no reading was obtained."""
+
+
 class TwelveDataTechnicalIndicatorAdapter:
     provider_name = "twelve_data"
     base_url = "https://api.twelvedata.com"
@@ -274,6 +278,8 @@ class TwelveDataTechnicalIndicatorAdapter:
                     f"{self.binance_base_url}/api/v3/klines",
                     params={"symbol": symbol, "interval": "1d", "limit": limit},
                 )
+                if getattr(response, "status_code", None) == 429:
+                    raise TechnicalSourceRateLimited("technical_source_rate_limited")
                 response.raise_for_status()
                 rows = response.json()
             self._binance_candle_cache[symbol] = [
@@ -303,10 +309,14 @@ class TwelveDataTechnicalIndicatorAdapter:
                 payload = response.json()
         except httpx.HTTPError as exc:
             if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                if exc.response.status_code == 429:
+                    raise TechnicalSourceRateLimited("technical_source_rate_limited") from None
                 raise ValueError(f"twelve_data_unavailable:http_{exc.response.status_code}") from None
             raise ValueError("twelve_data_transport_unavailable") from None
         if payload.get("status") == "error" or payload.get("code"):
             code = str(payload.get("code") or "provider_error")
+            if code == "429":
+                raise TechnicalSourceRateLimited("technical_source_rate_limited")
             raise ValueError(f"twelve_data_unavailable:{code}")
         TwelveDataResponseCache.put(endpoint, payload, **params)
         return payload
