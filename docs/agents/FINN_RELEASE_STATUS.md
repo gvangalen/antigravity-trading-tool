@@ -8,13 +8,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED_PENDING_CI`. The independent live QA run on the previous release was not accepted; this repair is not yet deployed or independently accepted. |
+| Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and production identity checks passed; this candidate is not independently accepted. |
 | Goal | Repair Analyse ↔ FINN score evidence, setup-boundary reads with multiple strategies, exact Smart-DCA threshold readback, and the paper-bot `NaN` display. |
-| Candidate branch | `codex/setup-match-live-qa-fixes` |
+| Candidate branch | Merged to `main` in `1f50e2f3adc682de0bf2f468be7aaddbc89e4561`. |
 | Candidate implementation SHA | `cece6f8ce964a3df7c29c1992ee85cf23af7b1c9` |
-| PR | Pending creation. |
+| PR | [#83](https://github.com/gvangalen/antigravity-trading-tool/pull/83), merged. |
 | Previous live SHA | `82f8b6bec76b80234e4a8b1222aa96fb9cd5cc3b`, reported by independent live QA as not accepted. |
-| Production SHA | Await public backend/frontend verification after Auto Deploy. |
+| Production SHA | `1f50e2f3adc682de0bf2f468be7aaddbc89e4561` observed on both public surfaces after Auto Deploy. This status-only update creates a later SHA; QA must bind to the current public backend/frontend SHA. |
 | Release owner | Build |
 | Last updated | 2026-10-06 |
 
@@ -47,7 +47,7 @@ An additional 37-case public parity runner was tried and did not pass. Its old D
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI and Auto Deploy | Pending. |
-| Public backend health and frontend build-info | Pending. |
+| Candidate CI | [PR #83 CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37420681594) completed success. |
+| Main CI and Auto Deploy | [Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37420888542) and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37421015126) completed success for `1f50e2f3adc682de0bf2f468be7aaddbc89e4561`. |
+| Public backend health and frontend build-info | On 2026-10-06 both returned HTTP 200 and SHA `1f50e2f3adc682de0bf2f468be7aaddbc89e4561`. |
 | Independent authenticated live QA | Pending for this candidate; only QA owns the fixture and verdict. |
