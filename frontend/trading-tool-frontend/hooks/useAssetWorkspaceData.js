@@ -116,17 +116,15 @@ function buildWorkspaceFallback(symbol, periods, quote, daily) {
   const marketScore = daily?.market?.score ?? null;
   const macroScore = daily?.macro?.score ?? null;
   const technicalScore = daily?.technical?.score ?? null;
-  const availableScores = [marketScore, macroScore, technicalScore].filter((value) => Number.isFinite(Number(value)));
-  const combined = availableScores.length
-    ? Math.round(availableScores.reduce((sum, value) => sum + Number(value), 0) / availableScores.length)
-    : null;
+  const isScore = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+  const combined = isScore(daily?.benchmark_score) ? Number(daily.benchmark_score) : null;
   const category = (score, interpretation) => ({
     rows: [],
     score: {
-      score: Number.isFinite(Number(score)) ? Number(score) : null,
+      score: isScore(score) ? Number(score) : null,
       period: "day",
       sample_size: null,
-      status: Number.isFinite(Number(score)) ? "available" : "insufficient_data",
+      status: isScore(score) ? "available" : "insufficient_data",
     },
     freshness: null,
     interpretation: interpretation || null,

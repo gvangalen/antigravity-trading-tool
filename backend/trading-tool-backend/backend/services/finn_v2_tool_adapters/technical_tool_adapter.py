@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.schemas.finn_v2_evidence_schema import TechnicalSnapshotData, TechnicalSnapshotItem
 from backend.services.technical_data_service import TechnicalDataService
+from backend.utils.scoring_utils import score_source_is_fresh
 
 
 class TechnicalToolAdapter:
@@ -15,15 +16,19 @@ class TechnicalToolAdapter:
         payload = [
             TechnicalSnapshotItem(
                 indicator=row.indicator,
-                value=float(row.value or 0),
-                score=float(row.score or 0),
+                value=float(row.value) if row.value is not None else None,
+                score=(float(row.score) if row.score is not None and
+                       score_source_is_fresh("technical", row.indicator, getattr(row, "source_observed_at", None), symbol=asset)
+                       else None),
                 advice=row.advies,
                 explanation=row.uitleg,
                 timestamp=row.timestamp,
+                source_observed_at=getattr(row, "source_observed_at", None),
             )
             for row in rows
         ]
-        latest = max((row.timestamp for row in rows if row.timestamp), default=None)
+        latest = max((getattr(row, "source_observed_at", None) for row in rows
+                      if getattr(row, "source_observed_at", None)), default=None)
         return {
             "data": TechnicalSnapshotData(symbol=asset, items=payload),
             "summary": {"title": "technical_snapshot", "symbol": asset, "count": len(payload)},

@@ -109,10 +109,11 @@ class MarketSnapshotData(BaseModel):
 
 class MacroSnapshotItem(BaseModel):
     indicator: str
-    value: float = 0.0
+    value: Optional[float] = None
     trend: Optional[str] = None
-    score: float = 0.0
+    score: Optional[float] = None
     timestamp: Optional[datetime] = None
+    source_observed_at: Optional[datetime] = None
 
 
 class MacroSnapshotData(BaseModel):
@@ -122,11 +123,12 @@ class MacroSnapshotData(BaseModel):
 
 class TechnicalSnapshotItem(BaseModel):
     indicator: str
-    value: float = 0.0
-    score: float = 0.0
+    value: Optional[float] = None
+    score: Optional[float] = None
     advice: Optional[str] = None
     explanation: Optional[str] = None
     timestamp: Optional[datetime] = None
+    source_observed_at: Optional[datetime] = None
 
 
 class TechnicalSnapshotData(BaseModel):

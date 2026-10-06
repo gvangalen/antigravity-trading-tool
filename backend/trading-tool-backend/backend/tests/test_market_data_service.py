@@ -188,6 +188,34 @@ def test_add_user_market_indicator_uses_isolated_asset_scope_lookup(monkeypatch)
     outer_session.rollback.assert_not_awaited()
 
 
+def test_add_market_indicator_saves_measurement_without_inventing_score(monkeypatch):
+    session = AsyncMock()
+    service = MarketDataService(session)
+    service._get_asset_scope = AsyncMock(return_value={"asset_class": "crypto"})
+    service.preference_repository = SimpleNamespace(ensure_user_config=AsyncMock())
+    service.repository.check_indicator_exists = AsyncMock(return_value=False)
+    def persisted(row):
+        row.id = 11
+        return row
+
+    service.repository.add_market_data_indicator = AsyncMock(side_effect=persisted)
+    monkeypatch.setattr(
+        "backend.services.market_data_service.sync_score_indicator",
+        lambda *_args, **_kwargs: {"score": None, "source_status": "insufficient_indicator_history"},
+    )
+
+    async def run():
+        from unittest.mock import patch
+        with patch("backend.services.onboarding_service.mark_step_completed", AsyncMock()):
+            return await service.add_user_market_indicator(7, "volume", 1234, symbol="BTC")
+
+    result = asyncio.run(run())
+
+    assert result.score is None
+    assert "Onvoldoende gedateerde metingen" in result.interpretation
+    session.commit.assert_awaited_once()
+
+
 def test_market_preference_sync_refreshes_existing_evidence_from_the_live_provider():
     service = MarketDataService(AsyncMock())
     service.resolve_effective_preferences = AsyncMock(
