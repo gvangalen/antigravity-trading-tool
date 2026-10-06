@@ -3724,7 +3724,7 @@ class FinnResponsesAnswerVerifier:
                 }
             )
             and all(call.get("name") in {
-                "get_saved_setup_inventory", "get_active_plan_and_strategy", "answer_directly",
+                "get_saved_setup_inventory", "get_active_plan_and_strategy", "get_saved_setup", "answer_directly",
             } for call in result.tool_trace)
             and all(any(
                 item.get("status") == "completed"

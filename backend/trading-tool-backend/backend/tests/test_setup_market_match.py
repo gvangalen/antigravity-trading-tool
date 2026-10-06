@@ -11,6 +11,9 @@ from backend.engine.policy_engine import evaluate_policy
 from backend.engine.decision_engine import decide_amount
 from backend.services import setup_market_match_sync
 from backend.services.report_service import ReportService
+from backend.services.finn_v2_tool_adapters.setup_tool_adapter import SetupToolAdapter
+from backend.services.finn_v2_tool_adapters.setup_inventory_tool_adapter import SetupInventoryToolAdapter
+from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
 
 
 def setup(setup_id, symbol="BTC", **conditions):
@@ -67,8 +70,63 @@ def test_a_valid_boundary_is_not_displayed_as_zero_percent_match():
 def test_missing_data_and_unconfigured_conditions_have_no_match_score():
     configured = setup(1, min_market_score=40)
     assert match_setup(configured, None)["status"] == "insufficient_data"
+    assert match_setup(configured, None)["conditions"]["market"] == {
+        "minimum": 40.0, "maximum": None,
+    }
     assert match_setup(configured, {"macro": 50, "technical": None, "market": 60})["score"] is None
     assert match_setup(setup(2), {"macro": 50, "technical": 50, "market": 50})["status"] == "unconfigured"
+
+
+def test_finn_setup_reads_preserve_boundaries_without_selecting_a_strategy():
+    async def run():
+        saved = setup(9, min_market_score=20, max_market_score=60,
+                      min_macro_score=30, max_macro_score=70,
+                      min_technical_score=40, max_technical_score=80)
+        active = (await SetupToolAdapter().execute(
+            setup=saved, resolution_source="explicit_name",
+        ))["data"]
+        listed = (await SetupInventoryToolAdapter().execute(setups=[saved]))["data"].setups[0]
+        assert (active.min_market_score, active.max_market_score) == (20, 60)
+        assert (active.min_macro_score, active.max_macro_score) == (30, 70)
+        assert (active.min_technical_score, active.max_technical_score) == (40, 80)
+        assert listed["min_market_score"] == 20
+        assert listed["max_technical_score"] == 80
+
+    asyncio.run(run())
+
+
+def test_finn_can_read_same_reported_market_score_as_analyse_without_a_complete_benchmark():
+    async def run():
+        today = date.today()
+        row = {"report_date": today, "macro_score": None,
+               "technical_score": None, "market_score": 100}
+        session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+            mappings=lambda: SimpleNamespace(first=lambda: row))))
+        service = SetupMarketMatchService(session)
+        service._source_is_fresh = AsyncMock(return_value=True)
+        result = await service.for_asset(7, "BTC", setups=[setup(9, min_market_score=20)])
+        assert result["reported_scores"]["market_score"] == 100
+        assert result["benchmark_score"] is None
+        assert result["matches"][0]["conditions"]["market"]["minimum"] == 20
+
+        adapter = MarketToolAdapter(SimpleNamespace())
+        adapter.repository.get_latest_snapshot = AsyncMock(return_value=SimpleNamespace(
+            symbol="BTC", price=100000, change_24h=1, volume=100,
+            timestamp=datetime.now(timezone.utc),
+        ))
+        adapter.scores.fetch_daily_scores = AsyncMock(return_value=row)
+        market = await adapter.execute(asset="BTC", user_id=7)
+        assert market["data"].saved_market_score == 100
+        assert market["data"].score_report_date == today
+        adapter.scores.fetch_daily_scores.assert_awaited_once_with(7, "BTC")
+
+        adapter.repository.get_latest_snapshot = AsyncMock(return_value=None)
+        score_only = await adapter.execute(asset="BTC", user_id=7)
+        assert score_only["data"].saved_market_score == 100
+        assert score_only["data"].price is None
+        assert score_only["source"] == "daily_scores"
+
+    asyncio.run(run())
 
 
 def test_setup_fit_uses_current_benchmark_weights_but_preserves_hard_conditions():

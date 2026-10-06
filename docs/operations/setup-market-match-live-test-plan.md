@@ -17,3 +17,13 @@ Gebruik een ingelogde QA-gebruiker met ten minste twee assets en meerdere setups
 | Smart DCA | Bij complete, verse markt-, macro- en technische bronnen volgt het bedrag de opgeslagen curve en actuele Analyse-weging. Bij ontbrekende of oude bronnen ontstaat geen scoregestuurd bedrag. |
 
 Noteer per beurt de run-ID en per botbeslissing de decision-ID, bronmomenten, scorevelden en reden voor een ontbrekende score. Controleer bij een verschil eerst het gedeployde SHA en daarna de eigenaar, asset, weging en bronversheid.
+
+## Gerichte herkeuring na de QA-run op `82f8b6be`
+
+Voer deze vragen ook als één doorlopend FINN-gesprek uit. Ze toetsen de gemelde fouten zonder een scorebron, plan of bot te wijzigen.
+
+1. Vergelijk voor BTC op dezelfde datum de marktscore op Analyse met FINN. FINN moet de opgeslagen score kunnen noemen, ook als macro of technisch ontbreekt. Hij mag de onvolledige of verouderde invoer niet als geverifieerde totale benchmark presenteren.
+2. Vraag naar de opgeslagen markt-, macro- en technische scoregrenzen van `BTC Breakout Full`. De setup heeft twee gekoppelde strategieën; FINN moet de grenzen van de setup rechtstreeks noemen zonder om een strategie te vragen. Vraag daarna hoe de actuele scores zich tot die grenzen verhouden.
+3. Vraag voor een opgeslagen Smart DCA met €75 basisbedrag, drempels 40/70 en staffels 80/100/120% welk hypothetisch bedrag precies score 70 geeft. Verwacht 120% en €90, zonder aankoop. Controleer ook 69,9 als middenscore en 40 als begin van de middenband.
+4. Open de diagnostiek van een paper-bot zonder geldige opgeslagen stop-loss. Daar mag geen `€ NaN` staan; toon een ontbrekende waarde als zodanig.
+5. Herhaal de samengestelde BTC-vervolgvraag die eerder op een generieke fout eindigde. Leg de run-ID en terminal reason vast als de fout terugkomt; uit alleen de zichtbare foutzin volgt geen technische oorzaak.

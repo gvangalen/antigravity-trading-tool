@@ -477,6 +477,8 @@ export default function BotAgentCard({
       copy.noStrategy;
     const setupScore = Number(normalizedDecision?.setup_match?.score ?? NaN);
     const stopLoss = planSource?.stop_loss?.price ?? planSource?.stop_loss ?? null;
+    const parsedStopLoss = stopLoss == null || stopLoss === "" ? null : Number(stopLoss);
+    const hasStopLoss = Number.isFinite(parsedStopLoss) && parsedStopLoss > 0;
     const targets = Array.isArray(planSource?.targets) ? planSource.targets : [];
 
     return {
@@ -495,11 +497,11 @@ export default function BotAgentCard({
       setupName,
       setupScoreLabel: Number.isFinite(setupScore) ? `${Math.round(setupScore)}/100` : copy.insufficientData,
       stopLossLabel:
-        stopLoss != null
-          ? formatCurrency(Number(stopLoss), locale, "EUR", { maximumFractionDigits: 0 })
+        hasStopLoss
+          ? formatCurrency(parsedStopLoss, locale, "EUR", { maximumFractionDigits: 0 })
           : copy.notAvailable,
       targetCount: targets.length,
-      hasPlanLevels: stopLoss != null || targets.length > 0,
+      hasPlanLevels: hasStopLoss || targets.length > 0,
       reason: deriveDecisionReason(normalizedDecision),
     };
   }, [

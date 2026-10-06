@@ -28,6 +28,9 @@ class SetupToolAdapter:
                 "dca_day_name": _dca_day_name(row.get("dca_day")),
                 "dca_month_day": row.get("dca_month_day"),
                 "min_investment": row.get("min_investment"),
+                **{f"{bound}_{component}_score": row.get(f"{bound}_{component}_score")
+                   for component in ("market", "macro", "technical")
+                   for bound in ("min", "max")},
             }
             for row in (setups or [])
         ]
@@ -43,6 +46,9 @@ class SetupToolAdapter:
             dca_day_name=_dca_day_name(setup.get("dca_day")),
             dca_month_day=setup.get("dca_month_day"),
             min_investment=setup.get("min_investment"),
+            **{f"{bound}_{component}_score": setup.get(f"{bound}_{component}_score")
+               for component in ("market", "macro", "technical")
+               for bound in ("min", "max")},
             setups=collection,
             setup_count=len(collection) if collection else None,
         )

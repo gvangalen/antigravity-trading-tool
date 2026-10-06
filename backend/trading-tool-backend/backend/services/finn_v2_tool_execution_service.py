@@ -577,7 +577,7 @@ class FinnV2ToolExecutionService:
             }
         if tool_name == "read_market_snapshot":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.market_adapter.execute(asset=asset_state["asset"])
+            return await self.market_adapter.execute(asset=asset_state["asset"], user_id=user_id)
         if tool_name == "read_macro_snapshot":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.macro_adapter.execute(user_id=user_id, asset=asset_state["asset"])

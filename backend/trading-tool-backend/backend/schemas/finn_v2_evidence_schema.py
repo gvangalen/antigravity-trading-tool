@@ -89,16 +89,20 @@ class SetupMarketMatchesData(BaseModel):
     source_status: str
     benchmark_score: Optional[float] = None
     benchmark_weights: Optional[Dict[str, float]] = None
+    reported_scores: Dict[str, Optional[float]] = Field(default_factory=dict)
+    component_source_status: Dict[str, str] = Field(default_factory=dict)
     matches: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class MarketSnapshotData(BaseModel):
     symbol: str
-    price: float = 0.0
-    change_24h: float = 0.0
-    volume: float = 0.0
+    price: Optional[float] = None
+    change_24h: Optional[float] = None
+    volume: Optional[float] = None
     source: str
     as_of: Optional[datetime] = None
+    saved_market_score: Optional[float] = None
+    score_report_date: Optional[date] = None
 
 
 class MacroSnapshotItem(BaseModel):
@@ -140,6 +144,12 @@ class ActiveSetupData(BaseModel):
     dca_day_name: Optional[str] = None
     dca_month_day: Optional[int] = None
     min_investment: Optional[float] = None
+    min_market_score: Optional[float] = None
+    max_market_score: Optional[float] = None
+    min_macro_score: Optional[float] = None
+    max_macro_score: Optional[float] = None
+    min_technical_score: Optional[float] = None
+    max_technical_score: Optional[float] = None
     setups: List[Dict[str, object]] = Field(default_factory=list)
     setup_count: Optional[int] = None
 
@@ -178,6 +188,7 @@ class LinkedStrategyData(BaseModel):
     low_score_percent: Optional[float] = None
     mid_score_percent: Optional[float] = None
     high_score_percent: Optional[float] = None
+    dca_score_bands: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class LinkedStrategyCollectionData(BaseModel):

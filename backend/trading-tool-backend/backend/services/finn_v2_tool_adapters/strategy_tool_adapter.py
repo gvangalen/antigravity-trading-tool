@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from backend.schemas.finn_v2_evidence_schema import LinkedStrategyData
+from backend.engine.curve_engine import calculate_position_size
 
 
 class StrategyToolAdapter:
@@ -77,16 +78,37 @@ class StrategyToolAdapter:
             return {}
         try:
             ordered = sorted(points, key=lambda point: float(point["x"]))
+            low = float(ordered[1]["x"])
+            high = float(ordered[2]["x"])
+            bands = [
+                (0.0, low, float(ordered[0]["y"])),
+                (low, high, float(ordered[1]["y"])),
+                (high, None, float(ordered[2]["y"])),
+            ]
             return {
                 "dca_amount_mode": "score_bands",
                 "score_source": curve.get("input"),
                 "score_weights": None,
                 "score_weights_policy": curve.get("weights_policy"),
-                "low_threshold": float(ordered[1]["x"]),
-                "high_threshold": float(ordered[2]["x"]),
+                "low_threshold": low,
+                "high_threshold": high,
                 "low_score_percent": round(100 * float(ordered[0]["y"]), 2),
                 "mid_score_percent": round(100 * float(ordered[1]["y"]), 2),
                 "high_score_percent": round(100 * float(ordered[2]["y"]), 2),
+                "dca_score_bands": [
+                    {
+                        "from_score_inclusive": start,
+                        "to_score_exclusive": end,
+                        "percent_of_base": round(100 * multiplier, 2),
+                        "planned_amount": calculate_position_size(
+                            base, curve, start,
+                            min_multiplier=curve.get("min_multiplier", 0.1),
+                            max_multiplier=curve.get("max_multiplier", 3.0),
+                        ),
+                        "amount_status": "hypothetical_before_exposure_not_purchase",
+                    }
+                    for start, end, multiplier in bands
+                ],
             }
         except (TypeError, ValueError, KeyError):
             return {}

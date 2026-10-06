@@ -142,9 +142,14 @@ class FinnResponsesFrontDoor:
             "read each relevant source before saying that one of them is missing. "
             "For current indicator readings, use get_current_technical_snapshot. A saved "
             "indicator configuration or its evaluation does not provide current readings. "
+            "For the market, macro and technical scores saved for an asset and their report "
+            "date, use get_saved_asset_scores; its separate source status determines freshness. "
+            "A market price snapshot is not a score report. "
             "For a question asking what entry, stop or target is saved, read the selected "
             "setup and linked strategy. An evaluation of plan quality cannot substitute "
             "for that linked-strategy read. "
+            "For a question only about a setup's saved market, macro or technical score "
+            "boundaries, use get_saved_setup; linked strategy selection is unnecessary. "
             "Keep source ownership explicit: entry, stop and targets read from a strategy "
             "are strategy fields, not setup fields. If asked which strategies are linked "
             "to a setup, use get_linked_strategies to read the full owner-scoped list. "
@@ -759,7 +764,7 @@ class FinnResponsesFrontDoor:
 
         def saved_read_targets_open_draft(call: FinnResponsesToolCall) -> bool:
             if not open_dca_draft or call.name not in {
-                "get_saved_setup_inventory", "get_active_plan_and_strategy",
+                "get_saved_setup_inventory", "get_active_plan_and_strategy", "get_saved_setup",
             } or call.answer_mode in {"list", "compare"}:
                 return False
             draft_name = str(draft_fields.get("name") or "").strip()
@@ -991,7 +996,7 @@ class FinnResponsesFrontDoor:
                     previous_setup_target = {
                         "entity_type": "setup", "entity_id": previous_focused_setup_id,
                     }
-                if call.name in {"get_active_plan_and_strategy", "get_linked_strategies"}:
+                if call.name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}:
                     # The model can express the choice, but only the user's text
                     # and owner-scoped persisted evidence may select the object.
                     reference = call.inputs.get("reference")
@@ -1104,7 +1109,7 @@ class FinnResponsesFrontDoor:
                                 },
                             )
                         if target.resolution_status == "resolved" and (
-                            call.name in {"get_active_plan_and_strategy", "get_linked_strategies"}
+                            call.name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}
                             or target.source == "explicit_name"
                             or (subject_reference and target.source == "active_runtime_context")
                         ):
@@ -1112,7 +1117,7 @@ class FinnResponsesFrontDoor:
                                 {"setup_id": target.entity_id,
                                  **({"strategy_name": call.inputs["strategy_name"]}
                                     if call.inputs.get("strategy_name") else {})}
-                                if call.name in {"get_active_plan_and_strategy", "get_linked_strategies"}
+                                if call.name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}
                                 else {**call.inputs, "setup_id": target.entity_id}
                             ))
                     if (

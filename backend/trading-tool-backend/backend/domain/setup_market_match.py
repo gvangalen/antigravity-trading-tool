@@ -46,6 +46,10 @@ def match_setup(
         "tags": setup.get("tags"),
         "favorite": setup.get("favorite"),
         "setup_explanation": setup.get("explanation"),
+        "conditions": {
+            component: {"minimum": minimum, "maximum": maximum}
+            for component, (minimum, maximum) in conditions.items()
+        },
         "score": None,
         "status": "unconfigured",
         "is_active": False,

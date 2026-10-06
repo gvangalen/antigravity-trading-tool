@@ -98,6 +98,8 @@ class FinnResponsesToolCatalog:
         # Collection reads have a distinct typed read adapter. They do not
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
+        self.read_tools["get_saved_setup"] = ("read_active_setup",)
+        self.read_tools["get_saved_asset_scores"] = ("read_asset_scores", "read_setup_market_matches")
         self.read_tools["get_setup_market_matches"] = ("read_setup_market_matches",)
         self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
         self.evaluation_contracts = {
@@ -166,14 +168,35 @@ class FinnResponsesToolCatalog:
             if name == "get_active_plan_and_strategy":
                 description += (
                     " Returns one selected saved setup and its linked strategy, not a list or assessment. "
+                    "For only a saved setup's market, macro or technical score boundaries, "
+                    "use get_saved_setup: those fields are on the setup and do not require a strategy. "
                     "For a single saved DCA plan, read this tool to verify its base amount, score bands "
                     "and a hypothetical planned amount; those fields belong to the linked strategy. "
+                    "The returned dca_score_bands are calculated by the execution curve engine: "
+                    "from_score_inclusive includes the exact threshold, while to_score_exclusive does not. "
+                    "Use the returned planned_amount for a hypothetical score instead of guessing the boundary. "
                     "For all saved setups, counts, or questions about which of several setups has a field, "
                     "use get_saved_setup_inventory instead. "
                     "Use it for listing settings or static arithmetic from saved entry, "
                     "stop and targets. If the user asks whether the complete plan fits "
                     "their goals or risk style, use evaluate_plan instead; this read alone "
                     "cannot establish suitability or a current trade signal."
+                )
+            if name == "get_saved_setup":
+                description += (
+                    " Read one owner-scoped saved setup by its name, including its market, macro "
+                    "and technical minimum and maximum score boundaries. These are setup fields, "
+                    "independent of how many strategies are linked. Do not read or choose a strategy "
+                    "to answer a question only about these setup fields."
+                )
+            if name == "get_saved_asset_scores":
+                description += (
+                    " Read the owner's most recently saved market, macro and technical scores "
+                    "for one asset, including their actual report date even when that date is "
+                    "before today. Use for questions asking which scores were saved or when. "
+                    "This tool also returns current per-component source status from the setup "
+                    "match read. Never infer source freshness from the report date alone. A saved "
+                    "report is not proof of a fresh benchmark or current trade signal."
                 )
             if name == "get_saved_setup_inventory":
                 description += (
@@ -197,7 +220,11 @@ class FinnResponsesToolCatalog:
                     "market conditions or deserves attention. Distinguish benchmark_score, weighted "
                     "by the owner's current Analyse preferences, from each setup's weighted fit to its "
                     "saved score ranges. Neither establishes an entry trigger, strategy readiness "
-                    "or permission to trade. If source_status is not available, explain the data gap."
+                    "or permission to trade. reported_scores may contain a score shown in Analyse "
+                    "even when incomplete or stale sources prevent a verified benchmark. Use "
+                    "component_source_status and as_of to explain that distinction. The saved "
+                    "score boundaries are in each match's conditions even when no match can be scored. "
+                    "If source_status is not available, explain the data gap."
                 )
             if name == "get_linked_strategies":
                 description += (
@@ -210,7 +237,7 @@ class FinnResponsesToolCatalog:
                 "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
                 "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
             }
-            if name in {"get_active_plan_and_strategy", "get_linked_strategies"}:
+            if name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}:
                 properties.update({
                     "setup_name": {"type": ["string", "null"],
                                    "description": "Saved setup name explicitly selected by the user. FINN resolves ownership server-side."},
@@ -426,7 +453,7 @@ class FinnResponsesToolCatalog:
             allowed = {"asset", "timeframe"}
             if name in self.evaluation_contracts:
                 allowed.update(self.evaluation_contracts[name].optional_inputs)
-            if name in {"get_active_plan_and_strategy", "get_linked_strategies"}:
+            if name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}:
                 allowed.update({"setup_name", "reference"})
             if name == "get_active_plan_and_strategy":
                 allowed.add("strategy_name")
