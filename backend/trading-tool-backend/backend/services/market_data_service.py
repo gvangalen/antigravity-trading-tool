@@ -67,7 +67,9 @@ def sync_score_indicator(category: str, indicator: str, value: float, user_id: i
             raise RuntimeError("Geen databaseverbinding voor scoring engine.")
         normalized_value = normalize_market_value_with_history(conn, symbol, indicator, value)
         if normalized_value is None:
-            raise HTTPException(422, "Onvoldoende historische marktdata voor deze indicatorscore.")
+            # The user's indicator choice can be saved before five dated
+            # observations exist. It remains unscored until evidence arrives.
+            return {"score": None, "source_status": "insufficient_indicator_history"}
         return score_indicator(conn=conn, category=category, indicator=indicator,
                                value=normalized_value,
                                user_id=user_id, symbol=symbol)
@@ -638,10 +640,12 @@ class MarketDataService:
         scored = await asyncio.to_thread(sync_score_indicator, "market", normalized, value,
                                          int(user_id), symbol)
 
-        score = require_indicator_score(scored, indicator_name)
-        trend = scored.get("trend") or "neutral"
-        interpretation = scored.get("interpretation") or "Geen interpretatie beschikbaar"
-        action = scored.get("action") or "Geen actie"
+        pending_history = scored.get("source_status") == "insufficient_indicator_history"
+        score = None if pending_history else require_indicator_score(scored, indicator_name)
+        trend = scored.get("trend") if not pending_history else None
+        interpretation = ("Onvoldoende gedateerde metingen voor een indicatorscore."
+                          if pending_history else scored.get("interpretation") or "Geen interpretatie beschikbaar")
+        action = scored.get("action") if not pending_history else None
 
         if exists:
             # Keep the confirmed configuration, but replace a stale

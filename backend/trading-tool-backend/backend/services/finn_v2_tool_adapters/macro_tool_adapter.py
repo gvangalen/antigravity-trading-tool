@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.schemas.finn_v2_evidence_schema import MacroSnapshotData, MacroSnapshotItem
+from backend.utils.scoring_utils import score_source_is_fresh
 
 
 class MacroToolAdapter:
@@ -15,14 +16,18 @@ class MacroToolAdapter:
         payload = [
             MacroSnapshotItem(
                 indicator=row.name,
-                value=float(row.value or 0),
+                value=float(row.value) if row.value is not None else None,
                 trend=row.trend,
-                score=float(row.score or 0),
+                score=(float(row.score) if row.score is not None and
+                       score_source_is_fresh("macro", row.name, getattr(row, "source_observed_at", None), symbol=asset)
+                       else None),
                 timestamp=row.timestamp,
+                source_observed_at=getattr(row, "source_observed_at", None),
             )
             for row in rows
         ]
-        latest = max((row.timestamp for row in rows if row.timestamp), default=None)
+        latest = max((getattr(row, "source_observed_at", None) for row in rows
+                      if getattr(row, "source_observed_at", None)), default=None)
         return {
             "data": MacroSnapshotData(symbol=asset, items=payload),
             "summary": {"title": "macro_snapshot", "symbol": asset, "count": len(payload)},

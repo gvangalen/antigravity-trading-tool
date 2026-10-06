@@ -278,6 +278,7 @@ export default function IndicatorConfigModal({
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [profileContext, setProfileContext] = useState(() => buildProfileContext({}, copy));
   const [selectedConditions, setSelectedConditions] = useState([]);
@@ -373,6 +374,7 @@ export default function IndicatorConfigModal({
     let active = true;
     setLoading(true);
     setAdvancedOpen(false);
+    setSaveError("");
 
     Promise.all([
       getIndicatorConfig(category, normalizedIndicator, assetSymbol),
@@ -413,6 +415,7 @@ export default function IndicatorConfigModal({
     if (!indicator || !category || !draft || saving || !isValidDraft) return;
 
     setSaving(true);
+    setSaveError("");
 
     try {
       if (draft.score_mode === "custom") {
@@ -458,7 +461,18 @@ export default function IndicatorConfigModal({
       onClose?.();
     } catch (error) {
       console.error("Failed to confirm indicator config modal:", error);
-      showSnackbar(copy.actionFailed.replace("{indicator}", indicatorLabel), "danger");
+      let detail = "";
+      try {
+        const parsed = JSON.parse(error?.body || "{}");
+        detail = typeof parsed?.detail === "string" ? parsed.detail : "";
+      } catch {}
+      const message = error?.status === 409
+        ? `${indicatorLabel} is al toegevoegd voor ${assetSymbol}. Bewerk de bestaande indicator.`
+        : error?.status === 422 && detail
+          ? detail
+          : copy.actionFailed.replace("{indicator}", indicatorLabel);
+      setSaveError(message);
+      showSnackbar(message, "danger");
     } finally {
       setSaving(false);
     }
@@ -687,6 +701,7 @@ export default function IndicatorConfigModal({
           </div>
         </div>
         <div className="mt-6 border-t border-slate-100 pt-5">
+          {saveError ? <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{saveError}</p> : null}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm font-semibold text-slate-500">
               {summaryText}

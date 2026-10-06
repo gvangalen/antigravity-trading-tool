@@ -47,6 +47,7 @@ import {
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { requestIndicatorContext } from "@/lib/api/workspace";
+import { validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -1234,7 +1235,7 @@ function explainIndicatorAssessment({
   return specific || genericByTone[tone] || ui.indicatorAssessment(safeLabel, direction, scoreTone(score, ui).label);
 }
 
-function buildRows(items, locale, ui) {
+function buildRows(items, locale, ui, currentEvidence = null, categoryScore = null) {
   const source = Array.isArray(items) ? items : [];
 
   return source.map((item, index) => {
@@ -1242,9 +1243,10 @@ function buildRows(items, locale, ui) {
     const label = prettifyName(name, ui);
     const rawValue = item?.value ?? item?.waarde;
     const hasValue = hasUsableIndicatorValue(name, rawValue);
-    const score = hasValue ? normalizeScore(item?.score) : null;
+    const evidence = currentEvidence === null ? item : validatedDayEvidence(categoryScore, currentEvidence, name);
+    const score = hasValue ? normalizeScore(evidence?.score) : null;
     const tone = scoreTone(score, ui);
-    const direction = hasValue ? toDirectionLabel(item, score, ui) : ui.unavailable;
+    const direction = score !== null ? toDirectionLabel(item, score, ui) : ui.unavailable;
     const value = formatIndicatorValue(name, rawValue, locale, ui);
     const numericValue = parseIndicatorNumber(rawValue);
     const scoreConflict =
@@ -1256,13 +1258,13 @@ function buildRows(items, locale, ui) {
       score <= 35;
     const rawDetail = String(item?.interpretation || item?.uitleg || item?.action || "").trim();
     const localizedDetail = trimSentence(localizeIndicatorDetail(rawDetail, ui), "");
-    const shouldUseBackendDetail =
+    const shouldUseBackendDetail = score !== null &&
       localizedDetail &&
       localizedDetail !== ui.unavailable &&
       !isGenericIndicatorExplanation(rawDetail) &&
       !isGenericIndicatorExplanation(localizedDetail) &&
       !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()];
-    const generatedDetail = hasValue
+    const generatedDetail = score !== null
       ? explainIndicatorAssessment({
           name,
           label,
@@ -1288,7 +1290,9 @@ function buildRows(items, locale, ui) {
       signalTone: tone,
       scoreLabel: score === null ? tone.label : `${tone.label} · ${Math.round(score)}`,
       detail,
-      timestamp: item?.timestamp || item?.date || null,
+      timestamp: currentEvidence === null
+        ? item?.source_observed_at || item?.timestamp || item?.date || null
+        : evidence?.source_observed_at || item?.source_observed_at || null,
       raw: item,
     };
   });
@@ -1871,12 +1875,12 @@ function EvidenceRow({
 
   const contribution = row.raw?.score_contribution;
   const contributionText =
-    contribution?.status === "available"
+    row.score !== null && contribution?.status === "available"
       ? `${Math.round(Number(contribution.weight || 0) * 100)}% · ${Number(contribution.weighted_points || 0).toFixed(1)} pt`
       : ui.unavailable;
   const freshness = row.raw?.freshness;
   const freshnessText =
-    freshness?.status !== "available"
+    row.score === null || freshness?.status !== "available"
       ? ui.unavailable
       : freshness.stale
       ? ui.staleData
@@ -1955,7 +1959,7 @@ function EvidenceRow({
                 [ui.dataSource, String(row.raw?.source || "—").replaceAll("_", " ")],
                 [ui.periodLabel, ui[row.raw?.period || period] || row.raw?.period || period],
                 [ui.freshness, freshnessText],
-                [ui.latestSignal, row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.live],
+                [ui.latestSignal, row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.unavailable],
                 [ui.scoreContribution, contributionText],
                 [ui.sampleSize, row.raw?.sample_size ?? 1],
               ].map(([label, value]) => (
@@ -2334,9 +2338,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const marketDayData = categoryData.market?.rows || [];
   const macroData = categoryData.macro?.rows || [];
   const technicalData = categoryData.technical?.rows || [];
-  const market = { score: categoryData.market?.score?.score ?? null };
-  const macro = { score: categoryData.macro?.score?.score ?? null };
-  const technical = { score: categoryData.technical?.score?.score ?? null };
+  const market = { score: marketTimeframe === "day" ? workspace?.daily?.market?.score ?? null : categoryData.market?.score?.score ?? null };
+  const macro = { score: macroTimeframe === "day" ? workspace?.daily?.macro?.score ?? null : categoryData.macro?.score?.score ?? null };
+  const technical = { score: technicalTimeframe === "day" ? workspace?.daily?.technical?.score ?? null : categoryData.technical?.score?.score ?? null };
   const workspaceAsset = workspace?.asset || null;
   const master = {
     weights: workspace?.master?.weights || {},
@@ -2685,9 +2689,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     null;
 
   const sections = useMemo(() => {
-    const marketRows = filterVisibleRows(buildRows(marketDayData, locale, ui), activeSymbol, "market", hiddenIndicatorKeys);
-    const macroRows = filterVisibleRows(buildRows(macroData, locale, ui), activeSymbol, "macro", hiddenIndicatorKeys);
-    const technicalRows = filterVisibleRows(buildRows(technicalData, locale, ui), activeSymbol, "technical", hiddenIndicatorKeys);
+    const evidence = workspace?.daily?.indicator_evidence || {};
+    const dayEvidence = (category, period, score) => period === "day" ? (normalizeScore(score) === null ? {} : evidence[category] || {}) : null;
+    const marketRows = filterVisibleRows(buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score), activeSymbol, "market", hiddenIndicatorKeys);
+    const macroRows = filterVisibleRows(buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe, macro?.score), macro?.score), activeSymbol, "macro", hiddenIndicatorKeys);
+    const technicalRows = filterVisibleRows(buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe, technical?.score), technical?.score), activeSymbol, "technical", hiddenIndicatorKeys);
     const visibleScore = (rows) => averageVisibleSectionScore(rows);
     const fallbackEmptyState = (score, rows, loadingState, defaultEmptyState) =>
       loadingState
@@ -2714,8 +2720,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Market" : locale?.startsWith("de") ? "Markt" : SECTION_META.market.label,
         eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
-        score: visibleScore(marketRows),
-        insight: buildSectionInsight("market", visibleScore(marketRows), ui),
+        score: marketTimeframe === "day" ? normalizeScore(market?.score) : visibleScore(marketRows),
+        insight: buildSectionInsight("market", marketTimeframe === "day" ? market?.score : visibleScore(marketRows), ui),
         rows: marketRows,
         emptyState: fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
         emptyAction: showEmptyAction(market?.score, marketRows, marketLoading) ? emptyActionButton("market") : null,
@@ -2725,8 +2731,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Macro" : locale?.startsWith("de") ? "Makro" : SECTION_META.macro.label,
         eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
-        score: visibleScore(macroRows),
-        insight: buildSectionInsight("macro", visibleScore(macroRows), ui),
+        score: macroTimeframe === "day" ? normalizeScore(macro?.score) : visibleScore(macroRows),
+        insight: buildSectionInsight("macro", macroTimeframe === "day" ? macro?.score : visibleScore(macroRows), ui),
         rows: macroRows,
         emptyState: fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
         emptyAction: showEmptyAction(macro?.score, macroRows, macroLoading) ? emptyActionButton("macro") : null,
@@ -2736,14 +2742,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Technical" : locale?.startsWith("de") ? "Technisch" : SECTION_META.technical.label,
         eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
-        score: visibleScore(technicalRows),
-        insight: buildSectionInsight("technical", visibleScore(technicalRows), ui),
+        score: technicalTimeframe === "day" ? normalizeScore(technical?.score) : visibleScore(technicalRows),
+        insight: buildSectionInsight("technical", technicalTimeframe === "day" ? technical?.score : visibleScore(technicalRows), ui),
         rows: technicalRows,
         emptyState: fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
         emptyAction: showEmptyAction(technical?.score, technicalRows, technicalLoading) ? emptyActionButton("technical") : null,
       },
     ];
-  }, [activeSymbol, hiddenIndicatorKeys, isFallbackWorkspace, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
+  }, [activeSymbol, hiddenIndicatorKeys, isFallbackWorkspace, locale, macro?.score, macroData, macroLoading, macroTimeframe, market?.score, marketDayData, marketLoading, marketTimeframe, technical?.score, technicalData, technicalLoading, technicalTimeframe, ui, workspace?.daily?.indicator_evidence]);
 
   const combinedSummary = useMemo(() => {
     if (Object.values(periods).every((period) => period === "day")) {
