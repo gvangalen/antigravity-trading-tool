@@ -6,6 +6,8 @@ from backend.domain.finn_dca_plan_contract import (
 )
 from backend.engine.decision_engine import decide_amount
 from backend.ai_agents.trading_bot_agent import _get_current_benchmark_weights
+from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
+import asyncio
 
 
 def _schedule():
@@ -49,6 +51,31 @@ def test_smart_dca_splits_visible_tiers_into_discrete_engine_curve():
                                 "_benchmark_weights": weights,
                                 "_source_available": {key: True for key in weights}})
         assert result["final_amount"] == amount
+
+
+def test_saved_smart_dca_readback_uses_engine_at_exact_high_threshold():
+    _, strategy = split_confirmed_dca_plan({
+        **_schedule(), "dca_amount_mode": "score_bands", "base_amount": 75,
+        "score_source": "benchmark_score", "low_threshold": 40,
+        "high_threshold": 70, "low_score_percent": 80,
+        "mid_score_percent": 100, "high_score_percent": 120,
+    })
+    saved = {**strategy, "id": 51, "setup_id": 9, "name": "BTC Smart DCA",
+             "data": {"dca_amount_semantics": "planned_exact",
+                      "decision_curve": strategy["decision_curve"]}}
+    readback = asyncio.run(StrategyToolAdapter().execute(
+        strategy=saved, resolution_source="explicit_name",
+    ))["data"]
+    bands = readback.dca_score_bands
+    assert [(row["from_score_inclusive"], row["to_score_exclusive"], row["planned_amount"])
+            for row in bands] == [(0, 40, 60), (40, 70, 75), (70, None, 90)]
+    weights = normalize_benchmark_weights({})
+    actual = decide_amount({**strategy, "setup_type": "dca"}, {
+        "market_score": 70, "macro_score": 70, "technical_score": 70,
+        "_benchmark_weights": weights,
+        "_source_available": {key: True for key in weights},
+    })
+    assert actual["final_amount"] == bands[2]["planned_amount"] == 90
 
 
 @pytest.mark.parametrize("overrides", [

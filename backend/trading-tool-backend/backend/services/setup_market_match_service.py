@@ -103,20 +103,44 @@ class SetupMarketMatchService:
             row = result.mappings().first()
         scores = None
         source_status = "missing_scores"
+        reported_scores = {
+            f"{category}_score": float(row[f"{category}_score"])
+            if row and row.get(f"{category}_score") is not None else None
+            for category in ("macro", "technical", "market")
+        }
+        component_source_status = {
+            score_key: "missing_score" if value is None else "unverified"
+            for score_key, value in reported_scores.items()
+        }
         if weights is None:
             source_status = "invalid_weights"
         elif row and self.daily_rows is not None:
             from datetime import date
             if row.get("report_date") != date.today():
                 source_status = "stale_scores"
-        if weights is not None and source_status != "stale_scores" and row and all(
-            row[key] is not None for key in ("macro_score", "technical_score", "market_score")
-        ):
-            source_status = "stale_sources"
-            if all([await self._source_is_fresh(user_id, symbol, category)
-                    for category in ("macro", "technical", "market")]):
-                scores = {category: row[f"{category}_score"] for category in ("macro", "technical", "market")}
+        if source_status == "stale_scores":
+            component_source_status = {
+                score_key: "stale_report" if value is not None else "missing_score"
+                for score_key, value in reported_scores.items()
+            }
+        elif row:
+            for category in ("macro", "technical", "market"):
+                score_key = f"{category}_score"
+                value = reported_scores[score_key]
+                if value is not None:
+                    component_source_status[score_key] = (
+                        "fresh" if await self._source_is_fresh(user_id, symbol, category)
+                        else "stale_source"
+                    )
+            if weights is not None and all(
+                component_source_status[f"{category}_score"] == "fresh"
+                for category in ("macro", "technical", "market")
+            ):
+                scores = {category: reported_scores[f"{category}_score"]
+                          for category in ("macro", "technical", "market")}
                 source_status = "available"
+            elif weights is not None and all(value is not None for value in reported_scores.values()):
+                source_status = "stale_sources"
         total_benchmark = None
         if scores is not None and weights is not None:
             weighted_scores = {f"{category}_score": float(value) for category, value in scores.items()}
@@ -126,13 +150,17 @@ class SetupMarketMatchService:
             )
         matches = rank_matches(selected, scores, weights)
         matches = [{**match, "benchmark_score": total_benchmark,
-                    "benchmark_weights": weights} for match in matches]
+                    "benchmark_weights": weights,
+                    "reported_scores": reported_scores,
+                    "component_source_status": component_source_status} for match in matches]
         return {
             "symbol": symbol,
             "as_of": row["report_date"] if row else None,
             "source_status": source_status,
             "benchmark_score": total_benchmark,
             "benchmark_weights": weights,
+            "reported_scores": reported_scores,
+            "component_source_status": component_source_status,
             "matches": matches,
         }
 

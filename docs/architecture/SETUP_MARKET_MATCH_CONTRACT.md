@@ -8,6 +8,8 @@ De totale benchmark gebruikt de actuele markt-, macro- en technische scores met 
 
 Een setup zonder scorevoorwaarden krijgt `unconfigured` en geen numerieke match. Ontbrekende of verouderde componenten krijgen `insufficient_data` en geen numerieke match. Een geldige score buiten een harde voorwaarde krijgt `outside_conditions`; alleen een match binnen alle opgeslagen voorwaarden krijgt `matches`. Van de passende setups wordt de hoogste als `is_best` aangeduid. De lijst blijft volledig zichtbaar en toont de beste bovenaan.
 
+Een afzonderlijke dagscore mag wel zichtbaar blijven wanneer de totale benchmark ontbreekt. FINN krijgt daarom de opgeslagen `reported_scores` en per component een `component_source_status`; `benchmark_score` en de numerieke setupmatch blijven leeg totdat alle drie bronnen geldig en vers zijn. De setupvoorwaarden staan als `conditions` ook bij een ontbrekende match. Een marktscore die Analyse toont is dus leesbaar zonder die als actueel handelssignaal te behandelen.
+
 ## Bronnen en afnemers
 
 - `domain/setup_market_match.py` bevat de score- en statusregels.

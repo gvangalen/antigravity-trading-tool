@@ -1982,6 +1982,69 @@ def test_selected_strategy_name_is_a_valid_owner_scoped_read_selector():
     assert call.inputs["strategy_name"] == "Apple Full Strategy"
 
 
+def test_saved_setup_bounds_read_never_requires_a_strategy():
+    catalog = FinnResponsesToolCatalog()
+    call = catalog.validate("get_saved_setup", {
+        "asset": "BTC", "setup_name": "BTC Breakout Full", "reference": "current_request",
+    })
+    assert call.read_tools == ("read_active_setup",)
+    assert call.inputs["setup_name"] == "BTC Breakout Full"
+    definition = next(item for item in catalog.definitions() if item["name"] == "get_saved_setup")
+    assert "independent of how many strategies" in definition["description"]
+    with pytest.raises(FinnResponsesToolError, match="read_arguments_invalid"):
+        catalog.validate("get_saved_setup", {"strategy_name": "BTC Breakout Full Strategy"})
+
+
+def test_saved_asset_score_read_uses_dated_score_tool():
+    catalog = FinnResponsesToolCatalog()
+    assert catalog.validate("get_saved_asset_scores", {"asset": "BTC"}).read_tools == (
+        "read_asset_scores", "read_setup_market_matches",
+    )
+    definition = next(item for item in catalog.definitions() if item["name"] == "get_saved_asset_scores")
+    assert "actual report date" in definition["description"]
+
+
+def test_saved_setup_bounds_question_uses_setup_read_without_strategy_disambiguation():
+    fake = FakeResponses(
+        response("bounds-read", calls=[tool_call(
+            "bounds-call", "get_saved_setup", {"setup_name": "BTC Breakout Full"},
+        )]),
+        response("bounds-answer", text=(
+            "BTC Breakout Full heeft markt 20–60, macro 30–70 en technisch 40–80 "
+            "als opgeslagen scoregrenzen."
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7, run_id="bounds-read",
+    )
+    front.relevance_guard = SimpleNamespace(
+        saved_plan_query_kind=AsyncMock(return_value={"kind": "detail", "source_asset": "BTC", "target_asset": "BTC"}),
+        previous_answer_suffices=AsyncMock(return_value=False),
+        is_relevant=AsyncMock(return_value=True),
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_active_setup", "status": "completed",
+            "data": {"setup_id": 9, "name": "BTC Breakout Full", "symbol": "BTC",
+                     "min_market_score": 20, "max_market_score": 60,
+                     "min_macro_score": 30, "max_macro_score": 70,
+                     "min_technical_score": 40, "max_technical_score": 80},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Welke markt-, macro- en technische scoregrenzen heeft BTC Breakout Full?",
+        instructions=front._model_led_instructions("nl"), conversation_context={}, verified_asset="BTC",
+    ))
+    assert [call.name for call in calls] == ["get_saved_setup"]
+    assert calls[0].read_tools == ("read_active_setup",)
+    assert result.response.answer_kind == "free_text"
+    assert "20–60" in result.response.text
+
+
 def test_rejected_proposal_does_not_override_later_valid_clarification():
     trace = (
         {"name": "create_or_update_trade_plan_proposal", "status": "retry"},
