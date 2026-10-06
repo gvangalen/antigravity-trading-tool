@@ -8,6 +8,20 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `BUILD_GATES_PENDING`. Do not merge or deploy yet. |
+| Goal | Unify indicator scoring and dated benchmark evidence across FINN, Analyse, Mijn Plan, reports, mobile and bot score input. |
+| Candidate branch | `codex/indicator-score-flow-v2` |
+| Candidate SHA | `5f8ec80a96c90cc450b71462644329bd51c25335` before this status-only update. |
+| PR | [#85](https://github.com/gvangalen/antigravity-trading-tool/pull/85), draft. |
+| Production SHA | `cb0c24827a853c616e0145d652f5353f2e9f8d24` reported by authenticated QA; verify public surfaces again before release. |
+| Last updated | 2026-10-06 |
+
+The score-flow code passed local root pytest (3142 passed, 3 skipped), frontend build, mobile typecheck/lint/web smoke and migration plan validation before the frontend export and `sharp` override commits. The export was rebuilt and the production dependency audit passed with zero vulnerabilities after the `sharp` update. [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37494677715) is in progress at the time of this entry. The worker-driven FINN action matrix and real-provider regression have **not** run for this candidate: no OpenAI API key is available in the local release environment. This is a release blocker under `FINN_RELEASE_PROCESS.md`. No production deployment or independent QA has occurred for this candidate.
+
+## Previous Release (setup-score repair)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and production identity checks passed; this candidate is not independently accepted. |
 | Goal | Repair Analyse ↔ FINN score evidence, setup-boundary reads with multiple strategies, exact Smart-DCA threshold readback, and the paper-bot `NaN` display. |
 | Candidate branch | Merged to `main` in `1f50e2f3adc682de0bf2f468be7aaddbc89e4561`. |
