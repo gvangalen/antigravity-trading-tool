@@ -11,7 +11,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 | Phase | `BUILD_VALIDATED`; candidate CI and deployment pending. |
 | Goal | Distinguish saved indicator configuration from unavailable scores in FINN Today; show the saved DCA purchase schedule separately from a chart timeframe in Automation; finish the Dutch onboarding copy. |
 | Candidate branch | `codex/onboarding-briefing-dca-cadence`. |
-| Candidate implementation SHA | Pending candidate commit. |
+| Candidate implementation SHA | `814b5ed0` (with this status correction in a follow-up commit). |
 | Production SHA | Pending deployment. |
 | Previous live SHA | `7eafc957254228f0ebd33580dc5179ec258cc489`, independently tested on a fresh account. |
 | Last updated | 2026-10-07 |
