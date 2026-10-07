@@ -12,6 +12,7 @@ import Drawer from "@/components/ui/Drawer";
 import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import BotAgentCard from "@/components/bot/BotAgentCard";
 import AddBotForm from "@/components/bot/AddBotForm";
+import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
 import BotBudgetForm from "@/components/bot/BotBudgetForm";
 import GlobalTradePanel from "@/components/bot/GlobalTradePanel";
 
@@ -77,8 +78,8 @@ function resolveBotChain(bot, strategies = [], setups = []) {
     null;
 
   const resolvedSetup =
+    setups.find((setup) => Number(setup.id) === Number(resolvedStrategy?.setup_id || bot?.strategy?.setup_id || bot?.strategy?.setup?.id)) ||
     resolvedStrategy?.setup ||
-    setups.find((setup) => setup.id === (resolvedStrategy?.setup_id || bot?.strategy?.setup_id || bot?.strategy?.setup?.id)) ||
     null;
 
   return {
@@ -470,7 +471,9 @@ function BotPageInner() {
       ? String(rawConfidence).toUpperCase()
       : copy.botList?.insufficientData || "Onvoldoende data";
 
-    return { portfolio, decision, symbol, timeframe, action, confidence };
+    const savedSchedule = formatDcaSchedule(bot?.strategy?.setup, copy.form || {});
+    const schedule = savedSchedule ? `${copy.form?.dcaPlanPrefix || "Plan:"} ${savedSchedule}` : "";
+    return { portfolio, decision, symbol, timeframe, schedule, action, confidence };
   };
 
   const askFinnAboutBot = (bot) => {
@@ -1062,7 +1065,7 @@ function BotPageInner() {
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-slate-950 dark:text-white">{bot.name}</span>
                           <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                            {presentation.symbol} · {presentation.timeframe} · {bot.is_live ? copy.modeLive : copy.modePaper}
+                            {presentation.symbol} · {presentation.schedule || presentation.timeframe} · {bot.is_live ? copy.modeLive : copy.modePaper}
                           </span>
                         </span>
                       </div>
@@ -1193,6 +1196,7 @@ function BotPageInner() {
         <AddBotForm
           ref={botFormRef}
           strategies={strategies}
+          setups={setups}
           initialData={drawer?.type === "edit-bot" ? drawer?.bot : null}
           initialValues={drawer?.type === "create-bot" ? drawer?.initialValues : null}
           guidedMode={showOnboardingGuide && drawer?.type === "create-bot"}

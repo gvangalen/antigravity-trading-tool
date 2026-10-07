@@ -34,7 +34,7 @@ const DEFAULT_STRATEGY = {
   stopLoss: "",
 };
 
-function Section({ title, subtitle, children, status }) {
+function Section({ title, subtitle, children, status, savedLabel }) {
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-5 flex items-start justify-between gap-4">
@@ -45,7 +45,7 @@ function Section({ title, subtitle, children, status }) {
         {status ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
             <CheckCircle2 size={12} />
-            Saved
+            {savedLabel || "Saved"}
           </span>
         ) : null}
       </div>
@@ -398,6 +398,7 @@ export default function OnboardingPlanPage() {
           title={copy.setupTitle || "1. Setup"}
           subtitle={copy.setupSubtitle || "Define the first setup that belongs to this asset."}
           status={setupDone}
+          savedLabel={copy.savedLabel}
         >
           <div className="grid gap-4 md:grid-cols-3">
             <Field label={copy.setupNameLabel || "Name"}>
@@ -501,6 +502,7 @@ export default function OnboardingPlanPage() {
             title={copy.strategyTitle || "2. Strategy"}
             subtitle={copy.strategySubtitle || "Link one strategy to the setup you just saved."}
             status={strategyDone}
+            savedLabel={copy.savedLabel}
           >
             {!setupDone ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-semibold text-amber-800">
