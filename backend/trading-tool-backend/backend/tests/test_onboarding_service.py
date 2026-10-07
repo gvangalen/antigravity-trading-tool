@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import backend.infrastructure.repositories.onboarding_repository as onboarding_repository_module
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
 from backend.services.onboarding_service import DEFAULT_FLOW, OnboardingService
+from backend.celery_task import onboarding_task
 
 
 class FakeOnboardingRepository:
@@ -251,6 +252,43 @@ def test_finish_onboarding_keeps_completed_flow_and_starts_pipeline(monkeypatch)
     assert repo.marked_flow_completed is False
     assert kickstarted == [99]
     assert status.onboarding_complete is True
+
+
+def test_completed_onboarding_queues_first_briefing_before_legacy_pipeline(monkeypatch):
+    repo = FakeOnboardingRepository(steps=[
+        SimpleNamespace(step_key=key, completed=True, pipeline_started=False)
+        for key in ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")
+    ])
+    calls = []
+    monkeypatch.setattr(onboarding_task.enqueue_first_dashboard_briefing, "delay", lambda *a, **kw: calls.append(("briefing", a, kw)))
+    monkeypatch.setattr(onboarding_task.run_onboarding_pipeline, "delay", lambda *a, **kw: calls.append(("pipeline", a, kw)))
+    service = OnboardingService(repo)
+
+    asyncio.run(service._kickstart_user_pipeline(42))
+    asyncio.run(service._kickstart_user_pipeline(42))
+
+    assert calls == [
+        ("briefing", (42,), {"trigger": "onboarding_completed"}),
+        ("pipeline", (42,), {}),
+    ]
+
+
+def test_briefing_dispatch_failure_does_not_cancel_onboarding_pipeline(monkeypatch):
+    repo = FakeOnboardingRepository(steps=[
+        SimpleNamespace(step_key=key, completed=True, pipeline_started=False)
+        for key in ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")
+    ])
+    calls = []
+
+    def fail_briefing(*args, **kwargs):
+        raise RuntimeError("broker retry")
+
+    monkeypatch.setattr(onboarding_task.enqueue_first_dashboard_briefing, "delay", fail_briefing)
+    monkeypatch.setattr(onboarding_task.run_onboarding_pipeline, "delay", lambda user_id: calls.append(user_id))
+
+    asyncio.run(OnboardingService(repo)._kickstart_user_pipeline(42))
+
+    assert calls == [42]
 
 
 def test_status_marks_automation_complete_without_exchange_for_v1_onboarding():

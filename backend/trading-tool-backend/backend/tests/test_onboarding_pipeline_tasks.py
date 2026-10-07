@@ -106,7 +106,6 @@ def test_run_onboarding_pipeline_queues_expected_workflow(monkeypatch):
         "run_technical_agent_daily",
         "run_daily_strategy_snapshot",
         "generate_daily_report",
-        "enqueue_first_dashboard_briefing",
     ]
     assert conn.commit_count >= 1
     assert conn.closed is True

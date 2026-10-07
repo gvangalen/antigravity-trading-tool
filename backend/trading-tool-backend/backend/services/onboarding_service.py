@@ -167,8 +167,19 @@ class OnboardingService:
 
         # Import the Celery task lazily so simple API startup and status reads
         # do not pull the full onboarding pipeline graph into app boot.
-        from backend.celery_task.onboarding_task import run_onboarding_pipeline
+        from backend.celery_task.onboarding_task import (
+            enqueue_first_dashboard_briefing,
+            run_onboarding_pipeline,
+        )
 
+        # The first coach briefing needs the saved plan, not completion of the
+        # legacy score/report chain. Its own worker checks data readiness.
+        try:
+            enqueue_first_dashboard_briefing.delay(user_id, trigger="onboarding_completed")
+        except Exception:
+            # The dashboard read can requeue the briefing. A transient briefing
+            # dispatch failure must not cancel the separate data pipeline.
+            logger.exception("[Onboarding] Eerste FINN-briefing kon niet worden ingepland voor user_id=%s", user_id)
         run_onboarding_pipeline.delay(user_id)
         logger.info(f"[Onboarding] Pipeline gestart voor user_id={user_id}")
 

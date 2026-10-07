@@ -178,8 +178,6 @@ def run_onboarding_pipeline(self, user_id: int):
             # 7️⃣ Dagrapport
             generate_daily_report.si(user_id),
 
-            # 8️⃣ First dashboard briefing enqueue
-            enqueue_first_dashboard_briefing.si(user_id, trigger="onboarding_pipeline"),
         )
 
         workflow.apply_async()
