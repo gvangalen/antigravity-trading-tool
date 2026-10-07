@@ -7,6 +7,7 @@ import re
 import asyncio
 import time
 from copy import deepcopy
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -8167,10 +8168,11 @@ class FinnPlanService:
                     }
                 else:
                     try:
-                        setup_strategy = await StrategyService(self.session).repository.get_strategy_by_setup(
-                            int(setup.get("id")),
-                            user_id,
-                        )
+                        async with self.session.begin_nested():
+                            setup_strategy = await StrategyService(self.session).repository.get_strategy_by_setup(
+                                int(setup.get("id")),
+                                user_id,
+                            )
                         if setup_strategy:
                             active_strategy = {
                                 "active": False,
@@ -8181,11 +8183,12 @@ class FinnPlanService:
                     except Exception as exc:
                         active_strategy = {"active": False, "portfolio_scope": True, "error": str(exc)}
                     try:
-                        bot_today = await BotService(self.session).get_bot_today(
-                            user_id,
-                            symbol=asset,
-                            lean=mission_control_fast,
-                        )
+                        async with self.session.begin_nested():
+                            bot_today = await BotService(self.session).get_bot_today(
+                                user_id,
+                                symbol=asset,
+                                lean=mission_control_fast,
+                            )
                     except Exception as exc:
                         bot_today = {"decisions": [], "scores": {}, "orders": [], "executions": [], "error": str(exc)}
                     if mission_control_fast:
@@ -8221,7 +8224,8 @@ class FinnPlanService:
         if self.session:
             try:
                 from backend.infrastructure.repositories.bot_repository import BotRepository
-                portfolio_context = await BotRepository(self.session).get_portfolio_intelligence_context(user_id)
+                async with self.session.begin_nested():
+                    portfolio_context = await BotRepository(self.session).get_portfolio_intelligence_context(user_id)
             except Exception:
                 portfolio_context = {}
 
@@ -11181,15 +11185,18 @@ class FinnPlanService:
         market_repo = MarketDataRepository(self.session)
 
         try:
-            macro_rows = await macro_repo.get_active_day_macro_data(user_id)
+            async with (self.session.begin_nested() if hasattr(self.session, "begin_nested") else nullcontext()):
+                macro_rows = await macro_repo.get_active_day_macro_data(user_id)
         except Exception:
             macro_rows = []
         try:
-            technical_rows = await technical_repo.get_day_data(user_id, asset)
+            async with (self.session.begin_nested() if hasattr(self.session, "begin_nested") else nullcontext()):
+                technical_rows = await technical_repo.get_day_data(user_id, asset)
         except Exception:
             technical_rows = []
         try:
-            market_rows = await market_repo.get_active_day_indicators(user_id, asset)
+            async with (self.session.begin_nested() if hasattr(self.session, "begin_nested") else nullcontext()):
+                market_rows = await market_repo.get_active_day_indicators(user_id, asset)
         except Exception:
             market_rows = []
 
@@ -11222,22 +11229,23 @@ class FinnPlanService:
         if not self.session:
             return {}
         try:
-            user = await UserRepository(self.session).get_by_id(user_id)
-            preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
-            active_asset = str(
-                preferences.get("onboarding_asset")
-                or preferences.get("selected_asset")
-                or ""
-            ).strip().upper()
-            result = await self.session.execute(
-                text("""
-                    SELECT step_key, completed
-                    FROM onboarding_steps
-                    WHERE user_id = :user_id AND flow = 'default'
-                """),
-                {"user_id": user_id},
-            )
-            rows = {str(row["step_key"]): bool(row["completed"]) for row in result.mappings()}
+            async with (self.session.begin_nested() if hasattr(self.session, "begin_nested") else nullcontext()):
+                user = await UserRepository(self.session).get_by_id(user_id)
+                preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+                active_asset = str(
+                    preferences.get("onboarding_asset")
+                    or preferences.get("selected_asset")
+                    or ""
+                ).strip().upper()
+                result = await self.session.execute(
+                    text("""
+                        SELECT step_key, completed
+                        FROM onboarding_steps
+                        WHERE user_id = :user_id AND flow = 'default'
+                    """),
+                    {"user_id": user_id},
+                )
+                rows = {str(row["step_key"]): bool(row["completed"]) for row in result.mappings()}
             return {
                 "active_asset": active_asset or None,
                 "has_market": rows.get("market", False),
@@ -13086,15 +13094,9 @@ class FinnPlanService:
             owner_task_id=owner_task_id,
             error_code=None,
         )
-        dispatch = self._dispatch_first_dashboard_briefing_task(
-            user_id,
-            task_id=task_id,
-            trigger=trigger,
-            context_version=current_version,
-            attempt=attempt_count,
-            owner_task_id=owner_task_id,
-        )
-        await self._transition_first_dashboard_briefing_state(
+        from backend.celery_task.queue_policy import resolve_task_queue
+        queue_name = resolve_task_queue(FIRST_DASHBOARD_GENERATION_TASK_NAME)
+        queued_state = await self._transition_first_dashboard_briefing_state(
             user_id,
             pending_state,
             status="queued",
@@ -13104,10 +13106,26 @@ class FinnPlanService:
             attempt_count=attempt_count,
             response_source="briefing_generating",
             owner_task_id=owner_task_id,
-            queue_name=dispatch.get("queue"),
-            routing_rule=dispatch.get("routing_rule"),
+            queue_name=queue_name,
+            routing_rule=FIRST_DASHBOARD_GENERATION_TASK_NAME,
             error_code=None,
         )
+        try:
+            dispatch = self._dispatch_first_dashboard_briefing_task(
+                user_id,
+                task_id=task_id,
+                trigger=trigger,
+                context_version=current_version,
+                attempt=attempt_count,
+                owner_task_id=owner_task_id,
+            )
+        except Exception as exc:
+            logger.exception("First dashboard briefing dispatch failed for user_id=%s", user_id)
+            return await self._finalize_first_dashboard_briefing_fallback(
+                user_id, payload, queued_state, error=f"dispatch_error:{exc}",
+                trigger=trigger, task_id=task_id, attempt=attempt_count,
+                owner_task_id=owner_task_id,
+            )
         return {
             "status": "queued",
             "context_version": current_version,
@@ -13170,7 +13188,15 @@ class FinnPlanService:
             }
         active_statuses = {"pending", "queued", "generating", "retry_scheduled"}
         generating_stale = stored_version == current_version and stored_status in active_statuses and self._first_dashboard_generation_stale(stored)
-        if stored_version == current_version and stored_status in active_statuses and not (allow_stale_takeover and generating_stale):
+        is_queued_owner = bool(
+            task_id
+            and str(stored.get("task_id") or "") == str(task_id)
+            and enqueued_context_version == current_version
+            and stored_status in {"pending", "queued", "retry_scheduled"}
+        )
+        if enqueued_context_version and enqueued_context_version != current_version:
+            return {"status": "stale", "context_version": current_version, "response_source": "briefing_generating"}
+        if stored_version == current_version and stored_status in active_statuses and not is_queued_owner and not (allow_stale_takeover and generating_stale):
             log_background_ai_skip(
                 user_id=user_id,
                 symbol=asset,
@@ -13339,7 +13365,7 @@ class FinnPlanService:
             await self.maybe_schedule_first_dashboard_retry(user_id, stored_briefing)
             stored_state = await self._load_first_dashboard_briefing_state(user_id)
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
-        if await self._inline_generate_first_dashboard_briefing_if_needed(user_id, payload, stored_state):
+        if await self._queue_first_dashboard_briefing_if_needed(user_id, payload, stored_state):
             stored_state = await self._load_first_dashboard_briefing_state(user_id)
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
         display = self._resolve_first_dashboard_briefing_display(payload, stored_briefing)
@@ -13389,7 +13415,7 @@ class FinnPlanService:
         }
         return self._compose_first_dashboard_context(payload, display)
 
-    async def _inline_generate_first_dashboard_briefing_if_needed(
+    async def _queue_first_dashboard_briefing_if_needed(
         self,
         user_id: int,
         payload: Dict[str, Any],
@@ -13410,17 +13436,14 @@ class FinnPlanService:
         if stored_version == current_version and stored_status == "fallback" and not self._first_dashboard_retry_due(stored_briefing):
             return False
         try:
-            await self._generate_and_store_first_dashboard_briefing_from_payload(
-                user_id,
-                payload,
-                stored_state,
-                trigger="mission_control_inline",
-                allow_stale_takeover=True,
+            result = await self._enqueue_first_dashboard_briefing_from_payload(
+                user_id, payload, stored_state,
+                trigger="mission_control_read", owner_task_id=None,
             )
-            return True
+            return result.get("status") in {"queued", "fallback"}
         except Exception:
             logger.exception(
-                "Could not generate first dashboard briefing inline for user_id=%s trace_id=%s",
+                "Could not queue first dashboard briefing for user_id=%s trace_id=%s",
                 user_id,
                 self.trace_id,
             )
@@ -13518,9 +13541,20 @@ class FinnPlanService:
         setup = asset_analysis.get("setup") or {}
         active_strategy = asset_analysis.get("active_strategy") or {}
         strategy = active_strategy.get("strategy") or {}
+        if isinstance(self.session, AsyncSession) and setup.get("id"):
+            try:
+                async with self.session.begin_nested():
+                    saved_setup = await SetupService(self.session).get_setup_by_id(int(setup["id"]), user_id)
+                setup = {**setup, **saved_setup}
+            except Exception:
+                logger.exception(
+                    "First dashboard setup detail lookup failed for user_id=%s setup_id=%s trace_id=%s",
+                    user_id, setup.get("id"), self.trace_id,
+                )
         linked_bot = None
         try:
-            linked_bot = await self._first_dashboard_linked_bot(user_id, active_asset, strategy_id=strategy.get("id"))
+            async with (self.session.begin_nested() if hasattr(self.session, "begin_nested") else nullcontext()):
+                linked_bot = await self._first_dashboard_linked_bot(user_id, active_asset, strategy_id=strategy.get("id"))
         except Exception:
             logger.exception(
                 "First dashboard linked bot lookup failed for user_id=%s asset=%s trace_id=%s",
@@ -13530,7 +13564,8 @@ class FinnPlanService:
             )
         indicators = {"market": [], "macro": [], "technical": []}
         try:
-            indicators = await self._first_dashboard_indicator_context(user_id, active_asset)
+            async with (self.session.begin_nested() if hasattr(self.session, "begin_nested") else nullcontext()):
+                indicators = await self._first_dashboard_indicator_context(user_id, active_asset)
         except Exception:
             logger.exception(
                 "First dashboard indicator context lookup failed for user_id=%s asset=%s trace_id=%s",
@@ -13583,7 +13618,12 @@ class FinnPlanService:
             "indicators.market",
             "setup.name",
             "setup.timeframe",
+            "setup.dca_frequency",
+            "setup.dca_day",
+            "setup.dca_month_day",
             "strategy.name",
+            "strategy.execution_mode",
+            "strategy.base_amount",
             "strategy.entry_rules",
             "strategy.exit_rules",
             "strategy.invalidations",
@@ -13643,10 +13683,15 @@ class FinnPlanService:
                 "name": setup.get("name"),
                 "timeframe": setup.get("timeframe"),
                 "setup_type": setup.get("setup_type"),
+                "dca_frequency": setup.get("dca_frequency"),
+                "dca_day": setup.get("dca_day"),
+                "dca_month_day": setup.get("dca_month_day"),
             },
             "strategy": {
                 "id": strategy.get("id"),
                 "name": strategy.get("name"),
+                "execution_mode": strategy.get("execution_mode"),
+                "base_amount": strategy.get("base_amount"),
                 "entry_rules": self._first_dashboard_rule_values(strategy.get("entry")),
                 "exit_rules": self._first_dashboard_rule_values(strategy.get("targets")),
                 "invalidations": self._first_dashboard_rule_values(strategy.get("stop_loss")),
@@ -14232,6 +14277,8 @@ class FinnPlanService:
                     "Treat profile.trader_context as the user's own description and coaching preference, not observed behavior or a proven trade rule.",
                     "Do not claim observed behavior patterns because no behavior history exists yet.",
                     "Do not change strategy or bot rules.",
+                    "For a fixed DCA setup, missing benchmark scores do not by themselves cancel its saved schedule or change its base amount. Do not describe scheduled DCA as a discretionary trade entry.",
+                    "A saved DCA schedule is a plan, not proof that a bot or purchase is active. State execution status only when the supplied bot evidence supports it.",
                     "Return valid JSON only.",
                 ],
                 "output_contract": {
@@ -14453,8 +14500,16 @@ class FinnPlanService:
             refs.append("bot.is_live")
         if (setup or {}).get("name"):
             refs.append("setup.name")
+        if (setup or {}).get("dca_frequency"):
+            refs.append("setup.dca_frequency")
+        if (setup or {}).get("dca_day"):
+            refs.append("setup.dca_day")
+        if (setup or {}).get("dca_month_day"):
+            refs.append("setup.dca_month_day")
         if (strategy or {}).get("name"):
             refs.append("strategy.name")
+        if (strategy or {}).get("base_amount") is not None:
+            refs.append("strategy.base_amount")
         if trader_context:
             refs.append("profile.trader_context")
         if market_snapshot.get("blockers"):
@@ -14652,6 +14707,28 @@ class FinnPlanService:
                 if has_limitation:
                     copy["assessment"] = f"Your {setup_name} plan: wait for current market data before an entry."
                 copy["reasoning"] = f"Your saved plan {plan_label} is the starting point. " + copy["reasoning"]
+        if str((setup or {}).get("setup_type") or (setup or {}).get("type") or "").lower() == "dca" and str((strategy or {}).get("execution_mode") or "").lower() == "fixed":
+            frequency = str((setup or {}).get("dca_frequency") or "").lower()
+            weekday = {"1": "maandag", "2": "dinsdag", "3": "woensdag", "4": "donderdag", "5": "vrijdag", "6": "zaterdag", "7": "zondag"}.get(str((setup or {}).get("dca_day") or ""))
+            schedule = (
+                f"elke {weekday}" if frequency == "weekly" and weekday else
+                f"maandelijks op dag {(setup or {}).get('dca_month_day')}" if frequency == "monthly" and (setup or {}).get("dca_month_day") else
+                "dagelijks" if frequency == "daily" else "volgens je opgeslagen schema"
+            )
+            amount = (strategy or {}).get("base_amount")
+            amount_text = f" voor €{amount:g}" if isinstance(amount, (int, float)) and amount > 0 else ""
+            if language == "nl":
+                copy["assessment"] = f"Je vaste DCA-plan {setup_name or asset} staat {schedule}{amount_text} gepland."
+                copy["reasoning"] = "Ontbrekende benchmarkgegevens veranderen dit vaste bedrag niet. Een actuele marktbeoordeling is nog niet mogelijk." if has_limitation else "Het vaste bedrag volgt je opgeslagen schema; de marktbeoordeling staat daar los van."
+                copy["action"] = "Controleer of het schema en het budget nog bij je bedoeling passen; ik heb niets uitgevoerd."
+            elif language == "en":
+                copy["assessment"] = f"Your fixed DCA plan {setup_name or asset} remains on its saved schedule."
+                copy["reasoning"] = "Missing benchmark data does not change its fixed amount. A current market assessment is not available yet." if has_limitation else "The fixed amount follows your saved schedule independently of the market assessment."
+                copy["action"] = "Review the schedule, budget and Paper status; I have not executed anything."
+            else:
+                copy["assessment"] = f"Dein fester DCA-Plan {setup_name or asset} bleibt nach dem gespeicherten Zeitplan bestehen."
+                copy["reasoning"] = "Fehlende Benchmarkdaten ändern den festen Betrag nicht. Eine aktuelle Marktbeurteilung ist noch nicht möglich." if has_limitation else "Der feste Betrag folgt dem gespeicherten Zeitplan unabhängig von der Marktbeurteilung."
+                copy["action"] = "Prüfe Zeitplan, Budget und Paper-Status; ich habe nichts ausgeführt."
         if trader_context:
             profile_note = " ".join(trader_context.split())
             profile_note = profile_note[:157].rstrip() + ("…" if len(profile_note) > 157 else "")

@@ -491,6 +491,52 @@ def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
     assert provider_calls[0]["reasoning_effort"] == "none"
 
 
+def test_queued_first_dashboard_worker_claims_its_own_task(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    payload = _first_dashboard_payload("ctx-v1")
+    stored_state = {
+        "first_dashboard_briefing": {
+            "status": "queued",
+            "context_version": "ctx-v1",
+            "task_id": "worker-1",
+            "attempt_count": 1,
+            "updated_at": _utc_now().isoformat(),
+        }
+    }
+
+    async def fake_prepare(*, user_id, **kwargs):
+        return payload
+
+    async def fake_load(_user_id):
+        return dict(stored_state)
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
+    monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
+    monkeypatch.setattr(finn_plan_module, "ask_gpt_json", lambda **kwargs: {
+        "assessment": "Controleer je eigen BTC-plan voordat je handelt.",
+        "reasoning": "Je hebt aangegeven dat FOMO een aandachtspunt is.",
+        "recommended_action": "Vergelijk de actuele voorwaarden met je setup.",
+        "data_limitation": "Een verse totaalscore ontbreekt.",
+        "evidence_refs": ["profile.trader_context", "asset.symbol"],
+    })
+
+    result = asyncio.run(service.generate_and_store_first_dashboard_briefing(
+        7, task_id="worker-1", enqueued_context_version="ctx-v1", attempt=1,
+    ))
+
+    assert result["status"] == "ready"
+    assert stored_state["first_dashboard_briefing"]["status"] == "ready"
+    assert stored_state["first_dashboard_briefing"]["task_id"] == "worker-1"
+
+
 def test_store_first_dashboard_briefing_serializes_decimal_snapshot(monkeypatch):
     class Session:
         committed = False
@@ -646,7 +692,8 @@ def test_enqueue_first_dashboard_briefing_records_pending_and_queued_state(monke
     assert result["status"] == "queued"
     assert result["task_id"] == briefing["task_id"]
     assert briefing["status"] == "queued"
-    assert briefing["queue"] == "ai_generation"
+    from backend.celery_task.queue_policy import resolve_task_queue
+    assert briefing["queue"] == resolve_task_queue("backend.celery_task.onboarding_task.generate_first_dashboard_briefing")
     assert briefing["owner_task_id"] == "owner-1"
     assert briefing["attempt_count"] == 1
     assert [item["status"] for item in briefing["transition_history"]] == ["pending", "queued"]
@@ -1031,6 +1078,48 @@ def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failu
     assert "Ik wil bij FOMO eerst mijn plan controleren." in payload["fallback_result"]["recommended_action"]
 
 
+def test_first_dashboard_fixed_dca_fallback_preserves_saved_schedule_and_amount():
+    result = FinnPlanService._first_dashboard_coaching_fallback(
+        locale="nl", asset="BTC", observation="", next_action={},
+        market_snapshot={"status": "missing"}, latest_analysis={"availability": "absent"},
+        blockers=[], linked_bot=None,
+        setup={"name": "BTC Vrijdag DCA", "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "5"},
+        strategy={"name": "BTC Vast", "execution_mode": "fixed", "base_amount": 80},
+    )
+
+    assert "vrijdag" in result["assessment"]
+    assert "€80" in result["assessment"]
+    assert "entry" not in " ".join(result.values()).lower()
+    assert "veranderen dit vaste bedrag niet" in result["reasoning"]
+
+
+def test_first_dashboard_prompt_receives_dca_schedule_and_strategy_amount(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "_fetch_onboarding_status", AsyncMock(return_value={"onboarding_complete": True, "active_asset": "BTC"}))
+    monkeypatch.setattr(service, "_first_dashboard_linked_bot", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_first_dashboard_indicator_context", AsyncMock(return_value={"market": [], "macro": [], "technical": []}))
+    monkeypatch.setattr(finn_plan_module, "UserRepository", lambda session: SimpleNamespace(
+        get_by_id=AsyncMock(return_value=SimpleNamespace(ai_preferences={"trader_context": "Ik wil FOMO vermijden."}))
+    ))
+
+    payload = asyncio.run(service._prepare_first_dashboard_payload(
+        user_id=7,
+        analysis={"assets": [{
+            "asset": "BTC",
+            "setup": {"name": "BTC DCA", "setup_type": "dca", "timeframe": "1D", "dca_frequency": "weekly", "dca_day": "5"},
+            "active_strategy": {"strategy": {"name": "BTC Vast", "execution_mode": "fixed", "base_amount": 80}},
+            "data_readiness": {"status": "missing"}, "has_scores": False, "blockers": [],
+        }]},
+        mission={"bot_review_queue": []}, activity_feed=[], day_log={},
+    ))
+
+    assert payload["ai_prompt_context"]["setup"]["dca_day"] == "5"
+    assert payload["ai_prompt_context"]["strategy"]["base_amount"] == 80
+    assert "setup.dca_day" in payload["allowed_evidence_refs"]
+    assert "strategy.base_amount" in payload["allowed_evidence_refs"]
+    assert "FOMO" in payload["ai_prompt_context"]["profile"]["trader_context"]
+
+
 def test_first_dashboard_allows_onboarding_configuration_activity_only():
     service = _service()
     activity = [
@@ -1289,7 +1378,7 @@ def test_build_first_dashboard_context_reuses_current_payload_after_user_activit
 
     monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fail_prepare)
     monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", empty_state)
-    monkeypatch.setattr(service, "_inline_generate_first_dashboard_briefing_if_needed", no_inline_generation)
+    monkeypatch.setattr(service, "_queue_first_dashboard_briefing_if_needed", no_inline_generation)
 
     result = asyncio.run(
         service._build_first_dashboard_context(
@@ -1335,28 +1424,29 @@ def test_first_dashboard_projects_personal_fallback_while_background_generation_
     assert context["review_label"] is None
 
 
-def test_inline_generate_first_dashboard_briefing_if_needed_generates_missing_state(monkeypatch):
+def test_missing_first_dashboard_briefing_is_queued_without_inline_generation(monkeypatch):
     service = FinnPlanService(db_session=object())
     stored_state = {}
 
-    async def fake_generate(_user_id, payload, state, *, trigger, allow_stale_takeover):
+    async def fake_enqueue(_user_id, payload, state, *, trigger, owner_task_id):
         stored_state.clear()
         stored_state.update(
             {
                 "first_dashboard_briefing": {
-                    "status": "ready",
+                    "status": "queued",
                     "context_version": payload["context_version"],
-                    "response_source": "ai_generated",
+                    "response_source": "briefing_generating",
                     "trigger": trigger,
                 }
             }
         )
-        return {"status": "ready", "response_source": "ai_generated"}
+        assert owner_task_id is None
+        return {"status": "queued", "response_source": "briefing_generating"}
 
-    monkeypatch.setattr(service, "_generate_and_store_first_dashboard_briefing_from_payload", fake_generate)
+    monkeypatch.setattr(service, "_enqueue_first_dashboard_briefing_from_payload", fake_enqueue)
 
     scheduled = asyncio.run(
-        service._inline_generate_first_dashboard_briefing_if_needed(
+        service._queue_first_dashboard_briefing_if_needed(
             7,
             _first_dashboard_payload("ctx-v7"),
             {},
@@ -1364,21 +1454,21 @@ def test_inline_generate_first_dashboard_briefing_if_needed_generates_missing_st
     )
 
     assert scheduled is True
-    assert stored_state["first_dashboard_briefing"]["status"] == "ready"
+    assert stored_state["first_dashboard_briefing"]["status"] == "queued"
     assert stored_state["first_dashboard_briefing"]["context_version"] == "ctx-v7"
-    assert stored_state["first_dashboard_briefing"]["trigger"] == "mission_control_inline"
+    assert stored_state["first_dashboard_briefing"]["trigger"] == "mission_control_read"
 
 
-def test_inline_generate_first_dashboard_briefing_if_needed_skips_fresh_generating_state(monkeypatch):
+def test_queue_first_dashboard_briefing_if_needed_skips_fresh_generating_state(monkeypatch):
     service = FinnPlanService(db_session=object())
 
     async def fake_generate(*args, **kwargs):
         raise AssertionError("fresh generating state should not be taken over")
 
-    monkeypatch.setattr(service, "_generate_and_store_first_dashboard_briefing_from_payload", fake_generate)
+    monkeypatch.setattr(service, "_enqueue_first_dashboard_briefing_from_payload", fake_generate)
 
     scheduled = asyncio.run(
-        service._inline_generate_first_dashboard_briefing_if_needed(
+        service._queue_first_dashboard_briefing_if_needed(
             7,
             _first_dashboard_payload("ctx-v7"),
             {
@@ -1395,16 +1485,16 @@ def test_inline_generate_first_dashboard_briefing_if_needed_skips_fresh_generati
     assert scheduled is False
 
 
-def test_inline_generate_first_dashboard_briefing_if_needed_takes_over_stale_queued_state(monkeypatch):
+def test_queue_first_dashboard_briefing_if_needed_takes_over_stale_queued_state(monkeypatch):
     service = FinnPlanService(db_session=object())
 
-    async def fake_generate(_user_id, payload, state, *, trigger, allow_stale_takeover, **kwargs):
-        return {"status": "ready", "response_source": "ai_generated"}
+    async def fake_generate(_user_id, payload, state, *, trigger, owner_task_id, **kwargs):
+        return {"status": "queued", "response_source": "briefing_generating"}
 
-    monkeypatch.setattr(service, "_generate_and_store_first_dashboard_briefing_from_payload", fake_generate)
+    monkeypatch.setattr(service, "_enqueue_first_dashboard_briefing_from_payload", fake_generate)
 
     scheduled = asyncio.run(
-        service._inline_generate_first_dashboard_briefing_if_needed(
+        service._queue_first_dashboard_briefing_if_needed(
             7,
             _first_dashboard_payload("ctx-v7"),
             {
