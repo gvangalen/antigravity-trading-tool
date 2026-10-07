@@ -8,11 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED`; candidate CI and deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate/main CI, deployment identity and availability passed. |
 | Goal | Distinguish saved indicator configuration from unavailable scores in FINN Today; show the saved DCA purchase schedule separately from a chart timeframe in Automation; finish the Dutch onboarding copy. |
 | Candidate branch | `codex/onboarding-briefing-dca-cadence`. |
-| Candidate implementation SHA | `814b5ed0` (with this status correction in a follow-up commit). |
-| Production SHA | Pending deployment. |
+| Candidate implementation SHA | `814b5ed0` (with candidate status correction in `eb591df9`). |
+| PR | [#106](https://github.com/gvangalen/antigravity-trading-tool/pull/106), merged. |
+| Production SHA | `31bb3e07877ca573f88d579fbf47fa2ba618ca16`, observed on both public surfaces after Auto Deploy. This status-only update creates a later SHA; QA must bind to the current backend/frontend SHA. |
 | Previous live SHA | `7eafc957254228f0ebd33580dc5179ec258cc489`, independently tested on a fresh account. |
 | Last updated | 2026-10-07 |
 
@@ -23,6 +24,8 @@ The briefing input now carries a separate owner-scoped indicator-configuration s
 Measured local evidence: root pytest **3173 passed, 3 skipped**, log SHA-256 `d55c947270f1a43856a09a7aeed2ec6cf59028702ea85aff19a8499bc6fd24fc`. Frontend build, typecheck, i18n lint/tests, command/proposal tests, focused onboarding and DCA cadence tests, and the canonical production-dependency `audit:high` script passed. Isolated PostgreSQL/Redis/FastAPI/Celery action-contract matrix **16/16**, zero broker orders or live calls, artifact SHA-256 `62c6046fb4e1683791b7201914f069baeffa520510f782f983946e4c7f82f53b`. Real-provider selector development **18/18** (SHA-256 `212be4fd111708028666ec74605dd2c18c5631c15cde62878fbd28c78a84d151`) and regression **109/109** (SHA-256 `b667490a967f87b01a107ebb8befe42ab569cd876be27b316317440ef45c2f6a`) had no provider, schema, parse, validation or timeout failure. A separate three-response real Luna/none briefing probe with saved DXY/RSI and absent scores did not call them unconfigured (SHA-256 `15a688828eb04b3e81ab30587b072df44c81182fa961b61fc7fdcbab679fd98f`); it is supporting evidence, not a production proof. Build has not accessed the QA fixture or sealed holdout.
 
 Independent QA should check a new account's saved DXY/RSI without scores against the FINN Today text and, if observable, capture `response_source` and generation status. For a monthly DCA setup on day 5 with a 1D chart timeframe, compare the saved setup, Automation form, bot cadence, and bot list after refresh. Confirm the daily cap accommodates the saved amount without implying daily purchases, and inspect the Dutch onboarding labels. Actual bot execution remains outside the read-only onboarding result.
+
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37663553111) and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37663790208) passed all five jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37664042646) succeeded for `31bb3e07877ca573f88d579fbf47fa2ba618ca16`. Public backend health and frontend build-info both returned HTTP 200 and that SHA on 2026-10-07. Build did not access the authenticated QA fixture.
 
 ## Previous Release (first briefing onboarding follow-up)
 
