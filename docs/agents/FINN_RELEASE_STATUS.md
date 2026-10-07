@@ -8,6 +8,48 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `LOCAL_VALIDATED`. Candidate CI and deployment are pending; independent authenticated browser QA has not run. |
+| Goal | Repair fresh-user DCA onboarding and the first FINN Today briefing: save the schedule, read the saved plan and trader context, finish the background briefing, and keep optional source failures from aborting Mission Control. |
+| Candidate branch | `codex/onboarding-dca-today-context` |
+| Candidate implementation SHA | `78cad90c891065bb33d71dad796a1717ebd0dc54` (together with preceding branch commit `ff79f435d67cfb1dab785e6082468d70fc24c112`). |
+| PR | Pending. |
+| Production SHA | Pending; no deployment claim. |
+| Last updated | 2026-10-07 |
+
+The guided onboarding form now captures a daily, weekly, or monthly DCA
+schedule and persists it with the setup; the fixed amount remains in the
+linked strategy. The first FINN Today briefing is dispatched independently of
+the older score/report chain. Its queued worker can claim its own task, while
+Mission Control queues missing briefings without a blocking provider call.
+Owner-scoped setup details, strategy amount, profile context, and optional
+market context reach the briefing. Fixed DCA is described as a saved schedule,
+not a discretionary entry or evidence of an executed purchase. Optional
+strategy, bot, indicator, and portfolio reads use database savepoints so an
+unavailable source does not invalidate the rest of the request.
+
+Measured local evidence: root pytest **3165 passed, 3 skipped**; log SHA-256
+`c14913b4fbc0ab07d5472c98f3206c676ebe254ae6a7ed32b0d5f1bb43d28793`.
+Frontend build, typecheck, i18n lint/tests, command/proposal tests, and
+high-severity dependency audit passed. The isolated PostgreSQL/Redis/FastAPI
+and prefork Celery action matrix passed **16/16**, with zero broker orders and
+zero live-trading calls; artifact SHA-256
+`b6ec82c85312eb368a031df78b2e11d57287e3c6a17a55ab5f0b2136664e5d21`.
+Real-provider selector development passed **18/18** (SHA-256
+`85c8f15afb2b76515881bd72e358a71fb423d24402cf4176d2d2fbe9237a0869`)
+and regression **109/109** (SHA-256
+`a62c02d8c38bce1b89dfe39a82bdf02dda5d6cf0f1f6fd773755dbad6827b8d9`),
+with zero provider, schema, parse, validation, or timeout failures. A local
+fresh-account API path persisted a Friday DCA setup as weekday code `5` and a
+fixed strategy. A local completed-account worker produced `ready` using
+`gpt-6-luna`/`none`, with the saved DCA amount and FOMO profile preference;
+Mission Control returned successfully for both tested local accounts. This is
+Build evidence, not independent production QA. A one-off Automation loading
+delay from the earlier browser report was not reproduced here.
+
+## Previous Release (indicator source evidence)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and deployment identity checks passed; authenticated runtime QA is pending. |
 | Goal | Expose each indicator's real source observation moment and the distinct dated source days required by absolute-value score normalizers, without changing score or execution decisions. |
 | Candidate branch | `codex/score-source-evidence`, merged to `main` in `bf453f9d44777f4099e436d29a49d06d46c15243`. |
