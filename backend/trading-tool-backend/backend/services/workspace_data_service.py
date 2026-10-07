@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from time import perf_counter
 from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from backend.infrastructure.models import AiCategoryInsight, Watchlist
+from backend.infrastructure.models import AiCategoryInsight, MacroData, MarketData, Watchlist
 from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
@@ -218,7 +218,7 @@ def _enrich_indicator_rows(
             "indicator_key": _indicator_key(row.get("name")),
             "period": period,
             "source": source,
-            "freshness": _freshness(row.get("timestamp"), threshold, source),
+            "freshness": _freshness(row.get("source_observed_at"), threshold, source),
             "data_status": data_status,
             "score_contribution": {
                 "status": "available" if scored_row else "insufficient_data",
@@ -244,6 +244,7 @@ def _market_row(row: Any) -> dict[str, Any]:
         "interpretation": row.interpretation,
         "action": row.action,
         "timestamp": _iso(row.timestamp),
+        "source_observed_at": _iso(getattr(row, "source_observed_at", None)),
         "sample_size": 1,
         "period_aggregate": False,
     }
@@ -258,6 +259,7 @@ def _macro_row(row: Any) -> dict[str, Any]:
         "interpretation": row.interpretation,
         "action": row.action,
         "timestamp": _iso(row.timestamp),
+        "source_observed_at": _iso(getattr(row, "source_observed_at", None)),
         "sample_size": 1,
         "period_aggregate": False,
     }
@@ -271,6 +273,7 @@ def _technical_row(row: Any) -> dict[str, Any]:
         "action": row.advies,
         "interpretation": row.uitleg,
         "timestamp": _iso(row.timestamp),
+        "source_observed_at": _iso(getattr(row, "source_observed_at", None)),
         "sample_size": 1,
         "period_aggregate": False,
     }
@@ -352,6 +355,7 @@ class WorkspaceDataService:
         # not provision or execute multiple connections concurrently.
         market_rows = await measure("market_rows", lambda: self._market_rows(user_id, symbol, periods["market"]))
         macro_rows = await measure("macro_rows", lambda: self._macro_rows(user_id, symbol, periods["macro"]))
+        await measure("score_history_coverage", lambda: self._add_score_history_coverage(user_id, symbol, market_rows, macro_rows))
         technical_rows = await measure("technical_rows", lambda: self._technical_rows(user_id, symbol, periods["technical"]))
         quote_snapshot = await measure("quote_snapshot", lambda: self._resolve_quote_snapshot(symbol))
         regime = await measure(
@@ -698,6 +702,55 @@ class WorkspaceDataService:
             "ai_calls": 0,
         }
 
+    async def _add_score_history_coverage(
+        self,
+        user_id: int,
+        symbol: str,
+        market_rows: list[dict[str, Any]],
+        macro_rows: list[dict[str, Any]],
+    ) -> None:
+        """Expose the actual dated history used by absolute-value normalizers.
+
+        The selected workspace period's sample_size is unrelated to the five
+        distinct source days required for price, volume and absolute macro
+        levels. These counts are diagnostic only and never create a score.
+        """
+        if not hasattr(getattr(self, "session", None), "execute"):
+            return
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        for row in market_rows:
+            key = _indicator_key(row.get("name"))
+            if key not in {"price", "volume"}:
+                continue
+            column = MarketData.price if key == "price" else MarketData.volume
+            stmt = select(func.count(func.distinct(func.date(MarketData.source_observed_at)))).where(
+                MarketData.symbol == symbol,
+                MarketData.source_observed_at >= now - timedelta(days=30),
+                column.is_not(None),
+            )
+            result = await self.session.execute(stmt)
+            row["score_history_coverage"] = {
+                "observed_days": int(result.scalar_one() or 0),
+                "required_days": 5,
+                "window_days": 30,
+            }
+        for row in macro_rows:
+            key = _indicator_key(row.get("name"))
+            if key not in {"dxy", "sp500", "gold_price", "oil_price"}:
+                continue
+            stmt = select(func.count(func.distinct(func.date(MacroData.source_observed_at)))).where(
+                MacroData.user_id == user_id,
+                func.lower(MacroData.name) == key,
+                MacroData.source_observed_at >= now - timedelta(days=90),
+                MacroData.value.is_not(None),
+            )
+            result = await self.session.execute(stmt)
+            row["score_history_coverage"] = {
+                "observed_days": int(result.scalar_one() or 0),
+                "required_days": 5,
+                "window_days": 90,
+            }
+
     async def _market_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
@@ -790,7 +843,7 @@ class WorkspaceDataService:
         threshold: int,
         source: str,
     ) -> dict[str, Any]:
-        timestamps = [row.get("timestamp") for row in rows if row.get("timestamp")]
+        timestamps = [row.get("source_observed_at") for row in rows if row.get("source_observed_at")]
         latest_timestamp = max(timestamps) if timestamps else None
         enriched_rows = _enrich_indicator_rows(
             rows,

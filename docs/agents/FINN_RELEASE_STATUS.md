@@ -8,6 +8,50 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `BUILD_VALIDATED_LOCAL`. Candidate CI is green; deployment and independent authenticated QA are pending. |
+| Goal | Expose each indicator's real source observation moment and the distinct dated source days required by absolute-value score normalizers, without changing score or execution decisions. |
+| Candidate branch | `codex/score-source-evidence`. |
+| Candidate implementation SHA | `bce8949f94a2c476d14f1c010f498d7a4cfb8d37` |
+| PR | [#98](https://github.com/gvangalen/antigravity-trading-tool/pull/98), draft while release checks complete. |
+| Previous live SHA | `bbccff3675160a6b1414d200aff1e19fc53b6da5`, reported by the user from authenticated QA. |
+| Production SHA | Not deployed. |
+| Last updated | 2026-10-07 |
+
+The workspace projection now carries `source_observed_at` from each measured
+indicator and derives freshness from that source moment, never from the receipt
+timestamp. Analyse labels `sample_size` as readings in the selected period and
+shows a separate count of distinct source days for Price and Volume in the
+last 30 days, and DXY, S&P 500, Gold and Oil in the last 90 days. The existing
+normalizers require five such days. A missing source moment appears as not
+recorded. This is read-only evidence; it does not backfill market or macro
+data, invent scores, change setup matches, or trigger bot decisions.
+
+Measured local evidence: root pytest **3160 passed, 3 skipped**; frontend build,
+typecheck, i18n lint/tests, command/proposal tests and high-severity dependency
+audit passed. The isolated local PostgreSQL/Redis/FastAPI/prefork Celery stack
+passed the safe-action matrix **16/16**, with zero prohibited executions,
+`.local-finn-parity-artifacts/score-source-evidence-action-matrix.json` SHA-256
+`370c6c58b1462d0ec2302dbeb836f830ed1605e6e9ceb9a61aec0e362e4c73e7`.
+The real-provider selector development run passed **18/18**, SHA-256
+`23e98c9ee8c30437d5d7502caa6b8e6bdec34c1cf44d395133db1d116cdaa569`;
+regression passed **109/109**, SHA-256
+`6f63a8a7dffe6e21b27ae57524aeef4dcebcc121608e6969ed98b3240643fd43`,
+with zero provider, schema, parse, validation or timeout failures. The new
+history query also executed against isolated PostgreSQL, and a local workspace
+read completed. PR #98's workflow-validation, backend-tests, security-baseline,
+mobile-quality and frontend-quality checks all completed success for the
+implementation SHA. Build did not access the authenticated QA fixture.
+
+The next independent QA pass should record the actual source moment and
+historical-day count for the five BTC indicators reported on 2026-10-07. One
+reading in the Day view alone does not establish whether scoring has the five
+distinct historical source days it needs. A positive setup match and a
+score-driven Paper decision remain unproved until complete fresh sources exist.
+
+## Previous Release (pending-source explanation)
+
+| Field | Value |
+| --- | --- |
 | Phase | `PARTIALLY_ASSESSED`. Targeted authenticated browser QA passed the pending-source explanation on the deployed SHA; broader scoreflow and read-parity acceptance remain open. |
 | Goal | Preserve the pending-source status of a configured but unmeasured indicator through the complete asset workspace projection. |
 | Candidate branch | `codex/preserve-pending-indicator-status`, merged to `main` in `9474f30a6023871c8895784853d4d9c11d513eaf`. |

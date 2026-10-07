@@ -13,8 +13,10 @@ from backend.services.workspace_data_service import (
     WorkspaceDataService,
     _aggregate_by_name,
     _enrich_indicator_rows,
+    _macro_row,
     _market_row,
     _score_summary,
+    _technical_row,
 )
 
 
@@ -67,6 +69,7 @@ def test_period_rows_are_aggregated_and_expose_their_sample_size():
             "interpretation": "latest",
             "action": "monitor",
             "timestamp": "2026-07-19T00:00:00+00:00",
+            "source_observed_at": None,
             "sample_size": 2,
             "period_aggregate": True,
         }
@@ -76,8 +79,8 @@ def test_period_rows_are_aggregated_and_expose_their_sample_size():
 def test_indicator_rows_expose_source_period_freshness_and_score_contribution():
     rows = _enrich_indicator_rows(
         [
-            {"name": "rsi", "value": 54.0, "score": 50.0, "timestamp": "2026-07-21T08:00:00+00:00"},
-            {"name": "ma_200", "value": 0.9, "score": 70.0, "timestamp": "2026-07-21T08:00:00+00:00"},
+            {"name": "rsi", "value": 54.0, "score": 50.0, "timestamp": "2026-07-21T08:00:00+00:00", "source_observed_at": "2026-07-21T08:00:00+00:00"},
+            {"name": "ma_200", "value": 0.9, "score": 70.0, "timestamp": "2026-07-21T08:00:00+00:00", "source_observed_at": "2026-07-21T08:00:00+00:00"},
             {"name": "missing", "value": None, "score": 10.0, "timestamp": None},
         ],
         period="day",
@@ -96,6 +99,84 @@ def test_indicator_rows_expose_source_period_freshness_and_score_contribution():
     }
     assert rows[2]["data_status"] == "insufficient_data"
     assert rows[2]["score_contribution"]["weighted_points"] is None
+
+
+def test_indicator_source_moment_is_distinct_from_receipt_time():
+    receipt = datetime.now(timezone.utc)
+    source = datetime(2026, 9, 22, tzinfo=timezone.utc)
+    raw = _market_row(SimpleNamespace(
+        name="price", value=Decimal("100"), score=None, trend=None,
+        interpretation=None, action=None, timestamp=receipt,
+        source_observed_at=source,
+    ))
+    category = WorkspaceDataService._category_payload(
+        [raw], "day", 36 * 60 * 60, "market_data_indicators"
+    )
+
+    assert raw["timestamp"] == receipt.isoformat()
+    assert raw["source_observed_at"] == source.isoformat()
+    assert category["rows"][0]["freshness"]["as_of"] == source.isoformat()
+    assert category["rows"][0]["freshness"]["stale"] is True
+    assert category["freshness"]["as_of"] == source.isoformat()
+
+
+def test_missing_source_moment_does_not_use_recent_receipt_as_evidence():
+    raw = _market_row(SimpleNamespace(
+        name="price", value=Decimal("100"), score=None, trend=None,
+        interpretation=None, action=None, timestamp=datetime.now(timezone.utc),
+        source_observed_at=None,
+    ))
+    category = WorkspaceDataService._category_payload(
+        [raw], "day", 36 * 60 * 60, "market_data_indicators"
+    )
+
+    assert category["rows"][0]["freshness"]["status"] == "insufficient_data"
+    assert category["freshness"]["as_of"] is None
+
+
+def test_macro_and_technical_rows_keep_the_actual_source_moment():
+    observed_at = datetime(2026, 10, 6, 6, 20, tzinfo=timezone.utc)
+    receipt = datetime(2026, 10, 7, 8, 0, tzinfo=timezone.utc)
+    macro = _macro_row(SimpleNamespace(
+        name="dxy", value=Decimal("99"), score=None, trend=None,
+        interpretation=None, action=None, timestamp=receipt,
+        source_observed_at=observed_at,
+    ))
+    technical = _technical_row(SimpleNamespace(
+        indicator="rsi", value=Decimal("50"), score=None,
+        advies=None, uitleg=None, timestamp=receipt,
+        source_observed_at=observed_at,
+    ))
+
+    assert macro["source_observed_at"] == observed_at.isoformat()
+    assert technical["source_observed_at"] == observed_at.isoformat()
+
+
+def test_history_coverage_counts_distinct_source_days_in_scoring_windows():
+    service = object.__new__(WorkspaceDataService)
+    readings = iter((2, 3, 4))
+    service.session = SimpleNamespace(execute=AsyncMock(side_effect=lambda _: SimpleNamespace(
+        scalar_one=lambda: next(readings)
+    )))
+    market = [{"name": "price"}, {"name": "volume"}, {"name": "change_24h"}]
+    macro = [{"name": "dxy"}, {"name": "inflation_rate"}]
+
+    asyncio.run(service._add_score_history_coverage(7, "BTC", market, macro))
+
+    assert market[0]["score_history_coverage"] == {
+        "observed_days": 2, "required_days": 5, "window_days": 30,
+    }
+    assert market[1]["score_history_coverage"]["observed_days"] == 3
+    assert macro[0]["score_history_coverage"] == {
+        "observed_days": 4, "required_days": 5, "window_days": 90,
+    }
+    assert "score_history_coverage" not in market[2]
+    assert "score_history_coverage" not in macro[1]
+    statements = [call.args[0] for call in service.session.execute.await_args_list]
+    assert len(statements) == 3
+    assert all("count(distinct(date(" in str(statement).lower() for statement in statements)
+    assert "macro_data.user_id" in str(statements[-1])
+    assert 7 in statements[-1].compile().params.values()
 
 
 def test_configured_indicator_pending_status_survives_workspace_projection():
@@ -300,6 +381,7 @@ def test_workspace_macro_rows_follow_active_asset_symbol():
             "interpretation": "ok",
             "action": "hold",
             "timestamp": "2026-08-07T00:00:00+00:00",
+            "source_observed_at": None,
             "sample_size": 1,
             "period_aggregate": False,
         }
