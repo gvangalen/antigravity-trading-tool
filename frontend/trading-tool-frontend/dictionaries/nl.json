@@ -3222,6 +3222,8 @@
     },
     "uiText": {
       "activeBriefing": "Actieve briefing",
+      "briefingGenerating": "FINN werkt aan je persoonlijke briefing. Dit is voorlopig de samenvatting van je opgeslagen plan.",
+      "briefingFallback": "De persoonlijke briefing is nu niet beschikbaar. Dit is de samenvatting van je opgeslagen plan.",
       "defensivePosture": "Defensieve houding",
       "alignedTo": "Afgestemd op",
       "workspaceOverview": "Werkoverzicht",
