@@ -8,11 +8,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED`; local gates passed. Candidate CI, deployment, and independent authenticated QA are pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated browser QA is pending. |
 | Goal | Finish the new-user onboarding handoff by making logout a verified server operation and completing locale-specific onboarding copy in Dutch, English, and German. |
 | Candidate branch | `codex/onboarding-logout-i18n`. |
-| Candidate implementation SHA | Pending candidate commit. |
-| Production SHA | Pending deployment. |
+| Candidate implementation SHA | `be610f60` in [PR #110](https://github.com/gvangalen/antigravity-trading-tool/pull/110), merged. |
+| Production SHA | `9195019257d5a57270944611bc0d8d86df3e1e87`, observed on both public surfaces after Auto Deploy. This status-only update creates a later SHA; QA must bind to the current backend/frontend SHA. |
 | Previous live SHA | `db60d6ea2996a6a835d01eb3dfe92df63163e5e3`, independently tested with a new account. |
 | Last updated | 2026-10-07 |
 
@@ -25,6 +25,8 @@ The Dutch onboarding dictionary now covers the reported English labels and relat
 Measured local evidence: root pytest **3173 passed, 3 skipped**, final log SHA-256 `a4cf77c0edd6eb8ff0e8258e5ff4b0bab9e9182189ceb985e747d811bd948524`; final frontend build, typecheck, i18n lint/tests, command/proposal tests, focused logout/locale tests, and canonical `audit:high` passed, final build log SHA-256 `6f5ae978c73139bd15f2b8331b20ac6b1f54129d88f863f98c74e96b0a6f98ab`. Isolated PostgreSQL/Redis/API/Celery action-contract matrix passed **16/16**, zero broker orders, live calls or production connections; artifact SHA-256 `2efdeb55c17de20ad8e0db1891c404a56e850c2968a8b8dfb4e995165f8eeda1`. With two separate synthetic accounts on that local API, login and `/me` returned 200, a valid-CSRF logout changed `/me` to 401, and a missing-CSRF logout returned 403 while `/me` stayed 200; a later valid logout cleared that session. Real-provider selector development passed **18/18**, zero provider/schema/parse/validation failures, artifact SHA-256 `7acb05e944824fb83e15e428aef08ebfc71fb4a3f583e77ce57bc20c7da59cdf`. Full regression passed **109/109** with zero provider/schema/parse/validation failures, artifact SHA-256 `78d7db0dfb1d174455b4a2acf1d123ed953d15ec9483af675dc142256265c982`. Build did not access the protected QA fixture or sealed holdout.
 
 Independent QA should sign out from both the avatar menu and profile on a new account, confirm the login page remains logged out after hard refresh and protected navigation, then genuinely log back in and compare the saved FINN Today text. In Dutch, inspect the onboarding shell, analysis, plan, bot and completion screens for untranslated copy; switch to English and German and verify the same labels update immediately. A deliberately failed logout must show an error without falsely reporting success. No live trade is part of this handoff.
+
+Candidate [CI run 37675373786](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37675373786) passed all five checks. Main [CI run 37675671071](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37675671071) passed, and [Auto Deploy run 37675927007](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37675927007) succeeded. Public `https://tradamind.com/api/health` and `https://tradamind.com/build-info.json` both returned HTTP 200 and SHA `9195019257d5a57270944611bc0d8d86df3e1e87`. Build performed no authenticated production QA or production write.
 
 ## Previous Release (first FINN Today briefing stability)
 
