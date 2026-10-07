@@ -8,12 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`. Candidate CI and deployment are pending; independent authenticated browser QA has not run. |
+| Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and deployment identity checks passed; independent authenticated browser QA has not run. |
 | Goal | Repair fresh-user DCA onboarding and the first FINN Today briefing: save the schedule, read the saved plan and trader context, finish the background briefing, and keep optional source failures from aborting Mission Control. |
-| Candidate branch | `codex/onboarding-dca-today-context` |
+| Candidate branch | `codex/onboarding-dca-today-context`, merged to `main` in `9e34dbda017c0c7313135c47ba3f4b651a584881`. |
 | Candidate implementation SHA | `78cad90c891065bb33d71dad796a1717ebd0dc54` (together with preceding branch commit `ff79f435d67cfb1dab785e6082468d70fc24c112`). |
-| PR | [#100](https://github.com/gvangalen/antigravity-trading-tool/pull/100), candidate checks pending. |
-| Production SHA | Pending; no deployment claim. |
+| PR | [#100](https://github.com/gvangalen/antigravity-trading-tool/pull/100), merged. |
+| Production SHA | `9e34dbda017c0c7313135c47ba3f4b651a584881`, observed on both public surfaces after Auto Deploy. This status-only update creates a later SHA; QA must bind to the current backend/frontend SHA. |
 | Last updated | 2026-10-07 |
 
 The guided onboarding form now captures a daily, weekly, or monthly DCA
@@ -45,6 +45,17 @@ fixed strategy. A local completed-account worker produced `ready` using
 Mission Control returned successfully for both tested local accounts. This is
 Build evidence, not independent production QA. A one-off Automation loading
 delay from the earlier browser report was not reproduced here.
+
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37614979009)
+and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37615249622)
+completed success. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37615474398)
+completed success for `9e34dbda017c0c7313135c47ba3f4b651a584881`.
+Public backend health and frontend build-info both returned HTTP 200 and that
+SHA on 2026-10-07. Build did not access the authenticated QA fixture. QA should
+complete a new-account browser path with a fixed DCA schedule, strategy and
+Paper bot, then verify the first FINN Today card is personal and remains
+consistent after a refresh. A repeated initial Automation loading delay, if
+observed, needs a run trace; it was not reproduced in local validation.
 
 ## Previous Release (indicator source evidence)
 
