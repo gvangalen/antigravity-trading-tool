@@ -384,6 +384,17 @@ def test_first_dashboard_observation_prefers_macro_gap_for_btc_swing_profile():
     assert "macro indicator" in next_action["question"].lower()
 
 
+def test_first_dashboard_german_fallback_stays_in_german():
+    observation, next_action = _service()._first_dashboard_observation_and_action(
+        "ETH", locale="de", profile={}, setup={}, strategy={}, linked_bot=None,
+        indicators={}, data_readiness={"status": "score_generation_missing"},
+        has_scores=False, blockers=[],
+    )
+    assert "Marktdatensatz" in observation
+    assert "Möchtest du" in next_action["question"]
+    assert "Review your" not in next_action["label"]
+
+
 def test_first_dashboard_observation_changes_for_aapl_missing_market_snapshot():
     service = _service()
 
@@ -1062,14 +1073,15 @@ def test_first_dashboard_indicator_context_uses_canonical_symbol_scoped_reposito
     repository.get_configured_indicator_names.assert_awaited_once_with(7, symbol="BTC")
 
 
-def test_first_dashboard_latest_analysis_uses_owner_scoped_report(monkeypatch):
-    repository = SimpleNamespace(
-        get_latest_report=AsyncMock(return_value={
-            "report_date": "2026-09-17",
-            "summary": "BTC momentum is improving while macro confirmation remains mixed.",
-        })
-    )
-    monkeypatch.setattr(finn_plan_module, "ReportRepository", lambda _session: repository)
+def test_first_dashboard_latest_analysis_uses_owner_scoped_benchmark(monkeypatch):
+    service = SimpleNamespace(benchmark_for_asset=AsyncMock(return_value={
+        "source_status": "available", "as_of": "2026-10-07", "benchmark_score": 72,
+        "reported_scores": {"market_score": 80, "macro_score": 60, "technical_score": 75},
+        "component_source_status": {
+            "market_score": "fresh", "macro_score": "fresh", "technical_score": "fresh",
+        },
+    }))
+    monkeypatch.setattr(finn_plan_module, "FinnSharedContextService", lambda _session: service)
 
     result = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
         7,
@@ -1078,18 +1090,22 @@ def test_first_dashboard_latest_analysis_uses_owner_scoped_report(monkeypatch):
         has_scores=False,
     ))
 
-    assert result == {
-        "availability": "available",
-        "source": "daily_report",
-        "report_date": "2026-09-17",
-        "summary": "BTC momentum is improving while macro confirmation remains mixed.",
-    }
-    repository.get_latest_report.assert_awaited_once_with(7, "daily_reports", symbol="BTC")
+    assert result["availability"] == "available"
+    assert result["source"] == "owner_scoped_benchmark"
+    assert result["report_date"] == "2026-10-07"
+    assert "Totale benchmark 72" in result["summary"]
+    service.benchmark_for_asset.assert_awaited_once_with(7, "BTC")
 
 
 def test_first_dashboard_does_not_claim_analysis_absent_when_scores_exist(monkeypatch):
-    repository = SimpleNamespace(get_latest_report=AsyncMock(return_value=None))
-    monkeypatch.setattr(finn_plan_module, "ReportRepository", lambda _session: repository)
+    service = SimpleNamespace(benchmark_for_asset=AsyncMock(return_value={
+        "source_status": "missing_scores", "as_of": "2026-10-07",
+        "reported_scores": {"market_score": 80, "macro_score": None, "technical_score": 75},
+        "component_source_status": {
+            "market_score": "fresh", "macro_score": "missing_score", "technical_score": "fresh",
+        },
+    }))
+    monkeypatch.setattr(finn_plan_module, "FinnSharedContextService", lambda _session: service)
 
     result = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
         7,
@@ -1098,14 +1114,15 @@ def test_first_dashboard_does_not_claim_analysis_absent_when_scores_exist(monkey
         has_scores=True,
     ))
 
-    assert result["availability"] == "available"
-    assert result["source"] == "score_snapshot"
-    assert "Market 8" in result["summary"]
+    assert result["availability"] == "partial"
+    assert result["source"] == "owner_scoped_benchmark"
+    assert "Market 80 (fresh)" in result["summary"]
+    assert result["component_source_status"]["macro_score"] == "missing_score"
 
 
 def test_first_dashboard_analysis_query_failure_is_unknown_not_absent(monkeypatch):
-    repository = SimpleNamespace(get_latest_report=AsyncMock(side_effect=RuntimeError("db unavailable")))
-    monkeypatch.setattr(finn_plan_module, "ReportRepository", lambda _session: repository)
+    service = SimpleNamespace(benchmark_for_asset=AsyncMock(side_effect=RuntimeError("db unavailable")))
+    monkeypatch.setattr(finn_plan_module, "FinnSharedContextService", lambda _session: service)
 
     result = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
         7,
@@ -1437,7 +1454,7 @@ def test_mission_personal_briefing_localizes_greeting_without_mixing_languages(l
     assert briefing["greeting"] == expected
 
 
-def test_first_dashboard_ai_validation_rejects_wrong_output_language():
+def test_first_dashboard_ai_validation_does_not_discard_coaching_for_language_heuristics():
     service = _service()
     result = {
         "assessment": "Avoid trading AAPL for now.",
@@ -1451,7 +1468,7 @@ def test_first_dashboard_ai_validation_rejects_wrong_output_language():
         result,
         allowed_refs=["asset.symbol"],
         locale="de",
-    ) is None
+    ) is not None
     assert service._validate_first_dashboard_ai_result(
         result,
         allowed_refs=["asset.symbol"],
@@ -1470,6 +1487,14 @@ def test_first_dashboard_ai_validation_rejects_wrong_output_language():
         allowed_refs=["asset.symbol"],
         locale="de",
     ) is not None
+
+    # Evidence references are metadata, not a reason to discard an otherwise
+    # usable read-only briefing. Unknown references are removed.
+    result["evidence_refs"] = ["not.in.snapshot"]
+    validated = service._validate_first_dashboard_ai_result(
+        result, allowed_refs=["asset.symbol"], locale="en",
+    )
+    assert validated["evidence_refs"] == []
 
 
 def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready(monkeypatch):

@@ -50,17 +50,6 @@ async def query_strategies(
     return await service.query_strategies(user_id, filters, format_type=format)
 
 # ==========================================================
-# 3️⃣ GENERATE STRATEGY (AI)
-# ==========================================================
-@router.post("/strategies/generate/{setup_id}")
-async def generate_strategy_for_setup(
-    setup_id: int,
-    current_user: dict = Depends(get_current_user),
-    service: StrategyService = Depends(get_strategy_service)
-):
-    return await service.generate_strategy_for_setup(setup_id, current_user["id"])
-
-# ==========================================================
 # 4️⃣ UPDATE STRATEGY (incl curve editor)
 # ==========================================================
 @router.put("/strategies/{strategy_id}")
@@ -83,17 +72,6 @@ async def delete_strategy(
     service: StrategyService = Depends(get_strategy_service)
 ):
     return await service.delete_strategy(strategy_id, current_user["id"])
-
-# ==========================================================
-# 6️⃣ AI STRATEGY ANALYSE
-# ==========================================================
-@router.post("/strategies/analyze/{strategy_id}")
-async def analyze_strategy(
-    strategy_id: int,
-    current_user: dict = Depends(get_current_user),
-    service: StrategyService = Depends(get_strategy_service)
-):
-    return await service.analyze_strategy(strategy_id, current_user["id"])
 
 # ==========================================================
 # 7️⃣ GET STRATEGY BY SETUP

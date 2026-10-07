@@ -2,13 +2,8 @@ from types import SimpleNamespace
 
 from backend.celery_task import bootstrap_agents_task as bootstrap_tasks
 from backend.celery_task import daily_report_task as daily_report_module
-from backend.celery_task import macro_task as macro_module
-from backend.celery_task import market_task as market_module
 from backend.celery_task import onboarding_task as onboarding_module
-from backend.celery_task import setup_task as setup_tasks
 from backend.celery_task import store_daily_scores_task as score_module
-from backend.celery_task import strategy_task as strategy_module
-from backend.celery_task import technical_task as technical_module
 
 
 class _Cursor:
@@ -72,11 +67,6 @@ def test_run_onboarding_pipeline_queues_expected_workflow(monkeypatch):
     monkeypatch.setattr(onboarding_module, "get_db_connection", lambda: conn)
 
     monkeypatch.setattr(score_module, "store_daily_scores_task", _TaskStub("store_daily_scores_task"))
-    monkeypatch.setattr(macro_module, "generate_macro_insight", _TaskStub("generate_macro_insight"))
-    monkeypatch.setattr(market_module, "run_market_agent_daily", _TaskStub("run_market_agent_daily"))
-    monkeypatch.setattr(technical_module, "run_technical_agent_daily", _TaskStub("run_technical_agent_daily"))
-    monkeypatch.setattr(setup_tasks, "run_setup_agent_daily", _TaskStub("run_setup_agent_daily"))
-    monkeypatch.setattr(strategy_module, "run_daily_strategy_snapshot", _TaskStub("run_daily_strategy_snapshot"))
     monkeypatch.setattr(daily_report_module, "generate_daily_report", _TaskStub("generate_daily_report"))
     monkeypatch.setattr(onboarding_module, "enqueue_first_dashboard_briefing", _TaskStub("enqueue_first_dashboard_briefing"))
 
@@ -101,12 +91,10 @@ def test_run_onboarding_pipeline_queues_expected_workflow(monkeypatch):
     assert captured["applied"] is True
     assert [step[0] for step in captured["steps"]] == [
         "store_daily_scores_task",
-        "generate_macro_insight",
-        "run_market_agent_daily",
-        "run_technical_agent_daily",
-        "run_daily_strategy_snapshot",
+        "enqueue_first_dashboard_briefing",
         "generate_daily_report",
     ]
+    assert captured["steps"][1][2] == {"trigger": "onboarding_scores_ready"}
     assert conn.commit_count >= 1
     assert conn.closed is True
 
@@ -116,7 +104,7 @@ def test_bootstrap_agents_task_queues_report_and_first_dashboard_briefing(monkey
     monkeypatch.setattr(bootstrap_tasks, "fetch_market_data", lambda: calls.append(("fetch_market_data",)))
     monkeypatch.setattr(bootstrap_tasks, "fetch_macro_data", lambda user_id: calls.append(("fetch_macro_data", user_id)))
     monkeypatch.setattr(bootstrap_tasks, "fetch_technical_data_day", lambda user_id: calls.append(("fetch_technical_data_day", user_id)))
-    monkeypatch.setattr(bootstrap_tasks, "run_market_agent_daily", lambda user_id: calls.append(("run_market_agent_daily", user_id)))
+    monkeypatch.setattr(bootstrap_tasks, "store_daily_scores_task", lambda user_id: calls.append(("store_daily_scores_task", user_id)))
     monkeypatch.setattr(bootstrap_tasks, "snapshot_all_for_user", lambda user_id: calls.append(("snapshot_all_for_user", user_id)))
     monkeypatch.setattr(bootstrap_tasks, "generate_daily_report", _DelayStub("generate_daily_report", calls))
     monkeypatch.setattr(bootstrap_tasks, "enqueue_first_dashboard_briefing", _DelayStub("enqueue_first_dashboard_briefing", calls))
@@ -124,6 +112,7 @@ def test_bootstrap_agents_task_queues_report_and_first_dashboard_briefing(monkey
     result = bootstrap_tasks.bootstrap_agents_task.run(user_id=315)
 
     assert result["status"] == "complete"
+    assert ("store_daily_scores_task", 315) in calls
     assert ("generate_daily_report", (), {"user_id": 315}) in calls
     assert (
         "enqueue_first_dashboard_briefing",

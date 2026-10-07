@@ -41,10 +41,6 @@ def sync_snapshot_all_for_user(user_id: int):
     snapshot_all_for_user(user_id, bucket="1h")
     snapshot_all_for_user(user_id, bucket="1d")
 
-def sync_run_daily_strategy_snapshot(user_id: int):
-    from backend.celery_task.strategy_task import run_daily_strategy_snapshot
-    run_daily_strategy_snapshot(user_id=user_id)
-
 def sync_run_trading_bot_agent(user_id: int, report_date: date, bot_id: int):
     from backend.ai_agents.trading_bot_agent import run_trading_bot_agent
     return run_trading_bot_agent(user_id=user_id, report_date=report_date, bot_id=bot_id)
@@ -1588,7 +1584,6 @@ class BotService:
     ) -> dict:
         report_date = date.fromisoformat(report_date_str) if report_date_str else date.today()
         
-        await asyncio.to_thread(sync_run_daily_strategy_snapshot, user_id)
         result = await asyncio.to_thread(sync_run_trading_bot_agent, user_id, report_date, bot_id)
         
         if not result or not getattr(result, "get", lambda k: False)("ok"):

@@ -39,6 +39,7 @@ from backend.services.finn_execution_governance_service import FinnExecutionGove
 from backend.services.indicator_config_service import IndicatorConfigService
 from backend.services.macro_data_service import MacroDataService
 from backend.services.score_service import ScoreService
+from backend.services.finn_shared_context_service import FinnSharedContextService
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.technical_data_service import TechnicalDataService
@@ -13250,6 +13251,27 @@ class FinnPlanService:
                 owner_task_id=owner_task_id,
             )
 
+        # Load the full graph only in the background generation worker. The
+        # dashboard read uses the compact context version and stays fast.
+        try:
+            shared_context = await FinnSharedContextService(self.session).for_user(
+                user_id, symbol=asset,
+            )
+            shared_asset = (shared_context.get("assets") or [None])[0]
+        except Exception:
+            logger.exception(
+                "First dashboard shared context lookup failed for user_id=%s asset=%s trace_id=%s",
+                user_id, asset, self.trace_id,
+            )
+            shared_asset = None
+        ai_payload = {
+            **payload,
+            "ai_prompt_context": {
+                **(payload.get("ai_prompt_context") or {}),
+                "shared_asset": shared_asset,
+            },
+        }
+
         scope = f"first_dashboard:{user_id}:{current_version}"
         ai_result: Dict[str, Any]
         try:
@@ -13265,7 +13287,7 @@ class FinnPlanService:
             ):
                 ai_result = await asyncio.to_thread(
                     ask_gpt_json,
-                    prompt=self._first_dashboard_ai_prompt(payload),
+                    prompt=self._first_dashboard_ai_prompt(ai_payload),
                     system_role=self._first_dashboard_ai_system_role(),
                     max_tokens=800,
                     client_max_retries=1,
@@ -13635,6 +13657,11 @@ class FinnPlanService:
             "latest_analysis.availability",
             "latest_analysis.summary",
             "latest_analysis.report_date",
+            "shared_asset.benchmark",
+            "shared_asset.indicator_configuration",
+            "shared_asset.setups",
+            "shared_asset.strategies",
+            "shared_asset.bots",
             "missing_fields",
             "history.behavior",
         ]
@@ -14125,6 +14152,10 @@ class FinnPlanService:
         retryable = self._is_first_dashboard_retryable_error(error)
         next_retry_at = self._first_dashboard_next_retry_at(retry_count) if retryable and retry_count < FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS else None
         error_code = self._first_dashboard_error_code(error)
+        logger.warning(
+            "First dashboard briefing fallback user_id=%s trace_id=%s task_id=%s error_code=%s retryable=%s retry_count=%s",
+            user_id, self.trace_id, task_id, error_code, retryable, retry_count,
+        )
         await self._transition_first_dashboard_briefing_state(
             user_id,
             existing_state,
@@ -14241,6 +14272,7 @@ class FinnPlanService:
                     "A saved DCA schedule is a plan, not proof that a bot or purchase is active. State execution status only when the supplied bot evidence supports it.",
                     "indicator_configuration.configured lists saved indicator choices. A saved DXY or RSI is configured even when it has no usable current score. Never call a listed indicator or its layer unconfigured. When lookup_status is unknown, do not claim whether a layer is configured. A complete_current_benchmark value of false means the score is incomplete, not that saved configuration is absent.",
                     "A historical latest_analysis.summary cannot override the current owner-scoped indicator_configuration when describing what the user has configured now.",
+                    "context.shared_asset is the owner-scoped plan graph and benchmark also used by FINN chat and reports. Use its source_status and component_source_status when discussing current scores or setup matches. Never select one linked strategy silently when several are present.",
                     "Return valid JSON only.",
                 ],
                 "output_contract": {
@@ -14275,43 +14307,18 @@ class FinnPlanService:
         for field in required_fields:
             value = result.get(field)
             if field == "evidence_refs":
-                if not isinstance(value, list):
-                    return None
                 refs = []
-                for item in value:
+                for item in value if isinstance(value, list) else []:
                     ref = str(item or "").strip()
                     if ref and ref in allowed_refs and ref not in refs:
                         refs.append(ref)
-                if not refs:
-                    return None
                 cleaned[field] = refs[:6]
                 continue
             text_value = str(value or "").strip()
             if field != "data_limitation" and len(text_value) < 6:
                 return None
             cleaned[field] = text_value
-        visible_text = " ".join(
-            cleaned.get(field, "")
-            for field in ("assessment", "reasoning", "recommended_action", "data_limitation")
-        )
-        if not self._first_dashboard_language_matches(visible_text, locale=locale):
-            return None
         return cleaned
-
-    @staticmethod
-    def _first_dashboard_language_matches(text: str, *, locale: str) -> bool:
-        language = str(locale or "nl").lower().split("-", 1)[0]
-        if language not in {"nl", "en", "de"}:
-            return True
-        tokens = set(re.findall(r"[a-zA-ZÀ-ÿ]+", str(text or "").lower()))
-        markers = {
-            "nl": {"de", "het", "een", "je", "jouw", "nog", "niet", "wacht", "markt", "voordat"},
-            "en": {"the", "a", "an", "your", "is", "are", "not", "wait", "market", "before"},
-            "de": {"der", "die", "das", "dein", "deine", "sie", "ist", "sind", "nicht", "warte", "warten", "aktuell", "aktuelle", "markt", "bevor", "handeln"},
-        }
-        scores = {key: len(tokens & values) for key, values in markers.items()}
-        strongest_other = max(score for key, score in scores.items() if key != language)
-        return not (scores[language] == 0 and strongest_other >= 2)
 
     def _first_dashboard_market_snapshot(
         self,
@@ -14350,69 +14357,43 @@ class FinnPlanService:
         asset_analysis: Dict[str, Any],
         has_scores: bool,
     ) -> Dict[str, Any]:
-        """Return a safe, owner-scoped analysis availability projection.
+        """Use the same measured benchmark and source checks as FINN chat.
 
-        A missing claim is allowed only after the owner-scoped report query
-        succeeds and both report and current score evidence are absent. Query
-        failures remain ``unknown`` so visible copy cannot turn an operational
-        error into a false statement about the user's data.
+        A historical AI report cannot become the source of truth for today's
+        scores or the user's current indicator configuration.
         """
         try:
-            report = await ReportRepository(self.session).get_latest_report(
-                user_id,
-                "daily_reports",
-                symbol=asset,
-            )
+            benchmark = await FinnSharedContextService(self.session).benchmark_for_asset(user_id, asset)
         except Exception:
             logger.exception(
-                "First dashboard latest analysis lookup failed for user_id=%s asset=%s trace_id=%s",
+                "First dashboard benchmark lookup failed for user_id=%s asset=%s trace_id=%s",
                 user_id,
                 asset,
                 self.trace_id,
             )
             return {"availability": "unknown", "source": "query_failed"}
-
-        if report:
-            summary = next(
-                (
-                    str(report.get(field) or "").strip()
-                    for field in (
-                        "summary",
-                        "headline",
-                        "market_summary",
-                        "macro_summary",
-                        "technical_summary",
-                    )
-                    if str(report.get(field) or "").strip()
-                ),
-                "",
-            )
-            return {
-                "availability": "available",
-                "source": "daily_report",
-                "report_date": str(report.get("report_date") or "") or None,
-                "summary": summary[:600] or None,
-            }
-
-        if has_scores:
-            score_parts = []
-            for label, field in (
+        components = benchmark.get("reported_scores") or {}
+        status = benchmark.get("component_source_status") or {}
+        score_parts = [
+            f"{label} {components[key]} ({status.get(key, 'unknown')})"
+            for label, key in (
                 ("Market", "market_score"),
                 ("Macro", "macro_score"),
                 ("Technisch", "technical_score"),
-                ("Setup", "setup_score"),
-            ):
-                value = asset_analysis.get(field)
-                if value is not None:
-                    score_parts.append(f"{label} {value}")
-            return {
-                "availability": "available",
-                "source": "score_snapshot",
-                "report_date": str(asset_analysis.get("date") or "") or None,
-                "summary": ", ".join(score_parts)[:600] or f"Actuele {asset}-analyse is beschikbaar.",
-            }
-
-        return {"availability": "absent", "source": "owner_scoped_query"}
+            )
+            if components.get(key) is not None
+        ]
+        complete = benchmark.get("source_status") == "available"
+        if complete:
+            score_parts.append(f"Totale benchmark {benchmark['benchmark_score']}")
+        return {
+            "availability": "available" if complete else ("partial" if score_parts else "absent"),
+            "source": "owner_scoped_benchmark",
+            "source_status": benchmark.get("source_status"),
+            "component_source_status": status,
+            "report_date": str(benchmark.get("as_of") or "") or None,
+            "summary": ", ".join(score_parts)[:600] or None,
+        }
 
     def _first_dashboard_missing_fields(
         self,
@@ -14748,9 +14729,28 @@ class FinnPlanService:
                 "ready_question": f"Wil je je {asset}-plan doornemen voordat je de volgende stap zet?",
             },
             "en": {},
-            "de": {},
+            "de": {
+                "waiting": "Ich warte noch auf den ersten vollständigen Marktdatensatz. Deshalb kann ich deine Einstiegsbedingungen noch nicht verlässlich beurteilen.",
+                "review": f"Prüfe deinen {asset}-Plan",
+                "waiting_question": f"Möchtest du deinen {asset}-Plan durchgehen, bevor aktuelle Marktdaten vorliegen?",
+                "blocked": "{asset} erfüllt noch keine Einstiegsbedingung: {category} liegt außerhalb deines eingestellten Bereichs {range}.",
+                "check": "Prüfe fehlende Einstiegsbedingungen",
+                "blocked_question": "Möchtest du prüfen, warum {category} deinen {asset}-Plan blockiert?",
+                "macro": "Dein Plan ist technisch eingerichtet, aber für diese Beurteilung fehlt noch der Makrokontext.",
+                "macro_action": "Prüfe den Makrokontext",
+                "macro_question": f"Möchtest du für {asset} zuerst einen passenden Makroindikator prüfen?",
+                "risk": "Dein gespeichertes Risikoprofil ist vorsichtig, der verknüpfte Bot nutzt aber ein aggressives Ausführungsprofil.",
+                "risk_question": "Möchtest du diesen Risikounterschied prüfen, bevor du fortfährst?",
+                "paper": "Deine Strategie und dein Bot sind verknüpft. Der Live-Handel ist ausgeschaltet; das ist der sichere Status während der Einrichtung.",
+                "simulate": "Erste Simulation starten",
+                "simulate_question": f"Möchtest du zuerst eine Simulation für {asset} durchführen?",
+                "timeframe": "Dein Swing-Profil passt nicht gut zum aktuellen Zeitrahmen {timeframe}.",
+                "timeframe_question": "Möchtest du prüfen, ob {timeframe} der richtige Zeitrahmen für diesen Plan ist?",
+                "ready": "Deine Strategie {strategy} ist vollständig verknüpft. Das aktuelle Setup zeigt keine blockierende Bedingung.",
+                "ready_question": f"Möchtest du deinen {asset}-Plan vor dem nächsten Schritt durchgehen?",
+            },
         }.get(language) or {}
-        if language != "nl":
+        if language not in {"nl", "de"}:
             copy = {
                 "waiting": "I am still waiting for the first complete market snapshot, so I cannot responsibly assess your entry conditions yet.",
                 "review": f"Review your {asset} plan",

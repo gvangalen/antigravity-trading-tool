@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 
-from backend.ai_agents import report_ai_agent, weekly_report_agent, monthly_report_agent, quarterly_report_agent
-from backend.ai_agents.report_model import TRADING_REPORT_MODEL, TRADING_REPORT_REASONING_EFFORT
+from backend.services import finn_unified_report_service as reports
 from backend.utils import openai_client
+
+TRADING_REPORT_MODEL = "gpt-6-luna"
+TRADING_REPORT_REASONING_EFFORT = "none"
 
 
 def _stub_report_provider(monkeypatch, output_text):
@@ -84,14 +86,27 @@ def test_shared_client_default_keeps_legacy_chat_route(monkeypatch):
 
 
 def test_all_trading_report_generators_pin_luna(monkeypatch):
-    for module in (report_ai_agent, weekly_report_agent, monthly_report_agent, quarterly_report_agent):
-        captured = []
-        monkeypatch.setattr(module, "ask_gpt_text", lambda **kwargs: captured.append(kwargs) or "A sufficiently long report response.")
-        if module is report_ai_agent:
-            module.generate_text("prompt", "fallback")
-        elif module is weekly_report_agent:
-            module.generate_text("prompt", "fallback")
-        else:
-            module.generate_text("prompt", "fallback", [])
-        assert captured[0]["model_override"] == "gpt-6-luna"
-        assert captured[0]["reasoning_effort"] == "none"
+    captured = []
+    shared = {"locale": "nl", "observed_at": "2026-10-07", "assets": []}
+
+    async def load_daily(_user_id):
+        return shared
+
+    async def load_period(_user_id, period):
+        return {"period": period, "period_start": "2026-10-01",
+                "period_end": "2026-10-07", "shared": shared,
+                "dated_scores": [], "bot_decisions": []}
+
+    monkeypatch.setattr(reports, "_load_context", load_daily)
+    monkeypatch.setattr(reports, "_load_period_context", load_period)
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **kwargs: captured.append(kwargs) or {})
+    for generate in (
+        reports.generate_unified_daily_report_sections,
+        reports.generate_weekly_report_sections,
+        reports.generate_monthly_report_sections,
+        reports.generate_quarterly_report_sections,
+    ):
+        generate(7)
+    assert len(captured) == 4
+    assert all(call["model_override"] == "gpt-6-luna" for call in captured)
+    assert all(call["reasoning_effort"] == "none" for call in captured)

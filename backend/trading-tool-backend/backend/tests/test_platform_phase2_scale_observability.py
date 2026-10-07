@@ -16,16 +16,7 @@ REQUEST_PATH_MODULES = [
 ]
 
 ALLOWED_LEGACY_SYNC_BOUNDARIES = {
-    "backend/trading-tool-backend/backend/ai_agents/macro_ai_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/market_ai_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/monthly_report_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/quarterly_report_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/report_ai_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/score_ai_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/strategy_ai_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/technical_ai_agent.py",
     "backend/trading-tool-backend/backend/ai_agents/trading_bot_agent.py",
-    "backend/trading-tool-backend/backend/ai_agents/weekly_report_agent.py",
     "backend/trading-tool-backend/backend/celery_task/btc_price_history_task.py",
     "backend/trading-tool-backend/backend/celery_task/celery_task_generate_pdf.py",
     "backend/trading-tool-backend/backend/celery_task/daily_usage_reset.py",
@@ -37,7 +28,6 @@ ALLOWED_LEGACY_SYNC_BOUNDARIES = {
     "backend/trading-tool-backend/backend/celery_task/onboarding_task.py",
     "backend/trading-tool-backend/backend/celery_task/quarterly_report_task.py",
     "backend/trading-tool-backend/backend/celery_task/store_daily_scores_task.py",
-    "backend/trading-tool-backend/backend/celery_task/strategy_task.py",
     "backend/trading-tool-backend/backend/celery_task/technical_task.py",
     "backend/trading-tool-backend/backend/celery_task/user_scoring_sync_task.py",
     "backend/trading-tool-backend/backend/celery_task/weekly_report_task.py",

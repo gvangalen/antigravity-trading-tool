@@ -112,19 +112,10 @@ def generate_first_dashboard_briefing(
     retry_backoff=True,
 )
 def run_onboarding_pipeline(self, user_id: int):
-    """
-    Volledige onboarding pipeline PER USER.
+    """Refresh measured scores, then regenerate FINN's owner-scoped briefing.
 
-    Flow:
-    1️⃣ Daily scores
-    2️⃣ Macro AI insight
-    3️⃣ Market AI insight
-    4️⃣ Technical AI insight
-    5️⃣ Setup agent (beste setup bepalen)
-    6️⃣ Strategy agent (dagelijkse strategy snapshot)
-    7️⃣ Daily report
-
-    ⚠️ Geen master score, geen batch agents.
+    Onboarding no longer starts the legacy chain of independent AI agents.
+    FINN Today and chat read the same persisted scores and setup matches.
     """
 
     logger.info("=================================================")
@@ -172,36 +163,13 @@ def run_onboarding_pipeline(self, user_id: int):
         from backend.celery_task.store_daily_scores_task import (
             store_daily_scores_task,
         )
-        from backend.celery_task.macro_task import generate_macro_insight
-        from backend.celery_task.market_task import run_market_agent_daily
-        from backend.celery_task.technical_task import run_technical_agent_daily
-
-        # 🔥 JUISTE STRATEGY TASK
-        from backend.celery_task.strategy_task import (
-            run_daily_strategy_snapshot,
-        )
-
         from backend.celery_task.daily_report_task import generate_daily_report
-
-        # --------------------------------------------------
-        # 🔗 PER-USER CHAIN (IMMUTABLE)
-        # --------------------------------------------------
+        # A first briefing may already be generating from the just-saved
+        # plan. Re-enqueue after scores so a changed context is regenerated.
         workflow = chain(
-            # 1️⃣ Scores
             store_daily_scores_task.si(user_id),
-
-            # 2️⃣–4️⃣ AI insights
-            generate_macro_insight.si(user_id),
-            run_market_agent_daily.si(user_id),
-            run_technical_agent_daily.si(user_id),
-
-            # Setup matches are calculated from measured scores when read.
-            # Strategy snapshot uses the same match contract.
-            run_daily_strategy_snapshot.si(user_id),
-
-            # 7️⃣ Dagrapport
+            enqueue_first_dashboard_briefing.si(user_id, trigger="onboarding_scores_ready"),
             generate_daily_report.si(user_id),
-
         )
 
         workflow.apply_async()

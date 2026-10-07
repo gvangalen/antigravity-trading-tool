@@ -6,15 +6,9 @@ from decimal import Decimal
 from celery import shared_task
 from dotenv import load_dotenv
 
-from backend.ai_agents.report_ai_agent import generate_daily_report_sections
+from backend.services.finn_unified_report_service import generate_unified_daily_report_sections
 from backend.infrastructure.database import SessionLocal
 from backend.infrastructure.repositories.daily_report_repository import DailyReportWriteRepository
-
-# 🧠 Regime memory
-from backend.ai_core.regime_memory import (
-    store_regime_memory,
-    get_regime_memory,
-)
 
 # 📸 Snapshot service
 from backend.services.report_snapshot_service import create_report_snapshot
@@ -70,10 +64,6 @@ def generate_daily_report(user_id: int):
     db = SessionLocal()
 
     try:
-        # 🧠 REGIME MEMORY
-        get_regime_memory(user_id)
-        store_regime_memory(user_id)
-
         # -------------------------------------------------
         # 1️⃣ GENERATE REPORT
         # -------------------------------------------------
@@ -86,13 +76,14 @@ def generate_daily_report(user_id: int):
             entry_point="daily_report_task",
             symbol="WATCHLIST",
         ):
-            report = generate_daily_report_sections(user_id=user_id)
+            report = generate_unified_daily_report_sections(user_id=user_id)
 
         if not isinstance(report, dict):
             raise ValueError("Report agent gaf geen geldig dict terug")
 
         report["meta"] = {
-            "version": "daily_v1",
+            **(report.get("meta") or {}),
+            "version": "finn_daily_v2",
             "generated_at": datetime.utcnow().isoformat(),
         }
 
@@ -173,25 +164,23 @@ def generate_daily_report(user_id: int):
     except Exception:
         logger.exception("❌ Fout in daily_report_task")
         db.rollback()
+        raise
 
     finally:
         db.close()
         logger.info("✅ Daily report task afgerond")
 
-        # -------------------------------------------------
-        # 4️⃣ PUSH NOTIFICATION
-        # -------------------------------------------------
-        try:
-            from backend.services.push_service import push_service
+    # Notify only after a report was stored and its snapshot was created.
+    try:
+        from backend.services.push_service import push_service
 
-            msg = f"Je dagelijkse rapport voor {today} staat voor je klaar."
-            push_service.notify_user(
-                db=None,
-                user_id=user_id,
-                title="Nieuw Rapport Beschikbaar",
-                message=msg,
-                url="/reports",
-            )
-            logger.info(f"🔔 Push notification sent to user {user_id}")
-        except Exception as e:
-            logger.error(f"⚠️ Failed to send push notification: {e}")
+        push_service.notify_user(
+            db=None,
+            user_id=user_id,
+            title="Nieuw Rapport Beschikbaar",
+            message=f"Je dagelijkse rapport voor {today} staat voor je klaar.",
+            url="/reports",
+        )
+        logger.info("🔔 Push notification sent to user %s", user_id)
+    except Exception:
+        logger.exception("⚠️ Failed to send report notification for user_id=%s", user_id)

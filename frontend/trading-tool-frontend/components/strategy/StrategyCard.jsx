@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { assistantChat } from "@/lib/api/ai";
-import {
-  analyzeStrategy,
-  deleteStrategy,
-  toggleFavoriteStrategy,
-} from "@/lib/api/strategy";
+import { deleteStrategy, toggleFavoriteStrategy } from "@/lib/api/strategy";
 import { useMarketData } from "@/hooks/useMarketData";
 import {
   ArrowRight, 
@@ -24,7 +20,6 @@ import {
   Euro,
   Tags,
   Brain,
-  Wand2
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { getIntlLocale } from "@/lib/i18n";
@@ -38,7 +33,6 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   const { openConfirm, showSnackbar } = useModal();
   const { btcLive } = useMarketData(strategy.symbol, { mode: "live" });
 
-  const [loading, setLoading] = useState(false);
   const [justUpdated, setJustUpdated] = useState(false);
   const [finnLoading, setFinnLoading] = useState(false);
   const [finnReview, setFinnReview] = useState(null);
@@ -94,19 +88,6 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   /* ==========================================================
      HANDLERS
   ========================================================== */
-  async function handleAnalyze() {
-    try {
-      setLoading(true);
-      await analyzeStrategy(id);
-      showSnackbar(copy.analysisSuccess, "success");
-      onRefresh?.();
-    } catch (err) {
-      showSnackbar(copy.analysisFailed, "danger");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleFinnReview() {
     try {
       setFinnLoading(true);
@@ -385,10 +366,6 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
       {/* FOOTER ACTIONS */}
       <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/30 flex justify-between items-center">
          <div className="flex items-center gap-3">
-            <button onClick={handleAnalyze} disabled={loading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-purple-600 transition-colors disabled:opacity-50">
-               <Wand2 size={12} />
-               {loading ? copy.analyzing : copy.newAnalysis}
-            </button>
             <button onClick={handleFinnReview} disabled={finnLoading} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary hover:text-blue-600 transition-colors disabled:opacity-50">
                <Brain size={12} />
                {finnLoading ? copy.finnChecking : copy.checkWithFinn}

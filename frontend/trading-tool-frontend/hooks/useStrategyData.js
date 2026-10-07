@@ -13,8 +13,6 @@ import {
   createStrategy,
   updateStrategy,
   deleteStrategy,
-  analyzeStrategy,
-  generateAllStrategies,
 } from '@/lib/api/strategy';
 
 import { fetchSetups } from '@/lib/api/setups';
@@ -206,44 +204,6 @@ export function useStrategyData(options = {}) {
   }
 
   // =========================================================
-  // AI ANALYSE
-  // =========================================================
-  async function analyzeSingleStrategy(strategyId) {
-    setSuccessMessage('');
-    setError('');
-
-    if (!strategyId) {
-      setError('Geen strategie geselecteerd.');
-      return;
-    }
-
-    try {
-      await analyzeStrategy(strategyId);
-      invalidateStrategyDataCaches();
-      await loadStrategies(true);
-      setSuccessMessage('🧠 AI-uitleg bijgewerkt');
-    } catch (err) {
-      console.error('❌ AI analyse fout:', err);
-      setError('AI analyse mislukt.');
-    }
-  }
-
-  // =========================================================
-  // BULK
-  // =========================================================
-  async function generateAll() {
-    try {
-      await generateAllStrategies();
-      invalidateStrategyDataCaches();
-      await loadStrategies(true);
-      setSuccessMessage('Alle strategieën gegenereerd.');
-    } catch (err) {
-      console.error('❌ generateAll fout:', err);
-      setError('Bulkgeneratie mislukt.');
-    }
-  }
-
-  // =========================================================
   // RETURN
   // =========================================================
   return {
@@ -260,7 +220,5 @@ export function useStrategyData(options = {}) {
     saveStrategy,
     removeStrategy,
 
-    analyzeSingleStrategy,
-    generateAll,
   };
 }

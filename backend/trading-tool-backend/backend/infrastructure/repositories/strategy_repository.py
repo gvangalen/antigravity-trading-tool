@@ -144,9 +144,9 @@ class StrategyRepository:
                 s.symbol,
                 s.timeframe,
                 s.user_id,
-                COALESCE(sn.entry::text, s.entry::text) as entry,
-                COALESCE(sn.targets, array_to_string(s.targets, ',')) as targets,
-                COALESCE(sn.stop_loss::text, s.stop_loss::text) as stop_loss,
+                s.entry::text as entry,
+                array_to_string(s.targets, ',') as targets,
+                s.stop_loss::text as stop_loss,
                 s.risk_profile,
                 s.explanation,
                 s.setup_type,
@@ -160,12 +160,7 @@ class StrategyRepository:
                 st.timeframe AS setup_timeframe,
                 st.name AS setup_name
             FROM strategies s
-            LEFT JOIN setups st ON st.id = s.setup_id
-            LEFT JOIN (
-                SELECT DISTINCT ON (strategy_id) strategy_id, entry::text as entry, targets::text as targets, stop_loss::text as stop_loss 
-                FROM active_strategy_snapshot 
-                ORDER BY strategy_id, snapshot_date DESC
-            ) sn ON sn.strategy_id = s.id
+            LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = s.user_id
             WHERE s.user_id = :user_id
         """
         params = {"user_id": user_id}

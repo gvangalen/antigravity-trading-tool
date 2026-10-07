@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
-from backend.ai_agents.weekly_report_agent import generate_weekly_report_sections
+from backend.services.finn_unified_report_service import generate_weekly_report_sections
 from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
 
 # =====================================================

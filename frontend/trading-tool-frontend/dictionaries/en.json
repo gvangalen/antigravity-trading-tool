@@ -1288,7 +1288,8 @@
         "technical_indicator": "technical indicator",
         "setup": "setup",
         "strategy": "strategy",
-        "bot": "configure bot"
+        "bot": "configure bot",
+        "exchange_connection": "Exchange connection"
       }
     }
   },

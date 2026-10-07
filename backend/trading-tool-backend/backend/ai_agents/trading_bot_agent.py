@@ -765,7 +765,7 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT macro_score, technical_score, market_score
+            SELECT macro_score, technical_score, market_score, calculated_at, indicator_evidence
             FROM daily_scores
             WHERE user_id=%s
               AND report_date=%s
@@ -782,7 +782,8 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
                     _source_available={"macro_score": False, "technical_score": False,
                                        "market_score": False, "setup_score": False})
 
-    macro, technical, market = row
+    macro, technical, market, calculated_at, indicator_evidence = row
+    score_row = {"calculated_at": calculated_at, "indicator_evidence": indicator_evidence}
 
     def available(value: Any) -> bool:
         try:
@@ -790,7 +791,7 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
         except (TypeError, ValueError):
             return False
 
-    source_fresh = _benchmark_component_source_freshness(conn, user_id, symbol)
+    source_fresh = _benchmark_component_source_freshness(conn, user_id, symbol, score_row)
     return {
         "macro": _clamp_score(macro, default=10),
         "technical": _clamp_score(technical, default=10),
@@ -806,7 +807,7 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
     }
 
 
-def _benchmark_component_source_freshness(conn, user_id: int, symbol: str) -> dict[str, bool]:
+def _benchmark_component_source_freshness(conn, user_id: int, symbol: str, score_row: dict) -> dict[str, bool]:
     """Use the same raw-source freshness rule as FINN and reports."""
     from backend.services.setup_market_match_sync import _fresh
 
@@ -814,7 +815,7 @@ def _benchmark_component_source_freshness(conn, user_id: int, symbol: str) -> di
     for category in ("macro", "technical", "market"):
         component = f"{category}_score"
         try:
-            result[component] = _fresh(conn, user_id, symbol, category)
+            result[component] = _fresh(conn, user_id, symbol, category, score_row)
         except Exception:
             logger.exception("Cannot verify %s source freshness", component)
             result[component] = False
@@ -920,6 +921,45 @@ def _get_active_strategy_snapshot(
         "stop_loss": float(stop_loss) if stop_loss is not None else None,
         "confidence": float(confidence or 0),
         "reason": reason,
+    }
+
+
+def _get_saved_strategy_plan(conn, user_id: int, strategy_id: int, match_score: Optional[float]) -> Optional[Dict[str, Any]]:
+    """Use the confirmed owner strategy instead of a separately generated AI snapshot."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT s.entry, s.targets, s.stop_loss
+            FROM strategies s
+            JOIN setups st ON st.id = s.setup_id AND st.user_id = s.user_id
+            WHERE s.id = %s AND s.user_id = %s
+            LIMIT 1
+            """,
+            (strategy_id, user_id),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    entry, raw_targets, stop_loss = row
+    if isinstance(raw_targets, str):
+        raw_targets = _safe_json(raw_targets, raw_targets.split(","))
+    targets = []
+    for value in raw_targets or []:
+        try:
+            targets.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    try:
+        entry_value = float(entry) if entry is not None else None
+        stop_value = float(stop_loss) if stop_loss is not None else None
+    except (TypeError, ValueError):
+        return None
+    return {
+        "entry": entry_value,
+        "targets": targets,
+        "stop_loss": stop_value,
+        "confidence": float(match_score) if match_score is not None else 50.0,
+        "reason": "saved_strategy_and_measured_setup_match",
     }
 
 # =====================================================
@@ -1553,12 +1593,7 @@ def run_trading_bot_agent(
             # =========================
             # SNAPSHOT
             # =========================
-            snapshot = _get_active_strategy_snapshot(
-                conn,
-                user_id,
-                bot["strategy_id"],
-                report_date,
-            )
+            snapshot = None
 
             # =========================
             # SETUP PAYLOAD
@@ -1586,6 +1621,9 @@ def run_trading_bot_agent(
             else:
                 current_match = match_setup_from_daily_scores({}, scores, scores.get("_benchmark_weights"))
             scores["_setup_match"] = current_match
+            snapshot = _get_saved_strategy_plan(
+                conn, user_id, bot["strategy_id"], current_match.get("score"),
+            )
             # Neutral input preserves existing execution rules when a match is
             # unavailable. Only a measured match may influence sizing.
             scores["setup"] = current_match["score"] if current_match["score"] is not None else 50

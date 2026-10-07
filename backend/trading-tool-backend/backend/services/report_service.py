@@ -12,7 +12,7 @@ from backend.infrastructure.repositories.report_repository import ReportReposito
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.locale_service import localize_report_payload, resolve_locale
 from backend.utils.pdf_playwright import render_report_pdf_via_playwright
-from backend.ai_agents.report_ai_agent import generate_daily_report_sections
+from backend.services.finn_unified_report_service import generate_unified_daily_report_sections as generate_daily_report_sections
 from backend.celery_task.daily_report_task import generate_daily_report
 from backend.celery_task.weekly_report_task import generate_weekly_report
 from backend.celery_task.monthly_report_task import generate_monthly_report
