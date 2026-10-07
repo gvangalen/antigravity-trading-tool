@@ -156,6 +156,8 @@ function createAssistantTranslator(t) {
 function buildAssistantUiText(at) {
   return {
     activeBriefing: at("uiText.activeBriefing"),
+    briefingGenerating: at("uiText.briefingGenerating"),
+    briefingFallback: at("uiText.briefingFallback"),
     defensivePosture: at("uiText.defensivePosture"),
     alignedTo: at("uiText.alignedTo"),
     workspaceOverview: at("uiText.workspaceOverview"),
@@ -6816,9 +6818,16 @@ function AIAssistantContent({
               )}
               <div className="min-h-[52px]">
                 {resolvedBriefingText ? (
-                  <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
-                    {resolvedBriefingText}
-                  </p>
+                  <div>
+                    <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
+                      {resolvedBriefingText}
+                    </p>
+                    {firstDashboardContext?.response_source?.startsWith("deterministic_fallback") && (
+                      <p className="mt-2 pl-3 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                        {firstDashboardIsGenerating ? uiText.briefingGenerating : uiText.briefingFallback}
+                      </p>
+                    )}
+                  </div>
                 ) : insightLoading && !previewSectionsOnly ? (
                   <div className="border-l-3 border-blue-500 pl-3 py-1 space-y-2 animate-pulse">
                     <div className="h-3 w-11/12 rounded-full bg-slate-200 dark:bg-slate-800" />

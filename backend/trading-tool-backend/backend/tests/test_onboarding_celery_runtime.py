@@ -5,6 +5,7 @@ from backend.celery_task.onboarding_task import (
 )
 from backend.infrastructure import database
 import backend.services.finn_plan_service as finn_plan_service
+from datetime import datetime, timedelta, timezone
 
 
 def test_reset_sqlalchemy_pools_after_fork_disposes_inherited_pools(monkeypatch):
@@ -98,6 +99,60 @@ def test_generate_first_dashboard_briefing_resets_engines_before_async_session(m
     assert result == {"status": "ready", "user_id": 315}
     assert calls[:4] == ["async-engine", "sync-engine", "session-enter", "service-init"]
     assert ("generate", 315, "onboarding_pipeline", "task-1", None, None, "ai_generation", None) in calls
+
+
+def test_transient_first_dashboard_fallback_schedules_retry_without_a_dashboard_read(monkeypatch):
+    scheduled = []
+    due = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+
+    class FakeEngine:
+        async def dispose(self):
+            pass
+
+    class FakeSyncEngine:
+        def dispose(self):
+            pass
+
+    class FakeSessionFactory:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeService:
+        def __init__(self, session):
+            pass
+
+        async def generate_and_store_first_dashboard_briefing(self, user_id, **kwargs):
+            return {"status": "fallback", "retryable": True, "next_retry_at": due}
+
+        @staticmethod
+        def invalidate_runtime_caches_for_user(user_id):
+            pass
+
+    monkeypatch.setattr(database, "engine", FakeEngine())
+    monkeypatch.setattr(database, "sync_engine", FakeSyncEngine())
+    monkeypatch.setattr(database, "async_session_factory", FakeSessionFactory)
+    monkeypatch.setattr(finn_plan_service, "FinnPlanService", FakeService)
+    monkeypatch.setattr(
+        enqueue_first_dashboard_briefing,
+        "apply_async",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+
+    generate_first_dashboard_briefing.push_request(id="task-1")
+    try:
+        result = generate_first_dashboard_briefing(315)
+    finally:
+        generate_first_dashboard_briefing.pop_request()
+
+    assert result["status"] == "fallback"
+    assert len(scheduled) == 1
+    assert scheduled[0]["args"] == [315]
+    assert scheduled[0]["kwargs"] == {"trigger": "first_dashboard_retry"}
+    assert 1 <= scheduled[0]["countdown"] <= 60
+    assert scheduled[0]["queue"].endswith("ai_generation")
 
 
 def test_enqueue_first_dashboard_briefing_resets_engines_before_service_enqueue(monkeypatch):

@@ -1,5 +1,7 @@
 import logging
 import asyncio
+from datetime import datetime, timezone
+from math import ceil
 from celery import shared_task, chain
 from backend.utils.db import get_db_connection
 
@@ -68,6 +70,28 @@ def generate_first_dashboard_briefing(
                 queue_name=(getattr(self.request, "delivery_info", None) or {}).get("routing_key"),
                 owner_task_id=owner_task_id,
             )
+            # The persisted fallback remains the source of truth. Queue a
+            # delayed *enqueue* check without marking it active: the normal
+            # enqueue path will reuse ready/in-flight work if a dashboard read
+            # already started the retry. Recovery no longer depends on the
+            # user keeping FINN Today open.
+            retry_at = result.get("next_retry_at") if result.get("status") == "fallback" else None
+            if result.get("retryable") and retry_at:
+                try:
+                    from backend.celery_task.queue_policy import resolve_task_queue
+
+                    due = datetime.fromisoformat(str(retry_at))
+                    if due.tzinfo is None:
+                        due = due.replace(tzinfo=timezone.utc)
+                    countdown = max(1, ceil((due - datetime.now(timezone.utc)).total_seconds()))
+                    enqueue_first_dashboard_briefing.apply_async(
+                        args=[user_id],
+                        kwargs={"trigger": "first_dashboard_retry"},
+                        countdown=countdown,
+                        queue=resolve_task_queue("backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing"),
+                    )
+                except Exception:
+                    logger.exception("First dashboard retry scheduling failed for user_id=%s", user_id)
             try:
                 from backend.api.ai_assistant_api import _invalidate_mission_control_cache
 

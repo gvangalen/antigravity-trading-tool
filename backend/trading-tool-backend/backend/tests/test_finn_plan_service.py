@@ -705,6 +705,11 @@ def test_retryable_fallback_keeps_briefing_polling_until_retry_is_due():
     assert display["response_source"] == "deterministic_fallback_while_generating"
 
 
+def test_first_dashboard_unparseable_provider_json_is_retryable():
+    service = _service()
+    assert service._is_first_dashboard_retryable_error("Failed to generate valid JSON")
+
+
 def test_first_dashboard_transient_provider_failure_recovers_on_second_worker_attempt(monkeypatch):
     service = FinnPlanService(db_session=object())
     payload = _first_dashboard_payload("ctx-v1")
@@ -915,6 +920,8 @@ def test_generate_first_dashboard_briefing_falls_back_for_invalid_ai_output(monk
     assert stored_state["first_dashboard_briefing"]["retryable"] is True
     assert stored_state["first_dashboard_briefing"]["retry_count"] == 1
     assert stored_state["first_dashboard_briefing"]["next_retry_at"]
+    assert result["retryable"] is True
+    assert result["next_retry_at"] == stored_state["first_dashboard_briefing"]["next_retry_at"]
 
 
 def test_resolve_first_dashboard_briefing_uses_cached_ai_for_matching_version():

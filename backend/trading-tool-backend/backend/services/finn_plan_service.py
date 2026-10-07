@@ -14139,6 +14139,8 @@ class FinnPlanService:
             "response_source": "deterministic_fallback",
             "error": error_code,
             "task_id": task_id or previous.get("task_id"),
+            "retryable": retryable,
+            "next_retry_at": next_retry_at,
         }
 
     async def _load_first_dashboard_briefing_state(self, user_id: int) -> Dict[str, Any]:
@@ -14507,6 +14509,8 @@ class FinnPlanService:
             "timed out",
             "rate_limited",
             "invalid_ai_output",
+            "failed_to_generate_valid_json",
+            "failed to generate valid json",
             "quota",
             "offline",
             "error",

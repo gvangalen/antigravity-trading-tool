@@ -43,9 +43,10 @@ export default function AuthGuard({ children }) {
       ? new URL(cached.next_route, window.location.origin).pathname
       : null;
     const cachedAllowsCurrentStep = Boolean(cachedNextPath && cachedNextPath === pathname);
+    const cachedAllowsSavedBot = pathname.startsWith("/bot") && Boolean(cached?.has_strategy);
     const canRenderWhileChecking = (
       (verifiedComplete.current && verifiedUserId.current === user.id)
-      || cachedComplete || cachedAllowsCurrentStep
+      || cachedComplete || cachedAllowsCurrentStep || cachedAllowsSavedBot
     );
     setCheckingOnboarding(!canRenderWhileChecking);
     if (canRenderWhileChecking) setRedirectingToOnboarding(false);
@@ -80,6 +81,10 @@ export default function AuthGuard({ children }) {
       // lets users inspect or correct their own plan before the later bot
       // onboarding phase is complete.
       const canManageSavedSetup = pathname.startsWith("/setup") && Boolean(status?.has_setup);
+      // A saved strategy unlocks Automation. Creating the bot completes that
+      // phase, but the user still needs to visit the explicit finish screen.
+      // Redirecting /bot to that screen here hides Automation after it renders.
+      const canManageBot = pathname.startsWith("/bot") && Boolean(status?.has_strategy);
 
       debug("🧭 AuthGuard Onboarding Sync:", {
         isComplete,
@@ -88,7 +93,7 @@ export default function AuthGuard({ children }) {
         sameRoute,
       });
 
-      if (!isComplete && !pathname.startsWith("/onboarding") && !sameRoute && !canManageSavedSetup) {
+      if (!isComplete && !pathname.startsWith("/onboarding") && !sameRoute && !canManageSavedSetup && !canManageBot) {
         debug("🚧 AuthGuard: Onboarding niet compleet -> naar next_route", nextRoute);
         setRedirectingToOnboarding(true);
         router.replace(nextRoute);
