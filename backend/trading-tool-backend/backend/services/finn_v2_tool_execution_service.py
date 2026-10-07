@@ -42,7 +42,7 @@ from backend.services.finn_v2_tool_adapters.setup_inventory_tool_adapter import 
 from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_adapters.watchlist_tool_adapter import WatchlistToolAdapter
-from backend.services.setup_market_match_service import SetupMarketMatchService
+from backend.services.finn_shared_context_service import FinnSharedContextService
 from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistryService
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
@@ -555,13 +555,13 @@ class FinnV2ToolExecutionService:
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.score_adapter.execute(user_id=user_id, asset=asset_state["asset"])
         if tool_name == "read_setup_market_matches":
-            match_service = SetupMarketMatchService(self.session)
+            context_service = FinnSharedContextService(self.session)
             requested_asset = selector.get("asset") if isinstance(selector, dict) else None
             if requested_asset:
                 asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-                assessment = await match_service.for_asset(user_id, asset_state["asset"])
+                assessment = await context_service.benchmark_for_asset(user_id, asset_state["asset"])
             else:
-                assessment = await match_service.for_all_assets(user_id)
+                assessment = await context_service.matches.for_all_assets(user_id)
             payload = SetupMarketMatchesData(**assessment)
             return {
                 "data": payload,

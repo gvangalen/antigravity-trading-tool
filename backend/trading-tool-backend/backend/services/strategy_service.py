@@ -59,29 +59,6 @@ def normalize_weekday(value: Any) -> Optional[int]:
     except (TypeError, ValueError):
         return None
 
-# =========================================================
-# SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS
-# =========================================================
-
-def sync_generate_strategy_task(setup_id: int, user_id: int):
-    from backend.celery_task.strategy_task import generate_for_setup
-    task = generate_for_setup.delay(
-        user_id=user_id,
-        setup_id=setup_id
-    )
-    return task.id
-
-def sync_analyze_strategy(strategy_id: int, user_id: int, strategy_join_row: dict):
-    from backend.ai_agents.strategy_ai_agent import analyze_and_store_strategy
-    return analyze_and_store_strategy(
-        user_id=user_id,
-        strategy_id=strategy_id,
-        strategies=[strategy_join_row],
-        base_strategy=strategy_join_row,
-        setup=strategy_join_row,
-        market_context={}
-    )
-
 class StrategyService:
     # Existing strategy persistence is permissive JSONB, so retain the one
     # canonical allowlist at the domain boundary rather than letting a FINN
@@ -426,22 +403,6 @@ class StrategyService:
             "symbol": merged_data["symbol"],
             "timeframe": merged_data["timeframe"],
             "message": "✅ Strategie bijgewerkt",
-        }
-
-    async def generate_strategy_for_setup(self, setup_id: int, user_id: int) -> dict:
-        task_id = await asyncio.to_thread(sync_generate_strategy_task, setup_id, user_id)
-        return {"task_id": task_id}
-
-    async def analyze_strategy(self, strategy_id: int, user_id: int) -> dict:
-        row = await self.repository.get_strategy_full_join(strategy_id, user_id)
-        if not row:
-            raise HTTPException(404, "Strategie niet gevonden")
-
-        result = await asyncio.to_thread(sync_analyze_strategy, strategy_id, user_id, row)
-
-        return {
-            "message": "🧠 Strategy AI analyse uitgevoerd",
-            "result": result
         }
 
     async def delete_strategy(self, strategy_id: int, user_id: int) -> dict:

@@ -8,6 +8,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `BUILD_VALIDATED`; candidate CI, merge, Auto Deploy and independent authenticated QA remain open. |
+| Goal | Replace the separate onboarding/report AI-agent chain with one owner-scoped FINN context, retain measured scoring and Paper execution, and use Luna Responses for FINN Today and reports. |
+| Candidate branch | `codex/finn-unified-onboarding`. |
+| Candidate implementation SHA | `c94eabf5` on candidate branch; candidate CI pending. |
+| Production SHA | Not deployed. |
+| Last updated | 2026-10-07. |
+
+Build replaced the old onboarding sequence of specialist AI interpretations with measured score tasks, a shared owner-scoped context and one FINN briefing. FINN chat, Today and daily/period reports now use that context or its benchmark service. Daily and period report prose uses `gpt-6-luna` with reasoning `none` via Responses. Saved strategy fields, rather than a separate generated daily strategy snapshot, feed current Paper decisions. The former macro, market, technical, score, strategy and report AI-agent modules and their unused schedules were removed. The older standalone strategy-analysis endpoint and button were removed; strategy cards retain FINN review. Deterministic source collection, score calculation, setup match, report storage and bot safety controls remain. Historical backtesting still reads historical strategy snapshots; this release does not claim point-in-time backtest migration.
+
+Measured local evidence on isolated PostgreSQL/Redis/API/Celery: root pytest **3181 passed, 3 skipped**, log SHA-256 `764c8c3514234fa28aa8bbea3f8ee5ae81a6e440e30efb65a4244ed2cde92813`. Frontend build, typecheck, i18n lint/tests, command/proposal tests and `audit:high` passed, log SHA-256 `ca9a799af236c02b0b7eb36aa77b1becf64feb067fe3d83c83ad8844308f5942`. The complete local worker-driven FINN action-contract matrix passed **16/16**, with zero broker orders, live trading calls, live bots or production connections; artifact SHA-256 `b26b69d31ee20fc36fa043c68bfd0e143d713ee469d429f99f0d3e9e3dfd7b2b`. Real-provider selector development passed **18/18**, artifact SHA-256 `0be2547579d19f6a5468b04171b6569919586670df7b376580224bb09e152b9e`; full regression passed **109/109**, artifact SHA-256 `069f9fc50e2ec1d904a4af4ac2b5ffaf9d6d0c0ab74a081a5146a9e84d07b670`. A synthetic completed-onboarding account generated and persisted a first Today briefing with `response_source=ai_generated` and Luna usage recorded; synthetic daily and weekly reports produced eight nonempty sections each using Luna. A local Paper-bot decision completed safely on `hold` with no order. These local probes do not establish the cause of earlier production fallbacks or constitute independent live acceptance.
+
+Independent QA should create a new account, complete onboarding and inspect the first briefing's visible `response_source`, `generation_status` and stable saved text after refresh/relogin. Compare the same owner profile, plans and current score status in FINN chat, Today and daily/weekly reports. Test missing and fresh source evidence separately, then one controlled Paper decision; do not place a live order. Verify Dutch, English and German onboarding text and that strategy cards open FINN review without the retired endpoint. Build did not access the protected QA fixture or sealed holdout.
+
+## Previous Release (logout and onboarding locale)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated browser QA is pending. |
 | Goal | Finish the new-user onboarding handoff by making logout a verified server operation and completing locale-specific onboarding copy in Dutch, English, and German. |
 | Candidate branch | `codex/onboarding-logout-i18n`. |

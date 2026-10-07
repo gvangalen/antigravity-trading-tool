@@ -4,9 +4,9 @@ from celery import shared_task
 from backend.celery_task.market_task import fetch_market_data
 from backend.celery_task.macro_task import fetch_macro_data
 from backend.celery_task.technical_task import fetch_technical_data_day
-from backend.celery_task.market_task import run_market_agent_daily
 from backend.celery_task.daily_report_task import generate_daily_report
 from backend.celery_task.onboarding_task import enqueue_first_dashboard_briefing
+from backend.celery_task.store_daily_scores_task import store_daily_scores_task
 from backend.services.portfolio_snapshot_service import snapshot_all_for_user
 
 logger = logging.getLogger(__name__)
@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 @shared_task(bind=True)
 def bootstrap_agents_task(self, user_id: int):
     """
-    Run initial AI agents for a new user environment.
-
-    Runs agents sequentially to avoid race conditions.
+    Refresh initial source data and measured scores for FINN.
     """
 
     logger.info(f"🚀 Bootstrapping agents for user {user_id}")
@@ -38,9 +36,9 @@ def bootstrap_agents_task(self, user_id: int):
 
         # Setup match is computed from the canonical score components.
 
-        # 5️⃣ AI insights
-        logger.info("🤖 Running market AI agent")
-        run_market_agent_daily(user_id=user_id)
+        # 5️⃣ Canonical measured scores; no independent AI-agent verdicts.
+        logger.info("🧮 Building measured scores")
+        store_daily_scores_task(user_id=user_id)
 
         # 6️⃣ Portfolio snapshot
         logger.info("💰 Creating portfolio snapshot")

@@ -79,6 +79,15 @@ test("auth dictionaries expose locale-specific login and reset copy", () => {
   assert.equal(de.auth.resetPasswordTitle, "Neues Passwort festlegen");
 });
 
+test("onboarding translations cover German profile and Dutch exchange status", () => {
+  assert.equal(de.traderProfile.onboardingStep.title, "Wer bist du als Trader?");
+  assert.equal(de.traderProfile.onboardingOverview.steps.asset.title, "Analyse");
+  assert.equal(de.traderProfile.assetOnboardingStep.stepNumber, "Analyse · 1 von 4");
+  assert.equal(de.traderProfile.onboardingBanner.phaseLabels.analysis, "Analyse");
+  assert.equal(nl.traderProfile.onboardingBanner.stepLabels.exchange_connection, "Exchange-koppeling");
+  assert.equal(de.traderProfile.onboardingBanner.stepLabels.exchange_connection, "Exchange-Verbindung");
+});
+
 test("Dutch setup editor exposes product copy instead of English backend labels", () => {
   const form = nl.setups.form;
 

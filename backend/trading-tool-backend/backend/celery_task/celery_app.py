@@ -26,7 +26,6 @@ from backend.celery_task.queue_policy import (
     celery_task_annotations,
     celery_task_routes,
 )
-from backend.services.legacy_ai_runtime import legacy_periodic_ai_enabled
 
 # =========================================================
 # 🪵 Logging
@@ -202,73 +201,19 @@ celery_app.conf.beat_schedule = {
         crontab(minute="*/15"),
     ),
 
-    # =====================================================
-    # 5️⃣ AI AGENTS (DIRECT - NIET VIA DISPATCHER)
-    # =====================================================
-    "macro_ai": build_dispatch_schedule_entry(
-        "backend.celery_task.macro_task.run_macro_agent_daily",
-        crontab(hour=4, minute=5),
-    ),
-
-    "market_ai": build_dispatch_schedule_entry(
-        "backend.celery_task.market_task.run_market_agent_daily",
-        crontab(hour=4, minute=20),
-    ),
-
-    "technical_ai": build_dispatch_schedule_entry(
-        "backend.celery_task.technical_task.run_technical_agent_daily",
-        crontab(hour=4, minute=35),
-    ),
-
-    # =====================================================
-    # 6️⃣ REGIME MEMORY
-    # =====================================================
+    # Regime memory is a deterministic bot-risk input, not an AI narrator.
     "dispatch_regime_memory": build_dispatch_schedule_entry(
         "backend.celery_task.regime_memory_task.run_regime_memory",
-        crontab(hour=3, minute=30),
+        crontab(hour=5, minute=10),
     ),
 
-    # =====================================================
-    # 7️⃣ STRATEGY SNAPSHOT
-    # =====================================================
-    "dispatch_strategy_snapshot": build_dispatch_schedule_entry(
-        "backend.celery_task.strategy_task.run_daily_strategy_snapshot",
-        crontab(hour="6,18", minute=20),
-    ),
-
-    # =====================================================
-    # 8️⃣ MASTER AI SCORE (GEÏSOLEERD)
-    # =====================================================
-    "run_master_score_ai": build_task_schedule_entry(
-        "backend.celery_task.store_daily_scores_task.run_master_score_ai",
-        crontab(hour=5, minute=0),
-    ),
-
-    # =====================================================
-    # 9️⃣ DAILY REPORT (LAATSTE)
-    # =====================================================
-    "dispatch_daily_report": build_dispatch_schedule_entry(
+    # FINN writes one report from the same owner-scoped facts used by chat and
+    # Today. The independent AI insight/master-score schedules are retired.
+    "dispatch_finn_daily_report": build_dispatch_schedule_entry(
         "backend.celery_task.daily_report_task.generate_daily_report",
         crontab(hour=5, minute=20),
     ),
 }
-
-LEGACY_PERIODIC_AI_SCHEDULES = frozenset(
-    {
-        "macro_ai",
-        "market_ai",
-        "technical_ai",
-        "dispatch_regime_memory",
-        "dispatch_strategy_snapshot",
-        "run_master_score_ai",
-        "dispatch_daily_report",
-    }
-)
-
-if not legacy_periodic_ai_enabled():
-    for schedule_name in LEGACY_PERIODIC_AI_SCHEDULES:
-        celery_app.conf.beat_schedule.pop(schedule_name, None)
-    logger.info("Legacy periodieke AI-taken zijn uitgeschakeld.")
 
 logger.info("🚀 Celery Beat schedule geladen (OPTIMIZED)")
 
@@ -293,7 +238,6 @@ try:
         import backend.celery_task.technical_task
         import backend.celery_task.store_daily_scores_task
         import backend.celery_task.setup_task
-        import backend.celery_task.strategy_task
         import backend.celery_task.trading_bot_task
         import backend.celery_task.regime_memory_task
         import backend.celery_task.portfolio_snapshot_task

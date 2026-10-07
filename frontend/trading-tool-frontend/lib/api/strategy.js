@@ -134,19 +134,11 @@ export const deleteStrategy = async (id) =>
 // =========================================================
 // 5. AI GENERATE (PER SETUP)
 // =========================================================
-export const generateStrategyForSetup = async (setupId) =>
-  await fetchAuth(`/api/strategies/generate/${setupId}`, {
-    method: 'POST',
-  });
 
 //
 // =========================================================
 // 6. BULK GENERATE
 // =========================================================
-export const generateAllStrategies = async () =>
-  await fetchAuth(`/api/strategies/generate_all`, {
-    method: 'POST',
-  });
 
 //
 // =========================================================
@@ -211,10 +203,6 @@ export const fetchTaskStatus = async (taskId) =>
 // =========================================================
 // 13. AI ANALYSE
 // =========================================================
-export const analyzeStrategy = async (strategyId) =>
-  await fetchAuth(`/api/strategies/analyze/${strategyId}`, {
-    method: 'POST',
-  });
 
 //
 // =========================================================

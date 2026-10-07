@@ -6,7 +6,6 @@ from celery import shared_task
 
 from backend.utils.db import get_db_connection
 from backend.utils.scoring_utils import generate_scores_db
-from backend.ai_agents.score_ai_agent import generate_master_score
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -236,31 +235,3 @@ def run_rule_based_daily_scores():
         logger.info("✅ RULE-BASED daily_scores klaar")
     finally:
         _release_rule_based_scores_lease(lease_client)
-
-
-# =========================================================
-# 3️⃣ CELERY TASK: MASTER SCORE AI (ALLE USERS)
-# =========================================================
-@shared_task(
-    name="backend.celery_task.store_daily_scores_task.run_master_score_ai"
-)
-def run_master_score_ai():
-    """
-    Draait de MASTER orchestrator AI.
-
-    Leest:
-      - daily_scores
-      - ai_category_insights (incl. setup)
-
-    Schrijft:
-      - ai_category_insights (category='master')
-    """
-
-    logger.info("🧠 Start MASTER Score AI (alle users)")
-
-    try:
-        generate_master_score()
-        logger.info("✅ MASTER Score AI afgerond")
-    except Exception:
-        logger.error("❌ Fout tijdens MASTER Score AI", exc_info=True)
-        raise

@@ -7,7 +7,6 @@ from backend.utils.technical_interpreter import (
     fetch_technical_value,
     interpret_technical_indicator_db,
 )
-from backend.ai_agents.technical_ai_agent import run_technical_agent
 
 # =====================================================
 # 🪵 Logging
@@ -179,15 +178,3 @@ def fetch_technical_data_day(user_id: int):
 
     logger.info(f"📌 Celery technical ingestie gestart (user_id={user_id})")
     fetch_and_process_technical(user_id)
-
-
-# =====================================================
-# 🤖 Celery Task — TECHNICAL AI AGENT
-# =====================================================
-@shared_task(name="backend.celery_task.technical_task.run_technical_agent_daily")
-def run_technical_agent_daily(user_id: int):
-    if user_id is None:
-        raise ValueError("❌ user_id is verplicht voor technical AI task")
-
-    logger.info(f"🤖 Celery technical AI agent gestart (user_id={user_id})")
-    run_technical_agent(user_id=user_id)

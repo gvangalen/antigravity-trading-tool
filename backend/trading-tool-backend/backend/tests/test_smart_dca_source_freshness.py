@@ -163,7 +163,7 @@ def test_smart_dca_execution_rejects_freshly_stamped_score_with_old_component():
             self.sql = sql
 
         def fetchone(self):
-            return (60, 60, 60)
+            return (60, 60, 60, datetime.now(timezone.utc), {})
 
         def fetchall(self):
             return [("fear_greed_index", old)]
@@ -185,3 +185,39 @@ def test_smart_dca_execution_rejects_freshly_stamped_score_with_old_component():
     assert benchmark_score({"market_score": result["market"], "macro_score": result["macro"],
                             "technical_score": result["technical"]},
                            EQUAL_BENCHMARK_WEIGHTS, result["_source_available"]) is None
+
+
+def test_paper_decision_checks_each_component_against_its_saved_score_evidence(monkeypatch):
+    from backend.ai_agents.trading_bot_agent import _get_daily_scores
+    from backend.services import setup_market_match_sync
+
+    calculated_at = datetime.now(timezone.utc)
+    evidence = {"market": {"price": {"value": 100}}}
+    checked = []
+
+    class Cursor:
+        def execute(self, sql, params):
+            pass
+
+        def fetchone(self):
+            return (80, 70, 60, calculated_at, evidence)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    def check_source(conn, user_id, symbol, category, row):
+        checked.append((user_id, symbol, category, row))
+        return True
+
+    monkeypatch.setattr(setup_market_match_sync, "_fresh", check_source)
+    result = _get_daily_scores(Connection(), 7, calculated_at.date(), "BTC")
+    assert {entry[2] for entry in checked} == {"market", "macro", "technical"}
+    assert all(entry[3] == {"calculated_at": calculated_at, "indicator_evidence": evidence} for entry in checked)
+    assert all(result["_source_available"][f"{category}_score"] for category in ("market", "macro", "technical"))

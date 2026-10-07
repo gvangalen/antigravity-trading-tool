@@ -431,8 +431,8 @@ def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
                                             {"macro": 50, "technical": 50, "market": 70})]}
 
         service._ensure_asset = asset
-        monkeypatch.setattr(execution_module, "SetupMarketMatchService",
-                            lambda _session: SimpleNamespace(for_asset=assessment))
+        monkeypatch.setattr(execution_module, "FinnSharedContextService",
+                            lambda _session: SimpleNamespace(benchmark_for_asset=assessment))
         payload = await service._dispatch_tool(
             tool_name="read_setup_market_matches", user_id=7,
             selector={"asset": "BTC"}, run=SimpleNamespace(), shared_state={},
@@ -450,8 +450,8 @@ def test_finn_match_tool_can_read_all_owned_setup_assets(monkeypatch):
         service.session = object()
         all_assets = AsyncMock(return_value={"symbol": "ALL", "as_of": None,
             "source_status": "per_asset", "matches": []})
-        monkeypatch.setattr(execution_module, "SetupMarketMatchService",
-                            lambda _session: SimpleNamespace(for_all_assets=all_assets))
+        monkeypatch.setattr(execution_module, "FinnSharedContextService",
+                            lambda _session: SimpleNamespace(matches=SimpleNamespace(for_all_assets=all_assets)))
         payload = await service._dispatch_tool(
             tool_name="read_setup_market_matches", user_id=7,
             selector={"asset": None}, run=SimpleNamespace(), shared_state={},

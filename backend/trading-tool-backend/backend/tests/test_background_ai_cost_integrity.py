@@ -1,93 +1,49 @@
-from datetime import date
 from pathlib import Path
 
-from backend.ai_agents.score_ai_agent import fetch_today_insights
-from backend.celery_task.strategy_task import (
-    input_is_unchanged,
-    stable_input_hash,
-)
+from backend.celery_task.celery_app import celery_app
 from backend.services import ai_usage_observability_service as usage
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_strategy_hash_is_stable_and_reuse_decision_is_deterministic():
-    left = {"setup": {"id": 1}, "scores": {"market": 40, "macro": 35}}
-    right = {"scores": {"macro": 35, "market": 40}, "setup": {"id": 1}}
-    current = stable_input_hash(left)
-
-    assert current == stable_input_hash(right)
-    assert input_is_unchanged(current, current) is True
-    assert input_is_unchanged(None, current) is False
-    assert input_is_unchanged(current, stable_input_hash({**left, "setup": {"id": 2}})) is False
+def test_retired_independent_agent_modules_are_absent():
+    retired = (
+        "macro_ai_agent", "market_ai_agent", "technical_ai_agent",
+        "score_ai_agent", "strategy_ai_agent", "report_ai_agent",
+        "weekly_report_agent", "monthly_report_agent", "quarterly_report_agent",
+    )
+    assert all(not (ROOT / "ai_agents" / f"{name}.py").exists() for name in retired)
 
 
 def test_high_frequency_jobs_do_not_invoke_background_ai():
     bot_source = (ROOT / "celery_task" / "trading_bot_task.py").read_text()
     market_source = (ROOT / "celery_task" / "market_task.py").read_text()
     market_ingest = market_source.split("def fetch_market_indicators", 1)[1]
-
     assert "run_daily_strategy_snapshot" not in bot_source
-    assert "run_market_agent(user_id=user_id)" not in market_ingest
-    assert "run_market_agent_daily" in market_source
+    assert "run_market_agent" not in market_ingest
+    assert "run_market_agent_daily" not in market_source
 
 
-def test_strategy_snapshot_reuses_first_ai_response_for_explanation():
-    source = (ROOT / "celery_task" / "strategy_task.py").read_text()
-
-    assert "analyze_strategy.delay(" not in source
-    assert "analysis[\"input_hash\"] = input_hash" in source
-    assert "input_is_unchanged(previous_input_hash, input_hash)" in source
-
-
-class _InsightCursor:
-    def __init__(self):
-        self.params = None
-        self.calls = []
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_args):
-        return False
-
-    def execute(self, query, params):
-        self.calls.append((query, params))
-        self.params = params
-
-    def fetchone(self):
-        category, _user_id, selected_date, symbol, _preferred = self.params
-        return (category, 42, "stable", "neutral", "low", "summary", [], selected_date, symbol)
+def test_bot_uses_saved_strategy_and_measured_match_instead_of_ai_snapshot():
+    source = (ROOT / "ai_agents" / "trading_bot_agent.py").read_text()
+    assert "_get_saved_strategy_plan(" in source
+    assert "snapshot = _get_saved_strategy_plan(" in source
+    assert "snapshot = _get_active_strategy_snapshot(" not in source
 
 
-class _InsightConnection:
-    def __init__(self):
-        self.cursor_instance = _InsightCursor()
-
-    def cursor(self):
-        return self.cursor_instance
-
-
-def test_master_inputs_are_selected_for_requested_asset_without_btc_fallback():
-    conn = _InsightConnection()
-
-    insights = fetch_today_insights(conn, user_id=7, symbol="eth")
-
-    assert set(insights) == {"macro", "market", "technical", "setup", "strategy"}
-    assert all(item[1][3] == "ETH" for item in conn.cursor_instance.calls)
-    assert all("symbol IN (%s, 'GLOBAL')" in item[0] for item in conn.cursor_instance.calls)
-    assert all(value["symbol"] == "ETH" for value in insights.values())
+def test_independent_ai_agent_schedules_are_retired():
+    schedule = celery_app.conf.beat_schedule
+    assert {"macro_ai", "market_ai", "technical_ai", "dispatch_strategy_snapshot",
+            "run_master_score_ai"}.isdisjoint(schedule)
+    assert "dispatch_finn_daily_report" in schedule
+    assert "dispatch_regime_memory" in schedule
 
 
-def test_master_writer_and_reader_share_asset_scoped_contract():
-    agent_source = (ROOT / "ai_agents" / "score_ai_agent.py").read_text()
-    repository_source = (ROOT / "infrastructure" / "repositories" / "score_repository.py").read_text()
-    migration_source = (ROOT / "scripts" / "migrations" / "2026_07_20_asset_scoped_ai_insights.py").read_text()
-
-    assert "ON CONFLICT (user_id, category, symbol, date)" in agent_source
-    assert "AiCategoryInsight.symbol == symbol" in repository_source
-    assert "uq_ai_category_insights_user_category_symbol_date" in migration_source
+def test_deploy_does_not_run_agents_for_a_hardcoded_user():
+    source = (ROOT / "deploy-backend.sh").read_text()
+    assert "UID = 30" not in source
+    assert "from ai_agents." not in source
 
 
 def test_reuse_telemetry_records_zero_cost_and_saved_estimate(monkeypatch):

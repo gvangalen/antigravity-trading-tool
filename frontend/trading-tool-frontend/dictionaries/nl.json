@@ -1263,7 +1263,8 @@
         "technical_indicator": "technische indicator",
         "setup": "setup",
         "strategy": "strategie",
-        "bot": "bot instellen"
+        "bot": "bot instellen",
+        "exchange_connection": "Exchange-koppeling"
       },
       "viewCta": "Bekijk onboarding",
       "missingPrefix": "Ontbreekt",
