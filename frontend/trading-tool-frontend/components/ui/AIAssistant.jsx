@@ -38,6 +38,7 @@ import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFo
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards } from "@/lib/finnProposalCardState.mjs";
+import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -156,8 +157,10 @@ function createAssistantTranslator(t) {
 function buildAssistantUiText(at) {
   return {
     activeBriefing: at("uiText.activeBriefing"),
-    briefingGenerating: at("uiText.briefingGenerating"),
-    briefingFallback: at("uiText.briefingFallback"),
+    briefingSaved: at("uiText.briefingSaved"),
+    briefingUpdating: at("uiText.briefingUpdating"),
+    briefingGeneratingLabel: at("uiText.briefingGeneratingLabel"),
+    briefingPlanSummary: at("uiText.briefingPlanSummary"),
     defensivePosture: at("uiText.defensivePosture"),
     alignedTo: at("uiText.alignedTo"),
     workspaceOverview: at("uiText.workspaceOverview"),
@@ -4280,7 +4283,7 @@ function AIAssistantContent({
         const cached = window.sessionStorage.getItem(requestKey);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (parsed && typeof parsed === "object") {
+          if (parsed && typeof parsed === "object" && canCacheMissionControl(parsed)) {
             setMissionControl((current) => current || parsed);
           }
         }
@@ -4368,12 +4371,14 @@ function AIAssistantContent({
             normalized?.generation_status || normalized?.first_dashboard_context?.generation_status || ""
           ).toLowerCase();
           const isRecoverableFailure = ["failed", "error", "fallback_error"].includes(generationStatus);
-          if (normalized && !isRecoverableFailure && typeof window !== "undefined" && requestKey) {
+          if (normalized && !isRecoverableFailure && canCacheMissionControl(normalized) && typeof window !== "undefined" && requestKey) {
             try {
               window.sessionStorage.setItem(requestKey, JSON.stringify(normalized));
             } catch (err) {
               console.warn("Finn Mission Control cache write failed", err);
             }
+          } else if (normalized?.first_dashboard_context && typeof window !== "undefined" && requestKey) {
+            window.sessionStorage.removeItem(requestKey);
           }
           if (isRecoverableFailure && typeof window !== "undefined" && requestKey) {
             window.sessionStorage.removeItem(requestKey);
@@ -6145,6 +6150,16 @@ function AIAssistantContent({
     "";
   const activeBriefingSymbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
   const firstDashboardContext = missionControl?.first_dashboard_context || null;
+  const firstDashboardPhase = firstBriefingPhase(firstDashboardContext);
+  const firstDashboardPhaseLabel = firstDashboardPhase === "saved"
+    ? uiText.briefingSaved
+    : firstDashboardPhase === "updating"
+    ? uiText.briefingUpdating
+    : firstDashboardPhase === "generating"
+    ? uiText.briefingGeneratingLabel
+    : firstDashboardPhase === "plan_summary"
+    ? uiText.briefingPlanSummary
+    : "";
   const firstDashboardGenerationStatus = String(firstDashboardContext?.generation_status || "").toLowerCase();
   const firstDashboardIsGenerating = ["pending", "queued", "generating", "retry_scheduled", "stale_while_revalidate"].includes(
     firstDashboardGenerationStatus,
@@ -6500,7 +6515,7 @@ function AIAssistantContent({
         )}
         {!isSimpleFinnModal && shouldCondenseMissionControl ? (
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(255,255,255,1)_100%)] dark:bg-[#0f172a] space-y-3 animate-fade-in">
-            {missionControlLoading && !missionControl ? (
+            {!missionControl && (missionControlLoading || (pathname === "/dashboard" && onboardingComplete && !missionControlLoadError)) ? (
               <div className="rounded-[22px] border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/35 px-4 py-4 space-y-3 animate-pulse">
                 <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
                   <Sparkles size={11} className="text-blue-500" />
@@ -6524,6 +6539,11 @@ function AIAssistantContent({
                         <Shield size={12} />
                         {uiText.workspaceSummary}
                       </div>
+                      {firstDashboardPhaseLabel ? (
+                        <p className="mt-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400" aria-live="polite">
+                          {firstDashboardPhaseLabel}
+                        </p>
+                      ) : null}
                       {workspaceGreeting ? (
                         <p className="mt-3 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
                           {workspaceGreeting}
@@ -6822,9 +6842,9 @@ function AIAssistantContent({
                     <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
                       {resolvedBriefingText}
                     </p>
-                    {firstDashboardContext?.response_source?.startsWith("deterministic_fallback") && (
+                    {firstDashboardPhaseLabel && (
                       <p className="mt-2 pl-3 text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                        {firstDashboardIsGenerating ? uiText.briefingGenerating : uiText.briefingFallback}
+                        {firstDashboardPhaseLabel}
                       </p>
                     )}
                   </div>
