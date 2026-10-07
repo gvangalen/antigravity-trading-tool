@@ -97,6 +97,31 @@ def test_indicator_rows_expose_source_period_freshness_and_score_contribution():
     assert rows[2]["data_status"] == "insufficient_data"
     assert rows[2]["score_contribution"]["weighted_points"] is None
 
+
+def test_configured_indicator_pending_status_survives_workspace_projection():
+    service = object.__new__(WorkspaceDataService)
+    service.technical_service = SimpleNamespace(
+        resolve_effective_preferences=AsyncMock(
+            return_value={"rows": [SimpleNamespace(indicator="adx")]}
+        )
+    )
+    service.technical = SimpleNamespace(get_day_data=AsyncMock(return_value=[]))
+
+    raw_rows = asyncio.run(service._technical_rows(7, "BTC", "day"))
+    category = service._category_payload(
+        raw_rows,
+        period="day",
+        threshold=36 * 60 * 60,
+        source="technical_indicators",
+    )
+
+    assert category["rows"][0]["name"] == "adx"
+    assert category["rows"][0]["value"] is None
+    assert category["rows"][0]["score"] is None
+    assert category["rows"][0]["data_status"] == "pending_refresh"
+    assert category["score"]["status"] == "insufficient_data"
+
+
 def test_intelligence_read_returns_insufficient_data_without_running_engine():
     repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=None))
     service = IntelligenceService(repository)
