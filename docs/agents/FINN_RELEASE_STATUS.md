@@ -8,13 +8,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED_LOCAL`. Candidate CI is green; deployment and independent authenticated QA are pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and deployment identity checks passed; authenticated runtime QA is pending. |
 | Goal | Expose each indicator's real source observation moment and the distinct dated source days required by absolute-value score normalizers, without changing score or execution decisions. |
-| Candidate branch | `codex/score-source-evidence`. |
+| Candidate branch | `codex/score-source-evidence`, merged to `main` in `bf453f9d44777f4099e436d29a49d06d46c15243`. |
 | Candidate implementation SHA | `bce8949f94a2c476d14f1c010f498d7a4cfb8d37` |
-| PR | [#98](https://github.com/gvangalen/antigravity-trading-tool/pull/98), draft while release checks complete. |
+| PR | [#98](https://github.com/gvangalen/antigravity-trading-tool/pull/98), merged. |
 | Previous live SHA | `bbccff3675160a6b1414d200aff1e19fc53b6da5`, reported by the user from authenticated QA. |
-| Production SHA | Not deployed. |
+| Production SHA | `bf453f9d44777f4099e436d29a49d06d46c15243`, observed on both public surfaces after Auto Deploy. This status-only update will create a later SHA; QA must bind to the current backend/frontend SHA. |
 | Last updated | 2026-10-07 |
 
 The workspace projection now carries `source_observed_at` from each measured
@@ -40,7 +40,11 @@ with zero provider, schema, parse, validation or timeout failures. The new
 history query also executed against isolated PostgreSQL, and a local workspace
 read completed. PR #98's workflow-validation, backend-tests, security-baseline,
 mobile-quality and frontend-quality checks all completed success for the
-implementation SHA. Build did not access the authenticated QA fixture.
+implementation SHA. [Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37599829650)
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37600049169)
+completed success for merge SHA `bf453f9d44777f4099e436d29a49d06d46c15243`.
+Public backend health and frontend build-info both returned HTTP 200 and that
+SHA on 2026-10-07. Build did not access the authenticated QA fixture.
 
 The next independent QA pass should record the actual source moment and
 historical-day count for the five BTC indicators reported on 2026-10-07. One
