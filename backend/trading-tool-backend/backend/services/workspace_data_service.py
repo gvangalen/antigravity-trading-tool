@@ -208,13 +208,18 @@ def _enrich_indicator_rows(
     for row in rows:
         available = row.get("value") is not None
         scored_row = available and row.get("score") is not None
+        data_status = (
+            "available" if available else
+            "pending_refresh" if row.get("data_status") == "pending_refresh" else
+            "insufficient_data"
+        )
         payload = dict(row)
         payload.update({
             "indicator_key": _indicator_key(row.get("name")),
             "period": period,
             "source": source,
             "freshness": _freshness(row.get("timestamp"), threshold, source),
-            "data_status": "available" if available else "insufficient_data",
+            "data_status": data_status,
             "score_contribution": {
                 "status": "available" if scored_row else "insufficient_data",
                 "basis": "equal_indicator_average",
