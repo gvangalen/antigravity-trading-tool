@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getOnboardingStatus } from "@/lib/api/onboarding";
+import { getCachedOnboardingStatus, getOnboardingStatus } from "@/lib/api/onboarding";
 
 /**
  * 🛡️ AuthGuard
@@ -16,7 +16,9 @@ export default function AuthGuard({ children }) {
   const pathname = usePathname();
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
   const [redirectingToOnboarding, setRedirectingToOnboarding] = useState(false);
-  const onboardingCheckInFlight = useRef(false);
+  const onboardingCheckVersion = useRef(0);
+  const verifiedComplete = useRef(false);
+  const verifiedUserId = useRef(null);
 
   // Routes that don't need auth
   const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/print", "/daily-report"];
@@ -26,16 +28,30 @@ export default function AuthGuard({ children }) {
   };
 
   const checkOnboardingStatus = useCallback(async () => {
-    if (onboardingCheckInFlight.current) return;
+    const checkVersion = ++onboardingCheckVersion.current;
     if (!user || isPublicRoute) {
       setCheckingOnboarding(false);
       return;
     }
 
-    onboardingCheckInFlight.current = true;
-    setCheckingOnboarding(true);
+    // A route transition must not hide an already verified workspace behind
+    // another network status read. The fresh, user-scoped cache is only an
+    // optimistic render; the server response below still enforces redirects.
+    const cached = getCachedOnboardingStatus(30_000);
+    const cachedComplete = cached?.onboarding_complete === true || cached?.phases_completed?.complete === true;
+    const cachedNextPath = cached?.next_route
+      ? new URL(cached.next_route, window.location.origin).pathname
+      : null;
+    const cachedAllowsCurrentStep = Boolean(cachedNextPath && cachedNextPath === pathname);
+    const canRenderWhileChecking = (
+      (verifiedComplete.current && verifiedUserId.current === user.id)
+      || cachedComplete || cachedAllowsCurrentStep
+    );
+    setCheckingOnboarding(!canRenderWhileChecking);
+    if (canRenderWhileChecking) setRedirectingToOnboarding(false);
     try {
       const status = await getOnboardingStatus();
+      if (checkVersion !== onboardingCheckVersion.current) return;
       
       const isComplete = status?.onboarding_complete ?? status?.phases_completed?.complete ?? (
         status?.has_profile &&
@@ -47,6 +63,8 @@ export default function AuthGuard({ children }) {
         status?.has_strategy &&
         status?.has_bot
       );
+      verifiedComplete.current = Boolean(isComplete);
+      verifiedUserId.current = user.id;
 
       const nextRoute = status?.next_route || "/onboarding/profile";
       const nextUrl = new URL(nextRoute, window.location.origin);
@@ -80,10 +98,13 @@ export default function AuthGuard({ children }) {
       setRedirectingToOnboarding(false);
 
     } catch (err) {
-      console.error("💥 AuthGuard: Onboarding check gefaald", err);
+      if (checkVersion === onboardingCheckVersion.current) {
+        console.error("💥 AuthGuard: Onboarding check gefaald", err);
+      }
     } finally {
-      onboardingCheckInFlight.current = false;
-      setCheckingOnboarding(false);
+      if (checkVersion === onboardingCheckVersion.current) {
+        setCheckingOnboarding(false);
+      }
     }
   }, [user, isPublicRoute, pathname, router]);
 

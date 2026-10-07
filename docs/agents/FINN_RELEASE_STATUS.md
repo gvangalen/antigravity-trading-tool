@@ -8,6 +8,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `CANDIDATE_READY`. Required local gates passed; candidate CI and deployment have not yet run. |
+| Goal | Recover a first FINN Today AI briefing after a transient worker/provider failure, and prevent a slow onboarding-status refresh from blanking Automation on route transitions. |
+| Candidate branch | `codex/first-briefing-automation-fix` (candidate branch). |
+| Previous live SHA | `8e150bdfa63202244d8702688dfa32715be3cae7`, independently tested on a fresh QA account. |
+| Last updated | 2026-10-07 |
+
+Independent QA confirmed that the DCA onboarding data, Paper bot and 4/4 completion persisted on the previous live SHA. The first FINN Today card stayed on deterministic fallback copy after refresh and relogin; the exact live `response_source` and `last_error_code` were not captured. Automation also showed a dark spinner for more than 20 seconds on first transition. These are QA observations, not a proven production worker trace.
+
+Code investigation found three concrete retry defects: the separate retry scheduler could mark a job `retry_scheduled` before its enqueue task skipped it as already in flight; the dashboard stopped polling while fallback waited for a retry; and the shared OpenAI client allowed only one scheduled call per hour, independently of the briefing service's former second limiter. The repair uses one version-scoped client limiter with three bounded attempts and one queue path for due retries. In an isolated local PostgreSQL/Redis/FastAPI/Celery runtime, a previously stuck `retry_scheduled` record with `ai_rate_limited` advanced to `queued` and then `ready` with `response_source=ai_generated` on worker attempt two. A second controlled worker probe pre-consumed a call slot in the same hour and still reached `ready` on attempt two. Mission Control read it back as `cached_ai`. A direct synthetic Saturday-DCA prompt to `gpt-6-luna` with reasoning `none` returned a valid Dutch briefing. The exact cause of the QA account's production fallback remains unproven without its trace.
+
+The Automation spinner is rendered by `AuthGuard` while it awaits `/api/onboarding/status` at each protected route transition. A recent user-scoped status or a verified completed account now permits the current page to render while the authoritative server check continues; stale in-flight checks cannot redirect a later navigation. Independent browser QA must verify the effect on the first Automation transition.
+
+Local backend tests: **3169 passed, 3 skipped**; `.local-finn-parity-artifacts/first-briefing-retry-pytest-final.log` SHA-256 `8f4f54d48258f96ff086d192ba61e0b983b8c4f9758683057ec079fca565deb0`. Focused first-dashboard and call-capacity tests passed. Frontend build, typecheck, i18n lint/tests, command/proposal/setup tests, onboarding handoff tests and high-severity dependency audit passed. The final isolated prefork Celery/Responses action matrix passed **16/16**, zero broker orders and live-trading calls; `.local-finn-parity-artifacts/first-briefing-retry-action-matrix-final.json` SHA-256 `2cf58c1ea347f0f7ace67c1123a43d44990c3eb9b137d21e820de7c3d1cd9735`. Real-provider selector development passed **18/18** with no provider/schema/parse/validation/timeout failures; SHA-256 `f649fcad794a5a44a47705f9d5d090adcda807739bb45df87771291b18db11f5`. The initial concurrent action matrix was **15/16** and two host-based selector regression runs ended **108/109** and **107/109** because of provider timeouts; they are recorded as red. The final 109-case Linux-runtime regression passed **109/109**, with zero provider, schema, parse, validation or timeout failures; `.local-finn-parity-artifacts/first-briefing-retry-selector-regression-linux.json` SHA-256 `b14291ce526efbf2ca2154db7983401e55c8d9b385585d4f69edbc75c336fccb`. The host-only timeout runs remain recorded as red diagnostics; the local parity-runtime release gate is green. Candidate CI, Auto Deploy, and public SHA checks are pending.
+
+## Previous Release (fresh onboarding DCA)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and deployment identity checks passed; independent authenticated browser QA has not run. |
 | Goal | Repair fresh-user DCA onboarding and the first FINN Today briefing: save the schedule, read the saved plan and trader context, finish the background briefing, and keep optional source failures from aborting Mission Control. |
 | Candidate branch | `codex/onboarding-dca-today-context`, merged to `main` in `9e34dbda017c0c7313135c47ba3f4b651a584881`. |

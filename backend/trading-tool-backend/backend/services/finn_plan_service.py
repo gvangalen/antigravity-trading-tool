@@ -31,7 +31,7 @@ from backend.infrastructure.models import OnboardingStep
 from backend.domain.indicator_display import indicator_display_name
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
-from backend.services.ai_availability_service import acquire_ai_call_slot, get_ai_availability
+from backend.services.ai_availability_service import get_ai_availability
 from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot, log_background_ai_skip
 from backend.services.bot_service import BotService
 from backend.services.finn_action_policy_service import FinnActionPolicyService
@@ -13059,7 +13059,9 @@ class FinnPlanService:
             }
 
         active_statuses = {"pending", "queued", "generating", "retry_scheduled"}
-        if stored_version == current_version and stored_status in active_statuses and not self._first_dashboard_generation_stale(stored):
+        if stored_version == current_version and stored_status in active_statuses and not (
+            stored_status == "retry_scheduled" and retry_due
+        ) and not self._first_dashboard_generation_stale(stored):
             return {
                 "status": "inflight",
                 "context_version": current_version,
@@ -13249,18 +13251,6 @@ class FinnPlanService:
             )
 
         scope = f"first_dashboard:{user_id}:{current_version}"
-        if not acquire_ai_call_slot(scope, scheduled=True):
-            return await self._finalize_first_dashboard_briefing_fallback(
-                user_id,
-                payload,
-                state,
-                error="ai_rate_limited",
-                trigger=trigger,
-                task_id=task_id,
-                attempt=attempt_count,
-                owner_task_id=owner_task_id,
-            )
-
         ai_result: Dict[str, Any]
         try:
             with ai_usage_context(
@@ -13270,6 +13260,7 @@ class FinnPlanService:
                 request_source="background_job",
                 run_kind="scheduled",
                 entry_point=FIRST_DASHBOARD_BRIEFING_ENTRY_POINT,
+                rate_limit_scope=scope,
                 symbol=asset,
             ):
                 ai_result = await asyncio.to_thread(
@@ -13362,9 +13353,9 @@ class FinnPlanService:
             if await self._recover_stale_first_dashboard_state_if_needed(user_id, payload, stored_state):
                 stored_state = await self._load_first_dashboard_briefing_state(user_id)
                 stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
-            await self.maybe_schedule_first_dashboard_retry(user_id, stored_briefing)
-            stored_state = await self._load_first_dashboard_briefing_state(user_id)
-            stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
+            # The ordinary queue path owns retries. A second scheduler first
+            # marked the state active, then its enqueue task treated that same
+            # state as in-flight and never dispatched the generation task.
         if await self._queue_first_dashboard_briefing_if_needed(user_id, payload, stored_state):
             stored_state = await self._load_first_dashboard_briefing_state(user_id)
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
@@ -13431,7 +13422,9 @@ class FinnPlanService:
 
         if stored_version == current_version and stored_status == "ready":
             return False
-        if stored_version == current_version and stored_status in {"pending", "queued", "generating", "retry_scheduled"} and not self._first_dashboard_generation_stale(stored_briefing):
+        if stored_version == current_version and stored_status in {"pending", "queued", "generating", "retry_scheduled"} and not (
+            stored_status == "retry_scheduled" and self._first_dashboard_retry_due(stored_briefing)
+        ) and not self._first_dashboard_generation_stale(stored_briefing):
             return False
         if stored_version == current_version and stored_status == "fallback" and not self._first_dashboard_retry_due(stored_briefing):
             return False
@@ -13819,7 +13812,7 @@ class FinnPlanService:
                 "trace": self._first_dashboard_trace_payload(stored_briefing),
             }
         if stored_version == current_version and stored_status == "fallback":
-            if self._first_dashboard_retry_due(stored_briefing):
+            if bool(stored_briefing.get("retryable")) and int(stored_briefing.get("retry_count") or 0) < FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS and stored_briefing.get("next_retry_at"):
                 return {
                     "briefing": payload.get("fallback_result") or {},
                     "response_source": "deterministic_fallback_while_generating",
@@ -14147,52 +14140,6 @@ class FinnPlanService:
             "error": error_code,
             "task_id": task_id or previous.get("task_id"),
         }
-
-    async def maybe_schedule_first_dashboard_retry(
-        self,
-        user_id: int,
-        stored_briefing: Dict[str, Any],
-    ) -> bool:
-        if not self.session:
-            return False
-        if not self._first_dashboard_retry_due(stored_briefing):
-            return False
-        step = await self._get_first_dashboard_storage_step(user_id)
-        if not step:
-            return False
-        state = self._normalize_first_dashboard_state(step.step_metadata)
-        current = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
-        if str(current.get("status") or "").lower() in {"pending", "queued", "retry_scheduled", "generating"}:
-            return False
-        await self._transition_first_dashboard_briefing_state(
-            user_id,
-            state,
-            status="retry_scheduled",
-            payload={
-                "asset": current.get("asset") or "BTC",
-                "context_version": current.get("context_version"),
-                "input_snapshot": current.get("input_snapshot") or {},
-                "fallback_result": current.get("fallback_result") or current.get("result") or {},
-            },
-            trigger="retry_scheduler",
-            task_id=current.get("task_id"),
-            attempt_count=int(current.get("attempt_count") or 1),
-            response_source="briefing_generating",
-            owner_task_id=current.get("owner_task_id"),
-            queue_name=current.get("queue"),
-            routing_rule=current.get("routing_rule"),
-            error_code=current.get("last_error_code"),
-            retry_count=int(current.get("retry_count") or 0),
-            retryable=bool(current.get("retryable")),
-            next_retry_at=current.get("next_retry_at"),
-        )
-        try:
-            from backend.celery_task.onboarding_task import enqueue_first_dashboard_briefing
-
-            enqueue_first_dashboard_briefing.delay(user_id, trigger="retry_scheduler")
-        except Exception:
-            return False
-        return True
 
     async def _load_first_dashboard_briefing_state(self, user_id: int) -> Dict[str, Any]:
         step = await self._get_first_dashboard_storage_step(user_id)

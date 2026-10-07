@@ -55,3 +55,27 @@ def test_responses_and_verifier_share_bounded_owner_scoped_capacity(monkeypatch)
         (f"finn_v2_responses:{user_id}:GLOBAL", {"scheduled": False, "limit_override": 120})
         for user_id in (388, 388, 389, 389)
     ]
+
+
+def test_first_dashboard_worker_gets_three_attempts_in_the_same_window(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        openai_client,
+        "acquire_ai_call_slot",
+        lambda scope, **kwargs: captured.append((scope, kwargs)) or True,
+    )
+
+    with ai_usage_context(
+        entry_point="onboarding_task:first_dashboard_briefing",
+        user_id=388,
+        symbol="BTC",
+        run_kind="scheduled",
+        rate_limit_scope="first_dashboard:388:ctx-v1",
+    ):
+        assert openai_client._rate_limit_allows_call() is True
+        assert openai_client._rate_limit_allows_call() is True
+
+    assert captured == [
+        ("first_dashboard:388:ctx-v1", {"scheduled": True, "limit_override": 3}),
+        ("first_dashboard:388:ctx-v1", {"scheduled": True, "limit_override": 3}),
+    ]
