@@ -33,6 +33,10 @@
     "evening": "Good evening"
   },
   "finnWorkspace": {
+    "onboardingHeader": {
+      "eyebrow": "Guided onboarding",
+      "flowLabel": "Analysis → My Plan → Automation"
+    },
     "canvasEyebrow": "Workspace",
     "defaultDescription": "Work in this flow with the active FINN briefing directly above it.",
     "activeStatus": "Active",
@@ -393,7 +397,8 @@
       "lightMode": "Light mode",
       "darkMode": "Dark mode",
       "signingOut": "Signing out...",
-      "signOut": "Sign out"
+      "signOut": "Sign out",
+      "logoutFailed": "Sign out failed. Your session is still active. Please try again."
     },
     "notificationsToggle": {
       "notifications": "Notifications",
@@ -952,7 +957,15 @@
       "dcaMonthly": "Monthly",
       "dcaWeekdayLabel": "Weekday",
       "dcaMonthDayLabel": "Day of month (1–28)",
-      "dcaWeekdays": {"monday": "Monday", "tuesday": "Tuesday", "wednesday": "Wednesday", "thursday": "Thursday", "friday": "Friday", "saturday": "Saturday", "sunday": "Sunday"},
+      "dcaWeekdays": {
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
+      },
       "setupSave": "Save setup",
       "setupSaving": "Saving setup…",
       "setupValidationError": "Complete the setup fields first.",
@@ -1028,7 +1041,8 @@
       "adminDescription": "System settings for AI and monitoring",
       "logoutTitle": "Sign out safely",
       "logoutDescription": "End your current session",
-      "logoutSuccess": "You have been signed out safely ✔"
+      "logoutSuccess": "You have been signed out safely ✔",
+      "logoutFailed": "Sign out failed. Your session is still active. Please try again."
     },
     "banner": {
       "completeLabel": "Step completed",
@@ -1258,6 +1272,23 @@
         "setup": "You are inside My Plan. Create one simple setup for the same asset so your analysis turns into explicit trading conditions.",
         "strategy": "You are still inside My Plan. Create one strategy for that setup so entries, invalidation, and risk become a real execution plan.",
         "bot": "You are inside Automation. Create one bot for the same plan and keep it safe with paper or paused mode unless you deliberately want live execution."
+      },
+      "progressLabel": "Progress",
+      "nextTaskLabel": "Do this now",
+      "phaseReady": "This phase is saved. You can continue to the next guided step.",
+      "phaseDone": "Saved",
+      "phaseCurrent": "Current step",
+      "phaseOpen": "Available",
+      "phaseLocked": "Locked",
+      "stepLabels": {
+        "profile_preferences": "profile preferences",
+        "asset": "choose an asset",
+        "market_indicator": "market indicator",
+        "macro_indicator": "macro indicator",
+        "technical_indicator": "technical indicator",
+        "setup": "setup",
+        "strategy": "strategy",
+        "bot": "configure bot"
       }
     }
   },
@@ -2012,7 +2043,18 @@
       "autoAdvanceStoppedHint": "Auto-continue stopped. You can review bot settings here or finish manually later.",
       "assistantCta": "Ask Finn for bot help",
       "secondaryCta": "Back to onboarding",
-      "assistantPrompt": "Help me finish the automation onboarding step for my chosen asset. Tell me which strategy to link, which mode to start with, what budget is safe, and what I should click next to save one valid bot."
+      "assistantPrompt": "Help me finish the automation onboarding step for my chosen asset. Tell me which strategy to link, which mode to start with, what budget is safe, and what I should click next to save one valid bot.",
+      "stepNumber": "Automation · 4 of 4",
+      "assetLabel": "Asset",
+      "strategyLabel": "Strategy",
+      "botLabel": "Bot",
+      "createStepTitle": "1. Create bot",
+      "createStepSubtitle": "Open bot creation and keep the first bot simple.",
+      "linkStepTitle": "2. Link strategy",
+      "linkStepSubtitle": "Use the strategy you just created for the same asset.",
+      "reviewStepTitle": "3. Review",
+      "reviewStepSubtitle": "Check mode and budget before you finish onboarding.",
+      "continuingLabel": "Finishing onboarding…"
     },
     "newBotLabel": "New bot",
     "modeLive": "Live",
@@ -2112,7 +2154,15 @@
       "scheduleDaily": "daily",
       "scheduleWeekly": "every {day}",
       "scheduleMonthly": "monthly on day {day}",
-      "scheduleWeekdays": {"monday": "Monday", "tuesday": "Tuesday", "wednesday": "Wednesday", "thursday": "Thursday", "friday": "Friday", "saturday": "Saturday", "sunday": "Sunday"},
+      "scheduleWeekdays": {
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
+      },
       "minOrderHelp": "The smallest amount one order is allowed to use.",
       "maxOrderHelp": "The largest amount a single order is allowed to use.",
       "simpleCycleBudgetLabel": "Spend per {timeframe} buy moment",

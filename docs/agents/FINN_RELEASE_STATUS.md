@@ -8,7 +8,29 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated browser QA is pending. |
+| Phase | `BUILD_VALIDATED`; local gates passed. Candidate CI, deployment, and independent authenticated QA are pending. |
+| Goal | Finish the new-user onboarding handoff by making logout a verified server operation and completing locale-specific onboarding copy in Dutch, English, and German. |
+| Candidate branch | `codex/onboarding-logout-i18n`. |
+| Candidate implementation SHA | Pending candidate commit. |
+| Production SHA | Pending deployment. |
+| Previous live SHA | `db60d6ea2996a6a835d01eb3dfe92df63163e5e3`, independently tested with a new account. |
+| Last updated | 2026-10-07 |
+
+Independent QA on the previous live SHA confirmed a temporary-to-saved FINN Today briefing transition in about 15 seconds, a factually personal stored briefing, and identical final text after a hard refresh. The QA account's ETH monthly day-5 DCA setup, €120 strategy and Paper bot persisted, and onboarding reached 4/4. Logout did not hold in the browser: the same account returned after refresh without a new password, so the saved briefing was not checked after a genuine relogin. Dutch onboarding still displayed “Launch protocol”, “Profile”, “analysis-basis” and “Create bot”. The QA observation does not reveal the logout HTTP status or cookie trace.
+
+Code inspection found that both logout buttons always displayed success and navigated to login, even if the logout request failed. The AuthProvider also erased local state before checking the server response. A surviving HttpOnly auth cookie could therefore restore the same account on refresh. This batch sends logout before clearing local state, bootstraps the existing CSRF cookie when needed, and checks that a fresh `/auth/me` request returns 401 before claiming browser logout. A failed request or surviving cookie leaves the visible session in place with localized failure feedback. The provider also aborts and versions in-flight session checks so an earlier response cannot rehydrate the user after verified logout. Native logout passes its refresh token for revocation. No backend cookie contract was changed, and the exact production failure cause remains unproven without its HTTP trace.
+
+The Dutch onboarding dictionary now covers the reported English labels and related profile, analysis, plan and bot copy. Previously missing bot-step and banner keys were added for all three supported locales, so the screens do not need their English fallback strings for those labels. Locale switching still uses the existing immediate `setLocale`/dictionary path.
+
+Measured local evidence: root pytest **3173 passed, 3 skipped**, final log SHA-256 `a4cf77c0edd6eb8ff0e8258e5ff4b0bab9e9182189ceb985e747d811bd948524`; final frontend build, typecheck, i18n lint/tests, command/proposal tests, focused logout/locale tests, and canonical `audit:high` passed, final build log SHA-256 `6f5ae978c73139bd15f2b8331b20ac6b1f54129d88f863f98c74e96b0a6f98ab`. Isolated PostgreSQL/Redis/API/Celery action-contract matrix passed **16/16**, zero broker orders, live calls or production connections; artifact SHA-256 `2efdeb55c17de20ad8e0db1891c404a56e850c2968a8b8dfb4e995165f8eeda1`. With two separate synthetic accounts on that local API, login and `/me` returned 200, a valid-CSRF logout changed `/me` to 401, and a missing-CSRF logout returned 403 while `/me` stayed 200; a later valid logout cleared that session. Real-provider selector development passed **18/18**, zero provider/schema/parse/validation failures, artifact SHA-256 `7acb05e944824fb83e15e428aef08ebfc71fb4a3f583e77ce57bc20c7da59cdf`. Full regression passed **109/109** with zero provider/schema/parse/validation failures, artifact SHA-256 `78d7db0dfb1d174455b4a2acf1d123ed953d15ec9483af675dc142256265c982`. Build did not access the protected QA fixture or sealed holdout.
+
+Independent QA should sign out from both the avatar menu and profile on a new account, confirm the login page remains logged out after hard refresh and protected navigation, then genuinely log back in and compare the saved FINN Today text. In Dutch, inspect the onboarding shell, analysis, plan, bot and completion screens for untranslated copy; switch to English and German and verify the same labels update immediately. A deliberately failed logout must show an error without falsely reporting success. No live trade is part of this handoff.
+
+## Previous Release (first FINN Today briefing stability)
+
+| Field | Value |
+| --- | --- |
+| Phase | `PARTIALLY_ACCEPTED`; independent new-account QA confirmed the temporary-to-saved briefing transition and hard-refresh stability, but could not finish a genuine relogin because logout did not hold. Onboarding copy also remained partly English. |
 | Goal | Make the first FINN Today briefing source and generation phase visible on compact and full cards, prevent a stale browser copy from appearing on refresh, and finish the reported Dutch onboarding labels. |
 | Candidate branch | `codex/first-briefing-stability`. |
 | Candidate implementation SHA | `a531bb98` in [PR #108](https://github.com/gvangalen/antigravity-trading-tool/pull/108), merged. |

@@ -20,7 +20,6 @@ import {
 } from "@/lib/traderProfileOptions";
 import { Mail, Shield, ArrowUpRight, Loader2, Sparkles, Pencil, Save, Languages, Check, Brain, LogOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
 
 function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
@@ -57,7 +56,6 @@ export default function ProfilePage() {
   const { t, locale, setLocale, supportedLocales } = useTranslation();
   const { user, logout } = useAuth();
   const { showSnackbar } = useModal();
-  const router = useRouter();
   const [loadingLogout, setLoadingLogout] = useState(false);
   const [loadingPreferences, setLoadingPreferences] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -84,9 +82,17 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     setLoadingLogout(true);
-    await logout();
-    showSnackbar(t?.traderProfile?.profilePage?.logoutSuccess, "success");
-    router.push("/login");
+    try {
+      const result = await logout();
+      if (!result?.success) {
+        showSnackbar(t?.traderProfile?.profilePage?.logoutFailed, "danger");
+        return;
+      }
+      showSnackbar(t?.traderProfile?.profilePage?.logoutSuccess, "success");
+      window.location.replace("/login");
+    } finally {
+      setLoadingLogout(false);
+    }
   };
 
   const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email;

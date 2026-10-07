@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -17,7 +16,6 @@ export default function AvatarMenu() {
   const [loadingLogout, setLoadingLogout] = useState(false);
   const dropdownRef = useRef(null);
 
-  const router = useRouter();
   const { logout, user } = useAuth();
   const { showSnackbar } = useModal();
   
@@ -71,12 +69,17 @@ export default function AvatarMenu() {
   const handleLogout = async () => {
     setLoadingLogout(true);
     setShowDropdown(false);
-
-    await logout();
-
-    showSnackbar(menuText.loggedOut, "success");
-
-    window.location.href = "/login";
+    try {
+      const result = await logout();
+      if (!result?.success) {
+        showSnackbar(menuText.logoutFailed, "danger");
+        return;
+      }
+      showSnackbar(menuText.loggedOut, "success");
+      window.location.replace("/login");
+    } finally {
+      setLoadingLogout(false);
+    }
   };
 
   return (
