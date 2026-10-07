@@ -8,9 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_READY`. Local gates passed; candidate CI and deployment have not run. Independent authenticated QA is pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and deployment identity passed; independent authenticated QA is pending. |
 | Goal | Keep Automation visible after a saved strategy during onboarding, schedule first FINN Today retries without a browser read, and identify temporary plan copy as temporary. |
 | Candidate branch | `codex/first-briefing-onboarding-followup`. |
+| Candidate implementation SHA | `c01fcce911aabe21a45cf8d7bc09f2959974c74f` (with the evidence correction in `0ef9b6162a5baf5b02cfd007241876581ebb53a4`). |
+| PR | [#104](https://github.com/gvangalen/antigravity-trading-tool/pull/104), merged. |
+| Production SHA | `ba247bb2dfdf26b808a98e71b4800fadfa6f83ff`, observed on both public surfaces after Auto Deploy. This status-only update creates a later SHA; QA must bind to the current backend/frontend SHA. |
 | Previous live SHA | `e9c0db94671faf513f63ed21ce1783995741339a`, independently tested on a fresh account and not accepted for Automation or first AI briefing. |
 | Last updated | 2026-10-07 |
 
@@ -19,6 +22,8 @@ The independent browser test observed Automation briefly before a 37-second dark
 `AuthGuard` previously redirected `/bot` while onboarding was incomplete even after a strategy had unlocked Automation. It now permits the saved-strategy Automation route through the authoritative status check and its short-lived user-scoped cache. The first-dashboard worker now schedules a delayed retry through the existing enqueue path after a retryable fallback; a dashboard read is no longer required to initiate that retry. An unparseable provider JSON response is classified as retryable. FINN Today labels deterministic plan copy as temporary while generation/retry is active and identifies terminal fallback as a plan summary. The fallback remains safe and does not imply an AI-generated briefing.
 
 Measured local evidence: root pytest **3171 passed, 3 skipped**; `.local-finn-parity-artifacts/first-briefing-followup-pytest-final.log` SHA-256 `06b55e849f32c45669e0d8c7f65244f5e68c0c26910e50f4870fae15b18bd9ce`. Frontend build, typecheck, i18n lint/tests, command/proposal/onboarding tests and high-severity dependency audit passed; frontend build log SHA-256 `65db30c5a2ca3ea5449644c57e3526f17135b42b34198a75183895f4b7578aaa`. The isolated local API/Celery/Responses safe-action matrix passed **16/16**, with zero broker orders or live trading calls; `.local-finn-parity-artifacts/first-briefing-followup-action-matrix-full.json` SHA-256 `e5457c201b88f6fe47450da44a02d5c3b0a70a9650c739abf3a0b757ca7c473f`. Real-provider selector development passed **18/18** (SHA-256 `ef502054623da8c9004a4c1120a0d7260da4dbfc39f3ef7d781cad46de7b89cd`) and regression **109/109** (SHA-256 `1cd512d0c0f585ced39f7e86ea29a9a290f567c666cc4dcded54230c52ce315f`), with zero provider, schema, parse, validation or timeout failures. The older `finn-local.sh matrix` runner was also attempted but failed because its legacy orchestrator snapshot join found no row on the current `visible_runtime` path; this run is recorded as a runner mismatch, not counted green. The current full action-contract runner is the 16/16 evidence above. The scheduled-retry behavior is covered by a targeted Celery task test; a real production retry on the QA account remains unverified.
+
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37648424412) and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37648696393) passed all five jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37648918825) succeeded for `ba247bb2dfdf26b808a98e71b4800fadfa6f83ff`. Public backend health and frontend build-info both returned HTTP 200 and that SHA on 2026-10-07. Build did not access the authenticated QA fixture. Independent QA must test a new account's first Automation transition and FINN Today card, including the displayed source/status label and the delayed retry after its due time; matching text alone is not proof of a provider or queue failure.
 
 ## Previous Release (first briefing retry)
 
