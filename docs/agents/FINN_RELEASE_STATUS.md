@@ -14,7 +14,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 | Previous live SHA | `e9c0db94671faf513f63ed21ce1783995741339a`, independently tested on a fresh account and not accepted for Automation or first AI briefing. |
 | Last updated | 2026-10-07 |
 
-The independent browser test observed Automation briefly before a 37-second dark loading state; refresh recovered it. FINN Today showed the exact deterministic DCA fallback after approximately six seconds and did not visibly change during 45 seconds, refresh or relogin. The live `response_source`, `generation_status` and `trace.last_error_code` were not captured, so the production provider or queue failure cannot be named. The first retry window in this code is 60 seconds; the 45-second observation alone cannot verify that retry.
+The independent browser test observed Automation briefly before a 37-second dark loading state; refresh recovered it. FINN Today showed text that exactly matches the deterministic DCA template after approximately six seconds and did not visibly change during 45 seconds, refresh or relogin. The response source itself was not observed. The live `response_source`, `generation_status` and `trace.last_error_code` were not captured, so the production provider or queue failure cannot be named. The first retry window in this code is 60 seconds; the 45-second observation alone cannot verify that retry.
 
 `AuthGuard` previously redirected `/bot` while onboarding was incomplete even after a strategy had unlocked Automation. It now permits the saved-strategy Automation route through the authoritative status check and its short-lived user-scoped cache. The first-dashboard worker now schedules a delayed retry through the existing enqueue path after a retryable fallback; a dashboard read is no longer required to initiate that retry. An unparseable provider JSON response is classified as retryable. FINN Today labels deterministic plan copy as temporary while generation/retry is active and identifies terminal fallback as a plan summary. The fallback remains safe and does not imply an AI-generated briefing.
 
@@ -24,7 +24,7 @@ Measured local evidence: root pytest **3171 passed, 3 skipped**; `.local-finn-pa
 
 | Field | Value |
 | --- | --- |
-| Phase | `QA_NOT_ACCEPTED`. Build gates and deployment identity passed; fresh-account QA on production SHA `e9c0db94671faf513f63ed21ce1783995741339a` reproduced the Automation loading state and deterministic FINN Today card. |
+| Phase | `QA_NOT_ACCEPTED`. Build gates and deployment identity passed; fresh-account QA on production SHA `e9c0db94671faf513f63ed21ce1783995741339a` reproduced the Automation loading state and a FINN Today card matching the deterministic DCA template; the response source was not observed. |
 | Goal | Recover a first FINN Today AI briefing after a transient worker/provider failure, and prevent a slow onboarding-status refresh from blanking Automation on route transitions. |
 | Candidate branch | `codex/first-briefing-automation-fix`, merged to `main` in `ced224a3c5f04d07345c1e27125eff2019f0ad3b`. |
 | Candidate implementation SHA | `2a565e8a2f8a7da53ed70b7848e9d92fe7b45b16`. |
