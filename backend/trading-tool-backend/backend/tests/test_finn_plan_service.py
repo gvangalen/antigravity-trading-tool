@@ -467,7 +467,6 @@ def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
     monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
     monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
     monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
-    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
     monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
     def fake_ask_gpt_json(**kwargs):
         provider_calls.append(kwargs)
@@ -518,7 +517,6 @@ def test_queued_first_dashboard_worker_claims_its_own_task(monkeypatch):
     monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
     monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
     monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
-    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
     monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
     monkeypatch.setattr(finn_plan_module, "ask_gpt_json", lambda **kwargs: {
         "assessment": "Controleer je eigen BTC-plan voordat je handelt.",
@@ -615,7 +613,6 @@ def test_generate_first_dashboard_briefing_retries_transient_fallback_when_due(m
     monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
     monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
     monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
-    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
     monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
     monkeypatch.setattr(
         finn_plan_module,
@@ -657,6 +654,107 @@ def test_generate_first_dashboard_briefing_deduplicates_inflight_same_version(mo
 
     assert result["status"] == "inflight"
     assert result["response_source"] == "briefing_generating"
+
+
+def test_due_retry_scheduled_state_dispatches_generation(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    state = {
+        "first_dashboard_briefing": {
+            "status": "retry_scheduled",
+            "context_version": "ctx-v1",
+            "retryable": True,
+            "retry_count": 1,
+            "attempt_count": 1,
+            "next_retry_at": "2026-08-14T00:00:00+00:00",
+            "updated_at": finn_plan_module._utc_now().isoformat(),
+        }
+    }
+
+    async def fake_store(_user_id, next_state):
+        state.clear()
+        state.update(next_state)
+
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(
+        service, "_dispatch_first_dashboard_briefing_task",
+        lambda _user_id, **kwargs: {"task_id": kwargs["task_id"], "queue": "ai_generation"},
+    )
+
+    result = asyncio.run(service._enqueue_first_dashboard_briefing_from_payload(
+        7, _first_dashboard_payload("ctx-v1"), state,
+        trigger="mission_control_read", owner_task_id=None,
+    ))
+
+    assert result["status"] == "queued"
+    assert result["attempt"] == 2
+    assert state["first_dashboard_briefing"]["status"] == "queued"
+
+
+def test_retryable_fallback_keeps_briefing_polling_until_retry_is_due():
+    service = _service()
+    payload = _first_dashboard_payload("ctx-v1")
+    display = service._resolve_first_dashboard_briefing_display(payload, {
+        "status": "fallback",
+        "context_version": "ctx-v1",
+        "retryable": True,
+        "retry_count": 1,
+        "next_retry_at": "2999-01-01T00:00:00+00:00",
+    })
+
+    assert display["generation_status"] == "retry_scheduled"
+    assert display["response_source"] == "deterministic_fallback_while_generating"
+
+
+def test_first_dashboard_transient_provider_failure_recovers_on_second_worker_attempt(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    payload = _first_dashboard_payload("ctx-v1")
+    state = {}
+    provider_attempts = 0
+
+    async def fake_store(_user_id, next_state):
+        state.clear()
+        state.update(next_state)
+
+    def fake_provider(**_kwargs):
+        nonlocal provider_attempts
+        provider_attempts += 1
+        if provider_attempts == 1:
+            return {"error": "timeout"}
+        return {
+            "assessment": "Forceer nog geen BTC-entry.",
+            "reasoning": "De huidige bevestiging steunt alleen op technische signalen.",
+            "recommended_action": "Wacht op een verse snapshot en controleer je voorwaarden.",
+            "data_limitation": "Actuele macrobevestiging ontbreekt nog.",
+            "evidence_refs": ["asset.symbol", "indicators.macro"],
+        }
+
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(service, "_dispatch_first_dashboard_briefing_task", lambda _user_id, **kwargs: {
+        "task_id": kwargs["task_id"], "queue": "ai_generation",
+    })
+    monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda _user_id: "local@example.com")
+    monkeypatch.setattr(finn_plan_module, "ask_gpt_json", fake_provider)
+
+    first = asyncio.run(service._generate_and_store_first_dashboard_briefing_from_payload(
+        7, payload, state, trigger="onboarding_completed", allow_stale_takeover=False,
+    ))
+    assert first["status"] == "fallback"
+    state["first_dashboard_briefing"]["next_retry_at"] = "2026-08-14T00:00:00+00:00"
+
+    queued = asyncio.run(service._enqueue_first_dashboard_briefing_from_payload(
+        7, payload, state, trigger="mission_control_read", owner_task_id=None,
+    ))
+    assert queued["status"] == "queued"
+    second = asyncio.run(service._generate_and_store_first_dashboard_briefing_from_payload(
+        7, payload, state, trigger="mission_control_read", allow_stale_takeover=False,
+        task_id=queued["task_id"], attempt=queued["attempt"],
+        enqueued_context_version="ctx-v1",
+    ))
+
+    assert second["status"] == "ready"
+    assert state["first_dashboard_briefing"]["response_source"] == "ai_generated"
+    assert provider_attempts == 2
 
 
 def test_enqueue_first_dashboard_briefing_records_pending_and_queued_state(monkeypatch):
@@ -716,7 +814,6 @@ def test_generate_first_dashboard_briefing_can_take_over_stale_generating_state(
 
     monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
     monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
-    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
     monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
     monkeypatch.setattr(
         finn_plan_module,
@@ -796,7 +893,6 @@ def test_generate_first_dashboard_briefing_falls_back_for_invalid_ai_output(monk
     monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
     monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
     monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
-    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
     monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
     monkeypatch.setattr(
         finn_plan_module,

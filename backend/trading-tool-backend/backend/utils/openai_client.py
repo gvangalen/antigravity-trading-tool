@@ -630,6 +630,8 @@ def _log_quota_block_warning(call_kind: str) -> None:
 
 def _call_scope() -> tuple[str, bool]:
     context = dict(get_ai_usage_context() or {})
+    if context.get("entry_point") == "onboarding_task:first_dashboard_briefing" and context.get("rate_limit_scope"):
+        return str(context["rate_limit_scope"]), context.get("run_kind") == "scheduled"
     scope = ":".join(
         str(value)
         for value in (
@@ -660,6 +662,11 @@ def _rate_limit_allows_call() -> bool:
                 "120",
             )),
         )
+    elif context.get("entry_point") == "onboarding_task:first_dashboard_briefing":
+        # The first dashboard briefing has up to three bounded worker attempts.
+        # The shared scheduled-call default of one per hour otherwise rejects
+        # every prompt retry even when the briefing state permits it.
+        limit_override = 3
     allowed = acquire_ai_call_slot(scope, scheduled=scheduled, limit_override=limit_override)
     if not allowed:
         _log_openai_quota_skip("ai_rate_limited")
