@@ -12,7 +12,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 | Goal | Repair fresh-user DCA onboarding and the first FINN Today briefing: save the schedule, read the saved plan and trader context, finish the background briefing, and keep optional source failures from aborting Mission Control. |
 | Candidate branch | `codex/onboarding-dca-today-context` |
 | Candidate implementation SHA | `78cad90c891065bb33d71dad796a1717ebd0dc54` (together with preceding branch commit `ff79f435d67cfb1dab785e6082468d70fc24c112`). |
-| PR | Pending. |
+| PR | [#100](https://github.com/gvangalen/antigravity-trading-tool/pull/100), candidate checks pending. |
 | Production SHA | Pending; no deployment claim. |
 | Last updated | 2026-10-07 |
 
