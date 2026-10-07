@@ -41,7 +41,7 @@ from backend.services.score_service import ScoreService
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.technical_data_service import TechnicalDataService
-from backend.services.trader_profile_service import normalize_trader_profile_preferences
+from backend.services.trader_profile_service import normalize_trader_context, normalize_trader_profile_preferences
 
 logger = logging.getLogger(__name__)
 from backend.utils.openai_client import ask_gpt_json
@@ -13252,6 +13252,8 @@ class FinnPlanService:
                     system_role=self._first_dashboard_ai_system_role(),
                     max_tokens=800,
                     client_max_retries=1,
+                    model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+                    reasoning_effort="none",
                 )
         except Exception as exc:
             return await self._finalize_first_dashboard_briefing_fallback(
@@ -13574,6 +13576,7 @@ class FinnPlanService:
             "profile.trader_types",
             "profile.risk_profiles",
             "profile.primary_timeframes",
+            "profile.trader_context",
             "asset.symbol",
             "indicators.technical",
             "indicators.macro",
@@ -13608,12 +13611,18 @@ class FinnPlanService:
                 latest_analysis=latest_analysis,
                 blockers=blockers,
                 linked_bot=linked_bot,
+                setup=setup,
+                strategy=strategy,
+                trader_context=normalize_trader_context(preferences.get("trader_context")),
             ),
             "evidence_refs": self._first_dashboard_fallback_evidence_refs(
                 observation=observation,
                 indicators=indicators,
                 linked_bot=linked_bot,
                 market_snapshot=market_snapshot,
+                setup=setup,
+                strategy=strategy,
+                trader_context=normalize_trader_context(preferences.get("trader_context")),
             ),
         }
         input_snapshot = {
@@ -13627,6 +13636,7 @@ class FinnPlanService:
                 "risk_profiles": profile.get("risk_profiles") or [],
                 "primary_timeframes": profile.get("primary_timeframes") or [],
                 "behavior_flags": profile.get("behavior_flags") or [],
+                "trader_context": normalize_trader_context(preferences.get("trader_context")),
             },
             "indicators": indicators,
             "setup": {
@@ -14219,7 +14229,8 @@ class FinnPlanService:
                     "Do not list the active asset, linked setup, strategy, bot, budget, or indicators as an inventory.",
                     "Use market claims only when supported by supplied market data.",
                     "Say that analysis is missing only when latest_analysis.availability is absent; unknown is not evidence of absence.",
-                    "Do not claim personal behavior patterns because no behavior history exists yet.",
+                    "Treat profile.trader_context as the user's own description and coaching preference, not observed behavior or a proven trade rule.",
+                    "Do not claim observed behavior patterns because no behavior history exists yet.",
                     "Do not change strategy or bot rules.",
                     "Return valid JSON only.",
                 ],
@@ -14428,6 +14439,9 @@ class FinnPlanService:
         indicators: Dict[str, List[str]],
         linked_bot: Optional[Dict[str, Any]],
         market_snapshot: Dict[str, Any],
+        setup: Optional[Dict[str, Any]] = None,
+        strategy: Optional[Dict[str, Any]] = None,
+        trader_context: str = "",
     ) -> List[str]:
         refs = ["asset.symbol"]
         lower_observation = str(observation or "").lower()
@@ -14437,6 +14451,12 @@ class FinnPlanService:
             refs.extend(["market.status", "market.freshness"])
         if linked_bot:
             refs.append("bot.is_live")
+        if (setup or {}).get("name"):
+            refs.append("setup.name")
+        if (strategy or {}).get("name"):
+            refs.append("strategy.name")
+        if trader_context:
+            refs.append("profile.trader_context")
         if market_snapshot.get("blockers"):
             refs.append("market.blockers")
         if not refs:
@@ -14578,6 +14598,9 @@ class FinnPlanService:
         latest_analysis: Dict[str, Any],
         blockers: List[Dict[str, Any]],
         linked_bot: Optional[Dict[str, Any]],
+        setup: Optional[Dict[str, Any]] = None,
+        strategy: Optional[Dict[str, Any]] = None,
+        trader_context: str = "",
     ) -> Dict[str, str]:
         language = str(locale or "nl").lower().split("-", 1)[0]
         market_ready = str((market_snapshot or {}).get("status") or "").lower() in {"ready", "available", "complete"}
@@ -14613,6 +14636,31 @@ class FinnPlanService:
                 copy["reasoning"] = f"The current {category} condition still blocks your entry."
         if linked_bot and not linked_bot.get("is_live") and language == "nl":
             copy["reasoning"] += " Je bot blijft ondertussen veilig in Paper."
+        setup_name = str((setup or {}).get("name") or "").strip()
+        strategy_name = str((strategy or {}).get("name") or "").strip()
+        if setup_name:
+            plan_label = f"{setup_name} ({strategy_name})" if strategy_name else setup_name
+            if language == "nl":
+                if has_limitation:
+                    copy["assessment"] = f"Je plan {setup_name}: wacht met een entry tot de marktgegevens actueel zijn."
+                copy["reasoning"] = f"Je opgeslagen plan {plan_label} is het vertrekpunt. " + copy["reasoning"]
+            elif language == "de":
+                if has_limitation:
+                    copy["assessment"] = f"Dein Plan {setup_name}: Warte mit dem Einstieg auf aktuelle Marktdaten."
+                copy["reasoning"] = f"Dein gespeicherter Plan {plan_label} ist der Ausgangspunkt. " + copy["reasoning"]
+            else:
+                if has_limitation:
+                    copy["assessment"] = f"Your {setup_name} plan: wait for current market data before an entry."
+                copy["reasoning"] = f"Your saved plan {plan_label} is the starting point. " + copy["reasoning"]
+        if trader_context:
+            profile_note = " ".join(trader_context.split())
+            profile_note = profile_note[:157].rstrip() + ("…" if len(profile_note) > 157 else "")
+            if language == "nl":
+                copy["action"] += f" Je schreef in je profiel: ‘{profile_note}’"
+            elif language == "de":
+                copy["action"] += f" In deinem Profil steht: ‘{profile_note}’"
+            else:
+                copy["action"] += f" Your profile note says: ‘{profile_note}’"
         return {
             "assessment": copy["assessment"],
             "reasoning": copy["reasoning"],

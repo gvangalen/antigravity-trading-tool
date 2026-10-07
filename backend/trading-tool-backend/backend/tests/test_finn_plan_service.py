@@ -450,6 +450,8 @@ def _first_dashboard_payload(version: str = "ctx-v1"):
 def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
     service = FinnPlanService(db_session=object())
     stored_state = {}
+    provider_calls = []
+    monkeypatch.delenv("FINN_RESPONSES_CHAT_MODEL", raising=False)
 
     async def fake_prepare(*, user_id, **kwargs):
         return _first_dashboard_payload()
@@ -467,17 +469,17 @@ def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
     monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
     monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
     monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
-    monkeypatch.setattr(
-        finn_plan_module,
-        "ask_gpt_json",
-        lambda **kwargs: {
+    def fake_ask_gpt_json(**kwargs):
+        provider_calls.append(kwargs)
+        return {
             "assessment": "Forceer nog geen BTC-entry.",
             "reasoning": "De huidige bevestiging steunt alleen op technische signalen.",
             "recommended_action": "Wacht op een verse snapshot en controleer je voorwaarden.",
             "data_limitation": "Actuele macrobevestiging ontbreekt nog.",
             "evidence_refs": ["asset.symbol", "indicators.macro"],
-        },
-    )
+        }
+
+    monkeypatch.setattr(finn_plan_module, "ask_gpt_json", fake_ask_gpt_json)
 
     result = asyncio.run(service.generate_and_store_first_dashboard_briefing(7))
 
@@ -485,6 +487,8 @@ def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
     assert result["response_source"] == "ai_generated"
     assert stored_state["first_dashboard_briefing"]["status"] == "ready"
     assert stored_state["first_dashboard_briefing"]["response_source"] == "ai_generated"
+    assert provider_calls[0]["model_override"] == "gpt-6-luna"
+    assert provider_calls[0]["reasoning_effort"] == "none"
 
 
 def test_store_first_dashboard_briefing_serializes_decimal_snapshot(monkeypatch):
@@ -970,7 +974,7 @@ def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failu
         return {"onboarding_complete": True, "active_asset": "BTC"}
 
     fake_user_repo = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=SimpleNamespace(ai_preferences={"trader_types": ["swing_trader"], "risk_profiles": ["balanced"]}))
+        get_by_id=AsyncMock(return_value=SimpleNamespace(ai_preferences={"trader_types": ["swing_trader"], "risk_profiles": ["balanced"], "trader_context": "Ik wil bij FOMO eerst mijn plan controleren."}))
     )
 
     monkeypatch.setattr(service, "_fetch_onboarding_status", fake_onboarding_status)
@@ -1017,6 +1021,14 @@ def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failu
     assert "entry" in payload["fallback_result"]["assessment"].lower()
     assert payload["input_snapshot"]["presentation_contract"] == "finn_today.coach_briefing.v1"
     assert payload["input_snapshot"]["locale"] == "nl"
+    assert payload["input_snapshot"]["profile"]["trader_context"] == "Ik wil bij FOMO eerst mijn plan controleren."
+    assert payload["ai_prompt_context"]["profile"]["trader_context"] == "Ik wil bij FOMO eerst mijn plan controleren."
+    assert "profile.trader_context" in payload["allowed_evidence_refs"]
+    assert "AAPL Setup" in payload["fallback_result"]["reasoning"]
+    assert "AAPL Setup" in payload["fallback_result"]["assessment"]
+    assert "AAPL Strategy" in payload["fallback_result"]["reasoning"]
+    assert "setup.name" in payload["fallback_result"]["evidence_refs"]
+    assert "Ik wil bij FOMO eerst mijn plan controleren." in payload["fallback_result"]["recommended_action"]
 
 
 def test_first_dashboard_allows_onboarding_configuration_activity_only():

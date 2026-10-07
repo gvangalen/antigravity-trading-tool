@@ -19,7 +19,11 @@ const DEFAULT_SETUP = {
   name: "",
   setupType: "trade",
   timeframe: "4H",
+  dcaFrequency: "weekly",
+  dcaDay: "monday",
+  dcaMonthDay: "1",
 };
+const DCA_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 const DEFAULT_STRATEGY = {
   name: "",
@@ -154,6 +158,9 @@ export default function OnboardingPlanPage() {
             name: setupCandidate.name || `${symbol} Setup`,
             setupType: String(setupCandidate.setup_type || "trade").toLowerCase(),
             timeframe: setupCandidate.timeframe || "4H",
+            dcaFrequency: setupCandidate.dca_frequency || "weekly",
+            dcaDay: DCA_WEEKDAYS[Number(setupCandidate.dca_day) - 1] || setupCandidate.dca_day || "monday",
+            dcaMonthDay: String(setupCandidate.dca_month_day || 1),
           });
 
           const bySetup = setupId
@@ -200,7 +207,17 @@ export default function OnboardingPlanPage() {
   const allDone = setupDone && strategyDone;
   const isTrade = String(setup.setupType || "").toLowerCase() === "trade";
 
-  const setupValid = Boolean(setup.name.trim() && setup.setupType && setup.timeframe);
+  const setupValid = Boolean(
+    setup.name.trim() && setup.setupType && setup.timeframe &&
+    (isTrade || (
+      setup.dcaFrequency &&
+      (setup.dcaFrequency !== "weekly" || setup.dcaDay) &&
+      (setup.dcaFrequency !== "monthly" || (
+        Number.isInteger(Number(setup.dcaMonthDay)) &&
+        Number(setup.dcaMonthDay) >= 1 && Number(setup.dcaMonthDay) <= 28
+      ))
+    )),
+  );
   const strategyValid = Boolean(
     strategy.name.trim() &&
       Number(strategy.baseAmount) > 0 &&
@@ -222,6 +239,11 @@ export default function OnboardingPlanPage() {
         symbol,
         setup_type: setup.setupType,
         timeframe: setup.timeframe,
+        ...(isTrade ? {} : {
+          dca_frequency: setup.dcaFrequency,
+          dca_day: setup.dcaFrequency === "weekly" ? setup.dcaDay : null,
+          dca_month_day: setup.dcaFrequency === "monthly" ? Number(setup.dcaMonthDay) : null,
+        }),
       });
 
       const nextSetup = normalizeSetupSaveResponse(response);
@@ -415,6 +437,32 @@ export default function OnboardingPlanPage() {
             </Field>
           </div>
 
+          {!isTrade ? (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Field label={copy.dcaFrequencyLabel || "Frequency"}>
+                <select value={setup.dcaFrequency} onChange={(event) => setSetup((current) => ({ ...current, dcaFrequency: event.target.value }))} disabled={setupDone || savingSetup || loading} className={inputClassName}>
+                  <option value="daily">{copy.dcaDaily || "Daily"}</option>
+                  <option value="weekly">{copy.dcaWeekly || "Weekly"}</option>
+                  <option value="monthly">{copy.dcaMonthly || "Monthly"}</option>
+                </select>
+              </Field>
+              {setup.dcaFrequency === "weekly" ? (
+                <Field label={copy.dcaWeekdayLabel || "Weekday"}>
+                  <select value={setup.dcaDay} onChange={(event) => setSetup((current) => ({ ...current, dcaDay: event.target.value }))} disabled={setupDone || savingSetup || loading} className={inputClassName}>
+                    {DCA_WEEKDAYS.map((day) => (
+                      <option key={day} value={day}>{copy.dcaWeekdays?.[day] || day}</option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+              {setup.dcaFrequency === "monthly" ? (
+                <Field label={copy.dcaMonthDayLabel || "Day of month"}>
+                  <input type="number" min="1" max="28" step="1" value={setup.dcaMonthDay} onChange={(event) => setSetup((current) => ({ ...current, dcaMonthDay: event.target.value }))} disabled={setupDone || savingSetup || loading} className={inputClassName} />
+                </Field>
+              ) : null}
+            </div>
+          ) : null}
+
           {!setupDone ? (
             <div className="mt-5">
               <button
@@ -434,6 +482,16 @@ export default function OnboardingPlanPage() {
                 value={setup.setupType === "dca" ? copy.setupTypeDca || "DCA" : copy.setupTypeTrade || "Trade"}
               />
               <SummaryRow label={copy.setupTimeframeLabel || "Timeframe"} value={setup.timeframe} />
+              {!isTrade ? (
+                <SummaryRow
+                  label={copy.dcaFrequencyLabel || "Frequency"}
+                  value={[
+                    copy[`dca${setup.dcaFrequency?.[0]?.toUpperCase()}${setup.dcaFrequency?.slice(1)}`] || setup.dcaFrequency,
+                    setup.dcaFrequency === "weekly" ? (copy.dcaWeekdays?.[setup.dcaDay] || setup.dcaDay) : null,
+                    setup.dcaFrequency === "monthly" ? setup.dcaMonthDay : null,
+                  ].filter(Boolean).join(" · ")}
+                />
+              ) : null}
             </div>
           )}
         </Section>
