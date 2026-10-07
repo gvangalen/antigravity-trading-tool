@@ -31,6 +31,7 @@ import {
   getBotRiskAcknowledgement,
   getBotSaveErrorMessage,
 } from "@/lib/bot/riskAcknowledgement.mjs";
+import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
 
 const RISK_PROFILE_ICONS = {
   conservative: Shield,
@@ -52,6 +53,7 @@ const AddBotForm = forwardRef(function AddBotForm({
   initialData = null,
   initialValues = null,
   strategies = [],
+  setups = [],
   onChange,
   onSubmit,
   onSaved,
@@ -124,7 +126,9 @@ const AddBotForm = forwardRef(function AddBotForm({
   }, [sourceData]);
 
   useEffect(() => {
-    if (!guidedMode) return;
+    if (!guidedMode || !form.strategy_id) return;
+    const linkedStrategy = strategies.find((strategy) => Number(strategy.id) === Number(form.strategy_id)) || sourceData?.strategy;
+    if (!linkedStrategy) return;
 
     const hasAnyBudgetValue = [
       form.budget_total_eur,
@@ -135,16 +139,27 @@ const AddBotForm = forwardRef(function AddBotForm({
 
     if (hasAnyBudgetValue) return;
 
+    const plannedAmount = Number(linkedStrategy?.base_amount || 0);
+    const suggestedDailyLimit = Number.isFinite(plannedAmount) && plannedAmount > 0
+      ? Math.max(GUIDED_BUDGET_DEFAULTS.budget_daily_limit_eur, plannedAmount)
+      : GUIDED_BUDGET_DEFAULTS.budget_daily_limit_eur;
+
     setForm((current) => ({
       ...current,
       ...GUIDED_BUDGET_DEFAULTS,
+      budget_total_eur: Math.max(GUIDED_BUDGET_DEFAULTS.budget_total_eur, suggestedDailyLimit),
+      budget_daily_limit_eur: suggestedDailyLimit,
+      budget_max_order_eur: suggestedDailyLimit,
     }));
   }, [
     form.budget_daily_limit_eur,
     form.budget_max_order_eur,
     form.budget_min_order_eur,
     form.budget_total_eur,
+    form.strategy_id,
     guidedMode,
+    sourceData,
+    strategies,
   ]);
 
   useEffect(() => {
@@ -188,6 +203,11 @@ const AddBotForm = forwardRef(function AddBotForm({
       null
     );
   }, [strategies, form.strategy_id, sourceData]);
+  const selectedSetup = useMemo(() => (
+    setups.find((setup) => Number(setup.id) === Number(selectedStrategy?.setup_id))
+    || selectedStrategy?.setup
+    || null
+  ), [selectedStrategy, setups]);
 
   const riskProfiles = [
     {
@@ -217,15 +237,9 @@ const AddBotForm = forwardRef(function AddBotForm({
 
   const onboardingCopy = pageCopy.onboardingGuide || {};
   const strategyTimeframe = String(selectedStrategy?.timeframe || "").toUpperCase();
-  const cadenceLabel = strategyTimeframe || copy.cadenceFallback || "—";
-  const cadenceSpendLabel = (copy.simpleCycleBudgetLabel || "Spend per {timeframe} cycle").replace(
-    "{timeframe}",
-    cadenceLabel
-  );
-  const cadenceSpendHelp = (copy.simpleCycleBudgetHelp || "For this strategy cadence, this is the amount the bot may use on one buy moment.").replace(
-    "{timeframe}",
-    cadenceLabel
-  );
+  const dcaSchedule = formatDcaSchedule(selectedSetup, copy);
+  const cadenceSpendLabel = copy.dailyLimitLabel || "Daily spending limit";
+  const cadenceSpendHelp = copy.dailyLimitHelp || "The most this bot may spend in one calendar day.";
 
   const getStrategyType = (s) =>
     (s?.strategy_type || s?.type || "manual").toUpperCase();
@@ -335,6 +349,7 @@ const AddBotForm = forwardRef(function AddBotForm({
 
     const payload = {
       ...form,
+      ...(guidedMode && dcaSchedule ? { cadence: selectedSetup.dca_frequency } : {}),
       name: String(form.name || "").trim(),
       strategy_id: Number(form.strategy_id),
       budget_total_eur: Number(form.budget_total_eur || 0),
@@ -374,11 +389,14 @@ const AddBotForm = forwardRef(function AddBotForm({
     }
   }, [
     copy.saveFailed,
+    dcaSchedule,
     form,
+    guidedMode,
     loading,
     onSaved,
     onSubmit,
     saveFailedMessage,
+    selectedSetup,
     showSnackbar,
     successMessage,
     validateForm,
@@ -537,6 +555,13 @@ const AddBotForm = forwardRef(function AddBotForm({
               "{selectedStrategy.description}"
             </div>
           )}
+          {dcaSchedule ? (
+            <p className="text-xs font-semibold text-slate-600">
+              {(copy.dcaScheduleNote || "Saved DCA schedule: {schedule}. {timeframe} is the chart timeframe, not a daily purchase schedule.")
+                .replace("{schedule}", dcaSchedule)
+                .replace("{timeframe}", strategyTimeframe || selectedSetup?.timeframe || "—")}
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -557,13 +582,13 @@ const AddBotForm = forwardRef(function AddBotForm({
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
               <CalendarDays size={12} />
-              {copy.cadenceCardLabel}
+              {dcaSchedule ? copy.dcaScheduleCardLabel : copy.cadenceCardLabel}
             </div>
             <div className="mt-2 text-sm font-black text-slate-900">
-              {copy.cadenceCardValue.replace("{timeframe}", cadenceLabel)}
+              {dcaSchedule || (copy.cadenceCardValue || "{timeframe} strategy").replace("{timeframe}", strategyTimeframe || "—")}
             </div>
             <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
-              {copy.cadenceCardHelp}
+              {dcaSchedule ? copy.dcaScheduleCardHelp : copy.cadenceCardHelp}
             </p>
           </div>
 
@@ -743,14 +768,11 @@ const AddBotForm = forwardRef(function AddBotForm({
               ))}
             </div>
 
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
-              <p>
-                {(copy.simpleBudgetExample || "If this amount is 100, the bot may use at most 100 on one {timeframe} buy moment. By default, one order uses that same amount.").replace(
-                  "{timeframe}",
-                  cadenceLabel
-                )}
-              </p>
-            </div>
+            {dcaSchedule ? (
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                {copy.dcaBudgetExample || "This daily limit does not change the saved DCA schedule or planned amount. It must allow at least that amount for a purchase."}
+              </div>
+            ) : null}
 
             <button
               type="button"

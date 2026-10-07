@@ -114,8 +114,8 @@ export default function OnboardingBanner({ step }) {
   })();
 
   const nextTaskLabel = missing.length > 0
-    ? humanizeToken(missing[0])
-    : STEP_LABELS[step] || stepPhase;
+    ? bannerCopy?.stepLabels?.[missing[0]] || humanizeToken(missing[0])
+    : bannerCopy?.stepLabels?.[step] || STEP_LABELS[step] || stepPhase;
 
   return (
     <div className="mb-10 overflow-hidden rounded-[30px] border border-blue-100 bg-white shadow-[0_16px_50px_-35px_rgba(37,99,235,0.28)] dark:border-slate-800 dark:bg-[#0f172a]">
@@ -201,7 +201,7 @@ export default function OnboardingBanner({ step }) {
                   <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
                     {index + 1}
                   </div>
-                  <div className="text-sm font-black text-slate-950 dark:text-slate-50">{phaseMeta.label}</div>
+                  <div className="text-sm font-black text-slate-950 dark:text-slate-50">{phaseLabels?.[phase] || phaseMeta.label}</div>
                   <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                     {complete
                       ? bannerCopy?.phaseDone || "Done"

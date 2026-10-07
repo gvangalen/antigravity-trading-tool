@@ -13556,9 +13556,11 @@ class FinnPlanService:
                 self.trace_id,
             )
         indicators = {"market": [], "macro": [], "technical": []}
+        indicator_lookup_status = "unknown"
         try:
             async with (self.session.begin_nested() if hasattr(self.session, "begin_nested") else nullcontext()):
                 indicators = await self._first_dashboard_indicator_context(user_id, active_asset)
+            indicator_lookup_status = "available"
         except Exception:
             logger.exception(
                 "First dashboard indicator context lookup failed for user_id=%s asset=%s trace_id=%s",
@@ -13584,6 +13586,7 @@ class FinnPlanService:
             strategy=strategy,
             linked_bot=linked_bot,
             indicators=indicators,
+            indicator_lookup_status=indicator_lookup_status,
             data_readiness=data_readiness,
             has_scores=has_scores,
             blockers=blockers,
@@ -13598,6 +13601,7 @@ class FinnPlanService:
             strategy=strategy,
             linked_bot=linked_bot,
             indicators=indicators,
+            indicator_lookup_status=indicator_lookup_status,
             market_snapshot=market_snapshot,
         )
         allowed_evidence_refs = [
@@ -13658,8 +13662,13 @@ class FinnPlanService:
                 trader_context=normalize_trader_context(preferences.get("trader_context")),
             ),
         }
+        indicator_configuration = {
+            "lookup_status": indicator_lookup_status,
+            "configured": indicators,
+            "complete_current_benchmark": has_scores,
+        }
         input_snapshot = {
-            "presentation_contract": "finn_today.coach_briefing.v1",
+            "presentation_contract": "finn_today.coach_briefing.v2",
             "name": display_name,
             "locale": locale,
             "asset": active_asset,
@@ -13672,6 +13681,7 @@ class FinnPlanService:
                 "trader_context": normalize_trader_context(preferences.get("trader_context")),
             },
             "indicators": indicators,
+            "indicator_configuration": indicator_configuration,
             "setup": {
                 "name": setup.get("name"),
                 "timeframe": setup.get("timeframe"),
@@ -13703,6 +13713,7 @@ class FinnPlanService:
             "profile": input_snapshot["profile"],
             "asset": {"symbol": active_asset},
             "indicators": indicators,
+            "indicator_configuration": indicator_configuration,
             "setup": input_snapshot["setup"],
             "strategy": input_snapshot["strategy"],
             "bot": linked_bot or {},
@@ -14228,6 +14239,8 @@ class FinnPlanService:
                     "Do not change strategy or bot rules.",
                     "For a fixed DCA setup, missing benchmark scores do not by themselves cancel its saved schedule or change its base amount. Do not describe scheduled DCA as a discretionary trade entry.",
                     "A saved DCA schedule is a plan, not proof that a bot or purchase is active. State execution status only when the supplied bot evidence supports it.",
+                    "indicator_configuration.configured lists saved indicator choices. A saved DXY or RSI is configured even when it has no usable current score. Never call a listed indicator or its layer unconfigured. When lookup_status is unknown, do not claim whether a layer is configured. A complete_current_benchmark value of false means the score is incomplete, not that saved configuration is absent.",
+                    "A historical latest_analysis.summary cannot override the current owner-scoped indicator_configuration when describing what the user has configured now.",
                     "Return valid JSON only.",
                 ],
                 "output_contract": {
@@ -14409,6 +14422,7 @@ class FinnPlanService:
         strategy: Dict[str, Any],
         linked_bot: Optional[Dict[str, Any]],
         indicators: Dict[str, List[str]],
+        indicator_lookup_status: str = "available",
         market_snapshot: Dict[str, Any],
     ) -> List[str]:
         missing = []
@@ -14416,7 +14430,7 @@ class FinnPlanService:
             missing.append("profile.trader_types")
         if not profile.get("risk_profiles"):
             missing.append("profile.risk_profiles")
-        if not indicators.get("macro"):
+        if indicator_lookup_status == "available" and not indicators.get("macro"):
             missing.append("indicators.macro")
         if not setup.get("timeframe"):
             missing.append("setup.timeframe")
@@ -14706,6 +14720,7 @@ class FinnPlanService:
         strategy: Dict[str, Any],
         linked_bot: Optional[Dict[str, Any]],
         indicators: Dict[str, List[str]],
+        indicator_lookup_status: str = "available",
         data_readiness: Dict[str, Any],
         has_scores: bool,
         blockers: List[Dict[str, Any]],
@@ -14768,7 +14783,7 @@ class FinnPlanService:
                 copy["blocked"].format(asset=asset, category=category, range=blocker.get("range")),
                 {"label": copy["check"], "question": copy["blocked_question"].format(category=category, asset=asset)},
             )
-        if not indicators.get("macro"):
+        if indicator_lookup_status == "available" and not indicators.get("macro"):
             return (
                 copy["macro"],
                 {"label": copy["macro_action"], "question": copy["macro_question"]},

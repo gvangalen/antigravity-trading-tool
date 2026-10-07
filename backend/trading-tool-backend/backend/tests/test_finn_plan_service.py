@@ -1169,7 +1169,8 @@ def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failu
     assert payload["bot"] is None
     assert payload["indicators"] == {"market": [], "macro": [], "technical": []}
     assert "entry" in payload["fallback_result"]["assessment"].lower()
-    assert payload["input_snapshot"]["presentation_contract"] == "finn_today.coach_briefing.v1"
+    assert payload["input_snapshot"]["presentation_contract"] == "finn_today.coach_briefing.v2"
+    assert payload["input_snapshot"]["indicator_configuration"]["lookup_status"] == "unknown"
     assert payload["input_snapshot"]["locale"] == "nl"
     assert payload["input_snapshot"]["profile"]["trader_context"] == "Ik wil bij FOMO eerst mijn plan controleren."
     assert payload["ai_prompt_context"]["profile"]["trader_context"] == "Ik wil bij FOMO eerst mijn plan controleren."
@@ -1221,6 +1222,48 @@ def test_first_dashboard_prompt_receives_dca_schedule_and_strategy_amount(monkey
     assert "setup.dca_day" in payload["allowed_evidence_refs"]
     assert "strategy.base_amount" in payload["allowed_evidence_refs"]
     assert "FOMO" in payload["ai_prompt_context"]["profile"]["trader_context"]
+
+
+def test_first_dashboard_prompt_separates_saved_indicators_from_missing_scores(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    monkeypatch.setattr(service, "_fetch_onboarding_status", AsyncMock(return_value={"onboarding_complete": True, "active_asset": "ETH"}))
+    monkeypatch.setattr(service, "_first_dashboard_linked_bot", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_first_dashboard_indicator_context", AsyncMock(return_value={
+        "market": ["price"], "macro": ["DXY"], "technical": ["RSI"],
+    }))
+    monkeypatch.setattr(finn_plan_module, "UserRepository", lambda session: SimpleNamespace(
+        get_by_id=AsyncMock(return_value=SimpleNamespace(ai_preferences={}))
+    ))
+
+    payload = asyncio.run(service._prepare_first_dashboard_payload(
+        user_id=7,
+        analysis={"assets": [{
+            "asset": "ETH",
+            "setup": {"name": "ETH DCA", "setup_type": "dca", "timeframe": "1D", "dca_frequency": "monthly", "dca_month_day": 5},
+            "active_strategy": {"strategy": {"name": "ETH Vast", "execution_mode": "fixed", "base_amount": 120}},
+            "data_readiness": {"status": "score_generation_missing"}, "has_scores": False, "blockers": [],
+        }]},
+        mission={"bot_review_queue": []}, activity_feed=[], day_log={},
+    ))
+
+    indicator_state = payload["ai_prompt_context"]["indicator_configuration"]
+    assert indicator_state == {
+        "lookup_status": "available",
+        "configured": {"market": ["price"], "macro": ["DXY"], "technical": ["RSI"]},
+        "complete_current_benchmark": False,
+    }
+    assert "indicators.macro" not in payload["ai_prompt_context"]["missing_fields"]
+    assert "Never call a listed indicator or its layer unconfigured" in service._first_dashboard_ai_prompt(payload)
+
+
+def test_first_dashboard_does_not_call_an_unreadable_indicator_layer_unconfigured():
+    observation, _ = _service()._first_dashboard_observation_and_action(
+        "ETH", locale="nl", profile={}, setup={}, strategy={"name": "ETH plan"},
+        linked_bot=None, indicators={"market": [], "macro": [], "technical": []},
+        indicator_lookup_status="unknown", data_readiness={"status": "ready"},
+        has_scores=True, blockers=[],
+    )
+    assert "mist nog bredere macrocontext" not in observation
 
 
 def test_first_dashboard_allows_onboarding_configuration_activity_only():

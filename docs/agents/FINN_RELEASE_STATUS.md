@@ -8,6 +8,26 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `BUILD_VALIDATED`; candidate CI and deployment pending. |
+| Goal | Distinguish saved indicator configuration from unavailable scores in FINN Today; show the saved DCA purchase schedule separately from a chart timeframe in Automation; finish the Dutch onboarding copy. |
+| Candidate branch | `codex/onboarding-briefing-dca-cadence`. |
+| Candidate implementation SHA | Pending candidate commit. |
+| Production SHA | Pending deployment. |
+| Previous live SHA | `7eafc957254228f0ebd33580dc5179ec258cc489`, independently tested on a fresh account. |
+| Last updated | 2026-10-07 |
+
+Independent QA found that the previous FINN Today card said macro and technical layers were not configured despite saved DXY and RSI configurations without usable scores. The Automation bot dialog used a 1D chart timeframe as purchase wording for a monthly day-5 DCA plan. The bot list repeated the timeframe without the plan cadence. Dutch onboarding still showed English state labels. The first card's live `response_source`, `generation_status`, and `trace.last_error_code` were not captured; this release does not claim to identify a provider or queue fault. No execution-cadence or live purchase outcome was established by that browser test.
+
+The briefing input now carries a separate owner-scoped indicator-configuration status, configured names, and complete-current-benchmark boolean. A lookup failure stays unknown; it cannot be read as an empty configuration. The provider prompt explicitly distinguishes a saved indicator from a usable current score and does not let a historical analysis summary override the current configuration. The briefing contract version changes so older ready text is regenerated. Automation resolves the saved setup for its strategy, presents the DCA frequency and weekday/month day, labels 1D as a chart timeframe, and uses a daily bot spending cap rather than a per-1D purchase amount. Guided bot creation sends the saved DCA cadence and makes its default daily and per-order caps at least the strategy base amount. Dutch onboarding labels are translated. A saved setup is still a plan; this work does not assert that a bot is active or that a purchase is due.
+
+Measured local evidence: root pytest **3173 passed, 3 skipped**, log SHA-256 `d55c947270f1a43856a09a7aeed2ec6cf59028702ea85aff19a8499bc6fd24fc`. Frontend build, typecheck, i18n lint/tests, command/proposal tests, focused onboarding and DCA cadence tests, and the canonical production-dependency `audit:high` script passed. Isolated PostgreSQL/Redis/FastAPI/Celery action-contract matrix **16/16**, zero broker orders or live calls, artifact SHA-256 `62c6046fb4e1683791b7201914f069baeffa520510f782f983946e4c7f82f53b`. Real-provider selector development **18/18** (SHA-256 `212be4fd111708028666ec74605dd2c18c5631c15cde62878fbd28c78a84d151`) and regression **109/109** (SHA-256 `b667490a967f87b01a107ebb8befe42ab569cd876be27b316317440ef45c2f6a`) had no provider, schema, parse, validation or timeout failure. A separate three-response real Luna/none briefing probe with saved DXY/RSI and absent scores did not call them unconfigured (SHA-256 `15a688828eb04b3e81ab30587b072df44c81182fa961b61fc7fdcbab679fd98f`); it is supporting evidence, not a production proof. Build has not accessed the QA fixture or sealed holdout.
+
+Independent QA should check a new account's saved DXY/RSI without scores against the FINN Today text and, if observable, capture `response_source` and generation status. For a monthly DCA setup on day 5 with a 1D chart timeframe, compare the saved setup, Automation form, bot cadence, and bot list after refresh. Confirm the daily cap accommodates the saved amount without implying daily purchases, and inspect the Dutch onboarding labels. Actual bot execution remains outside the read-only onboarding result.
+
+## Previous Release (first briefing onboarding follow-up)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`. Build gates and deployment identity passed; independent authenticated QA is pending. |
 | Goal | Keep Automation visible after a saved strategy during onboarding, schedule first FINN Today retries without a browser read, and identify temporary plan copy as temporary. |
 | Candidate branch | `codex/first-briefing-onboarding-followup`. |

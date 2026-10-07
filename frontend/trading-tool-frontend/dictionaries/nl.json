@@ -1234,6 +1234,14 @@
     },
     "onboardingBanner": {
       "eyebrow": "Begeleide onboarding",
+      "progressLabel": "Voortgang",
+      "nextTaskLabel": "Doe dit nu",
+      "phaseReady": "Deze fase is opgeslagen. Je kunt verder naar de volgende stap.",
+      "phaseDone": "Opgeslagen",
+      "phaseCurrent": "Huidige stap",
+      "phaseOpen": "Beschikbaar",
+      "phaseLocked": "Nog gesloten",
+      "stepLabels": {"profile_preferences": "profielvoorkeuren", "asset": "asset kiezen", "market_indicator": "marktindicator", "macro_indicator": "macro-indicator", "technical_indicator": "technische indicator", "setup": "setup", "strategy": "strategie", "bot": "bot instellen"},
       "viewCta": "Bekijk onboarding",
       "missingPrefix": "Ontbreekt",
       "completeSuffix": "voltooid",
@@ -1241,10 +1249,10 @@
       "unlockedSuffix": "ontgrendeld",
       "finishPrefix": "Rond eerst deze sub-stap af voor",
       "phaseLabels": {
-        "profile": "Profile",
-        "analysis": "Analysis",
-        "plan": "My Plan",
-        "automation": "Automation"
+        "profile": "Profiel",
+        "analysis": "Analyse",
+        "plan": "Mijn Plan",
+        "automation": "Automatisering"
       },
       "profileComplete": "Je profiel is opgeslagen. FINN kan de rest van de productflow nu rond jouw voorkeuren begeleiden.",
       "analysisComplete": "De eerste analysebasis staat. FINN kan nu asset en indicatoren combineren tot live context.",
@@ -1252,13 +1260,13 @@
       "automationComplete": "Automation is ingesteld. De laatste bot kan gepauzeerd blijven totdat jij bewust activeert.",
       "stepBodies": {
         "profile": "Begin met het opslaan van de profielgegevens die FINN echt gebruikt: ervaring, stijl, risico en doelen.",
-        "asset": "Je zit in Analysis. Voeg eerst één echt asset toe zodat de rest van deze workspace aan hetzelfde symbool verankerd blijft.",
-        "market": "Je zit in Analysis. Open het configuratieblok en koppel één marktindicator zodat FINN het eerste live marktbewijs voor dit asset krijgt.",
-        "macro": "Je zit nog steeds in Analysis. Voeg één macro-indicator toe, zoals DXY, zodat FINN hetzelfde asset in het juiste regime kan plaatsen.",
-        "technical": "Je zit nog steeds in Analysis. Voeg één technische indicator toe, zoals RSI of MA 200, zodat FINN trend, momentum en timing kan uitleggen.",
-        "setup": "Je zit in My Plan. Maak één simpele setup voor hetzelfde asset zodat je analyse verandert in expliciete tradingvoorwaarden.",
-        "strategy": "Je zit nog steeds in My Plan. Maak één strategie voor die setup zodat entry, invalidatie en risico een echt uitvoeringsplan worden.",
-        "bot": "Je zit in Automation. Maak één bot voor hetzelfde plan en houd het veilig met paper-modus of pauze, tenzij je bewust live wilt gaan."
+        "asset": "Je zit in Analyse. Voeg eerst één asset toe zodat de rest van deze werkruimte bij hetzelfde symbool hoort.",
+        "market": "Je zit in Analyse. Koppel één marktindicator zodat FINN weet welke marktgegevens jij wilt volgen.",
+        "macro": "Je zit nog steeds in Analyse. Voeg één macro-indicator toe, zoals DXY, zodat FINN de bredere marktcontext kan beoordelen.",
+        "technical": "Je zit nog steeds in Analyse. Voeg één technische indicator toe, zoals RSI of MA 200, zodat FINN trend en momentum kan uitleggen.",
+        "setup": "Je zit in Mijn Plan. Maak één setup voor hetzelfde asset zodat je analyse een concreet plan wordt.",
+        "strategy": "Je zit nog steeds in Mijn Plan. Maak één strategie voor die setup zodat instap, stop en risico duidelijk zijn.",
+        "bot": "Je zit in Automatisering. Maak één bot voor hetzelfde plan en houd hem in Paper of gepauzeerd totdat je bewust live wilt gaan."
       }
     }
   },
@@ -2091,6 +2099,9 @@
       "currencyUsd": "USD (US dollar)",
       "cadenceFallback": "deze cadence",
       "cadenceCardLabel": "Strategiecadence",
+      "dcaScheduleCardLabel": "DCA-aankoopritme",
+      "dcaPlanPrefix": "Plan:",
+      "dcaScheduleCardHelp": "Dit ritme komt uit de opgeslagen setup. Het grafiektijdsframe bepaalt geen aankoopdag.",
       "cadenceCardValue": "{timeframe} strategie",
       "cadenceCardHelp": "Je strategie bepaalt hoe vaak de bot mag handelen. Een wekelijkse strategie zoekt dus niet elk uur een nieuwe trade.",
       "budgetCardLabel": "Budgetlogica",
@@ -2105,6 +2116,12 @@
       "maxOrderLabel": "Max. ordergrootte",
       "totalBudgetHelp": "Het maximale totaalbedrag dat deze bot in beheer mag hebben.",
       "dailyLimitHelp": "De maximale som die deze bot op één dag mag inzetten, ook als je strategie wekelijks is.",
+      "dcaScheduleNote": "Opgeslagen DCA-schema: {schedule}. {timeframe} is het grafiektijdsframe, niet het aankoopritme.",
+      "dcaBudgetExample": "Deze daglimiet verandert het opgeslagen DCA-ritme of geplande bedrag niet. Voor een aankoop moet de limiet minstens dat bedrag toelaten.",
+      "scheduleDaily": "dagelijks",
+      "scheduleWeekly": "elke {day}",
+      "scheduleMonthly": "maandelijks op dag {day}",
+      "scheduleWeekdays": {"monday": "maandag", "tuesday": "dinsdag", "wednesday": "woensdag", "thursday": "donderdag", "friday": "vrijdag", "saturday": "zaterdag", "sunday": "zondag"},
       "minOrderHelp": "Het kleinste bedrag dat één order mag gebruiken.",
       "maxOrderHelp": "Het grootste bedrag dat één losse order mag gebruiken.",
       "simpleCycleBudgetLabel": "Bedrag per {timeframe}-koopmoment",
