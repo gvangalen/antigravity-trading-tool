@@ -34,6 +34,10 @@
     "evening": "Good evening"
   },
   "finnWorkspace": {
+    "onboardingHeader": {
+      "eyebrow": "Begleiteter Einstieg",
+      "flowLabel": "Analyse → Mein Plan → Automatisierung"
+    },
     "canvasEyebrow": "Arbeitsbereich",
     "defaultDescription": "Arbeite in diesem Ablauf mit dem aktiven FINN-Briefing direkt darüber.",
     "activeStatus": "Aktiv",
@@ -139,7 +143,7 @@
       ],
       "onboarding": [
         {
-          "label": "Profile",
+          "label": "Profil",
           "description": "Erzähle Finn, wie du handelst, damit die Führung zu deinem Workflow passt."
         },
         {
@@ -147,7 +151,7 @@
           "description": "Verankere ein Asset und füge Markt-, Makro- und Technik-Kontext darum herum hinzu."
         },
         {
-          "label": "My Plan",
+          "label": "Mein Plan",
           "description": "Erstelle das Setup und die Strategie, denen FINN und dein Bot folgen sollen."
         },
         {
@@ -394,7 +398,8 @@
       "lightMode": "Heller Modus",
       "darkMode": "Dunkler Modus",
       "signingOut": "Abmelden...",
-      "signOut": "Abmelden"
+      "signOut": "Abmelden",
+      "logoutFailed": "Abmelden fehlgeschlagen. Deine Sitzung ist noch aktiv. Bitte versuche es erneut."
     },
     "notificationsToggle": {
       "notifications": "Benachrichtigungen",
@@ -821,7 +826,7 @@
       },
       "timeframes": {
         "title": "Which timeframes do you use?",
-        "subtitle": "You can select multiple. Finn uses this to mute irrelevant signals."
+        "subtitle": "Du kannst mehrere auswählen. Finn blendet damit unpassende Signale aus."
       },
       "assetFocus": {
         "title": "What do you focus on?",
@@ -833,7 +838,7 @@
       },
       "experience": {
         "title": "How much experience do you have?",
-        "subtitle": "Choose what fits you best right now. You can select multiple levels if you sit between them."
+        "subtitle": "Wähle aus, was gerade am besten zu dir passt. Du kannst auch mehrere Stufen auswählen."
       },
       "risk": {
         "title": "What is your risk profile?",
@@ -850,13 +855,13 @@
       }
     },
     "onboardingStep": {
-      "stepNumber": "Step 1 of 8",
+      "stepNumber": "Schritt 1 von 8",
       "title": "Who are you as a trader?",
       "description": "Finn uses this profile to tune explanations, warnings, and setup guidance to your style right away. That gives you less noise and more relevant advice.",
       "finnSaysLabel": "Finn says",
-      "finnSaysBody": "You first, then the market. With your profile, Finn can decide which signals, timeframes, and warnings actually matter to you.",
-      "footer": "Save your profile to make the rest of onboarding more personal. After that you unlock the market and setup steps with much less noise.",
-      "saveAndContinue": "Save profile and continue",
+      "finnSaysBody": "Du stehst im Mittelpunkt, danach kommt der Markt. Mit deinem Profil kann Finn einordnen, welche Signale, Zeitrahmen und Warnungen für dich wichtig sind.",
+      "footer": "Speichere dein Profil, damit die weitere Begleitung zu dir passt. Danach folgen Markt und Setup.",
+      "saveAndContinue": "Profil speichern und fortfahren",
       "saving": "Saving profile...",
       "validationError": "Please complete all profile fields first so Finn can guide you properly.",
       "saveError": "Saving your trader profile failed. Please try again."
@@ -864,7 +869,7 @@
     "assetOnboardingStep": {
       "stepNumber": "Analysis · 1 of 4",
       "title": "Choose the first asset you want to build around",
-      "description": "Your first asset becomes the anchor for the rest of onboarding. Finn uses this symbol to keep market, macro, technical, setup, strategy, and bot guidance aligned to the same context.",
+      "description": "Dein erstes Asset ist der Ausgangspunkt für das weitere Onboarding. Finn hält Markt-, Makro- und technische Analyse sowie Setup, Strategie und Bot beim selben Symbol.",
       "finnSaysLabel": "Finn says",
       "finnSaysBody": "Search the instrument you actually want to trade first. I will add it to your watchlist and keep the next onboarding steps scoped to that same symbol.",
       "searchTitle": "Search your first asset",
@@ -874,7 +879,7 @@
       "tableSymbol": "Symbol",
       "tableName": "Name",
       "tableType": "Type",
-      "tableMarket": "Market",
+      "tableMarket": "Markt",
       "loadingResults": "Searching assets...",
       "noResults": "No matching crypto or stock found yet.",
       "searchHint": "Start typing a crypto or stock name to see matching results.",
@@ -885,7 +890,7 @@
         "stock": "Stock"
       },
       "assetLabel": "Asset",
-      "footer": "After saving, Finn adds this asset to your watchlist and uses it as the anchor for market, macro, technical, setup, strategy, and bot onboarding.",
+      "footer": "Nach dem Speichern nimmt Finn dieses Asset auf deine Watchlist und nutzt es als Ausgangspunkt für Analyse, Setup, Strategie und Bot.",
       "saveAndContinue": "Use asset and continue",
       "saving": "Saving asset...",
       "validationError": "Choose one asset first so Finn can anchor the next onboarding steps correctly.",
@@ -894,7 +899,7 @@
     "analysisOnboardingStep": {
       "stepNumber": "Analyse · 2 von 4",
       "title": "Lege deine erste Analysebasis an",
-      "description": "Füge für {symbol} genau einen Markt-, einen Makro- und einen technischen Indikator hinzu. Danach gehst du direkt weiter zu My Plan.",
+      "description": "Füge für {symbol} genau einen Markt-, einen Makro- und einen technischen Indikator hinzu. Danach gehst du direkt weiter zu Mein Plan.",
       "finnSaysLabel": "Finn says",
       "finnSaysBody": "Halte diesen Schritt bewusst klein. Ein Indikator pro Kategorie reicht aus, um deinen ersten echten Analysekontext rund um {symbol} aufzubauen.",
       "assetTitle": "Wähle dein erstes Asset",
@@ -922,14 +927,14 @@
       "emptyLabel": "Keine passenden Indikatoren gefunden.",
       "successEyebrow": "Analyse bereit",
       "successTitle": "Deine erste Analysebasis ist gespeichert",
-      "successMessage": "Du hast ein Asset sowie je einen Markt-, Makro- und technischen Indikator gewählt. Prüfe die Basis kurz und gehe dann weiter zu My Plan.",
-      "continueLabel": "Weiter zu My Plan",
-      "continuingLabel": "My Plan wird geöffnet…",
+      "successMessage": "Du hast ein Asset sowie je einen Markt-, Makro- und technischen Indikator gewählt. Prüfe die Basis kurz und gehe dann weiter zu Mein Plan.",
+      "continueLabel": "Weiter zu Mein Plan",
+      "continuingLabel": "Mein Plan wird geöffnet…",
       "loadError": "Das Laden dieses Analyse-Onboardings ist fehlgeschlagen. Bitte versuche es erneut.",
       "saveError": "Das Speichern dieses Analyseschritts ist fehlgeschlagen. Bitte versuche es erneut."
     },
     "planOnboardingStep": {
-      "stepNumber": "My Plan · 3 von 4",
+      "stepNumber": "Mein Plan · 3 von 4",
       "title": "Erstelle ein Setup und eine Strategie",
       "description": "Verwandle die erste Analyse für {symbol} in einen konkreten Plan. Speichere zuerst ein Setup und verknüpfe danach direkt eine Strategie.",
       "finnSaysLabel": "Finn says",
@@ -953,7 +958,15 @@
       "dcaMonthly": "Monatlich",
       "dcaWeekdayLabel": "Wochentag",
       "dcaMonthDayLabel": "Tag des Monats (1–28)",
-      "dcaWeekdays": {"monday": "Montag", "tuesday": "Dienstag", "wednesday": "Mittwoch", "thursday": "Donnerstag", "friday": "Freitag", "saturday": "Samstag", "sunday": "Sonntag"},
+      "dcaWeekdays": {
+        "monday": "Montag",
+        "tuesday": "Dienstag",
+        "wednesday": "Mittwoch",
+        "thursday": "Donnerstag",
+        "friday": "Freitag",
+        "saturday": "Samstag",
+        "sunday": "Sonntag"
+      },
       "setupSave": "Setup speichern",
       "setupSaving": "Setup wird gespeichert…",
       "setupValidationError": "Fülle zuerst die Setup-Felder aus.",
@@ -961,7 +974,7 @@
       "strategyTitle": "2. Strategie",
       "strategySubtitle": "Verknüpfe eine Strategie mit dem Setup, das du gerade gespeichert hast.",
       "strategyNameLabel": "Name",
-      "strategyNamePlaceholder": "{symbol} Strategy",
+      "strategyNamePlaceholder": "{symbol} Strategie",
       "strategyAmountLabel": "Basisbetrag",
       "strategyEntryLabel": "Entry",
       "strategyTargetsLabel": "Targets",
@@ -1000,7 +1013,7 @@
       "contactLabel": "Email address",
       "roleLabel": "Authorization level",
       "summaryEyebrow": "Finn trader profile",
-      "summaryDescription": "Your trading style, goals, risk profile, timeframes, and coaching patterns live in the trading profile section below.",
+      "summaryDescription": "Handelsstil, Ziele, Risikoprofil, Zeitrahmen und Coaching-Wünsche stehen unten in deinem Traderprofil.",
       "summaryHelper": "Use the profile editor below to update it.",
       "languageEyebrow": "Language preference",
       "languageTitle": "Choose your account language",
@@ -1016,7 +1029,7 @@
       "edit": "Edit profile",
       "close": "Close",
       "loading": "Loading trader profile...",
-      "save": "Save profile",
+      "save": "Profil speichern",
       "saving": "Saving profile...",
       "loadError": "The trader profile could not be loaded.",
       "saveError": "Saving your trader profile failed. Please try again.",
@@ -1027,66 +1040,67 @@
       "helper": "Update this profile whenever your style changes. That keeps Finn relevant and reduces signals that do not fit how you trade.",
       "adminTitle": "Open AI admin",
       "adminDescription": "System settings for AI and monitoring",
-      "logoutTitle": "Sign out safely",
-      "logoutDescription": "End your current session",
-      "logoutSuccess": "You have been signed out safely ✔"
+      "logoutTitle": "Sicher abmelden",
+      "logoutDescription": "Beende deine aktuelle Sitzung",
+      "logoutSuccess": "Du wurdest sicher abgemeldet ✔",
+      "logoutFailed": "Abmelden fehlgeschlagen. Deine Sitzung ist noch aktiv. Bitte versuche es erneut."
     },
     "banner": {
-      "completeLabel": "Step completed",
+      "completeLabel": "Schritt abgeschlossen",
       "recommendedLabel": "Recommended next step",
       "completeTitle": "Good, this step is done",
-      "completeBody": "You can move on to the next step or go back to your onboarding overview.",
+      "completeBody": "Du kannst zum nächsten Schritt gehen oder zur Onboarding-Übersicht zurückkehren.",
       "finnHelps": "Finn helps:",
       "unlocksPrefix": "Then you unlock:",
       "overviewCta": "View onboarding →",
       "backToOverviewCta": "Back to overview →",
       "steps": {
         "profile": {
-          "title": "Step 1 of 8 — Your trading profile",
+          "title": "Schritt 1 von 8 — Dein Traderprofil",
           "action": "Start by sharing what kind of trader you are, which horizon you use, and what Finn should watch.",
           "help": "Finn uses this to adapt setups, explanations, and risk warnings to your style.",
           "unlocks": "More personal coaching"
         },
         "asset": {
-          "title": "Step 2 of 8 — Choose your first asset",
+          "title": "Schritt 2 von 8 — Erstes Asset wählen",
           "action": "Pick the first asset you want to trade so onboarding stops floating on defaults and every next step points to the same symbol.",
-          "help": "Finn adds this asset to your watchlist and keeps market, macro, technical, setup, strategy, and bot guidance scoped to it.",
+          "help": "Finn nimmt dieses Asset auf deine Watchlist und hält die weitere Analyse sowie Setup, Strategie und Bot daran gebunden.",
           "unlocks": "Asset-scoped context building"
         },
         "market": {
-          "title": "Step 3 of 8 — Market context",
-          "action": "Open the market page for your chosen asset and let Finn establish the live market picture first.",
-          "help": "Without market context for your chosen asset, Finn stays too generic in the advice that follows.",
-          "unlocks": "Your first market briefing"
+          "title": "Schritt 3 von 8 — Marktkontext",
+          "action": "Öffne die Marktseite für dein gewähltes Asset und lass Finn zuerst das aktuelle Marktbild erfassen.",
+          "help": "Ohne Marktkontext für dein Asset bleiben Finns spätere Hinweise zu allgemein.",
+          "unlocks": "Dein erster Marktüberblick"
         },
         "macro": {
-          "title": "Step 4 of 8 — Macro picture",
+          "title": "Schritt 4 von 8 — Makrobild",
           "action": "Add macro context so Finn can judge the broader regime around your chosen asset more accurately.",
           "help": "Think DXY, yields, or liquidity: Finn uses this bigger picture to judge the asset you picked.",
           "unlocks": "Better risk assessment"
         },
         "technical": {
-          "title": "Step 5 of 8 — Technical signals",
-          "action": "Check technical signals for your chosen asset so Finn can judge entries and timing more accurately.",
+          "title": "Schritt 5 von 8 — Technische Signale",
+          "action": "Prüfe technische Signale für dein Asset, damit Finn Einstiege und Timing besser einordnen kann.",
           "help": "This step gives Finn concrete evidence for trend, momentum, and timing on your chosen asset.",
           "unlocks": "Stronger timing explanations"
         },
         "setup": {
-          "title": "Step 6 of 8 — Create a setup",
+          "title": "Schritt 6 von 8 — Setup erstellen",
           "action": "Create your first setup for your chosen asset so Finn can connect your rules to real situations.",
           "help": "This is where Finn becomes more specific: not just context, but your asset-specific rules too.",
-          "unlocks": "More personal reviews"
+          "unlocks": "Persönlichere Auswertungen"
         },
         "strategy": {
-          "title": "Step 7 of 8 — Choose a strategy",
-          "action": "Create your first strategy for that setup so dashboard, reviews, and reports become truly useful.",
+          "title": "Schritt 7 von 8 — Strategie wählen",
+          "action": "Erstelle deine erste Strategie für dieses Setup, damit Dashboard, Auswertungen und Berichte nützlich werden.",
           "help": "After this step Finn can review and prioritize decisions for your chosen asset much better.",
           "unlocks": "Full review flow"
         },
         "bot": {
-          "title": "Step 8 of 8 — Link a bot to your strategy",
-          "action": "Create one bot for your new strategy so Finn can turn your setup and strategy into a repeatable execution lane.",
-          "help": "This is the final bridge from planning to execution. Finn uses the linked bot to review cadence, budget, and live versus paper mode for the same asset.",
+          "title": "Schritt 8 von 8 — Bot mit deiner Strategie verbinden",
+          "action": "Erstelle einen Bot für deine neue Strategie, damit Finn Setup und Strategie mit einer wiederholbaren Ausführung verbinden kann.",
+          "help": "Das ist der letzte Schritt vom Plan zur Ausführung. Finn prüft beim verbundenen Bot Rhythmus, Budget und Live- oder Paper-Modus für dasselbe Asset.",
           "unlocks": "A complete execution-ready workflow"
         }
       }
@@ -1095,7 +1109,7 @@
       "loading": "Finn bereitet deinen Workspace vor...",
       "eyebrow": "Finn begleitet dein Setup",
       "title": "Richte den echten Produktfluss ein",
-      "description": "Du musst nicht sofort das ganze Produkt verstehen. Gehe ruhig durch dieselben vier Workspaces, die du später auch wirklich nutzt: Profile, Analysis, My Plan und Automation. Finn erklärt in jedem Workspace, was du klicken musst und warum dieser Schritt wichtig ist.",
+      "description": "Du musst nicht sofort das ganze Produkt verstehen. Gehe durch die vier Arbeitsbereiche, die du später nutzt: Profil, Analyse, Mein Plan und Automatisierung. Finn erklärt dir dort die nächsten Schritte.",
       "chips": {
         "duration": "5-10 Minuten",
         "safe": "Keine Live-Trades im Onboarding",
@@ -1103,13 +1117,13 @@
       },
       "finnSays": "Finn sagt",
       "finnHelpsLabel": "Finn hilft:",
-      "finnComplete": "Deine Ausführungsbasis steht. Öffne jetzt dein Dashboard, prüfe deinen ersten Report und frage Finn nach deinem nächsten Schritt.",
+      "finnComplete": "Deine Ausführungsbasis steht. Öffne jetzt dein Dashboard, lies deinen ersten Bericht und frage Finn nach deinem nächsten Schritt.",
       "completeLabel": "Basis steht",
       "completeTitle": "Du kannst jetzt wirklich mit Tradamind arbeiten",
-      "completeBody": "Dein Onboarding ist abgeschlossen. Profil, Kontext, Setup, Strategie und Bot-Verknüpfung sind jetzt eingerichtet. Öffne dein Dashboard für das Gesamtbild, lies deinen Report für die Zusammenfassung und frage Finn nach deinem ersten konkreten nächsten Schritt.",
+      "completeBody": "Dein Onboarding ist abgeschlossen. Profil, Kontext, Setup, Strategie und Bot sind eingerichtet. Öffne das Dashboard, lies deinen Bericht und frage Finn nach deinem nächsten konkreten Schritt.",
       "completeActions": {
         "dashboard": "Dashboard öffnen",
-        "report": "Report lesen",
+        "report": "Bericht lesen",
         "finn": "Frage Finn nach deinem nächsten Schritt"
       },
       "nextStepPrefix": "Nächste Phase:",
@@ -1130,14 +1144,14 @@
       },
       "steps": {
         "profile": {
-          "title": "Profile",
+          "title": "Profil",
           "description": "Speichere das Trader-Profil, das Finn wirklich nutzt: Erfahrung, Stil, Risiko, Ziele und relevante Präferenzen.",
           "finnHelp": "Finn nutzt dieses Profil, um Erklärungen, Warnungen und empfohlene nächste Schritte an deine Art zu handeln anzupassen.",
           "unlocks": "Persönliche Führung in den echten Workspaces"
         },
         "asset": {
           "title": "Analysis",
-          "description": "Wähle innerhalb von Analysis ein Asset und baue darum den ersten Market-, Macro- und Technical-Kontext auf.",
+          "description": "Wähle in der Analyse ein Asset und ergänze Markt-, Makro- und technische Daten.",
           "finnHelp": "Finn hält dadurch die ganze Analyse an ein Asset gebunden, sodass Preis, Indikatoren, Scores und Briefing im selben Kontext bleiben.",
           "unlocks": "Eine erste Live-Analysebasis für ein echtes Asset"
         },
@@ -1156,17 +1170,17 @@
         "technical": {
           "title": "Analysis",
           "description": "Füge mindestens einen technischen Indikator hinzu, damit Finn Momentum, Trend und Timing für das gewählte Asset erklären kann.",
-          "finnHelp": "Technical vervollständigt die erste Analyseebene mit konkretem Nachweis aus der Preisstruktur.",
+          "finnHelp": "Der technische Indikator ergänzt die erste Analyse mit konkreten Daten aus der Preisentwicklung.",
           "unlocks": "Eine vollständige erste Analysekonfiguration"
         },
         "setup": {
-          "title": "My Plan",
+          "title": "Mein Plan",
           "description": "Erstelle ein Setup für dasselbe Asset, damit dein Marktbild in explizite Trading-Bedingungen übergeht.",
           "finnHelp": "Hier wechselt Finn von allgemeiner Analyse zu deinem echten Handelsrahmen.",
           "unlocks": "Eine konkrete Planbasis"
         },
         "strategy": {
-          "title": "My Plan",
+          "title": "Mein Plan",
           "description": "Erstelle eine Strategie für dieses Setup, damit Entry, Invalidation und Risiko zu einem Ausführungsplan werden.",
           "finnHelp": "Nach diesem Schritt kann Finn Entscheidungen gegen deine eigenen Regeln prüfen statt nur gegen allgemeinen Kontext.",
           "unlocks": "Einen vollständigen Plan, den Finn bewerten kann"
@@ -1181,22 +1195,22 @@
     },
     "onboardingComplete": {
       "title": "Onboarding complete",
-      "description": "Your foundation is ready. Finn now has enough context to make your dashboard, reports, and reviews much more targeted. Start calmly: open your dashboard, then check your report, and ask Finn for your next step.",
+      "description": "Deine Grundlage steht. Finn kann Dashboard, Berichte und Auswertungen jetzt stärker auf dich abstimmen. Öffne zuerst das Dashboard, lies dann den Bericht und frage Finn nach dem nächsten Schritt.",
       "finnSays": "Finn says",
       "finnBody": "Open your dashboard first for the full picture. Then use report to see what matters today and ask Finn which next step makes most sense.",
       "chips": {
         "dashboard": "Dashboard",
-        "report": "Report",
+        "report": "Bericht",
         "askFinn": "Ask Finn"
       },
       "openDashboard": "Open dashboard",
       "preparingDashboard": "Preparing dashboard...",
-      "footer": "You can always come back later to market, setup, or strategy to sharpen your context."
+      "footer": "Du kannst jederzeit zur Marktanalyse, zum Setup oder zur Strategie zurückkehren, um deinen Plan zu verbessern."
     },
     "onboardingPage": {
       "eyebrow": "Geführtes Onboarding",
       "title": "Richte den echten Produktfluss Schritt für Schritt ein",
-      "description": "FINN führt dich durch dieselben Workspaces, die du später jeden Tag nutzt: Analysis, My Plan und Automation. Reflection bleibt außerhalb des Onboardings und füllt sich später selbst.",
+      "description": "FINN führt dich durch die Arbeitsbereiche Analyse, Mein Plan und Automatisierung. Reflexion ergänzt sich später.",
       "activeAssetLabel": "Asset",
       "phasesCompleteLabel": "Phasen abgeschlossen",
       "readyLabel": "Bereit",
@@ -1241,9 +1255,9 @@
       "unlockedSuffix": "freigeschaltet",
       "finishPrefix": "Schließe zuerst diesen Teil-Schritt ab für",
       "phaseLabels": {
-        "profile": "Profile",
+        "profile": "Profil",
         "analysis": "Analysis",
-        "plan": "My Plan",
+        "plan": "Mein Plan",
         "automation": "Automation"
       },
       "profileComplete": "Dein Profil ist gespeichert. FINN kann den restlichen Produktfluss jetzt an deinen Präferenzen ausrichten.",
@@ -1256,9 +1270,26 @@
         "market": "Du bist in Analysis. Öffne den Konfigurationsblock und verknüpfe einen Marktindikator, damit FINN den ersten Live-Marktnachweis für dieses Asset bekommt.",
         "macro": "Du bist noch immer in Analysis. Füge einen Makroindikator wie DXY hinzu, damit FINN dasselbe Asset im richtigen Regime einordnen kann.",
         "technical": "Du bist noch immer in Analysis. Füge einen technischen Indikator wie RSI oder MA 200 hinzu, damit FINN Trend, Momentum und Timing erklären kann.",
-        "setup": "Du bist in My Plan. Erstelle ein einfaches Setup für dasselbe Asset, damit deine Analyse zu expliziten Trading-Bedingungen wird.",
-        "strategy": "Du bist noch immer in My Plan. Erstelle eine Strategie für dieses Setup, damit Entry, Invalidation und Risiko zu einem echten Ausführungsplan werden.",
+        "setup": "Du bist in Mein Plan. Erstelle ein einfaches Setup für dasselbe Asset, damit deine Analyse zu klaren Handelsbedingungen wird.",
+        "strategy": "Du bist noch in Mein Plan. Erstelle eine Strategie für dieses Setup, damit Einstieg, Ungültigkeit und Risiko einen Ausführungsplan ergeben.",
         "bot": "Du bist in Automation. Erstelle einen Bot für denselben Plan und halte ihn sicher im Paper-Modus oder pausiert, sofern du nicht bewusst live gehen willst."
+      },
+      "progressLabel": "Fortschritt",
+      "nextTaskLabel": "Jetzt erledigen",
+      "phaseReady": "Diese Phase ist gespeichert. Du kannst mit dem nächsten Schritt weitermachen.",
+      "phaseDone": "Gespeichert",
+      "phaseCurrent": "Aktueller Schritt",
+      "phaseOpen": "Verfügbar",
+      "phaseLocked": "Gesperrt",
+      "stepLabels": {
+        "profile_preferences": "Profilangaben",
+        "asset": "Asset wählen",
+        "market_indicator": "Marktindikator",
+        "macro_indicator": "Makroindikator",
+        "technical_indicator": "technischer Indikator",
+        "setup": "Setup",
+        "strategy": "Strategie",
+        "bot": "Bot einrichten"
       }
     }
   },
@@ -1955,15 +1986,15 @@
       "body": "Das ist der letzte Onboarding-Schritt. Erstelle einen einfachen Bot für die Strategie, die du gerade angelegt hast, damit Finn Plan, Ausführungsmodus und Sicherheitsprüfungen in einer reviewbaren Automation-Lane verbinden kann.",
       "guidedIntro": "Mach auf dieser Seite nur eine Sache: Erstelle einen Bot für die Strategie, die du gerade gespeichert hast. Im Onboarding ist es völlig in Ordnung, den Bot im Paper-Modus oder pausiert zu lassen.",
       "planSummaryEyebrow": "Planübersicht",
-      "planSummaryBody": "Das sind das Setup und die Strategie, die du gerade in My Plan vorbereitet hast und denen dieser Bot folgen soll.",
-      "backToPlanCta": "My Plan prüfen",
+      "planSummaryBody": "Das sind das Setup und die Strategie, die du gerade in Mein Plan vorbereitet hast und denen dieser Bot folgen soll.",
+      "backToPlanCta": "Mein Plan prüfen",
       "setupLabel": "Setup",
       "botProgressLabel": "Bot-Status",
       "savedLabel": "Gespeichert",
       "pendingLabel": "Offen",
       "nextStepLabel": "Nächster Schritt",
       "nextStepBody": "Erstelle zuerst einen sicheren Starter-Bot. Paper-Modus oder pausiert reicht für das Onboarding.",
-      "secondaryReviewCta": "Zurück zu My Plan",
+      "secondaryReviewCta": "Zurück zu Mein Plan",
       "lockedLabel": "Mit einem gespeicherten Bot abschließen",
       "lockedBody": "Dieser Onboarding-Schritt ist erst abgeschlossen, wenn ein Bot für deine aktuelle Strategie gespeichert wurde.",
       "drawerEyebrow": "Automation · geführte Erstellung",
@@ -2003,7 +2034,7 @@
       "completionHint": "Sobald dein erster Bot gespeichert ist, ist dieser Onboarding-Schritt abgeschlossen und dein vollständiger Ausführungsfluss steht.",
       "completedEyebrow": "Onboarding abgeschlossen",
       "completedTitle": "Dein erster Ausfuehrungsflow ist bereit.",
-      "completedBody": "Du hast jetzt Profil, Kontext, Setup, Strategy und Bot miteinander verbunden. Gehe weiter zum Onboarding-Abschluss, oder bleibe hier, wenn du zuerst noch Bot-Einstellungen verfeinern willst.",
+      "completedBody": "Du hast jetzt Profil, Kontext, Setup, Strategie und Bot miteinander verbunden. Gehe weiter zum Onboarding-Abschluss, oder bleibe hier, wenn du zuerst noch Bot-Einstellungen verfeinern willst.",
       "finnLabel": "Finn hilft:",
       "finnHint": "Wenn du unsicher bist, frage Finn, welche Strategie du zuerst verknüpfen solltest, ob Paper-Modus jetzt sinnvoller ist und welches Startbudget sich sicher anfühlt.",
       "primaryCta": "Bot-Erstellung öffnen",
@@ -2013,7 +2044,18 @@
       "autoAdvanceStoppedHint": "Automatisches Weitergehen gestoppt. Du kannst Bot-Einstellungen hier pruefen oder spaeter manuell abschliessen.",
       "assistantCta": "Finn um Bot-Hilfe bitten",
       "secondaryCta": "Zurück zum Onboarding",
-      "assistantPrompt": "Hilf mir, den Automation-Onboarding-Schritt für mein gewähltes Asset abzuschließen. Sag mir, welche Strategie ich verknüpfen soll, mit welchem Modus ich starten soll, welches Budget sicher ist und was ich danach anklicken muss, um einen gültigen Bot zu speichern."
+      "assistantPrompt": "Hilf mir, den Automation-Onboarding-Schritt für mein gewähltes Asset abzuschließen. Sag mir, welche Strategie ich verknüpfen soll, mit welchem Modus ich starten soll, welches Budget sicher ist und was ich danach anklicken muss, um einen gültigen Bot zu speichern.",
+      "stepNumber": "Automatisierung · 4 von 4",
+      "assetLabel": "Asset",
+      "strategyLabel": "Strategie",
+      "botLabel": "Bot",
+      "createStepTitle": "1. Bot erstellen",
+      "createStepSubtitle": "Öffne die Bot-Erstellung und halte den ersten Bot einfach.",
+      "linkStepTitle": "2. Strategie verknüpfen",
+      "linkStepSubtitle": "Verwende die Strategie, die du gerade für dasselbe Asset erstellt hast.",
+      "reviewStepTitle": "3. Prüfen",
+      "reviewStepSubtitle": "Prüfe Modus und Budget, bevor du das Onboarding abschließt.",
+      "continuingLabel": "Onboarding wird abgeschlossen…"
     },
     "newBotLabel": "Neuer Bot",
     "modeLive": "Live",
@@ -2113,7 +2155,15 @@
       "scheduleDaily": "täglich",
       "scheduleWeekly": "jeden {day}",
       "scheduleMonthly": "monatlich am {day}.",
-      "scheduleWeekdays": {"monday": "Montag", "tuesday": "Dienstag", "wednesday": "Mittwoch", "thursday": "Donnerstag", "friday": "Freitag", "saturday": "Samstag", "sunday": "Sonntag"},
+      "scheduleWeekdays": {
+        "monday": "Montag",
+        "tuesday": "Dienstag",
+        "wednesday": "Mittwoch",
+        "thursday": "Donnerstag",
+        "friday": "Freitag",
+        "saturday": "Samstag",
+        "sunday": "Sonntag"
+      },
       "minOrderHelp": "Der kleinste Betrag, den eine einzelne Order nutzen darf.",
       "maxOrderHelp": "Der groesste Betrag, den eine einzelne Order nutzen darf.",
       "simpleCycleBudgetLabel": "Betrag pro {timeframe}-Kaufmoment",

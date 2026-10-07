@@ -19,6 +19,7 @@ import {
   storeAuthTokens,
   clearStoredAuth,
   clearClientUserScopedState,
+  apiLogout,
   apiRefresh,
 } from "@/lib/api/auth";
 import { clearOnboardingStatusCache } from "@/lib/api/onboarding";
@@ -72,6 +73,7 @@ export function AuthProvider({ children }) {
 
   const sessionInFlight = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const sessionVersionRef = useRef(0);
 
   const fetchCurrentUser = useCallback(async (signal?: AbortSignal) => {
     return fetch(`${API_BASE_URL}/api/auth/me`, {
@@ -97,19 +99,23 @@ export function AuthProvider({ children }) {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const sessionVersion = sessionVersionRef.current;
 
     try {
       let res = await fetchCurrentUser(controller.signal);
 
       if (res.status === 401) {
         const refreshed = await apiRefresh();
-        if (refreshed.success && !controller.signal.aborted) {
+        if (refreshed.success && !controller.signal.aborted && sessionVersion === sessionVersionRef.current) {
           res = await fetchCurrentUser(controller.signal);
         }
       }
 
+      if (controller.signal.aborted || sessionVersion !== sessionVersionRef.current) return;
+
       if (res.ok) {
         const u = await res.json();
+        if (controller.signal.aborted || sessionVersion !== sessionVersionRef.current) return;
         setUser(u);
         saveUserLocal(u);
       } else {
@@ -121,7 +127,7 @@ export function AuthProvider({ children }) {
       setSessionChecked(true);
 
     } catch (err: any) {
-      if (err?.name !== "AbortError") {
+      if (err?.name !== "AbortError" && sessionVersion === sessionVersionRef.current) {
         console.error("❌ Auth /me error:", err);
         setUser(null);
         clearStoredAuth();
@@ -153,18 +159,24 @@ export function AuthProvider({ children }) {
      TOKEN REFRESH (veilig)
   ------------------------------------------------------- */
   useEffect(() => {
+    if (!user?.id) return;
+    const controller = new AbortController();
     const interval = setInterval(async () => {
       try {
         await fetchWithAuth(`${API_BASE_URL}/api/auth/refresh`, {
           method: "POST",
+          signal: controller.signal,
         });
       } catch {
         // refresh mag stil falen
       }
     }, 50 * 60 * 1000);
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
+  }, [user?.id]);
 
   /* -------------------------------------------------------
      LOGIN  ✅ FIXED
@@ -195,6 +207,8 @@ export function AuthProvider({ children }) {
       });
       const loginUser = data?.user ?? null;
 
+      sessionVersionRef.current += 1;
+      abortRef.current?.abort();
       clearClientUserScopedState();
       if (loginUser) {
         setUser(loginUser);
@@ -224,24 +238,21 @@ export function AuthProvider({ children }) {
      LOGOUT
   ------------------------------------------------------- */
   const logout = useCallback(async () => {
+    const result = await apiLogout();
+    if (!result.success) return result;
+
+    sessionVersionRef.current += 1;
+    abortRef.current?.abort();
     setUser(null);
-    clearStoredAuth();
+    setSessionChecked(true);
+    setLoading(false);
     clearClientUserScopedState();
     clearOnboardingStatusCache();
 
-    try {
-      await fetchWithAuth(`${API_BASE_URL}/api/auth/logout`, {
-        method: "POST",
-      });
-      
-      // 📳 Haptic Feedback
-      import("@/lib/haptics").then(({ hapticFeedback }) => {
-        hapticFeedback.impact();
-      });
-
-    } catch {
-      /* stil */
-    }
+    import("@/lib/haptics").then(({ hapticFeedback }) => {
+      hapticFeedback.impact();
+    });
+    return result;
   }, []);
 
   /* -------------------------------------------------------

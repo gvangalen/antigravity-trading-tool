@@ -12,6 +12,7 @@ import {
   clearTokenLocal,
 } from "@/lib/api/user";
 import { getActiveLocale, normalizeLocale } from "@/lib/i18n";
+import { logoutSession } from "@/lib/api/logoutSession.mjs";
 
 /* =======================================================
    📌 Native Token Helpers
@@ -341,16 +342,23 @@ export async function apiLogin(email: string, password: string, locale?: string 
 
 export async function apiLogout() {
   try {
-    await fetch(`${API_BASE_URL}/api/auth/logout`, {
-      method: "POST",
-      credentials: "include",
+    if (!IS_NATIVE_APP && !getCsrfToken()) {
+      await ensureCsrfCookie();
+    }
+    const result = await logoutSession({
+      fetchImpl: fetch,
+      logoutUrl: `${API_BASE_URL}/api/auth/logout`,
+      meUrl: `${API_BASE_URL}/api/auth/me`,
       headers: {
         "Content-Type": "application/json",
         ...Object.fromEntries(buildAuthHeaders(undefined, "POST").entries()),
       },
+      refreshToken: loadRefreshToken(),
+      verifyBrowser: !IS_NATIVE_APP,
     });
+    if (!result.success) return result;
     clearStoredAuth();
-    return { success: true };
+    return result;
   } catch (err) {
     console.error("❌ apiLogout error:", err);
     return { success: false };
