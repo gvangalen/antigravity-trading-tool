@@ -3168,6 +3168,10 @@
     },
     "uiText": {
       "activeBriefing": "Active briefing",
+      "briefingSaved": "Saved personal briefing from FINN",
+      "briefingUpdating": "Earlier briefing; FINN is processing new information",
+      "briefingGeneratingLabel": "Temporary plan summary; FINN is preparing your briefing",
+      "briefingPlanSummary": "Plan summary; personal briefing unavailable",
       "briefingGenerating": "FINN is preparing your personal briefing. This is a temporary summary of your saved plan.",
       "briefingFallback": "The personal briefing is unavailable right now. This is a summary of your saved plan.",
       "defensivePosture": "Defensive posture",

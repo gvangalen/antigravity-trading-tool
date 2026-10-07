@@ -34,6 +34,10 @@
     "evening": "Goedenavond"
   },
   "finnWorkspace": {
+    "onboardingHeader": {
+      "eyebrow": "Begeleide start",
+      "flowLabel": "Analyse → Mijn Plan → Automatisering"
+    },
     "canvasEyebrow": "Werkruimte",
     "defaultDescription": "Werk in deze flow met de actieve FINN-briefing direct erboven.",
     "activeStatus": "Actief",
@@ -143,15 +147,15 @@
           "description": "Vertel Finn hoe je handelt, zodat de begeleiding past bij jouw workflow."
         },
         {
-          "label": "Analysis",
+          "label": "Analyse",
           "description": "Veranker één asset en voeg daar market-, macro- en technical-context aan toe."
         },
         {
-          "label": "My Plan",
+          "label": "Mijn Plan",
           "description": "Maak de setup en strategie die FINN en je bot straks moeten volgen."
         },
         {
-          "label": "Automation",
+          "label": "Automatisering",
           "description": "Koppel het plan veilig aan een bot zonder direct live te hoeven activeren."
         }
       ]
@@ -171,7 +175,7 @@
     "portfolio": "Portfolio",
     "analysis": "Analyse",
     "myPlan": "Mijn Plan",
-    "automation": "Automation",
+    "automation": "Automatisering",
     "reflection": "Reflectie",
     "dashboard": "Overzicht",
     "market": "Markt",
@@ -862,13 +866,13 @@
       "saveError": "Opslaan van je traderprofiel is mislukt. Probeer het nog eens."
     },
     "assetOnboardingStep": {
-      "stepNumber": "Analysis · 1 van 4",
+      "stepNumber": "Analyse · 1 van 4",
       "title": "Kies eerst het asset waar je omheen wilt bouwen",
       "description": "Je eerste asset wordt het anker voor de rest van onboarding. Finn gebruikt dit symbool om markt-, macro-, technical-, setup-, strategie- en botbegeleiding op dezelfde context te houden.",
       "finnSaysLabel": "Finn zegt",
       "finnSaysBody": "Zoek eerst het instrument dat je echt wilt traden. Ik zet het op je watchlist en houd de volgende onboardingstappen aan datzelfde symbool gekoppeld.",
       "searchTitle": "Zoek je eerste asset",
-      "searchSubtitle": "Zoek crypto of aandelen, selecteer exact één resultaat en gebruik dat als anker voor de rest van Analysis.",
+      "searchSubtitle": "Zoek crypto of aandelen, selecteer exact één resultaat en gebruik dat als anker voor de rest van Analyse.",
       "searchPlaceholder": "Zoek BTC, Ethereum, AAPL of Microsoft",
       "popularLabel": "Populair om mee te starten",
       "tableSymbol": "Symbool",
@@ -892,9 +896,9 @@
       "saveError": "Opslaan van je onboarding-asset is mislukt. Probeer het nog eens."
     },
     "analysisOnboardingStep": {
-      "stepNumber": "Analysis · 2 van 4",
+      "stepNumber": "Analyse · 2 van 4",
       "title": "Voeg je eerste analysis-basis toe",
-      "description": "Voeg voor {symbol} exact één market-, één macro- en één technical-indicator toe. Daarna controleer je eerst je basis en ga je zelf door naar My Plan.",
+      "description": "Voeg voor {symbol} exact één market-, één macro- en één technical-indicator toe. Daarna controleer je eerst je basis en ga je zelf door naar Mijn Plan.",
       "finnSaysLabel": "Finn zegt",
       "finnSaysBody": "Houd deze stap bewust klein. Eén indicator per categorie is genoeg om je eerste echte analysis-context op te bouwen rond {symbol}.",
       "assetTitle": "Kies je eerste asset",
@@ -920,20 +924,20 @@
       "changeLabel": "Kies anders",
       "addedLabel": "Toegevoegd",
       "emptyLabel": "Geen passende indicator gevonden.",
-      "successEyebrow": "Analysis klaar",
+      "successEyebrow": "Analyse klaar",
       "successTitle": "Je eerste analysis-basis is opgeslagen",
-      "successMessage": "Je hebt één asset plus één market-, macro- en technical-indicator gekozen. Controleer kort je basis en ga daarna verder naar My Plan.",
-      "continueLabel": "Verder naar My Plan",
-      "continuingLabel": "My Plan openen…",
+      "successMessage": "Je hebt één asset plus één market-, macro- en technical-indicator gekozen. Controleer kort je basis en ga daarna verder naar Mijn Plan.",
+      "continueLabel": "Verder naar Mijn Plan",
+      "continuingLabel": "Mijn Plan openen…",
       "loadError": "Laden van de analysis-onboarding is mislukt. Probeer het opnieuw.",
       "saveError": "Opslaan van deze analysis-stap is mislukt. Probeer het opnieuw."
     },
     "planOnboardingStep": {
-      "stepNumber": "My Plan · 3 van 4",
+      "stepNumber": "Mijn Plan · 3 van 4",
       "title": "Maak één setup en één strategy",
       "description": "Zet je eerste analysis voor {symbol} om in een concreet plan. Sla eerst één setup op en koppel daarna direct één strategy.",
       "finnSaysLabel": "Finn zegt",
-      "finnSaysBody": "Houd ook deze stap klein. Eén setup en één gekoppelde strategy zijn genoeg om daarna veilig door te gaan naar Automation.",
+      "finnSaysBody": "Houd ook deze stap klein. Eén setup en één gekoppelde strategy zijn genoeg om daarna veilig door te gaan naar Automatisering.",
       "assetLabel": "Asset",
       "setupProgressLabel": "Setupstatus",
       "strategyProgressLabel": "Strategystatus",
@@ -975,16 +979,16 @@
       "strategyLockedLabel": "Vergrendeld totdat setup is opgeslagen",
       "strategyLockedBody": "Sla eerst de setup op. Daarna opent deze strategiestap direct voor hetzelfde asset.",
       "reviewTitle": "3. Controle",
-      "reviewSubtitle": "Controleer eerst je eerste plan voordat je doorgaat naar Automation.",
+      "reviewSubtitle": "Controleer eerst je eerste plan voordat je doorgaat naar Automatisering.",
       "nextStepLabel": "Volgende stap",
       "nextStepSetup": "Begin met het opslaan van één setup. Daarna wordt de strategiestap meteen ontgrendeld.",
-      "nextStepStrategy": "Sla nu één strategy voor deze setup op. Daarna kun je zelf door naar Automation.",
+      "nextStepStrategy": "Sla nu één strategy voor deze setup op. Daarna kun je zelf door naar Automatisering.",
       "successEyebrow": "Plan klaar",
       "successTitle": "Je eerste setup en strategy zijn opgeslagen",
-      "successMessage": "Controleer kort je eerste plan en ga daarna zelf door naar Automation wanneer je klaar bent.",
-      "continueLabel": "Verder naar Automation",
-      "continuingLabel": "Automation openen…",
-      "loadError": "Laden van de My Plan-onboarding is mislukt. Probeer het opnieuw."
+      "successMessage": "Controleer kort je eerste plan en ga daarna zelf door naar Automatisering wanneer je klaar bent.",
+      "continueLabel": "Verder naar Automatisering",
+      "continuingLabel": "Automatisering openen…",
+      "loadError": "Laden van de Mijn Plan-onboarding is mislukt. Probeer het opnieuw."
     },
     "profilePage": {
       "eyebrow": "Tradingprofiel",
@@ -1095,7 +1099,7 @@
       "loading": "Finn zet je werkplek klaar...",
       "eyebrow": "Finn begeleidt je setup",
       "title": "Zet de echte productflow klaar",
-      "description": "Je hoeft niet meteen het hele product te begrijpen. Ga rustig door dezelfde vier workspaces die je later ook echt gebruikt: Profile, Analysis, My Plan en Automation. Finn legt in elke workspace uit wat je moet klikken en waarom die stap belangrijk is.",
+      "description": "Je hoeft niet meteen het hele product te begrijpen. Ga rustig door dezelfde vier workspaces die je later ook echt gebruikt: Profile, Analyse, Mijn Plan en Automatisering. Finn legt in elke workspace uit wat je moet klikken en waarom die stap belangrijk is.",
       "chips": {
         "duration": "5-10 minuten",
         "safe": "Geen live trades in onboarding",
@@ -1136,43 +1140,43 @@
           "unlocks": "Persoonlijke begeleiding in de echte workspaces"
         },
         "asset": {
-          "title": "Analysis",
-          "description": "Kies binnen Analysis één asset en bouw daar de eerste market-, macro- en technical-context omheen op.",
+          "title": "Analyse",
+          "description": "Kies binnen Analyse één asset en bouw daar de eerste market-, macro- en technical-context omheen op.",
           "finnHelp": "Finn houdt zo de hele analyse aan één asset gekoppeld, zodat prijs, indicatoren, scores en briefing in dezelfde context blijven.",
           "unlocks": "Een eerste live analysebasis voor één echte asset"
         },
         "market": {
-          "title": "Analysis",
+          "title": "Analyse",
           "description": "Voeg minstens één marktindicator toe zodat Finn live prijsactie en brede marktdruk voor het gekozen asset kan lezen.",
           "finnHelp": "Dit geeft Finn het eerste live marktbewijs voor het asset dat je hebt gekozen.",
-          "unlocks": "Marktbewijs binnen Analysis"
+          "unlocks": "Marktbewijs binnen Analyse"
         },
         "macro": {
-          "title": "Analysis",
+          "title": "Analyse",
           "description": "Voeg minstens één macro-indicator toe zodat Finn liquiditeit, regime en breder risico rond datzelfde asset kan meewegen.",
           "finnHelp": "Macro geeft Finn de grotere context achter je asset-specifieke analyse.",
           "unlocks": "Macro-regimecontext voor hetzelfde asset"
         },
         "technical": {
-          "title": "Analysis",
+          "title": "Analyse",
           "description": "Voeg minstens één technische indicator toe zodat Finn momentum, trend en timing op het gekozen asset kan uitleggen.",
           "finnHelp": "Technical maakt de eerste analysetag compleet met concreet bewijs uit de prijsstructuur.",
           "unlocks": "Een complete eerste analyseconfiguratie"
         },
         "setup": {
-          "title": "My Plan",
+          "title": "Mijn Plan",
           "description": "Maak één setup voor hetzelfde asset zodat je marktbeeld verandert in expliciete tradingvoorwaarden.",
           "finnHelp": "Hier gaat Finn van algemene analyse naar jouw echte handelskader.",
           "unlocks": "Een concrete planbasis"
         },
         "strategy": {
-          "title": "My Plan",
+          "title": "Mijn Plan",
           "description": "Maak één strategie voor die setup zodat entry, invalidatie en risico een uitvoeringsplan worden.",
           "finnHelp": "Na deze stap kan Finn beslissingen toetsen aan jouw eigen regels in plaats van alleen aan algemene context.",
           "unlocks": "Een compleet plan dat Finn kan beoordelen"
         },
         "bot": {
-          "title": "Automation",
+          "title": "Automatisering",
           "description": "Koppel één bot aan dat plan zodat setup, strategie en uitvoeringsmodus samen in één veilige automation-lane staan.",
           "finnHelp": "Finn gebruikt deze laatste stap om exchange-status, uitvoeringsmodus, budget en plan-uitlijning te controleren voordat je live gaat.",
           "unlocks": "Een complete end-to-end flow die klaar is voor serieuze tests"
@@ -1196,7 +1200,7 @@
     "onboardingPage": {
       "eyebrow": "Begeleide onboarding",
       "title": "Zet de echte productflow stap voor stap klaar",
-      "description": "FINN begeleidt je door dezelfde workspaces die je elke dag gebruikt: Analysis, My Plan en Automation. Reflection blijft buiten onboarding en vult zichzelf later.",
+      "description": "FINN begeleidt je door dezelfde werkruimtes die je elke dag gebruikt: Analyse, Mijn Plan en Automatisering. Reflectie vult zichzelf later.",
       "activeAssetLabel": "Asset",
       "phasesCompleteLabel": "fases voltooid",
       "readyLabel": "Klaar",
@@ -1207,7 +1211,7 @@
       "completeEyebrow": "Onboarding voltooid",
       "completeTitle": "Je bent klaar om met FINN te werken",
       "completeDescription": "Je profiel, analyseflow, plan en automation staan ingesteld. FINN kan nu je marktcontext blijven volgen en je helpen het plan te volgen dat je hebt gezet.",
-      "completeCta": "Ga naar Analysis",
+      "completeCta": "Ga naar Analyse",
       "phaseEyebrow": "FINN begeleidt deze fase",
       "checklistLabel": "Checklist",
       "openStepCta": "Open stap",
@@ -1257,7 +1261,7 @@
       "profileComplete": "Je profiel is opgeslagen. FINN kan de rest van de productflow nu rond jouw voorkeuren begeleiden.",
       "analysisComplete": "De eerste analysebasis staat. FINN kan nu asset en indicatoren combineren tot live context.",
       "planComplete": "Je setup en strategie staan klaar voor het gekozen asset.",
-      "automationComplete": "Automation is ingesteld. De laatste bot kan gepauzeerd blijven totdat jij bewust activeert.",
+      "automationComplete": "Automatisering is ingesteld. De laatste bot kan gepauzeerd blijven totdat jij bewust activeert.",
       "stepBodies": {
         "profile": "Begin met het opslaan van de profielgegevens die FINN echt gebruikt: ervaring, stijl, risico en doelen.",
         "asset": "Je zit in Analyse. Voeg eerst één asset toe zodat de rest van deze werkruimte bij hetzelfde symbool hoort.",
@@ -1333,9 +1337,9 @@
       "loadError": "Kon marktdata niet laden.",
       "processing": "{symbol} wordt verwerkt...",
       "onboardingGuide": {
-        "eyebrow": "Analysis-stap",
+        "eyebrow": "Analyse-stap",
         "title": "Voeg één marktindicator toe voor {symbol}",
-        "body": "Begin de echte Analysis-workspace door één marktsignaal voor {symbol} toe te voegen. Zo krijgt Finn het eerste live marktbewijs voordat je doorgaat naar macro en technical context.",
+        "body": "Begin de echte Analyse-workspace door één marktsignaal voor {symbol} toe te voegen. Zo krijgt Finn het eerste live marktbewijs voordat je doorgaat naar macro en technical context.",
         "guidedBadge": "Onboarding begeleidt je hier",
         "guidedIntro": "Doe op deze pagina maar één ding: ga naar het configuratieblok hieronder, zoek één marktindicator en koppel die aan het marktoverzicht voor {symbol}.",
         "guidedConfigHint": "Beste eerste stap: kies een duidelijk signaal zoals prijs, 24u-verandering of volume, klik op koppelen aan marktoverzicht en controleer daarna dat hij actief zichtbaar is in je market-sectie.",
@@ -1352,7 +1356,7 @@
           "Open het configuratieblok hieronder.",
           "Zoek één marktindicator voor {symbol}, bijvoorbeeld prijs, 24u-verandering of volume.",
           "Klik op koppelen aan marktoverzicht zodat de indicator onderdeel wordt van de live marktcontext.",
-          "Controleer dat de indicator actief staat en ga daarna terug naar onboarding voor de volgende Analysis-stap."
+          "Controleer dat de indicator actief staat en ga daarna terug naar onboarding voor de volgende analysestap."
         ],
         "primaryCta": "Open marktconfiguratie",
         "nextCta": "Ga door naar macro",
@@ -1438,7 +1442,7 @@
         "addError": "Toevoegen mislukt."
       },
       "onboardingGuide": {
-        "eyebrow": "Analysis-stap",
+        "eyebrow": "Analyse-stap",
         "title": "Voeg één macro-indicator toe voor je {symbol}-beeld",
         "body": "Macro is breder dan {symbol}, maar hier leert Finn in welk regime het asset staat dat jij koos. Eén goede macro-indicator is genoeg om deze onboardingstap af te ronden.",
         "guidedBadge": "Onboarding begeleidt je hier",
@@ -1457,7 +1461,7 @@
           "Open het configuratieblok hieronder.",
           "Zoek één macro-indicator, bijvoorbeeld DXY.",
           "Klik op synchroniseren met macro en wacht tot de indicator actief verschijnt in je macro-overzicht voor {symbol}.",
-          "Zodra één macro-indicator actief is, ga je terug naar onboarding voor de volgende Analysis-stap."
+          "Zodra één macro-indicator actief is, ga je terug naar onboarding voor de volgende analysestap."
         ],
         "primaryCta": "Open macro-configuratie",
         "nextCta": "Ga door naar technical",
@@ -1542,9 +1546,9 @@
         "addError": "Toevoegen mislukt. Probeer opnieuw."
       },
       "onboardingGuide": {
-        "eyebrow": "Analysis-stap",
+        "eyebrow": "Analyse-stap",
         "title": "Voeg één technische indicator toe voor {symbol}",
-        "body": "Rond de eerste Analysis-configuratie af door één technisch signaal voor {symbol} toe te voegen. Zo krijgt Finn concreet bewijs voor trend en momentum in plaats van alleen brede context.",
+        "body": "Rond de eerste Analyse-configuratie af door één technisch signaal voor {symbol} toe te voegen. Zo krijgt Finn concreet bewijs voor trend en momentum in plaats van alleen brede context.",
         "guidedBadge": "Onboarding begeleidt je hier",
         "guidedIntro": "Doe op deze pagina maar één ding: zoek in het configuratieblok hieronder één technische indicator en synchroniseer die naar de technical-context voor {symbol}.",
         "guidedConfigHint": "Beste eerste stap: zoek RSI of MA 200, klik op synchroniseren met terminal en controleer daarna dat de indicator onderdeel wordt van je technische context voor {symbol}.",
@@ -1845,9 +1849,9 @@
     "newTitle": "Nieuwe setup",
     "newDescription": "Voeg een nieuw tradingmodel toe aan het systeem",
     "onboardingGuide": {
-      "eyebrow": "My Plan-stap",
+      "eyebrow": "Mijn Plan-stap",
       "title": "Maak één simpele setup voor je gekozen asset",
-      "body": "Hier verandert Analysis in een echt plan. Maak één duidelijke setup voor hetzelfde asset zodat Finn je context aan expliciete tradingvoorwaarden kan koppelen.",
+      "body": "Hier verandert Analyse in een echt plan. Maak één duidelijke setup voor hetzelfde asset zodat Finn je context aan expliciete tradingvoorwaarden kan koppelen.",
       "guidedBadge": "Onboarding begeleidt je hier",
       "guidedIntro": "Doe op deze pagina maar één ding: open het blok voor een nieuwe setup hieronder en sla één simpele setup op voor je gekozen asset.",
       "guidedConfigHint": "Beste eerste stap: kies het asset, selecteer één setup-type, kies één timeframe en sla de setup op. Hij hoeft nog niet perfect te zijn; een eerste geldige versie is genoeg.",
@@ -1862,7 +1866,7 @@
       ],
       "steps": [
         "Scroll naar het blok voor een nieuwe setup hieronder.",
-        "Kies hetzelfde asset dat je in Analysis hebt gebruikt.",
+        "Kies hetzelfde asset dat je in Analyse hebt gebruikt.",
         "Selecteer één setup-type en één timeframe.",
         "Sla de setup op zodat Finn hem als eerste plan-kader kan gebruiken."
       ],
@@ -1889,7 +1893,7 @@
     "newTitle": "Nieuwe strategie",
     "newDescription": "Voeg een nieuwe strategie toe die past bij je setup en uitvoeringsstijl",
     "onboardingGuide": {
-      "eyebrow": "My Plan-stap",
+      "eyebrow": "Mijn Plan-stap",
       "title": "Maak één uitvoeringsstrategie voor je gekozen asset",
       "body": "Een strategie maakt van je setup een uitvoeringsplan. Maak één basisstrategie voor hetzelfde asset zodat Finn toekomstige beslissingen tegen echte regels kan beoordelen in plaats van alleen tegen algemene context.",
       "guidedBadge": "Onboarding begeleidt je hier",
@@ -1908,7 +1912,7 @@
         "Scroll naar het blok voor een nieuwe strategie hieronder.",
         "Kies eerst bij welke setup hij hoort.",
         "Vul de belangrijkste uitvoeringsvelden in voor entry, invalidatie en risico.",
-        "Sla de strategie op zodat My Plan één complete setup-naar-strategie-keten heeft."
+        "Sla de strategie op zodat Mijn Plan één complete setup-naar-strategie-keten heeft."
       ],
       "primaryCta": "Open nieuwe strategie",
       "nextCta": "Ga door naar bot",
@@ -1941,40 +1945,40 @@
     "subtitle": "Beheer je geautomatiseerde tradingstrategieën",
     "createTitle": "Bot aanmaken",
     "createStatus": "Concept aanmaken",
-    "createFromPlanTitle": "Plan activeren in Automation",
+    "createFromPlanTitle": "Plan activeren in Automatisering",
     "createFromPlanStatus": "Plan koppelen",
     "createImpact": "Je maakt een nieuwe botconfig aan met een eigen strategie, budget en review-lane.",
-    "createFromPlanImpact": "Je activeert dit plan in Automation door er een uitvoerende botconfig aan te koppelen.",
+    "createFromPlanImpact": "Je activeert dit plan in Automatisering door er een uitvoerende botconfig aan te koppelen.",
     "createSafety": "Controleer modus, budget en strategie. Live-activiteit blijft pas na expliciete review mogelijk.",
     "createFromPlanSafety": "Controleer vooral modus, budget en strategie. Het plan blijft leidend; live-activiteit blijft pas na expliciete review mogelijk.",
     "createConsequence": "Na opslaan verversen we de botlijst en kun je Finn direct laten controleren of de bot goed is ingericht.",
-    "createFromPlanConsequence": "Na opslaan openen we de uitvoeringslijn van dit plan in Automation zodat je direct ziet hoe het plan nu draait.",
+    "createFromPlanConsequence": "Na opslaan openen we de uitvoeringslijn van dit plan in Automatisering zodat je direct ziet hoe het plan nu draait.",
     "createConfirm": "Sla bot op",
     "createBusy": "Bot wordt opgeslagen...",
     "createFromPlanConfirm": "Activeer plan",
     "createFromPlanBusy": "Plan wordt geactiveerd...",
     "createValidation": "Vul naam en strategie in voordat je de bot opslaat.",
     "createSuccess": "Bot opgeslagen. Laat Finn nu de configuratie en risico's kort checken.",
-    "createFromPlanSuccess": "Plan geactiveerd in Automation. Finn kan nu de uitvoeringslijn en risico's kort checken.",
+    "createFromPlanSuccess": "Plan geactiveerd in Automatisering. Finn kan nu de uitvoeringslijn en risico's kort checken.",
     "onboardingGuide": {
-      "eyebrow": "Automation-stap",
+      "eyebrow": "Automatisering-stap",
       "guidedBadge": "Onboarding begeleidt je hier",
       "title": "Koppel één bot aan je strategie",
       "body": "Dit is de laatste onboardingstap. Maak één eenvoudige bot voor de strategie die je net hebt gemaakt, zodat Finn plan, uitvoeringsmodus en veiligheidschecks in één reviewbare automation-lane kan verbinden.",
       "guidedIntro": "Doe op deze pagina maar één ding: maak één bot voor de strategie die je net hebt opgeslagen. Tijdens onboarding is het helemaal goed om de bot in paper-modus of gepauzeerd te laten staan.",
       "planSummaryEyebrow": "Planoverzicht",
-      "planSummaryBody": "Dit zijn de setup en strategie die je net in My Plan hebt voorbereid en die deze bot moet volgen.",
-      "backToPlanCta": "Bekijk My Plan",
+      "planSummaryBody": "Dit zijn de setup en strategie die je net in Mijn Plan hebt voorbereid en die deze bot moet volgen.",
+      "backToPlanCta": "Bekijk Mijn Plan",
       "setupLabel": "Setup",
       "botProgressLabel": "Botstatus",
       "savedLabel": "Opgeslagen",
       "pendingLabel": "Open",
       "nextStepLabel": "Volgende stap",
       "nextStepBody": "Maak eerst één veilige starter-bot. Paper-modus of gepauzeerd is genoeg voor onboarding.",
-      "secondaryReviewCta": "Terug naar My Plan",
+      "secondaryReviewCta": "Terug naar Mijn Plan",
       "lockedLabel": "Rond af met één opgeslagen bot",
       "lockedBody": "Deze onboardingstap is pas klaar nadat één bot voor je huidige strategie is opgeslagen.",
-      "drawerEyebrow": "Automation · begeleide aanmaak",
+      "drawerEyebrow": "Automatisering · begeleide aanmaak",
       "drawerTitle": "Maak één veilige starter-bot",
       "drawerBody": "Gebruik de opgeslagen strategie voor {symbol}, start in paper-modus of gepauzeerd en sla één bot op om onboarding af te ronden.",
       "drawerStepOneEyebrow": "Stap 1",
@@ -1994,7 +1998,7 @@
       "reviewBudgetBody": "Nu nog optioneel, maar wel slim om te checken voordat je live automation gebruikt.",
       "reviewStatusEyebrow": "Reviewstatus",
       "reviewStatusTitle": "Klaar om onboarding af te ronden",
-      "reviewStatusBody": "Je kunt deze bot nu nog verfijnen, of doorgaan en later vanuit Automation terugkomen.",
+      "reviewStatusBody": "Je kunt deze bot nu nog verfijnen, of doorgaan en later vanuit Automatisering terugkomen.",
       "reviewEditBotCta": "Bekijk botinstellingen",
       "reviewBudgetCta": "Bekijk budget",
       "examples": [
@@ -2006,7 +2010,7 @@
         "Klik op bot aanmaken.",
         "Kies de strategie die je net voor dezelfde asset hebt gemaakt.",
         "Kies een veilige eerste modus, bij voorkeur paper of gepauzeerd.",
-        "Controleer het startbudget en sla de bot op zodat Automation één geldige uitvoeringslane heeft."
+        "Controleer het startbudget en sla de bot op zodat Automatisering één geldige uitvoeringslijn heeft."
       ],
       "completionHint": "Zodra je eerste bot is opgeslagen, is deze onboardingstap klaar en staat je volledige uitvoeringsflow.",
       "completedEyebrow": "Onboarding afgerond",
@@ -2365,7 +2369,7 @@
       "diagnosticsToolsLabel": "Diagnostiektools",
       "diagnosticsToolsBody": "Gebruik backtests en scenario's alleen wanneer je dieper wilt controleren waarom de bot wel of niet uitvoerbaar is.",
       "blockerNoStrategyBody": "Deze bot kan nog niet handelen, omdat er nog geen strategie is gekoppeld aan het plan.",
-      "blockerNoStrategyStep": "Volgende stap: koppel eerst een strategie voordat Automation een beslissing kan nemen.",
+      "blockerNoStrategyStep": "Volgende stap: koppel eerst een strategie voordat Automatisering een beslissing kan nemen.",
       "blockerBudgetTitle": "Budget nodig",
       "blockerBudgetBody": "Deze bot heeft nog geen budget, dus Finn kan geen positie bepalen of trades uitvoeren vanuit deze keten.",
       "blockerBudgetStep": "Volgende stap: voeg eerst budget en limieten toe voordat je deze bot voor uitvoering gebruikt.",
@@ -2564,7 +2568,7 @@
       "completeChainHint": "Maak eerst de gekoppelde uitvoeringsketen compleet",
       "evidence": "Onderbouwing",
       "linkMissingTitle": "Strategiekoppeling ontbreekt",
-      "linkMissingBody": "Deze bot is wel aan een plan/setup gekoppeld, maar nog niet aan een strategie. Automation mag dit daarom niet tonen als complete uitvoeringsketen.",
+      "linkMissingBody": "Deze bot is wel aan een plan/setup gekoppeld, maar nog niet aan een strategie. Automatisering mag dit daarom niet tonen als complete uitvoeringsketen.",
       "linkStrategyAction": "Koppel strategie",
       "setupMissingTitle": "Setupkoppeling ontbreekt",
       "setupMissingBody": "Deze bot heeft nog geen gekoppelde setup binnen het plan, waardoor de actuele marktcontext niet tegen een echte uitvoeringsketen beoordeeld kan worden.",
@@ -3239,6 +3243,10 @@
     },
     "uiText": {
       "activeBriefing": "Actieve briefing",
+      "briefingSaved": "Opgeslagen persoonlijke briefing van FINN",
+      "briefingUpdating": "Eerdere briefing; FINN verwerkt nieuwe gegevens",
+      "briefingGeneratingLabel": "Tijdelijke plansamenvatting; FINN maakt je briefing",
+      "briefingPlanSummary": "Plansamenvatting; persoonlijke briefing niet beschikbaar",
       "briefingGenerating": "FINN werkt aan je persoonlijke briefing. Dit is voorlopig de samenvatting van je opgeslagen plan.",
       "briefingFallback": "De persoonlijke briefing is nu niet beschikbaar. Dit is de samenvatting van je opgeslagen plan.",
       "defensivePosture": "Defensieve houding",
@@ -3752,11 +3760,11 @@
     },
     "onboarding": {
       "done": "Goed. Deze stap staat nu stabiel. Ga terug naar het onboarding-overzicht voor de volgende fase.",
-      "market": "Je zit in Analysis. Open het configuratieblok op deze pagina, voeg één marktindicator toe voor het huidige asset en controleer dat hij actief wordt. Zo krijgt Finn het eerste live marktbewijs.",
-      "macro": "Je zit nog steeds in Analysis. Open het configuratieblok, zoek één macro-indicator zoals DXY, klik op synchroniseren en wacht tot hij actief zichtbaar is. Zo krijgt Finn regimecontext rond hetzelfde asset.",
-      "technical": "Je zit nog steeds in Analysis. Open het configuratieblok, zoek één technische indicator zoals RSI, synchroniseer hem en controleer dat hij actief wordt. Zo krijgt Finn bewijs voor trend en momentum.",
-      "setup": "Je zit nu in My Plan. Open het blok voor een nieuwe setup, maak één simpele setup voor hetzelfde asset en sla die op. Daarmee verandert je analyse in concrete tradingvoorwaarden.",
-      "strategy": "Je zit nog steeds in My Plan. Open het blok voor een nieuwe strategie, kies de setup die je net maakte, vul de belangrijkste uitvoeringsvelden in en sla op. Daarmee krijgt Finn een plan dat echt te reviewen is.",
+      "market": "Je zit in Analyse. Open het configuratieblok op deze pagina, voeg één marktindicator toe voor het huidige asset en controleer dat hij actief wordt. Zo krijgt Finn het eerste live marktbewijs.",
+      "macro": "Je zit nog steeds in Analyse. Open het configuratieblok, zoek één macro-indicator zoals DXY, klik op synchroniseren en wacht tot hij actief zichtbaar is. Zo krijgt Finn regimecontext rond hetzelfde asset.",
+      "technical": "Je zit nog steeds in Analyse. Open het configuratieblok, zoek één technische indicator zoals RSI, synchroniseer hem en controleer dat hij actief wordt. Zo krijgt Finn bewijs voor trend en momentum.",
+      "setup": "Je zit nu in Mijn Plan. Open het blok voor een nieuwe setup, maak één simpele setup voor hetzelfde asset en sla die op. Daarmee verandert je analyse in concrete tradingvoorwaarden.",
+      "strategy": "Je zit nog steeds in Mijn Plan. Open het blok voor een nieuwe strategie, kies de setup die je net maakte, vul de belangrijkste uitvoeringsvelden in en sla op. Daarmee krijgt Finn een plan dat echt te reviewen is.",
       "default": "Ik begeleid je stap voor stap door de echte productflow. Op elke pagina leg ik uit wat je hierna moet klikken en waarom die stap belangrijk is."
     },
     "draftStatus": {

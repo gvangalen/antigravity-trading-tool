@@ -8,7 +8,27 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; local gates, candidate/main CI, deployment identity and availability passed. |
+| Phase | `BUILD_VALIDATED`; local gates passed. Candidate CI, deployment, and independent authenticated QA are pending. |
+| Goal | Make the first FINN Today briefing source and generation phase visible on compact and full cards, prevent a stale browser copy from appearing on refresh, and finish the reported Dutch onboarding labels. |
+| Candidate branch | `codex/first-briefing-stability`. |
+| Candidate implementation SHA | Pending candidate commit. |
+| Production SHA | Pending deployment. |
+| Previous live SHA | `626744a8fce6b591375874b08e6c2e9d12f71ccf`, independently tested with a new account. |
+| Last updated | 2026-10-07 |
+
+Independent live QA on the previous SHA found that the saved DXY/RSI status, monthly day-5 DCA cadence, Paper bot, refresh/relogin persistence, onboarding completion, and Automation route worked. The first FINN Today text was personal and factually consistent, but after refresh the visible card changed from a plan summary to differently worded personal copy. QA could not observe `response_source` or `generation_status` from the UI, so it did not establish whether the latter text was a stored AI briefing or why the transition occurred. Dutch onboarding still showed “Automation” and “Guided onboarding”.
+
+Code inspection shows that the backend intentionally presents deterministic plan copy during `pending`, `queued`, `generating`, and retry states, then the stored AI result at `ready`; it reuses a ready result when its context version matches. The compact FINN Today card did not label these phases. The browser session cache also stored interim and ready first-dashboard responses, which could reappear before the server's current response on refresh. A separate cached insight could briefly fill the compact card before Mission Control loaded. This batch makes the source phase visible in both card views, treats the server's owner-scoped record as the only cache for the first dashboard briefing, and shows a loading state rather than an unrelated insight while the completed account awaits Mission Control. It also supplies the missing Dutch onboarding shell translation and translates the reported navigation and step labels. It does not change the coach's generated answer or claim a specific provider/queue error in the live QA run.
+
+Measured local evidence: root pytest **3173 passed, 3 skipped**, log SHA-256 `5b395ce166d59a3938a9fb5b7ae0685e2373257372aaa0e4b6e29abf8c26cf8f`; frontend build, typecheck, i18n lint/tests, command/proposal tests, focused source-phase/cache/translation tests, and canonical `audit:high` passed, final build log SHA-256 `3664d822a9b5fe2b4a80b2ff0884b81a13d1fa9e2cef6206b444710a793faba3`. Isolated PostgreSQL/Redis/API/Celery action-contract matrix passed **16/16**, with zero broker orders or live calls, artifact SHA-256 `6cf51eba176431b8636d64d71a4491762f0240537a833c0d03f57de7c57f1153`. Real-provider selector development passed **18/18**, SHA-256 `adabcabdbedc147bb9d08ee5fa64956249b8db54c0d1362dbb2e5b5e1d5e9e8a`. The first regression run, concurrent with the action matrix, scored **108/109**: the general plan-audit case `reg-qa-plan-audit-variant` was selected as `evaluate_setup` instead of `evaluate_plan`; provider, schema, parse, and validation failure rates were zero. This red run remains recorded, artifact SHA-256 `d3d83586840aff7a11f9793274accb33f62ee0c0ca9dd378add2bf7061e4dd9c`. The clean sequential full regression passed **109/109**, with zero provider, schema, parse, or validation failures; artifact SHA-256 `3ab86fbd1d16fcb77e77ced045110e08d5dfcb35576c7d098eac1b347826ebd8`. Build has not accessed the QA fixture or sealed holdout.
+
+Independent QA should check the initial temporary label, the transition to the saved-personal-briefing label, and identical saved text on refresh/relogin while the owner plan and evidence remain unchanged. If the saved text changes, capture the displayed phase before and after; a changed context can legitimately require regeneration, while a changed ready result for the same context is a defect. Verify Dutch onboarding shell, navigation and step labels. Build does not access the authenticated QA fixture.
+
+## Previous Release (indicator configuration and DCA cadence)
+
+| Field | Value |
+| --- | --- |
+| Phase | `PARTIALLY_ACCEPTED`; fresh-account browser QA on `626744a8fce6b591375874b08e6c2e9d12f71ccf` passed the indicator, DCA cadence, Paper bot, persistence and Automation route checks, but could not verify the first briefing's source/stability and found Dutch copy remnants. |
 | Goal | Distinguish saved indicator configuration from unavailable scores in FINN Today; show the saved DCA purchase schedule separately from a chart timeframe in Automation; finish the Dutch onboarding copy. |
 | Candidate branch | `codex/onboarding-briefing-dca-cadence`. |
 | Candidate implementation SHA | `814b5ed0` (with candidate status correction in `eb591df9`). |
