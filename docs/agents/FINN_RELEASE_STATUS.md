@@ -8,18 +8,20 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`. CI, deployment and independent authenticated QA are pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`. Scoped Build gates and production identity checks passed; independent authenticated QA is pending. The broader optional read-parity diagnostic remains red as documented below. |
 | Goal | Preserve the pending-source status of a configured but unmeasured indicator through the complete asset workspace projection. |
-| Candidate branch | `codex/preserve-pending-indicator-status` |
-| Candidate implementation SHA | Pending commit. |
-| PR | Pending. |
+| Candidate branch | `codex/preserve-pending-indicator-status`, merged to `main` in `9474f30a6023871c8895784853d4d9c11d513eaf`. |
+| Candidate implementation SHA | `71e4946cdf60049158ca7065a63892e611b11b15` |
+| PR | [#95](https://github.com/gvangalen/antigravity-trading-tool/pull/95), merged. |
 | Previous live SHA | `b514fdb10356e3632129b12626e1c1898560aa80`; authenticated QA added BTC ADX and confirmed persistence, zero measurements, null value and score, but the expanded detail still said only “Onvoldoende data”. No real provider 429 occurred. |
-| Production SHA | Pending deployment. |
+| Production SHA | `9474f30a6023871c8895784853d4d9c11d513eaf` observed on both public surfaces after Auto Deploy. This status-only update creates a later SHA; QA must bind to the current public backend/frontend SHA. |
 | Last updated | 2026-10-07 |
 
 The root cause was in `WorkspaceDataService._enrich_indicator_rows`: `_include_configured_rows` marked an unmeasured configured indicator `pending_refresh`, but enrichment unconditionally replaced every null-value row status with `insufficient_data`. The frontend's pending explanation therefore never received its required status. The fix preserves `pending_refresh` for those rows while keeping the value, score and category score absent. A regression test covers the final technical category payload for configured ADX with no observation. This does not claim a real production 429 or a positive setupmatch or score-driven Paper decision.
 
 Measured local evidence: root pytest **3156 passed, 3 skipped**, `.local-finn-parity-artifacts/preserve-pending-status-pytest-final.log` SHA-256 `a5bbdfe9a26803cd90f5adb56d938f5156edc955abdcbb35f283bf321fb0bbef`; frontend build, typecheck, i18n lint/tests, command/proposal tests, pending-evidence tests and high-severity dependency audit passed, build log SHA-256 `4898f64db7993188ed0110131f904fa0fd36141aaf1847c90294e76820135abf`. Isolated prefork Celery/Responses safe-action matrix passed **16/16**, with zero prohibited executions, `.local-finn-parity-artifacts/preserve-pending-status-safe-action-matrix.json` SHA-256 `ec1113e6394dccc9523fcba9b79c53c7169adfc33f271de8f20eac92b1940ead`. Real-provider selector development passed **18/18**, SHA-256 `84197429a1e60d8bb6057d222a16af922bfd2a833cb53ce0242eb07571c5edd1`; regression passed **109/109**, SHA-256 `817f5ca216ff22d1523a085a11227624e880029f9fe7f6012c79b6abbb863e61`, with zero provider, schema, parse, validation or timeout failures. An additional nonsealed parity diagnostic was **not green**: the action chain reached 16/16, but 20 read-only cases did not select the expected operation. Its final artifact is `.local-finn-parity-artifacts/preserve-pending-status-full-action-matrix-final2.json` SHA-256 `2402f95e31ed8462c4798ab8eec15cb25f3bc61699f8a02ad39a7c2c94add020`. This diagnostic remains a separate FINN read-route issue and is not counted as passing. The candidate changes no read selector or operation contract.
+
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37574093759) and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37574310111) completed success. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37574455371) completed success for `9474f30a6023871c8895784853d4d9c11d513eaf`; public backend health and frontend build-info both returned HTTP 200 and that SHA on 2026-10-07. Build did not access the authenticated QA fixture. QA should verify that configured BTC ADX with zero readings shows the pending-source detail after a hard refresh, while its value, score and technical group score stay absent. A real 429, a positive setupmatch and a score-driven Paper decision remain unproved.
 
 ## Previous Release (pending explanation)
 
