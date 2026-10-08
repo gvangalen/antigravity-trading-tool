@@ -8,10 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; candidate branch pushed. Candidate CI, merge, Auto Deploy, public SHA verification and independent authenticated QA remain pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; candidate and main CI passed, Auto Deploy succeeded, and backend/frontend public endpoints reported the merge SHA. Authenticated live acceptance remains pending. |
 | Goal | Align per-indicator source freshness in Analyse and FINN, show verified score contributions consistently, localize RSI explanation, and distinguish no bot evaluation from data refresh. |
 | Candidate branch | `codex/score-freshness-parity`. |
 | Candidate implementation SHA | `45b990afb2aca26698ca4be49593fa1870f3367a`. |
+| Candidate merge SHA | `36066457fcd9ace139d174425dc6f4c4fa314425`. |
+| Production SHA | `36066457fcd9ace139d174425dc6f4c4fa314425`, observed on both public surfaces after Auto Deploy. This status-only update creates a later SHA; public identity must be checked again after its deployment. |
 | Production SHA before this candidate | `7268ebe8403e70713f88f300ea221ee0c761a1d9`, as reported by independent authenticated QA. |
 | Last updated | 2026-10-08. |
 
@@ -20,6 +22,8 @@ Independent QA on the previous SHA confirmed that a new ETH owner receives measu
 Code inspection found a six-hour FINN technical-tool TTL against Score 2.0's 36-hour closed-crypto-candle window, string-only timestamp matching for workspace evidence, a frontend contribution read from a different field than its displayed score, hardcoded English RSI explanation, and a bot-card fallback that said data was updating before any decision ran. The candidate uses the shared source-age policy, normalizes UTC evidence moments, derives the visible contribution from verified daily evidence, localizes RSI in all supported languages and labels the no-decision state accurately. It does not change order or bot execution logic.
 
 Measured local evidence on the candidate: root backend suite **3217 passed, 3 skipped**; frontend production build, typecheck, i18n lint/tests, command and proposal tests, and high-severity dependency audit passed. The isolated PostgreSQL/Redis/API/prefork-Celery safe-action matrix passed **16/16**, with zero broker orders, live trading calls, live bots or production connections; artifact SHA-256 `b9f6f34ae4d26544b242ef91cada5ed99d558df2fb03e6bd011023ad73b98426`. Real-provider selector development passed **18/18**, SHA-256 `819fad5b2146f6cd25b20a3596ed1ac1378042e57cb797bb6707b7821f99441c`; regression passed **109/109**, SHA-256 `0cd8ad80b6843603feaede35492177ddad266dd0e68dc65d8d6c362658c75b9c`, both with zero provider, schema, parse, validation or timeout failures. The action matrix completed before the final workspace-only freshness alignment; focused and full backend tests passed afterward. These measurements do not establish production UI parity or an actual Paper decision.
+
+[Candidate CI run 37839499742](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37839499742) and [main CI run 37839789148](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37839789148) each passed all five jobs. [Auto Deploy run 37840033781](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37840033781) succeeded. Public backend health and frontend build-info both returned HTTP 200 and SHA `36066457fcd9ace139d174425dc6f4c4fa314425`. Build performed no authenticated production QA.
 
 Independent QA should repeat the new-owner ETH Price/DXY/RSI flow and compare the *same source observation* in Analyse and FINN. Check each indicator's contribution and NL/EN/DE explanation, plus the bot's initial no-decision label. A positive score-driven Paper decision remains a separate controlled test requiring a matching setup and an actual evaluation run; never infer it from a newly created manual bot.
 
