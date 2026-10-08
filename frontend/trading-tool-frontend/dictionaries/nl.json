@@ -2963,9 +2963,9 @@
         "explanation": "Toelichting: De beste setup is geselecteerd op basis van de huidige macro- en marktomstandigheden."
       },
       "activeStrategy": {
-        "cardTitle": "Actieve strategie",
-        "empty": "Geen actieve strategie voor deze periode.",
-        "strategyLabel": "Strategie",
+        "cardTitle": "Opgeslagen strategie",
+        "empty": "Bekijk je opgeslagen strategieën in Mijn Plan.",
+        "strategyLabel": "Opgeslagen strategie",
         "referencePrice": "Referentieprijs",
         "entryPrice": "Instapprijs",
         "priceChange": "Koerswijziging",

@@ -68,7 +68,10 @@ class FinnSharedContextService:
             benchmark = await self.benchmark_for_asset(user_id, asset, setups=owned_setups)
             try:
                 indicator_result = await self.indicators.execute(user_id=user_id, asset=asset)
-                configuration = indicator_result["data"].model_dump(mode="json")
+                # The evidence schema is a Pydantic v1 model in the deployed
+                # runtime. FastAPI's encoder supports both v1 and v2; calling
+                # model_dump here made every successful lookup appear unknown.
+                configuration = jsonable_encoder(indicator_result["data"])
                 configuration_status = "available"
             except Exception:
                 # A failed lookup cannot be interpreted as no configuration.
