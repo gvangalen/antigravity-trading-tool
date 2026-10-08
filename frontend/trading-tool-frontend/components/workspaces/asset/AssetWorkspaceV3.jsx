@@ -251,6 +251,11 @@ function getUiCopy(locale = "nl") {
       loadingMacro: "Loading macro data...",
       loadingTechnical: "Loading technical data...",
       indicatorAssessment: (label, direction, signal) => `${label} is ${direction.toLowerCase()} and currently gives a ${signal.toLowerCase()} signal.`,
+      rsiAssessment: {
+        high: "RSI supports momentum and confirms a stronger direction.",
+        mid: "RSI is neutral; momentum is currently balanced.",
+        low: "RSI points to weak momentum and does not yet confirm follow-through.",
+      },
       positiveMoveWeakScore: (value, score) => `Price is up ${value}, but the configured scoring thresholds still place this move in the weak zone (${score}/100).`,
       aboveMa200: "Above MA200",
       belowMa200: "Below MA200",
@@ -404,6 +409,11 @@ function getUiCopy(locale = "nl") {
       loadingMacro: "Makrodaten werden geladen...",
       loadingTechnical: "Technische Daten werden geladen...",
       indicatorAssessment: (label, direction, signal) => `${label} ist ${direction.toLowerCase()} und liefert derzeit ein ${signal.toLowerCase()} Signal.`,
+      rsiAssessment: {
+        high: "RSI unterstützt das Momentum und bestätigt eine stärkere Richtung.",
+        mid: "RSI ist neutral; das Momentum ist derzeit ausgeglichen.",
+        low: "RSI weist auf schwaches Momentum hin und bestätigt noch keine Fortsetzung.",
+      },
       positiveMoveWeakScore: (value, score) => `Der Kurs steigt um ${value}, aber die konfigurierten Score-Grenzen ordnen diese Bewegung noch der schwachen Zone zu (${score}/100).`,
       aboveMa200: "Über MA200",
       belowMa200: "Unter MA200",
@@ -556,6 +566,11 @@ function getUiCopy(locale = "nl") {
     loadingMacro: "Macrodata laden...",
     loadingTechnical: "Technische data laden...",
     indicatorAssessment: (label, direction, signal) => `${label} ${direction.toLowerCase()} en geeft nu een ${signal.toLowerCase()} signaal.`,
+    rsiAssessment: {
+      high: "RSI ondersteunt het momentum en bevestigt een sterkere richting.",
+      mid: "RSI is neutraal; het momentum is momenteel in balans.",
+      low: "RSI wijst op zwak momentum en bevestigt nog geen vervolgbeweging.",
+    },
     positiveMoveWeakScore: (value, score) => `De koers stijgt ${value}, maar de ingestelde scoregrenzen plaatsen deze beweging nog in de zwakke zone (${score}/100).`,
     aboveMa200: "Boven MA200",
     belowMa200: "Onder MA200",
@@ -1154,6 +1169,10 @@ function explainIndicatorAssessment({
   const safeLabel = label || prettifyName(name, ui);
   const tone = score === null ? "missing" : score >= 70 ? "high" : score <= 35 ? "low" : "mid";
 
+  if (normalizedName === "rsi" && ui.rsiAssessment?.[tone]) {
+    return ui.rsiAssessment[tone];
+  }
+
   const genericByTone = {
     high: `${safeLabel} supports the current setup and confirms the stronger side of the signal.`,
     mid: `${safeLabel} is mixed right now and does not create a strong edge on its own.`,
@@ -1285,6 +1304,11 @@ function explainIndicatorAssessment({
 
 function buildRows(items, locale, ui, currentEvidence = null, categoryScore = null) {
   const source = Array.isArray(items) ? items : [];
+  const evidenceWeight = currentEvidence && normalizeScore(categoryScore) !== null
+    ? Object.values(currentEvidence).reduce((sum, entry) =>
+        sum + (["custom", "system_template"].includes(entry?.rule_origin) &&
+          normalizeScore(entry?.score) !== null ? Number(entry?.weight || 1) : 0), 0)
+    : 0;
 
   return source.map((item, index) => {
     const name = item?.name || item?.indicator || `indicator_${index}`;
@@ -1292,7 +1316,19 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const rawValue = item?.value ?? item?.waarde;
     const hasValue = hasUsableIndicatorValue(name, rawValue);
     const evidence = currentEvidence === null ? item : validatedDayEvidence(categoryScore, currentEvidence, name);
-    const score = hasValue ? normalizeScore(evidence?.score) : null;
+    // The server verifies that the daily evidence still matches this exact
+    // reading. Do not resurrect a saved score when that check rejected it.
+    const score = hasValue && (currentEvidence === null || evidence)
+      ? normalizeScore(item?.score)
+      : null;
+    const verifiedContribution = score !== null && evidenceWeight > 0 && evidence
+      ? {
+          status: "available",
+          basis: "verified_indicator_weight",
+          weight: Number(evidence.weight || 1) / evidenceWeight,
+          weighted_points: score * Number(evidence.weight || 1) / evidenceWeight,
+        }
+      : null;
     const ruleOrigin = score === null ? null : evidence?.rule_origin || item?.rule_origin || null;
     const tone = scoreTone(score, ui);
     const direction = score !== null ? toDirectionLabel(item, score, ui) : ui.unavailable;
@@ -1368,7 +1404,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
       ruleOrigin,
       normalizedPosition: score === null || !Number.isFinite(normalizedPosition) ? null : Math.round(normalizedPosition),
-      raw: item,
+      raw: verifiedContribution ? { ...item, score_contribution: verifiedContribution } : item,
     };
   });
 }

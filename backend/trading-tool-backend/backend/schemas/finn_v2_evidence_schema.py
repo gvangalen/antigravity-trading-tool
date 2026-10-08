@@ -123,6 +123,7 @@ class TechnicalSnapshotItem(BaseModel):
     indicator: str
     value: Optional[float] = None
     score: Optional[float] = None
+    source_status: Optional[str] = None
     advice: Optional[str] = None
     explanation: Optional[str] = None
     timestamp: Optional[datetime] = None

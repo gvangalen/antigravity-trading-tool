@@ -23,6 +23,7 @@ from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_service import MarketDataService
 from backend.services.score_service import ScoreService
 from backend.services.technical_data_service import TechnicalDataService
+from backend.utils.scoring_utils import score_source_is_fresh
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,10 @@ def _current_indicator_rows(rows: list[dict[str, Any]], category: str,
         if isinstance(saved, dict) and saved.get("rule_origin") in {"custom", "system_template"}:
             try:
                 same_value = math.isclose(float(row["value"]), float(saved["value"]), rel_tol=1e-12)
-                same_moment = row.get("source_observed_at") == saved.get("source_observed_at")
+                row_moment = _as_utc(row.get("source_observed_at"))
+                saved_moment = _as_utc(saved.get("source_observed_at"))
+                same_moment = (row_moment is not None and saved_moment is not None
+                               and row_moment == saved_moment)
                 score = float(saved["score"])
             except (KeyError, TypeError, ValueError):
                 same_value = same_moment = False
@@ -229,6 +233,7 @@ def _enrich_indicator_rows(
     period: str,
     threshold: int,
     source: str,
+    symbol: str = "BTC",
 ) -> list[dict[str, Any]]:
     # Older rows may contain a numeric score produced by the generated bucket
     # rule. Do not present that number as an assessed indicator while the
@@ -257,6 +262,16 @@ def _enrich_indicator_rows(
         )
         payload = dict(row)
         freshness = _freshness(row.get("source_observed_at"), threshold, source)
+        category = {
+            "market_data_indicators": "market",
+            "macro_data": "macro",
+            "technical_indicators": "technical",
+        }.get(source)
+        if period == "day" and category:
+            freshness["stale"] = not score_source_is_fresh(
+                category, str(row.get("name") or ""),
+                _as_utc(row.get("source_observed_at")), symbol=symbol,
+            )
         coverage = row.get("score_history_coverage") or {}
         if scored_row:
             score_reason = None
@@ -440,9 +455,9 @@ class WorkspaceDataService:
         macro_rows = _current_indicator_rows(macro_rows, "macro", daily if periods["macro"] == "day" else None)
         technical_rows = _current_indicator_rows(technical_rows, "technical", daily if periods["technical"] == "day" else None)
         categories = {
-            "market": self._category_payload(market_rows, periods["market"], STALE_AFTER_SECONDS[periods["market"]], "market_data_indicators"),
-            "macro": self._category_payload(macro_rows, periods["macro"], STALE_AFTER_SECONDS[periods["macro"]], "macro_data"),
-            "technical": self._category_payload(technical_rows, periods["technical"], STALE_AFTER_SECONDS[periods["technical"]], "technical_indicators"),
+            "market": self._category_payload(market_rows, periods["market"], STALE_AFTER_SECONDS[periods["market"]], "market_data_indicators", symbol=symbol),
+            "macro": self._category_payload(macro_rows, periods["macro"], STALE_AFTER_SECONDS[periods["macro"]], "macro_data", symbol=symbol),
+            "technical": self._category_payload(technical_rows, periods["technical"], STALE_AFTER_SECONDS[periods["technical"]], "technical_indicators", symbol=symbol),
         }
         master_payload = master.model_dump() if hasattr(master, "model_dump") else master.dict()
         if master_payload.get("master_score") is None:
@@ -756,6 +771,7 @@ class WorkspaceDataService:
             period,
             STALE_AFTER_SECONDS[period],
             source,
+            symbol=symbol,
         )
         target = _indicator_key(indicator)
         row = next(
@@ -914,6 +930,7 @@ class WorkspaceDataService:
         period: str,
         threshold: int,
         source: str,
+        *, symbol: str = "BTC",
     ) -> dict[str, Any]:
         timestamps = [row.get("source_observed_at") for row in rows if row.get("source_observed_at")]
         latest_timestamp = max(timestamps) if timestamps else None
@@ -922,13 +939,20 @@ class WorkspaceDataService:
             period=period,
             threshold=threshold,
             source=source,
+            symbol=symbol,
         )
+        freshness = _freshness(
+            datetime.fromisoformat(latest_timestamp) if latest_timestamp else None,
+            threshold,
+            source,
+        )
+        if period == "day":
+            measured = [row for row in enriched_rows if row.get("value") is not None]
+            freshness["stale"] = not measured or any(
+                row["freshness"]["stale"] for row in measured
+            )
         return {
             "rows": enriched_rows,
             "score": _score_summary(enriched_rows, period),
-            "freshness": _freshness(
-                datetime.fromisoformat(latest_timestamp) if latest_timestamp else None,
-                threshold,
-                source,
-            ),
+            "freshness": freshness,
         }

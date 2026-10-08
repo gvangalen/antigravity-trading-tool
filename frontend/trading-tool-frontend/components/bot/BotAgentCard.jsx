@@ -138,7 +138,7 @@ export default function BotAgentCard({
     if (normalizedAction) {
       return copy.executionReasonFallback;
     }
-    return copy.dataUpdating;
+    return copy.noDecisionYet;
   };
 
   /* ================= BOT STATE ================= */
@@ -269,7 +269,7 @@ export default function BotAgentCard({
       ? copy.noStrategy
       : !hasBudget
         ? copy.blockerBudgetBody
-      : decisionReason || copy.dataUpdating;
+      : decisionReason || copy.noDecisionYet;
 
     const blocker = !hasCompleteChain
       ? {
@@ -691,7 +691,7 @@ export default function BotAgentCard({
 
           <div className="bg-card rounded-xl p-3 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.lastChecked}</div>
-             <div className="text-xs font-black text-muted tracking-tight">{lastRun || copy.dataUpdating}</div>
+             <div className="text-xs font-black text-muted tracking-tight">{lastRun || copy.noDecisionYet}</div>
           </div>
          </div>
 

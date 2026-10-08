@@ -20,6 +20,9 @@ class TechnicalToolAdapter:
                 score=(float(row.score) if row.score is not None and
                        score_source_is_fresh("technical", row.indicator, getattr(row, "source_observed_at", None), symbol=asset)
                        else None),
+                source_status=("fresh" if score_source_is_fresh(
+                    "technical", row.indicator, getattr(row, "source_observed_at", None), symbol=asset
+                ) else "stale" if getattr(row, "source_observed_at", None) else "unknown"),
                 advice=row.advies,
                 explanation=row.uitleg,
                 timestamp=row.timestamp,
@@ -29,10 +32,20 @@ class TechnicalToolAdapter:
         ]
         latest = max((getattr(row, "source_observed_at", None) for row in rows
                       if getattr(row, "source_observed_at", None)), default=None)
+        # The scoring pipeline permits a closed crypto candle for 36 hours.
+        # A generic six-hour tool TTL must not call the same RSI measurement stale.
+        measured = [row for row in rows if row.value is not None]
+        freshness_status = (
+            "unknown" if not measured else
+            "fresh" if all(score_source_is_fresh(
+                "technical", row.indicator, getattr(row, "source_observed_at", None), symbol=asset
+            ) for row in measured) else "stale"
+        )
         return {
             "data": TechnicalSnapshotData(symbol=asset, items=payload),
             "summary": {"title": "technical_snapshot", "symbol": asset, "count": len(payload)},
             "as_of": latest,
+            "freshness_status": freshness_status,
             "source": "technical_indicators",
             "schema_name": "TechnicalSnapshotData",
             "entity_type": "technical_snapshot",

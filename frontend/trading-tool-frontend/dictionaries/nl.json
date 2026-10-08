@@ -2350,6 +2350,7 @@
       "noStrategy": "Geen strategie gekoppeld",
       "lastChecked": "Laatst gecontroleerd",
       "dataUpdating": "Data wordt bijgewerkt",
+      "noDecisionYet": "Nog geen botbeoordeling uitgevoerd",
       "collapseDiagnostics": "Diagnostiek inklappen",
       "viewFullDiagnostics": "Volledige diagnostiek bekijken",
       "scenarioLoading": "Parallelle scenario's doorrekenen...",
