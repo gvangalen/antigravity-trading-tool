@@ -159,7 +159,12 @@ function getUiCopy(locale = "nl") {
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
       indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
       scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
-      missingScoreRule: "A source reading is available, but no validated scoring rule is configured. This indicator has no score yet.",
+      missingScoreRule: "A source reading is available, but no scoring rule is configured. This indicator has no score yet.",
+      scoringRule: "Scoring rule",
+      systemScoringRule: "System rule",
+      personalScoringRule: "Your curve",
+      priceRangeMethod: (position) => `Measured price position in its recent 30-day range: ${position}/100. This is not an entry signal.`,
+      dxyRangeMethod: (position) => `Measured DXY position in its recent 90-day range: ${position}/100. Higher dollar strength lowers this broad risk-context score; this is not an asset signal.`,
       market: "Market",
       macro: "Macro",
       technical: "Technical",
@@ -304,7 +309,12 @@ function getUiCopy(locale = "nl") {
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
       indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
       scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
-      missingScoreRule: "Ein Quellwert ist vorhanden, aber keine validierte Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
+      missingScoreRule: "Ein Quellwert ist vorhanden, aber keine Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
+      scoringRule: "Scoreregel",
+      systemScoringRule: "Systemregel",
+      personalScoringRule: "Deine Kurve",
+      priceRangeMethod: (position) => `Gemessene Preisposition im jüngsten 30-Tage-Bereich: ${position}/100. Das ist kein Einstiegssignal.`,
+      dxyRangeMethod: (position) => `Gemessene DXY-Position im jüngsten 90-Tage-Bereich: ${position}/100. Ein stärkerer Dollar senkt diesen allgemeinen Risikokontext-Score; das ist kein Assetsignal.`,
       market: "Markt",
       macro: "Makro",
       technical: "Technisch",
@@ -448,7 +458,12 @@ function getUiCopy(locale = "nl") {
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
     indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
     scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
-    missingScoreRule: "Er is een bronmeting, maar geen gevalideerde scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
+    missingScoreRule: "Er is een bronmeting, maar geen scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
+    scoringRule: "Scoreregel",
+    systemScoringRule: "Systeemregel",
+    personalScoringRule: "Jouw curve",
+    priceRangeMethod: (position) => `Gemeten prijspositie in het recente 30-daagse bereik: ${position}/100. Dit is geen instapsignaal.`,
+    dxyRangeMethod: (position) => `Gemeten DXY-positie in het recente 90-daagse bereik: ${position}/100. Een sterkere dollar verlaagt deze algemene risicocontextscore; dit is geen assetsignaal.`,
     market: "Markt",
     macro: "Macro",
     technical: "Technisch",
@@ -1269,6 +1284,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const hasValue = hasUsableIndicatorValue(name, rawValue);
     const evidence = currentEvidence === null ? item : validatedDayEvidence(categoryScore, currentEvidence, name);
     const score = hasValue ? normalizeScore(evidence?.score) : null;
+    const ruleOrigin = score === null ? null : evidence?.rule_origin || item?.rule_origin || null;
     const tone = scoreTone(score, ui);
     const direction = score !== null ? toDirectionLabel(item, score, ui) : ui.unavailable;
     const value = formatIndicatorValue(name, rawValue, locale, ui);
@@ -1310,8 +1326,18 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       : !hasValue && item?.data_status === "pending_refresh"
         ? ui.pendingSource
         : ui.unavailable;
+    const normalizedPosition = Number(evidence?.normalized_value);
+    const methodDetail = ruleOrigin === "system_template" && Number.isFinite(normalizedPosition)
+      ? String(name).toLowerCase() === "price"
+        ? ui.priceRangeMethod(Math.round(normalizedPosition))
+        : String(name).toLowerCase() === "dxy"
+          ? ui.dxyRangeMethod(Math.round(normalizedPosition))
+          : null
+      : null;
     const detail = scoreConflict
       ? ui.positiveMoveWeakScore(value, Math.round(score))
+      : methodDetail
+        ? methodDetail
       : shouldUseBackendDetail
         ? localizedDetail
         : generatedDetail;
@@ -1327,6 +1353,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       scoreLabel: score === null ? tone.label : `${tone.label} · ${Math.round(score)}`,
       detail,
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
+      ruleOrigin,
       raw: item,
     };
   });
@@ -1995,6 +2022,7 @@ function EvidenceRow({
                 [ui.freshness, freshnessText],
                 [ui.latestSignal, row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.missingSourceMoment],
                 [ui.scoreContribution, contributionText],
+                ...(row.ruleOrigin ? [[ui.scoringRule, row.ruleOrigin === "custom" ? ui.personalScoringRule : ui.systemScoringRule]] : []),
                 [ui.sampleSize, row.raw?.sample_size ?? 1],
                 ...(row.raw?.score_history_coverage ? [[
                   ui.scoreHistory,

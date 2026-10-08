@@ -314,7 +314,8 @@ def test_positive_match_uses_saved_evidence_for_each_selected_source():
     observed = now - timedelta(hours=1)
     readings = {"market": ("price", 76000), "macro": ("dxy", 100), "technical": ("rsi", 55)}
     evidence = {
-        category: {name: {"value": value, "source_observed_at": observed.isoformat()}}
+        category: {name: {"value": value, "source_observed_at": observed.isoformat(),
+                          "rule_origin": "system_template"}}
         for category, (name, value) in readings.items()
     }
     row = {"report_date": date.today(), "calculated_at": now,
@@ -345,8 +346,16 @@ def test_positive_match_uses_saved_evidence_for_each_selected_source():
         assert result["matches"][0]["status"] == "matches"
         assert result["matches"][0]["is_best"] is True
 
+        row["indicator_evidence"] = {**evidence, "market": {"price": {
+            "value": 76000, "source_observed_at": observed.isoformat(),
+        }}}
+        legacy = await service.for_asset(7, "BTC", setups=owned)
+        assert legacy["benchmark_score"] is None
+        assert legacy["matches"][0]["status"] == "insufficient_data"
+
         row["indicator_evidence"] = {**evidence, "macro": {"dxy": {
-            "value": 100, "source_observed_at": (observed - timedelta(days=14)).isoformat()}}}
+            "value": 100, "source_observed_at": (observed - timedelta(days=14)).isoformat(),
+            "rule_origin": "system_template"}}}
         stale = await service.for_asset(7, "BTC", setups=owned)
         assert stale["benchmark_score"] is None
         assert stale["matches"][0]["status"] == "insufficient_data"

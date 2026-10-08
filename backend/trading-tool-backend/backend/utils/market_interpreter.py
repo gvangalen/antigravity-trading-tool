@@ -144,14 +144,14 @@ def interpret_market_indicator(indicator: str, value: float, user_id: int):
             user_id=user_id,  # ✅ FIX: user_id meegeven
         )
 
-        if not rule:
+        if not rule or rule.get("score") is None:
             logger.warning(
                 f"⚠️ Geen rule match → {normalized_name} value={normalized_value}"
             )
             return _fallback("Geen scoreregel beschikbaar")
 
         return {
-            "score": max(0, min(100, rule.get("score", 10))),
+            "score": max(0, min(100, rule["score"])),
             "trend": rule.get("trend") or "neutral",
             "interpretation": rule.get("interpretation")
                 or "Geen interpretatie beschikbaar",
@@ -168,8 +168,8 @@ def interpret_market_indicator(indicator: str, value: float, user_id: int):
 # =========================================================
 def _fallback(reason: str):
     return {
-        "score": 10,
-        "trend": "neutral",
+        "score": None,
+        "trend": None,
         "interpretation": reason,
         "action": "Geen actie",
     }

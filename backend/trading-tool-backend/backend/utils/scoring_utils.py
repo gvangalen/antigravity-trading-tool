@@ -102,6 +102,10 @@ def score_snapshot_is_current(category: str, symbol: str, configurations,
             category, name, observed_at, symbol=symbol,
         ):
             return False
+        # Legacy daily rows could contain a generated bucket score. The
+        # provenance field is mandatory for a current decision-grade score.
+        if saved.get("rule_origin") not in {"custom", "system_template"}:
+            return False
         try:
             if not math.isclose(float(saved["value"]), float(value), rel_tol=1e-12):
                 return False

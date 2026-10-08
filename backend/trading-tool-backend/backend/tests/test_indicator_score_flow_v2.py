@@ -97,10 +97,22 @@ def test_generated_bucket_is_not_decision_grade(monkeypatch):
     assert result["total_score"] is None
 
 
+def test_legacy_interpreters_do_not_turn_a_missing_rule_into_ten(monkeypatch):
+    from backend.utils import market_interpreter, macro_interpreter, technical_interpreter
+
+    for module, function, indicator, value in (
+        (market_interpreter, market_interpreter.interpret_market_indicator, "price", 100),
+        (macro_interpreter, macro_interpreter.interpret_macro_indicator, "dxy", 102.25),
+        (technical_interpreter, technical_interpreter.interpret_technical_indicator_db, "rsi", 58.33),
+    ):
+        monkeypatch.setattr(module, "get_score_rule_from_db", lambda *_args, **_kwargs: {"score": None})
+        assert function(indicator, value, 7)["score"] is None
+
+
 def test_technical_readback_accepts_a_measured_indicator_without_score():
     row = TechnicalDataResponse(
         indicator="rsi", waarde=58.33, score=None, advies="onbekend",
-        uitleg="Geen gevalideerde scoreregel voor deze indicator.",
+        uitleg="Geen vastgelegde scoreregel voor deze indicator.",
         timestamp=datetime.now(timezone.utc),
     )
     assert row.score is None
@@ -194,13 +206,18 @@ def test_absolute_market_price_and_volume_need_asset_history():
 def test_snapshot_is_invalid_after_rule_or_source_changes():
     now = datetime.now(timezone.utc)
     observed = now - timedelta(hours=1)
-    saved = {"rsi": {"value": 48, "source_observed_at": observed.isoformat()}}
+    saved = {"rsi": {"value": 48, "source_observed_at": observed.isoformat(),
+                     "rule_origin": "system_template"}}
     readings = [("rsi", 48, observed)]
 
     assert scoring_utils.score_snapshot_is_current(
         "technical", "BTC", [("rsi", now - timedelta(minutes=2))],
         readings, saved, now,
     ) is True
+    assert scoring_utils.score_snapshot_is_current(
+        "technical", "BTC", [("rsi", now - timedelta(minutes=2))],
+        readings, {"rsi": {"value": 48, "source_observed_at": observed.isoformat()}}, now,
+    ) is False
     assert scoring_utils.score_snapshot_is_current(
         "technical", "BTC", [("rsi", now + timedelta(seconds=1))],
         readings, saved, now,

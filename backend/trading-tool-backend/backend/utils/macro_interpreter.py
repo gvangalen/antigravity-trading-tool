@@ -651,16 +651,16 @@ def interpret_macro_indicator(name: str, value: float, user_id: int):
             user_id=user_id,   # ✅ FIX: user-id meegeven
         )
 
-        if not rule:
+        if not rule or rule.get("score") is None:
             return {
-                "score": 10,
-                "trend": "neutral",
+                "score": None,
+                "trend": None,
                 "interpretation": "Geen scoreregel match",
                 "action": "Geen actie",
             }
 
         return {
-            "score": max(0, min(100, rule.get("score", 10))),
+            "score": max(0, min(100, rule["score"])),
             "trend": rule.get("trend") or "neutral",
             "interpretation": rule.get("interpretation"),
             "action": rule.get("action"),
@@ -669,8 +669,8 @@ def interpret_macro_indicator(name: str, value: float, user_id: int):
     except Exception:
         logger.error("interpret_macro_indicator error", exc_info=True)
         return {
-            "score": 10,
-            "trend": "neutral",
+            "score": None,
+            "trend": None,
             "interpretation": "Interpretatiefout",
             "action": "Controleer logs",
         }

@@ -646,7 +646,7 @@ class MarketDataService:
         trend = scored.get("trend") if score is not None else None
         interpretation = (
             "Onvoldoende gedateerde metingen voor een indicatorscore." if pending_history else
-            "Geen gevalideerde scoreregel voor deze indicator." if missing_rule else
+            "Geen vastgelegde scoreregel voor deze indicator." if missing_rule else
             scored.get("interpretation") or "Geen interpretatie beschikbaar"
         )
         action = scored.get("action") if score is not None else None

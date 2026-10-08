@@ -76,7 +76,7 @@ class TechnicalDataService:
             return {
                 "score": None,
                 "trend": "onbekend",
-                "interpretation": "Geen gevalideerde scoreregel voor deze indicator.",
+                "interpretation": "Geen vastgelegde scoreregel voor deze indicator.",
                 "action": None,
             }
 

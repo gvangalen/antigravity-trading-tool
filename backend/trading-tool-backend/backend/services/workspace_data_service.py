@@ -233,7 +233,8 @@ def _enrich_indicator_rows(
             score_reason = "insufficient_dated_history"
         elif freshness["stale"]:
             score_reason = "stale_source"
-        elif "geen gevalideerde scoreregel" in str(row.get("interpretation") or "").lower() or "fallback" in str(row.get("interpretation") or "").lower():
+        elif any(marker in str(row.get("interpretation") or "").lower()
+                 for marker in ("geen vastgelegde scoreregel", "geen gevalideerde scoreregel", "fallback")):
             score_reason = "missing_rule"
         else:
             score_reason = "score_pending"
