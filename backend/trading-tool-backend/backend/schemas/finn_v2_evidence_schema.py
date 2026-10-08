@@ -103,8 +103,6 @@ class MarketSnapshotData(BaseModel):
     volume: Optional[float] = None
     source: str
     as_of: Optional[datetime] = None
-    saved_market_score: Optional[float] = None
-    score_report_date: Optional[date] = None
 
 
 class MacroSnapshotItem(BaseModel):

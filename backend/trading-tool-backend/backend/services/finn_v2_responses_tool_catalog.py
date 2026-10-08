@@ -100,6 +100,7 @@ class FinnResponsesToolCatalog:
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
         self.read_tools["get_saved_setup"] = ("read_active_setup",)
         self.read_tools["get_saved_asset_scores"] = ("read_asset_scores", "read_setup_market_matches")
+        self.read_tools["get_current_asset_scores"] = ("read_active_asset", "read_setup_market_matches")
         self.read_tools["get_setup_market_matches"] = ("read_setup_market_matches",)
         self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
         self.evaluation_contracts = {
@@ -191,12 +192,21 @@ class FinnResponsesToolCatalog:
                 )
             if name == "get_saved_asset_scores":
                 description += (
-                    " Read the owner's most recently saved market, macro and technical scores "
+                    " Read the owner's historical saved market, macro and technical scores "
                     "for one asset, including their actual report date even when that date is "
-                    "before today. Use for questions asking which scores were saved or when. "
+                    "before today. Use only for questions asking which prior scores were saved or when. "
+                    "For current scores, use get_current_asset_scores instead. "
                     "This tool also returns current per-component source status from the setup "
                     "match read. Never infer source freshness from the report date alone. A saved "
                     "report is not proof of a fresh benchmark or current trade signal."
+                )
+            if name == "get_current_asset_scores":
+                description += (
+                    " Read the owner's current market, macro and technical component scores "
+                    "for one asset using the same source verification as Analyse. "
+                    "reported_scores is null for each missing or stale component; "
+                    "component_source_status explains why. A missing score is not zero. "
+                    "Use for questions about scores now, not historical saved reports."
                 )
             if name == "get_saved_setup_inventory":
                 description += (
@@ -220,8 +230,8 @@ class FinnResponsesToolCatalog:
                     "market conditions or deserves attention. Distinguish benchmark_score, weighted "
                     "by the owner's current Analyse preferences, from each setup's weighted fit to its "
                     "saved score ranges. Neither establishes an entry trigger, strategy readiness "
-                    "or permission to trade. reported_scores may contain a score shown in Analyse "
-                    "even when incomplete or stale sources prevent a verified benchmark. Use "
+                    "or permission to trade. reported_scores include only components whose "
+                    "sources are currently verified, matching Analyse. Use "
                     "component_source_status and as_of to explain that distinction. The saved "
                     "score boundaries are in each match's conditions even when no match can be scored. "
                     "If source_status is not available, explain the data gap."

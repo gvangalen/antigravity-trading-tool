@@ -87,9 +87,9 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
 def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
     """Project shared context into report facts; never expose unverified score rows.
 
-    ``reported_scores`` are historical database values and can be present even
-    when their underlying indicator evidence has expired. Reports must use the
-    same per-component freshness decision as Analyse and FINN chat.
+    ``reported_scores`` contains only currently verified components. Apply the
+    source status again at this boundary so reports never recover a stale value
+    if an older context producer still provides one.
     """
     assets = []
     for item in context.get("assets") or []:

@@ -97,14 +97,14 @@ class SetupMarketMatchService:
             row = result.mappings().first()
         scores = None
         source_status = "missing_scores"
-        reported_scores = {
+        stored_scores = {
             f"{category}_score": float(row[f"{category}_score"])
             if row and row.get(f"{category}_score") is not None else None
             for category in ("macro", "technical", "market")
         }
         component_source_status = {
             score_key: "missing_score" if value is None else "unverified"
-            for score_key, value in reported_scores.items()
+            for score_key, value in stored_scores.items()
         }
         if weights is None:
             source_status = "invalid_weights"
@@ -115,12 +115,12 @@ class SetupMarketMatchService:
         if source_status == "stale_scores":
             component_source_status = {
                 score_key: "stale_report" if value is not None else "missing_score"
-                for score_key, value in reported_scores.items()
+                for score_key, value in stored_scores.items()
             }
         elif row:
             for category in ("macro", "technical", "market"):
                 score_key = f"{category}_score"
-                value = reported_scores[score_key]
+                value = stored_scores[score_key]
                 if value is not None:
                     component_source_status[score_key] = (
                         "fresh" if await self._source_is_fresh(user_id, symbol, category, row)
@@ -130,11 +130,17 @@ class SetupMarketMatchService:
                 component_source_status[f"{category}_score"] == "fresh"
                 for category in ("macro", "technical", "market")
             ):
-                scores = {category: reported_scores[f"{category}_score"]
+                scores = {category: stored_scores[f"{category}_score"]
                           for category in ("macro", "technical", "market")}
                 source_status = "available"
-            elif weights is not None and all(value is not None for value in reported_scores.values()):
+            elif weights is not None and all(value is not None for value in stored_scores.values()):
                 source_status = "stale_sources"
+        # The match response describes what Analyse can use now. Historical or
+        # stale database values belong in the explicitly dated saved-report read.
+        reported_scores = {
+            key: value if component_source_status[key] == "fresh" else None
+            for key, value in stored_scores.items()
+        }
         total_benchmark = None
         if scores is not None and weights is not None:
             weighted_scores = {f"{category}_score": float(value) for category, value in scores.items()}

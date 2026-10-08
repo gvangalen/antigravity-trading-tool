@@ -8,6 +8,7 @@ from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.services import finn_v2_tool_execution_service as execution_module
 
 
 class _FakeRunRepo:
@@ -165,6 +166,30 @@ def test_tool_execution_preserves_initially_empty_shared_state(monkeypatch):
     ))
     assert result.success is True
     assert shared_state == {"asset": "BTC", "resolution_source": "selected_asset"}
+
+
+def test_current_score_read_uses_asset_resolved_from_workspace(monkeypatch):
+    seen = []
+
+    class Context:
+        def __init__(self, session):
+            pass
+
+        async def benchmark_for_asset(self, user_id, asset):
+            seen.append((user_id, asset))
+            return {"symbol": asset, "as_of": None, "source_status": "missing_scores",
+                    "benchmark_score": None, "reported_scores": {},
+                    "component_source_status": {}, "matches": []}
+
+    monkeypatch.setattr(execution_module, "FinnSharedContextService", Context)
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    result = asyncio.run(service._dispatch_tool(
+        tool_name="read_setup_market_matches", user_id=7,
+        selector={"asset": None}, run=SimpleNamespace(),
+        shared_state={"asset": "ETH", "resolution_source": "selected_asset"},
+    ))
+    assert seen == [(7, "ETH")]
+    assert result["data"].symbol == "ETH"
 
 
 def test_tool_execution_releases_primary_connection_around_durable_call_sessions(monkeypatch):

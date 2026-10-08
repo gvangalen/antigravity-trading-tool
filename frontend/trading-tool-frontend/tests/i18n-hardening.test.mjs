@@ -11,8 +11,24 @@ import {
   getRiskProfileOptions,
   getBehaviorFlagOptions,
   normalizeTraderProfilePreferences,
+  mergeLoadedTraderProfilePreferences,
   serializeTraderProfilePreferences,
 } from "../lib/traderProfileOptions.js";
+
+test("late profile load preserves choices made during onboarding", () => {
+  const current = normalizeTraderProfilePreferences({
+    trader_types: ["dca_investor"],
+    primary_timeframes: ["1d"],
+  });
+  const merged = mergeLoadedTraderProfilePreferences(current, {
+    trader_types: ["swing_trader"],
+    primary_timeframes: ["4h"],
+    asset_focus: ["btc"],
+  }, new Set(["trader_types", "primary_timeframes"]));
+  assert.deepEqual(merged.trader_types, ["dca_investor"]);
+  assert.deepEqual(merged.primary_timeframes, ["1d"]);
+  assert.deepEqual(merged.asset_focus, ["btc"]);
+});
 
 const nl = JSON.parse(
   fs.readFileSync(path.join(process.cwd(), "dictionaries/nl.json"), "utf8")

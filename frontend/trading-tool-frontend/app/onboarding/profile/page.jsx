@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Sparkles, User } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -16,7 +16,7 @@ import {
   getRiskProfileOptions,
   getTimeframeOptions,
   getTraderTypeOptions,
-  normalizeTraderProfilePreferences,
+  mergeLoadedTraderProfilePreferences,
   serializeTraderProfilePreferences,
 } from "@/lib/traderProfileOptions";
 
@@ -34,6 +34,7 @@ function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
             <button
               key={option.value}
               type="button"
+              aria-pressed={active}
               onClick={() => onToggle(option.value)}
               className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
                 active
@@ -55,7 +56,7 @@ export default function OnboardingProfilePage() {
   const router = useRouter();
   const { t } = useTranslation();
   const { completeStep, saving } = useOnboarding();
-  const [loadingPrefs, setLoadingPrefs] = useState(true);
+  const touchedFields = useRef(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [form, setForm] = useState({
@@ -74,18 +75,14 @@ export default function OnboardingProfilePage() {
 
     async function loadPreferences() {
       try {
-        setLoadingPrefs(true);
         const response = await getAssistantPreferences();
         const preferences = response?.preferences || {};
         if (cancelled) return;
-
-        setForm(normalizeTraderProfilePreferences(preferences));
+        setForm((current) => mergeLoadedTraderProfilePreferences(
+          current, preferences, touchedFields.current,
+        ));
       } catch (err) {
         console.error("Profielvoorkeuren laden mislukt", err);
-      } finally {
-        if (!cancelled) {
-          setLoadingPrefs(false);
-        }
       }
     }
 
@@ -115,6 +112,7 @@ export default function OnboardingProfilePage() {
   const behaviorOptions = useMemo(() => getBehaviorFlagOptions(t), [t]);
 
   const toggleMulti = (field, value) => {
+    touchedFields.current.add(field);
     setForm((current) => {
       const list = current[field];
       const nextList = list.includes(value)
@@ -244,7 +242,10 @@ export default function OnboardingProfilePage() {
         />
         <TraderContextField
           value={form.trader_context}
-          onChange={(trader_context) => setForm((current) => ({ ...current, trader_context }))}
+          onChange={(trader_context) => {
+            touchedFields.current.add("trader_context");
+            setForm((current) => ({ ...current, trader_context }));
+          }}
           copy={t?.traderProfile?.groups?.traderContext}
         />
       </div>
@@ -262,7 +263,7 @@ export default function OnboardingProfilePage() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!isValid || loadingPrefs || saving || submitting}
+          disabled={!isValid || saving || submitting}
           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting || saving
