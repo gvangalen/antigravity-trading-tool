@@ -262,6 +262,17 @@ async def put_macro_preferences(
     )
     await db.commit()
 
+    for name in {name for name, _ in normalized_items} & {"dxy", "sp500", "gold_price", "oil_price"}:
+        try:
+            from backend.celery_task.celery_app import celery_app
+            celery_app.send_task(
+                "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                kwargs={"user_id": int(user_id), "symbol": normalized_symbol,
+                        "category": "macro", "indicator": name},
+            )
+        except Exception:
+            logger.warning("Macro history queued for periodic retry: indicator=%s", name, exc_info=True)
+
     rows = await service.preference_repository.list_scope_configs(
         user_id,
         category="macro",

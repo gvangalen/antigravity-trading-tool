@@ -19,6 +19,7 @@ from backend.utils.macro_interpreter import fetch_absolute_macro_history
 ABSOLUTE_MACRO_INDICATORS = frozenset({"dxy", "sp500", "gold_price", "oil_price"})
 ABSOLUTE_MARKET_INDICATORS = frozenset({"price", "volume"})
 REQUIRED_SOURCE_DAYS = 5
+RSI_SOURCE_DAYS = 15
 
 
 class IndicatorHistoryBootstrap:
@@ -27,15 +28,19 @@ class IndicatorHistoryBootstrap:
 
     async def market_coverage(self, symbol: str) -> dict[str, int]:
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
+        today = datetime.combine(datetime.now(timezone.utc).date(), time.min)
         rows = (await self.session.execute(
             select(MarketData.source_observed_at, MarketData.price, MarketData.volume).where(
                 MarketData.symbol == symbol,
                 MarketData.source_observed_at >= cutoff,
+                MarketData.source_observed_at < today,
             )
         )).all()
         return {
-            "price": len({stamp.date() for stamp, price, _ in rows if stamp and price is not None}),
-            "volume": len({stamp.date() for stamp, _, volume in rows if stamp and volume is not None}),
+            "price": len({stamp.date() for stamp, price, _ in rows
+                          if stamp and stamp < today and price is not None}),
+            "volume": len({stamp.date() for stamp, _, volume in rows
+                           if stamp and stamp < today and volume is not None}),
         }
 
     async def macro_coverage(self, user_id: int, indicator: str) -> int:
@@ -50,13 +55,16 @@ class IndicatorHistoryBootstrap:
         )).scalars().all()
         return len({stamp.date() for stamp in rows if stamp})
 
-    async def bootstrap_market(self, symbol: str, indicators: set[str]) -> dict:
+    async def bootstrap_market(self, symbol: str, indicators: set[str], *,
+                               required_price_days: int = REQUIRED_SOURCE_DAYS) -> dict:
         normalized_symbol = str(symbol or "").strip().upper()
         requested = indicators & ABSOLUTE_MARKET_INDICATORS
         if not normalized_symbol or not requested:
             return {"inserted": 0, "status": "not_required"}
         coverage = await self.market_coverage(normalized_symbol)
-        if all(coverage[name] >= REQUIRED_SOURCE_DAYS for name in requested):
+        required = {name: required_price_days if name == "price" else REQUIRED_SOURCE_DAYS
+                    for name in requested}
+        if all(coverage[name] >= required[name] for name in requested):
             return {"inserted": 0, "status": "ready", "coverage": coverage}
 
         asset = AssetRecord(**await AssetCatalogService(self.session).get_asset(normalized_symbol))
@@ -98,7 +106,7 @@ class IndicatorHistoryBootstrap:
             await self.session.commit()
         coverage = await self.market_coverage(normalized_symbol)
         return {"inserted": inserted, "status": (
-            "ready" if all(coverage[name] >= REQUIRED_SOURCE_DAYS for name in requested)
+            "ready" if all(coverage[name] >= required[name] for name in requested)
             else "insufficient_history"
         ), "coverage": coverage}
 

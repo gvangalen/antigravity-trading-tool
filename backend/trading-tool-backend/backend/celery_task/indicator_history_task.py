@@ -11,10 +11,12 @@ from requests import HTTPError
 
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.models import UserIndicatorConfig
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.services.indicator_history_bootstrap import (
     ABSOLUTE_MACRO_INDICATORS,
     ABSOLUTE_MARKET_INDICATORS,
     IndicatorHistoryBootstrap,
+    RSI_SOURCE_DAYS,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,7 @@ async def _bootstrap_indicator_histories(
         query = select(UserIndicatorConfig).where(
             UserIndicatorConfig.enabled.is_(True),
             UserIndicatorConfig.symbol.is_not(None),
-            UserIndicatorConfig.category.in_(("market", "macro")),
+            UserIndicatorConfig.category.in_(("market", "macro", "technical")),
         )
         if user_id is not None:
             query = query.where(UserIndicatorConfig.user_id == int(user_id))
@@ -50,6 +52,7 @@ async def _bootstrap_indicator_histories(
 
         market: dict[str, set[str]] = defaultdict(set)
         market_owners: dict[str, set[int]] = defaultdict(set)
+        rsi_owners: dict[str, set[int]] = defaultdict(set)
         macro: dict[tuple[int, str], str] = {}
         for row in rows:
             name = str(row.indicator or "").lower()
@@ -59,6 +62,12 @@ async def _bootstrap_indicator_histories(
                 market_owners[asset].add(int(row.user_id))
             elif row.category == "macro" and name in ABSOLUTE_MACRO_INDICATORS:
                 macro[(int(row.user_id), name)] = asset
+            elif (row.category == "technical" and name == "rsi" and
+                  str(getattr(row, "asset_class", None) or
+                      DEFAULT_ASSET_CATALOG.get(asset, {}).get("asset_class") or "").lower() == "crypto"):
+                market[asset].add("price")
+                market_owners[asset].add(int(row.user_id))
+                rsi_owners[asset].add(int(row.user_id))
         scopes = [("market", asset, names) for asset, names in sorted(market.items())]
         scopes += [("macro", key, asset) for key, asset in sorted(macro.items())]
         if user_id is None and len(scopes) > MAX_HISTORY_SCOPES_PER_SWEEP:
@@ -72,10 +81,53 @@ async def _bootstrap_indicator_histories(
         for scope_type, target, extra in scopes:
             try:
                 if scope_type == "market":
-                    outcome = await service.bootstrap_market(target, extra)
+                    if target in rsi_owners:
+                        outcome = await service.bootstrap_market(
+                            target, extra, required_price_days=RSI_SOURCE_DAYS,
+                        )
+                    else:
+                        outcome = await service.bootstrap_market(target, extra)
                 else:
                     owner_id, name = target
                     outcome = await service.bootstrap_macro(owner_id, name, extra)
+                if outcome.get("status") == "ready" and (
+                    outcome.get("inserted", 0) > 0 or user_id is not None
+                ):
+                    if scope_type == "market" and target in rsi_owners:
+                        from backend.services.technical_data_service import TechnicalDataService
+                        technical = TechnicalDataService(session)
+                        materialized = 0
+                        for owner_id in sorted(rsi_owners[target]):
+                            try:
+                                await technical._add_technical_indicator(
+                                    "rsi", owner_id, symbol=target, persist_preference=False,
+                                )
+                                await session.commit()
+                                materialized += 1
+                            except Exception as exc:
+                                await session.rollback()
+                                logger.warning(
+                                    "RSI materialization pending: category=technical code=%s",
+                                    _source_failure_code(exc),
+                                )
+                        outcome["rsi_materialized"] = materialized
+                        outcome["rsi_pending"] = len(rsi_owners[target]) - materialized
+                    elif scope_type == "macro":
+                        from backend.services.macro_data_service import MacroDataService
+                        try:
+                            await MacroDataService(session).add_macro_indicator(
+                                owner_id, name, None, symbol=extra,
+                                persist_preference=False, refresh_existing=True,
+                            )
+                            await session.commit()
+                            outcome["measurement_status"] = "ready"
+                        except Exception as exc:
+                            await session.rollback()
+                            outcome["measurement_status"] = "pending_source"
+                            logger.warning(
+                                "Macro materialization pending: category=macro indicator=%s code=%s",
+                                name, _source_failure_code(exc),
+                            )
                 results.append({"type": scope_type, "target": str(target), **outcome})
                 # A new owner can select an asset whose shared market history
                 # is already complete. Rebuild their score even when this run

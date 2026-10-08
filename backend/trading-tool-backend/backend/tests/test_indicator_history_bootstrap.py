@@ -156,6 +156,42 @@ def test_market_backfill_uses_closed_dated_candles_and_is_idempotent(monkeypatch
     assert len({row.source_observed_at.date() for row in session.rows}) == 6
 
 
+def test_rsi_backfill_continues_after_price_has_five_days(monkeypatch):
+    from backend.services import indicator_history_bootstrap as module
+
+    class _Asset:
+        async def get_asset(self, _symbol):
+            return {"symbol": "ETH", "display_name": "Ethereum", "asset_class": "crypto",
+                    "provider": "binance", "primary_provider": "binance"}
+
+    class _Provider:
+        async def fetch_candles(self, _asset, _timeframe, *, limit):
+            assert limit == 40
+            return [SimpleNamespace(
+                period_start=datetime.combine(_day(offset), time.min, timezone.utc),
+                is_final=True, close=200 + offset, volume=1000,
+                open=199, high=202, low=198,
+            ) for offset in range(1, 18)]
+
+    monkeypatch.setattr(module, "AssetCatalogService", lambda _session: _Asset())
+    monkeypatch.setattr(module, "MarketDataProviderRegistry", lambda: SimpleNamespace(
+        resolve_for_asset=lambda _asset: _Provider(),
+    ))
+    session = _MarketSession()
+    for offset in range(1, 6):
+        observed_at = datetime.combine(_day(offset), time(23, 59, 59))
+        session.rows.append(SimpleNamespace(source_observed_at=observed_at,
+                                            price=200 + offset, volume=1000))
+
+    result = asyncio.run(IndicatorHistoryBootstrap(session).bootstrap_market(
+        "ETH", {"price"}, required_price_days=15,
+    ))
+
+    assert result["status"] == "ready"
+    assert result["coverage"]["price"] >= 15
+    assert result["inserted"] >= 10
+
+
 def test_macro_backfill_is_owner_scoped_and_never_creates_a_score(monkeypatch):
     from backend.services import indicator_history_bootstrap as module
 
@@ -193,6 +229,9 @@ def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
         async def execute(self, _query):
             return _Result(rows)
 
+        async def commit(self):
+            pass
+
     class _Bootstrap:
         def __init__(self, _session):
             pass
@@ -203,9 +242,17 @@ def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
         async def bootstrap_macro(self, _owner, _name, _symbol):
             return {"status": "ready", "inserted": 5}
 
+    class _MacroService:
+        def __init__(self, _session):
+            pass
+
+        async def add_macro_indicator(self, *_args, **_kwargs):
+            pass
+
     queued = []
     monkeypatch.setattr(task_module, "async_session_factory", _Session)
     monkeypatch.setattr(task_module, "IndicatorHistoryBootstrap", _Bootstrap)
+    monkeypatch.setattr(MacroDataService, "add_macro_indicator", _MacroService.add_macro_indicator)
     monkeypatch.setattr(celery_module.celery_app, "send_task",
                         lambda name, **kwargs: queued.append((name, kwargs)))
 
@@ -255,6 +302,80 @@ def test_new_owner_reuses_existing_asset_history_without_waiting_for_new_days(mo
         ("backend.celery_task.store_daily_scores_task.store_daily_scores_task",
          {"kwargs": {"user_id": 9}}),
     ]
+
+
+def test_targeted_rsi_history_materializes_reading_and_rebuilds_owner_score(monkeypatch):
+    from backend.celery_task import indicator_history_task as task_module
+    from backend.celery_task import celery_app as celery_module
+    from backend.services.technical_data_service import TechnicalDataService
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def execute(self, _query):
+            return _Result([SimpleNamespace(
+                user_id=9, symbol="ETH", category="technical", indicator="rsi")])
+
+        async def commit(self):
+            pass
+
+    class _Bootstrap:
+        def __init__(self, _session):
+            pass
+
+        async def bootstrap_market(self, _symbol, _names, *, required_price_days):
+            assert required_price_days == 15
+            assert _names == {"price"}
+            return {"status": "ready", "inserted": 10}
+
+    materialized = []
+
+    async def _add_rsi(self, name, owner, **kwargs):
+        materialized.append((name, owner, kwargs))
+
+    queued = []
+    monkeypatch.setattr(task_module, "async_session_factory", _Session)
+    monkeypatch.setattr(task_module, "IndicatorHistoryBootstrap", _Bootstrap)
+    monkeypatch.setattr(TechnicalDataService, "_add_technical_indicator", _add_rsi)
+    monkeypatch.setattr(celery_module.celery_app, "send_task",
+                        lambda name, **kwargs: queued.append((name, kwargs)))
+
+    result = asyncio.run(task_module._bootstrap_indicator_histories(
+        user_id=9, symbol="ETH", category="technical", indicator="rsi",
+    ))
+
+    assert result["scopes"][0]["status"] == "ready"
+    assert materialized == [("rsi", 9, {"symbol": "ETH", "persist_preference": False})]
+    assert queued == [(
+        "backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+        {"kwargs": {"user_id": 9}},
+    )]
+
+
+def test_stock_rsi_does_not_request_crypto_candle_history(monkeypatch):
+    from backend.celery_task import indicator_history_task as task_module
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def execute(self, _query):
+            return _Result([SimpleNamespace(
+                user_id=9, symbol="AAPL", asset_class="stock",
+                category="technical", indicator="rsi")])
+
+    monkeypatch.setattr(task_module, "async_session_factory", _Session)
+    result = asyncio.run(task_module._bootstrap_indicator_histories(
+        user_id=9, symbol="AAPL", category="technical", indicator="rsi",
+    ))
+    assert result == {"scopes": []}
 
 
 def test_derived_dxy_history_uses_only_complete_currency_days(monkeypatch):

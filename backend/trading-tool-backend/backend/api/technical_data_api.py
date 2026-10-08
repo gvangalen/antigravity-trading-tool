@@ -78,6 +78,16 @@ async def add_technical_indicator(
         result = await service.add_technical_indicator(name_raw, user_id, symbol=symbol)
         # Commit manually if auto-commit not configured in router middleware properly
         await session.commit()
+        if str(name_raw or "").strip().lower() == "rsi":
+            try:
+                from backend.celery_task.celery_app import celery_app
+                celery_app.send_task(
+                    "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                    kwargs={"user_id": int(user_id), "symbol": str(symbol).upper(),
+                            "category": "technical", "indicator": "rsi"},
+                )
+            except Exception:
+                logger.warning("RSI history queued for periodic retry", exc_info=True)
         return result
 
     except ValueError as ve:
@@ -332,6 +342,17 @@ async def put_technical_preferences(
         asset_class=asset_class,
     )
     await session.commit()
+
+    if "rsi" in {name for name, _ in normalized_items}:
+        try:
+            from backend.celery_task.celery_app import celery_app
+            celery_app.send_task(
+                "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                kwargs={"user_id": int(user_id), "symbol": normalized_symbol,
+                        "category": "technical", "indicator": "rsi"},
+            )
+        except Exception:
+            logger.warning("RSI history queued for periodic retry", exc_info=True)
 
     rows = await repo.list_scope_configs(
         user_id,
