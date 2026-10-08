@@ -227,8 +227,7 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         ("indicator_delete", "Verwijder mijn RSI indicatorconfiguratie voor SOL.", "delete_indicator_configuration"),
         (
             "setup_create",
-            f"Erstelle ein taegliches DCA-Setup fuer SOL auf 4 Stunden mit dem Namen {names['setup']} "
-            "und einem festen Basisbetrag von 100 Euro pro Ausfuehrung.",
+            f"Erstelle ein Trade-Setup fuer SOL auf 4 Stunden mit dem Namen {names['setup']}.",
             "create_setup",
         ),
         # Every dependent turn deliberately omits the object name and ID. It
@@ -307,7 +306,7 @@ def main() -> None:
             suffix = args.fixture_namespace or uuid.uuid4().hex[:8]
             names = {
                 "indicator": f"chain_rsi_{suffix}",
-                "setup": f"Chain DCA Setup {suffix}",
+                "setup": f"Chain Trade Setup {suffix}",
                 "strategy": f"Chain Strategy {suffix}",
                 "bot": f"Chain Bot {suffix}",
             }
@@ -320,7 +319,7 @@ def main() -> None:
         suffix = args.fixture_namespace or uuid.uuid4().hex[:8]
         names = {
             "indicator": f"chain_rsi_{suffix}",
-            "setup": f"Chain DCA Setup {suffix}",
+            "setup": f"Chain Trade Setup {suffix}",
             "strategy": f"Chain Strategy {suffix}",
             "bot": f"Chain Bot {suffix}",
         }
