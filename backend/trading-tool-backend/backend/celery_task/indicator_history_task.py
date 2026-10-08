@@ -41,12 +41,14 @@ async def _bootstrap_indicator_histories(
         rows = (await session.execute(query)).scalars().all()
 
         market: dict[str, set[str]] = defaultdict(set)
+        market_owners: dict[str, set[int]] = defaultdict(set)
         macro: dict[tuple[int, str], str] = {}
         for row in rows:
             name = str(row.indicator or "").lower()
             asset = str(row.symbol or "").upper()
             if row.category == "market" and name in ABSOLUTE_MARKET_INDICATORS:
                 market[asset].add(name)
+                market_owners[asset].add(int(row.user_id))
             elif row.category == "macro" and name in ABSOLUTE_MACRO_INDICATORS:
                 macro[(int(row.user_id), name)] = asset
         scopes = [("market", asset, names) for asset, names in sorted(market.items())]
@@ -58,6 +60,7 @@ async def _bootstrap_indicator_histories(
 
         service = IndicatorHistoryBootstrap(session)
         results = []
+        score_refreshes: set[int] = set()
         for scope_type, target, extra in scopes:
             try:
                 if scope_type == "market":
@@ -66,12 +69,33 @@ async def _bootstrap_indicator_histories(
                     owner_id, name = target
                     outcome = await service.bootstrap_macro(owner_id, name, extra)
                 results.append({"type": scope_type, "target": str(target), **outcome})
+                # A new owner can select an asset whose shared market history
+                # is already complete. Rebuild their score even when this run
+                # did not need to insert another candle.
+                if outcome.get("status") == "ready" and (
+                    outcome.get("inserted", 0) > 0 or user_id is not None
+                ):
+                    if scope_type == "market":
+                        score_refreshes.update(market_owners[target])
+                    else:
+                        score_refreshes.add(owner_id)
             except Exception as exc:
                 await session.rollback()
                 logger.warning("Indicator history bootstrap failed for %s %s: %s",
                                scope_type, target, type(exc).__name__)
                 results.append({"type": scope_type, "target": str(target),
                                 "status": "source_unavailable", "inserted": 0})
+        if score_refreshes:
+            from backend.celery_task.celery_app import celery_app
+            for owner_id in sorted(score_refreshes):
+                try:
+                    celery_app.send_task(
+                        "backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+                        kwargs={"user_id": owner_id},
+                    )
+                except Exception:
+                    logger.warning("Score refresh after history bootstrap could not be queued for owner %s",
+                                   owner_id, exc_info=True)
         return {"scopes": results}
 
 

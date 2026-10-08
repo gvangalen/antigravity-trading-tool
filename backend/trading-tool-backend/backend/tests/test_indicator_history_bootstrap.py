@@ -119,6 +119,88 @@ def test_macro_backfill_is_owner_scoped_and_never_creates_a_score(monkeypatch):
     assert session.commits == 1
 
 
+def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
+    from backend.celery_task import indicator_history_task as task_module
+    from backend.celery_task import celery_app as celery_module
+
+    rows = [SimpleNamespace(user_id=7, symbol="ETH", category="market", indicator="price"),
+            SimpleNamespace(user_id=7, symbol="ETH", category="macro", indicator="dxy"),
+            SimpleNamespace(user_id=8, symbol="ETH", category="market", indicator="price")]
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def execute(self, _query):
+            return _Result(rows)
+
+    class _Bootstrap:
+        def __init__(self, _session):
+            pass
+
+        async def bootstrap_market(self, _symbol, _names):
+            return {"status": "ready", "inserted": 5}
+
+        async def bootstrap_macro(self, _owner, _name, _symbol):
+            return {"status": "ready", "inserted": 5}
+
+    queued = []
+    monkeypatch.setattr(task_module, "async_session_factory", _Session)
+    monkeypatch.setattr(task_module, "IndicatorHistoryBootstrap", _Bootstrap)
+    monkeypatch.setattr(celery_module.celery_app, "send_task",
+                        lambda name, **kwargs: queued.append((name, kwargs)))
+
+    result = asyncio.run(task_module._bootstrap_indicator_histories())
+
+    assert len(result["scopes"]) == 2
+    assert queued == [
+        ("backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+         {"kwargs": {"user_id": 7}}),
+        ("backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+         {"kwargs": {"user_id": 8}}),
+    ]
+
+
+def test_new_owner_reuses_existing_asset_history_without_waiting_for_new_days(monkeypatch):
+    from backend.celery_task import indicator_history_task as task_module
+    from backend.celery_task import celery_app as celery_module
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def execute(self, _query):
+            return _Result([SimpleNamespace(
+                user_id=9, symbol="BTC", category="market", indicator="price")])
+
+    class _Bootstrap:
+        def __init__(self, _session):
+            pass
+
+        async def bootstrap_market(self, _symbol, _names):
+            return {"status": "ready", "inserted": 0}
+
+    queued = []
+    monkeypatch.setattr(task_module, "async_session_factory", _Session)
+    monkeypatch.setattr(task_module, "IndicatorHistoryBootstrap", _Bootstrap)
+    monkeypatch.setattr(celery_module.celery_app, "send_task",
+                        lambda name, **kwargs: queued.append((name, kwargs)))
+
+    asyncio.run(task_module._bootstrap_indicator_histories(
+        user_id=9, symbol="BTC", category="market", indicator="price"))
+
+    assert queued == [
+        ("backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+         {"kwargs": {"user_id": 9}}),
+    ]
+
+
 def test_derived_dxy_history_uses_only_complete_currency_days(monkeypatch):
     common = _day(1).isoformat()
     incomplete = _day(2).isoformat()
