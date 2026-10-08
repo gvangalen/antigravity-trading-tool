@@ -236,7 +236,7 @@ class FinnV2ToolExecutionService:
                 timeout=timeout_seconds,
             )
             as_of = payload.get("as_of")
-            freshness_status = self.freshness.freshness_for(tool_name, as_of)
+            freshness_status = payload.get("freshness_status") or self.freshness.freshness_for(tool_name, as_of)
             result_summary = self.redaction.redact_result_summary(payload.get("summary") or {})
             result = ToolExecutionResult(
                 tool_name=tool_name,

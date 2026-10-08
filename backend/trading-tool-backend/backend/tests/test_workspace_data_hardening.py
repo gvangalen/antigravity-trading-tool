@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -64,6 +64,36 @@ def test_day_indicator_rejects_evidence_for_a_different_observation():
                  "rule_origin": "system_template",
              }}}}
     assert _current_indicator_rows(raw, "market", daily)[0]["score"] is None
+
+
+def test_day_indicator_matches_equivalent_utc_source_moments():
+    raw = [{"name": "RSI", "value": 31.91, "score": None,
+            "source_observed_at": "2026-10-07T23:55:00+00:00"}]
+    daily = {
+        "technical": {"score": 40, "source_status": "fresh"},
+        "indicator_evidence": {"technical": {"rsi": {
+            "value": 31.91, "score": 40, "weight": 1,
+            "source_observed_at": "2026-10-07T23:55:00Z",
+            "rule_origin": "system_template",
+        }}},
+    }
+    rows = _current_indicator_rows(raw, "technical", daily)
+    assert rows[0]["score"] == 40
+    contribution = WorkspaceDataService._category_payload(
+        rows, "day", 36 * 60 * 60, "technical_indicators"
+    )["rows"][0]["score_contribution"]
+    assert contribution["weighted_points"] == 40
+
+
+def test_day_macro_freshness_uses_dxy_source_window_instead_of_generic_day_window():
+    observed = (datetime.now(timezone.utc) - timedelta(hours=60)).isoformat()
+    rows = _enrich_indicator_rows(
+        [{"name": "DXY", "value": 102.24, "score": 20,
+          "source_observed_at": observed}],
+        period="day", threshold=36 * 60 * 60, source="macro_data", symbol="ETH",
+    )
+    assert rows[0]["freshness"]["stale"] is False
+    assert rows[0]["score_unavailable_reason"] is None
 
 
 def test_missing_indicator_data_never_becomes_an_artificial_score():

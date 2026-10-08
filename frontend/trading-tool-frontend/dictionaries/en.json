@@ -2349,6 +2349,7 @@
       "noStrategy": "No strategy linked",
       "lastChecked": "Last checked",
       "dataUpdating": "Data is updating",
+      "noDecisionYet": "No bot evaluation has run yet",
       "collapseDiagnostics": "Collapse diagnostics",
       "viewFullDiagnostics": "View full diagnostics",
       "scenarioLoading": "Running parallel scenarios...",

@@ -2350,6 +2350,7 @@
       "noStrategy": "Keine Strategie verknüpft",
       "lastChecked": "Zuletzt geprüft",
       "dataUpdating": "Daten werden aktualisiert",
+      "noDecisionYet": "Noch keine Bot-Bewertung ausgeführt",
       "collapseDiagnostics": "Diagnostik einklappen",
       "viewFullDiagnostics": "Vollständige Diagnostik ansehen",
       "scenarioLoading": "Parallele Szenarien berechnen...",
