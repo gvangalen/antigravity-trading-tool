@@ -75,3 +75,48 @@ def test_preference_save_dispatches_owner_scoped_history_after_commit(
             }},
         ),
     ]
+
+
+def test_direct_rsi_add_also_recovers_history_after_save(monkeypatch):
+    from backend.api import technical_data_api
+    from backend.celery_task import celery_app as celery_module
+
+    events = []
+
+    class _Request:
+        async def json(self):
+            return {"indicator": "RSI", "symbol": "ETH"}
+
+    class _Session:
+        async def commit(self):
+            events.append("commit")
+
+    class _Service:
+        def __init__(self, _session):
+            pass
+
+        async def add_technical_indicator(self, name, owner, *, symbol):
+            assert (name, owner, symbol) == ("RSI", 17, "ETH")
+            return {"status": "pending_source"}
+
+    monkeypatch.setattr(technical_data_api, "TechnicalDataService", _Service)
+    monkeypatch.setattr(
+        celery_module.celery_app, "send_task",
+        lambda name, **kwargs: events.append((name, kwargs)),
+    )
+
+    result = asyncio.run(technical_data_api.add_technical_indicator(
+        _Request(), current_user={"id": 17}, session=_Session(),
+    ))
+
+    assert result["status"] == "pending_source"
+    assert events == [
+        "commit",
+        (
+            "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+            {"kwargs": {
+                "user_id": 17, "symbol": "ETH",
+                "category": "technical", "indicator": "rsi",
+            }},
+        ),
+    ]
