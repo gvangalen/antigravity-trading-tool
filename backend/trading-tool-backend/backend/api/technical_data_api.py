@@ -333,6 +333,17 @@ async def put_technical_preferences(
     )
     await session.commit()
 
+    if "rsi" in {name for name, _ in normalized_items}:
+        try:
+            from backend.celery_task.celery_app import celery_app
+            celery_app.send_task(
+                "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                kwargs={"user_id": int(user_id), "symbol": normalized_symbol,
+                        "category": "technical", "indicator": "rsi"},
+            )
+        except Exception:
+            logger.warning("RSI history queued for periodic retry", exc_info=True)
+
     rows = await repo.list_scope_configs(
         user_id,
         symbol=normalized_symbol,
