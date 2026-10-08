@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from types import SimpleNamespace
 
 from backend.services.indicator_history_bootstrap import IndicatorHistoryBootstrap
@@ -40,6 +40,35 @@ def test_macro_history_provider_classifies_credit_limit(monkeypatch):
 
     with pytest.raises(MacroSourceRateLimited, match="macro_source_rate_limited"):
         TwelveDataMacroProvider(api_key="secret").fetch_daily_history("EUR/USD")
+
+
+def test_direct_dxy_index_uses_same_completed_source_for_reading_and_history(monkeypatch):
+    from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
+
+    today = datetime.now(timezone.utc).date()
+    days = [today - timedelta(days=offset) for offset in range(7, -1, -1)]
+    payload = {"chart": {"result": [{
+        "timestamp": [int(datetime.combine(day, time.min, timezone.utc).timestamp())
+                      for day in days],
+        "indicators": {"quote": [{"close": [101.0 + i for i in range(len(days))]}]},
+    }]}}
+    calls = []
+    macro_interpreter._hourly_dxy_chart.cache_clear()
+    monkeypatch.setattr(macro_interpreter, "_yahoo_dxy_chart", lambda **kwargs: (
+        calls.append(kwargs) or payload
+    ))
+
+    definition = get_macro_indicator_definition("dxy")
+    assert definition["source"] == "yahoo"
+    history = macro_interpreter.fetch_absolute_macro_history("dxy")
+    current = macro_interpreter.fetch_macro_value("dxy", source="yahoo", link=definition["link"])
+
+    assert len(history) == 7
+    assert history[-1][0].date() == today - timedelta(days=1)
+    assert current["value"] == history[-1][1]
+    assert current["observed_at"].date() == history[-1][0].date()
+    assert calls == [{"history": True}]
+    macro_interpreter._hourly_dxy_chart.cache_clear()
 
 
 def _day(offset):

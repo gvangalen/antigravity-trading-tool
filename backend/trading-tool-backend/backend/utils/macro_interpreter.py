@@ -4,6 +4,8 @@ import csv
 import json
 import math
 import re
+import time
+from functools import lru_cache
 from datetime import date, datetime, timedelta, timezone
 from io import StringIO
 from urllib.parse import parse_qs, urlparse
@@ -71,6 +73,32 @@ def _yahoo_dxy_chart(*, history: bool = False):
     response = requests.get(YAHOO_DXY, params=params, headers=YAHOO_DXY_HEADERS, timeout=10)
     response.raise_for_status()
     return response.json()
+
+
+@lru_cache(maxsize=2)
+def _hourly_dxy_chart(hour_bucket: int):
+    # One public index series serves both the current reading and historical
+    # normalization for every owner in this worker process.
+    return _yahoo_dxy_chart(history=True)
+
+
+def _dated_yahoo_dxy_closes() -> dict[str, float]:
+    payload = (_hourly_dxy_chart(int(time.time() // 3600))
+               .get("chart", {}).get("result") or [{}])[0]
+    timestamps = payload.get("timestamp") or []
+    closes = ((payload.get("indicators", {}).get("quote") or [{}])[0]
+              .get("close") or [])
+    today = datetime.now(timezone.utc).date()
+    readings: dict[str, float] = {}
+    for stamp, close in zip(timestamps, closes):
+        try:
+            day = datetime.fromtimestamp(int(stamp), timezone.utc).date()
+            value = float(close)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if day < today and math.isfinite(value) and value > 0:
+            readings[day.isoformat()] = value
+    return readings
 
 
 def _fetch_json(url: str, timeout: int = 10):
@@ -238,6 +266,8 @@ def fetch_absolute_macro_history(name: str, *, days: int = 90) -> list[tuple[dat
                 raw[day] = float(value)
             except ValueError:
                 continue
+    elif indicator == "dxy" and source == "yahoo":
+        raw = _dated_yahoo_dxy_closes()
     elif indicator == "dxy":
         provider = TwelveDataMacroProvider()
         if provider.api_key:
@@ -384,6 +414,17 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     effective_link = link
 
     twelve_data_provider = TwelveDataMacroProvider()
+    if normalized == "dxy" and source_lower == "yahoo":
+        readings = _dated_yahoo_dxy_closes()
+        if not readings:
+            return {"value": None}
+        day = max(readings)
+        return {
+            "value": readings[day],
+            "observed_at": datetime.combine(
+                date.fromisoformat(day), datetime.max.time(), timezone.utc,
+            ),
+        }
     if use_twelve_data and twelve_data_provider.supports_indicator(normalized):
         try:
             reading = twelve_data_provider.fetch_quote_reading(

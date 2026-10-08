@@ -1,11 +1,15 @@
 import asyncio
 import logging
+from datetime import datetime, time, timedelta, timezone
+from math import isfinite
 from typing import Dict, Any, List, Optional
 from types import SimpleNamespace
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.models import MarketData
 from backend.domain.technical_indicator_catalog import (
     get_active_technical_indicator_definitions,
     get_technical_indicator_definition,
@@ -15,10 +19,10 @@ from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.technical_indicator_provider_registry import TechnicalIndicatorProviderRegistry
 from backend.services.providers.twelve_data_technical_indicator_adapter import TechnicalSourceRateLimited
-from backend.utils.technical_interpreter import fetch_technical_value
+from backend.utils.technical_interpreter import calculate_rsi, fetch_technical_value
 from backend.utils.technical_interpreter import normalize_technical_value
 from backend.utils.scoring_engine import score_indicator
-from backend.utils.scoring_utils import normalize_indicator_name
+from backend.utils.scoring_utils import normalize_indicator_name, score_source_is_fresh
 from backend.utils.db import get_db_connection
 from backend.services.onboarding_service import mark_step_completed
 from backend.utils.indicator_score_validation import require_indicator_score
@@ -310,6 +314,10 @@ class TechnicalDataService:
     ) -> dict[str, Any] | None:
         asset_meta = await AssetCatalogService(self.session).get_asset(symbol)
         asset = AssetRecord(**asset_meta)
+        if name == "rsi" and asset.asset_class == "crypto":
+            local_reading = await self._rsi_from_dated_market_history(asset.symbol)
+            if local_reading is not None:
+                return local_reading
         provider = self.provider_registry.resolve_for_asset(asset, name)
         if provider is not None:
             read = getattr(provider, "fetch_indicator_reading", None)
@@ -333,6 +341,34 @@ class TechnicalDataService:
             link=link,
             symbol=symbol,
         )
+
+    async def _rsi_from_dated_market_history(self, symbol: str) -> dict[str, Any] | None:
+        """Use completed source candles already shared by the market score path."""
+        today = datetime.now(timezone.utc).date()
+        cutoff = datetime.combine(today - timedelta(days=60), time.min)
+        rows = (await self.session.execute(
+            select(MarketData.source_observed_at, MarketData.price).where(
+                MarketData.symbol == symbol.upper(),
+                MarketData.source_observed_at >= cutoff,
+                MarketData.source_observed_at < datetime.combine(today, time.min),
+                MarketData.price.is_not(None),
+            ).order_by(MarketData.source_observed_at)
+        )).all()
+        by_day: dict[object, tuple[datetime, float]] = {}
+        for observed_at, raw_price in rows:
+            if observed_at is None:
+                continue
+            price = float(raw_price)
+            if isfinite(price) and price > 0:
+                by_day[observed_at.date()] = (observed_at, price)
+        closes = [item[1] for _, item in sorted(by_day.items())]
+        value = calculate_rsi(closes, period=14)
+        if value is None:
+            return None
+        observed_at = max(item[0] for item in by_day.values())
+        if not score_source_is_fresh("technical", "rsi", observed_at, symbol=symbol):
+            return None
+        return {"value": float(value), "observed_at": observed_at}
 
     async def _add_technical_indicator(
         self,
