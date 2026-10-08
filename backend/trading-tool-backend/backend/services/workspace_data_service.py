@@ -197,6 +197,15 @@ def _enrich_indicator_rows(
     threshold: int,
     source: str,
 ) -> list[dict[str, Any]]:
+    # Older rows may contain a numeric score produced by the generated bucket
+    # rule. Do not present that number as an assessed indicator while the
+    # background score rebuild catches up.
+    rows = [
+        {**row, "score": None}
+        if "fallback" in str(row.get("interpretation") or "").lower()
+        else row
+        for row in rows
+    ]
     scored = [
         row
         for row in rows
@@ -224,6 +233,8 @@ def _enrich_indicator_rows(
             score_reason = "insufficient_dated_history"
         elif freshness["stale"]:
             score_reason = "stale_source"
+        elif "geen gevalideerde scoreregel" in str(row.get("interpretation") or "").lower() or "fallback" in str(row.get("interpretation") or "").lower():
+            score_reason = "missing_rule"
         else:
             score_reason = "score_pending"
         payload.update({

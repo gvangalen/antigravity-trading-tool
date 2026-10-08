@@ -206,7 +206,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 user_id=user_id,
                 symbol=symbol,
             )
-            if scored.get("matched_rule_id") is None:
+            if scored.get("rule_origin") in {"missing", "generated_fallback"}:
                 return {"scores": {}, "total_score": None, "top_contributors": [],
                         "source_status": "missing_rule"}
             weight = float(scored.get("weight", 1))
@@ -221,6 +221,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 "action": scored["action"],
                 "weight": weight,
                 "mode": scored["score_mode"],
+                "rule_origin": scored["rule_origin"],
             }
 
             weighted_total += scored["score"] * weight

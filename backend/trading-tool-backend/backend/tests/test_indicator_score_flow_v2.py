@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from backend.utils import scoring_utils
+from backend.utils import scoring_engine
 from backend.utils.market_interpreter import normalize_market_value, normalize_market_value_with_history
 
 
@@ -79,6 +80,20 @@ def test_personal_indicator_rules_feed_weighted_macro_score(monkeypatch):
     assert result["scores"]["dxy"]["weight"] == 2
     assert result["scores"]["fear_greed_index"]["score"] == 25
     assert result["total_score"] == 62
+
+
+def test_generated_bucket_is_not_decision_grade(monkeypatch):
+    monkeypatch.setattr(scoring_engine, "fetch_rules_for_indicator",
+                        lambda *_args, **_kwargs: scoring_engine._fallback_fixed_rules("dxy"))
+    scored = scoring_engine.score_indicator(_Connection(), "macro", "dxy", 50, 7, "BTC")
+    assert scored["rule_origin"] == "generated_fallback"
+    assert scored["score"] is None
+
+    monkeypatch.setattr(scoring_utils, "score_indicator", lambda **_kwargs: scored)
+    monkeypatch.setattr(scoring_utils, "get_db_connection", _Connection)
+    result = scoring_utils.generate_scores_db("macro", user_id=7, symbol="BTC")
+    assert result["source_status"] == "missing_rule"
+    assert result["total_score"] is None
 
 
 def test_absolute_macro_level_without_dated_history_is_not_scored(monkeypatch):

@@ -72,6 +72,14 @@ class TechnicalDataService:
         finally:
             conn.close()
 
+        if scored.get("rule_origin") in {"missing", "generated_fallback"}:
+            return {
+                "score": None,
+                "trend": None,
+                "interpretation": "Geen gevalideerde scoreregel voor deze indicator.",
+                "action": None,
+            }
+
         try:
             score = require_indicator_score(scored, name)
         except HTTPException as exc:
@@ -377,7 +385,7 @@ class TechnicalDataService:
             user_id=user_id,
             symbol=symbol,
         )
-        score = float(scored["score"])
+        score = float(scored["score"]) if scored.get("score") is not None else None
         advies = scored.get("trend") or "neutral"
         uitleg = scored.get("interpretation") or "Geen interpretatie beschikbaar"
 
@@ -397,7 +405,7 @@ class TechnicalDataService:
             "message": f"Indicator '{name}' toegevoegd.",
             "id": new_ind.id,
             "value": float(new_ind.value),
-            "score": float(new_ind.score),
+            "score": float(new_ind.score) if new_ind.score is not None else None,
             "advies": new_ind.advies,
             "uitleg": new_ind.uitleg,
         }

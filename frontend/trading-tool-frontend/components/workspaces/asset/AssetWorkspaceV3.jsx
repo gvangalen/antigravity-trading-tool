@@ -159,6 +159,7 @@ function getUiCopy(locale = "nl") {
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
       indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
       scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
+      missingScoreRule: "A source reading is available, but no validated scoring rule is configured. This indicator has no score yet.",
       market: "Market",
       macro: "Macro",
       technical: "Technical",
@@ -303,6 +304,7 @@ function getUiCopy(locale = "nl") {
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
       indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
       scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
+      missingScoreRule: "Ein Quellwert ist vorhanden, aber keine validierte Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
       market: "Markt",
       macro: "Makro",
       technical: "Technisch",
@@ -446,6 +448,7 @@ function getUiCopy(locale = "nl") {
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
     indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
     scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
+    missingScoreRule: "Er is een bronmeting, maar geen gevalideerde scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
     market: "Markt",
     macro: "Macro",
     technical: "Technisch",
@@ -1300,6 +1303,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
         ? ui.historyPending(historyCoverage.observed_days, historyCoverage.required_days)
         : unavailableReason === "stale_source"
           ? ui.indicatorSourceStale
+          : unavailableReason === "missing_rule"
+            ? ui.missingScoreRule
           : unavailableReason === "score_pending"
             ? ui.scorePending
       : !hasValue && item?.data_status === "pending_refresh"

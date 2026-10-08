@@ -428,18 +428,20 @@ def score_indicator(
         return {
             "indicator": indicator,
             "value": v,
-            "base_score": 10,
-            "score": 10,
+            "base_score": None,
+            "score": None,
             "score_mode": "standard",
             "weight": 1.0,
             "trend": None,
             "interpretation": "Geen scoreregel match (fallback).",
             "action": "Geen actie.",
             "matched_rule_id": None,
+            "rule_origin": "missing",
         }
 
-    base_score = _clamp_score(int(rule.score))
-    final_score = _apply_score_mode(base_score, rule.score_mode)
+    generated_fallback = rule.id < 0
+    base_score = None if generated_fallback else _clamp_score(int(rule.score))
+    final_score = None if generated_fallback else _apply_score_mode(base_score, rule.score_mode)
 
     w = float(rule.weight if rule.weight is not None else 1.0)
     if w < 0:
@@ -456,6 +458,10 @@ def score_indicator(
         "interpretation": rule.interpretation,
         "action": rule.action,
         "matched_rule_id": rule.id,
+        "rule_origin": (
+            "generated_fallback" if generated_fallback else
+            "custom" if rule.score_mode == "custom" else "system_template"
+        ),
         "rules_user_id": rule.user_id,  # handig voor debug
     }
 
@@ -495,9 +501,11 @@ def score_category(
             value=value,
             user_id=user_id,  # ✅ user-based override
         )
+        if scored.get("score") is None:
+            continue
         items.append(scored)
 
-        s = float(scored["score"] or 10)
+        s = float(scored["score"])
         w = float(scored["weight"] or 1.0)
 
         weighted_sum += s * w
@@ -505,11 +513,11 @@ def score_category(
         total_weight += w
         count += 1
 
-    raw_avg = (raw_sum / count) if count > 0 else 10.0
-    weighted_avg = (weighted_sum / total_weight) if total_weight > 0 else 10.0
+    raw_avg = (raw_sum / count) if count > 0 else None
+    weighted_avg = (weighted_sum / total_weight) if total_weight > 0 else None
 
-    raw_avg_i = _clamp_score(int(round(raw_avg)))
-    weighted_avg_i = _clamp_score(int(round(weighted_avg)))
+    raw_avg_i = _clamp_score(int(round(raw_avg))) if raw_avg is not None else None
+    weighted_avg_i = _clamp_score(int(round(weighted_avg))) if weighted_avg is not None else None
 
     if persist and count > 0:
         persist_indicator_scores(
