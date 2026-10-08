@@ -4,15 +4,42 @@ from types import SimpleNamespace
 
 from backend.services.indicator_history_bootstrap import IndicatorHistoryBootstrap
 from backend.services.providers.twelve_data_macro_provider import (
-    DXY_BASE_FACTOR, DXY_COMPONENT_WEIGHTS, TwelveDataMacroProvider,
+    DXY_BASE_FACTOR, DXY_COMPONENT_WEIGHTS, MacroSourceRateLimited,
+    TwelveDataMacroProvider,
 )
 from backend.utils import macro_interpreter
 from backend.services.workspace_data_service import _enrich_indicator_rows
 from unittest.mock import AsyncMock, patch
+import requests
+import pytest
 
 from backend.services.macro_data_service import MacroDataService
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from sqlalchemy.dialects import postgresql
+
+
+def test_history_source_error_reports_http_status_without_request_url():
+    from backend.celery_task.indicator_history_task import _source_failure_code
+
+    response = requests.Response()
+    response.status_code = 429
+    response.url = "https://provider.invalid/history?apikey=secret"
+    error = requests.HTTPError("provider request failed", response=response)
+
+    assert _source_failure_code(error) == "source_http_429"
+    assert _source_failure_code(ValueError("secret")) == "ValueError"
+
+
+def test_macro_history_provider_classifies_credit_limit(monkeypatch):
+    from backend.services.providers import twelve_data_macro_provider as module
+
+    response = requests.Response()
+    response.status_code = 429
+    response.url = "https://provider.invalid/history?apikey=secret"
+    monkeypatch.setattr(module.requests, "get", lambda *_args, **_kwargs: response)
+
+    with pytest.raises(MacroSourceRateLimited, match="macro_source_rate_limited"):
+        TwelveDataMacroProvider(api_key="secret").fetch_daily_history("EUR/USD")
 
 
 def _day(offset):

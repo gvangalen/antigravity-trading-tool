@@ -287,7 +287,16 @@ class TechnicalDataService:
                 )
                 results["synced"].append({"indicator": indicator_name, "payload": payload})
             except Exception as exc:
-                results["failed"].append({"indicator": indicator_name, "error": str(exc)})
+                error_code = type(exc).__name__
+                logger.warning(
+                    "Configured technical indicator refresh failed: indicator=%s code=%s",
+                    indicator_name, error_code,
+                )
+                results["failed"].append({
+                    "indicator": indicator_name,
+                    "error": str(exc),
+                    "error_code": error_code,
+                })
 
         return results
 
@@ -365,6 +374,10 @@ class TechnicalDataService:
             # The saved owner-scoped configuration is useful even while the
             # provider refuses a measurement. The workspace projects it with
             # null value/score until a later refresh succeeds.
+            logger.warning(
+                "Configured technical indicator awaits source: indicator=%s code=TechnicalSourceRateLimited",
+                name,
+            )
             return {
                 "status": "pending_source",
                 "indicator": name,
