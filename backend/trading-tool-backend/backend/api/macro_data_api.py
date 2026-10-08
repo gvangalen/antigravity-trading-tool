@@ -39,7 +39,19 @@ async def add_macro_indicator(
         symbol = payload.get("symbol")
         
         service = MacroDataService(db)
-        return await service.add_macro_indicator(int(user_id), raw_name, value, symbol=symbol)
+        result = await service.add_macro_indicator(int(user_id), raw_name, value, symbol=symbol)
+        await db.commit()
+        if str(raw_name or "").strip().lower() in {"dxy", "sp500", "gold_price", "oil_price"}:
+            try:
+                from backend.celery_task.celery_app import celery_app
+                celery_app.send_task(
+                    "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                    kwargs={"user_id": int(user_id), "symbol": str(symbol or "BTC").upper(),
+                            "category": "macro", "indicator": str(raw_name).lower()},
+                )
+            except Exception:
+                logger.warning("Macro indicator history queued for periodic retry", exc_info=True)
+        return result
     except HTTPException:
         raise
     except Exception as e:

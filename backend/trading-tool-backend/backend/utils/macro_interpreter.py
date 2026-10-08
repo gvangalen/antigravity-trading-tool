@@ -2,8 +2,9 @@ import logging
 import requests
 import csv
 import json
+import math
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from io import StringIO
 from urllib.parse import parse_qs, urlparse
 
@@ -20,6 +21,7 @@ from backend.utils.scoring_utils import (
 logger = logging.getLogger(__name__)
 
 YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
+YAHOO_DXY_HEADERS = {"User-Agent": "Mozilla/5.0"}
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start_date}"
 YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
@@ -62,6 +64,13 @@ def _extract_last_non_null(sequence):
 
 def _http_get(url: str, timeout: int = 10):
     return requests.get(url, timeout=timeout, headers=REQUEST_HEADERS)
+
+
+def _yahoo_dxy_chart(*, history: bool = False):
+    params = {"range": "3mo", "interval": "1d"} if history else None
+    response = requests.get(YAHOO_DXY, params=params, headers=YAHOO_DXY_HEADERS, timeout=10)
+    response.raise_for_status()
+    return response.json()
 
 
 def _fetch_json(url: str, timeout: int = 10):
@@ -202,6 +211,61 @@ def _fred_json_result(payload: dict, *, inflation: bool) -> dict:
         _extract_fred_json_observations(payload),
         _extract_inflation_yoy_from_fred_json(payload) if inflation else _extract_last_fred_json_value(payload),
     )
+
+
+def fetch_absolute_macro_history(name: str, *, days: int = 90) -> list[tuple[datetime, float]]:
+    """Fetch real dated observations for absolute macro score normalization.
+
+    The source follows the canonical indicator catalog. A derived DXY day is
+    included only if all six underlying currency closes exist for that day.
+    Returning no history leaves the indicator unscored; receipt time is never
+    substituted for a missing source date.
+    """
+    from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
+
+    indicator = normalize_indicator_name(name)
+    definition = get_macro_indicator_definition(indicator)
+    if not definition or indicator not in {"dxy", "sp500", "gold_price", "oil_price"}:
+        return []
+    source = definition["source"]
+    link = definition["link"]
+    raw: dict[str, float] = {}
+    if source == "fred":
+        series_id = str(link).split(":", 1)[1]
+        csv_text = _fetch_text(_fred_csv_url(series_id), timeout=20)
+        for day, value in _extract_csv_rows(csv_text):
+            try:
+                raw[day] = float(value)
+            except ValueError:
+                continue
+    elif indicator == "dxy":
+        provider = TwelveDataMacroProvider()
+        if provider.api_key:
+            raw = provider.fetch_derived_dxy_history(limit=100)
+        else:
+            # The live DXY route also falls back to this same index when the
+            # derived basket is unavailable because no Twelve Data key exists.
+            payload = (_yahoo_dxy_chart(history=True).get("chart", {}).get("result") or [{}])[0]
+            timestamps = payload.get("timestamp") or []
+            closes = ((payload.get("indicators", {}).get("quote") or [{}])[0].get("close") or [])
+            for stamp, close in zip(timestamps, closes):
+                if close is not None:
+                    raw[datetime.fromtimestamp(int(stamp), timezone.utc).date().isoformat()] = float(close)
+    elif indicator == "gold_price":
+        raw = TwelveDataMacroProvider().fetch_daily_history("XAU/USD", limit=100)
+
+    today = datetime.now(timezone.utc).date()
+    cutoff = today - timedelta(days=days)
+    readings: list[tuple[datetime, float]] = []
+    for day, value in raw.items():
+        try:
+            observed_day = date.fromisoformat(str(day)[:10])
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if cutoff <= observed_day < today and math.isfinite(numeric):
+            readings.append((datetime.combine(observed_day, datetime.min.time()), numeric))
+    return sorted(readings)
 
 
 def _fetch_dxy_from_twelve_data(provider: TwelveDataMacroProvider):
@@ -349,10 +413,13 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
         except Exception:
             logger.warning("Twelve Data DXY fallback mislukt", exc_info=True)
 
+        # A configured derived basket must never be blended with a different
+        # Yahoo index series when the provider is temporarily unavailable.
+        if getattr(twelve_data_provider, "api_key", ""):
+            return {"value": None}
+
         try:
-            r = _http_get(YAHOO_DXY, timeout=10)
-            r.raise_for_status()
-            data = r.json()
+            data = _yahoo_dxy_chart()
             result = data.get("chart", {}).get("result") or []
             if not result:
                 return {"value": None}
@@ -584,16 +651,16 @@ def interpret_macro_indicator(name: str, value: float, user_id: int):
             user_id=user_id,   # ✅ FIX: user-id meegeven
         )
 
-        if not rule:
+        if not rule or rule.get("score") is None:
             return {
-                "score": 10,
-                "trend": "neutral",
+                "score": None,
+                "trend": None,
                 "interpretation": "Geen scoreregel match",
                 "action": "Geen actie",
             }
 
         return {
-            "score": max(0, min(100, rule.get("score", 10))),
+            "score": max(0, min(100, rule["score"])),
             "trend": rule.get("trend") or "neutral",
             "interpretation": rule.get("interpretation"),
             "action": rule.get("action"),
@@ -602,8 +669,8 @@ def interpret_macro_indicator(name: str, value: float, user_id: int):
     except Exception:
         logger.error("interpret_macro_indicator error", exc_info=True)
         return {
-            "score": 10,
-            "trend": "neutral",
+            "score": None,
+            "trend": None,
             "interpretation": "Interpretatiefout",
             "action": "Controleer logs",
         }

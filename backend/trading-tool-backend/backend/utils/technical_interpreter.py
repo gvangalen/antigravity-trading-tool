@@ -200,16 +200,16 @@ def interpret_technical_indicator_db(indicator: str, value: float, user_id: int)
             user_id=user_id,   # ✅ FIX
         )
 
-        if not result:
+        if not result or result.get("score") is None:
             return {
-                "score": 10,
-                "trend": "neutral",
+                "score": None,
+                "trend": None,
                 "interpretation": "Geen scoreregel match",
                 "action": "Geen actie",
             }
 
         return {
-            "score": max(0, min(100, result.get("score", 10))),
+            "score": max(0, min(100, result["score"])),
             "trend": result.get("trend") or "neutral",
             "interpretation": result.get("interpretation")
                 or "Geen interpretatie beschikbaar",
@@ -220,8 +220,8 @@ def interpret_technical_indicator_db(indicator: str, value: float, user_id: int)
         logger.error("❌ interpret_technical_indicator_db fout", exc_info=True)
 
         return {
-            "score": 10,
-            "trend": "neutral",
+            "score": None,
+            "trend": None,
             "interpretation": "Interpretatiefout",
             "action": "Controleer logs",
         }

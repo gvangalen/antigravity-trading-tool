@@ -8,6 +8,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `LOCAL_VALIDATED`; draft [PR #116](https://github.com/gvangalen/antigravity-trading-tool/pull/116) is open. CI passed for implementation SHA `c26c676c`; not merged or deployed. |
+| Goal | Complete Score 2.0 indicator history bootstrap and explicit score rules so a new owner can use genuine existing source days without waiting five days after registration. |
+| Candidate branch | `codex/score-history-bootstrap`. |
+| Candidate implementation SHA | `c26c676cb54f5b3d1577f40e632d12d0996a70e6`; this status-only edit will create a later commit. |
+| Production SHA | `45775a219aba597f74de26c6f92c0c0ebfb5864c`, independently reported by browser QA and also observed on both public health/build-info surfaces before this release. |
+| Last updated | 2026-10-08. |
+
+The candidate backfills only genuinely dated, completed Price/Volume and absolute macro observations, rejects generated bucket fallbacks as scores, installs explicit system templates where missing, explains insufficient history in Analyse, and queues an owner score rebuild after history becomes sufficient. A newly configured owner also gets a rebuild when that asset's shared market history was already complete. The prior report fact-parity release remains awaiting its own authenticated QA; this Score 2.0 goal does not count as report acceptance.
+
+Measured local evidence at implementation SHA `c26c676c`: root pytest **3197 passed, 3 skipped**. Frontend production build, typecheck, i18n lint/tests, command and proposal tests, and `audit:high` passed; mobile typecheck passed. The isolated PostgreSQL/Redis/API/Celery action matrix passed **16/16**, with zero production connections or broker orders, artifact SHA-256 `dd3d064a555c9ffe5a485efe4beb50b5fc29bbb643d88b0e1a159aae6c4f5514`. Real Responses selector development passed **18/18**, artifact SHA-256 `1970ccb1be76c4f22e59274ab43beff2cbaffd1723b634cb59a178342a21bf95`; regression passed **109/109**, artifact SHA-256 `a36c8566ad310c9d69a39fbfe808939b9eac9fad17d55472caa2f2030ed1f312`. Both reported zero provider, schema, parse and validation failures. The isolated migration plan validator passed, and CI run [37781428653](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37781428653) completed successfully for the implementation SHA. No production deployment or authenticated score QA has occurred for this candidate.
+
+A direct local DXY history fetch returned Twelve Data HTTP 429 because its daily API-credit limit was exhausted. The branch retains an unavailable Macro score and retries later; it does not prove that five DXY days or a positive benchmark will be available to a new production account today. Independent QA must test a fresh account after deployment, record each indicator's dated-day count and rule origin, compare Analyse/FINN/benchmark, and separately verify any positive setup match and controlled Paper decision only when all sources are genuinely fresh. No live order is part of this release.
+
+## Previous Release (report fact parity)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated report fact-parity QA remains open. |
 | Goal | Make daily report score and saved-plan facts agree with Analyse, FINN chat and the owner-scoped shared context. |
 | Candidate branch | `codex/finn-report-facts-parity`. |

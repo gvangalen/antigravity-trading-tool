@@ -197,6 +197,15 @@ def _enrich_indicator_rows(
     threshold: int,
     source: str,
 ) -> list[dict[str, Any]]:
+    # Older rows may contain a numeric score produced by the generated bucket
+    # rule. Do not present that number as an assessed indicator while the
+    # background score rebuild catches up.
+    rows = [
+        {**row, "score": None}
+        if "fallback" in str(row.get("interpretation") or "").lower()
+        else row
+        for row in rows
+    ]
     scored = [
         row
         for row in rows
@@ -214,11 +223,27 @@ def _enrich_indicator_rows(
             "insufficient_data"
         )
         payload = dict(row)
+        freshness = _freshness(row.get("source_observed_at"), threshold, source)
+        coverage = row.get("score_history_coverage") or {}
+        if scored_row:
+            score_reason = None
+        elif not available or not row.get("source_observed_at"):
+            score_reason = "missing_source_reading"
+        elif coverage and coverage.get("observed_days", 0) < coverage.get("required_days", 5):
+            score_reason = "insufficient_dated_history"
+        elif freshness["stale"]:
+            score_reason = "stale_source"
+        elif any(marker in str(row.get("interpretation") or "").lower()
+                 for marker in ("geen vastgelegde scoreregel", "geen gevalideerde scoreregel", "fallback")):
+            score_reason = "missing_rule"
+        else:
+            score_reason = "score_pending"
         payload.update({
             "indicator_key": _indicator_key(row.get("name")),
             "period": period,
             "source": source,
-            "freshness": _freshness(row.get("source_observed_at"), threshold, source),
+            "freshness": freshness,
+            "score_unavailable_reason": score_reason,
             "data_status": data_status,
             "score_contribution": {
                 "status": "available" if scored_row else "insufficient_data",

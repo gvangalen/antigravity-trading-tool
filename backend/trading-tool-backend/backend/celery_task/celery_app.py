@@ -160,6 +160,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.market_task.sync_configured_market_snapshots",
         crontab(minute="*/5"),
     ),
+    "bootstrap_indicator_histories": build_task_schedule_entry(
+        "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+        crontab(minute=7),
+    ),
 
     "fetch_market_data_7d": build_task_schedule_entry(
         "backend.celery_task.market_task.fetch_market_data_7d",
@@ -234,6 +238,7 @@ try:
         import backend.celery_task.onboarding_task
         import backend.celery_task.dispatcher
         import backend.celery_task.market_task
+        import backend.celery_task.indicator_history_task
         import backend.celery_task.macro_task
         import backend.celery_task.technical_task
         import backend.celery_task.store_daily_scores_task

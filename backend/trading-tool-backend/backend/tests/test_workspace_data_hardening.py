@@ -36,6 +36,18 @@ def test_missing_indicator_data_never_becomes_an_artificial_score():
     }
 
 
+def test_old_generated_bucket_score_is_hidden_until_a_rule_is_configured():
+    rows = _enrich_indicator_rows(
+        [{"name": "price", "value": 100.0, "score": 10.0,
+          "interpretation": "Fallback bucket rule (auto).",
+          "source_observed_at": datetime.now(timezone.utc).isoformat()}],
+        period="day", threshold=36 * 60 * 60, source="market_data_indicators",
+    )
+    assert rows[0]["score"] is None
+    assert rows[0]["score_unavailable_reason"] == "missing_rule"
+    assert _score_summary(rows, "day")["score"] is None
+
+
 def test_period_rows_are_aggregated_and_expose_their_sample_size():
     rows = [
         SimpleNamespace(

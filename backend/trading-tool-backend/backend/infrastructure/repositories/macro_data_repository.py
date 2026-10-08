@@ -75,32 +75,13 @@ class MacroDataRepository:
         return result.scalars().first()
 
     async def get_active_day_macro_data(self, user_id: int, symbol: Optional[str] = None) -> List[MacroData]:
-        subq = (
-            select(
-                MacroData.name,
-                func.max(MacroData.timestamp).label("max_ts")
-            )
-            .where(
-                and_(
-                    MacroData.user_id == user_id,
-                    MacroData.symbol == symbol,
-                )
-            )
-            .group_by(MacroData.name)
-            .subquery()
-        )
-        
-        stmt = (
-            select(MacroData)
-            .join(subq, and_(MacroData.name == subq.c.name, MacroData.timestamp == subq.c.max_ts))
-            .where(
-                and_(
-                    MacroData.user_id == user_id,
-                    MacroData.symbol == symbol,
-                )
-            )
-        )
-        
+        # Source time, rather than receipt time, identifies the current
+        # reading. A later historical backfill must not hide newer evidence.
+        stmt = (select(MacroData)
+                .where(MacroData.user_id == user_id, MacroData.symbol == symbol)
+                .distinct(MacroData.name)
+                .order_by(MacroData.name, MacroData.source_observed_at.desc().nulls_last(),
+                          MacroData.timestamp.desc()))
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

@@ -9,6 +9,7 @@ import requests
 
 
 TWELVE_DATA_QUOTE_URL = "https://api.twelvedata.com/quote"
+TWELVE_DATA_SERIES_URL = "https://api.twelvedata.com/time_series"
 DXY_BASE_FACTOR = 50.14348112
 DXY_COMPONENT_WEIGHTS: dict[str, tuple[str, float]] = {
     "EUR/USD": ("eurusd", -0.576),
@@ -96,6 +97,49 @@ class TwelveDataMacroProvider:
         except (TypeError, ValueError, OverflowError):
             observed_at = None
         return {"value": raw_value, "observed_at": observed_at}
+
+    def fetch_daily_history(self, provider_symbol: str, *, limit: int = 100) -> dict[str, float]:
+        """Return dated closes from the same provider used for live macro quotes."""
+        if not self.api_key:
+            return {}
+        response = requests.get(
+            TWELVE_DATA_SERIES_URL,
+            params={"symbol": provider_symbol, "interval": "1day",
+                    "outputsize": min(max(limit, 5), 100), "apikey": self.api_key},
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("status") == "error":
+            raise ValueError(payload.get("message") or "Twelve Data history unavailable")
+        history: dict[str, float] = {}
+        for item in payload.get("values") or []:
+            day = str(item.get("datetime") or "")[:10]
+            value = _float_or_none(item.get("close"))
+            if day and value is not None and math.isfinite(value):
+                history[day] = value
+        return history
+
+    def fetch_derived_dxy_history(self, *, limit: int = 100) -> dict[str, float]:
+        """Only score days for which all six basket components were measured."""
+        components = {
+            symbol: self.fetch_daily_history(symbol, limit=limit)
+            for symbol in DXY_COMPONENT_WEIGHTS
+        }
+        if not components or any(not readings for readings in components.values()):
+            return {}
+        complete_days = set.intersection(*(set(readings) for readings in components.values()))
+        history: dict[str, float] = {}
+        for day in complete_days:
+            value = DXY_BASE_FACTOR
+            for symbol, (_, exponent) in DXY_COMPONENT_WEIGHTS.items():
+                rate = components[symbol][day]
+                if rate <= 0:
+                    break
+                value *= math.pow(rate, exponent)
+            else:
+                history[day] = value
+        return history
 
     def fetch_derived_dxy_reading(self) -> dict | None:
         if not self.api_key:

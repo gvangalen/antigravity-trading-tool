@@ -156,6 +156,18 @@ function getUiCopy(locale = "nl") {
       neutral: "Neutral",
       unavailable: "Insufficient data",
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
+      historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
+      indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
+      scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
+      missingScoreRule: "A source reading is available, but no scoring rule is configured. This indicator has no score yet.",
+      scoringRule: "Scoring rule",
+      systemScoringRule: "System rule",
+      personalScoringRule: "Your curve",
+      priceRangeMethod: (position) => `Measured price position in its recent 30-day range: ${position}/100. This is not an entry signal.`,
+      dxyRangeMethod: (position) => `Measured DXY position in its recent 90-day range: ${position}/100. Higher dollar strength lowers this broad risk-context score; this is not an asset signal.`,
+      volumeMethod: (position) => `Trading volume relative to its recent median: ${position}/100 (50 is the median). Volume alone says nothing about price direction.`,
+      change24hMethod: (position) => `The 24-hour price change maps to ${position}/100 on a -20% to +20% scale. This is short-term direction, not an entry signal.`,
+      normalizedInput: "Normalized reading",
       market: "Market",
       macro: "Macro",
       technical: "Technical",
@@ -297,6 +309,18 @@ function getUiCopy(locale = "nl") {
       neutral: "Neutral",
       unavailable: "Unzureichende Daten",
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
+      historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
+      indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
+      scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
+      missingScoreRule: "Ein Quellwert ist vorhanden, aber keine Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
+      scoringRule: "Scoreregel",
+      systemScoringRule: "Systemregel",
+      personalScoringRule: "Deine Kurve",
+      priceRangeMethod: (position) => `Gemessene Preisposition im jüngsten 30-Tage-Bereich: ${position}/100. Das ist kein Einstiegssignal.`,
+      dxyRangeMethod: (position) => `Gemessene DXY-Position im jüngsten 90-Tage-Bereich: ${position}/100. Ein stärkerer Dollar senkt diesen allgemeinen Risikokontext-Score; das ist kein Assetsignal.`,
+      volumeMethod: (position) => `Handelsvolumen relativ zum jüngsten Median: ${position}/100 (50 entspricht dem Median). Volumen allein zeigt keine Preisrichtung.`,
+      change24hMethod: (position) => `Die 24-Stunden-Preisänderung ergibt ${position}/100 auf einer Skala von -20 % bis +20 %. Das ist eine kurzfristige Richtung, kein Einstiegssignal.`,
+      normalizedInput: "Normierter Messwert",
       market: "Markt",
       macro: "Makro",
       technical: "Technisch",
@@ -437,6 +461,18 @@ function getUiCopy(locale = "nl") {
     neutral: "Neutraal",
     unavailable: "Onvoldoende data",
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
+    historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
+    indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
+    scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
+    missingScoreRule: "Er is een bronmeting, maar geen scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
+    scoringRule: "Scoreregel",
+    systemScoringRule: "Systeemregel",
+    personalScoringRule: "Jouw curve",
+    priceRangeMethod: (position) => `Gemeten prijspositie in het recente 30-daagse bereik: ${position}/100. Dit is geen instapsignaal.`,
+    dxyRangeMethod: (position) => `Gemeten DXY-positie in het recente 90-daagse bereik: ${position}/100. Een sterkere dollar verlaagt deze algemene risicocontextscore; dit is geen assetsignaal.`,
+    volumeMethod: (position) => `Handelsvolume ten opzichte van de recente mediaan: ${position}/100 (50 is de mediaan). Volume alleen zegt niets over de koersrichting.`,
+    change24hMethod: (position) => `De koersverandering in 24 uur komt uit op ${position}/100 op een schaal van -20% tot +20%. Dit is kortetermijnrichting, geen instapsignaal.`,
+    normalizedInput: "Genormaliseerde meting",
     market: "Markt",
     macro: "Macro",
     technical: "Technisch",
@@ -1257,6 +1293,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const hasValue = hasUsableIndicatorValue(name, rawValue);
     const evidence = currentEvidence === null ? item : validatedDayEvidence(categoryScore, currentEvidence, name);
     const score = hasValue ? normalizeScore(evidence?.score) : null;
+    const ruleOrigin = score === null ? null : evidence?.rule_origin || item?.rule_origin || null;
     const tone = scoreTone(score, ui);
     const direction = score !== null ? toDirectionLabel(item, score, ui) : ui.unavailable;
     const value = formatIndicatorValue(name, rawValue, locale, ui);
@@ -1276,6 +1313,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       !isGenericIndicatorExplanation(rawDetail) &&
       !isGenericIndicatorExplanation(localizedDetail) &&
       !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()];
+    const unavailableReason = item?.score_unavailable_reason;
+    const historyCoverage = item?.score_history_coverage;
     const generatedDetail = score !== null
       ? explainIndicatorAssessment({
           name,
@@ -1285,11 +1324,33 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
           direction,
           ui,
         })
+      : unavailableReason === "insufficient_dated_history" && historyCoverage
+        ? ui.historyPending(historyCoverage.observed_days, historyCoverage.required_days)
+        : unavailableReason === "stale_source"
+          ? ui.indicatorSourceStale
+          : unavailableReason === "missing_rule"
+            ? ui.missingScoreRule
+          : unavailableReason === "score_pending"
+            ? ui.scorePending
       : !hasValue && item?.data_status === "pending_refresh"
         ? ui.pendingSource
         : ui.unavailable;
+    const normalizedPosition = Number(evidence?.normalized_value);
+    const methodDetail = ruleOrigin === "system_template" && Number.isFinite(normalizedPosition)
+      ? String(name).toLowerCase() === "price"
+        ? ui.priceRangeMethod(Math.round(normalizedPosition))
+        : String(name).toLowerCase() === "dxy"
+          ? ui.dxyRangeMethod(Math.round(normalizedPosition))
+          : String(name).toLowerCase() === "volume"
+            ? ui.volumeMethod(Math.round(normalizedPosition))
+            : String(name).toLowerCase() === "change_24h"
+              ? ui.change24hMethod(Math.round(normalizedPosition))
+          : null
+      : null;
     const detail = scoreConflict
       ? ui.positiveMoveWeakScore(value, Math.round(score))
+      : methodDetail
+        ? methodDetail
       : shouldUseBackendDetail
         ? localizedDetail
         : generatedDetail;
@@ -1305,6 +1366,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       scoreLabel: score === null ? tone.label : `${tone.label} · ${Math.round(score)}`,
       detail,
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
+      ruleOrigin,
+      normalizedPosition: score === null || !Number.isFinite(normalizedPosition) ? null : Math.round(normalizedPosition),
       raw: item,
     };
   });
@@ -1973,6 +2036,8 @@ function EvidenceRow({
                 [ui.freshness, freshnessText],
                 [ui.latestSignal, row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.missingSourceMoment],
                 [ui.scoreContribution, contributionText],
+                ...(row.ruleOrigin ? [[ui.scoringRule, row.ruleOrigin === "custom" ? ui.personalScoringRule : ui.systemScoringRule]] : []),
+                ...(row.normalizedPosition !== null ? [[ui.normalizedInput, `${row.normalizedPosition}/100`]] : []),
                 [ui.sampleSize, row.raw?.sample_size ?? 1],
                 ...(row.raw?.score_history_coverage ? [[
                   ui.scoreHistory,

@@ -641,11 +641,15 @@ class MarketDataService:
                                          int(user_id), symbol)
 
         pending_history = scored.get("source_status") == "insufficient_indicator_history"
-        score = None if pending_history else require_indicator_score(scored, indicator_name)
-        trend = scored.get("trend") if not pending_history else None
-        interpretation = ("Onvoldoende gedateerde metingen voor een indicatorscore."
-                          if pending_history else scored.get("interpretation") or "Geen interpretatie beschikbaar")
-        action = scored.get("action") if not pending_history else None
+        missing_rule = scored.get("rule_origin") in {"missing", "generated_fallback"}
+        score = None if pending_history or missing_rule else require_indicator_score(scored, indicator_name)
+        trend = scored.get("trend") if score is not None else None
+        interpretation = (
+            "Onvoldoende gedateerde metingen voor een indicatorscore." if pending_history else
+            "Geen vastgelegde scoreregel voor deze indicator." if missing_rule else
+            scored.get("interpretation") or "Geen interpretatie beschikbaar"
+        )
+        action = scored.get("action") if score is not None else None
 
         if exists:
             # Keep the confirmed configuration, but replace a stale
