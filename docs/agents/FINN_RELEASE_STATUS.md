@@ -8,10 +8,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_READY_FOR_CI`; local Build gates passed. CI, Auto Deploy, public identity checks and independent authenticated QA are pending. |
+| Phase | `MERGED_AWAITING_CI`; [PR #118](https://github.com/gvangalen/antigravity-trading-tool/pull/118) passed all five candidate CI jobs and merged. Main CI, Auto Deploy, public identity checks and independent authenticated QA are pending. |
 | Goal | Repair the new-account profile loading race and make FINN and Analyse use the same verified current Score 2.0 components and indicator evidence. |
 | Candidate branch | `codex/score-qa-followup`. |
 | Candidate implementation SHA | `104e8a73` (the release-status commit follows this implementation commit). |
+| Candidate merge SHA | `ec63e300efa85d633b8b643fd190114b9079417b`. |
 | Production SHA before this candidate | `db89ca94e45459ad11ec92a1a5df73092918d954`, measured as HTTP 200 on both public surfaces on 2026-10-08. |
 | Last updated | 2026-10-08. |
 
