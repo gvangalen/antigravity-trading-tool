@@ -43,6 +43,8 @@ UPDATE indicators
 SET display_name = 'US Dollar Index (Derived Basket)', source = 'derived',
     link = 'derived:dxy'
 WHERE name = 'dxy';
+UPDATE macro_data SET name = 'dxy_direct_index_rollback', score = NULL
+WHERE LOWER(name) = 'dxy';
 UPDATE macro_data SET name = 'dxy'
 WHERE name = 'dxy_derived_legacy';
 DELETE FROM score_source_migrations WHERE name = 'dxy_direct_index_v1';
