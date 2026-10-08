@@ -2963,9 +2963,9 @@
         "explanation": "Explanation: The best setup is selected based on the current macro and market conditions."
       },
       "activeStrategy": {
-        "cardTitle": "Active strategy",
-        "empty": "No active strategy for this period.",
-        "strategyLabel": "Strategy",
+        "cardTitle": "Gespeicherte Strategie",
+        "empty": "Prüfe deine gespeicherten Strategien unter Mein Plan.",
+        "strategyLabel": "Gespeicherte Strategie",
         "referencePrice": "Reference price",
         "entryPrice": "Entry price",
         "priceChange": "Price change",

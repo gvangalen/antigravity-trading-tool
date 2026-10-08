@@ -84,16 +84,68 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
+    """Project shared context into report facts; never expose unverified score rows.
+
+    ``reported_scores`` are historical database values and can be present even
+    when their underlying indicator evidence has expired. Reports must use the
+    same per-component freshness decision as Analyse and FINN chat.
+    """
+    assets = []
+    for item in context.get("assets") or []:
+        benchmark = item.get("benchmark") or {}
+        source_status = benchmark.get("component_source_status") or {}
+        reported = benchmark.get("reported_scores") or {}
+        scores = {
+            key: reported.get(key) if source_status.get(key) == "fresh" else None
+            for key in ("market_score", "macro_score", "technical_score")
+        }
+        configuration = item.get("indicator_configuration")
+        configured = {
+            category: [row.get("indicator") for row in configuration.get(category, [])
+                       if isinstance(row, dict) and row.get("enabled", True) and row.get("indicator")]
+            for category in ("market", "macro", "technical")
+        } if isinstance(configuration, dict) else None
+        assets.append({
+            "symbol": item.get("symbol"),
+            "score_status": benchmark.get("source_status"),
+            "scores": scores,
+            "benchmark_score": benchmark.get("benchmark_score"),
+            "configured_indicators": configured,
+            "indicator_lookup_status": item.get("indicator_lookup_status"),
+            "setups": [{"id": row.get("id"), "name": row.get("name"),
+                        "timeframe": row.get("timeframe"), "setup_type": row.get("setup_type")}
+                       for row in item.get("setups") or []],
+            "strategies": [{"id": row.get("id"), "setup_id": row.get("setup_id"),
+                            "name": row.get("name"), "setup_name": row.get("setup_name"),
+                            "execution_mode": row.get("execution_mode"),
+                            "base_amount": row.get("base_amount")}
+                           for row in item.get("strategies") or []],
+            "bots": [{"id": row.get("id"), "name": row.get("name"),
+                      "is_live": row.get("is_live")}
+                     for row in item.get("bots") or []],
+            "matches": [{"setup_id": row.get("setup_id"), "name": row.get("name"),
+                         "symbol": row.get("symbol"), "timeframe": row.get("timeframe"),
+                         "status": row.get("status"), "score": row.get("score"),
+                         "is_active": row.get("is_active")}
+                        for row in benchmark.get("matches") or []],
+        })
+    return {"locale": context.get("locale"), "profile": context.get("profile"),
+            "trader_context": context.get("trader_context"), "assets": assets}
+
+
+def _configured_highlights(facts: dict[str, Any], category: str) -> list[dict[str, Any]]:
+    return [{"indicator": name, "symbol": item["symbol"]}
+            for item in facts["assets"]
+            for name in (item.get("configured_indicators") or {}).get(category, [])]
+
+
 def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     """Generate prose, preserving the report storage shape without old agent snapshots."""
     context = asyncio.run(_load_context(user_id))
     assets = context.get("assets") or []
-    factual_context = {
-        "locale": context.get("locale"),
-        "profile": context.get("profile"),
-        "trader_context": context.get("trader_context"),
-        "assets": assets[:30],
-    }
+    facts = _report_facts(context)
+    factual_context = {**facts, "assets": facts["assets"][:30]}
     result = ask_gpt_json(
         system_role=(
             "You are FINN, the user's trading coach. Write a careful daily report from only the "
@@ -117,7 +169,56 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         and len(str(result.get(key) or "").strip()) >= 20 else fallbacks[key]
         for key in REPORT_SECTIONS
     }
-    matches = [match for item in assets for match in item["benchmark"].get("matches") or []]
+    # Model prose is useful for a coaching outlook. Factual report sections are
+    # assembled from typed source status and owner-scoped configuration. A
+    # prompt alone cannot prevent a persisted report from calling a stale score
+    # current or claiming a saved strategy does not exist.
+    locale = str(context.get("locale") or "nl").lower()
+    labels = {
+        "nl": {"missing": "Geen bruikbare actuele score", "configured": "Ingesteld",
+               "not_configured": "Geen indicatoren ingesteld", "unknown": "Indicatorconfiguratie niet beschikbaar",
+               "strategies": "Opgeslagen strategieën", "no_strategies": "Geen opgeslagen strategie"},
+        "en": {"missing": "No usable current score", "configured": "Configured",
+               "not_configured": "No indicators configured", "unknown": "Indicator configuration unavailable",
+               "strategies": "Saved strategies", "no_strategies": "No saved strategy"},
+        "de": {"missing": "Kein brauchbarer aktueller Wert", "configured": "Eingerichtet",
+               "not_configured": "Keine Indikatoren eingerichtet", "unknown": "Indikatorkonfiguration nicht verfügbar",
+               "strategies": "Gespeicherte Strategien", "no_strategies": "Keine gespeicherte Strategie"},
+    }.get(locale, None)
+    labels = labels or {"missing": "No usable current score", "configured": "Configured",
+                         "not_configured": "No indicators configured", "unknown": "Indicator configuration unavailable",
+                         "strategies": "Saved strategies", "no_strategies": "No saved strategy"}
+    def score_section(category: str) -> str:
+        parts = []
+        for item in facts["assets"]:
+            names = (item.get("configured_indicators") or {}).get(category)
+            configuration = (f"{labels['configured']}: {', '.join(names)}" if names
+                             else labels["not_configured"] if names is not None
+                             else labels["unknown"])
+            value = item["scores"].get(f"{category}_score")
+            score = f"{value:g}/100" if isinstance(value, (int, float)) else labels["missing"]
+            parts.append(f"{item['symbol']}: {configuration}; {score}.")
+        return " ".join(parts) if parts else fallbacks[{
+            "market": "market_analysis", "macro": "macro_context",
+            "technical": "technical_analysis"}[category]]
+    prose["market_analysis"] = score_section("market")
+    prose["macro_context"] = score_section("macro")
+    prose["technical_analysis"] = score_section("technical")
+    strategy_names = [f"{item['symbol']}: {row['name']}"
+                      for item in facts["assets"] for row in item["strategies"] if row.get("name")]
+    prose["strategy_implication"] = (
+        f"{labels['strategies']}: {', '.join(strategy_names)}. "
+        + fallbacks["strategy_implication"] if strategy_names else labels["no_strategies"] + "."
+    )
+    if any(item["score_status"] != "available" for item in facts["assets"]):
+        prose["setup_validation"] = fallbacks["setup_validation"]
+        prose["outlook"] = fallbacks["outlook"]
+    # The summary must not turn unavailable scores or saved plans into model
+    # assertions. It uses the same owner-scoped names as the fact cards.
+    prose["executive_summary"] = fallbacks["executive_summary"]
+    prose["bot_strategy"] = fallbacks["bot_strategy"]
+    all_strategies = [row for item in assets for row in item.get("strategies") or []]
+    matches = [match for item in facts["assets"] for match in item["matches"]]
     matches.sort(key=lambda item: (bool(item.get("is_active")), item.get("score") or -1), reverse=True)
     best = next((match for match in matches if match.get("is_active")), None)
     best_setup = ({
@@ -128,18 +229,32 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     # benchmark. Leave them null; the per-asset facts live in the report body.
     return {
         **prose,
-        "watchlist": [{"symbol": item["symbol"], "benchmark": item["benchmark"]} for item in assets],
+        "watchlist": [{"symbol": item["symbol"], "benchmark": {
+            "source_status": item["score_status"],
+            "benchmark_score": item["benchmark_score"],
+            "reported_scores": item["scores"],
+            "matches": item["matches"],
+        }} for item in facts["assets"]],
         "best_setup": best_setup,
         "top_setups": matches[:5],
-        "active_strategy": None,
+        "active_strategy": ({
+            "setup_name": all_strategies[0].get("setup_name") or all_strategies[0].get("name"),
+            "symbol": all_strategies[0].get("symbol"),
+            "timeframe": all_strategies[0].get("timeframe"),
+            "entry": all_strategies[0].get("entry"),
+            "targets": all_strategies[0].get("targets"),
+            "stop_loss": all_strategies[0].get("stop_loss"),
+            "confidence_score": None,
+        } if len(all_strategies) == 1 else None),
         "bot_snapshot": None,
-        "market_indicator_highlights": [],
-        "macro_indicator_highlights": [],
-        "technical_indicator_highlights": [],
+        "market_indicator_highlights": _configured_highlights(facts, "market"),
+        "macro_indicator_highlights": _configured_highlights(facts, "macro"),
+        "technical_indicator_highlights": _configured_highlights(facts, "technical"),
         "price": None, "change_24h": None, "volume": None,
         "macro_score": None, "technical_score": None, "market_score": None,
         "setup_score": best_setup.get("score") if best_setup else None,
-        "meta": {"source": "finn_shared_context.v1", "observed_at": context.get("observed_at")},
+        "meta": {"source": "finn_shared_context.v1", "report_facts_version": 2,
+                 "observed_at": context.get("observed_at")},
     }
 
 
@@ -189,6 +304,7 @@ def generate_unified_period_report_sections(user_id: int, period: str) -> dict[s
     context = asyncio.run(_load_period_context(user_id, period))
     shared = context["shared"]
     locale = str(shared.get("locale") or "nl")
+    report_context = {**context, "shared": _report_facts(shared)}
     result = ask_gpt_json(
         system_role=(
             "You are FINN, the user's trading coach. Write a factual period report "
@@ -199,7 +315,7 @@ def generate_unified_period_report_sections(user_id: int, period: str) -> dict[s
             "with exactly the eight requested string fields."
         ),
         prompt=json.dumps({"task": f"Write the {period} FINN report", "locale": locale,
-                           "sections": PERIOD_SECTIONS, "context": context}, ensure_ascii=False),
+                           "sections": PERIOD_SECTIONS, "context": report_context}, ensure_ascii=False),
         max_tokens=2600,
         model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
         reasoning_effort="none",

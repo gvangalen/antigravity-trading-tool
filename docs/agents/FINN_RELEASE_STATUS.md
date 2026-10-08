@@ -8,6 +8,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `LOCAL_GATES_PASSED`; independent QA blocked report fact parity on production SHA `6d6913ec6236e7695c362d606d65011e3bd02b08`. No new candidate is deployed. |
+| Goal | Make daily report score and saved-plan facts agree with Analyse, FINN chat and the owner-scoped shared context. |
+| Candidate branch | `codex/finn-report-facts-parity`. |
+| Production SHA | `6d6913ec6236e7695c362d606d65011e3bd02b08`, reported by the user from both live health surfaces during independent QA. |
+| Last updated | 2026-10-08. |
+
+Independent browser QA completed new-account onboarding with ETH monthly DCA, a linked €120 strategy and a Paper bot. FINN Today transitioned from a temporary summary to a stored personal briefing that persisted after refresh and genuine relogin. Analyse and FINN chat correctly showed insufficient market, macro and technical scores. The daily report contradicted them by calling market 10/100 and technical 50/100 current and denying a saved strategy and indicator configuration. The positive fresh-score and Paper execution paths remain unproven. This is a `NOT_ACCEPTED` fact-parity result for that release, not a provider identity trace.
+
+Build traced the discrepancy to three report-path faults. The writer passed raw `reported_scores` into Luna even when source status rejected those values. It always stored `active_strategy=None` and empty indicator highlights. The shared context also called Pydantic-v2-only `model_dump()` on the deployed v1 indicator schema, caught the resulting exception and silently labelled a successful configuration lookup unknown. The repair projects only fresh component scores into report input and output, serializes the real indicator schema through FastAPI's version-compatible encoder, writes owner-scoped strategy and indicator facts, and uses typed report sections for score/configuration claims. FINN chat answer control is unchanged.
+
+Measured local evidence: root pytest **3184 passed, 3 skipped**, log SHA-256 `1224074359f9f195c6aee503d826cc7ab16751eaeb148cb779ef09d20c043264`. Frontend production build, typecheck, i18n lint/tests, command/proposal tests and `audit:high` passed. The isolated PostgreSQL/Redis/API/Celery action matrix passed **16/16**, no broker orders, live calls, live bots or production connections; artifact SHA-256 `957b47baab5b40921f44f1b5e7fa13242c6613f88a6546480ddaa0c30a9a4502`. Real-provider selector development passed **18/18**, artifact SHA-256 `af6a66304fd5af49c1a863fcfa167388203d5983b499be1ddcec184f3bece7e0`; regression passed **109/109**, artifact SHA-256 `4f2f1fdfd2543c939159ce82ccd6159b6d3fe091fd8249b7d5a3644db830fc84`, with zero provider/schema/parse/validation failures. A direct local Luna Responses report over a synthetic database user produced eight nonempty sections, retained configured indicators and saved strategy facts, and kept unverified scalar scores null. The local bootstrap `daily_reports` table lacks historical production report columns, so a direct SQL persistence probe failed with `UndefinedColumn`; the task-to-repository mapping is covered by the focused regression, but the local SQL persistence path is not claimed green. Candidate CI, deployment and live QA are pending.
+
+## Previous Release (unified FINN onboarding and reports)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, merge, Auto Deploy and public SHA checks passed. Authenticated QA remains open. |
 | Goal | Replace the separate onboarding/report AI-agent chain with one owner-scoped FINN context, retain measured scoring and Paper execution, and use Luna Responses for FINN Today and reports. |
 | Candidate branch | `codex/finn-unified-onboarding`. |
