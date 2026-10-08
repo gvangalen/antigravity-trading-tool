@@ -11,6 +11,7 @@ from requests import HTTPError
 
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.models import UserIndicatorConfig
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.services.indicator_history_bootstrap import (
     ABSOLUTE_MACRO_INDICATORS,
     ABSOLUTE_MARKET_INDICATORS,
@@ -61,7 +62,9 @@ async def _bootstrap_indicator_histories(
                 market_owners[asset].add(int(row.user_id))
             elif row.category == "macro" and name in ABSOLUTE_MACRO_INDICATORS:
                 macro[(int(row.user_id), name)] = asset
-            elif row.category == "technical" and name == "rsi":
+            elif (row.category == "technical" and name == "rsi" and
+                  str(getattr(row, "asset_class", None) or
+                      DEFAULT_ASSET_CATALOG.get(asset, {}).get("asset_class") or "").lower() == "crypto"):
                 market[asset].add("price")
                 market_owners[asset].add(int(row.user_id))
                 rsi_owners[asset].add(int(row.user_id))

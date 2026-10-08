@@ -356,6 +356,28 @@ def test_targeted_rsi_history_materializes_reading_and_rebuilds_owner_score(monk
     )]
 
 
+def test_stock_rsi_does_not_request_crypto_candle_history(monkeypatch):
+    from backend.celery_task import indicator_history_task as task_module
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def execute(self, _query):
+            return _Result([SimpleNamespace(
+                user_id=9, symbol="AAPL", asset_class="stock",
+                category="technical", indicator="rsi")])
+
+    monkeypatch.setattr(task_module, "async_session_factory", _Session)
+    result = asyncio.run(task_module._bootstrap_indicator_histories(
+        user_id=9, symbol="AAPL", category="technical", indicator="rsi",
+    ))
+    assert result == {"scopes": []}
+
+
 def test_derived_dxy_history_uses_only_complete_currency_days(monkeypatch):
     common = _day(1).isoformat()
     incomplete = _day(2).isoformat()
