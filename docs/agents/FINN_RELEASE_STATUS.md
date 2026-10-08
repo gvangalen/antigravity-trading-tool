@@ -8,15 +8,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `MERGED_AWAITING_CI`; [PR #118](https://github.com/gvangalen/antigravity-trading-tool/pull/118) passed all five candidate CI jobs and merged. Main CI, Auto Deploy, public identity checks and independent authenticated QA are pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; [PR #118](https://github.com/gvangalen/antigravity-trading-tool/pull/118) merged, all CI jobs and Auto Deploy passed, and both public surfaces reported the deployed SHA. Authenticated live acceptance is pending. |
 | Goal | Repair the new-account profile loading race and make FINN and Analyse use the same verified current Score 2.0 components and indicator evidence. |
 | Candidate branch | `codex/score-qa-followup`. |
 | Candidate implementation SHA | `104e8a73` (the release-status commit follows this implementation commit). |
 | Candidate merge SHA | `ec63e300efa85d633b8b643fd190114b9079417b`. |
+| Production SHA | `899b4fbb093e7cfaf627fdaa556e51ea6d55bec4`, observed on backend and frontend after deployment. This status-only update creates a later SHA; public identity must be checked again after its deployment. |
 | Production SHA before this candidate | `db89ca94e45459ad11ec92a1a5df73092918d954`, measured as HTTP 200 on both public surfaces on 2026-10-08. |
 | Last updated | 2026-10-08. |
 
 The user-provided authenticated browser check on `db89ca94` found that a new account could not pass profile onboarding because choices appeared unresponsive and Save stayed disabled. Build inspected the already open tab without submitting or saving, clicked all six required choices and observed Save become enabled with no browser errors, then reset the choices; that exact click failure did not reproduce. The code did reveal two ways a slow preferences request could strand the form: a late response overwrote choices made in the meantime, and the request's loading flag disabled Save even after all required choices were set. Both paths are repaired, and selected buttons expose `aria-pressed`.
+
+[Candidate CI run 37797515860](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37797515860) and [main CI run 37798271113](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37798271113) each passed all five jobs. The API merge and a status push did not start the normal main-CI event, so `workflow_dispatch` was added to the existing CI workflow, validated with actionlint, and used to run main CI on `899b4fbb`. [Auto Deploy run 37798507546](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37798507546) completed success. Public backend health and frontend build-info both returned HTTP 200 and SHA `899b4fbb093e7cfaf627fdaa556e51ea6d55bec4`. Build performed no authenticated live acceptance.
 
 The same browser report showed Analyse withholding an unverified ETH Market score while FINN still mentioned a dated stored “Market 30.” The current-score tool now uses the owner-scoped source verification behind Analyse; stale components return null with a reason. A separate saved-score tool preserves explicit historical report reads. Market-price snapshots no longer carry a saved score. Analyse's daily indicator rows now project the verified weighted indicator evidence saved by Score 2.0, rather than older row score fields. Other display periods retain measurements but show no unverified legacy score. Five dated Price days alone still do not prove a score if another configured source or the rule-based rebuild is incomplete.
 
