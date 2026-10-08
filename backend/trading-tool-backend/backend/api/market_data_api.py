@@ -44,7 +44,18 @@ async def add_user_market_indicator(
         symbol = payload.get("symbol") or "BTC"
         
         service = MarketDataService(db)
-        return await service.add_user_market_indicator(int(user_id), raw_name, value, symbol=symbol)
+        result = await service.add_user_market_indicator(int(user_id), raw_name, value, symbol=symbol)
+        if str(raw_name or "").strip().lower() in {"price", "volume"}:
+            try:
+                from backend.celery_task.celery_app import celery_app
+                celery_app.send_task(
+                    "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                    kwargs={"user_id": int(user_id), "symbol": str(symbol).upper(),
+                            "category": "market", "indicator": str(raw_name).lower()},
+                )
+            except Exception:
+                logger.warning("Market indicator history queued for periodic retry", exc_info=True)
+        return result
     except HTTPException:
         raise
     except Exception as e:

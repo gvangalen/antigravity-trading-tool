@@ -156,6 +156,9 @@ function getUiCopy(locale = "nl") {
       neutral: "Neutral",
       unavailable: "Insufficient data",
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
+      historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
+      indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
+      scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
       market: "Market",
       macro: "Macro",
       technical: "Technical",
@@ -297,6 +300,9 @@ function getUiCopy(locale = "nl") {
       neutral: "Neutral",
       unavailable: "Unzureichende Daten",
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
+      historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
+      indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
+      scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
       market: "Markt",
       macro: "Makro",
       technical: "Technisch",
@@ -437,6 +443,9 @@ function getUiCopy(locale = "nl") {
     neutral: "Neutraal",
     unavailable: "Onvoldoende data",
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
+    historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
+    indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
+    scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
     market: "Markt",
     macro: "Macro",
     technical: "Technisch",
@@ -1276,6 +1285,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       !isGenericIndicatorExplanation(rawDetail) &&
       !isGenericIndicatorExplanation(localizedDetail) &&
       !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()];
+    const unavailableReason = item?.score_unavailable_reason;
+    const historyCoverage = item?.score_history_coverage;
     const generatedDetail = score !== null
       ? explainIndicatorAssessment({
           name,
@@ -1285,6 +1296,12 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
           direction,
           ui,
         })
+      : unavailableReason === "insufficient_dated_history" && historyCoverage
+        ? ui.historyPending(historyCoverage.observed_days, historyCoverage.required_days)
+        : unavailableReason === "stale_source"
+          ? ui.indicatorSourceStale
+          : unavailableReason === "score_pending"
+            ? ui.scorePending
       : !hasValue && item?.data_status === "pending_refresh"
         ? ui.pendingSource
         : ui.unavailable;

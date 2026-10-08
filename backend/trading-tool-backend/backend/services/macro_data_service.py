@@ -343,6 +343,19 @@ class MacroDataService:
                 latest.source_observed_at == source_observed_at
                 and float(latest.value) == float(value)
             ):
+                # A first reading can predate the history bootstrap. Re-score
+                # unchanged source evidence after real dated history arrives.
+                # Rule edits must also not leave the individual row stale.
+                normalized = normalize_indicator_name(indicator_name)
+                rescored = await asyncio.to_thread(
+                    self._sync_score_indicator, "macro", normalized,
+                    value, user_id, normalized_symbol or "BTC", source_observed_at,
+                )
+                latest.score = (None if rescored.get("source_status") == "insufficient_indicator_history"
+                                else require_indicator_score(rescored, indicator_name))
+                latest.trend = rescored.get("trend") or "neutral"
+                latest.interpretation = rescored.get("interpretation") or "Geen interpretatie beschikbaar"
+                latest.action = rescored.get("action") or "Geen actie"
                 return MacroAddResponse(
                     message=f"Indicator '{indicator_name}' is al actueel.",
                     value=value, score=latest.score, trend=latest.trend,

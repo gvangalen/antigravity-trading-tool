@@ -214,11 +214,24 @@ def _enrich_indicator_rows(
             "insufficient_data"
         )
         payload = dict(row)
+        freshness = _freshness(row.get("source_observed_at"), threshold, source)
+        coverage = row.get("score_history_coverage") or {}
+        if scored_row:
+            score_reason = None
+        elif not available or not row.get("source_observed_at"):
+            score_reason = "missing_source_reading"
+        elif coverage and coverage.get("observed_days", 0) < coverage.get("required_days", 5):
+            score_reason = "insufficient_dated_history"
+        elif freshness["stale"]:
+            score_reason = "stale_source"
+        else:
+            score_reason = "score_pending"
         payload.update({
             "indicator_key": _indicator_key(row.get("name")),
             "period": period,
             "source": source,
-            "freshness": _freshness(row.get("source_observed_at"), threshold, source),
+            "freshness": freshness,
+            "score_unavailable_reason": score_reason,
             "data_status": data_status,
             "score_contribution": {
                 "status": "available" if scored_row else "insufficient_data",
