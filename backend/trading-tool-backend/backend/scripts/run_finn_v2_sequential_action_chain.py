@@ -225,7 +225,12 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         ("indicator_create", "Create a technical RSI indicator configuration for SOL.", "create_indicator_configuration"),
         ("indicator_update", "Aktualisiere meine RSI-Indikatorkonfiguration fuer SOL und setze die Periode auf 21.", "update_indicator_configuration"),
         ("indicator_delete", "Verwijder mijn RSI indicatorconfiguratie voor SOL.", "delete_indicator_configuration"),
-        ("setup_create", f"Erstelle ein taegliches DCA-Setup fuer SOL auf 4 Stunden mit dem Namen {names['setup']}.", "create_setup"),
+        (
+            "setup_create",
+            f"Erstelle ein taegliches DCA-Setup fuer SOL auf 4 Stunden mit dem Namen {names['setup']} "
+            "und einem festen Basisbetrag von 100 Euro pro Ausfuehrung.",
+            "create_setup",
+        ),
         # Every dependent turn deliberately omits the object name and ID. It
         # must obtain its one safe reference from the preceding executed
         # action-result rather than from a pre-seeded fixture or text match.
