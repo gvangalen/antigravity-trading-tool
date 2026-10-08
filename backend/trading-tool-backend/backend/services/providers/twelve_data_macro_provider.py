@@ -21,6 +21,10 @@ DXY_COMPONENT_WEIGHTS: dict[str, tuple[str, float]] = {
 }
 
 
+class MacroSourceRateLimited(ValueError):
+    """The macro provider refused a read because its rate or credit limit was reached."""
+
+
 def _float_or_none(value: Any) -> float | None:
     try:
         return None if value is None else float(value)
@@ -108,9 +112,13 @@ class TwelveDataMacroProvider:
                     "outputsize": min(max(limit, 5), 100), "apikey": self.api_key},
             timeout=15,
         )
+        if response.status_code == 429:
+            raise MacroSourceRateLimited("macro_source_rate_limited")
         response.raise_for_status()
         payload = response.json()
         if payload.get("status") == "error":
+            if str(payload.get("code")) == "429":
+                raise MacroSourceRateLimited("macro_source_rate_limited")
             raise ValueError(payload.get("message") or "Twelve Data history unavailable")
         history: dict[str, float] = {}
         for item in payload.get("values") or []:

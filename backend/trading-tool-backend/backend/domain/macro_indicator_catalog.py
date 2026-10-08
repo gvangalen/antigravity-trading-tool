@@ -6,9 +6,9 @@ from typing import Dict, List, Optional
 MACRO_INDICATOR_DEFINITIONS: List[dict] = [
     {
         "name": "dxy",
-        "display_name": "US Dollar Index (Derived Basket)",
-        "source": "derived",
-        "link": "derived:dxy",
+        "display_name": "US Dollar Index (DXY)",
+        "source": "yahoo",
+        "link": "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
         "category": "macro",
         "active": True,
     },

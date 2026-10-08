@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from celery import shared_task
 from sqlalchemy import select
+from requests import HTTPError
 
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.models import UserIndicatorConfig
@@ -18,6 +19,13 @@ from backend.services.indicator_history_bootstrap import (
 
 logger = logging.getLogger(__name__)
 MAX_HISTORY_SCOPES_PER_SWEEP = 4
+
+
+def _source_failure_code(exc: Exception) -> str:
+    """Expose an upstream status without logging request URLs or credentials."""
+    if isinstance(exc, HTTPError) and exc.response is not None:
+        return f"source_http_{exc.response.status_code}"
+    return type(exc).__name__
 
 
 async def _bootstrap_indicator_histories(
@@ -81,10 +89,15 @@ async def _bootstrap_indicator_histories(
                         score_refreshes.add(owner_id)
             except Exception as exc:
                 await session.rollback()
-                logger.warning("Indicator history bootstrap failed for %s %s: %s",
-                               scope_type, target, type(exc).__name__)
+                error_code = _source_failure_code(exc)
+                indicator_label = ",".join(sorted(extra)) if scope_type == "market" else target[1]
+                logger.warning(
+                    "Indicator history bootstrap failed: category=%s indicator=%s code=%s",
+                    scope_type, indicator_label, error_code,
+                )
                 results.append({"type": scope_type, "target": str(target),
-                                "status": "source_unavailable", "inserted": 0})
+                                "status": "source_unavailable", "inserted": 0,
+                                "error_code": error_code})
         if score_refreshes:
             from backend.celery_task.celery_app import celery_app
             for owner_id in sorted(score_refreshes):
@@ -96,6 +109,12 @@ async def _bootstrap_indicator_histories(
                 except Exception:
                     logger.warning("Score refresh after history bootstrap could not be queued for owner %s",
                                    owner_id, exc_info=True)
+        statuses = [result["status"] for result in results]
+        logger.info(
+            "Indicator history bootstrap completed: attempted=%s ready=%s insufficient=%s unavailable=%s",
+            len(results), statuses.count("ready"),
+            statuses.count("insufficient_history"), statuses.count("source_unavailable"),
+        )
         return {"scopes": results}
 
 

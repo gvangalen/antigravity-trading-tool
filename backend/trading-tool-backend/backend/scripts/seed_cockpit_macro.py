@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 MACRO_INDICATORS = [
     {
         "name": "dxy",
-        "display_name": "US Dollar Index (Derived Basket)",
-        "source": "derived",
-        "link": "derived:dxy",
+        "display_name": "US Dollar Index (DXY)",
+        "source": "yahoo",
+        "link": "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
         "category": "macro",
         "active": True,
     },

@@ -1,11 +1,68 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, time, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from backend.services.technical_data_service import TechnicalDataService
 from backend.services.providers.twelve_data_technical_indicator_adapter import TechnicalSourceRateLimited
 from backend.api.technical_data_api import add_technical_indicator as add_technical_indicator_api
+
+
+def test_crypto_rsi_reuses_distinct_completed_market_source_days():
+    today = datetime.now(timezone.utc).date()
+    rows = [
+        (datetime.combine(today - timedelta(days=offset), time(23, 59, 59)),
+         100.0 + (16 - offset))
+        for offset in range(16, 0, -1)
+    ]
+    rows.append((rows[-1][0], 9999.0))  # newest saved row wins for that day
+    rows.append((datetime.combine(today, time.min), 1.0))  # incomplete day is excluded by query
+    session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(all=lambda: rows[:-1])))
+    service = TechnicalDataService(session)
+
+    reading = asyncio.run(service._rsi_from_dated_market_history("ETH"))
+
+    assert reading is not None
+    assert reading["observed_at"].date() == today - timedelta(days=1)
+    assert 0 <= reading["value"] <= 100
+    session.execute.assert_awaited_once()
+
+
+def test_crypto_rsi_needs_fifteen_dated_days_before_local_calculation():
+    today = datetime.now(timezone.utc).date()
+    rows = [
+        (datetime.combine(today - timedelta(days=offset), time(23, 59, 59)), 100.0 + offset)
+        for offset in range(14, 0, -1)
+    ]
+    session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(all=lambda: rows)))
+
+    assert asyncio.run(TechnicalDataService(session)._rsi_from_dated_market_history("ETH")) is None
+
+
+def test_crypto_rsi_prefers_verified_market_history_over_new_provider_call(monkeypatch):
+    service = TechnicalDataService(AsyncMock())
+    service._rsi_from_dated_market_history = AsyncMock(return_value={
+        "value": 54.0, "observed_at": datetime.now(timezone.utc),
+    })
+    service.provider_registry = SimpleNamespace(resolve_for_asset=lambda *_: (
+        _ for _ in ()).throw(AssertionError("provider must not be called"))
+    )
+
+    class _Catalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_asset(self, _symbol):
+            return {"symbol": "ETH", "display_name": "Ethereum", "asset_class": "crypto"}
+
+    monkeypatch.setattr("backend.services.technical_data_service.AssetCatalogService", _Catalog)
+
+    reading = asyncio.run(service._fetch_indicator_value(
+        name="rsi", source="twelve_data", link="twelve_data:rsi", symbol="ETH",
+    ))
+
+    assert reading["value"] == 54.0
+    service._rsi_from_dated_market_history.assert_awaited_once_with("ETH")
 
 
 def test_get_all_technical_indicators_merges_canonical_catalog_with_db_rows():

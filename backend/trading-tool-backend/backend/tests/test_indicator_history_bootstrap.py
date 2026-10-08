@@ -1,18 +1,74 @@
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from types import SimpleNamespace
 
 from backend.services.indicator_history_bootstrap import IndicatorHistoryBootstrap
 from backend.services.providers.twelve_data_macro_provider import (
-    DXY_BASE_FACTOR, DXY_COMPONENT_WEIGHTS, TwelveDataMacroProvider,
+    DXY_BASE_FACTOR, DXY_COMPONENT_WEIGHTS, MacroSourceRateLimited,
+    TwelveDataMacroProvider,
 )
 from backend.utils import macro_interpreter
 from backend.services.workspace_data_service import _enrich_indicator_rows
 from unittest.mock import AsyncMock, patch
+import requests
+import pytest
 
 from backend.services.macro_data_service import MacroDataService
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from sqlalchemy.dialects import postgresql
+
+
+def test_history_source_error_reports_http_status_without_request_url():
+    from backend.celery_task.indicator_history_task import _source_failure_code
+
+    response = requests.Response()
+    response.status_code = 429
+    response.url = "https://provider.invalid/history?apikey=secret"
+    error = requests.HTTPError("provider request failed", response=response)
+
+    assert _source_failure_code(error) == "source_http_429"
+    assert _source_failure_code(ValueError("secret")) == "ValueError"
+
+
+def test_macro_history_provider_classifies_credit_limit(monkeypatch):
+    from backend.services.providers import twelve_data_macro_provider as module
+
+    response = requests.Response()
+    response.status_code = 429
+    response.url = "https://provider.invalid/history?apikey=secret"
+    monkeypatch.setattr(module.requests, "get", lambda *_args, **_kwargs: response)
+
+    with pytest.raises(MacroSourceRateLimited, match="macro_source_rate_limited"):
+        TwelveDataMacroProvider(api_key="secret").fetch_daily_history("EUR/USD")
+
+
+def test_direct_dxy_index_uses_same_completed_source_for_reading_and_history(monkeypatch):
+    from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
+
+    today = datetime.now(timezone.utc).date()
+    days = [today - timedelta(days=offset) for offset in range(7, -1, -1)]
+    payload = {"chart": {"result": [{
+        "timestamp": [int(datetime.combine(day, time.min, timezone.utc).timestamp())
+                      for day in days],
+        "indicators": {"quote": [{"close": [101.0 + i for i in range(len(days))]}]},
+    }]}}
+    calls = []
+    macro_interpreter._hourly_dxy_chart.cache_clear()
+    monkeypatch.setattr(macro_interpreter, "_yahoo_dxy_chart", lambda **kwargs: (
+        calls.append(kwargs) or payload
+    ))
+
+    definition = get_macro_indicator_definition("dxy")
+    assert definition["source"] == "yahoo"
+    history = macro_interpreter.fetch_absolute_macro_history("dxy")
+    current = macro_interpreter.fetch_macro_value("dxy", source="yahoo", link=definition["link"])
+
+    assert len(history) == 7
+    assert history[-1][0].date() == today - timedelta(days=1)
+    assert current["value"] == history[-1][1]
+    assert current["observed_at"].date() == history[-1][0].date()
+    assert calls == [{"history": True}]
+    macro_interpreter._hourly_dxy_chart.cache_clear()
 
 
 def _day(offset):
