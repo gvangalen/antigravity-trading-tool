@@ -12,12 +12,58 @@ from backend.services.intelligence_service import IntelligenceService
 from backend.services.workspace_data_service import (
     WorkspaceDataService,
     _aggregate_by_name,
+    _current_indicator_rows,
     _enrich_indicator_rows,
     _macro_row,
     _market_row,
     _score_summary,
     _technical_row,
 )
+
+
+def test_day_indicator_uses_verified_weighted_score_instead_of_legacy_row_score():
+    observed = datetime.now(timezone.utc).isoformat()
+    raw = [{"name": "price", "value": 100.0, "score": 10,
+            "interpretation": "Fallback bucket rule (auto).",
+            "source_observed_at": observed,
+            "score_history_coverage": {"observed_days": 5, "required_days": 5}}]
+    daily = {
+        "market": {"score": 30, "source_status": "fresh"},
+        "indicator_evidence": {"market": {"price": {
+            "value": 100.0, "score": 30, "weight": 1.3,
+            "source_observed_at": observed, "rule_origin": "system_template",
+            "interpretation": "Relatieve prijspositie in de laatste 30 dagen.",
+        }}},
+    }
+    rows = _current_indicator_rows(raw, "market", daily)
+    assert rows[0]["score"] == 30
+    assert rows[0]["score_weight"] == 1.3
+    assert "Fallback" not in rows[0]["interpretation"]
+    category = WorkspaceDataService._category_payload(rows, "day", 36 * 60 * 60, "market_data_indicators")
+    assert category["rows"][0]["score_contribution"]["weight"] == 1.0
+
+
+def test_day_indicator_hides_old_score_when_daily_evidence_is_not_fresh():
+    observed = datetime.now(timezone.utc).isoformat()
+    raw = [{"name": "price", "value": 100.0, "score": 30,
+            "interpretation": "Old score", "source_observed_at": observed}]
+    daily = {"market": {"score": None, "source_status": "stale_source"},
+             "indicator_evidence": {"market": {"price": {"score": 30}}}}
+    rows = _current_indicator_rows(raw, "market", daily)
+    assert rows[0]["score"] is None
+    assert rows[0]["interpretation"] is None
+
+
+def test_day_indicator_rejects_evidence_for_a_different_observation():
+    observed = datetime.now(timezone.utc).isoformat()
+    raw = [{"name": "price", "value": 101.0, "score": 80,
+            "source_observed_at": observed}]
+    daily = {"market": {"score": 30, "source_status": "fresh"},
+             "indicator_evidence": {"market": {"price": {
+                 "value": 100.0, "score": 30, "source_observed_at": observed,
+                 "rule_origin": "system_template",
+             }}}}
+    assert _current_indicator_rows(raw, "market", daily)[0]["score"] is None
 
 
 def test_missing_indicator_data_never_becomes_an_artificial_score():

@@ -1997,6 +1997,11 @@ def test_saved_setup_bounds_read_never_requires_a_strategy():
 
 def test_saved_asset_score_read_uses_dated_score_tool():
     catalog = FinnResponsesToolCatalog()
+    assert catalog.validate("get_current_asset_scores", {"asset": "BTC"}).read_tools == (
+        "read_active_asset", "read_setup_market_matches",
+    )
+    current_definition = next(item for item in catalog.definitions() if item["name"] == "get_current_asset_scores")
+    assert "same source verification as Analyse" in current_definition["description"]
     assert catalog.validate("get_saved_asset_scores", {"asset": "BTC"}).read_tools == (
         "read_asset_scores", "read_setup_market_matches",
     )

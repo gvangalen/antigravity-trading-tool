@@ -3,6 +3,8 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from backend.domain.setup_market_match import match_setup, match_setup_from_daily_scores, rank_matches
 from backend.services.setup_market_match_service import SetupMarketMatchService
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
@@ -95,7 +97,7 @@ def test_finn_setup_reads_preserve_boundaries_without_selecting_a_strategy():
     asyncio.run(run())
 
 
-def test_finn_can_read_same_reported_market_score_as_analyse_without_a_complete_benchmark():
+def test_finn_current_score_read_matches_analyse_and_market_snapshot_has_no_score():
     async def run():
         today = date.today()
         row = {"report_date": today, "macro_score": None,
@@ -114,17 +116,31 @@ def test_finn_can_read_same_reported_market_score_as_analyse_without_a_complete_
             symbol="BTC", price=100000, change_24h=1, volume=100,
             timestamp=datetime.now(timezone.utc),
         ))
-        adapter.scores.fetch_daily_scores = AsyncMock(return_value=row)
         market = await adapter.execute(asset="BTC", user_id=7)
-        assert market["data"].saved_market_score == 100
-        assert market["data"].score_report_date == today
-        adapter.scores.fetch_daily_scores.assert_awaited_once_with(7, "BTC")
+        assert "saved_market_score" not in market["data"].dict()
+        assert market["source"] == "market_data"
 
         adapter.repository.get_latest_snapshot = AsyncMock(return_value=None)
-        score_only = await adapter.execute(asset="BTC", user_id=7)
-        assert score_only["data"].saved_market_score == 100
-        assert score_only["data"].price is None
-        assert score_only["source"] == "daily_scores"
+        with pytest.raises(LookupError, match="source_unavailable"):
+            await adapter.execute(asset="BTC", user_id=7)
+
+    asyncio.run(run())
+
+
+def test_finn_current_score_read_hides_stale_component_but_retains_source_status():
+    async def run():
+        today = date.today()
+        row = {"report_date": today, "macro_score": None,
+               "technical_score": None, "market_score": 30}
+        session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+            mappings=lambda: SimpleNamespace(first=lambda: row))))
+        service = SetupMarketMatchService(session)
+        service._source_is_fresh = AsyncMock(return_value=False)
+        result = await service.for_asset(7, "ETH", setups=[setup(9, symbol="ETH")])
+        assert result["reported_scores"]["market_score"] is None
+        assert result["component_source_status"]["market_score"] == "stale_source"
+        assert result["benchmark_score"] is None
+        assert result["matches"][0]["reported_scores"]["market_score"] is None
 
     asyncio.run(run())
 

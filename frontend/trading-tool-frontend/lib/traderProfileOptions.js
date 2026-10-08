@@ -110,6 +110,15 @@ export function normalizeTraderProfilePreferences(preferences = {}) {
   };
 }
 
+export function mergeLoadedTraderProfilePreferences(current, preferences, touchedFields) {
+  const saved = normalizeTraderProfilePreferences(preferences);
+  return Object.fromEntries(
+    Object.entries(saved).map(([field, value]) => [
+      field, touchedFields.has(field) ? current[field] : value,
+    ]),
+  );
+}
+
 export function serializeTraderProfilePreferences(form = {}) {
   const traderTypes = ensureArray(form.trader_types);
   const investmentGoals = ensureArray(form.investment_goals_list);

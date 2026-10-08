@@ -556,7 +556,7 @@ class FinnV2ToolExecutionService:
             return await self.score_adapter.execute(user_id=user_id, asset=asset_state["asset"])
         if tool_name == "read_setup_market_matches":
             context_service = FinnSharedContextService(self.session)
-            requested_asset = selector.get("asset") if isinstance(selector, dict) else None
+            requested_asset = (selector.get("asset") if isinstance(selector, dict) else None) or shared_state.get("asset")
             if requested_asset:
                 asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
                 assessment = await context_service.benchmark_for_asset(user_id, asset_state["asset"])

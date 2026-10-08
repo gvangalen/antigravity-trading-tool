@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import date, datetime, timedelta, timezone
 from time import perf_counter
@@ -161,6 +162,38 @@ def _indicator_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
 
 
+def _current_indicator_rows(rows: list[dict[str, Any]], category: str,
+                            daily: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Use the same verified daily indicator evidence as the category score."""
+    component = (daily or {}).get(category) or {}
+    evidence = ((daily or {}).get("indicator_evidence") or {}).get(category) or {}
+    if component.get("source_status") != "fresh" or not isinstance(evidence, dict):
+        evidence = {}
+    projected = []
+    for row in rows:
+        item = {**row, "score": None, "trend": None,
+                "interpretation": None, "action": None}
+        saved = evidence.get(_indicator_key(row.get("name")))
+        if isinstance(saved, dict) and saved.get("rule_origin") in {"custom", "system_template"}:
+            try:
+                same_value = math.isclose(float(row["value"]), float(saved["value"]), rel_tol=1e-12)
+                same_moment = row.get("source_observed_at") == saved.get("source_observed_at")
+                score = float(saved["score"])
+            except (KeyError, TypeError, ValueError):
+                same_value = same_moment = False
+            if same_value and same_moment:
+                item.update({
+                    "score": score,
+                    "trend": saved.get("trend"),
+                    "interpretation": saved.get("interpretation"),
+                    "action": saved.get("action"),
+                    "score_weight": saved.get("weight"),
+                    "rule_origin": saved.get("rule_origin"),
+                })
+        projected.append(item)
+    return projected
+
+
 def _include_configured_rows(
     rows: list[dict[str, Any]],
     configured: Iterable[Any],
@@ -211,7 +244,7 @@ def _enrich_indicator_rows(
         for row in rows
         if row.get("value") is not None and row.get("score") is not None
     ]
-    contribution_weight = 1 / len(scored) if scored else 0
+    total_weight = sum(float(row.get("score_weight") or 1) for row in scored)
 
     enriched = []
     for row in rows:
@@ -247,11 +280,11 @@ def _enrich_indicator_rows(
             "data_status": data_status,
             "score_contribution": {
                 "status": "available" if scored_row else "insufficient_data",
-                "basis": "equal_indicator_average",
-                "weight": round(contribution_weight, 6) if scored_row else None,
+                "basis": "verified_indicator_weight" if row.get("score_weight") is not None else "equal_indicator_average",
+                "weight": round(float(row.get("score_weight") or 1) / total_weight, 6) if scored_row and total_weight else None,
                 "weighted_points": (
-                    round(float(row["score"]) * contribution_weight, 2)
-                    if scored_row
+                    round(float(row["score"]) * float(row.get("score_weight") or 1) / total_weight, 2)
+                    if scored_row and total_weight
                     else None
                 ),
             },
@@ -402,6 +435,10 @@ class WorkspaceDataService:
             "volume": quote_snapshot.get("volume"),
             **_freshness(quote_snapshot.get("timestamp"), STALE_AFTER_SECONDS["quote"], "market_data"),
         }
+        canonical_day = all(period == "day" for period in periods.values())
+        market_rows = _current_indicator_rows(market_rows, "market", daily if periods["market"] == "day" else None)
+        macro_rows = _current_indicator_rows(macro_rows, "macro", daily if periods["macro"] == "day" else None)
+        technical_rows = _current_indicator_rows(technical_rows, "technical", daily if periods["technical"] == "day" else None)
         categories = {
             "market": self._category_payload(market_rows, periods["market"], STALE_AFTER_SECONDS[periods["market"]], "market_data_indicators"),
             "macro": self._category_payload(macro_rows, periods["macro"], STALE_AFTER_SECONDS[periods["macro"]], "macro_data"),
@@ -420,7 +457,17 @@ class WorkspaceDataService:
             {category: payload["score"]["score"] for category, payload in categories.items()},
             master_payload.get("weights"),
         )
-        canonical_day = all(period == "day" for period in periods.values())
+        for category, payload in categories.items():
+            component = (daily or {}).get(category) or {}
+            score = component.get("score") if periods[category] == "day" and component.get("source_status") == "fresh" else None
+            payload["score"].update({
+                "score": score,
+                "basis": "verified_daily_indicator_evidence" if periods[category] == "day" else "period_measurements_only",
+                "status": "available" if score is not None else "insufficient_data",
+                "reason": None if score is not None else (
+                    "no_verified_category_score" if periods[category] == "day" else "period_score_not_available"
+                ),
+            })
         if canonical_day:
             combined = (daily or {}).get("benchmark_score")
         effective_watchlist_symbols = (
