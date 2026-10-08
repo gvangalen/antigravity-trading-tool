@@ -75,7 +75,7 @@ class TechnicalDataService:
         if scored.get("rule_origin") in {"missing", "generated_fallback"}:
             return {
                 "score": None,
-                "trend": None,
+                "trend": "onbekend",
                 "interpretation": "Geen gevalideerde scoreregel voor deze indicator.",
                 "action": None,
             }

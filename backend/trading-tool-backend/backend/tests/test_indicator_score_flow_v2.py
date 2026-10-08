@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from backend.utils import scoring_utils
 from backend.utils import scoring_engine
+from backend.schemas.technical_data_schema import TechnicalDataResponse
 from backend.utils.market_interpreter import normalize_market_value, normalize_market_value_with_history
 
 
@@ -94,6 +95,15 @@ def test_generated_bucket_is_not_decision_grade(monkeypatch):
     result = scoring_utils.generate_scores_db("macro", user_id=7, symbol="BTC")
     assert result["source_status"] == "missing_rule"
     assert result["total_score"] is None
+
+
+def test_technical_readback_accepts_a_measured_indicator_without_score():
+    row = TechnicalDataResponse(
+        indicator="rsi", waarde=58.33, score=None, advies="onbekend",
+        uitleg="Geen gevalideerde scoreregel voor deze indicator.",
+        timestamp=datetime.now(timezone.utc),
+    )
+    assert row.score is None
 
 
 def test_absolute_macro_level_without_dated_history_is_not_scored(monkeypatch):

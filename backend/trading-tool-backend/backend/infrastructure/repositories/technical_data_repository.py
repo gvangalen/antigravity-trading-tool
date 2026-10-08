@@ -768,7 +768,7 @@ class TechnicalDataRepository:
         self,
         name: str,
         value: float,
-        score: float,
+        score: float | None,
         advies: str,
         uitleg: str,
         user_id: int,
