@@ -73,7 +73,9 @@ class AssetScoresData(BaseModel):
     benchmark_weights: Optional[Dict[str, float]] = None
     reported_scores: Dict[str, Optional[float]] = Field(default_factory=dict)
     component_source_status: Dict[str, str] = Field(default_factory=dict)
+    component_status_explanation: Dict[str, str] = Field(default_factory=dict)
     component_source_observed_at: Dict[str, Dict[str, Optional[str]]] = Field(default_factory=dict)
+    component_indicator_source_status: Dict[str, Dict[str, str]] = Field(default_factory=dict)
 
 
 class SetupMarketMatchesData(BaseModel):
@@ -84,7 +86,9 @@ class SetupMarketMatchesData(BaseModel):
     benchmark_weights: Optional[Dict[str, float]] = None
     reported_scores: Dict[str, Optional[float]] = Field(default_factory=dict)
     component_source_status: Dict[str, str] = Field(default_factory=dict)
+    component_status_explanation: Dict[str, str] = Field(default_factory=dict)
     component_source_observed_at: Dict[str, Dict[str, Optional[str]]] = Field(default_factory=dict)
+    component_indicator_source_status: Dict[str, Dict[str, str]] = Field(default_factory=dict)
     matches: List[Dict[str, Any]] = Field(default_factory=list)
 
 
@@ -95,6 +99,7 @@ class MarketSnapshotData(BaseModel):
     volume: Optional[float] = None
     source: str
     as_of: Optional[datetime] = None
+    source_observed_at: Optional[datetime] = None
 
 
 class MacroSnapshotItem(BaseModel):

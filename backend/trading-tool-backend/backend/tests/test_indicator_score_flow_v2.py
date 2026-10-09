@@ -226,3 +226,11 @@ def test_snapshot_is_invalid_after_rule_or_source_changes():
         "technical", "BTC", [("rsi", now - timedelta(minutes=2))],
         [("rsi", 49, observed)], saved, now,
     ) is False
+    assert scoring_utils.score_snapshot_diagnosis(
+        "technical", "BTC", [("rsi", now - timedelta(minutes=2))],
+        [("rsi", 49, observed)], saved, now,
+    ) == "score_rebuild_pending"
+    assert scoring_utils.score_snapshot_diagnosis(
+        "technical", "BTC", [("rsi", now - timedelta(minutes=2))],
+        [("rsi", 48, now - timedelta(days=5))], saved, now,
+    ) == "stale_source"

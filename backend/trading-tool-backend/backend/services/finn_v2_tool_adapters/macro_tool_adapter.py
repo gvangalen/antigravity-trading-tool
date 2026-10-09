@@ -22,7 +22,10 @@ class MacroToolAdapter:
         payload = [
             MacroSnapshotItem(
                 indicator=row.name,
-                value=float(row.value) if row.value is not None else None,
+                # Provider floats can be stored as e.g. 102.13999938964844.
+                # Keep six meaningful digits in the model-facing measurement;
+                # scoring still reads the unchanged stored value.
+                value=float(f"{float(row.value):.6g}") if row.value is not None else None,
                 trend=row.trend,
                 score=(float(row.score) if row.score is not None and source_status == "fresh"
                        else None),

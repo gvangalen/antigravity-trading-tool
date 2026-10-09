@@ -68,52 +68,62 @@ def normalize_indicator_name(name: str) -> str:
     return NAME_ALIASES.get(normalized, normalized)
 
 
-def score_snapshot_is_current(category: str, symbol: str, configurations,
-                              readings, evidence, calculated_at) -> bool:
-    """Verify that a saved category still describes the selected inputs.
+def score_snapshot_diagnosis(category: str, symbol: str, configurations,
+                             readings, evidence, calculated_at) -> str:
+    """Explain why a saved category cannot currently be used as a score.
 
     Source freshness alone is insufficient after a user changes indicator
     rules or a provider publishes a new value before the next score job.
     """
     if not isinstance(calculated_at, datetime) or not isinstance(evidence, dict):
-        return False
+        return "score_unverified"
     calculation_time = (calculated_at.replace(tzinfo=timezone.utc)
                         if calculated_at.tzinfo is None else calculated_at.astimezone(timezone.utc))
     configured = {}
     for name, updated_at in configurations:
         key = normalize_indicator_name(name)
         if not isinstance(updated_at, datetime):
-            return False
+            return "configuration_unverified"
         update_time = (updated_at.replace(tzinfo=timezone.utc)
                        if updated_at.tzinfo is None else updated_at.astimezone(timezone.utc))
         if update_time > calculation_time:
-            return False
+            return "score_rebuild_pending"
         configured[key] = True
     if not configured or set(evidence) != set(configured):
-        return False
+        return "score_rebuild_pending"
     current = {normalize_indicator_name(name): (value, observed_at)
                for name, value, observed_at in readings
                if normalize_indicator_name(name) in configured}
     if set(current) != set(configured):
-        return False
+        return "missing_indicator_reading"
     for name, (value, observed_at) in current.items():
         saved = evidence.get(name)
-        if not isinstance(saved, dict) or not score_source_is_fresh(
-            category, name, observed_at, symbol=symbol,
-        ):
-            return False
+        if not isinstance(saved, dict):
+            return "score_rebuild_pending"
+        if value is None:
+            return "missing_indicator_reading"
+        if not score_source_is_fresh(category, name, observed_at, symbol=symbol):
+            return "stale_source" if observed_at is not None else "missing_indicator_reading"
         # Legacy daily rows could contain a generated bucket score. The
         # provenance field is mandatory for a current decision-grade score.
         if saved.get("rule_origin") not in {"custom", "system_template"}:
-            return False
+            return "rule_unverified"
         try:
             if not math.isclose(float(saved["value"]), float(value), rel_tol=1e-12):
-                return False
+                return "score_rebuild_pending"
         except (KeyError, TypeError, ValueError):
-            return False
+            return "score_rebuild_pending"
         if saved.get("source_observed_at") != observed_at.isoformat():
-            return False
-    return True
+            return "score_rebuild_pending"
+    return "fresh"
+
+
+def score_snapshot_is_current(category: str, symbol: str, configurations,
+                              readings, evidence, calculated_at) -> bool:
+    """Keep the report and bot gate on the same strict verification rule."""
+    return score_snapshot_diagnosis(
+        category, symbol, configurations, readings, evidence, calculated_at,
+    ) == "fresh"
 
 
 # =========================================================

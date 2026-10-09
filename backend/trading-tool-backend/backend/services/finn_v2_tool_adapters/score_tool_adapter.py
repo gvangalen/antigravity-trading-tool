@@ -14,7 +14,9 @@ class ScoreToolAdapter:
             "symbol", "as_of", "source_status", "benchmark_score",
             "benchmark_weights", "reported_scores", "component_source_status",
         )}
+        payload["component_status_explanation"] = assessment.get("component_status_explanation") or {}
         payload["component_source_observed_at"] = assessment.get("component_source_observed_at") or {}
+        payload["component_indicator_source_status"] = assessment.get("component_indicator_source_status") or {}
         return {
             "data": AssetScoresData(**payload),
             "summary": {"title": "asset_scores", "symbol": asset, "source_status": assessment["source_status"]},
