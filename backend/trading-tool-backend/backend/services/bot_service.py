@@ -1084,6 +1084,13 @@ class BotService:
             if not bot: continue
             
             scores_payload = self._safe_json(r["scores_json"], {})
+            if scores_payload and scores_payload.get("score_semantics") != "verified_score_2":
+                # Old decisions can contain fabricated 10/50 placeholders.
+                # Preserve the decision record, never present those values as
+                # current Score 2.0 evidence.
+                scores_payload = {**scores_payload, **{
+                    key: None for key in ("macro", "technical", "market", "setup", "combined", "setup_match")
+                }, "score_semantics": "legacy_unverified"}
             reasons_payload = self._safe_json(r["reason_json"], [])
             
             trade_plan = {"entry_plan": [], "stop_loss": {}, "targets": [], "risk": {}}
@@ -1146,10 +1153,13 @@ class BotService:
             scores = self._safe_json(r["scores_json"], {})
             reasons = self._safe_json(r["reason_json"], [])
             
-            setup_match = scores.get("setup_match") or {
+            setup_match = (
+                scores.get("setup_match")
+                if scores.get("score_semantics") == "verified_score_2" else None
+            ) or {
                 "status": "no_snapshot", "summary": "Geen strategie context",
                 "detail": "Er is geen actief strategy snapshot beschikbaar.",
-                "score": 10, "confidence": "low",
+                "score": None, "confidence": "low",
             }
             out.append({
                 "decision_id": r["id"],

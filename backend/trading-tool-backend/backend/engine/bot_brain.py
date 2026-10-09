@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date
 from typing import Any, Dict, Optional
 
@@ -54,14 +55,23 @@ def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(x, hi))
 
 
-def _normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
+def _normalize_scores(scores: Dict[str, Any]) -> Dict[str, Any]:
+    availability = scores.get("_source_available") or {}
+
+    def measured(name: str) -> Optional[float]:
+        raw = scores.get(name, scores.get(name.removesuffix("_score")))
+        if name in availability and availability[name] is not True:
+            return None
+        value = _safe_float(raw)
+        return value if value is not None and math.isfinite(value) and 0 <= value <= 100 else None
+
     return {
-        "macro_score": _safe_float(scores.get("macro_score", scores.get("macro", 10)), 10.0) or 10.0,
-        "technical_score": _safe_float(scores.get("technical_score", scores.get("technical", 10)), 10.0) or 10.0,
-        "market_score": _safe_float(scores.get("market_score", scores.get("market", 10)), 10.0) or 10.0,
-        # Missing match is neutral for sizing, never a fabricated weak match.
-        "setup_score": _safe_float(scores.get("setup_score", scores.get("setup")), 50.0),
-        "_source_available": scores.get("_source_available") or {},
+        "macro_score": measured("macro_score"),
+        "technical_score": measured("technical_score"),
+        "market_score": measured("market_score"),
+        # A missing setup match has no sizing effect; it is not a score of 50.
+        "setup_score": measured("setup_score"),
+        "_source_available": availability,
         "_benchmark_weights": scores.get("_benchmark_weights") or {},
     }
 
@@ -191,8 +201,8 @@ def _build_action_decision(
         snapshot.get("confidence_score") or snapshot.get("confidence"),
         0.0
     ) or 0.0
-    market_score = _safe_float(normalized_scores.get("market_score"), 10.0) or 10.0
-    technical_score = _safe_float(normalized_scores.get("technical_score"), 10.0) or 10.0
+    market_score = normalized_scores.get("market_score")
+    technical_score = normalized_scores.get("technical_score")
 
     entry = levels.get("entry")
     stop_loss = levels.get("stop_loss")
@@ -231,6 +241,14 @@ def _build_action_decision(
             "action": "hold",
             "reason": f"Confidence too low ({confidence_score:.1f})",
             "intent_note": "Snapshot confidence below watch threshold",
+            "confidence_score": confidence_score,
+        }
+
+    if market_score is None:
+        return {
+            "action": "hold",
+            "reason": "Verified market score unavailable",
+            "intent_note": "Wait for current Score 2.0 market evidence",
             "confidence_score": confidence_score,
         }
 
@@ -306,7 +324,10 @@ def _build_action_decision(
             return {
                 "action": "buy",
                 "reason": f"Trade setup confirmed near entry ({live_price:.2f} vs {entry:.2f})",
-                "intent_note": f"Technical={technical_score:.1f}, market={market_score:.1f}",
+                "intent_note": (
+                    f"Technical={technical_score:.1f}, market={market_score:.1f}"
+                    if technical_score is not None else f"Market={market_score:.1f}; technical unavailable"
+                ),
                 "confidence_score": confidence_score,
             }
 
@@ -374,16 +395,33 @@ def run_bot_brain(
     # -------------------------------------------------
     # 2️⃣ Market Intelligence
     # -------------------------------------------------
-    market_intelligence = get_market_intelligence(
-        user_id=user_id,
-        scores=normalized_scores,
+    score_evidence_complete = all(
+        normalized_scores.get(f"{category}_score") is not None
+        for category in ("macro", "technical", "market")
     )
+    if score_evidence_complete:
+        # This risk context may use historical metrics, but it only receives
+        # current verified Score 2.0 components. It is not a second score.
+        market_intelligence = get_market_intelligence(
+            user_id=user_id,
+            scores=normalized_scores,
+        )
+    else:
+        # Keep fixed DCA evaluation available without inventing a market
+        # score or passing stale values into the legacy risk-context engine.
+        market_intelligence = {
+            "source_status": "insufficient_score_evidence",
+            "trend": {}, "metrics": {},
+            "state": {"market_pressure": 0.5, "transition_risk": 0.5,
+                      "trend_strength": 0.5, "risk_environment": 0.5},
+        }
     if not market_intelligence:
         raise RuntimeError("market_intelligence_empty")
 
     trend_block = market_intelligence.get("trend") or {}
     state_block = market_intelligence.get("state") or {}
-    metrics_block = market_intelligence.get("metrics") or {}
+    metrics_block = {key: value for key, value in (market_intelligence.get("metrics") or {}).items()
+                     if key != "setup_quality"}
 
     market_cycle = market_intelligence.get("cycle")
     temperature = market_intelligence.get("temperature")
@@ -491,8 +529,7 @@ def run_bot_brain(
         else:
             score_ready = False
         if not score_ready:
-            # The legacy score loader uses 10 as a display fallback. Never
-            # turn that placeholder into a Smart DCA purchase amount.
+            # No verified benchmark means no score-selected purchase amount.
             suggested_amount = 0.0
             position_size = 0.0
             unsupported_source = score_source != "benchmark_score"
@@ -535,13 +572,7 @@ def run_bot_brain(
     # -------------------------------------------------
     try:
         proposed_amount = suggested_amount if action == "buy" else 0.0
-        macro_score_for_guardrail = float(normalized_scores.get("macro_score", 50.0))
-        if (
-            setup_type == "dca"
-            and setup.get("dca_amount_semantics") == "planned_exact"
-            and (scores.get("_source_available") or {}).get("macro_score") is not True
-        ):
-            macro_score_for_guardrail = None
+        macro_score_for_guardrail = normalized_scores.get("macro_score")
 
         guardrails_result = apply_guardrails(
             proposed_amount_eur=proposed_amount,
@@ -621,9 +652,9 @@ def run_bot_brain(
     # 9️⃣ 🔥 CONTEXT (GEEN SCORE)
     # -------------------------------------------------
     trade_context = {
-        "risk_environment": round(_clamp(risk_environment, 0.0, 1.0), 4),
-        "trend_strength_reference": round(_clamp(trend_strength, 0.0, 1.0), 4),
-        "setup_score_reference": scores.get("setup_score", scores.get("setup")),
+        "risk_environment": round(_clamp(risk_environment, 0.0, 1.0), 4) if score_evidence_complete else None,
+        "trend_strength_reference": round(_clamp(trend_strength, 0.0, 1.0), 4) if score_evidence_complete else None,
+        "setup_score_reference": normalized_scores.get("setup_score"),
     }
 
     # -------------------------------------------------
@@ -695,10 +726,10 @@ def run_bot_brain(
             "long": long_trend,
         },
 
-        "market_pressure": round(_clamp(market_pressure, 0.0, 1.0), 4),
-        "transition_risk": round(_clamp(transition_risk, 0.0, 1.0), 4),
+        "market_pressure": round(_clamp(market_pressure, 0.0, 1.0), 4) if score_evidence_complete else None,
+        "transition_risk": round(_clamp(transition_risk, 0.0, 1.0), 4) if score_evidence_complete else None,
         "volatility_state": volatility_state,
-        "trend_strength": round(_clamp(trend_strength, 0.0, 1.0), 4),
+        "trend_strength": round(_clamp(trend_strength, 0.0, 1.0), 4) if score_evidence_complete else None,
         "structure_bias": structure_bias,
         "risk_environment": risk_environment,
         "risk_state": risk_state,

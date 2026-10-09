@@ -49,34 +49,15 @@ def _map_confidence(v: float) -> str:
     return "low"
 
 
-def _clamp_score(v: Any, *, default: float = 10.0, lo: float = 10.0, hi: float = 100.0) -> float:
-    """
-    Scores mogen NOOIT 0 zijn.
-    - None/NaN/invalid -> default
-    - < lo -> lo
-    - > hi -> hi
-    """
+def _verified_score(v: Any) -> Optional[float]:
+    """Score 2.0: a measured zero is valid; missing or invalid is unknown."""
     try:
+        if v is None or isinstance(v, bool):
+            return None
         x = float(v)
-        if x != x:  # NaN
-            x = default
-    except Exception:
-        x = default
-
-    if x < lo:
-        return float(lo)
-    if x > hi:
-        return float(hi)
-    return float(x)
-
-
-def _confidence_from_score(score: float) -> str:
-    s = float(score or 0)
-    if s >= 70:
-        return "high"
-    if s >= 40:
-        return "medium"
-    return "low"
+        return x if math.isfinite(x) and 0 <= x <= 100 else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _normalize_action(v: str) -> str:
@@ -459,139 +440,36 @@ def _get_strategy_setup_payload(
     return payload
 
 # =====================================================
-# 📦 Risk profiles
-# =====================================================
-def _get_risk_thresholds(risk_profile: str) -> dict:
-    """
-    Defines decision thresholds per risk profile.
-    (UI + legacy behavior: still used for setup_match text)
-    """
-    profile = (risk_profile or "balanced").lower()
-
-    if profile == "conservative":
-        return {"buy": 75, "hold": 55, "min_confidence": "high"}
-
-    if profile == "aggressive":
-        return {"buy": 35, "hold": 20, "min_confidence": "medium"}
-
-    return {"buy": 55, "hold": 40, "min_confidence": "medium"}
-
-
-# =====================================================
 # 📦 Build setup match (UI CONTRACT)
 # =====================================================
 def _build_setup_match(
     *,
     bot: Dict[str, Any],
     scores: Dict[str, float],
-    snapshot: Optional[Dict[str, Any]] = None,
-    current_match: Optional[Dict[str, Any]] = None,
+    current_match: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    UI-CONTRACT (KEIHARD):
-    - setup_match bestaat ALTIJD
-    - score is NOOIT 0
-    - status + UI-tekst komen UITSLUITEND uit de backend
-    - frontend mag NIETS interpreteren
-    """
-
-    if current_match is not None:
-        status = current_match["status"]
-        summary = {
-            "matches": "Opgeslagen scorevoorwaarden passen bij de actuele benchmark.",
-            "outside_conditions": "Opgeslagen scorevoorwaarden passen nu niet.",
-            "insufficient_data": "Actuele benchmarkgegevens zijn niet volledig beschikbaar.",
-            "unconfigured": "Deze setup heeft geen scorevoorwaarden.",
-        }.get(status, "Setupmatch niet beschikbaar.")
-        return {
-            "name": current_match.get("name") or bot.get("setup_type") or "Setup",
-            "symbol": current_match.get("symbol") or bot.get("symbol", DEFAULT_SYMBOL),
-            "timeframe": current_match.get("timeframe") or bot.get("timeframe") or "—",
-            "score": current_match["score"],
-            "status": status,
-            "is_active": current_match["is_active"],
-            "summary": summary,
-            "detail": " ".join(current_match["reasons"]) or summary,
-            "components": current_match["components"],
-            "as_of": scores.get("_report_date"),
-            "source": "owner_setup_market_match",
-            "match_buy": False,
-            "match_hold": False,
-        }
-
-    macro = _clamp_score(scores.get("macro", 10), default=10)
-    technical = _clamp_score(scores.get("technical", 10), default=10)
-    market = _clamp_score(scores.get("market", 10), default=10)
-    setup = _clamp_score(scores.get("setup", 10), default=10)
-
-    combined_score = round((macro + technical + market + setup) / 4, 1)
-    combined_score = _clamp_score(combined_score, default=10)
-
-    thresholds = _get_risk_thresholds(bot.get("risk_profile", "balanced"))
-    buy_th = float(thresholds["buy"])
-    hold_th = float(thresholds["hold"])
-
-    has_snapshot = snapshot is not None
-    strategy_confidence = _clamp_score(
-        snapshot.get("confidence", 0) if snapshot else 0,
-        default=10,
-    )
-
-    match_buy = has_snapshot and combined_score >= buy_th and strategy_confidence >= buy_th
-    match_hold = has_snapshot and combined_score >= hold_th
-
-    if not has_snapshot:
-        status = "no_snapshot"
-        summary = "Geen actueel strategy-plan beschikbaar voor vandaag."
-        detail = (
-            "De marktcondities zijn bekend, maar deze strategie heeft vandaag "
-            "onvoldoende context om gecontroleerd uitgevoerd te worden."
-        )
-        reason = "no_active_strategy_snapshot"
-
-    elif match_buy:
-        status = "match_buy"
-        summary = "Strategie voldoet aan buy-voorwaarden."
-        detail = (
-            f"Totale score ({combined_score}) en strategie-confidence "
-            f"({strategy_confidence}) liggen boven de buy-drempel ({buy_th})."
-        )
-        reason = "buy_conditions_met"
-
-    elif match_hold:
-        status = "no_match"
-        summary = "Strategie actief, maar geen buy-signaal."
-        detail = (
-            f"Score ({combined_score}) is voldoende om vast te houden "
-            f"(≥ {hold_th}), maar nog onder de buy-drempel ({buy_th})."
-        )
-        reason = "hold_conditions_only"
-
-    else:
-        status = "no_match"
-        summary = "Strategie onder minimumdrempel."
-        detail = (
-            f"Score ({combined_score}) ligt onder de hold-drempel ({hold_th}). "
-            "De strategie blijft inactief."
-        )
-        reason = "below_hold_threshold"
-
+    """Expose the owner-scoped Score 2.0 match without legacy averaging."""
+    status = current_match["status"]
+    summary = {
+        "matches": "Opgeslagen scorevoorwaarden passen bij de actuele benchmark.",
+        "outside_conditions": "Opgeslagen scorevoorwaarden passen nu niet.",
+        "insufficient_data": "Actuele benchmarkgegevens zijn niet volledig beschikbaar.",
+        "unconfigured": "Deze setup heeft geen scorevoorwaarden.",
+    }.get(status, "Setupmatch niet beschikbaar.")
     return {
-        "name": bot.get("setup_type") or bot.get("bot_name") or "Strategy",
-        "symbol": bot.get("symbol", DEFAULT_SYMBOL),
-        "timeframe": bot.get("timeframe") or "—",
-        "score": combined_score,
-        "confidence": _confidence_from_score(combined_score),
-        "components": {"macro": macro, "technical": technical, "market": market, "setup": setup},
-        "thresholds": {"buy": buy_th, "hold": hold_th},
-        "strategy_confidence": strategy_confidence,
-        "has_snapshot": has_snapshot,
-        "match_buy": bool(match_buy),
-        "match_hold": bool(match_hold),
+        "name": current_match.get("name") or bot.get("setup_type") or "Setup",
+        "symbol": current_match.get("symbol") or bot.get("symbol", DEFAULT_SYMBOL),
+        "timeframe": current_match.get("timeframe") or bot.get("timeframe") or "—",
+        "score": current_match["score"],
         "status": status,
+        "is_active": current_match["is_active"],
         "summary": summary,
-        "detail": detail,
-        "reason": reason,
+        "detail": " ".join(current_match["reasons"]) or summary,
+        "components": current_match["components"],
+        "as_of": scores.get("_report_date"),
+        "source": "owner_setup_market_match",
+        "match_buy": False,
+        "match_hold": False,
     }
 
 
@@ -757,9 +635,7 @@ def build_order_proposal(
 # 📊 Daily scores (single source of truth)
 # =====================================================
 def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC") -> Dict[str, float]:
-    """
-    Single source of truth. Returned scores are ALWAYS in [10..100].
-    """
+    """Read only current, source-verified Score 2.0 components."""
     symbol = (symbol or DEFAULT_SYMBOL).upper()
 
     with conn.cursor() as cur:
@@ -777,7 +653,7 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
         row = cur.fetchone()
 
     if not row:
-        return dict(macro=10.0, technical=10.0, market=10.0, setup=None,
+        return dict(macro=None, technical=None, market=None, setup=None,
                     _report_date=report_date.isoformat(),
                     _source_available={"macro_score": False, "technical_score": False,
                                        "market_score": False, "setup_score": False})
@@ -785,23 +661,20 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
     macro, technical, market, calculated_at, indicator_evidence = row
     score_row = {"calculated_at": calculated_at, "indicator_evidence": indicator_evidence}
 
-    def available(value: Any) -> bool:
-        try:
-            return value is not None and math.isfinite(float(value)) and 0 <= float(value) <= 100
-        except (TypeError, ValueError):
-            return False
-
     source_fresh = _benchmark_component_source_freshness(conn, user_id, symbol, score_row)
+    verified = {
+        "macro": _verified_score(macro) if source_fresh["macro_score"] else None,
+        "technical": _verified_score(technical) if source_fresh["technical_score"] else None,
+        "market": _verified_score(market) if source_fresh["market_score"] else None,
+    }
     return {
-        "macro": _clamp_score(macro, default=10),
-        "technical": _clamp_score(technical, default=10),
-        "market": _clamp_score(market, default=10),
+        **verified,
         "setup": None,
         "_report_date": report_date.isoformat(),
         "_source_available": {
-            "macro_score": available(macro) and source_fresh["macro_score"],
-            "technical_score": available(technical) and source_fresh["technical_score"],
-            "market_score": available(market) and source_fresh["market_score"],
+            "macro_score": verified["macro"] is not None,
+            "technical_score": verified["technical"] is not None,
+            "market_score": verified["market"] is not None,
             "setup_score": False,
         },
     }
@@ -958,8 +831,11 @@ def _get_saved_strategy_plan(conn, user_id: int, strategy_id: int, match_score: 
         "entry": entry_value,
         "targets": targets,
         "stop_loss": stop_value,
-        "confidence": float(match_score) if match_score is not None else 50.0,
-        "reason": "saved_strategy_and_measured_setup_match",
+        "confidence": float(match_score) if match_score is not None else None,
+        "reason": (
+            "saved_strategy_and_measured_setup_match"
+            if match_score is not None else "saved_strategy_setup_match_unavailable"
+        ),
     }
 
 # =====================================================
@@ -1415,16 +1291,26 @@ def _persist_decision_and_order(
     amount_eur = float(decision.get("amount_eur") or 0.0)
 
     metrics = decision.get("metrics") or {}
+    availability = scores.get("_source_available") or {}
+    verified_components = {
+        category: (
+            _verified_score(scores.get(category))
+            if availability.get(f"{category}_score") is True else None
+        ) for category in ("macro", "technical", "market")
+    }
 
     scores_payload = {
-        "macro": _clamp_score(scores.get("macro", 10)),
-        "technical": _clamp_score(scores.get("technical", 10)),
-        "market": _clamp_score(scores.get("market", 10)),
+        "score_semantics": "verified_score_2",
+        **verified_components,
         "setup": (scores.get("_setup_match") or {}).get("score"),
         "setup_match": decision.get("setup_match"),
 
-        # ✅ GEEN FAKE SCORE MEER
-        "combined": _clamp_score(decision.get("score", 10)),
+        "combined": benchmark_score(
+            {f"{category}_score": verified_components[category]
+             for category in ("macro", "technical", "market")},
+            scores.get("_benchmark_weights") or {},
+            availability,
+        ),
 
         "regime": decision.get("regime"),
         "risk_state": decision.get("risk_state"),
@@ -1443,13 +1329,12 @@ def _persist_decision_and_order(
     if decision.get("dca_amount_semantics") == "planned_exact":
         source = decision.get("score_source")
         components = {
-            "market_score": scores.get("market"),
-            "macro_score": scores.get("macro"),
-            "technical_score": scores.get("technical"),
+            f"{category}_score": verified_components[category]
+            for category in ("market", "macro", "technical")
         }
         weights = scores.get("_benchmark_weights") or {}
         combined = (
-            benchmark_score(components, weights, scores.get("_source_available") or {})
+            benchmark_score(components, weights, availability)
             if source == "benchmark_score" else None
         )
         available = (
@@ -1624,9 +1509,10 @@ def run_trading_bot_agent(
             snapshot = _get_saved_strategy_plan(
                 conn, user_id, bot["strategy_id"], current_match.get("score"),
             )
-            # Neutral input preserves existing execution rules when a match is
-            # unavailable. Only a measured match may influence sizing.
-            scores["setup"] = current_match["score"] if current_match["score"] is not None else 50
+            # A missing match has no sizing effect. Only measured matches may
+            # influence sizing; no synthetic neutral score is recorded.
+            scores["setup"] = current_match["score"]
+            scores["_source_available"]["setup_score"] = current_match["score"] is not None
 
             if setup_payload.get("dca_amount_semantics") == "planned_exact":
                 from backend.domain.finn_dca_plan_contract import dca_due_on_date
@@ -1723,7 +1609,6 @@ def run_trading_bot_agent(
             setup_match = _build_setup_match(
                 bot=bot,
                 scores=scores,
-                snapshot=snapshot,
                 current_match=scores["_setup_match"],
             )
 
@@ -1779,7 +1664,7 @@ def run_trading_bot_agent(
                 "position_size": round(position_size, 2),
                 "exposure_multiplier": float(brain.get("exposure_multiplier") or 1.0),
 
-                # V1: UI gebruikt setup score
+                # Setup match is a separate Score 2.0 assessment.
                 "score": scores["_setup_match"].get("score"),
 
                 "strategy_reason": brain.get("reason"),

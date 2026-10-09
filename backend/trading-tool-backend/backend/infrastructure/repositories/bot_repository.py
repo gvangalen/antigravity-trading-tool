@@ -33,26 +33,6 @@ class BotRepository:
         )
         return result.fetchone() is not None
 
-    async def get_daily_scores_row(self, user_id: int, report_date: date, symbol: str = "BTC") -> Optional[dict]:
-        if not await self.check_table_exists("daily_scores"):
-            return None
-        query = text("""
-            SELECT macro_score, technical_score, market_score, setup_score
-            FROM daily_scores
-            WHERE user_id=:user_id AND report_date=:report_date AND symbol=:symbol
-            LIMIT 1
-        """)
-        result = await self.session.execute(query, {"user_id": user_id, "report_date": report_date, "symbol": symbol.upper()})
-        row = result.fetchone()
-        if not row:
-            return None
-        return {
-            "macro": float(row[0]) if row[0] is not None else None,
-            "technical": float(row[1]) if row[1] is not None else None,
-            "market": float(row[2]) if row[2] is not None else None,
-            "setup": float(row[3]) if row[3] is not None else None,
-        }
-
     async def get_bot_configs(self, user_id: int) -> List[dict]:
         has_base_currency = await self.check_column_exists("bot_configs", "base_currency")
         base_currency_select = "b.base_currency" if has_base_currency else "'EUR' AS base_currency"
