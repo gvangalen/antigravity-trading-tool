@@ -8,6 +8,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `CANDIDATE_VALIDATED_LOCALLY`; CI and Auto Deploy pending. |
+| Goal | Align the separate FINN macro snapshot's source freshness with Score 2.0 so the same DXY observation cannot be fresh in Analyse and stale in a follow-up tool result. |
+| Candidate branch | `codex/finn-macro-freshness-parity`. |
+| Candidate implementation SHA | `158783fdb9840a75fe46112cd11e54d5ab3332da`; status evidence commit follows. |
+| Previous live SHA | `7d81881d7c5f131016ab8f66ead3d76d0ab8c956`, independently tested: score/FOMO continuity passed; separate macro snapshot freshness contradicted the Score 2.0 DXY source moment. |
+| Last updated | 2026-10-09. |
+
+Root cause in code: `read_macro_snapshot` fell through to a generic six-hour tool TTL, while Score 2.0 checks each macro observation using its own release window (four days for DXY, 75 days for monthly inflation/rates). The macro adapter now reports each indicator's `source_status` using the Score 2.0 source rule and supplies a snapshot status only when all measured indicators agree. A mixed snapshot is `unknown` at bundle level; each source retains its own status. No response copy, model override, score calculation, bot rule or action contract changed. Without the specific live run trace, this explains the deterministic mismatch in the deployed code but does not prove that the cited run used that exact tool call.
+
+Measured local evidence: backend **3120 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command/proposal tests passed; `audit:high` exited successfully with one moderate Next.js advisory. Isolated PostgreSQL/Redis/API/Celery action matrix passed **16/16** with zero production connections, broker orders, or live trading calls; artifact `.local-finn-parity-artifacts/finn-macro-freshness-action-matrix.json` SHA-256 `555bfcf0a4f9d1424426d5a3146f4b0c0eda9b43a330904ed729c03ec6fa4dde`. Real-provider Luna selector development passed **18/18** and regression **109/109** operation matches, with zero provider, parse, schema, timeout or validation failures; artifacts SHA-256 `7788cce8f4a23013f60da0e7ff0ff43f07acaba50e15b37542a6d69306325a23` and `ba57e927e75b303591b69387eef682af90dc5ba30f2551a67c3c6d77f52a046a`. A separate synthetic local two-turn real-provider probe read current ETH scores, then the separate DXY macro snapshot; Luna called `get_current_asset_scores` followed by `get_market_snapshot` and identified the same 12-hour-old DXY measurement as fresh in both answers. Artifact `.local-finn-parity-artifacts/macro-freshness-two-turn-probe.json` SHA-256 `ba65b151a6fdb4115bfde24ac6c4f2f078dab15f9233e75ef331244d11932409`. Build performed no authenticated production QA.
+
+After deployment, independent QA should repeat the same score-read → separate macro-snapshot question on the deployed SHA. Compare the DXY source moment and status with Analyse, including an actually stale or missing macro source if available, and verify that no trade or bot action is proposed.
+
+## Previous Release (score freshness continuity)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated live QA remains pending. |
 | Goal | Keep Score 2.0 source freshness consistent between a score answer and an immediate FOMO follow-up, and prevent incomplete selector JSON from ending an otherwise valid turn, without replacing the model's coaching answer. |
 | Candidate branch | `codex/finn-score-freshness-continuity`. |
