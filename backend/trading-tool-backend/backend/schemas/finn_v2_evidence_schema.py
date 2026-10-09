@@ -65,24 +65,14 @@ class IndicatorConfigurationData(BaseModel):
     provenance: str = "user_indicator_configs"
 
 
-class MasterScoreData(BaseModel):
-    score: float = 0.0
-    date: Optional[date] = None
-
-
-class DailyScoresData(BaseModel):
-    macro_score: Optional[float] = None
-    technical_score: Optional[float] = None
-    market_score: Optional[float] = None
-    report_date: Optional[date] = None
-    calculated_at: Optional[datetime] = None
-    indicator_evidence: Dict[str, Any] = Field(default_factory=dict)
-
-
 class AssetScoresData(BaseModel):
     symbol: str
-    daily_scores: Optional[DailyScoresData] = None
-    master_score: Optional[MasterScoreData] = None
+    as_of: Optional[date] = None
+    source_status: str
+    benchmark_score: Optional[float] = None
+    benchmark_weights: Optional[Dict[str, float]] = None
+    reported_scores: Dict[str, Optional[float]] = Field(default_factory=dict)
+    component_source_status: Dict[str, str] = Field(default_factory=dict)
 
 
 class SetupMarketMatchesData(BaseModel):

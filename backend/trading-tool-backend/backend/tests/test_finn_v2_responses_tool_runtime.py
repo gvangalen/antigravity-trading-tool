@@ -1995,18 +1995,14 @@ def test_saved_setup_bounds_read_never_requires_a_strategy():
         catalog.validate("get_saved_setup", {"strategy_name": "BTC Breakout Full Strategy"})
 
 
-def test_saved_asset_score_read_uses_dated_score_tool():
+def test_current_asset_score_read_uses_only_source_verified_score_tool():
     catalog = FinnResponsesToolCatalog()
     assert catalog.validate("get_current_asset_scores", {"asset": "BTC"}).read_tools == (
-        "read_active_asset", "read_setup_market_matches",
+        "read_active_asset", "read_asset_scores",
     )
     current_definition = next(item for item in catalog.definitions() if item["name"] == "get_current_asset_scores")
     assert "same source verification as Analyse" in current_definition["description"]
-    assert catalog.validate("get_saved_asset_scores", {"asset": "BTC"}).read_tools == (
-        "read_asset_scores", "read_setup_market_matches",
-    )
-    definition = next(item for item in catalog.definitions() if item["name"] == "get_saved_asset_scores")
-    assert "actual report date" in definition["description"]
+    assert "get_saved_asset_scores" not in {item["name"] for item in catalog.definitions()}
 
 
 def test_saved_setup_bounds_question_uses_setup_read_without_strategy_disambiguation():
@@ -6809,26 +6805,24 @@ def test_portfolio_evaluation_repair_uses_portfolio_evidence_not_plan_template()
     )
 
 
-def test_read_executor_preserves_dated_score_provenance_without_claiming_freshness():
+def test_read_executor_uses_explicit_current_source_timestamp_only():
     assert FinnResponsesReadExecutor._as_of({
-        "daily_scores": {"macro_score": 61.0, "report_date": "2026-09-26"},
-    }) == "2026-09-26"
-    assert FinnResponsesReadExecutor._as_of({
-        "master_score": {"score": 62.0, "date": "2026-09-25"},
-    }) == "2026-09-25"
-    assert FinnResponsesReadExecutor._as_of({"daily_scores": {"macro_score": 61.0}}) is None
+        "as_of": "2026-10-09", "reported_scores": {"macro_score": None},
+    }) == "2026-10-09"
+    assert FinnResponsesReadExecutor._as_of({"daily_scores": {"report_date": "2026-09-26"}}) is None
 
 
-def test_score_tool_exposes_historical_date_and_stale_boundary_to_model():
+def test_score_tool_exposes_current_missing_component_boundary_to_model():
     class Reads:
         async def execute_tool(self, **kwargs):
             if kwargs["tool_name"] == "read_asset_scores":
                 return SimpleNamespace(
-                    success=True, availability="stale", freshness_status="stale",
-                    source="daily_scores", asset="BTC",
-                    result={"symbol": "BTC", "daily_scores": {
-                        "macro_score": 61.0, "report_date": "2026-09-26",
-                    }}, error_codes=[],
+                    success=True, availability="available", freshness_status="fresh",
+                    source="daily_scores_and_source_indicators", asset="BTC",
+                    result={"symbol": "BTC", "as_of": "2026-10-09",
+                            "reported_scores": {"macro_score": None, "market_score": 30},
+                            "component_source_status": {"macro_score": "stale_source", "market_score": "fresh"},
+                            "benchmark_score": None}, error_codes=[],
                 )
             return SimpleNamespace(
                 success=True, availability="available", freshness_status="unknown",
@@ -6841,9 +6835,9 @@ def test_score_tool_exposes_historical_date_and_stale_boundary_to_model():
     executor.reads = Reads()
     result = asyncio.run(executor(FinnResponsesToolCatalog().validate("explain_score", {})))
     scores = next(item for item in result["results"] if item["scope"] == "read_asset_scores")
-    assert scores["as_of"] == "2026-09-26"
-    assert scores["freshness"] == "stale"
-    assert "historical report" in result["evidence_boundary"]
+    assert scores["as_of"] == "2026-10-09"
+    assert scores["data"]["reported_scores"]["macro_score"] is None
+    assert "source-verified" in result["evidence_boundary"]
 
 
 def test_factual_score_list_exception_does_not_apply_to_score_advice():
@@ -6854,23 +6848,25 @@ def test_factual_score_list_exception_does_not_apply_to_score_advice():
     assert not allow("Toon mijn BTC-scores.", ())
 
 
-def test_responses_loop_guides_dated_score_answer_without_replacing_model_text():
+def test_responses_loop_guides_current_score_answer_without_replacing_model_text():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "explain_score", {}),)),
-        response("r2", text="De scores zijn van gisteren en dus geen actueel handelssignaal."),
+        response("r2", text="Macro is onbekend; daarom is er geen totale benchmarkscore."),
     )
 
     async def execute(_call):
         return {"status": "completed", "results": [{
-            "scope": "read_asset_scores", "status": "completed", "freshness": "stale",
-            "as_of": "2026-09-26", "data": {"daily_scores": {"macro_score": 61.0}},
+            "scope": "read_asset_scores", "status": "completed", "freshness": "fresh",
+            "as_of": "2026-10-09", "data": {"reported_scores": {"macro_score": None},
+                                          "component_source_status": {"macro_score": "stale_source"},
+                                          "benchmark_score": None},
         }]}
 
     result = asyncio.run(FinnResponsesLoop(
         client=SimpleNamespace(responses=fake), executor=execute,
     ).run(message="Toon mijn scores.", instructions="Use FINN evidence."))
-    assert "For dated score evidence" in fake.requests[1]["instructions"]
-    assert result.text == "De scores zijn van gisteren en dus geen actueel handelssignaal."
+    assert "For current score evidence" in fake.requests[1]["instructions"]
+    assert result.text == "Macro is onbekend; daarom is er geen totale benchmarkscore."
 
 
 def test_profile_tool_result_exposes_capability_not_suitability_boundary():

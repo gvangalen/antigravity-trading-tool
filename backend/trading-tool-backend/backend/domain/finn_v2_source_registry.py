@@ -106,7 +106,7 @@ _SOURCES: tuple[InformationSource, ...] = (
     InformationSource("linked_bot", "bot_configs", "BotRepository", SourceClassification.CANONICAL_PRODUCT_STATE, required_asset_fields=("symbol",), cache_namespace="linked_bot:v1"),
     InformationSource("bot_status", "bot_configs", "BotRepository", SourceClassification.DERIVED_VIEW, required_asset_fields=("symbol",), cache_namespace="bot_status:v1"),
     InformationSource("watchlist", "watchlists", "WatchlistRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="watchlist:v1"),
-    InformationSource("scores", "daily_scores", "ScoreRepository", SourceClassification.CANONICAL_PRODUCT_STATE, required_asset_fields=("symbol",), cache_namespace="scores:v2", allowed_reader_paths=("ScoreRepository.fetch_daily_scores_batch", "ScoreToolAdapter")),
+    InformationSource("scores", "daily_scores,user_indicator_configs,market_data_indicators,macro_data,technical_indicators", "SetupMarketMatchService", SourceClassification.CANONICAL_PRODUCT_STATE, required_asset_fields=("symbol",), cache_namespace="scores:v3", allowed_reader_paths=("FinnSharedContextService.benchmark_for_asset", "SetupMarketMatchService.for_asset", "ScoreToolAdapter")),
     # Portfolio state is derived from the user-owned bot portfolio ledger and
     # its linked plan entities. There is no separate PortfolioRepository in
     # this deployment, so advertising one here would create a false authority.

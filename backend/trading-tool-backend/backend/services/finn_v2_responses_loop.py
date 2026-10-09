@@ -585,12 +585,10 @@ class FinnResponsesLoop:
                 for item in (call.get("result") or {}).get("results", [])
             ):
                 turn_instructions += (
-                    "\nFor dated score evidence, answer in one brief paragraph without headings "
-                    "or bullet lists. Include only scores actually present in the typed tool result, "
-                    "name its as_of date and say plainly when the source is stale. A historical "
-                    "score is not today's market reading or a trading recommendation. Do not "
-                    "offer a fresh score calculation or live market check unless a tool in this "
-                    "turn actually made that source available."
+                    "\nFor current score evidence, answer in one brief paragraph without headings "
+                    "or bullet lists. Include only source-verified scores in reported_scores. "
+                    "Null components are unknown, not zero. Name the missing or stale sources "
+                    "and do not infer a benchmark or trading signal when the benchmark_score is null."
                 )
             limited_evaluations = [
                 item.get("result") or {}

@@ -99,8 +99,7 @@ class FinnResponsesToolCatalog:
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
         self.read_tools["get_saved_setup"] = ("read_active_setup",)
-        self.read_tools["get_saved_asset_scores"] = ("read_asset_scores", "read_setup_market_matches")
-        self.read_tools["get_current_asset_scores"] = ("read_active_asset", "read_setup_market_matches")
+        self.read_tools["get_current_asset_scores"] = ("read_active_asset", "read_asset_scores")
         self.read_tools["get_setup_market_matches"] = ("read_setup_market_matches",)
         self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
         self.evaluation_contracts = {
@@ -190,23 +189,14 @@ class FinnResponsesToolCatalog:
                     "independent of how many strategies are linked. Do not read or choose a strategy "
                     "to answer a question only about these setup fields."
                 )
-            if name == "get_saved_asset_scores":
-                description += (
-                    " Read the owner's historical saved market, macro and technical scores "
-                    "for one asset, including their actual report date even when that date is "
-                    "before today. Use only for questions asking which prior scores were saved or when. "
-                    "For current scores, use get_current_asset_scores instead. "
-                    "This tool also returns current per-component source status from the setup "
-                    "match read. Never infer source freshness from the report date alone. A saved "
-                    "report is not proof of a fresh benchmark or current trade signal."
-                )
             if name == "get_current_asset_scores":
                 description += (
                     " Read the owner's current market, macro and technical component scores "
                     "for one asset using the same source verification as Analyse. "
                     "reported_scores is null for each missing or stale component; "
                     "component_source_status explains why. A missing score is not zero. "
-                    "Use for questions about scores now, not historical saved reports."
+                    "benchmark_score is null unless all three components are fresh. "
+                    "Do not present historical stored scores as current."
                 )
             if name == "get_saved_setup_inventory":
                 description += (
