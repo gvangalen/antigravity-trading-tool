@@ -8,10 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATION`; production deployment and independent live QA pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated live QA remains pending. |
 | Goal | Keep a fresh Price measurement distinct from a verified Score 2.0 Market score, and avoid exposing raw status codes or binary-float artifacts in FINN's explanation. |
 | Candidate branch | `codex/finn-market-score-evidence-parity`. |
 | Candidate implementation SHA | `8d1422075732a4fe1869acc41b20d3489f290eec`; release evidence commit follows. |
+| Candidate merge SHA | `caac418eb9541c6e9107511ef123dbbaad4cc602` ([PR #136](https://github.com/gvangalen/antigravity-trading-tool/pull/136)). |
+| Production SHA | `caac418eb9541c6e9107511ef123dbbaad4cc602`, observed on both public surfaces. This status-only update creates a later SHA; verify current identity before authenticated QA. |
 | Previous live SHA | `d3b8c038a69730f9cc3f05206235e612051e74e5`, independently tested: the DXY freshness fix passed; Price quote freshness and Market score eligibility contradicted each other. |
 | Last updated | 2026-10-09. |
 
@@ -20,6 +22,8 @@ The code-level cause is that `get_market_snapshot` used the database receipt tim
 Measured local evidence: backend **3123 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command/proposal tests passed; `audit:high` exited successfully with one moderate Next.js advisory. The isolated PostgreSQL/Redis/API/Celery action matrix passed **16/16** on the final code, artifact `.local-finn-parity-artifacts/finn-market-score-evidence-release-rerun.json` SHA-256 `644fb527d22196b39140b968ebca8cb1882060879b5214f54e0d89993b47ea6b`. An earlier local matrix had one strategy-clarification miss (15/16); that diagnostic is retained and is not represented as green. A synthetic local two-turn real-provider probe on a fresh quote with an unverified Market score selected both read tools, described the quote as fresh and the score as pending verification, and emitted neither a raw status code nor a made-up score; artifact `.local-finn-parity-artifacts/market-score-two-turn-final.json` SHA-256 `018e6698d7132aeca38a43d429876117081bb70477432d01965dd9299f4b3ec1`. Real-provider Luna selector development selected the expected operation **18/18**; regression selected it **109/109** with zero provider, schema, timeout, parse or validation failures. Artifacts SHA-256 `668be1f5b4f1b73b29958e87f9d2aca18f32e66aaa98bc453180f94bb46b3848` and `fdd2a000884cf893205fd3a54c712fbfe5371968b98453ac3f1c4eda1671ff27`. The regression has one additional conversation-reference/missing-input mismatch on a live-bot-activation case (**108/109** on those two metrics); the same case and result occur in the previous deployed release's regression artifact. That high-risk action path is outside this score-read repair and remains policy-denied. Build performed no authenticated production QA.
 
 After deployment, independent QA should ask FINN to compare the Price measurement's source time with the current Market score in Analyse, then ask a FOMO follow-up. A recent quote and unavailable score must be explained separately, with no raw `stale_source` label, full binary-float DXY value, invented combined score, proposal or order. Check the actual stored score and quote source moments; a truly old measurement should be called old, and a later valid rebuild should allow the score. This candidate does not by itself prove which score verification predicate failed in the original live run.
+
+[Candidate CI run 37983016232](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37983016232) and [main CI run 37983274619](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37983274619) passed all five jobs. [Auto Deploy run 37983491784](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37983491784) succeeded. Public `https://tradamind.com/api/health` and `https://tradamind.com/build-info.json` each returned HTTP 200 and SHA `caac418eb9541c6e9107511ef123dbbaad4cc602`. Build performed no authenticated production QA.
 
 ## Previous Release (macro freshness parity)
 
