@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import time
+from uuid import uuid4
 from collections import Counter
 from pathlib import Path
 from statistics import median
@@ -26,6 +27,7 @@ from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils import openai_client
 
 DATASETS = ("development", "regression", "holdout")
+_EVAL_RUN_ID = uuid4().hex[:12]
 
 
 def fixture_paths(*, dataset: str | None = None) -> list[Path]:
@@ -103,8 +105,11 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
         # request or another testcase in the product call-slot limiter.
         # entry_point is enough to isolate the call-slot scope. Keep user_id
         # absent: usage telemetry persists it as an integer foreign key.
-        with ai_usage_context(entry_point=f"selector_eval:{case.eval_id}"):
+        with ai_usage_context(entry_point=f"selector_eval:{_EVAL_RUN_ID}:{case.eval_id}"):
             response = openai_client.ask_gpt_structured_response(**kwargs)
+        # A bounded selector retry supersedes its incomplete first response.
+        # Grade the final provider result, not stale keys from the first one.
+        raw.clear()
         raw.update(response)
         return response
 
