@@ -62,6 +62,8 @@ def _normalize_scores(scores: Dict[str, Any]) -> Dict[str, Any]:
         raw = scores.get(name, scores.get(name.removesuffix("_score")))
         if name in availability and availability[name] is not True:
             return None
+        if isinstance(raw, bool):
+            return None
         value = _safe_float(raw)
         return value if value is not None and math.isfinite(value) and 0 <= value <= 100 else None
 
@@ -189,7 +191,7 @@ def _build_action_decision(
     setup_type: str,
     snapshot: Dict[str, Any],
     levels: Dict[str, Any],
-    normalized_scores: Dict[str, float],
+    normalized_scores: Dict[str, Any],
     market_pressure: float,
     transition_risk: float,
     rules: Dict[str, float],
@@ -362,7 +364,7 @@ def run_bot_brain(
     *,
     user_id: int,
     setup: Dict[str, Any],
-    scores: Dict[str, float],
+    scores: Dict[str, Any],
     action_rules: Optional[Dict[str, float]] = None,
     portfolio_context: Optional[Dict[str, Any]] = None,
     backtest_mode: bool = False,
@@ -395,10 +397,12 @@ def run_bot_brain(
     # -------------------------------------------------
     # 2️⃣ Market Intelligence
     # -------------------------------------------------
-    score_evidence_complete = all(
-        normalized_scores.get(f"{category}_score") is not None
-        for category in ("macro", "technical", "market")
+    verified_benchmark = benchmark_score(
+        normalized_scores,
+        normalized_scores.get("_benchmark_weights") or {},
+        normalized_scores.get("_source_available") or {},
     )
+    score_evidence_complete = verified_benchmark is not None
     if score_evidence_complete:
         # This risk context may use historical metrics, but it only receives
         # current verified Score 2.0 components. It is not a second score.

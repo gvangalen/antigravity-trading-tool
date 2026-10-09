@@ -445,7 +445,7 @@ def _get_strategy_setup_payload(
 def _build_setup_match(
     *,
     bot: Dict[str, Any],
-    scores: Dict[str, float],
+    scores: Dict[str, Any],
     current_match: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Expose the owner-scoped Score 2.0 match without legacy averaging."""
@@ -634,7 +634,7 @@ def build_order_proposal(
 # =====================================================
 # 📊 Daily scores (single source of truth)
 # =====================================================
-def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC") -> Dict[str, float]:
+def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC") -> Dict[str, Any]:
     """Read only current, source-verified Score 2.0 components."""
     symbol = (symbol or DEFAULT_SYMBOL).upper()
 
@@ -1281,7 +1281,7 @@ def _persist_decision_and_order(
     setup_id: Optional[int],
     report_date: date,
     decision: Dict[str, Any],
-    scores: Dict[str, float],
+    scores: Dict[str, Any],
 ) -> int:
 
     action = _normalize_action(decision.get("action"))
