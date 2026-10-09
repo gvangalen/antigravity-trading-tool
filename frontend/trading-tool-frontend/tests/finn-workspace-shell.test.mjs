@@ -14,6 +14,10 @@ const planSource = await readFile(
   new URL("../components/workflows/MyPlanWorkflow.jsx", import.meta.url),
   "utf8",
 );
+const analysisSource = await readFile(
+  new URL("../components/workspaces/asset/AssetWorkspaceV3.jsx", import.meta.url),
+  "utf8",
+);
 
 test("renders the shared FINN workspace on every protected workflow", () => {
   assert.match(shellSource, /<FinnPanel\s+[\s\S]*?previewSectionsOnly/);
@@ -25,6 +29,12 @@ test("forwards contextual FINN requests into the regular chat", () => {
   assert.match(shellSource, /autoSubmit:\s*Boolean\(detail\.autoSubmit\)/);
   assert.match(assistantSource, /\.\.\.\(commandRequest\?\.context\s*\|\|\s*\{\}\)/);
   assert.match(assistantSource, /handleChat\(commandRequest\.query\)/);
+});
+
+test("opens indicator questions in FINN chat without calling the retired specialist", () => {
+  assert.match(analysisSource, /query: ui\.indicatorQuestion\(row\.name, symbol, category, period\)/);
+  assert.match(analysisSource, /openFinnContext\(\{/);
+  assert.doesNotMatch(analysisSource, /requestIndicatorContext|finnResult/);
 });
 
 test("uses compact plan actions instead of inline specialist cards", () => {

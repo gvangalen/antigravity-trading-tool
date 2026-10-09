@@ -7,7 +7,8 @@ import re
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from sqlalchemy import select, update, and_, desc, text
-from backend.infrastructure.models import AiCategoryInsight, ChatSession, ChatMessage, AiIntelligenceEvent, AiPendingAction
+from backend.infrastructure.models import ChatSession, ChatMessage, AiIntelligenceEvent, AiPendingAction
+from backend.services.score_service import ScoreService
 
 from backend.ai_agents.ai_assistant_prompts import get_role_prompt
 from backend.services.ai_gateway import AiGateway
@@ -2847,9 +2848,9 @@ class AiAssistantService:
             if intent == "decision":
                 # The repositories behind this service often share one AsyncSession.
                 # Keep these reads sequential to avoid concurrent session use.
-                scores = await self.score_repo.get_master_score(user_id)
+                scores = await ScoreService(self.score_repo).get_master_score(user_id)
                 setups = await self.setup_repo.get_user_setups(user_id)
-                context_parts.append(f"CURRENT MASTER SCORE: {scores.avg_score if scores else 'N/A'}")
+                context_parts.append(f"CURRENT BENCHMARK SCORE: {scores.master_score if scores.master_score is not None else 'unknown'}")
                 context_parts.append(f"ACTIVE SETUPS: {[s.name for s in setups]}")
 
             elif intent == "report":
@@ -2899,36 +2900,16 @@ class AiAssistantService:
                 categories = ["macro", "market", "technical"]
                 category_data = {}
 
-                async def get_insight_for_category(cat):
-                    stmt = select(AiCategoryInsight).where(
-                        AiCategoryInsight.user_id == user_id,
-                        AiCategoryInsight.category == cat
-                    ).order_by(AiCategoryInsight.date.desc()).limit(1)
-                    
-                    res = await self.score_repo.db.execute(stmt)
-                    user_insight = res.scalars().first()
-
-                    if user_insight:
-                        return cat, {
-                            "summary": user_insight.summary,
-                            "bias": user_insight.bias,
-                            "score": float(user_insight.avg_score or 0)
-                        }
-                    else:
-                        global_insight = await self.score_repo.get_global_insight(cat)
-                        if global_insight:
-                            return cat, {
-                                "summary": global_insight["summary"],
-                                "bias": global_insight["bias"],
-                                "score": float(global_insight["avg_score"] or 0),
-                                "note": "GLOBAL_FALLBACK"
-                            }
-                        return cat, None
-
-                for cat in categories:
-                    _, data = await get_insight_for_category(cat)
-                    if data:
-                        category_data[cat] = data
+                try:
+                    current = await ScoreService(self.score_repo).get_daily_scores(user_id)
+                    category_data = {
+                        cat: {"score": getattr(current, cat).score,
+                              "source_status": getattr(current, cat).source_status,
+                              "interpretation": getattr(current, cat).interpretation}
+                        for cat in categories
+                    }
+                except LookupError:
+                    category_data = {cat: {"score": None, "source_status": "unavailable"} for cat in categories}
 
                 context_parts.append(f"AI ANALYSIS CONTEXT: {category_data}")
 

@@ -45,8 +45,7 @@ import {
   toTradingViewSymbol,
 } from "../../../../../shared/tradingViewConfig";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
-import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
-import { requestIndicatorContext } from "@/lib/api/workspace";
+import { FINN_INDICATOR_MODAL_COMPLETED_EVENT, openFinnContext } from "@/lib/finnCommandSearch";
 import { validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
@@ -219,13 +218,9 @@ function getUiCopy(locale = "nl") {
       sampleSize: "Readings in period",
       scoreHistory: "Dated source days for score",
       scoreHistoryValue: (observed, required, window) => `${observed}/${required} in the last ${window} days`,
-      askFinnContext: "Ask FINN for context",
-      finnContext: "FINN context",
-      finnContextLoading: "FINN is reviewing this indicator...",
+      askFinnContext: "Discuss with FINN",
+      indicatorQuestion: (indicator, symbol, category, period) => `Explain my saved ${indicator} indicator for ${symbol} (${category}, ${period}). Read its configuration, source observation and score. Distinguish missing or stale data from a zero score. Do not change anything.`,
       finnContextUnavailable: "Extra AI context is currently unavailable. The current data and rule-based explanation above remain available.",
-      whyCounts: "Why this counts",
-      confirmation: "What to monitor",
-      conflicts: "Conflicts and caveats",
       live: "Live",
       edit: "Edit",
       remove: "Remove",
@@ -377,13 +372,9 @@ function getUiCopy(locale = "nl") {
       sampleSize: "Messungen im Zeitraum",
       scoreHistory: "Datierte Quelltage für den Score",
       scoreHistoryValue: (observed, required, window) => `${observed}/${required} in den letzten ${window} Tagen`,
-      askFinnContext: "FINN nach Kontext fragen",
-      finnContext: "FINN-Kontext",
-      finnContextLoading: "FINN prüft diesen Indikator...",
+    askFinnContext: "Mit FINN besprechen",
+    indicatorQuestion: (indicator, symbol, category, period) => `Erkläre meinen gespeicherten Indikator ${indicator} für ${symbol} (${category}, ${period}). Lies Konfiguration, Quellmessung und Score. Unterscheide fehlende oder veraltete Daten von einem Score von null. Ändere nichts.`,
       finnContextUnavailable: "Zusätzlicher AI-Kontext ist derzeit nicht verfügbar. Die aktuellen Daten und die regelbasierte Erklärung oben bleiben verfügbar.",
-      whyCounts: "Warum dies zählt",
-      confirmation: "Was zu beobachten ist",
-      conflicts: "Konflikte und Einschränkungen",
       live: "Live",
       edit: "Bearbeiten",
       remove: "Entfernen",
@@ -534,13 +525,9 @@ function getUiCopy(locale = "nl") {
     sampleSize: "Metingen in periode",
     scoreHistory: "Gedateerde brondagen voor score",
     scoreHistoryValue: (observed, required, window) => `${observed}/${required} in de laatste ${window} dagen`,
-    askFinnContext: "Vraag FINN om context",
-    finnContext: "FINN-context",
-    finnContextLoading: "FINN beoordeelt deze indicator...",
+    askFinnContext: "Bespreek met FINN",
+    indicatorQuestion: (indicator, symbol, category, period) => `Leg mijn opgeslagen indicator ${indicator} voor ${symbol} uit (${category}, ${period}). Lees de configuratie, bronmeting en score. Maak onderscheid tussen ontbrekende of verouderde data en een score van nul. Wijzig niets.`,
     finnContextUnavailable: "Extra AI-context is nu niet beschikbaar. De actuele data en regeluitleg hierboven blijven wel beschikbaar.",
-    whyCounts: "Waarom dit meetelt",
-    confirmation: "Wat je kunt volgen",
-    conflicts: "Conflicten en kanttekeningen",
     live: "Live",
     edit: "Bewerken",
     remove: "Verwijderen",
@@ -1961,27 +1948,19 @@ function EvidenceRow({
   locale,
   ui,
 }) {
-  const [finnResult, setFinnResult] = useState(null);
-  const [finnLoading, setFinnLoading] = useState(false);
-
-  const requestFinnContext = async () => {
-    if (finnLoading) return;
-    setFinnLoading(true);
-    try {
-      const result = await requestIndicatorContext({
+  const requestFinnContext = () => {
+    openFinnContext({
+      query: ui.indicatorQuestion(row.name, symbol, category, period),
+      context: {
+        page: "/asset",
         symbol,
         category,
         indicator: row.name,
         period,
         timeframe: period === "day" ? "1D" : period,
         locale,
-      });
-      setFinnResult(result);
-    } catch (error) {
-      setFinnResult({ status: "unavailable", reason: error?.message || "request_failed" });
-    } finally {
-      setFinnLoading(false);
-    }
+      },
+    });
   };
 
   const contribution = row.raw?.score_contribution;
@@ -1996,7 +1975,6 @@ function EvidenceRow({
       : freshness.stale
       ? ui.staleData
       : ui.currentData;
-  const specialist = finnResult?.context;
 
   return (
     <div className="border-t border-slate-100">
@@ -2096,35 +2074,14 @@ function EvidenceRow({
             <button
               type="button"
               onClick={requestFinnContext}
-              disabled={finnLoading}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-blue-600 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-blue-600"
             >
               <Brain size={13} />
-              {finnLoading ? ui.finnContextLoading : ui.askFinnContext}
+              {ui.askFinnContext}
             </button>
             {renderExpandedActions ? renderExpandedActions(row) : null}
           </div>
 
-          {finnResult ? (
-            <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
-                <Brain size={13} />
-                {ui.finnContext}
-              </div>
-              {finnResult.status === "available" && specialist ? (
-                <div className="mt-2.5 grid gap-3 text-[12px] leading-5 text-slate-700 lg:grid-cols-3">
-                  <div><strong className="block text-slate-950">{ui.details}</strong>{specialist.summary}</div>
-                  <div><strong className="block text-slate-950">{ui.whyCounts}</strong>{specialist.why_it_counts}</div>
-                  <div><strong className="block text-slate-950">{ui.confirmation}</strong>{specialist.confirmation}</div>
-                  {specialist.conflicts?.length ? (
-                    <div className="lg:col-span-3"><strong className="block text-slate-950">{ui.conflicts}</strong>{specialist.conflicts.join(" · ")}</div>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="mt-2 text-[12px] font-medium leading-5 text-slate-600">{ui.finnContextUnavailable}</p>
-              )}
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>

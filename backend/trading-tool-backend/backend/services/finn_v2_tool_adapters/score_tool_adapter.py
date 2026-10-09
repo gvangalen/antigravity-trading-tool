@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.infrastructure.repositories.score_repository import ScoreRepository
-from backend.schemas.finn_v2_evidence_schema import AssetScoresData, DailyScoresData, MasterScoreData
+from backend.schemas.finn_v2_evidence_schema import AssetScoresData, DailyScoresData
 
 
 class ScoreToolAdapter:
@@ -12,10 +12,9 @@ class ScoreToolAdapter:
         # Coaching can explain the most recent saved report even when it was
         # produced before today. Its date and freshness remain explicit.
         daily = (await self.repository.fetch_daily_scores_batch(user_id, [asset])).get(asset.upper())
-        master = await self.repository.get_master_score(user_id, asset)
-        if not daily and not master:
+        if not daily:
             raise LookupError("source_unavailable")
-        report_date = daily.get("report_date") if daily else getattr(master, "date", None)
+        report_date = daily.get("report_date")
         payload = {
             "symbol": asset,
             "daily_scores": DailyScoresData(
@@ -26,10 +25,7 @@ class ScoreToolAdapter:
                 calculated_at=daily.get("calculated_at") if daily else None,
                 indicator_evidence=(daily.get("indicator_evidence") or {}) if daily else {},
             ) if daily else None,
-            "master_score": MasterScoreData(
-                score=float(getattr(master, "avg_score", 0) or 0),
-                date=getattr(master, "date", None),
-            ) if master else None,
+            "master_score": None,
         }
         return {
             "data": AssetScoresData(**payload),

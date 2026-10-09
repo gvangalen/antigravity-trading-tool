@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 
 # Import model types and repositories to reuse their well-tested database query logic sequentially
-from backend.infrastructure.models import AiCategoryInsight
+from backend.services.score_service import ScoreService
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.finn_v2_active_plan_resolver import FinnV2ActivePlanResolver
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
@@ -347,10 +347,10 @@ class AssistantContextRepository:
 
         if intent == "decision":
             # Scores & Setups run sequentially
-            scores = await self.score_repo.get_master_score(user_id)
+            scores = await ScoreService(self.score_repo).get_master_score(user_id)
             setups = await self.setup_repo.get_user_setups(user_id)
             
-            context_parts.append(f"CURRENT MASTER SCORE: {scores.avg_score if scores else 'N/A'}")
+            context_parts.append(f"CURRENT BENCHMARK SCORE: {scores.master_score if scores.master_score is not None else 'unknown'}")
             context_parts.append(f"ACTIVE SETUPS: {[s.name for s in setups]}")
 
         elif intent == "report":
@@ -400,22 +400,16 @@ class AssistantContextRepository:
             category_data = {}
 
             if resolved_symbol:
-                for cat in categories:
-                    stmt = select(AiCategoryInsight).where(
-                        AiCategoryInsight.user_id == user_id,
-                        AiCategoryInsight.category == cat,
-                        AiCategoryInsight.symbol == resolved_symbol,
-                    ).order_by(AiCategoryInsight.date.desc()).limit(1)
-
-                    res = await self.session.execute(stmt)
-                    user_insight = res.scalars().first()
-
-                    if user_insight:
-                        category_data[cat] = {
-                            "summary": user_insight.summary,
-                            "bias": user_insight.bias,
-                            "score": float(user_insight.avg_score or 0)
-                        }
+                try:
+                    current = await ScoreService(self.score_repo).get_daily_scores(user_id, resolved_symbol)
+                    category_data = {
+                        cat: {"score": getattr(current, cat).score,
+                              "source_status": getattr(current, cat).source_status,
+                              "interpretation": getattr(current, cat).interpretation}
+                        for cat in categories
+                    }
+                except LookupError:
+                    category_data = {cat: {"score": None, "source_status": "unavailable"} for cat in categories}
             else:
                 category_data["asset_resolution"] = {
                     "status": "unknown",

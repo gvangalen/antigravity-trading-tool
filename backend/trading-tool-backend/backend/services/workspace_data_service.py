@@ -10,7 +10,7 @@ from typing import Any, Iterable
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 
-from backend.infrastructure.models import AiCategoryInsight, MacroData, MarketData, Watchlist
+from backend.infrastructure.models import MacroData, MarketData, Watchlist
 from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
@@ -670,28 +670,18 @@ class WorkspaceDataService:
         latest_dates: list[Any] = []
 
         for category in categories:
-            stmt = (
-                select(AiCategoryInsight)
-                .where(
-                    AiCategoryInsight.user_id == user_id,
-                    AiCategoryInsight.category == category,
-                    AiCategoryInsight.symbol == symbol,
-                )
-                .order_by(AiCategoryInsight.date.desc(), AiCategoryInsight.id.desc())
-                .limit(1)
-            )
-            result = await self.session.execute(stmt)
-            row = result.scalars().first()
-            if not row:
+            component = (daily or {}).get(category) or {}
+            if component.get("score") is None:
                 continue
             insights[category] = {
-                "summary": row.summary or "",
-                "bias": row.bias or "–",
-                "risk": row.risk or "–",
-                "score": _number(row.avg_score),
-                "as_of": _iso(row.date),
+                "summary": component.get("interpretation") or "",
+                "bias": "–",
+                "risk": "–",
+                "score": _number(component.get("score")),
+                "as_of": _iso((daily or {}).get("calculated_at")),
             }
-            latest_dates.append(row.date)
+            if (daily or {}).get("calculated_at"):
+                latest_dates.append((daily or {})["calculated_at"])
 
         master_summary = str(master_payload.get("summary") or "").strip()
         master_date = master_payload.get("date")

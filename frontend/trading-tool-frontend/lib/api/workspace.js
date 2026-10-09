@@ -26,19 +26,3 @@ export function fetchWorkspaceWatchlist(symbols = [], options = {}) {
   const params = new URLSearchParams({ symbols: normalized.join(",") });
   return fetchAuth(`/api/workspace/watchlist?${params.toString()}`, { method: "GET", ...options });
 }
-
-export function requestIndicatorContext(payload) {
-  return fetchAuth("/api/finn/specialists/indicator-context", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}
-
-export function requestWorkspaceContext(payload) {
-  return fetchAuth("/api/finn/specialists/workspace-context", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}

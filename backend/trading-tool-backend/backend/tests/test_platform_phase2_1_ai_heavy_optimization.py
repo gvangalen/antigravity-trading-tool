@@ -223,14 +223,18 @@ def test_recent_governance_events_cache_reuses_same_window():
     assert first[0]["payload"]["headline"] == "Review BTC first"
 
 
-def test_assistant_context_cache_reuses_decision_context_reads():
+def test_assistant_context_cache_reuses_decision_context_reads(monkeypatch):
     assistant_module._assistant_context_cache.clear()
     calls = {"score": 0, "setups": 0}
 
     class _ScoreRepo:
-        async def get_master_score(self, user_id):
-            calls["score"] += 1
-            return SimpleNamespace(avg_score=83)
+        pass
+
+    async def get_current_benchmark(self, user_id):
+        calls["score"] += 1
+        return SimpleNamespace(master_score=83)
+
+    monkeypatch.setattr(assistant_module.ScoreService, "get_master_score", get_current_benchmark)
 
     class _SetupRepo:
         async def get_user_setups(self, user_id):
@@ -252,7 +256,7 @@ def test_assistant_context_cache_reuses_decision_context_reads():
     first = asyncio.run(service._build_context(11, "decision"))
     second = asyncio.run(service._build_context(11, "decision"))
 
-    assert "CURRENT MASTER SCORE: 83" in first
+    assert "CURRENT BENCHMARK SCORE: 83" in first
     assert first == second
     assert calls == {"score": 1, "setups": 1}
 

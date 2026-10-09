@@ -1045,29 +1045,9 @@ class BotService:
     # ==========================
     async def get_bot_today(self, user_id: int, symbol: str = "BTC", *, lean: bool = False) -> dict:
         today = date.today()
-        daily_scores = await self.repository.get_daily_scores_row(user_id, today) or {
-            "macro": 10, "technical": 10, "market": 10, "setup": 10
+        daily_scores = await self.repository.get_daily_scores_row(user_id, today, symbol) or {
+            "macro": None, "technical": None, "market": None, "setup": None
         }
-        
-        if not lean:
-            # 🔥 SYNC: Probeer master insight op te halen voor consistente scores met Overview
-            from backend.infrastructure.repositories.score_repository import ScoreRepository
-            score_repo = ScoreRepository(self.session)
-            master = await score_repo.get_master_score(user_id, symbol=symbol)
-            
-            if master and master.top_signals:
-                meta = master.top_signals
-                if isinstance(meta, str):
-                    try: meta = json.loads(meta)
-                    except: meta = {}
-                
-                domains = meta.get("domains", {})
-                if domains:
-                    # Overschrijf raw scores met de AI-geïnterpreteerde domein scores
-                    if "macro" in domains: daily_scores["macro"] = domains["macro"].get("score", daily_scores["macro"])
-                    if "technical" in domains: daily_scores["technical"] = domains["technical"].get("score", daily_scores["technical"])
-                    if "market" in domains: daily_scores["market"] = domains["market"].get("score", daily_scores["market"])
-                    if "setup" in domains: daily_scores["setup"] = domains["setup"].get("score", daily_scores["setup"])
         
         bot_rows = await self.repository.get_active_bots_with_setups(user_id)
         if not bot_rows:

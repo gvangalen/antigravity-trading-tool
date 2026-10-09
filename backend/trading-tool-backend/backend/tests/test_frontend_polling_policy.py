@@ -22,7 +22,6 @@ def test_hotspot_polling_uses_visibility_policy_instead_of_raw_intervals():
     hotspot_files = [
         FRONTEND_ROOT / "app" / "(protected)" / "admin" / "logs" / "page.jsx",
         FRONTEND_ROOT / "hooks" / "useIntelligenceEvents.js",
-        FRONTEND_ROOT / "hooks" / "useAgentData.js",
         FRONTEND_ROOT / "hooks" / "useMarketData.js",
         FRONTEND_ROOT / "components" / "market" / "MarketLiveCard.jsx",
         FRONTEND_ROOT / "components" / "bot" / "TradePanelContainer.jsx",

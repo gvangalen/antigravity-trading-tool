@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, text
-from backend.infrastructure.models import AiCategoryInsight, DailyScore, Setup
+from backend.infrastructure.models import DailyScore, Setup
 from typing import List, Dict, Any, Optional
 
 class ScoreRepository:
@@ -29,17 +29,6 @@ class ScoreRepository:
             })
         rows.sort(key=lambda row: (row["is_active"], row["score"] if row["score"] is not None else -1), reverse=True)
         return rows
-
-    async def get_master_score(self, user_id: int, symbol: str = "BTC") -> Optional[AiCategoryInsight]:
-        # Filter by user, category and symbol (Master scores are now partitioned by symbol)
-        stmt = select(AiCategoryInsight).where(
-            AiCategoryInsight.user_id == user_id,
-            AiCategoryInsight.category == 'master',
-            AiCategoryInsight.symbol == symbol
-        ).order_by(AiCategoryInsight.date.desc()).limit(1)
-        
-        result = await self.db.execute(stmt)
-        return result.scalars().first()
 
     async def get_global_insight(self, category: str) -> Optional[Dict[str, Any]]:
         """

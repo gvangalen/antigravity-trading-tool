@@ -21,10 +21,6 @@ def test_score_adapter_reads_latest_saved_report_with_its_actual_date():
                 "setup_score": 99,
             }}
 
-        async def get_master_score(self, user_id, asset):
-            assert (user_id, asset) == (17, "BTC")
-            return None
-
     adapter = object.__new__(ScoreToolAdapter)
     adapter.repository = Repository()
 

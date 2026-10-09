@@ -829,8 +829,9 @@ def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
     assert "watchlistSymbols" in hook
     assert "fetchWorkspaceWatchlist" not in hook
     assert "assistantChat" not in hook
-    assert "requestIndicatorContext" in workspace
+    assert "openFinnContext({" in workspace
     assert "onClick={requestFinnContext}" in workspace
+    assert "requestIndicatorContext" not in workspace
 
 
 def test_each_explicit_review_flow_uses_one_ai_request():
