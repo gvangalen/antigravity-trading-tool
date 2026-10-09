@@ -8,12 +8,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; CI and deployment pending. Independent authenticated live QA remains pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA checks passed. Independent authenticated live QA remains pending. |
 | Goal | Preserve the confirmed strategy identity and verified rename across FINN follow-up turns; align daily score freshness with Score 2.0 and expose per-indicator source moments. |
-| Candidate branch | `codex/finn-confirmed-action-continuity` (candidate PR pending). |
+| Candidate branch | `codex/finn-confirmed-action-continuity` ([PR #130](https://github.com/gvangalen/antigravity-trading-tool/pull/130), merged). |
 | Candidate implementation SHA | `4fcafaa612ed438b6790e90b3d84c3467faf61a7`; candidate head also includes this status update. |
 | Previous live SHA | `859b0e6feb129cfc38900324ba5225c10ba59e0c`, independently tested with a broken post-confirmation strategy reference and inconsistent freshness explanation. |
-| Production SHA | Not yet changed by this batch. Public backend/frontend identity must be measured after Auto Deploy. |
+| Candidate merge SHA | `b0854580701e02a0bead70c33fa12f508fa51312`. |
+| Production SHA | `b0854580701e02a0bead70c33fa12f508fa51312`, observed on both public surfaces. This status-only update creates a later SHA; check current public identity before live QA. |
 | Last updated | 2026-10-09. |
 
 The confirmed strategy postcondition now supplies the owner-scoped strategy and parent setup to the next read. A confirmed rename preserves the verified old and new names; fields still require a fresh saved-object read. The daily score tools compare a report **date** with the current UTC report date while Score 2.0 independently verifies each indicator source. Their typed result now carries the configured indicators' source moments. The model is asked to translate `fixed` to a user-facing fixed amount. This batch does not change bot execution or trading permissions.
@@ -21,6 +22,8 @@ The confirmed strategy postcondition now supplies the owner-scoped strategy and 
 Measured local evidence: backend **3111 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command and proposal tests passed. `audit:high` exited successfully with one moderate Next.js advisory. The isolated PostgreSQL/Redis/API/prefork-Celery action matrix passed **16/16**, including a new same-conversation read after a confirmed strategy update; zero production connections, broker orders, live trading calls and live bots. Artifact `.local-finn-parity-artifacts/finn-action-continuity-final.json`, SHA-256 `b65cfa70f39be8e2dc1af3478af641d0828e346d1d5446297aa53a617537bd34`. A separate local real-provider rename → confirmation → follow-up probe completed, read the owner-scoped strategy, and named both old and new strategy names; this is not production QA.
 
 Real-provider Luna selector development passed **18/18**, artifact SHA-256 `381b11ccf2448b346c945ebab068098a474d7b88bce6741ec0cadcbf38aa12fc`. Regression passed **109/109**, artifact SHA-256 `bb89abc3cb8fc982834e93cf1502b0f9c81d8949378699f6ac003671affb6c92`. Both runs had zero provider, schema, parse, validation and timeout failures. The exact reason for the old live freshness contradiction cannot be proven without that run's trace; the new source moments and date semantics make the distinction testable in the next independent live run.
+
+[Candidate CI run 37965385737](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37965385737) and [main CI run 37965609420](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37965609420) passed all five jobs. [Auto Deploy run 37965849977](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37965849977) succeeded. Public `https://tradamind.com/api/health` and `https://tradamind.com/build-info.json` each returned HTTP 200 and SHA `b0854580701e02a0bead70c33fa12f508fa51312`. Build performed no authenticated live QA.
 
 ## Previous Release (Luna internal-model unification)
 
