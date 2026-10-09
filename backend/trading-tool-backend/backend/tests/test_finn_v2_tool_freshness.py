@@ -21,6 +21,14 @@ def test_freshness_service_returns_not_applicable_for_profile():
     assert service.freshness_for("read_profile", None) == "not_applicable"
 
 
+def test_daily_score_report_uses_report_day_not_rolling_midnight_age():
+    service = FinnV2FreshnessService()
+    today = datetime.now(timezone.utc).date()
+    for tool in ("read_asset_scores", "read_setup_market_matches"):
+        assert service.freshness_for(tool, today) == "fresh"
+        assert service.freshness_for(tool, today - timedelta(days=1)) == "stale"
+
+
 def test_technical_snapshot_uses_score_source_freshness_for_closed_crypto_candle():
     observed = datetime.now(timezone.utc) - timedelta(hours=12)
     adapter = TechnicalToolAdapter(None)

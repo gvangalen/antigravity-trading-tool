@@ -194,7 +194,9 @@ class FinnResponsesToolCatalog:
                     " Read the owner's current market, macro and technical component scores "
                     "for one asset using the same source verification as Analyse. "
                     "reported_scores is null for each missing or stale component; "
-                    "component_source_status explains why. A missing score is not zero. "
+                    "component_source_status explains why; component_source_observed_at "
+                    "contains each configured indicator's actual source moment when available. "
+                    "A missing score is not zero. "
                     "benchmark_score is null unless all three components are fresh. "
                     "Do not present historical stored scores as current."
                 )

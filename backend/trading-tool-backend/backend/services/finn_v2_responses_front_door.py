@@ -188,7 +188,9 @@ class FinnResponsesFrontDoor:
             "For a requested mutation, choose the registry-backed proposal tool. FINN validates "
             "inputs and dependencies; only explicit user confirmation can execute it. "
             "Never claim a write happened before confirmed execution, and never suggest a "
-            "broker order or live-bot activation. Hide internal IDs, field names and error codes; "
+            "broker order or live-bot activation. Translate an execution_mode of fixed as a "
+            "fixed amount (vast bedrag in Dutch), never show the raw enum. Hide internal IDs, "
+            "field names and error codes; "
             "explain dates and missing values in ordinary language."
         )
 
@@ -360,6 +362,18 @@ class FinnResponsesFrontDoor:
         previous_turn_contract = (previous_response or {}).get("turn_contract") or {}
         previous_focused_setup_id = previous_turn_contract.get("focused_setup_id")
         previous_focused_strategy_id = previous_turn_contract.get("focused_strategy_id")
+        confirmed_strategy = dict(conversation_context.get("previous_action_result") or {})
+        if not (
+            confirmed_strategy.get("owner_user_id") == self.user_id
+            and confirmed_strategy.get("result_status") == "succeeded"
+            and confirmed_strategy.get("entity_type") == "strategy"
+            and confirmed_strategy.get("entity_id") is not None
+        ):
+            confirmed_strategy = {}
+        confirmed_strategy_followup = bool(
+            confirmed_strategy
+            and re.search(r"\b(?:zojuist|net|just|gerade)\b", message, re.I)
+        )
         singular_strategy_followup = bool(
             isinstance(previous_focused_setup_id, int)
             and isinstance(previous_focused_strategy_id, int)
@@ -1004,6 +1018,16 @@ class FinnResponsesFrontDoor:
                     # The model can express the choice, but only the user's text
                     # and owner-scoped persisted evidence may select the object.
                     reference = call.inputs.get("reference")
+                    if (
+                        not reference and confirmed_strategy_followup
+                        and call.name == "get_active_plan_and_strategy"
+                        and not any(
+                            str(call.inputs.get(key) or "").casefold() in message.casefold()
+                            for key in ("setup_name", "strategy_name")
+                            if call.inputs.get(key)
+                        )
+                    ):
+                        reference = "previous_response"
                     prior_setups = [
                         item for prior_call in (previous_response or {}).get("tool_trace", [])
                         for item in (prior_call.get("result", {}).get("results") or [])
@@ -1039,6 +1063,21 @@ class FinnResponsesFrontDoor:
                                 previous_setup_target = {
                                     "entity_type": "setup",
                                     "entity_id": action_result["entity_id"],
+                                }
+                            elif (
+                                confirmed_strategy
+                                and action_result == confirmed_strategy
+                                and confirmed_strategy.get("parent_entity_type") == "setup"
+                                and confirmed_strategy.get("parent_entity_id") is not None
+                                and not any(
+                                    str(call.inputs.get(key) or "").casefold() in message.casefold()
+                                    for key in ("setup_name", "strategy_name")
+                                    if call.inputs.get(key)
+                                )
+                            ):
+                                previous_setup_target = {
+                                    "entity_type": "setup",
+                                    "entity_id": confirmed_strategy["parent_entity_id"],
                                 }
                         if reference == "previous_response" and not previous_setup_target and not resuming_clarification:
                             explicit_name = str(call.inputs.get("setup_name") or "")
@@ -1120,7 +1159,13 @@ class FinnResponsesFrontDoor:
                             call = replace(call, inputs=(
                                 {"setup_id": target.entity_id,
                                  **({"strategy_name": call.inputs["strategy_name"]}
-                                    if call.inputs.get("strategy_name") else {})}
+                                    if call.inputs.get("strategy_name") else {}),
+                                 **({"strategy_id": confirmed_strategy["entity_id"]}
+                                    if call.name == "get_active_plan_and_strategy"
+                                    and confirmed_strategy
+                                    and previous_setup_target
+                                    and str(target.entity_id) == str(confirmed_strategy.get("parent_entity_id"))
+                                    and not call.inputs.get("strategy_name") else {})}
                                 if call.name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}
                                 else {**call.inputs, "setup_id": target.entity_id}
                             ))
@@ -1598,6 +1643,14 @@ class FinnResponsesFrontDoor:
             message=model_message or message,
             instructions=(
                 self._model_led_instructions(locale)
+                + (
+                    " The last confirmed action in this conversation changed the saved strategy '"
+                    + str(confirmed_strategy.get("canonical_name") or "")
+                    + "'. A follow-up about what just changed refers to this verified strategy. "
+                    "Read it with get_active_plan_and_strategy before describing its saved fields; "
+                    "use reference=previous_response without guessing a setup or strategy name."
+                    if confirmed_strategy_followup else ""
+                )
                 + (
                     " FINN cancelled the earlier owner-scoped "
                     + str(dict(conversation_context["proposal_correction_result"]).get("previous_asset"))

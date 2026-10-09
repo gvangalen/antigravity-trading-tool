@@ -442,6 +442,30 @@ def test_source_freshness_rejects_missing_configured_indicator():
     asyncio.run(run())
 
 
+def test_source_moment_is_reported_from_configured_indicator_observation():
+    async def run():
+        now = datetime.now(timezone.utc)
+        observed = now - timedelta(hours=1)
+        results = [
+            SimpleNamespace(fetchall=lambda: [("rsi", now)]),
+            SimpleNamespace(fetchall=lambda: [("rsi", 45, observed),
+                                              ("unconfigured", 20, observed)]),
+        ]
+        service = SetupMarketMatchService(SimpleNamespace(
+            execute=AsyncMock(side_effect=results),
+        ))
+        moments = {}
+        await service._source_is_fresh(7, "BTC", "technical", {
+            "calculated_at": now,
+            "indicator_evidence": {"technical": {
+                "rsi": {"value": 45, "source_observed_at": observed.isoformat()},
+            }},
+        }, moments)
+        assert moments == {"technical": {"rsi": observed.isoformat()}}
+
+    asyncio.run(run())
+
+
 def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
     async def run():
         service = object.__new__(execution_module.FinnV2ToolExecutionService)

@@ -45,7 +45,7 @@ class SetupMarketMatchService:
         return weights
 
     async def _source_is_fresh(self, user_id: int, symbol: str, category: str,
-                               row: dict) -> bool:
+                               row: dict, source_moments: dict | None = None) -> bool:
         table, name_column = {
             "macro": ("macro_data", "name"),
             "technical": ("technical_indicators", "indicator"),
@@ -66,6 +66,13 @@ class SetupMarketMatchService:
             WHERE user_id = :user_id {asset_clause}
             ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
         """), parameters)
+        observations = result.fetchall()
+        if source_moments is not None:
+            configured_names = {str(item[0]).casefold() for item in configured}
+            source_moments[category] = {
+                str(item[0]): item[2].isoformat() if item[2] is not None else None
+                for item in observations if str(item[0]).casefold() in configured_names
+            }
         evidence = row.get("indicator_evidence") or {}
         if isinstance(evidence, str):
             try:
@@ -73,7 +80,7 @@ class SetupMarketMatchService:
             except json.JSONDecodeError:
                 evidence = {}
         return score_snapshot_is_current(
-            category, symbol, configured, result.fetchall(),
+            category, symbol, configured, observations,
             evidence.get(category) if isinstance(evidence, dict) else None,
             row.get("calculated_at"),
         )
@@ -106,6 +113,7 @@ class SetupMarketMatchService:
             score_key: "missing_score" if value is None else "unverified"
             for score_key, value in stored_scores.items()
         }
+        component_source_observed_at: dict[str, dict] = {}
         if weights is None:
             source_status = "invalid_weights"
         elif row and self.daily_rows is not None:
@@ -123,7 +131,9 @@ class SetupMarketMatchService:
                 value = stored_scores[score_key]
                 if value is not None:
                     component_source_status[score_key] = (
-                        "fresh" if await self._source_is_fresh(user_id, symbol, category, row)
+                        "fresh" if await self._source_is_fresh(
+                            user_id, symbol, category, row, component_source_observed_at,
+                        )
                         else "stale_source"
                     )
             if weights is not None and all(
@@ -161,6 +171,7 @@ class SetupMarketMatchService:
             "benchmark_weights": weights,
             "reported_scores": reported_scores,
             "component_source_status": component_source_status,
+            "component_source_observed_at": component_source_observed_at,
             "matches": matches,
         }
 

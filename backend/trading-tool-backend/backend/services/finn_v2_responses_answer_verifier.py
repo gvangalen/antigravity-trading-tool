@@ -2812,7 +2812,7 @@ class FinnResponsesAnswerVerifier:
             )
         confirmed_action = {
             key: recent_action_result.get(key)
-            for key in ("operation_id", "entity_type", "canonical_name", "result_status")
+            for key in ("operation_id", "entity_type", "canonical_name", "previous_name", "result_status")
             if recent_action_result and recent_action_result.get(key) is not None
         }
         general_education = (
@@ -3326,6 +3326,8 @@ class FinnResponsesAnswerVerifier:
                 " A confirmed_action_result is verified persisted evidence of the object just saved. "
                 "For a claim about which object was saved, its exact canonical_name must match this "
                 "result; a short guided slot answer is not an object's name unless this result says so. "
+                "If previous_name is present, it proves the confirmed rename from that old name "
+                "to canonical_name; it does not prove any other field was unchanged. "
                 "Do not invent saved object names from conversation text. This action result proves "
                 "only object identity and successful persistence, not its current asset, timeframe, "
                 "frequency, amount, currency or other fields. Previous chat text and a draft are "

@@ -19,6 +19,12 @@ class FinnV2FreshnessService:
         if as_of is None:
             return "unknown"
         now = datetime.now(timezone.utc)
+        if tool_name in {"read_asset_scores", "read_setup_market_matches"} and isinstance(as_of, date) and not isinstance(as_of, datetime):
+            # These tools expose a daily report date, not a midnight source
+            # observation. Component source freshness is checked separately
+            # by SetupMarketMatchService. An arbitrary rolling 24-hour check
+            # on midnight would contradict that same daily benchmark.
+            return "fresh" if as_of == now.date() else "stale"
         candidate = self._normalized_datetime(as_of)
         age_seconds = (now - candidate).total_seconds()
         return "fresh" if age_seconds <= max_age else "stale"
