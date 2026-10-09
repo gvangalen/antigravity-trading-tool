@@ -58,7 +58,7 @@ explicit reason, persisted before input collection or tool planning.
 | `delete_bot` | `CREATE_PROPOSAL`, delete | `bot_id` | Owner-scoped linked bot | V2 proposal, confirmation and `BotService.delete_bot_config`; disabled by default |
 | `deactivate_bot` | `ACTION_PROPOSAL`, update | `bot_id` | Owner-scoped linked bot and status | V2 proposal, confirmation and a non-live inactive update; disabled by default |
 | `read_latest_report` | `READ`, read | Canonical active/referenced asset | Owner-scoped `daily_reports` metadata through `ReportToolAdapter` | Read-only; no report generation |
-| `read_review_history` | `READ`, read | Canonical active/referenced asset | Owner-scoped `ai_reflections` through `ReviewToolAdapter` | Read-only; no reflection generation |
+| `read_review_history` | `READ`, read | Canonical active/referenced asset | Owner-scoped `bot_decisions` through `ReviewToolAdapter` | Read-only; no reflection generation |
 | `evaluate_review_history` | `EVALUATE`, evaluate | Canonical active/referenced asset | Released review-history evidence | Advice-only response; no reflection generation |
 
 `generate_strategy` is not a public FINN V2 operation. Existing legacy strategy

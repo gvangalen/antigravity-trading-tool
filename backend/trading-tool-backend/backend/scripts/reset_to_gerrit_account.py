@@ -105,7 +105,6 @@ ACTIONS: list[TableAction] = [
     sql_user("conversation_state"),
     sql_user("ai_pending_actions"),
     sql_user("ai_intelligence_events"),
-    sql_user("ai_reflections"),
     sql_user("finn_product_events"),
     sql_user("regime_memory"),
     sql_user("trading_advice"),
