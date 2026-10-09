@@ -1,4 +1,3 @@
-from backend.api.ai_assistant_api import _normalize_finn_response_contract
 from backend.services.finn_product_analytics_service import FinnProductAnalyticsService
 from backend.services.finn_plan_service import FinnPlanService
 import asyncio
@@ -23,33 +22,6 @@ def test_response_trace_lookup_is_user_scoped_and_uses_memory_fallback(monkeypat
     assert service.get_response_trace(user_id=7, trace_id="trace-private")["trace_id"] == "trace-private"
     assert service.get_response_trace(user_id=8, trace_id="trace-private") is None
     assert service.get_response_trace(user_id=7, trace_id="missing") is None
-
-
-def test_normalize_finn_response_contract_promotes_primary_fields():
-    payload = _normalize_finn_response_contract(
-        {
-            "response": "Finn kan dit verder uitleggen.",
-            "analysis": {
-                "summary": "Korte conclusie",
-                "risk_summary": "Risico blijft beheersbaar.",
-                "next_best_actions": [{"label": "Review setup opnieuw"}],
-                "review_reason": "De setup wijkt af van je plan.",
-            },
-        }
-    )
-
-    assert payload["summary"] == "Korte conclusie"
-    assert payload["risk_summary"] == "Risico blijft beheersbaar."
-    assert payload["next_best_action"] == "Review setup opnieuw"
-    assert payload["review_reason"] == "De setup wijkt af van je plan."
-
-
-def test_normalize_finn_response_contract_uses_response_as_summary_fallback():
-    payload = _normalize_finn_response_contract({"response": "Dit is de hoofduitleg."})
-
-    assert payload["summary"] == "Dit is de hoofduitleg."
-    assert payload["risk_summary"] is None
-    assert payload["next_best_action"] is None
 
 
 def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():

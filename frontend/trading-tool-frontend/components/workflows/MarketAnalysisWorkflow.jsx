@@ -22,7 +22,6 @@ import { useTechnicalData } from "@/hooks/useTechnicalData";
 import { useScoresData } from "@/hooks/useScoresData";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
-import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketTerminalHUD from "@/components/market/MarketTerminalHUD";
@@ -441,10 +440,6 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
             />
           </DashboardErrorBoundary>
 
-          <DashboardErrorBoundary>
-            <AgentInsightPanel category="market" symbol={activeSymbol} />
-          </DashboardErrorBoundary>
-
           <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-[#0f172a] lg:p-6">
             <div className="flex w-full items-center justify-between gap-4">
               <div>
@@ -491,10 +486,6 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
             />
           </DashboardErrorBoundary>
 
-          <DashboardErrorBoundary>
-            <AgentInsightPanel category="macro" symbol={activeSymbol} />
-          </DashboardErrorBoundary>
-
           <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-[#0f172a] lg:p-6">
             <div className="flex w-full items-center justify-between gap-4">
               <div>
@@ -537,10 +528,6 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
               risk={technical?.risk}
               loading={technicalLoading || !technical}
             />
-          </DashboardErrorBoundary>
-
-          <DashboardErrorBoundary>
-            <AgentInsightPanel category="technical" symbol={activeSymbol} />
           </DashboardErrorBoundary>
 
           <SectionShell
@@ -688,10 +675,6 @@ export default function MarketAnalysisWorkflow({ initialStep = "market" }) {
                   ))}
                 </div>
               </div>
-
-              <DashboardErrorBoundary>
-                <AgentInsightPanel category="market" symbol={activeSymbol} />
-              </DashboardErrorBoundary>
             </div>
           </div>
         </SectionShell>

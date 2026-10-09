@@ -8,6 +8,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `LOCAL_VALIDATED`; implementation branch is pushed. Candidate CI, merge, Auto Deploy, public SHA checks, and independent authenticated QA are pending. |
+| Goal | Make FINN the only user-facing trading coach: retire unused legacy assistant, insight, reflection, and flow-registry paths; give chat, Today, reports, web, and mobile the shared FINN context; preserve Score 2.0 semantics and Paper-bot execution boundaries. |
+| Candidate branch | `codex/finn-unify-coach-context`. |
+| Candidate implementation SHA | `d25603987` (local and pushed branch head before this status update). |
+| Production SHA | Not deployed. The previous score-freshness candidate is superseded for the next release; its authenticated QA acceptance was not recorded. |
+| Last updated | 2026-10-09. |
+
+Build removed the obsolete assistant service, gateway, insight endpoint and UI requests, unused flow registry, old reflection and insight tables, and stale assistant-only scripts. The active chat and action routes use FINN V2 visible delivery. Web and mobile read the FINN mission-control briefing rather than a separate insight generator. The existing deterministic bot worker and ScoreToolAdapter remain because they execute Paper decisions and read verified Score 2.0 evidence; they are not separate conversational agents. FINN Today and unified reports use Luna through Responses with reasoning `none`. Auxiliary operation selection and answer-boundary helpers still have separate model calls and are not represented here as a single Luna call.
+
+Measured local evidence: root backend suite **3102 passed, 3 skipped** after the completed removal batch; frontend production build, typecheck, i18n lint/tests, command and proposal tests, and high-severity audit passed; mobile typecheck, lint, web/iOS/Android bundle smokes passed (lint emitted existing warnings). A fresh isolated PostgreSQL/Redis/API/prefork-Celery stack migrated without the retired tables. The worker-driven safe-action matrix passed **16/16** with zero broker orders, live trading calls, live bots, or production connections; artifact SHA-256 `51175b894912abd11f00db573c1299a77ab50e4119396f303dc8069ddd64921b`. Real-provider selector development passed **18/18**, artifact SHA-256 `413719de087d1f620b71cb892c4f721bbf947d637ec7173a70057b41bb23109a`; regression passed **109/109**, artifact SHA-256 `2bd8170692b257e46f29bf2d117ac81b9b7ec3af247088ce24e91edef708f095`. Both provider runs had zero provider, schema, parse, validation, or timeout failures. These measurements do not establish authenticated production behavior or an actual score-driven Paper decision.
+
+Independent QA, after deployment and user initiation, should test a new-owner onboarding path through FINN Today, chat, saved plans, dated Score 2.0 evidence and daily/period reports; verify no old insight card appears in web or mobile. Check incomplete and complete benchmark cases, one controlled Paper decision, and that actions still require confirmation. No live order. Build did not access the protected QA fixture or sealed holdout.
+
+## Previous Release (score freshness parity)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate and main CI passed, Auto Deploy succeeded, and backend/frontend public endpoints reported the merge SHA. Authenticated live acceptance remains pending. |
 | Goal | Align per-indicator source freshness in Analyse and FINN, show verified score contributions consistently, localize RSI explanation, and distinguish no bot evaluation from data refresh. |
 | Candidate branch | `codex/score-freshness-parity`. |

@@ -470,7 +470,7 @@ export function FinnScreen({
   const activeInsight = insightMatchesActiveAsset ? insightResource.data : undefined;
   const activeBotDecision = mapMobileOverviewBotDecision(overviewResource.data);
   const activeAssetOverview = overviewResource.data?.watchlist.find((asset) => asset.symbol === context.asset);
-  const activeBriefingText = buildActiveBriefingText(context.asset, activeInsight, activeAssetOverview);
+  const activeBriefingText = buildActiveBriefingText(context.asset, activeInsight);
   const starterPrompts = useMemo(
     () => [
       `Vat ${context.asset} vandaag samen`,
@@ -788,7 +788,6 @@ export function FinnScreen({
 function buildActiveBriefingText(
   symbol: string,
   insight?: AssistantInsightResponse,
-  asset?: MobileOverviewAsset,
 ) {
   const greeting = withoutSurroundingQuotes(insight?.greeting ?? '');
   const marketInsight = conciseInsightText(insight?.market_insight);
@@ -801,21 +800,7 @@ function buildActiveBriefingText(
       .trim();
   }
 
-  if (!asset) {
-    return `Hoi Henk, ${symbol} is nu de actieve context. Ik laad de briefing opnieuw zodat mijn analyse op deze asset aansluit.`;
-  }
-
-  const score = asset.benchmark_score == null ? 'onbekend' : Math.round(asset.benchmark_score);
-  const change =
-    typeof asset.change_24h === 'number'
-      ? `${asset.change_24h >= 0 ? '+' : ''}${asset.change_24h.toFixed(2)}%`
-      : '—';
-  const risk =
-    (asset.setup_match_score != null && asset.setup_match_score < 45) || (asset.technical_score != null && asset.technical_score < 45)
-      ? 'De structuur is nog zwak, dus ik zou wachten op bevestiging.'
-      : 'De context is bruikbaar, maar ik blijf risico en setup-validiteit bewaken.';
-
-  return `Hoi Henk, ${symbol} is nu actief. Composite score ${score}, 24h ${change}. ${risk}`;
+  return `Voor ${symbol} is nog geen opgeslagen FINN-briefing beschikbaar. Controleer Analyse voor actuele scores en bespreek je plan met FINN.`;
 }
 
 function conciseInsightText(value?: Record<string, string> | null) {

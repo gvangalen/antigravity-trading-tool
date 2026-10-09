@@ -9,15 +9,14 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_assistant_execute_route_has_dedicated_rate_limit_and_reasoning_redaction():
+def test_assistant_execute_route_has_dedicated_rate_limit_and_no_reasoning_payload():
     source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
 
     assert "execute_rate_limiter = InMemoryRateLimiter" in source
     assert "def _apply_assistant_execute_rate_limit" in source
-    assert "def _redact_assistant_reasoning" in source
-    assert 'payload["reasoning"] = None' in source
     assert "_apply_assistant_execute_rate_limit(user_id=user_id, raw_request=request)" in source
-    assert "reasoning = None" in source
+    assert 'action_id = payload.get("action_id")' in source
+    assert 'payload.get("reasoning")' not in source
 
 
 def test_sensitive_manual_order_routes_have_rate_limits():

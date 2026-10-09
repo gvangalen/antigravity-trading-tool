@@ -9,7 +9,6 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import TechnicalTerminalHUD from "@/components/technical/TechnicalTerminalHUD";
 import TechnicalTabs from "@/components/technical/TechnicalTabs";
 import TechnicalTerminalGrid from "@/components/technical/TechnicalTerminalGrid";
-import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 
@@ -212,9 +211,6 @@ export default function TechnicalPage() {
            <Brain size={14} className="text-slate-400 dark:text-slate-500" />
            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{technicalT.analysis}</span>
         </div>
-        <DashboardErrorBoundary>
-          <AgentInsightPanel category="technical" symbol={selectedAsset} />
-        </DashboardErrorBoundary>
       </div>
 
       <div className="grid grid-cols-1 gap-12 pt-8 pb-24">

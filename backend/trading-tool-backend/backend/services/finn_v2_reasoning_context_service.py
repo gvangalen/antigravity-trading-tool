@@ -339,7 +339,10 @@ class FinnV2ReasoningContextService:
                 "scope_by_category": source.get("scope_by_category") or {},
             }
         if tool_name == "read_asset_scores":
-            return {"symbol": payload.get("symbol"), "daily_scores": payload.get("daily_scores"), "master_score": payload.get("master_score")}
+            return {key: payload.get(key) for key in (
+                "symbol", "as_of", "source_status", "reported_scores", "component_source_status",
+                "benchmark_score", "benchmark_weights",
+            )}
         if tool_name == "read_market_snapshot":
             return {key: payload.get(key) for key in ["symbol", "price", "change_24h", "volume", "source", "as_of"] if payload.get(key) is not None}
         if tool_name == "read_macro_snapshot":

@@ -17,7 +17,6 @@ import { useScoresData } from "@/hooks/useScoresData";
 import MacroTabs from "@/components/macro/MacroTabs";
 import MacroIndicatorScoreView from "@/components/macro/MacroIndicatorScoreView";
 import MacroTerminalHUD from "@/components/macro/MacroTerminalHUD";
-import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import { useModal } from "@/components/modal/ModalProvider";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
@@ -269,9 +268,6 @@ export default function MacroPage() {
            <Brain size={14} className="text-slate-400 dark:text-slate-500" />
            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{macroT.analysis}</span>
         </div>
-        <DashboardErrorBoundary>
-          <AgentInsightPanel category="macro" symbol={selectedAsset} />
-        </DashboardErrorBoundary>
       </div>
 
       <div className="grid grid-cols-1 gap-12 pt-8 pb-24">

@@ -14,8 +14,6 @@ import {
 
 import StrategyList from "@/components/strategy/StrategyList";
 import StrategyForm from "@/components/strategy/StrategyForm";
-import ActiveStrategyTodayCard from "@/components/strategy/ActiveStrategyTodayCard";
-import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import Drawer from "@/components/ui/Drawer";
@@ -150,18 +148,6 @@ export default function StrategiesWorkspaceSection() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <DashboardErrorBoundary>
-            <AgentInsightPanel category="strategy" key={refreshKey} />
-          </DashboardErrorBoundary>
-        </div>
-        <div className="lg:col-span-1">
-          <DashboardErrorBoundary>
-            <ActiveStrategyTodayCard />
-          </DashboardErrorBoundary>
-        </div>
-      </div>
 
       <section className="rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_50px_-40px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-[#0f172a]">
         <div className="flex items-center justify-between gap-4 border-b border-slate-100 p-6 dark:border-slate-800">

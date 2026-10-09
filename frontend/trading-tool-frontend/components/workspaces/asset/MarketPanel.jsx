@@ -16,7 +16,6 @@ import MarketTerminalHUD from "@/components/market/MarketTerminalHUD";
 import TechnicalTerminalGrid from "@/components/technical/TechnicalTerminalGrid";
 import MarketSevenDayTable from "@/components/market/MarketSevenDayTable";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
-import AgentInsightPanel from "@/components/agents/AgentInsightPanel";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
@@ -170,9 +169,6 @@ export default function MarketPage() {
             <div className="w-8 h-0.5 bg-blue-600/30" />
             <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em] opacity-90">{marketT.analysis.replace("{symbol}", activeSymbol)}</span>
          </div>
-         <DashboardErrorBoundary>
-           <AgentInsightPanel category="market" symbol={activeSymbol} />
-         </DashboardErrorBoundary>
       </div>
 
       <div className="grid grid-cols-1 gap-20 pt-16">

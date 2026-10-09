@@ -40,7 +40,7 @@ explicit reason, persisted before input collection or tool planning.
 | `watchlist_add` | `ACTION_PROPOSAL`, add | `asset` | Active asset and watchlist evidence | V2 proposal, confirmation and conflict-safe adapter; database uniqueness is `(user_id, symbol)` |
 | `watchlist_remove` | `ACTION_PROPOSAL`, remove | `asset` | Active asset and watchlist evidence | V2 proposal, confirmation and owner-scoped remove adapter |
 | `select_asset` | `ACTION_PROPOSAL`, update | `asset` | Canonical asset and authenticated preference scope | V2 proposal, confirmation and `UserRepository.update_ai_preferences`; disabled by default |
-| `read_scores` | `READ`, read | Active asset from the canonical resolver when available | Existing `ScoreRepository` snapshot via `ScoreToolAdapter` as `AssetScoresData`, including source and as-of information | Read-only; no score recomputation, proposal or write |
+| `read_scores` | `READ`, read | Active asset from the canonical resolver when available | Current source-verified Score 2.0 benchmark through `FinnSharedContextService` and `ScoreToolAdapter` as `AssetScoresData`; missing or stale components remain null | Read-only; no score recomputation, proposal or write |
 | `explain_score` | `EVALUATE`, evaluate | Active or referenced score context | Stored score evidence with optional profile, preferences, setup, strategy and indicator context | Read-only evidence-grounded explanation; no new score, proposal or write |
 | `read_portfolio` | `READ`, read | Server-issued authenticated user; optional canonical asset filter | Existing owner-scoped `BotRepository.get_portfolio_intelligence_context` through `PortfolioToolAdapter` as `PortfolioData` | Read-only; no rebalance, order or proposal |
 | `evaluate_portfolio` | `EVALUATE`, evaluate | Server-issued authenticated user; optional canonical asset filter | Portfolio, profile and preferences; optional plan, market and indicator evidence | Advice-only verified or limited response; no rebalance, order, proposal or write |
@@ -58,7 +58,7 @@ explicit reason, persisted before input collection or tool planning.
 | `delete_bot` | `CREATE_PROPOSAL`, delete | `bot_id` | Owner-scoped linked bot | V2 proposal, confirmation and `BotService.delete_bot_config`; disabled by default |
 | `deactivate_bot` | `ACTION_PROPOSAL`, update | `bot_id` | Owner-scoped linked bot and status | V2 proposal, confirmation and a non-live inactive update; disabled by default |
 | `read_latest_report` | `READ`, read | Canonical active/referenced asset | Owner-scoped `daily_reports` metadata through `ReportToolAdapter` | Read-only; no report generation |
-| `read_review_history` | `READ`, read | Canonical active/referenced asset | Owner-scoped `ai_reflections` through `ReviewToolAdapter` | Read-only; no reflection generation |
+| `read_review_history` | `READ`, read | Canonical active/referenced asset | Owner-scoped `bot_decisions` through `ReviewToolAdapter` | Read-only; no reflection generation |
 | `evaluate_review_history` | `EVALUATE`, evaluate | Canonical active/referenced asset | Released review-history evidence | Advice-only response; no reflection generation |
 
 `generate_strategy` is not a public FINN V2 operation. Existing legacy strategy
@@ -92,7 +92,8 @@ conversation resolver defines a parallel action schema.
 
 Source scopes are declared in the registry and resolved by
 `finn_v2_source_registry.py`. The score scope reads the existing
-`daily_scores`/`ai_category_insights` source through `ScoreRepository`.
+the verified Score 2.0 daily scores, dated indicator measurements and owner
+configurations through `SetupMarketMatchService` and `ScoreToolAdapter`.
 
 The current deployed portfolio implementation has no `PortfolioRepository` or
 `portfolio_items` reader. Its canonical V1 portfolio view is the authenticated

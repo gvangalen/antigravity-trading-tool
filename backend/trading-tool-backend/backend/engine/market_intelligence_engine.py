@@ -317,13 +317,8 @@ def compute_market_intelligence(
         
     volatility_score = _calculate_true_volatility_score(raw_vol_proxy)
 
-    setup_score = round(
-        _clamp(
-            float(scores.get("setup_score", 10)),
-            0.0,
-            100.0,
-        )
-    )
+    raw_setup_score = _safe_float(scores.get("setup_score"))
+    setup_score = round(_clamp(raw_setup_score, 0.0, 100.0)) if raw_setup_score is not None else None
 
     # -------------------------------------------------
     # Final output
@@ -381,7 +376,7 @@ def compute_market_intelligence(
         "metrics": {
             "market_pressure": market_pressure_score,
             "transition_risk": transition_risk_score,
-            "setup_quality": int(setup_score),
+            "setup_quality": setup_score,
             "volatility": volatility_score,
             "trend_strength": trend_strength_score,
         },
@@ -433,7 +428,7 @@ def get_market_intelligence(
             "metrics": {
                 "market_pressure": 50,
                 "transition_risk": 50,
-                "setup_quality": 10,
+                "setup_quality": None,
                 "volatility": 50,
                 "trend_strength": 50,
             },

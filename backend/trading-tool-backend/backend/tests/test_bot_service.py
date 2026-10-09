@@ -8,6 +8,75 @@ from backend.schemas.bot_schema import BotManualOrderSchema
 from backend.services.bot_service import BotService
 
 
+def test_bot_today_uses_verified_score_2_components_without_changing_decisions(monkeypatch):
+    class Repo:
+        async def get_active_bots_with_setups(self, user_id):
+            return [{"id": 8, "name": "Paper", "symbol": "ETH", "timeframe": "1D",
+                     "setup_type": "dca", "setup_name": "ETH DCA"}]
+
+        async def get_bot_decisions_by_date(self, user_id, day):
+            return []
+
+        async def get_daily_scores_row(self, *args):
+            raise AssertionError("raw daily scores must not drive the bot summary")
+
+    calls = []
+
+    async def verified(self, user_id, symbol, *, setups=None):
+        calls.append((user_id, symbol, setups))
+        return {"reported_scores": {"macro_score": None, "technical_score": 40,
+                                     "market_score": 30}}
+
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService.for_asset",
+        verified,
+    )
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+
+    result = asyncio.run(service.get_bot_today(7, "ETH", lean=True))
+
+    assert calls == [(7, "ETH", [])]
+    assert result["scores"] == {"macro": None, "technical": 40,
+                                "market": 30, "setup": None}
+    assert result["decisions"] == []
+
+
+def test_bot_today_does_not_relabel_an_old_decision_score_as_current(monkeypatch):
+    class Repo:
+        async def get_active_bots_with_setups(self, user_id):
+            return [{"id": 8, "name": "Paper", "symbol": "ETH", "timeframe": "1D",
+                     "setup_type": "trade", "setup_name": "ETH Plan"}]
+
+        async def get_bot_decisions_by_date(self, user_id, day):
+            return [{"id": 12, "bot_id": 8, "symbol": "ETH", "action": "hold",
+                     "confidence": "low", "scores_json": json.dumps({
+                         "macro": 10, "market": 10, "technical": 10,
+                         "combined": 10, "setup_match": {"score": 10},
+                     }), "reason_json": "[]", "setup_id": 9, "strategy_id": 10,
+                     "status": "planned", "created_at": None, "updated_at": None}]
+
+    async def verified(self, user_id, symbol, *, setups=None):
+        return {"reported_scores": {"macro_score": None, "technical_score": 40,
+                                     "market_score": 30}}
+
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService.for_asset", verified,
+    )
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+
+    result = asyncio.run(service.get_bot_today(7, "ETH", lean=True))
+
+    assert result["scores"]["market"] == 30
+    old = result["decisions"][0]
+    assert old["action"] == "hold"
+    assert old["scores_json"]["score_semantics"] == "legacy_unverified"
+    assert old["scores_json"]["market"] is None
+    assert old["scores_json"]["combined"] is None
+    assert old["setup_match"] is None
+
+
 class _FakeResult:
     def __init__(self, row=None):
         self._row = row

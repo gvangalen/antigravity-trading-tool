@@ -1045,29 +1045,23 @@ class BotService:
     # ==========================
     async def get_bot_today(self, user_id: int, symbol: str = "BTC", *, lean: bool = False) -> dict:
         today = date.today()
-        daily_scores = await self.repository.get_daily_scores_row(user_id, today) or {
-            "macro": 10, "technical": 10, "market": 10, "setup": 10
+        # The bot summary must use the same source-verified Score 2.0 view as
+        # Analyse and FINN. A score stored for today can still have stale raw
+        # indicator evidence and must not be displayed as current.
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, symbol, setups=[]
+        )
+        reported = assessment["reported_scores"]
+        daily_scores = {
+            "macro": reported["macro_score"],
+            "technical": reported["technical_score"],
+            "market": reported["market_score"],
+            # A setup match belongs to a specific setup/bot decision, not to
+            # the asset-wide score header.
+            "setup": None,
         }
-        
-        if not lean:
-            # 🔥 SYNC: Probeer master insight op te halen voor consistente scores met Overview
-            from backend.infrastructure.repositories.score_repository import ScoreRepository
-            score_repo = ScoreRepository(self.session)
-            master = await score_repo.get_master_score(user_id, symbol=symbol)
-            
-            if master and master.top_signals:
-                meta = master.top_signals
-                if isinstance(meta, str):
-                    try: meta = json.loads(meta)
-                    except: meta = {}
-                
-                domains = meta.get("domains", {})
-                if domains:
-                    # Overschrijf raw scores met de AI-geïnterpreteerde domein scores
-                    if "macro" in domains: daily_scores["macro"] = domains["macro"].get("score", daily_scores["macro"])
-                    if "technical" in domains: daily_scores["technical"] = domains["technical"].get("score", daily_scores["technical"])
-                    if "market" in domains: daily_scores["market"] = domains["market"].get("score", daily_scores["market"])
-                    if "setup" in domains: daily_scores["setup"] = domains["setup"].get("score", daily_scores["setup"])
         
         bot_rows = await self.repository.get_active_bots_with_setups(user_id)
         if not bot_rows:
@@ -1090,6 +1084,13 @@ class BotService:
             if not bot: continue
             
             scores_payload = self._safe_json(r["scores_json"], {})
+            if scores_payload and scores_payload.get("score_semantics") != "verified_score_2":
+                # Old decisions can contain fabricated 10/50 placeholders.
+                # Preserve the decision record, never present those values as
+                # current Score 2.0 evidence.
+                scores_payload = {**scores_payload, **{
+                    key: None for key in ("macro", "technical", "market", "setup", "combined", "setup_match")
+                }, "score_semantics": "legacy_unverified"}
             reasons_payload = self._safe_json(r["reason_json"], [])
             
             trade_plan = {"entry_plan": [], "stop_loss": {}, "targets": [], "risk": {}}
@@ -1152,10 +1153,13 @@ class BotService:
             scores = self._safe_json(r["scores_json"], {})
             reasons = self._safe_json(r["reason_json"], [])
             
-            setup_match = scores.get("setup_match") or {
+            setup_match = (
+                scores.get("setup_match")
+                if scores.get("score_semantics") == "verified_score_2" else None
+            ) or {
                 "status": "no_snapshot", "summary": "Geen strategie context",
                 "detail": "Er is geen actief strategy snapshot beschikbaar.",
-                "score": 10, "confidence": "low",
+                "score": None, "confidence": "low",
             }
             out.append({
                 "decision_id": r["id"],

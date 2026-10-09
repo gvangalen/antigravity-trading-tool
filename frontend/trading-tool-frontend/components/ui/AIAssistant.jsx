@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -494,11 +494,8 @@ function AIAssistantContent({
   const [messages, setMessages] = useState([]);
   const messagesRef = useRef(messages);
   const [preferences, setPreferences] = useState({});
-  const [insight, setInsight] = useState(null);
-  const [insightLoading, setInsightLoading] = useState(false);
   const [stableBriefingText, setStableBriefingText] = useState("");
   const [workspaceSnapshot, setWorkspaceSnapshot] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [activeState, setActiveState] = useState(null);
   const [contextMetric, setContextMetric] = useState(null);
   const [finnDraft, setFinnDraft] = useState(null);
@@ -520,15 +517,12 @@ function AIAssistantContent({
   const draftFormRef = useRef(null);
   const handledContextRequestRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
-  const insightCacheKeyRef = useRef("");
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
   const missionControlRequestRef = useRef(null);
   const missionControlRequestKeyRef = useRef("");
   const missionControlRequestGenerationRef = useRef(0);
-  const insightRequestRef = useRef(null);
-  const insightRequestKeyRef = useRef("");
   const finnStateRequestRef = useRef(null);
   const sharedSessionRestoreRef = useRef(false);
   const forceNewFinnConversationRef = useRef(false);
@@ -576,10 +570,8 @@ function AIAssistantContent({
   useEffect(() => {
     setPreferences({});
     setMessages([]);
-    setInsight(null);
     setStableBriefingText("");
     setWorkspaceSnapshot(null);
-    setLastUpdated(null);
     setActiveState(null);
     setContextMetric(null);
     setFinnDraft(null);
@@ -593,13 +585,10 @@ function AIAssistantContent({
     setAvailableFinnSessions([]);
     handledContextRequestRef.current = null;
     loadedFinnStateRef.current = false;
-    insightCacheKeyRef.current = "";
     missionControlCacheKeyRef.current = "";
     missionControlRequestRef.current = null;
     missionControlRequestKeyRef.current = "";
     missionControlRequestGenerationRef.current += 1;
-    insightRequestRef.current = null;
-    insightRequestKeyRef.current = "";
     finnStateRequestRef.current = null;
     sharedSessionRestoreRef.current = false;
   }, [user?.id]);
@@ -627,7 +616,6 @@ function AIAssistantContent({
         },
       ]);
 
-      loadInsight();
       loadMissionControl();
       emitFinnRefreshSignals();
     };
@@ -874,75 +862,8 @@ function AIAssistantContent({
     return score;
   };
 
-  const buildBriefingText = (sourceInsight) => {
-    const openReviews = countUniqueReviewCandidates(missionControl);
-    const blockedCount = Number(missionControl?.summary?.blocked_count || 0);
-    const greetingName = user?.first_name || "Trader";
-    const primaryItem = primaryCoachingItem || missionControl?.bot_review_queue?.[0] || missionControl?.workqueue?.[0] || null;
-    const symbol = String(
-      isAssetAnalysisPage
-        ? context?.symbol || globalSymbol || primaryItem?.asset || "BTC"
-        : primaryItem?.asset || context?.symbol || globalSymbol || "BTC"
-    ).trim().toUpperCase();
-    const postureLabel = String(
-      missionControl?.summary?.posture ||
-      sourceInsight?.market_insight?.posture ||
-      sourceInsight?.bot_insight?.posture ||
-      ""
-    ).toLowerCase();
-    const cycleLabel = String(
-      sourceInsight?.market_insight?.structural_cycle ||
-      sourceInsight?.market_insight?.cycle ||
-      sourceInsight?.market_insight?.regime ||
-      ""
-    ).toLowerCase();
-    const nowHour = new Date().getHours();
-
-    const greetingKey = nowHour < 12 ? "morning" : nowHour < 18 ? "afternoon" : "evening";
-    const greetingLine = `${at(`briefing.greeting.${greetingKey}`, "", { name: greetingName })} ${greetingName}.`;
-
-    let marketLine = at("briefing.market.default", "", { symbol });
-    if (isInvestorLike) {
-      marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? at("briefing.market.investor.correction", "", { symbol })
-        : at("briefing.market.investor.steady", "", { symbol });
-    } else if (isSwingLike) {
-      marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? at("briefing.market.swing.correction", "", { symbol })
-        : at("briefing.market.swing.steady", "", { symbol });
-    } else if (isIntradayLike) {
-      marketLine = cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")
-        ? at("briefing.market.intraday.correction", "", { symbol })
-        : at("briefing.market.intraday.steady", "", { symbol });
-    } else if (cycleLabel.includes("correction") || postureLabel.includes("defensive") || postureLabel.includes("action_required")) {
-      marketLine = at("briefing.market.generic.correction", "", { symbol });
-    } else if (cycleLabel.includes("recovery") || postureLabel.includes("stable")) {
-      marketLine = at("briefing.market.generic.recovery", "", { symbol });
-    } else if (cycleLabel.includes("distribution")) {
-      marketLine = at("briefing.market.generic.distribution", "", { symbol });
-    }
-
-    const reviewCount = Math.max(openReviews || 0, isReviewCandidate(primaryItem) ? 1 : 0);
-    let reviewLine = at("briefing.review.none");
-    if (reviewCount === 1) {
-      reviewLine = at("briefing.review.one");
-    } else if (reviewCount > 1) {
-      reviewLine = at("briefing.review.many", "", { count: reviewCount });
-    } else if (blockedCount > 0) {
-      reviewLine = blockedCount === 1
-        ? at("briefing.review.blockingOne")
-        : at("briefing.review.blockingMany", "", { count: blockedCount });
-    }
-
-    const beginTarget = primaryItem
-      ? humanizeMissionTitle(primaryItem).replace(/^Review\s+/i, "Review ")
-      : blockedCount > 0
-        ? at("briefing.begin.blockingIssue")
-        : at("briefing.begin.nextSafeStep");
-    const beginLine = at("briefing.begin.prefix", "", { target: beginTarget });
-
-    return [greetingLine, marketLine, reviewLine, beginLine].filter(Boolean).join("\n");
-  };
+  const buildBriefingText = () =>
+    String(missionControl?.finn_briefing?.summary || "").trim();
 
   const buildSnapshotBriefingText = (snapshot) => {
     const greetingName = user?.first_name || "Trader";
@@ -990,11 +911,6 @@ function AIAssistantContent({
       `Er is nog geen nieuwe marktanalyse voor ${symbol}; ik gebruik je profiel en opgeslagen plancontext wel al.`,
       "Nieuwe marktgegevens worden op de achtergrond verwerkt.",
     ].join("\n");
-  };
-
-  // Helper to get nested insight consistently
-  const getInsightField = (block, field) => {
-    return insight?.[block]?.[field] || insight?.[block.replace('_insight', '')]?.[field];
   };
 
   // 🛰️ Active Entities Context (Phase 2 Sync)
@@ -1072,7 +988,6 @@ function AIAssistantContent({
   }, [user?.id, context.page_type, context.symbol, context.timeframe, pathname, globalSymbol]);
 
   useEffect(() => {
-    insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
     const userScope = String(user?.id || "anonymous");
     const missionControlScope = isAssetAnalysisPage
       ? normalizeScopedAssetSymbol(context.symbol || globalSymbol) || "UNKNOWN"
@@ -1664,14 +1579,8 @@ function AIAssistantContent({
     return Boolean(risk || next || reason || (summary && summary !== message?.text));
   };
 
-  const getBriefingFollowUpActions = () => {
-    return normalizeFollowUpActions(
-      insight?.follow_up_actions ||
-      insight?.state?.analysis?.follow_up_actions ||
-      insight?.suggested_actions ||
-      []
-    );
-  };
+  const getBriefingFollowUpActions = () =>
+    normalizeFollowUpActions(missionControl?.finn_briefing?.suggested_actions || []);
 
   const getMissionOpenActions = () => {
     return normalizeFollowUpActions([
@@ -4022,9 +3931,6 @@ function AIAssistantContent({
   useEffect(() => {
     if (isOpen) {
       loadMissionControl();
-      if (isAssetAnalysisPage) {
-        loadInsight();
-      }
       if (!previewSectionsOnly) {
         loadFinnState();
       }
@@ -4035,11 +3941,6 @@ function AIAssistantContent({
       loadedFinnStateRef.current = false;
     }
   }, [isOpen, isAssetAnalysisPage, pathname]);
-
-  useEffect(() => {
-    if (!isOpen || !isAssetAnalysisPage) return;
-    void loadInsight();
-  }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
 
   useEffect(() => {
     if (!isOpen || !isAssetAnalysisPage) return;
@@ -4213,59 +4114,6 @@ function AIAssistantContent({
       }
     })();
     return finnStateRequestRef.current;
-  }
-
-  async function loadInsight() {
-    const requestKey = insightCacheKeyRef.current || `finn-insight:${currentConversationStorageKey}`;
-    if (insightRequestRef.current && insightRequestKeyRef.current === requestKey) {
-      return insightRequestRef.current;
-    }
-    setInsightLoading(true);
-    if (!insight && typeof window !== "undefined" && requestKey) {
-      try {
-        const cached = window.sessionStorage.getItem(requestKey);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed && typeof parsed === "object") {
-            setInsight((current) => current || parsed);
-          }
-        }
-      } catch (err) {
-        console.warn("Finn insight cache read failed", err);
-      }
-    }
-    insightRequestKeyRef.current = requestKey;
-    insightRequestRef.current = (async () => {
-      try {
-        const res = await fetchAssistantInsight(context);
-        if (requestKey !== insightCacheKeyRef.current) {
-          return res;
-        }
-        setInsight(res);
-        setStableBriefingText(buildBriefingText(res));
-        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        if (res && typeof window !== "undefined" && requestKey) {
-          try {
-            window.sessionStorage.setItem(requestKey, JSON.stringify(res));
-          } catch (cacheError) {
-            console.warn("Finn insight cache write failed", cacheError);
-          }
-        }
-        return res;
-      } catch (err) {
-        console.error("Failed to fetch AI insight", err);
-        return null;
-      } finally {
-        if (requestKey === insightCacheKeyRef.current) {
-          setInsightLoading(false);
-        }
-        if (insightRequestKeyRef.current === requestKey) {
-          insightRequestRef.current = null;
-          insightRequestKeyRef.current = "";
-        }
-      }
-    })();
-    return insightRequestRef.current;
   }
 
   async function loadMissionControl({ force = false } = {}) {
@@ -5084,7 +4932,7 @@ function AIAssistantContent({
         if (typeof window !== "undefined" && missionControlCacheKeyRef.current) {
           window.sessionStorage.removeItem(missionControlCacheKeyRef.current);
         }
-        await Promise.all([loadInsight(), loadMissionControl({ force: true })]);
+        await loadMissionControl({ force: true });
         return;
       }
       const res = await executeAssistantAction(action);
@@ -5097,7 +4945,6 @@ function AIAssistantContent({
           text: res.message || "Daily scores ververst en geverifieerd.",
           intent: "daily_score_refresh_done",
         }]);
-        await loadInsight();
         await loadMissionControl();
         emitFinnRefreshSignals();
         return;
@@ -5112,7 +4959,6 @@ function AIAssistantContent({
           text: res.message || "Bot-decision gegenereerd. Review het voorstel voordat je iets uitvoert.",
           intent: "bot_decision_generated",
         }]);
-        await loadInsight();
         await loadMissionControl();
         emitFinnRefreshSignals();
         return;
@@ -5128,7 +4974,6 @@ function AIAssistantContent({
           intent: "bot_decision_skipped",
           operatorResolution: res.operator_resolution,
         }]);
-        await loadInsight();
         await loadMissionControl();
         emitFinnRefreshSignals();
         return;
@@ -5143,7 +4988,6 @@ function AIAssistantContent({
           text: res.message || uiText.botDecisionPaperExecuted,
           intent: "bot_decision_executed",
         }]);
-        await loadInsight();
         await loadMissionControl();
         emitFinnRefreshSignals();
         return;
@@ -5158,7 +5002,6 @@ function AIAssistantContent({
           isError: !res?.verified?.live_preflight,
           suggestedActions: executionConsoleAction ? [executionConsoleAction] : [],
         }]);
-        await loadInsight();
         await loadMissionControl();
         emitFinnRefreshSignals();
         return;
@@ -5233,7 +5076,6 @@ function AIAssistantContent({
           intent: "indicator_configured",
         }]);
         setFinnDraft(null);
-        await loadInsight();
         await loadMissionControl();
         emitFinnRefreshSignals();
         return;
@@ -5271,7 +5113,6 @@ function AIAssistantContent({
         intent: isBotOnly ? "bot_created" : (isStrategyOnly ? "strategy_created" : "plan_created"),
       }]);
       setFinnDraft(null);
-      await loadInsight();
       await loadMissionControl();
       emitFinnRefreshSignals();
     } catch (err) {
@@ -6171,8 +6012,8 @@ function AIAssistantContent({
     || stableBriefingText.toUpperCase().includes(activeBriefingSymbol);
   const resolvedBriefingText = normalizeVisibleBriefing(firstDashboardBriefingText
     || (stableBriefingMatchesAsset
-      ? stableBriefingText || buildBriefingText(insight) || ""
-      : buildBriefingText(insight) || ""));
+      ? stableBriefingText || buildBriefingText() || ""
+      : buildBriefingText() || ""));
   const workspaceBriefingLines = String(resolvedBriefingText)
     .split("\n")
     .map((line) => line.trim())
@@ -6289,20 +6130,9 @@ function AIAssistantContent({
     overlayMissionSections.reviewItems.length > 0 ||
     overlayMissionSections.riskItems.length > 0 ||
     Number(missionControl?.summary?.blocked_count || 0) > 0;
-  const marketStatusValue = (() => {
-    const summaryPosture = String(missionControl?.summary?.posture || "").toLowerCase();
-    const marketPosture = String(insight?.market_insight?.posture || "").toLowerCase();
-    const marketCycle = String(
-      insight?.market_insight?.structural_cycle ||
-      insight?.market_insight?.cycle ||
-      ""
-    ).toLowerCase();
-    return humanizeSurfaceStatus(
-      summaryPosture.includes("action_required")
-        ? marketPosture || marketCycle || "defensive"
-        : summaryPosture || marketPosture || marketCycle || "defensive"
-    );
-  })();
+  const planStatusValue = missionControl?.summary?.posture
+    ? humanizeSurfaceStatus(missionControl.summary.posture)
+    : uiText.notAvailable;
   const openItemsAreReviews =
     overlayMissionSections.todayItems.length > 0 &&
     overlayMissionSections.todayItems.every((item) => isReviewCandidate(item));
@@ -6323,14 +6153,13 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (!isOpen || isOnboarding) return;
-    const nextBriefing = buildBriefingText(insight);
+    const nextBriefing = buildBriefingText();
     if (nextBriefing) {
       setStableBriefingText(nextBriefing);
     }
   }, [
     isOpen,
     isOnboarding,
-    insight,
     missionControl,
     preferences?.first_name,
     context.symbol,
@@ -6579,7 +6408,7 @@ function AIAssistantContent({
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                           <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusMarket}</span>
                           <span className="text-slate-950 dark:text-slate-50">
-                            {marketStatusValue}
+                            {planStatusValue}
                           </span>
                         </div>
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
@@ -6848,14 +6677,14 @@ function AIAssistantContent({
                       </p>
                     )}
                   </div>
-                ) : insightLoading && !previewSectionsOnly ? (
+                ) : missionControlLoading && !previewSectionsOnly ? (
                   <div className="border-l-3 border-blue-500 pl-3 py-1 space-y-2 animate-pulse">
                     <div className="h-3 w-11/12 rounded-full bg-slate-200 dark:bg-slate-800" />
                     <div className="h-3 w-8/12 rounded-full bg-slate-200 dark:bg-slate-800" />
                   </div>
                 ) : (
                   <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
-                    {buildBriefingText(insight)}
+                    {buildBriefingText()}
                   </p>
                 )}
               </div>

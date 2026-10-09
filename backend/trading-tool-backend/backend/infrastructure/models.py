@@ -334,21 +334,6 @@ class DailyScore(Base):
     calculated_at = Column(DateTime(timezone=True), nullable=True)
     indicator_evidence = Column(JSON, nullable=True)
 
-class AiCategoryInsight(Base):
-    __tablename__ = 'ai_category_insights'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
-    category = Column(String, nullable=False)
-    date = Column(Date, nullable=False)
-    avg_score = Column(Numeric)
-    trend = Column(String)
-    bias = Column(String)
-    risk = Column(String)
-    summary = Column(String)
-    top_signals = Column(JSON)
-    symbol = Column(String, default="BTC")
-
 class PushSubscription(Base):
     __tablename__ = 'push_subscriptions'
 

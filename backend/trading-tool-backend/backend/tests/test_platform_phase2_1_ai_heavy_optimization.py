@@ -1,10 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
-from backend.services import ai_assistant_service as assistant_module
 from backend.services import finn_plan_service as finn_module
 from backend.services import report_service as report_module
-from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services.report_service import ReportService
 
@@ -221,40 +219,6 @@ def test_recent_governance_events_cache_reuses_same_window():
     assert session.calls == 1
     assert first == second
     assert first[0]["payload"]["headline"] == "Review BTC first"
-
-
-def test_assistant_context_cache_reuses_decision_context_reads():
-    assistant_module._assistant_context_cache.clear()
-    calls = {"score": 0, "setups": 0}
-
-    class _ScoreRepo:
-        async def get_master_score(self, user_id):
-            calls["score"] += 1
-            return SimpleNamespace(avg_score=83)
-
-    class _SetupRepo:
-        async def get_user_setups(self, user_id):
-            calls["setups"] += 1
-            return [SimpleNamespace(name="BTC Breakout")]
-
-    service = AiAssistantService(
-        score_repo=_ScoreRepo(),
-        setup_repo=_SetupRepo(),
-        report_repo=SimpleNamespace(),
-        bot_repo=SimpleNamespace(),
-        user_repo=SimpleNamespace(),
-        market_data_repo=SimpleNamespace(),
-        strategy_repo=SimpleNamespace(),
-        state_repo=SimpleNamespace(),
-        ai_gateway=SimpleNamespace(),
-    )
-
-    first = asyncio.run(service._build_context(11, "decision"))
-    second = asyncio.run(service._build_context(11, "decision"))
-
-    assert "CURRENT MASTER SCORE: 83" in first
-    assert first == second
-    assert calls == {"score": 1, "setups": 1}
 
 
 def test_daily_report_preview_cache_reuses_generated_preview(monkeypatch):

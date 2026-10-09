@@ -46,7 +46,7 @@ def test_assistant_execute_rejects_arbitrary_client_action_payloads():
 
     assert 'payload.get("action")' not in api_source
     assert "execute_issued_action" in api_source
-    assert "issue_response_actions" in api_source
+    assert "issue_response_actions" in _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
     assert 'body: JSON.stringify({ action_id: actionId })' in frontend_source
     assert "body: JSON.stringify({ action })" not in frontend_source
 

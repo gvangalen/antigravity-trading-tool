@@ -18,8 +18,13 @@ CREATE TABLE IF NOT EXISTS conversation_state (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE ai_category_insights
-ADD COLUMN IF NOT EXISTS symbol VARCHAR DEFAULT 'BTC';
+DO $$
+BEGIN
+    IF to_regclass('ai_category_insights') IS NOT NULL THEN
+        ALTER TABLE ai_category_insights
+            ADD COLUMN IF NOT EXISTS symbol VARCHAR DEFAULT 'BTC';
+    END IF;
+END $$;
 
 ALTER TABLE ai_usage_logs
 ADD COLUMN IF NOT EXISTS trace_id VARCHAR;

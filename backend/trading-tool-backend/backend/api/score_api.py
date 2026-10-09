@@ -138,7 +138,7 @@ async def update_intelligence_weights(
 
 
 # =========================================================
-# AI Master Score — uit ai_category_insights (user-specific)
+# Gewogen benchmark uit de actuele Score 2.0-bronnen.
 # =========================================================
 @router.get("/ai/master_score", response_model=MasterScoreResponse)
 async def get_ai_master_score(

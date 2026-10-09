@@ -40,3 +40,14 @@ def test_bot_does_not_invent_strategy_when_owned_row_is_missing():
     cursor = _Cursor(None)
     conn = type("Connection", (), {"cursor": lambda self: cursor})()
     assert _get_saved_strategy_plan(conn, user_id=7, strategy_id=31, match_score=None) is None
+
+
+def test_bot_keeps_saved_strategy_but_does_not_invent_match_confidence():
+    cursor = _Cursor(("76000", ["82000"], "72000"))
+    conn = type("Connection", (), {"cursor": lambda self: cursor})()
+
+    plan = _get_saved_strategy_plan(conn, user_id=7, strategy_id=31, match_score=None)
+
+    assert plan["entry"] == 76000.0
+    assert plan["confidence"] is None
+    assert plan["reason"] == "saved_strategy_setup_match_unavailable"

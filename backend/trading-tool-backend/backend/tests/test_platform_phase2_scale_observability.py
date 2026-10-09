@@ -10,7 +10,6 @@ STATUS_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-status.md"
 
 REQUEST_PATH_MODULES = [
     BACKEND_ROOT / "services" / "dashboard_service.py",
-    BACKEND_ROOT / "services" / "ai_assistant_service.py",
     BACKEND_ROOT / "services" / "system_health_service.py",
     BACKEND_ROOT / "services" / "push_service.py",
 ]

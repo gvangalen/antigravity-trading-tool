@@ -100,7 +100,7 @@ def test_translate_text_if_needed_never_calls_ai_for_local_supported_locales(mon
 def test_localize_finn_payload_uses_single_bundled_ai_call_for_unsupported_locale(monkeypatch):
     calls = []
 
-    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries):
+    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries, model_override, reasoning_effort):
         calls.append(
             {
                 "prompt": prompt,
@@ -108,6 +108,8 @@ def test_localize_finn_payload_uses_single_bundled_ai_call_for_unsupported_local
                 "max_tokens": max_tokens,
                 "retries": retries,
                 "client_max_retries": client_max_retries,
+                "model_override": model_override,
+                "reasoning_effort": reasoning_effort,
             }
         )
         assert "Translate the following Tradamind/Finn JSON payload" in prompt
@@ -143,12 +145,14 @@ def test_localize_finn_payload_uses_single_bundled_ai_call_for_unsupported_local
     assert len(calls) == 1
     assert calls[0]["retries"] == 1
     assert calls[0]["client_max_retries"] == 0
+    assert calls[0]["model_override"] == "gpt-6-luna"
+    assert calls[0]["reasoning_effort"] == "none"
 
 
 def test_localize_finn_payload_caches_unsupported_locale_bundle(monkeypatch):
     calls = []
 
-    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries):
+    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries, model_override, reasoning_effort):
         calls.append(prompt)
         payload = json.loads(prompt.split("\n\n", 1)[1])
         payload["response"] = "FR: memoized"
@@ -169,7 +173,7 @@ def test_localize_finn_payload_caches_unsupported_locale_bundle(monkeypatch):
 def test_localize_finn_payload_returns_original_payload_on_quota_failure(monkeypatch):
     calls = []
 
-    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries):
+    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries, model_override, reasoning_effort):
         calls.append(prompt)
         return "AI quota bereikt"
 
@@ -185,7 +189,7 @@ def test_localize_finn_payload_returns_original_payload_on_quota_failure(monkeyp
 def test_localize_report_payload_uses_single_bundled_ai_call_for_unsupported_locale(monkeypatch):
     calls = []
 
-    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries):
+    async def fake_translate(*, prompt, system_role, max_tokens, retries, client_max_retries, model_override, reasoning_effort):
         calls.append(prompt)
         payload = json.loads(prompt.split("\n\n", 1)[1])
         payload["executive_summary"] = "FR: executive"

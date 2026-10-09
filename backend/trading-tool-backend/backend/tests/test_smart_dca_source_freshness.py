@@ -182,6 +182,7 @@ def test_smart_dca_execution_rejects_freshly_stamped_score_with_old_component():
     assert all(result["_source_available"][component] is False for component in (
         "market_score", "macro_score", "technical_score",
     ))
+    assert {result[key] for key in ("market", "macro", "technical")} == {None}
     assert benchmark_score({"market_score": result["market"], "macro_score": result["macro"],
                             "technical_score": result["technical"]},
                            EQUAL_BENCHMARK_WEIGHTS, result["_source_available"]) is None
@@ -221,3 +222,39 @@ def test_paper_decision_checks_each_component_against_its_saved_score_evidence(m
     assert {entry[2] for entry in checked} == {"market", "macro", "technical"}
     assert all(entry[3] == {"calculated_at": calculated_at, "indicator_evidence": evidence} for entry in checked)
     assert all(result["_source_available"][f"{category}_score"] for category in ("market", "macro", "technical"))
+
+
+def test_paper_score_reader_keeps_missing_unknown_and_measured_zero_valid(monkeypatch):
+    from backend.ai_agents.trading_bot_agent import _get_daily_scores
+    from backend.services import setup_market_match_sync
+
+    class Cursor:
+        row = None
+
+        def execute(self, sql, params):
+            pass
+
+        def fetchone(self):
+            return self.row
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return cursor
+
+    cursor = Cursor()
+    conn = Connection()
+    today = datetime.now(timezone.utc).date()
+    empty = _get_daily_scores(conn, 7, today, "ETH")
+    assert (empty["macro"], empty["technical"], empty["market"]) == (None, None, None)
+
+    monkeypatch.setattr(setup_market_match_sync, "_fresh", lambda *args: True)
+    cursor.row = (0, 60, 80, datetime.now(timezone.utc), {})
+    scored = _get_daily_scores(conn, 7, today, "ETH")
+    assert scored["macro"] == 0.0
+    assert scored["_source_available"]["macro_score"] is True

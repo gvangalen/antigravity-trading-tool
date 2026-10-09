@@ -17,23 +17,6 @@ ALTER TABLE bot_portfolios
     ADD COLUMN IF NOT EXISTS realized_pnl_eur NUMERIC NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
-CREATE TABLE IF NOT EXISTS ai_reflections (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    category TEXT NOT NULL,
-    indicator TEXT NOT NULL,
-    raw_score NUMERIC,
-    ai_score NUMERIC,
-    compliance NUMERIC,
-    comment TEXT,
-    recommendation TEXT,
-    date DATE NOT NULL DEFAULT CURRENT_DATE,
-    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS ix_ai_reflections_user_category_date
-    ON ai_reflections (user_id, category, date, timestamp DESC);
-
 CREATE TABLE IF NOT EXISTS daily_reports (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

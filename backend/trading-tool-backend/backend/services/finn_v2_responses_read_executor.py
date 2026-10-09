@@ -258,11 +258,12 @@ class FinnResponsesReadExecutor:
             for item in results
         ):
             output["evidence_boundary"] = (
-                "A dated score is a historical report, not a current market reading. "
-                "When reporting exact saved scores, name their report date and actual freshness status. "
+                "Scores come from the current, source-verified Score 2.0 assessment. "
+                "Only reported_scores with a fresh component_source_status are available. "
+                "A null component is unknown, not zero. "
                 "Use one short paragraph without headings or a raw backend inventory. "
-                "Do not infer a present trading signal, personal suitability, or a missing score as zero. "
-                "Do not offer to refresh or repeat a score assessment when no fresh score source is available."
+                "A benchmark_score is available only when all three components are fresh. "
+                "Do not infer a trading signal or personal suitability from a score alone."
             )
         if self._facts_only_local_experiment():
             output.pop("evidence_boundary", None)
@@ -281,12 +282,6 @@ class FinnResponsesReadExecutor:
             value = data.get("as_of") or data.get("timestamp")
             if value:
                 return str(value)
-            daily_scores = data.get("daily_scores")
-            if isinstance(daily_scores, dict) and daily_scores.get("report_date"):
-                return str(daily_scores["report_date"])
-            master_score = data.get("master_score")
-            if isinstance(master_score, dict) and master_score.get("date"):
-                return str(master_score["date"])
         return None
 
     @staticmethod

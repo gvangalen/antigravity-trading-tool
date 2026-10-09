@@ -59,7 +59,8 @@ def test_scores_and_portfolio_have_distinct_canonical_sources():
     scores = registry.get("scores")
     portfolio = registry.get("portfolio")
 
-    assert scores.canonical_repository == "ScoreRepository"
+    assert scores.canonical_repository == "SetupMarketMatchService"
+    assert scores.canonical_table == "daily_scores,user_indicator_configs,market_data_indicators,macro_data,technical_indicators"
     assert scores.required_asset_fields == ("symbol",)
     assert portfolio.canonical_table == "bot_portfolios,bot_configs,setups,strategies"
     assert portfolio.canonical_repository == "BotRepository"
