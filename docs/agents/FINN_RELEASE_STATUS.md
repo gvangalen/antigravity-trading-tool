@@ -8,11 +8,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED`; candidate CI and production deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated live acceptance remains pending. |
 | Goal | Use Luna with reasoning `none` for FINN V2's remaining internal Responses calls, and remove redundant proposal and answer overrides that block valid coaching and drafts. |
-| Candidate branch | `codex/finn-internal-model-unification` ([PR #128](https://github.com/gvangalen/antigravity-trading-tool/pull/128), draft pending CI). |
+| Candidate branch | `codex/finn-internal-model-unification` ([PR #128](https://github.com/gvangalen/antigravity-trading-tool/pull/128), merged). |
 | Candidate implementation SHA | `bad6705616c61dd3c35ac906a0fc81c2762f95d9`; this status update will have a later SHA. |
-| Production SHA | Pending deployment and public identity check. |
+| Candidate merge SHA | `18099031e4abee69535c309032a40f1e22fba4a8`. |
+| Production SHA | `18099031e4abee69535c309032a40f1e22fba4a8`, observed on both public surfaces after successful Auto Deploy. This status-only update creates a later SHA; public identity must be checked again after its deployment. |
 | Last updated | 2026-10-09. |
 
 The FINN V2 auxiliary Responses classifiers, semantic verifier, hard-claim boundary, repair path and structured operation selector now use the configured Luna model and reasoning `none`. Proposal relevance checks only whether the user requested a persistent change; owner-scoped target resolution, contract validation and explicit confirmation remain the write boundary. An inconclusive auxiliary relevance call cannot veto a confirmation-gated draft. The answer boundary no longer treats a coach's question about which risk a rule should address as a promised trading outcome.
@@ -22,6 +23,8 @@ Measured local evidence on the isolated PostgreSQL/Redis/API/prefork-Celery stac
 Real-provider selector development reached **18/18 operation matches** with zero provider, schema, parse, validation or timeout failures; artifact `.local-finn-parity-artifacts/selector-development-final.json`, SHA-256 `1bb1689d2286d5e994f27a1a377f513f4d6bf4d86d077e35ab59a1d90c2e5fc6`. Regression reached **109/109 operation matches**, with the same zero failure rates; artifact `.local-finn-parity-artifacts/selector-regression-rerun.json`, SHA-256 `6ee88d435d5bd6a071a1567f052cf34186f3b6f573f60f9447ee5b5dab9952d5`. Its conversation-reference and missing-input submetrics are **108/109**: published case `s609-16` asks to activate the “discussed bot” without a verified bot in the case context. The selector keeps `bot_id` missing instead of projecting an unverified target. This mismatch is recorded, not counted as a safe live-bot activation or a fully matching selector case.
 
 Build has not performed authenticated production QA. After deployment, independent QA should verify the explicit saved-object mutation and multi-turn coach paths, effective model provenance where observable, and normal confirmation and Paper boundaries on the deployed SHA.
+
+[Candidate CI run 37944002055](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37944002055) and [main CI run 37944248647](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37944248647) passed all five jobs. [Auto Deploy run 37944423808](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/37944423808) succeeded. Public `https://tradamind.com/api/health` and `https://tradamind.com/build-info.json` each returned HTTP 200 and SHA `18099031e4abee69535c309032a40f1e22fba4a8`. Build performed no authenticated live QA.
 
 ## Previous Release (unified FINN batch)
 
