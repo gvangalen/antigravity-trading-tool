@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_adapters.macro_tool_adapter import MacroToolAdapter
+from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
 from backend.utils.scoring_utils import score_source_is_fresh
 
 
@@ -15,6 +16,32 @@ def test_freshness_service_marks_market_data_stale_after_threshold():
 
     assert service.freshness_for("read_market_snapshot", stale) == "stale"
     assert service.freshness_for("read_market_snapshot", fresh) == "fresh"
+
+
+def test_market_snapshot_uses_provider_source_moment_not_receipt_time():
+    adapter = MarketToolAdapter(None)
+    now = datetime.now(timezone.utc)
+    observed = now - timedelta(minutes=4)
+
+    async def latest(_asset):
+        return SimpleNamespace(symbol="ETH", price=2500, change_24h=1,
+                               volume=100, timestamp=now,
+                               source_observed_at=observed)
+
+    adapter.repository.get_latest_snapshot = latest
+    result = asyncio.run(adapter.execute(asset="ETH", user_id=1))
+    assert result["as_of"] == observed
+    assert result["data"].source_observed_at == observed
+    assert FinnV2FreshnessService().freshness_for("read_market_snapshot", result["as_of"]) == "fresh"
+
+    async def missing_source(_asset):
+        return SimpleNamespace(symbol="ETH", price=2500, change_24h=1,
+                               volume=100, timestamp=now, source_observed_at=None)
+
+    adapter.repository.get_latest_snapshot = missing_source
+    missing = asyncio.run(adapter.execute(asset="ETH", user_id=1))
+    assert missing["as_of"] is None
+    assert FinnV2FreshnessService().freshness_for("read_market_snapshot", missing["as_of"]) == "unknown"
 
 
 def test_freshness_service_returns_not_applicable_for_profile():
@@ -66,6 +93,20 @@ def test_macro_snapshot_uses_score_2_source_window_for_dxy():
     assert result["data"].items[0].score == 20
     # No six-hour tool TTL may reclassify this measured macro source.
     assert FinnV2FreshnessService().freshness_for("read_macro_snapshot", observed) == "unknown"
+
+
+def test_macro_snapshot_hides_binary_float_storage_noise():
+    observed = datetime.now(timezone.utc)
+    adapter = MacroToolAdapter(None)
+
+    async def readings(_user_id, *, symbol):
+        return [SimpleNamespace(name="DXY", value=102.13999938964844, score=20,
+                                trend=None, timestamp=observed,
+                                source_observed_at=observed)]
+
+    adapter.repository.get_active_day_macro_data = readings
+    result = asyncio.run(adapter.execute(user_id=1, asset="ETH"))
+    assert result["data"].items[0].value == 102.14
 
 
 def test_macro_snapshot_keeps_individual_freshness_when_sources_differ():

@@ -193,14 +193,34 @@ class FinnResponsesToolCatalog:
                 description += (
                     " Read the owner's current market, macro and technical component scores "
                     "for one asset using the same source verification as Analyse. "
-                    "reported_scores is null for each missing or stale component; "
-                    "component_source_status explains why; component_source_observed_at "
+                    "reported_scores is null for each unavailable component; "
+                    "component_source_status describes score verification, not necessarily "
+                    "the age of a current market quote. A score_rebuild_pending component "
+                    "has saved score evidence that no longer matches the latest "
+                    "configuration or observation; check indicator source ages separately. "
+                    "Stale_source means its indicator source "
+                    "itself is too old. Explain these states in plain language without "
+                    "printing internal status codes; component_status_explanation gives "
+                    "the plain meaning. component_indicator_source_status "
+                    "shows freshness for each configured indicator; component_source_observed_at "
                     "contains each configured indicator's actual source moment when available. "
                     "The read result's checked_at is when source freshness was verified; "
                     "as_of is the daily report date, not the check time. "
                     "A missing score is not zero. "
                     "benchmark_score is null unless all three components are fresh. "
-                    "Do not present historical stored scores as current."
+                    "Do not present historical stored scores as current. "
+                    "If the question compares a recent price quote with a missing Market score, "
+                    "read this tool and get_market_snapshot; neither read alone establishes both facts."
+                )
+            if name == "get_market_snapshot":
+                description += (
+                    " The market snapshot is a quote measurement, not a Score 2.0 category "
+                    "score. Its as_of is the provider's source moment; an absent source moment "
+                    "means quote freshness is unknown. A fresh quote does not verify a saved "
+                    "Market score, and a pending Market score does not make the quote stale. "
+                    "For a question comparing quote freshness with Score 2.0 availability, "
+                    "also read get_current_asset_scores. "
+                    "Present measured values in ordinary rounded form, without binary-float artifacts."
                 )
             if name == "get_saved_setup_inventory":
                 description += (

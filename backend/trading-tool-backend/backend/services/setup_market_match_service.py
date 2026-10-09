@@ -9,7 +9,23 @@ from sqlalchemy import text
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
 from backend.domain.setup_market_match import rank_matches
 from backend.infrastructure.repositories.setup_repository import SetupRepository
-from backend.utils.scoring_utils import score_snapshot_is_current
+from backend.utils.scoring_utils import (
+    normalize_indicator_name, score_snapshot_diagnosis, score_source_is_fresh,
+)
+
+
+_SCORE_STATUS_EXPLANATIONS = {
+    "fresh": "The saved score is verified against the configured indicator readings.",
+    "missing_score": "No saved score is available; a separate measurement may still exist.",
+    "stale_source": "At least one configured indicator reading is too old for a current score.",
+    "score_rebuild_pending": "The saved score does not match the latest configured indicator evidence; recalculate it before using it.",
+    "score_unverified": "The saved score lacks the evidence needed to verify it.",
+    "configuration_unverified": "The indicator configuration cannot be verified against the saved score.",
+    "missing_indicator_reading": "A configured indicator has no valid reading.",
+    "rule_unverified": "The saved score lacks a verified scoring rule.",
+    "stale_report": "The saved score report is from a previous day.",
+    "unverified": "The saved score has not been checked against current sources.",
+}
 
 
 class SetupMarketMatchService:
@@ -45,7 +61,8 @@ class SetupMarketMatchService:
         return weights
 
     async def _source_is_fresh(self, user_id: int, symbol: str, category: str,
-                               row: dict, source_moments: dict | None = None) -> bool:
+                               row: dict, source_moments: dict | None = None,
+                               diagnostics: dict | None = None) -> bool:
         table, name_column = {
             "macro": ("macro_data", "name"),
             "technical": ("technical_indicators", "indicator"),
@@ -67,11 +84,20 @@ class SetupMarketMatchService:
             ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
         """), parameters)
         observations = result.fetchall()
+        configured_names = {normalize_indicator_name(str(item[0])) for item in configured}
         if source_moments is not None:
-            configured_names = {str(item[0]).casefold() for item in configured}
             source_moments[category] = {
                 str(item[0]): item[2].isoformat() if item[2] is not None else None
-                for item in observations if str(item[0]).casefold() in configured_names
+                for item in observations if normalize_indicator_name(str(item[0])) in configured_names
+            }
+        if diagnostics is not None:
+            diagnostics[f"{category}_indicator_sources"] = {
+                str(item[0]): (
+                    "fresh" if score_source_is_fresh(
+                        category, str(item[0]), item[2], symbol=symbol,
+                    ) else "stale" if item[2] is not None else "unknown"
+                )
+                for item in observations if normalize_indicator_name(str(item[0])) in configured_names
             }
         evidence = row.get("indicator_evidence") or {}
         if isinstance(evidence, str):
@@ -79,11 +105,14 @@ class SetupMarketMatchService:
                 evidence = json.loads(evidence)
             except json.JSONDecodeError:
                 evidence = {}
-        return score_snapshot_is_current(
+        diagnosis = score_snapshot_diagnosis(
             category, symbol, configured, observations,
             evidence.get(category) if isinstance(evidence, dict) else None,
             row.get("calculated_at"),
         )
+        if diagnostics is not None:
+            diagnostics[f"{category}_score"] = diagnosis
+        return diagnosis == "fresh"
 
     async def for_asset(self, user_id: int, symbol: str, *, setups=None) -> dict:
         symbol = str(symbol or "").strip().upper()
@@ -114,6 +143,8 @@ class SetupMarketMatchService:
             for score_key, value in stored_scores.items()
         }
         component_source_observed_at: dict[str, dict] = {}
+        component_indicator_source_status: dict[str, dict] = {}
+        score_diagnostics: dict[str, object] = {}
         if weights is None:
             source_status = "invalid_weights"
         elif row and self.daily_rows is not None:
@@ -133,8 +164,12 @@ class SetupMarketMatchService:
                     component_source_status[score_key] = (
                         "fresh" if await self._source_is_fresh(
                             user_id, symbol, category, row, component_source_observed_at,
+                            score_diagnostics,
                         )
-                        else "stale_source"
+                        else str(score_diagnostics.get(score_key) or "stale_source")
+                    )
+                    component_indicator_source_status[category] = score_diagnostics.get(
+                        f"{category}_indicator_sources", {}
                     )
             if weights is not None and all(
                 component_source_status[f"{category}_score"] == "fresh"
@@ -144,12 +179,19 @@ class SetupMarketMatchService:
                           for category in ("macro", "technical", "market")}
                 source_status = "available"
             elif weights is not None and all(value is not None for value in stored_scores.values()):
-                source_status = "stale_sources"
+                source_status = (
+                    "stale_sources" if "stale_source" in component_source_status.values()
+                    else "unverified_scores"
+                )
         # The match response describes what Analyse can use now. Historical or
         # stale database values belong in the explicitly dated saved-report read.
         reported_scores = {
             key: value if component_source_status[key] == "fresh" else None
             for key, value in stored_scores.items()
+        }
+        component_status_explanation = {
+            key: _SCORE_STATUS_EXPLANATIONS.get(status, "The score is currently unavailable.")
+            for key, status in component_source_status.items()
         }
         total_benchmark = None
         if scores is not None and weights is not None:
@@ -171,7 +213,9 @@ class SetupMarketMatchService:
             "benchmark_weights": weights,
             "reported_scores": reported_scores,
             "component_source_status": component_source_status,
+            "component_status_explanation": component_status_explanation,
             "component_source_observed_at": component_source_observed_at,
+            "component_indicator_source_status": component_indicator_source_status,
             "matches": matches,
         }
 

@@ -145,6 +145,36 @@ def test_finn_current_score_read_hides_stale_component_but_retains_source_status
     asyncio.run(run())
 
 
+def test_recent_price_reading_can_need_score_rebuild_without_being_stale():
+    async def run():
+        now = datetime.now(timezone.utc)
+        observed = now - timedelta(minutes=4)
+        row = {
+            "report_date": date.today(), "market_score": 30,
+            "macro_score": None, "technical_score": None,
+            "calculated_at": now - timedelta(minutes=5),
+            "indicator_evidence": {"market": {"price": {
+                "value": 100, "source_observed_at": (now - timedelta(hours=1)).isoformat(),
+                "rule_origin": "system_template",
+            }}},
+        }
+        session = SimpleNamespace(execute=AsyncMock(side_effect=[
+            SimpleNamespace(mappings=lambda: SimpleNamespace(first=lambda: {"ai_preferences": None})),
+            SimpleNamespace(fetchall=lambda: [("price", now - timedelta(hours=2))]),
+            SimpleNamespace(fetchall=lambda: [("price", 101, observed)]),
+        ]))
+        service = SetupMarketMatchService(session, daily_rows={"ETH": row})
+        result = await service.for_asset(7, "ETH", setups=[])
+        assert result["reported_scores"]["market_score"] is None
+        assert result["component_source_status"]["market_score"] == "score_rebuild_pending"
+        assert "recalculate" in result["component_status_explanation"]["market_score"]
+        assert result["component_indicator_source_status"]["market"]["price"] == "fresh"
+        assert result["component_source_observed_at"]["market"]["price"] == observed.isoformat()
+        assert result["benchmark_score"] is None
+
+    asyncio.run(run())
+
+
 def test_setup_fit_uses_current_benchmark_weights_but_preserves_hard_conditions():
     conditions = setup(1, min_macro_score=40, max_macro_score=60,
                        min_market_score=40, max_market_score=80)
