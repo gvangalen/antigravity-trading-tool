@@ -39,6 +39,75 @@ def test_structured_selector_can_only_choose_an_offered_contract():
     assert selection.operation_id == "evaluate_strategy"
 
 
+def test_structured_selector_budget_can_hold_a_complete_strict_schema():
+    requests = []
+
+    def provider(**kwargs):
+        requests.append(kwargs)
+        return _provider()
+
+    selector = FinnV2StructuredOperationSelectorService(provider=provider)
+    registry = FinnV2OperationRegistry()
+    selection, error = selector.select(
+        message="Leg MACD in gewone taal uit.",
+        candidate_contracts=(registry.get("evaluate_strategy"),),
+        facts={}, verified_context=None, max_output_tokens=240,
+    )
+    assert error is None and selection is not None
+    assert requests[0]["max_output_tokens"] == 900
+
+
+def test_structured_selector_retries_only_incomplete_provider_output():
+    requests = []
+
+    def provider(**kwargs):
+        requests.append(kwargs)
+        return {"error": "incomplete_structured_response"} if len(requests) == 1 else _provider()
+
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Leg MACD uit.",
+        candidate_contracts=(FinnV2OperationRegistry().get("evaluate_strategy"),),
+        facts={}, verified_context=None,
+    )
+    assert error is None and selection is not None
+    assert [request["max_output_tokens"] for request in requests] == [900, 1800]
+
+
+def test_async_structured_selector_retries_incomplete_provider_output():
+    requests = []
+
+    async def provider(**kwargs):
+        requests.append(kwargs)
+        return {"error": "incomplete_structured_response"} if len(requests) == 1 else _provider()
+
+    selection, error = asyncio.run(
+        FinnV2StructuredOperationSelectorService(provider=provider).select_async(
+            message="Leg MACD uit.",
+            candidate_contracts=(FinnV2OperationRegistry().get("evaluate_strategy"),),
+            facts={}, verified_context=None,
+        )
+    )
+    assert error is None and selection is not None
+    assert [request["max_output_tokens"] for request in requests] == [900, 1800]
+
+
+def test_structured_selector_does_not_retry_provider_refusal():
+    requests = []
+
+    def provider(**kwargs):
+        requests.append(kwargs)
+        return {"error": "incomplete_structured_response", "error_detail": {"refusal": "declined"}}
+
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Explain a concept.",
+        candidate_contracts=(FinnV2OperationRegistry().get("evaluate_strategy"),),
+        facts={}, verified_context=None,
+    )
+    assert selection is None
+    assert error == "selector_incomplete_structured_response"
+    assert len(requests) == 1
+
+
 def test_async_structured_selector_awaits_provider_and_preserves_contract_validation():
     requests = []
 
@@ -62,6 +131,7 @@ def test_async_structured_selector_awaits_provider_and_preserves_contract_valida
     assert selection.operation_id == "evaluate_strategy"
     assert requests[0]["model_override"] == "gpt-6-luna"
     assert requests[0]["reasoning_effort"] == "none"
+    assert requests[0]["max_output_tokens"] == 900
 
 
 def test_structured_selector_rejects_a_provider_operation_outside_candidates():

@@ -70,6 +70,13 @@ class FinnV2StructuredOperationSelectorService:
         else:
             injected = self._provider(**captured)
             response = await injected if asyncio.iscoroutine(injected) else injected
+        if self._incomplete_provider_output(response):
+            retry_request = {**captured, "max_output_tokens": self._retry_token_budget(captured)}
+            if self._provider is openai_client.ask_gpt_structured_response:
+                response = await openai_client.ask_gpt_structured_response_async(**retry_request)
+            else:
+                injected = self._provider(**retry_request)
+                response = await injected if asyncio.iscoroutine(injected) else injected
         response_selector = FinnV2StructuredOperationSelectorService(provider=lambda **_kwargs: response)
         return response_selector.select(
             message=message,
@@ -103,7 +110,7 @@ class FinnV2StructuredOperationSelectorService:
         ):
             return None, "selector_test_forced_unavailable"
         try:
-            response = self._provider(
+            request = dict(
                 prompt=str({
                     "message": message,
                     "facts": dict(facts),
@@ -189,9 +196,17 @@ class FinnV2StructuredOperationSelectorService:
             ),
                 **finn_structured_model_options(),
                 timeout_seconds=self._timeout_seconds(timeout_seconds),
-                max_output_tokens=max(450, min(600, int(max_output_tokens or 450))),
+                # Strict selector JSON is normally short, but an occasional
+                # complete response exceeds the old 450-token ceiling. The
+                # ceiling truncated otherwise valid provider output.
+                max_output_tokens=max(900, min(1200, int(max_output_tokens or 900))),
                 client_max_retries=0,
             )
+            response = self._provider(**request)
+            if self._incomplete_provider_output(response):
+                response = self._provider(
+                    **{**request, "max_output_tokens": self._retry_token_budget(request)}
+                )
         except Exception as exc:
             return None, f"selector_provider_exception:{type(exc).__name__}"
         if response.get("error"):
@@ -267,6 +282,18 @@ class FinnV2StructuredOperationSelectorService:
         if phase_budget_seconds is not None:
             return max(3, int(phase_budget_seconds))
         return max(15, int(os.getenv("FINN_V2_SELECTOR_TIMEOUT_SECONDS", "30")))
+
+    @staticmethod
+    def _incomplete_provider_output(response: Mapping[str, Any]) -> bool:
+        detail = response.get("error_detail")
+        return (
+            response.get("error") == "incomplete_structured_response"
+            and not (isinstance(detail, Mapping) and detail.get("refusal"))
+        )
+
+    @staticmethod
+    def _retry_token_budget(request: Mapping[str, Any]) -> int:
+        return min(1800, max(1200, int(request.get("max_output_tokens") or 900) * 2))
 
     @staticmethod
     def _selector_manifest(candidate_contracts: tuple[OperationContract, ...]) -> list[dict[str, object]]:

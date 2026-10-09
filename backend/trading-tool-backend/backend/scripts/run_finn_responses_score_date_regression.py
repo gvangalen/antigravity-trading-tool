@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic local API/Celery/Responses regression for dated saved scores."""
+"""Synthetic local API/Celery/Responses regression for stale saved scores."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 from datetime import date, timedelta
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from sqlalchemy import text
@@ -36,9 +37,9 @@ def main() -> None:
 
     token = create_access_token({"sub": str(user["id"]), "role": "user"})
     questions = (
-        "Van welke datum zijn mijn opgeslagen BTC-scores voor Markt, Macro en Technisch? "
-        "Noem de drie scores en wat hun brondatum betekent. Verander niets.",
-        "Zijn die drie scores daarmee een actueel instapsignaal?",
+        "Zijn mijn BTC-scores voor Markt, Macro en Technisch nu actueel? "
+        "Gebruik geen oud opgeslagen overzicht als actuele marktmeting. Verander niets.",
+        "Kan ik op basis van die ontbrekende actuele scores nu instappen?",
     )
     artifact = {"synthetic_local_only": True, "report_date": str(report_date), "cases": []}
     conversation_id = None
@@ -64,17 +65,28 @@ def main() -> None:
             "no_failure_copy": "FINN kon dit antwoord niet afronden" not in answer,
         }
         if question == questions[0]:
+            current_score_data = [item.get("data") or {} for item in score_evidence]
             checks.update({
                 "score_read": bool(score_evidence),
-                "latest_saved_date": any(item.get("as_of") == str(report_date) for item in score_evidence),
-                "score_values": all(value in answer for value in ("100", "75")),
-                "date_in_answer": str(report_date.year) in answer,
+                "historical_row_not_current": all(
+                    item.get("as_of") != str(report_date) for item in score_evidence
+                ),
+                "missing_current_components_remain_null": all(
+                    all((data.get("reported_scores") or {}).get(key) is None
+                        for key in ("market_score", "macro_score", "technical_score"))
+                    for data in current_score_data
+                ),
+                "no_old_score_values_claimed_current": not re.search(
+                    r"(?:markt|macro)[^.!?\n]{0,25}\b100\b|"
+                    r"(?:technisch)[^.!?\n]{0,25}\b75\b",
+                    answer, re.I,
+                ),
             })
         else:
             lower = answer.casefold()
-            checks["no_current_trade_signal"] = "signaal" in lower and (
-                "geen" in lower or "niet" in lower
-            )
+            checks["no_current_trade_signal"] = any(
+                word in lower for word in ("geen", "niet", "onvoldoende", "ontbreken")
+            ) and not any(phrase in lower for phrase in ("koop nu", "stap nu in"))
         artifact["cases"].append({
             "question": question, "run_id": observed["run_id"],
             "status": observed["status"], "answer": answer,

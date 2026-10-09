@@ -6952,8 +6952,34 @@ def test_score_tool_exposes_current_missing_component_boundary_to_model():
     result = asyncio.run(executor(FinnResponsesToolCatalog().validate("explain_score", {})))
     scores = next(item for item in result["results"] if item["scope"] == "read_asset_scores")
     assert scores["as_of"] == "2026-10-09"
+    assert scores["checked_at"].endswith("+00:00")
     assert scores["data"]["reported_scores"]["macro_score"] is None
     assert "source-verified" in result["evidence_boundary"]
+
+
+def test_score_freshness_checkpoint_survives_verified_followup_context():
+    from backend.services.finn_v2_verified_turn_context import project_verified_turn
+
+    prior = {
+        "answer": "Markt 40, Macro 20 en Technisch 40 zijn vers.",
+        "user_message": "Zijn mijn ETH-scores actueel?",
+        "terminal_status": "completed",
+        "tool_trace": [{"result": {"results": [{
+            "scope": "read_asset_scores", "status": "completed", "asset": "ETH",
+            "as_of": "2026-10-09", "checked_at": "2026-10-09T17:00:00+00:00",
+            "freshness": "fresh", "data": {
+                "reported_scores": {"market_score": 40, "macro_score": 20, "technical_score": 40},
+                "component_source_status": {
+                    "market_score": "fresh", "macro_score": "fresh", "technical_score": "fresh",
+                },
+            },
+        }]}}],
+    }
+    projected = project_verified_turn(prior)
+    assert projected["evidence"][0]["checked_at"] == "2026-10-09T17:00:00+00:00"
+    instructions = FinnResponsesFrontDoor._model_led_instructions("nl")
+    assert "read them again" in instructions
+    assert "merely because its report date is today" in instructions
 
 
 def test_factual_score_list_exception_does_not_apply_to_score_advice():
