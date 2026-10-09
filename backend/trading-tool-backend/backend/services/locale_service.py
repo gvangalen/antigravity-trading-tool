@@ -1,6 +1,7 @@
 import hashlib
 import asyncio
 import json
+import os
 import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Optional
@@ -319,6 +320,8 @@ async def _translate_payload_once_with_ai(payload: Dict[str, Any], target_locale
             max_tokens=2400,
             retries=1,
             client_max_retries=0,
+            model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            reasoning_effort="none",
         )
     if not isinstance(translated, str):
         return payload
@@ -410,6 +413,8 @@ async def translate_text_if_needed(text: Any, target_locale: str, *, allow_ai_tr
             max_tokens=1200,
             retries=1,
             client_max_retries=0,
+            model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            reasoning_effort="none",
         )
     if not isinstance(translated, str):
         return text

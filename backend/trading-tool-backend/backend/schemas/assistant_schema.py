@@ -93,14 +93,6 @@ class AssistantPreferenceUpdate(BaseModel):
 class AssistantPreferences(BaseModel):
     preferences: Dict[str, Any]
 
-class AssistantInsightResponse(BaseModel):
-    greeting: str
-    bot_insight: Optional[Dict[str, str]] = None
-    market_insight: Optional[Dict[str, str]] = None
-    context_detected: Optional[Dict[str, Any]] = None
-    suggested_actions: Optional[List[str]] = None  # Server-Driven proactive action chips
-
-
 class AssistantAnalyticsEvent(BaseModel):
     event_name: str
     session_id: Optional[str] = None

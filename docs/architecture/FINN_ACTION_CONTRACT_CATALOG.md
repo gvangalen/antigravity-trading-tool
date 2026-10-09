@@ -92,7 +92,8 @@ conversation resolver defines a parallel action schema.
 
 Source scopes are declared in the registry and resolved by
 `finn_v2_source_registry.py`. The score scope reads the existing
-`daily_scores`/`ai_category_insights` source through `ScoreRepository`.
+the verified Score 2.0 daily scores, dated indicator measurements and owner
+configurations through `SetupMarketMatchService` and `ScoreToolAdapter`.
 
 The current deployed portfolio implementation has no `PortfolioRepository` or
 `portfolio_items` reader. Its canonical V1 portfolio view is the authenticated

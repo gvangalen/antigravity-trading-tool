@@ -27,6 +27,17 @@ def test_retired_reflection_table_is_not_recreated_and_is_removed_on_deploy():
     assert "run_migration backend/scripts/migrations/2026_10_09_retire_ai_reflections.py" in deploy
 
 
+def test_retired_category_insights_do_not_block_fresh_schema_or_survive_deploy():
+    backend = Path(__file__).parents[1]
+    historical = (backend / "scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py").read_text(encoding="utf-8")
+    retirement = (backend / "scripts/migrations/2026_10_09_retire_ai_category_insights.py").read_text(encoding="utf-8")
+    deploy = (backend.parents[2] / "ops/deploy/deploy_env.sh").read_text(encoding="utf-8")
+
+    assert "to_regclass('ai_category_insights') IS NOT NULL" in historical
+    assert "DROP TABLE IF EXISTS ai_category_insights" in retirement
+    assert "run_migration backend/scripts/migrations/2026_10_09_retire_ai_category_insights.py" in deploy
+
+
 def test_certification_fixture_seeds_released_score_evidence():
     source = (Path(__file__).parents[1] / "scripts/run_finn_v2_full_action_matrix.py").read_text(encoding="utf-8")
 

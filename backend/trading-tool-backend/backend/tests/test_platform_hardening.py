@@ -6,8 +6,6 @@ from types import SimpleNamespace
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
-from backend.services.ai_gateway import AiGateway
-from backend.services.ai_assistant_service import AiAssistantService
 from backend.services.dashboard_service import DashboardService
 from backend.services import portfolio_snapshot_service
 
@@ -154,86 +152,6 @@ def test_ai_preferences_update_reassigns_jsonb_payload_for_persistence():
     }
 
 
-def test_ai_cache_save_uses_context_composite_conflict_key():
-    session = _FakeAsyncSession()
-    user_repo = type("UserRepo", (), {"db": session})()
-    score_repo = object()
-    gateway = AiGateway(user_repo, score_repo)
-
-    asyncio.run(gateway._save_cache(
-        query_hash="same-hash",
-        text_query="same prompt",
-        norm_query="same prompt",
-        response={"ok": True},
-        cost=0.1,
-        symbol="BTC",
-        timeframe="1D",
-        category="assistant",
-        ttl=60,
-        embedding=[0.1, 0.2],
-    ))
-
-    sql = session.executed[0]["sql"].lower()
-    assert "on conflict (query_hash, symbol, timeframe, category) do update" in sql
-    assert session.executed[0]["params"]["s"] == "BTC"
-    assert session.executed[0]["params"]["tf"] == "1D"
-    assert session.executed[0]["params"]["cat"] == "assistant"
-
-
-def test_ai_usage_logging_uses_isolated_compat_session(monkeypatch):
-    class _MainSession:
-        async def execute(self, query, params=None):
-            raise AssertionError("shared request session should not be used for ai usage logging")
-
-    main_session = _MainSession()
-    isolated_session = _FakeIsolatedUsageSession(
-        supported_columns={
-            "user_id",
-            "model",
-            "prompt_tokens",
-            "completion_tokens",
-            "cost",
-            "purpose",
-            "status",
-            "response_time_ms",
-            "estimated_cost_if_full",
-            "similarity_score",
-            "cache_age_seconds",
-            "rejected_reason",
-            "symbol",
-        }
-    )
-
-    monkeypatch.setattr("backend.services.ai_gateway.async_session_factory", lambda: _FakeAsyncSessionFactory(isolated_session))
-
-    user_repo = type("UserRepo", (), {"db": main_session})()
-    gateway = AiGateway(user_repo, object())
-
-    asyncio.run(
-        gateway._log_usage(
-            user_id=7,
-            model="gpt-4o-mini",
-            p_tokens=10,
-            c_tokens=5,
-            cost=0.02,
-            purpose="assistant",
-            status="full_ai",
-            response_time_ms=123,
-            estimated_cost_if_full=0.02,
-            request_source="staging_user",
-            app_env="staging",
-            run_kind="interactive",
-            entry_point="ai_gateway:assistant",
-            user_email_snapshot="qa@example.com",
-        )
-    )
-
-    insert_sql = isolated_session.executed[-1]["sql"].lower()
-    assert "insert into ai_usage_logs" in insert_sql
-    assert "request_source" not in insert_sql
-    assert isolated_session.commits == 1
-
-
 def test_mobile_overview_does_not_parallelize_shared_session_work():
     source = inspect.getsource(DashboardService.get_mobile_overview)
 
@@ -248,16 +166,6 @@ def test_dashboard_data_does_not_parallelize_shared_session_work():
     assert "asyncio.gather" not in source
     assert "get_latest_market_data" in source
     assert "get_latest_technical_data" in source
-
-
-def test_assistant_context_builder_does_not_parallelize_shared_session_work():
-    source = inspect.getsource(AiAssistantService._build_context)
-
-    assert "asyncio.gather" not in source
-    assert "get_master_score" in source
-    assert "get_user_setups" in source
-    assert "get_last_strategy" in source
-    assert "get_bot_history" in source
 
 
 def test_main_startup_is_schema_read_only():

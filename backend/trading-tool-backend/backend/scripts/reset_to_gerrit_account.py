@@ -135,7 +135,6 @@ ACTIONS: list[TableAction] = [
     sql_user("monthly_reports"),
     sql_user("quarterly_reports"),
     sql_user("daily_scores"),
-    sql_user("ai_category_insights"),
     sql_user("ai_usage_logs"),
     sql_user("system_logs"),
     sql_user("strategies"),

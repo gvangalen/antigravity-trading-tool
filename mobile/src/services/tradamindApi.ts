@@ -9,6 +9,11 @@ export type AssistantInsightResponse = {
   suggested_actions?: string[];
 };
 
+type FinnTodayResponse = {
+  finn_briefing?: { greeting?: string | null; summary?: string | null } | null;
+  first_dashboard_context?: { briefing_text?: string | null } | null;
+};
+
 export type AssistantPreferencesResponse = {
   preferences: Record<string, unknown>;
 };
@@ -283,12 +288,21 @@ export type IntelligenceWeightsPayload = {
 };
 
 export const assistantApi = {
-  insight(context: AssistantRuntimeContext) {
-    return apiClient.request<AssistantInsightResponse>('/api/assistant/insight', {
-      body: context,
-      method: 'POST',
-      timeoutMs: 20000,
-    });
+  async insight(context: AssistantRuntimeContext): Promise<AssistantInsightResponse> {
+    const mission = await apiClient.get<FinnTodayResponse>(
+      '/api/assistant/mission-control',
+      { symbol: context.symbol || undefined },
+    );
+    const summary = String(
+      mission.first_dashboard_context?.briefing_text || mission.finn_briefing?.summary || '',
+    ).trim();
+    return {
+      greeting: String(mission.finn_briefing?.greeting || 'Hoi!'),
+      bot_insight: summary ? { conclusion: summary } : null,
+      market_insight: null,
+      context_detected: { symbol: context.symbol || '' },
+      suggested_actions: [],
+    };
   },
 
   preferences() {

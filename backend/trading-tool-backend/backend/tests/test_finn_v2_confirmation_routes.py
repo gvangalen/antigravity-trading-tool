@@ -77,10 +77,6 @@ def test_execution_replay_does_not_consume_a_second_mutation_rate_slot(monkeypat
     monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2ExecutionRepository", lambda db: ExecutionRepository())
     monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2ExecutionService", lambda db: ExecutionService())
     monkeypatch.setattr(
-        "backend.api.ai_assistant_api._invalidate_mission_control_cache",
-        lambda user_id: invalidated_users.append(user_id),
-    )
-    monkeypatch.setattr(
         "backend.services.finn_plan_service.FinnPlanService.invalidate_runtime_caches_for_user",
         lambda user_id: invalidated_users.append(user_id),
     )
@@ -98,10 +94,10 @@ def test_execution_replay_does_not_consume_a_second_mutation_rate_slot(monkeypat
 
     assert result["status"] == "already_executed"
     assert calls == []
-    assert invalidated_users == [7, 7]
+    assert invalidated_users == [7]
 
 
-def test_v2_execution_invalidates_the_cached_finn_today_projection(monkeypatch):
+def test_v2_execution_invalidates_the_finn_plan_runtime_projection(monkeypatch):
     monkeypatch.setattr(
         "backend.api.ai_assistant_api.execute_rate_limiter.check_rate_limit",
         lambda *args, **kwargs: None,
@@ -121,11 +117,11 @@ def test_v2_execution_invalidates_the_cached_finn_today_projection(monkeypatch):
 
     monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2ExecutionRepository", lambda db: ExecutionRepository())
     monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2ExecutionService", lambda db: ExecutionService())
+    invalidated_users = []
     monkeypatch.setattr(
         "backend.services.finn_plan_service.FinnPlanService.invalidate_runtime_caches_for_user",
-        lambda user_id: None,
+        lambda user_id: invalidated_users.append(user_id),
     )
-    ai_assistant_api._store_cached_mission_control(7, {"finn_briefing": {"summary": "€0,00"}})
 
     asyncio.run(
         assistant_v2_execute_proposal(
@@ -138,4 +134,4 @@ def test_v2_execution_invalidates_the_cached_finn_today_projection(monkeypatch):
         )
     )
 
-    assert ai_assistant_api._get_cached_mission_control(7) is None
+    assert invalidated_users == [7]

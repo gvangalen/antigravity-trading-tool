@@ -108,13 +108,7 @@ def test_assistant_chat_v2_only_new_user_returns_verified_v2_envelope(monkeypatc
             },
         }
 
-    async def _graph_context(*, db, user_id, query, context_payload=None):
-        return await _identity_context(db, user_id, context_payload, query=query)
-
     try:
-        monkeypatch.setattr(ai_assistant_api, "_new_finn_plan_service", lambda db, trace_id=None: _StubFinnPlanService())
-        monkeypatch.setattr(ai_assistant_api, "_enrich_with_trader_profile", _identity_context)
-        monkeypatch.setattr(ai_assistant_api, "_apply_canonical_finn_context_graph", _graph_context)
         monkeypatch.setattr(ai_assistant_api, "_apply_assistant_rate_limit", lambda **kwargs: None)
         monkeypatch.setattr(ai_assistant_api, "_record_finn_product_event", lambda **kwargs: None)
         monkeypatch.setattr(ai_assistant_api, "_try_v2_visible_delivery", _visible_delivery)
@@ -135,7 +129,6 @@ def test_assistant_chat_v2_only_new_user_returns_verified_v2_envelope(monkeypatc
                 ),
                 x_trace_id="trace-new-user-v2",
                 current_user={"id": 351, "email": "new-user@example.net", "role": "user"},
-                service=object(),
                 db=object(),
             )
         )

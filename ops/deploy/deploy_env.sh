@@ -311,7 +311,6 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_06_10_finn_product_events.py
   run_migration backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
   run_migration backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
-  run_migration backend/scripts/migrations/2026_07_20_asset_scoped_ai_insights.py
   run_migration backend/scripts/migrations/2026_07_20_finn_response_trace_index.py
   run_migration backend/scripts/migrations/2026_08_05_asset_catalog.py
   run_migration backend/scripts/migrations/2026_08_05_asset_catalog_provider_routing.py
@@ -351,6 +350,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_10_08_indicator_score_templates_v2.py
   run_migration backend/scripts/migrations/2026_10_08_dxy_yahoo_source.py
   run_migration backend/scripts/migrations/2026_10_09_retire_ai_reflections.py
+  run_migration backend/scripts/migrations/2026_10_09_retire_ai_category_insights.py
   advance_deploy_step 'schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \

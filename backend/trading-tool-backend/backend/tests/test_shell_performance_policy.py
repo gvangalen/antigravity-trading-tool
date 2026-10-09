@@ -30,9 +30,11 @@ def test_assistant_events_get_is_read_only_and_refresh_is_explicit():
     assert "evaluate_and_generate_events" in refresh_section
 
 
-def test_market_intelligence_cache_ttl_and_mission_control_ttl_are_hardened():
+def test_market_intelligence_cache_ttl_and_mission_control_persisted_read_are_hardened():
     intelligence_source = _read(BACKEND_ROOT / "services" / "intelligence_service.py")
     assistant_source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
 
     assert 'MARKET_INTELLIGENCE_CACHE_TTL_SECONDS' in intelligence_source
-    assert 'MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))' in assistant_source
+    assert "service.deliver_mission_control(" in assistant_source
+    assert "timeout=8.0" in assistant_source
+    assert "_mission_control_cache" not in assistant_source
