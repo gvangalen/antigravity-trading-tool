@@ -84,7 +84,9 @@ TOOL_FRESHNESS_MAX_AGE_SECONDS: Dict[str, Optional[int]] = {
     "read_asset_scores": 86400,
     "read_setup_market_matches": 86400,
     "read_market_snapshot": 900,
-    "read_macro_snapshot": 21600,
+    # The macro adapter evaluates each observation with Score 2.0's
+    # indicator-specific source window; a generic TTL has no valid meaning.
+    "read_macro_snapshot": None,
     "read_technical_snapshot": 21600,
     "read_active_setup": None,
     "read_saved_setup_inventory": None,
