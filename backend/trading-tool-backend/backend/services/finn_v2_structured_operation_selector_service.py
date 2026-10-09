@@ -11,6 +11,7 @@ from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.services.asset_catalog_service import resolve_catalog_symbol
 from backend.utils import openai_client
+from backend.services.finn_v2_responses_model import finn_structured_model_options
 from backend.utils.openai_client import StructuredOutputSpec
 
 
@@ -163,8 +164,11 @@ class FinnV2StructuredOperationSelectorService:
                     "than off_topic. Requests for autonomous buy, sell, investment, portfolio, or "
                     "trading decisions are financial unsupported operations, never off_topic. "
                     "when no supported contract exists. "
-                    "When facts.entities includes indicator_configuration and the request is a read, "
-                    "select read_indicator_configuration unless facts.discourse_act is evaluation. "
+                    "When facts.entities includes indicator_configuration and the request only asks "
+                    "which settings are stored, select read_indicator_configuration. A request to "
+                    "identify missing, weak, or incomplete indicator coverage evaluates that "
+                    "configuration, even when it also asks to list the stored indicators; select "
+                    "evaluate_indicator_configuration. "
                     "A request for the current selected instrument, symbol, market, or workspace asset "
                     "is read_active_asset even if it does not name a ticker; do not ask for clarification "
                     "when FINN can read that active workspace state. "
@@ -183,8 +187,9 @@ class FinnV2StructuredOperationSelectorService:
                 name="finn_v2_operation_selection",
                 schema=self._schema(candidate_ids),
             ),
+                **finn_structured_model_options(),
                 timeout_seconds=self._timeout_seconds(timeout_seconds),
-                max_output_tokens=max(160, min(300, int(max_output_tokens or 240))),
+                max_output_tokens=max(450, min(600, int(max_output_tokens or 450))),
                 client_max_retries=0,
             )
         except Exception as exc:

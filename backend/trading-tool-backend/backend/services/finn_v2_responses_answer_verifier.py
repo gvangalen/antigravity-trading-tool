@@ -31,6 +31,7 @@ from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_verified_setup_reference import verified_selected_setup
 from backend.services.finn_v2_turn_contract import turn_contract_gap
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
+from backend.services.finn_v2_responses_model import finn_responses_model_options
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
 
@@ -858,9 +859,17 @@ class FinnResponsesAnswerVerifier:
             re.IGNORECASE | re.DOTALL,
         )
         for match in risk_reduction.finditer(text):
-            sentence = re.split(r"[.!?\n]", text[:match.start()])[-1] + re.split(
-                r"[.!?\n]", text[match.end():], maxsplit=1,
-            )[0]
+            before = re.split(r"[.!?\n]", text[:match.start()])[-1]
+            after = re.split(r"[.!?\n]", text[match.end():], maxsplit=1)[0]
+            sentence = before + match.group(0) + after
+            next_boundary = text[match.end() + len(after):match.end() + len(after) + 1]
+            if next_boundary == "?" and re.match(
+                r"\s*(?:welk\w*|wat|waarom|hoe|which|what|why|how|"
+                r"welch\w*|was|warum|wie)\b", before, re.I,
+            ):
+                # Asking which risk a rule should address is not a promise
+                # that the rule will reduce it.
+                continue
             if re.search(
                 r"\b(?:kleinere?\s+positie|positieomvang\s+verklein\w*|"
                 r"smaller\s+position|lower\s+position\s+size)\b", sentence, re.I,
@@ -1653,8 +1662,7 @@ class FinnResponsesAnswerVerifier:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
-                    temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Audit a trading-coach answer against ONLY the typed evidence. Distinguish "
                         "stored user choices from evaluated market/risk evidence. A saved profile, "
@@ -1976,7 +1984,7 @@ class FinnResponsesAnswerVerifier:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Audit this answer to a question about current technical indicators. "
                         "The current technical snapshot is unavailable. Do not infer a temporary "
@@ -2016,7 +2024,7 @@ class FinnResponsesAnswerVerifier:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none",
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the user asks for exactly one indicator candidate, "
                         "and check whether the proposed answer respects the NUMBER and KIND of "
@@ -2091,7 +2099,7 @@ class FinnResponsesAnswerVerifier:
                     return False, ""
                 suggestion = await asyncio.wait_for(
                     client.responses.create(
-                        model="gpt-4o-mini", store=False, tool_choice="none",
+                        **finn_responses_model_options(), store=False, tool_choice="none",
                         instructions=(
                             "The user requests one missing macro-indicator and a brief reason. "
                             "Choose exactly one supplied existing catalog option. Write one "
@@ -4220,7 +4228,7 @@ class FinnResponsesAnswerVerifier:
                 try:
                     response = await asyncio.wait_for(
                         self.client.responses.create(
-                            model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                            **finn_responses_model_options(), store=False, tool_choice="none",
                             instructions=(self._model_led_repair_instructions(locale) if result.model_led_coach else (
                                 "You are FINN repairing a rejected coaching answer. Write every "
                                 "user-facing field in the requested language. The question determines "
@@ -4322,13 +4330,13 @@ class FinnResponsesAnswerVerifier:
                 try:
                     repair_model = (
                         os.getenv("FINN_RESPONSES_CLARIFICATION_MODEL", "gpt-6-luna")
-                        if result.model_led_coach else "gpt-4o"
+                        if result.model_led_coach else finn_responses_model_options()["model"]
                     )
                     response = await asyncio.wait_for(
                         self.client.responses.create(
                             model=repair_model, store=False,
                             **({"reasoning": {"effort": os.getenv("FINN_RESPONSES_REASONING_EFFORT", "none")}}
-                               if result.model_led_coach and repair_model.startswith("gpt-6-") else {}),
+                               if repair_model.startswith("gpt-6-") else {}),
                             instructions=(self._model_led_repair_instructions(locale) if result.model_led_coach else (
                                 "You are FINN. Rewrite every user-facing field entirely in "
                                 + ({"nl": "Dutch", "en": "English", "de": "German"}.get(locale or "", "the user's language"))

@@ -146,6 +146,9 @@ class FinnV2SemanticVerifierService:
             system_role=system_prompt,
             output_spec=StructuredOutputSpec(name="finn_v2_semantic_verifier", schema=self.SCHEMA),
             model_override=self.flags.semantic_verifier_model(),
+            reasoning_effort=(
+                "none" if self.flags.semantic_verifier_model() == "gpt-6-luna" else None
+            ),
             timeout_seconds=provider_timeout_seconds or self.flags.semantic_verifier_timeout_seconds(),
             client_max_retries=0,
         )
@@ -283,6 +286,7 @@ class FinnV2SemanticVerifierService:
                     schema=self.COACH_SCHEMA if coach_answer else self.SCHEMA,
                 ),
                 model_override=verifier_model,
+                reasoning_effort="none" if verifier_model == "gpt-6-luna" else None,
                 timeout_seconds=effective_timeout,
                 max_output_tokens=750 if coach_answer else 1000,
                 client_max_retries=0,

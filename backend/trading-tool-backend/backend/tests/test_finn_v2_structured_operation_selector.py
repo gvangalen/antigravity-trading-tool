@@ -40,7 +40,10 @@ def test_structured_selector_can_only_choose_an_offered_contract():
 
 
 def test_async_structured_selector_awaits_provider_and_preserves_contract_validation():
-    async def provider(**_kwargs):
+    requests = []
+
+    async def provider(**kwargs):
+        requests.append(kwargs)
         await asyncio.sleep(0)
         return _provider()
 
@@ -57,6 +60,8 @@ def test_async_structured_selector_awaits_provider_and_preserves_contract_valida
     assert error is None
     assert selection is not None
     assert selection.operation_id == "evaluate_strategy"
+    assert requests[0]["model_override"] == "gpt-6-luna"
+    assert requests[0]["reasoning_effort"] == "none"
 
 
 def test_structured_selector_rejects_a_provider_operation_outside_candidates():

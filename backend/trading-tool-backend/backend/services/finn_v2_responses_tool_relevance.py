@@ -9,6 +9,7 @@ from typing import Any
 
 from backend.services.asset_catalog_service import mentioned_catalog_symbols
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
+from backend.services.finn_v2_responses_model import finn_responses_model_options
 
 
 class FinnResponsesToolRelevanceGuard:
@@ -31,7 +32,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Classify the latest user's primary factual question. Choose inventory "
                         "for all saved setup names or counts. Choose none for questions "
@@ -98,7 +99,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the latest user turn explicitly requests preparing a "
                         "persistent change to a FINN object. Select the single matching operation "
@@ -151,7 +152,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the user's question requires current or saved FINN-owned "
                         "facts that were not verified by tools in this turn or the supplied previous "
@@ -198,7 +199,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Identify only the FINN object kind the user explicitly wants to "
                         "create, change, delete or deactivate. The supplied registry domains "
@@ -245,8 +246,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
-                    temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the latest message answers the specific open question "
                         "and continues the original request. A correction that changes the "
@@ -296,7 +296,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the latest user message corrects only the object kind "
                         "of the still-open action. Return false for a new complete command, "
@@ -341,8 +341,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
-                    temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Classify whether the latest turn is ONLY an answer to one active "
                         "FINN draft question. Return continues=true for a short answer to "
@@ -408,8 +407,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
-                    temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Choose the one primary FINN operation that answers the latest user request, "
                         "or respond_without_tool when the user asks for general education or a "
@@ -531,7 +529,7 @@ class FinnResponsesToolRelevanceGuard:
 
     async def previous_answer_suffices(
         self, *, message: str, previous_answer: str,
-        model: str = "gpt-4o-mini", reasoning_effort: str = "none",
+        model: str | None = None, reasoning_effort: str = "none",
     ) -> str | bool | None:
         # An explicit next-choice follow-up asks for a process decision from
         # the verified answer, not another read of the same saved plan.
@@ -558,6 +556,7 @@ class FinnResponsesToolRelevanceGuard:
             self.client.with_options(max_retries=0, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
         )
+        model = model or finn_responses_model_options()["model"]
         model_options = (
             {"reasoning": {"effort": reasoning_effort}}
             if model.startswith("gpt-6-") else {"temperature": 0}
@@ -701,60 +700,42 @@ class FinnResponsesToolRelevanceGuard:
             if is_proposal:
                 response = await asyncio.wait_for(
                     client.responses.create(
-                        model="gpt-4o-mini", store=False, tool_choice="none",
+                        **finn_responses_model_options(), store=False, tool_choice="none",
                         instructions=(
-                            "Check whether the candidate action contract matches the latest "
-                            "user request's mutation, target object type and action polarity. "
-                            "A strategy is not its parent setup; a bot is not its strategy. "
-                            "Compare the candidate with the supplied canonical registry "
-                            "operations. Mark aligned=false if another operation matches the "
-                            "requested change better, or if the user asked only a question. "
-                            "Previous answers provide context but cannot change the explicit "
-                            "target in the latest request. Do not decide target IDs, input "
-                            "completeness or execution authorization. A proposal is only a "
-                            "draft and requires separate user confirmation. When not aligned, "
-                            "recommend the single best operation_id from the supplied registry "
-                            "list, or 'none' if the request is not a mutation. A short reply that "
-                            "supplies a detail requested in the previous verified answer is not "
-                            "a mutation, even when that detail could also be stored in a plan."
+                            "Check only whether the latest user message asks FINN to prepare "
+                            "a persistent change. The main assistant already chose an action; "
+                            "do not choose a different operation or interpret words inside a "
+                            "saved object's name as its type. An incomplete create or update "
+                            "request is still a mutation; the action contract asks for missing "
+                            "details. Mark aligned=false for a question, hypothetical example, "
+                            "read-only coaching request, or a short reply supplying a detail "
+                            "requested in the previous answer. Do not decide target IDs, field "
+                            "completeness or execution authorization. The proposal is a draft "
+                            "that requires separate user confirmation."
                         ),
                         input=json.dumps({
                             "latest_user_message": message,
                             "previous_verified_answer": previous_answer[:1200],
-                            "candidate_operation_id": tool_name,
-                            "candidate_purpose": tool_purpose,
-                            "registry_action_operations": proposal_operations or [],
                         }, ensure_ascii=False),
                         text={"format": {
                             "type": "json_schema", "name": "finn_action_alignment", "strict": True,
                             "schema": {
                                 "type": "object", "properties": {
                                     "aligned": {"type": "boolean"},
-                                    "recommended_operation_id": {
-                                        "type": "string",
-                                        "enum": ["none"] + [
-                                            item["operation_id"] for item in (proposal_operations or [])
-                                        ],
-                                    },
                                 },
-                                "required": ["aligned", "recommended_operation_id"],
+                                "required": ["aligned"],
                                 "additionalProperties": False,
                             },
                         }},
-                        max_output_tokens=40,
+                        max_output_tokens=24,
                     ),
                     timeout=timeout,
                 )
                 parsed = json.loads(str(getattr(response, "output_text", "") or ""))
-                recommendation = parsed.get("recommended_operation_id")
-                if recommendation in {
-                    item["operation_id"] for item in (proposal_operations or [])
-                }:
-                    self.recommended_operation_id = recommendation
                 return parsed["aligned"] if isinstance(parsed.get("aligned"), bool) else None
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none",
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Judge whether the proposed FINN operation is the right primary operation "
                         "for the latest user's semantic intent, action polarity and domain, not merely "

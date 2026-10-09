@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from backend.utils.openai_client import StructuredOutputSpec, ask_gpt_structured_response_async
+from backend.services.finn_v2_responses_model import finn_structured_model_options
 
 
 _CLAIM_SCHEMA = {
@@ -335,7 +336,7 @@ class FinnV2HardClaimBoundary:
                 prompt=json.dumps({"answer": answer, "user_message": user_message}, ensure_ascii=False),
                 system_role=instructions,
                 output_spec=StructuredOutputSpec(name="finn_v2_hard_claims", schema=_CLAIM_SCHEMA),
-                model_override="gpt-4o-mini", timeout_seconds=15, client_max_retries=0,
+                **finn_structured_model_options(), timeout_seconds=15, client_max_retries=0,
             )
             if not attempt:
                 response, condition_check, whole_answer_fit_check = await asyncio.gather(
@@ -356,7 +357,7 @@ class FinnV2HardClaimBoundary:
                         output_spec=StructuredOutputSpec(
                             name="finn_v2_condition_bypass_check", schema=_CONDITION_SCHEMA,
                         ),
-                        model_override="gpt-4o-mini", timeout_seconds=15,
+                        **finn_structured_model_options(), timeout_seconds=15,
                         client_max_retries=0,
                     ),
                     ask_gpt_structured_response_async(
@@ -433,7 +434,7 @@ class FinnV2HardClaimBoundary:
                 output_spec=StructuredOutputSpec(
                     name="finn_v2_outcome_check", schema=_OUTCOME_SCHEMA,
                 ),
-                model_override="gpt-4o-mini", timeout_seconds=15, client_max_retries=0,
+                **finn_structured_model_options(), timeout_seconds=15, client_max_retries=0,
             )
             parsed_outcome = outcome_check.get("parsed")
             if outcome_check.get("error") or not isinstance(parsed_outcome, dict) or not isinstance(

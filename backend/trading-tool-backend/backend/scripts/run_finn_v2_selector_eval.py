@@ -21,6 +21,7 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService, FinnV2OperationClassificationValidator
 from backend.services.finn_v2_selector_eval_registry import SelectorEvalCase, load_and_validate
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelectorService
+from backend.services.finn_v2_responses_model import finn_structured_model_options
 from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils import openai_client
 
@@ -72,7 +73,7 @@ def provenance_for(*, dataset: str, paths: list[Path], registry: FinnV2Operation
         "registry_sha256": registry_hash,
         "registry_version": registry.VERSION,
         "selector_boundary_sha256": boundary_hash,
-        "provider_model": str(runtime.get("model") or "unknown"),
+        "provider_model": finn_structured_model_options()["model_override"],
         "provider_configured": str(bool(runtime.get("configured"))).lower(),
     }
 

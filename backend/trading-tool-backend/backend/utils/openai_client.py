@@ -776,6 +776,7 @@ def ask_gpt_structured_response(
     timeout_seconds: Optional[int] = None,
     max_output_tokens: Optional[int] = None,
     client_max_retries: Optional[int] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     try:
         _validate_structured_output_spec(output_spec)
@@ -819,6 +820,7 @@ def ask_gpt_structured_response(
             output_spec=output_spec,
             max_output_tokens=max_output_tokens or MAX_TOKENS,
             timeout_seconds=timeout_seconds,
+            reasoning_effort=reasoning_effort,
         )
         response = active_client.responses.create(**request_kwargs)
         parsed = None
