@@ -1479,9 +1479,7 @@ class FinnResponsesFrontDoor:
                     requested_domain = await check_domain(
                         message=message, domains=registry_domains,
                     )
-                    if requested_domain in {None, "unknown"}:
-                        return {"status": "unavailable", "reason": "write_target_domain_unverified"}
-                    if requested_domain != candidate_domain:
+                    if requested_domain not in {None, "unknown"} and requested_domain != candidate_domain:
                         if target_retry_used:
                             return {"status": "unavailable", "reason": "write_target_domain_mismatch"}
                         target_retry_used = True
@@ -1500,7 +1498,7 @@ class FinnResponsesFrontDoor:
                 # A verified requested kind outranks a prefix match on a saved
                 # object's name in another domain (for example a setup whose
                 # name prefixes a strategy that has not been created yet).
-                if session_factory is not None and requested_domain is None:
+                if session_factory is not None and requested_domain in {None, "unknown"}:
                     async with session_factory() as session:
                         resolver = FinnV2EntityResolutionService(session)
                         targets = [
@@ -1538,6 +1536,28 @@ class FinnResponsesFrontDoor:
                                 "FINN keeps the owner-scoped object ID server-side."
                             ),
                         }
+                    candidate_matches = [
+                        target for target in targets
+                        if target.entity_type == candidate_domain
+                        and target.resolution_status == "resolved"
+                        and target.source == "explicit_name"
+                    ]
+                    # A uniquely longest, owner-scoped name in the user's
+                    # message is stronger evidence than an inconclusive model
+                    # classification. Equal-length names across domains stay
+                    # ambiguous and cannot create a write proposal.
+                    if not (
+                        len(candidate_matches) == 1
+                        and candidate_name_length > max((
+                            len(target.display_name or "") for target in targets
+                            if target.entity_type != candidate_domain
+                            and target.resolution_status == "resolved"
+                            and target.source == "explicit_name"
+                        ), default=0)
+                    ):
+                        return {"status": "unavailable", "reason": "write_target_domain_unverified"}
+                elif requested_domain in {None, "unknown"}:
+                    return {"status": "unavailable", "reason": "write_target_domain_unverified"}
             selected = analysis
             return {
                 "status": "needs_input" if state.get("missing_required_inputs") else "validation_pending",

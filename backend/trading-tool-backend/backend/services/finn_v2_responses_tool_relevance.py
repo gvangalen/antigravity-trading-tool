@@ -702,54 +702,36 @@ class FinnResponsesToolRelevanceGuard:
                     client.responses.create(
                         **finn_responses_model_options(), store=False, tool_choice="none",
                         instructions=(
-                            "Check whether the candidate action contract matches the latest "
-                            "user request's mutation, target object type and action polarity. "
-                            "A strategy is not its parent setup; a bot is not its strategy. "
-                            "Compare the candidate with the supplied canonical registry "
-                            "operations. Mark aligned=false if another operation matches the "
-                            "requested change better, or if the user asked only a question. "
-                            "Previous answers provide context but cannot change the explicit "
-                            "target in the latest request. Do not decide target IDs, input "
-                            "completeness or execution authorization. A proposal is only a "
-                            "draft and requires separate user confirmation. When not aligned, "
-                            "recommend the single best operation_id from the supplied registry "
-                            "list, or 'none' if the request is not a mutation. A short reply that "
-                            "supplies a detail requested in the previous verified answer is not "
-                            "a mutation, even when that detail could also be stored in a plan."
+                            "Check only whether the latest user message asks FINN to prepare "
+                            "a persistent change. The main assistant already chose an action; "
+                            "do not choose a different operation or interpret words inside a "
+                            "saved object's name as its type. An incomplete create or update "
+                            "request is still a mutation; the action contract asks for missing "
+                            "details. Mark aligned=false for a question, hypothetical example, "
+                            "read-only coaching request, or a short reply supplying a detail "
+                            "requested in the previous answer. Do not decide target IDs, field "
+                            "completeness or execution authorization. The proposal is a draft "
+                            "that requires separate user confirmation."
                         ),
                         input=json.dumps({
                             "latest_user_message": message,
                             "previous_verified_answer": previous_answer[:1200],
-                            "candidate_operation_id": tool_name,
-                            "candidate_purpose": tool_purpose,
-                            "registry_action_operations": proposal_operations or [],
                         }, ensure_ascii=False),
                         text={"format": {
                             "type": "json_schema", "name": "finn_action_alignment", "strict": True,
                             "schema": {
                                 "type": "object", "properties": {
                                     "aligned": {"type": "boolean"},
-                                    "recommended_operation_id": {
-                                        "type": "string",
-                                        "enum": ["none"] + [
-                                            item["operation_id"] for item in (proposal_operations or [])
-                                        ],
-                                    },
                                 },
-                                "required": ["aligned", "recommended_operation_id"],
+                                "required": ["aligned"],
                                 "additionalProperties": False,
                             },
                         }},
-                        max_output_tokens=40,
+                        max_output_tokens=24,
                     ),
                     timeout=timeout,
                 )
                 parsed = json.loads(str(getattr(response, "output_text", "") or ""))
-                recommendation = parsed.get("recommended_operation_id")
-                if recommendation in {
-                    item["operation_id"] for item in (proposal_operations or [])
-                }:
-                    self.recommended_operation_id = recommendation
                 return parsed["aligned"] if isinstance(parsed.get("aligned"), bool) else None
             response = await asyncio.wait_for(
                 client.responses.create(

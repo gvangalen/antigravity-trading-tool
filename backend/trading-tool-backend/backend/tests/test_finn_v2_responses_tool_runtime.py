@@ -3695,6 +3695,26 @@ def test_tool_relevance_guard_uses_typed_responses_without_exposing_identity():
     assert request["tool_choice"] == "none" and request["store"] is False
     assert request["text"]["format"]["type"] == "json_schema"
     assert "user_id" not in request["input"] and "proposal_id" not in request["input"]
+    assert "candidate_operation_id" not in request["input"]
+    assert request["text"]["format"]["schema"]["required"] == ["aligned"]
+
+
+def test_proposal_relevance_checks_mutation_intent_without_overruling_object_kind():
+    fake = FakeResponses(response("judge", text='{"aligned": true}'))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    aligned = asyncio.run(guard.is_relevant(
+        message="Maak een strategie voor Matrix Strategy Parent.",
+        previous_answer="", tool_name="create_strategy",
+        tool_purpose="create strategy", is_proposal=True,
+        proposal_operations=[
+            {"operation_id": "create_setup", "domain": "setup", "polarity": "create"},
+            {"operation_id": "create_strategy", "domain": "strategy", "polarity": "create"},
+        ],
+    ))
+    assert aligned is True
+    assert guard.recommended_operation_id is None
+    assert "Matrix Strategy Parent" in fake.requests[0]["input"]
+    assert "registry_action_operations" not in fake.requests[0]["input"]
 
 
 def test_mutation_domain_guard_uses_registry_domains_without_owner_identity():
@@ -3731,8 +3751,8 @@ def test_guided_target_correction_is_model_classified_without_identity(corrects)
     assert "user_id" not in request["input"] and "strategy_id" not in request["input"]
 
 
-def test_proposal_relevance_compares_registry_operation_domain_and_polarity():
-    fake = FakeResponses(response("judge", text='{"aligned": false}'))
+def test_proposal_relevance_only_checks_mutation_intent():
+    fake = FakeResponses(response("judge", text='{"aligned": true}'))
     guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
     operations = [
         {"operation_id": "update_setup", "domain": "setup", "polarity": "WRITE_ACTION",
@@ -3745,11 +3765,13 @@ def test_proposal_relevance_compares_registry_operation_domain_and_polarity():
         previous_answer="", tool_name="update_setup", tool_purpose="WRITE_ACTION setup",
         is_proposal=True, proposal_operations=operations,
     ))
-    assert aligned is False
+    assert aligned is True
     payload = json.loads(fake.requests[0]["input"])
-    assert payload["candidate_operation_id"] == "update_setup"
-    assert payload["registry_action_operations"] == operations
-    assert "target object type" in fake.requests[0]["instructions"]
+    assert payload == {
+        "latest_user_message": "Wijzig BTC Breakout Full Strategy van 250 naar 300 euro per uitvoering",
+        "previous_verified_answer": "",
+    }
+    assert "persistent change" in fake.requests[0]["instructions"]
 
 
 @pytest.mark.parametrize("message,continues", [
@@ -3873,6 +3895,68 @@ def test_specific_strategy_name_blocks_overlapping_setup_proposal(monkeypatch):
     assert result.proposal_analysis is None
     assert result.response.tool_trace[0]["result"]["reason"] == "owner_scoped_target_type_mismatch"
     assert result.response.tool_trace[0]["result"]["target_domain"] == "strategy"
+
+
+def test_owner_scoped_named_strategy_survives_inconclusive_domain_check(monkeypatch):
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "create_or_update_trade_plan_proposal", {
+            "operation_id": "update_strategy", "draft_intent": "new",
+            "inputs": {"changed_fields": {"base_amount": 120}},
+        }),)),
+        response("r2", text="Ik heb een wijzigingsvoorstel voorbereid."),
+    )
+    guard = SimpleNamespace(
+        requested_mutation_domain=AsyncMock(return_value="unknown"),
+        is_relevant=AsyncMock(return_value=True),
+    )
+
+    class Resolver:
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, *, user_id, entity_type, **_kwargs):
+            if entity_type == "strategy":
+                return CanonicalEntityTarget(
+                    entity_type="strategy", entity_id=7,
+                    display_name="Matrix Update Strategie", owner_id=user_id,
+                    source="explicit_name", resolution_status="resolved",
+                )
+            return CanonicalEntityTarget(
+                entity_type=entity_type, owner_id=user_id, resolution_status="not_found",
+            )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    class ProgressRepository:
+        def __init__(self, _session):
+            pass
+
+        async def record_responses_progress(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository",
+        ProgressRepository,
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "named-strategy-domain-unknown"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = guard
+    front.reads = SimpleNamespace(session_factory=session_factory)
+    result = asyncio.run(front.run(
+        message="Werk Matrix Update Strategie bij en zet de basisinleg naar 120 euro.",
+        instructions="Use FINN tools", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.proposal_analysis is not None
+    assert result.proposal_analysis.request_plan.operation_id == "update_strategy"
+    assert result.response.tool_trace[0]["result"]["status"] == "needs_input"
 
 
 def test_missing_strategy_cannot_turn_prefix_matched_setup_into_write_proposal(monkeypatch):
