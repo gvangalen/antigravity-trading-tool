@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
@@ -119,6 +120,10 @@ class FinnResponsesReadExecutor:
                 "data": data,
                 "reason": result.error_codes[0] if result.error_codes else None,
             }
+            if read_tool == "read_asset_scores" and result.success:
+                # as_of is the daily score report date; this is the moment its
+                # component-source freshness was checked for this conversation.
+                evidence["checked_at"] = datetime.now(timezone.utc).isoformat()
             if read_tool == "read_active_asset" and result.success:
                 evidence["resolution_source"] = shared_state.get("resolution_source")
             results.append(evidence)

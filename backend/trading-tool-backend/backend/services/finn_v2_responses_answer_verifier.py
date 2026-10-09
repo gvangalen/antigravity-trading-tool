@@ -3157,6 +3157,7 @@ class FinnResponsesAnswerVerifier:
         compact.extend({
             "scope": item.get("scope"), "status": item.get("status"),
             "source": item.get("source"), "as_of": item.get("as_of"),
+            "checked_at": item.get("checked_at"),
             "asset": item.get("asset"), "freshness": item.get("freshness"),
             "availability": item.get("availability"), "data": item.get("data"),
             "reason": item.get("reason"), "lineage": "previous_verified_run",

@@ -26,7 +26,7 @@ def project_verified_turn(previous: Mapping[str, Any] | None) -> dict[str, Any] 
                 continue
             evidence.append({
                 key: item.get(key) for key in
-                ("scope", "status", "reason", "source", "asset", "timeframe", "as_of", "freshness", "data")
+                ("scope", "status", "reason", "source", "asset", "timeframe", "as_of", "checked_at", "freshness", "data")
                 if key in item
             })
     return {

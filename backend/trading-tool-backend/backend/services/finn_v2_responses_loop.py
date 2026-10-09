@@ -381,7 +381,8 @@ class FinnResponsesLoop:
             )
         elif verified_turn_context:
             verified_context += (
-                "\nVerified preceding-turn context (persisted FINN evidence, not fresh market data): "
+                "\nVerified preceding-turn context (a snapshot of evidence as verified in that turn; "
+                "re-read time-sensitive sources before claiming they are current now): "
                 + json.dumps(verified_turn_context, ensure_ascii=False, default=str)
             )
             if verified_turn_context.get("user_message"):

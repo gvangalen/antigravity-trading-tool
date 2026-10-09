@@ -196,6 +196,8 @@ class FinnResponsesToolCatalog:
                     "reported_scores is null for each missing or stale component; "
                     "component_source_status explains why; component_source_observed_at "
                     "contains each configured indicator's actual source moment when available. "
+                    "The read result's checked_at is when source freshness was verified; "
+                    "as_of is the daily report date, not the check time. "
                     "A missing score is not zero. "
                     "benchmark_score is null unless all three components are fresh. "
                     "Do not present historical stored scores as current."
