@@ -8,6 +8,40 @@ from backend.schemas.bot_schema import BotManualOrderSchema
 from backend.services.bot_service import BotService
 
 
+def test_bot_today_uses_verified_score_2_components_without_changing_decisions(monkeypatch):
+    class Repo:
+        async def get_active_bots_with_setups(self, user_id):
+            return [{"id": 8, "name": "Paper", "symbol": "ETH", "timeframe": "1D",
+                     "setup_type": "dca", "setup_name": "ETH DCA"}]
+
+        async def get_bot_decisions_by_date(self, user_id, day):
+            return []
+
+        async def get_daily_scores_row(self, *args):
+            raise AssertionError("raw daily scores must not drive the bot summary")
+
+    calls = []
+
+    async def verified(self, user_id, symbol, *, setups=None):
+        calls.append((user_id, symbol, setups))
+        return {"reported_scores": {"macro_score": None, "technical_score": 40,
+                                     "market_score": 30}}
+
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService.for_asset",
+        verified,
+    )
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+
+    result = asyncio.run(service.get_bot_today(7, "ETH", lean=True))
+
+    assert calls == [(7, "ETH", [])]
+    assert result["scores"] == {"macro": None, "technical": 40,
+                                "market": 30, "setup": None}
+    assert result["decisions"] == []
+
+
 class _FakeResult:
     def __init__(self, row=None):
         self._row = row

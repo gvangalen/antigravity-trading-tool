@@ -1045,8 +1045,22 @@ class BotService:
     # ==========================
     async def get_bot_today(self, user_id: int, symbol: str = "BTC", *, lean: bool = False) -> dict:
         today = date.today()
-        daily_scores = await self.repository.get_daily_scores_row(user_id, today, symbol) or {
-            "macro": None, "technical": None, "market": None, "setup": None
+        # The bot summary must use the same source-verified Score 2.0 view as
+        # Analyse and FINN. A score stored for today can still have stale raw
+        # indicator evidence and must not be displayed as current.
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, symbol, setups=[]
+        )
+        reported = assessment["reported_scores"]
+        daily_scores = {
+            "macro": reported["macro_score"],
+            "technical": reported["technical_score"],
+            "market": reported["market_score"],
+            # A setup match belongs to a specific setup/bot decision, not to
+            # the asset-wide score header.
+            "setup": None,
         }
         
         bot_rows = await self.repository.get_active_bots_with_setups(user_id)
