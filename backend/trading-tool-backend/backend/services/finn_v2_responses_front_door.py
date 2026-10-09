@@ -936,9 +936,12 @@ class FinnResponsesFrontDoor:
                     "FINN Responses tool relevance completed in %.2fs verified=%s",
                     monotonic() - relevance_started, aligned is not None,
                 )
-                if aligned is None:
+                if aligned is None and call.operation_id is None:
                     return {"status": "unavailable", "reason": "tool_relevance_unverified"}
-                if not aligned:
+                # A second model call timing out must not veto an otherwise
+                # valid draft action. The owner-scoped target, contract
+                # validation and separate confirmation still gate the write.
+                if aligned is False:
                     if relevance_retry_used:
                         return {"status": "unavailable", "reason": "tool_not_relevant_to_request"}
                     relevance_retry_used = True

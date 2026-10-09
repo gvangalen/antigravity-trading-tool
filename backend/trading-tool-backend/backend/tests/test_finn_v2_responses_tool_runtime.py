@@ -5832,6 +5832,32 @@ def test_irrelevant_proposal_is_retried_without_creating_draft():
     assert front.relevance_guard.is_relevant.await_args_list[0].kwargs["tool_name"] == "create_setup"
 
 
+def test_inconclusive_relevance_does_not_veto_confirmation_gated_draft():
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "manage_paper_bot_proposal", {
+            "operation_id": "deactivate_bot", "draft_intent": "new", "inputs": {},
+        }),)),
+        response("r2", text="Welke bestaande bot bedoel je?"),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-relevance-timeout"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = SimpleNamespace(
+        is_relevant=AsyncMock(return_value=None),
+        requested_mutation_domain=AsyncMock(return_value="bot"),
+    )
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message="Deactiveer de bot Matrix Deactivate Bot.",
+        instructions="Use FINN tools", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.proposal_analysis is not None
+    assert result.proposal_analysis.request_plan.operation_id == "deactivate_bot"
+    assert result.response.tool_trace[0]["result"]["status"] == "needs_input"
+
+
 def test_model_led_read_question_cannot_start_a_select_asset_proposal():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "manage_asset_watchlist_proposal", {
