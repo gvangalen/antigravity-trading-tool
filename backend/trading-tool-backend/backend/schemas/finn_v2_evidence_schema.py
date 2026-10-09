@@ -102,6 +102,7 @@ class MacroSnapshotItem(BaseModel):
     value: Optional[float] = None
     trend: Optional[str] = None
     score: Optional[float] = None
+    source_status: Optional[str] = None
     timestamp: Optional[datetime] = None
     source_observed_at: Optional[datetime] = None
 

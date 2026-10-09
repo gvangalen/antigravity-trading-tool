@@ -23,6 +23,8 @@ def test_macro_snapshot_preserves_missing_and_stale_scores():
     assert result["data"].items[0].value == 5400
     assert result["data"].items[0].source_observed_at is None
     assert result["as_of"] == old
+    assert result["freshness_status"] == "unknown"
+    assert [item.source_status for item in result["data"].items] == ["unknown", "stale"]
 
 
 def test_technical_snapshot_keeps_real_zero_but_not_missing_score():
