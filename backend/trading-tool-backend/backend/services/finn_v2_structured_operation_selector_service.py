@@ -11,6 +11,7 @@ from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.services.asset_catalog_service import resolve_catalog_symbol
 from backend.utils import openai_client
+from backend.services.finn_v2_responses_model import finn_structured_model_options
 from backend.utils.openai_client import StructuredOutputSpec
 
 
@@ -183,6 +184,7 @@ class FinnV2StructuredOperationSelectorService:
                 name="finn_v2_operation_selection",
                 schema=self._schema(candidate_ids),
             ),
+                **finn_structured_model_options(),
                 timeout_seconds=self._timeout_seconds(timeout_seconds),
                 max_output_tokens=max(160, min(300, int(max_output_tokens or 240))),
                 client_max_retries=0,

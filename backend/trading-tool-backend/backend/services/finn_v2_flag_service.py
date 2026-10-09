@@ -249,10 +249,12 @@ class FinnV2FlagService:
 
     def semantic_verifier_model(self) -> str | None:
         value = str(os.getenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", "")).strip()
-        return value or "gpt-6-sol"
+        return value or str(os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna")).strip() or "gpt-6-luna"
 
     def coach_verifier_model(self) -> str:
-        return str(os.getenv("FINN_V2_COACH_VERIFIER_MODEL", "")).strip() or "gpt-4o"
+        return str(os.getenv("FINN_V2_COACH_VERIFIER_MODEL", "")).strip() or str(
+            os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna")
+        ).strip() or "gpt-6-luna"
 
     def semantic_verifier_required_modes(self) -> Set[str]:
         raw = os.getenv("FINN_V2_SEMANTIC_VERIFIER_REQUIRED_MODES", "EVALUATE,CREATE_PROPOSAL,ACTION_PROPOSAL")

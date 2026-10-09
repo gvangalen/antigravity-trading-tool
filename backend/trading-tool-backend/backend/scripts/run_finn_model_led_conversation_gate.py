@@ -84,7 +84,10 @@ def main() -> None:
     artifact = {
         "synthetic_local_only": True,
         "chat_model": os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
-        "verifier_model": os.getenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", "gpt-6-sol"),
+        "verifier_model": os.getenv(
+            "FINN_V2_SEMANTIC_VERIFIER_MODEL",
+            os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+        ),
         "conversations": [], "action_followups": [], "complete": False,
     }
     prompts_by_locale = ALTERNATE_CONVERSATIONS if args.variant == "alternate" else CONVERSATIONS

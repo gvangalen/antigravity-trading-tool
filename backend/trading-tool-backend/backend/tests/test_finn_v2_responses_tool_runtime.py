@@ -3677,6 +3677,9 @@ def test_direct_answer_read_boundary_distinguishes_saved_fact_from_general_coach
     ))
     assert all(request["tool_choice"] == "none" for request in fake.requests)
     assert all(not request.get("tools") for request in fake.requests)
+    assert all(request["model"] == "gpt-6-luna" for request in fake.requests)
+    assert all(request["reasoning"] == {"effort": "none"} for request in fake.requests)
+    assert all("temperature" not in request for request in fake.requests)
 
 
 def test_tool_relevance_guard_uses_typed_responses_without_exposing_identity():
@@ -9333,7 +9336,8 @@ def test_personal_advice_audit_uses_typed_evidence(answer, unsupported, expected
     ))
     assert actual is expected
     kwargs = create.await_args.kwargs
-    assert kwargs["model"] == "gpt-4o"
+    assert kwargs["model"] == "gpt-6-luna"
+    assert kwargs["reasoning"] == {"effort": "none"}
     assert kwargs["text"]["format"]["type"] == "json_schema"
     assert kwargs["tool_choice"] == "none"
     assert "read_active_strategy" in kwargs["input"]

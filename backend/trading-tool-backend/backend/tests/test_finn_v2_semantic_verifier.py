@@ -12,11 +12,11 @@ from backend.utils import openai_client as openai_module
 
 def test_semantic_verifier_model_default_and_override(monkeypatch):
     monkeypatch.delenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", raising=False)
-    assert FinnV2FlagService().semantic_verifier_model() == "gpt-6-sol"
+    assert FinnV2FlagService().semantic_verifier_model() == "gpt-6-luna"
     monkeypatch.setenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", "gpt-test")
     assert FinnV2FlagService().semantic_verifier_model() == "gpt-test"
     monkeypatch.delenv("FINN_V2_COACH_VERIFIER_MODEL", raising=False)
-    assert FinnV2FlagService().coach_verifier_model() == "gpt-4o"
+    assert FinnV2FlagService().coach_verifier_model() == "gpt-6-luna"
     monkeypatch.setenv("FINN_V2_COACH_VERIFIER_MODEL", "gpt-coach-test")
     assert FinnV2FlagService().coach_verifier_model() == "gpt-coach-test"
 

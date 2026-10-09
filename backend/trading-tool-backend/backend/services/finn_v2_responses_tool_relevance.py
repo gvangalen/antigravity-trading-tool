@@ -9,6 +9,7 @@ from typing import Any
 
 from backend.services.asset_catalog_service import mentioned_catalog_symbols
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
+from backend.services.finn_v2_responses_model import finn_responses_model_options
 
 
 class FinnResponsesToolRelevanceGuard:
@@ -31,7 +32,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Classify the latest user's primary factual question. Choose inventory "
                         "for all saved setup names or counts. Choose none for questions "
@@ -98,7 +99,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the latest user turn explicitly requests preparing a "
                         "persistent change to a FINN object. Select the single matching operation "
@@ -151,7 +152,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the user's question requires current or saved FINN-owned "
                         "facts that were not verified by tools in this turn or the supplied previous "
@@ -198,7 +199,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Identify only the FINN object kind the user explicitly wants to "
                         "create, change, delete or deactivate. The supplied registry domains "
@@ -245,8 +246,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
-                    temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the latest message answers the specific open question "
                         "and continues the original request. A correction that changes the "
@@ -296,7 +296,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Decide whether the latest user message corrects only the object kind "
                         "of the still-open action. Return false for a new complete command, "
@@ -341,8 +341,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
-                    temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Classify whether the latest turn is ONLY an answer to one active "
                         "FINN draft question. Return continues=true for a short answer to "
@@ -408,8 +407,7 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o", store=False, tool_choice="none",
-                    temperature=0,
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Choose the one primary FINN operation that answers the latest user request, "
                         "or respond_without_tool when the user asks for general education or a "
@@ -531,7 +529,7 @@ class FinnResponsesToolRelevanceGuard:
 
     async def previous_answer_suffices(
         self, *, message: str, previous_answer: str,
-        model: str = "gpt-4o-mini", reasoning_effort: str = "none",
+        model: str | None = None, reasoning_effort: str = "none",
     ) -> str | bool | None:
         # An explicit next-choice follow-up asks for a process decision from
         # the verified answer, not another read of the same saved plan.
@@ -558,6 +556,7 @@ class FinnResponsesToolRelevanceGuard:
             self.client.with_options(max_retries=0, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
         )
+        model = model or finn_responses_model_options()["model"]
         model_options = (
             {"reasoning": {"effort": reasoning_effort}}
             if model.startswith("gpt-6-") else {"temperature": 0}
@@ -701,7 +700,7 @@ class FinnResponsesToolRelevanceGuard:
             if is_proposal:
                 response = await asyncio.wait_for(
                     client.responses.create(
-                        model="gpt-4o-mini", store=False, tool_choice="none",
+                        **finn_responses_model_options(), store=False, tool_choice="none",
                         instructions=(
                             "Check whether the candidate action contract matches the latest "
                             "user request's mutation, target object type and action polarity. "
@@ -754,7 +753,7 @@ class FinnResponsesToolRelevanceGuard:
                 return parsed["aligned"] if isinstance(parsed.get("aligned"), bool) else None
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none",
+                    **finn_responses_model_options(), store=False, tool_choice="none",
                     instructions=(
                         "Judge whether the proposed FINN operation is the right primary operation "
                         "for the latest user's semantic intent, action polarity and domain, not merely "

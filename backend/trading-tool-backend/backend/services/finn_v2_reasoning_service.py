@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 import asyncio
@@ -584,6 +585,9 @@ class FinnV2ReasoningService:
                         schema=self.prompts.response_schema(),
                     ),
                     model_override=model_name,
+                    reasoning_effort=(
+                        "none" if model_name == "gpt-6-luna" else None
+                    ),
                     timeout_seconds=provider_timeout,
                     max_output_tokens=self.flags.reasoning_max_output_tokens(),
                     client_max_retries=0,
@@ -1838,7 +1842,9 @@ class FinnV2ReasoningService:
         )
 
     def _resolved_model(self) -> str:
-        return self.flags.reasoning_model_override() or openai_client.get_openai_runtime_status().get("model") or "unknown"
+        return self.flags.reasoning_model_override() or os.getenv(
+            "FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"
+        ) or "gpt-6-luna"
 
     def _is_visible_run(self, run) -> bool:
         return getattr(run, "visibility", None) == "visible" or getattr(run, "feature_mode", None) in {"visible_runtime", "visible_readonly"}
