@@ -859,9 +859,17 @@ class FinnResponsesAnswerVerifier:
             re.IGNORECASE | re.DOTALL,
         )
         for match in risk_reduction.finditer(text):
-            sentence = re.split(r"[.!?\n]", text[:match.start()])[-1] + re.split(
-                r"[.!?\n]", text[match.end():], maxsplit=1,
-            )[0]
+            before = re.split(r"[.!?\n]", text[:match.start()])[-1]
+            after = re.split(r"[.!?\n]", text[match.end():], maxsplit=1)[0]
+            sentence = before + match.group(0) + after
+            next_boundary = text[match.end() + len(after):match.end() + len(after) + 1]
+            if next_boundary == "?" and re.match(
+                r"\s*(?:welk\w*|wat|waarom|hoe|which|what|why|how|"
+                r"welch\w*|was|warum|wie)\b", before, re.I,
+            ):
+                # Asking which risk a rule should address is not a promise
+                # that the rule will reduce it.
+                continue
             if re.search(
                 r"\b(?:kleinere?\s+positie|positieomvang\s+verklein\w*|"
                 r"smaller\s+position|lower\s+position\s+size)\b", sentence, re.I,

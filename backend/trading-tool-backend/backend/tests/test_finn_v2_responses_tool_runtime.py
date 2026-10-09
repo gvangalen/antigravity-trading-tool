@@ -2238,6 +2238,9 @@ def test_unverified_trading_outcome_promises_are_not_grounded_process_coaching()
     assert check("Dit verhoogt de kans dat je in de juiste richting handelt.")
     assert not check("Je zegt dat je op bevestiging wilt wachten; welk signaal bedoel je?")
     assert not check(
+        "Welk signaal wacht je af, en welk risico moet het volgens jou helpen beperken?"
+    )
+    assert not check(
         "Een ruimere stop betekent meer risico per eenheid; "
         "een kleinere positie kan dat risico beperken."
     )
