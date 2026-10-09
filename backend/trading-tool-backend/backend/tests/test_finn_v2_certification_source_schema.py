@@ -34,6 +34,7 @@ def test_retired_category_insights_do_not_block_fresh_schema_or_survive_deploy()
     deploy = (backend.parents[2] / "ops/deploy/deploy_env.sh").read_text(encoding="utf-8")
 
     assert "to_regclass('ai_category_insights') IS NOT NULL" in historical
+    assert "DROP VIEW IF EXISTS ai_master_score_view" in retirement
     assert "DROP TABLE IF EXISTS ai_category_insights" in retirement
     assert "run_migration backend/scripts/migrations/2026_10_09_retire_ai_category_insights.py" in deploy
 
