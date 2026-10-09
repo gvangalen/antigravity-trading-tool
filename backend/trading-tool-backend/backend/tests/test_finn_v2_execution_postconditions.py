@@ -319,6 +319,26 @@ def test_action_result_projects_the_committed_entity_snapshot():
     }
 
 
+def test_confirmed_strategy_rename_keeps_verified_old_and_new_names():
+    proposal = SimpleNamespace(
+        id="proposal-rename", run_id="run-rename", user_id=7,
+        operation_type="update_strategy",
+        payload_json={"change": {"strategy_id": 44, "changed_fields": {"name": "New name"}}},
+    )
+    execution = SimpleNamespace(id="execution-rename", status="succeeded",
+                                completed_at=datetime.now(timezone.utc))
+    action_result = FinnV2ExecutionService._action_result(
+        proposal=proposal, execution=execution,
+        result={"id": 44, "name": "New name", "setup_id": 12},
+        prior_entity={"id": 44, "name": "Old name", "parent_entity_type": "setup",
+                      "parent_entity_id": "12"},
+    )
+    assert action_result["entity_id"] == "44"
+    assert action_result["canonical_name"] == "New name"
+    assert action_result["previous_name"] == "Old name"
+    assert action_result["parent_entity_id"] == "12"
+
+
 def test_strategy_repository_normalizes_decimal_payload_before_json_encoding():
     """A single strategy-field update retains Decimal values from its row."""
     from backend.infrastructure.repositories.strategy_repository import StrategyRepository

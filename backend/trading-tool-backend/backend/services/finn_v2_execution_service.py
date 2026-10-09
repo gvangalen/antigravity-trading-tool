@@ -436,6 +436,10 @@ class FinnV2ExecutionService:
             "entity_type": entity_type,
             "entity_id": str(entity_id) if entity_id is not None else None,
             "canonical_name": canonical_name,
+            **({"previous_name": prior_entity["name"]}
+               if proposal.operation_type.startswith("update_")
+               and prior_entity.get("name")
+               and prior_entity.get("name") != canonical_name else {}),
             "canonical_entity": canonical_entity,
             "owner_user_id": proposal.user_id,
             "parent_entity_type": parent_type,

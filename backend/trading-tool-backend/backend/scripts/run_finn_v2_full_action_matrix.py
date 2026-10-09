@@ -468,6 +468,28 @@ def _run_contract(
                 mutation_pace_seconds=mutation_pace_seconds,
             )
             result.update(lifecycle)
+        if operation_id == "update_strategy" and result.get("execution_result") == "succeeded":
+            continued = run_gate(
+                base_url=base_url, bearer_token=token,
+                message="Wat heb je zojuist veranderd en wat bleef gelijk? Controleer de opgeslagen strategie.",
+                conversation_id=result.get("execution_conversation_id"),
+                timeout_seconds=75,
+            )
+            continued_record = _runtime_record(continued["run_id"])
+            exchange = dict(continued_record["runtime_state"].get("responses_exchange") or {})
+            scopes = [
+                item.get("scope")
+                for call in exchange.get("tool_trace") or []
+                for item in (call.get("result") or {}).get("results") or []
+                if isinstance(item, dict) and item.get("status") == "completed"
+            ]
+            result["confirmed_strategy_followup"] = {
+                "run_id": continued["run_id"],
+                "status": continued["status"],
+                "same_conversation": continued["conversation_id"] == result.get("execution_conversation_id"),
+                "owner_scoped_strategy_read": "read_linked_strategy" in scopes,
+                "mentions_saved_amount": "120" in str(exchange.get("answer") or ""),
+            }
         follow_up = _run_follow_up(base_url, follow_up_token, spec, follow_up_fields)
         result["incomplete_follow_up"] = follow_up
         required = set(contract.required_inputs)
@@ -483,6 +505,12 @@ def _run_contract(
             result.get("attempt_count") == 1,
             observed["polling_sse_contract_projection"],
             lifecycle_ok,
+            (operation_id != "update_strategy" or all((
+                result.get("confirmed_strategy_followup", {}).get("status") == "completed",
+                result.get("confirmed_strategy_followup", {}).get("same_conversation"),
+                result.get("confirmed_strategy_followup", {}).get("owner_scoped_strategy_read"),
+                result.get("confirmed_strategy_followup", {}).get("mentions_saved_amount"),
+            ))),
             # Only create_strategy requires a multi-turn slot-collection
             # proof in this action matrix. Other actions are fully proven by
             # their natural first turn plus proposal/confirmation/execution;

@@ -7447,6 +7447,78 @@ def test_confirmed_action_result_is_grounding_for_saved_object_readback():
     assert "confirmed_action_result" in semantic.verify_async.await_args.kwargs["deterministic_summary"]["available_scopes"]
 
 
+@pytest.mark.parametrize("tool_arguments", [
+    {"reference": "previous_response"},
+    {},
+    {"setup_name": "Unverified old name"},
+])
+def test_confirmed_strategy_rename_followup_reads_exact_owner_scoped_strategy(monkeypatch, tool_arguments):
+    import backend.services.finn_v2_responses_front_door as front_module
+
+    fake = FakeResponses(
+        response("read-rename", calls=(tool_call("c1", "get_active_plan_and_strategy", tool_arguments),)),
+        response("answer-rename", text="Ik heb de naam gewijzigd; het bedrag bleef gelijk."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "rename-followup"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    received = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def commit(self):
+            pass
+
+    class Reads:
+        session_factory = Session
+
+        async def __call__(self, call):
+            received.append(call.inputs)
+            return {"status": "completed", "results": []}
+
+    class Resolver:
+        is_setup_collection_request = staticmethod(lambda _message: False)
+        references_recent_action = staticmethod(lambda _message, _entity_type: False)
+
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, **kwargs):
+            assert kwargs["conversation_context"]["canonical_entity_target"] == {
+                "entity_type": "setup", "entity_id": "42",
+            }
+            return SimpleNamespace(resolution_status="resolved", entity_id=42,
+                                   source="active_runtime_context")
+
+    monkeypatch.setattr(front_module, "FinnV2EntityResolutionService", Resolver)
+    monkeypatch.setattr(front_module.FinnV2RuntimeContractRepository,
+                        "record_responses_progress", AsyncMock())
+    front.reads = Reads()
+    action = {
+        "owner_user_id": 21, "result_status": "succeeded",
+        "operation_id": "update_strategy", "entity_type": "strategy",
+        "entity_id": "52", "canonical_name": "ETH Nieuwe Strategie",
+        "parent_entity_type": "setup", "parent_entity_id": "42",
+    }
+    asyncio.run(front.run(
+        message="Wat heb je zojuist veranderd en wat bleef gelijk?",
+        instructions="coach", verified_asset="ETH",
+        conversation_context={"previous_action_result": action},
+        previous_response={"answer": "Je wijziging is bevestigd.", "tool_trace": [],
+                           "terminal_status": "completed"},
+    ))
+    assert received == [{"setup_id": 42, "strategy_id": "52"}]
+
+
 def test_rejected_read_is_rewritten_once_via_responses_and_reverified():
     semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=[
         SimpleNamespace(available=True, passes=False, reason_codes=["unsupported_market_claim"]),
