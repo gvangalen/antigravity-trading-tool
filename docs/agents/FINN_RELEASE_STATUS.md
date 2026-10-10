@@ -8,6 +8,25 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `LOCAL_VALIDATED`; candidate CI, Auto Deploy, public SHA check and independent authenticated QA have not run for this batch. |
+| Goal | Prove the shared Score 2.0 → setup match → Paper path for fresh, missing and stale inputs; align FINN chat, Today and report evidence; move admin-log AI to explicit Luna/Responses; retire unused public legacy routes and labels. |
+| Candidate branch | `codex/finn-score-chain-convergence`. |
+| Implementation commits | `bf1fb40856aad9b6e1502d35f21a4d171be3b491` and `5ca2d9150c6ab247ab9eba0104f7938438c6ad0b`; Git HEAD after this status update is the candidate SHA. |
+| Production SHA | Pending deployment. |
+| Last updated | 2026-10-10. |
+
+This batch uses the shared verified benchmark for FINN Today and report context. A local database fixture produced Market 80, Macro 70, Technical 60, benchmark 70, a matching setup, and one Paper bot without an order; the same benchmark appeared in chat, Today and report context. Missing RSI evidence and a stale RSI source each produced an unknown benchmark and an insufficient setup match, rather than a zero score. The deterministic bot path was exercised locally for a fresh matched score and for missing/stale sources. This is synthetic local evidence, not a live positive Paper decision.
+
+The old onboarding agent bootstrap route and task were removed after its callers moved to the indicator-history → score → Today/report sequence. The public `/ai/master_score` route and web/mobile callers moved to `/scores/benchmark`; internal `master_score` schema fields and methods still have active callers and remain until a typed contract migration. Admin-log analysis now explicitly selects `gpt-6-luna` with reasoning `none` through Responses. Its real-provider synthetic-log probe returned HTTP 200 from `/v1/responses` and a structured response.
+
+Local validation: backend **3144 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command/proposal tests and `audit:high` passed; mobile typecheck, lint and web/iOS/Android bundle smokes passed. The isolated worker-driven action matrix passed **16/16** with zero broker orders, live bots, live-trading calls and production connections; artifact `.local-finn-parity-artifacts/full-action-matrix.json` SHA-256 `d9ddcf64ce104b38e159d0a177731c0733decc203ae5b227855b35a429da10ae`. Real-provider Luna selector development passed **18/18**, SHA-256 `e83813d3574659b685fdeab18ed70d60b7034ca0612a73b1750977d4edd08462`; regression passed **109/109**, SHA-256 `606223db4f365220c09c7f3e391c135f6f9c3bb775e31c5ccaaba1516c759bde`, both with zero provider failures. Local database parity artifact SHA-256 `ecb36a86fc3767595dbbdbb1fe540dd333d1e76dd4634ae53836aa2536d20189`; missing/stale source artifact SHA-256 `c45af2589e21541bc78358e954151c8f3f96be3ce31faafb6380adb84af18479`.
+
+Independent QA after deployment should compare the same owner and dated evidence in Analyse, FINN chat, FINN Today and the report; verify one complete fresh benchmark and a controlled Paper decision, then missing/stale source behavior. It should also check that no old onboarding agent bootstrap or master-score URL is called, while confirming normal action confirmation and no live order.
+
+## Previous Release (React recovery and source moments)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public deployment identity passed. Authenticated live acceptance remains pending. |
 | Goal | Stop the Analyse page's React-runtime reload loop and give FINN readable source moments for its first price/score response without changing Score 2.0 freshness decisions. |
 | Candidate branch | `codex/finn-chat-react-render`. |

@@ -12,9 +12,7 @@ from backend.utils.auth_utils import decode_token, get_current_user
 from backend.services.system_health_service import SystemHealthService
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.finn_v2_cutover_service import FinnV2CutoverService
-from backend.services.system_service import SystemService
 from backend.utils.openai_client import clear_openai_runtime_breaker, get_openai_runtime_status, probe_openai_runtime
-from backend.schemas.system_schema import BootstrapAgentsResponse
 from backend.infrastructure.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -293,25 +291,3 @@ async def system_finn_v2_status(
     db: AsyncSession = Depends(get_db),
 ):
     return await FinnV2CutoverService(db).operator_snapshot()
-
-# =====================================================
-# 🚀 BOOTSTRAP AGENTS (na onboarding)
-# =====================================================
-@router.post("/system/bootstrap-agents", response_model=BootstrapAgentsResponse)
-async def bootstrap_agents(current_user=Depends(get_current_user)):
-    """
-    Triggers the background initialization of AI agents for a newly onboarded user.
-    """
-    try:
-        user_id = current_user["id"]
-        logger.info(f"🚀 API Request: Bootstrap agents gestart voor user {user_id}")
-
-        result = await SystemService.bootstrap_agents_for_user(user_id)
-        return result
-
-    except Exception as e:
-        logger.exception(f"❌ Bootstrap agents mislukt voor user: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Bootstrap agents starten mislukt",
-        )

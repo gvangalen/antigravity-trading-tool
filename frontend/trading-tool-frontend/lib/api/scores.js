@@ -57,18 +57,21 @@ export async function getDailyScores(symbol = "BTC", options = {}) {
 
 //
 // =====================================================
-// 🔹 2. AI Master Score ophalen
+// 🔹 2. Score 2.0-benchmark ophalen
 // =====================================================
-export async function getAiMasterScore(symbol = "BTC") {
+export async function getBenchmarkScore(symbol = "BTC") {
   try {
-    const data = await fetchAuth(`/api/ai/master_score?symbol=${symbol}`);
-    const masterScore = Number(data?.master_score);
+    const data = await fetchAuth(`/api/scores/benchmark?symbol=${symbol}`);
+    const rawScore = data?.master_score;
+    const masterScore = rawScore === null || rawScore === undefined || rawScore === ''
+      ? NaN
+      : Number(rawScore);
     if (!Number.isFinite(masterScore)) {
       return { master_score: null, data_status: 'insufficient_data' };
     }
     return { ...data, master_score: masterScore };
   } catch (err) {
-    console.error('❌ getAiMasterScore ERROR:', err);
+    console.error('❌ getBenchmarkScore ERROR:', err);
     return {
       master_score: null,
       data_status: 'insufficient_data',

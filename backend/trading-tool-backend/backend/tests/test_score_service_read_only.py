@@ -9,6 +9,14 @@ from backend.services import score_service as score_service_module
 from backend.services.score_service import ScoreService
 
 
+def test_public_benchmark_route_replaces_ai_master_score_name():
+    from backend.api.score_api import router
+
+    paths = {route.path for route in router.routes}
+    assert "/scores/benchmark" in paths
+    assert "/ai/master_score" not in paths
+
+
 def test_daily_scores_read_does_not_initialize_or_refresh_indicators(monkeypatch):
     repository = SimpleNamespace(
         db=object(),

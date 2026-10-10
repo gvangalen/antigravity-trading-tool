@@ -112,7 +112,7 @@ def generate_first_dashboard_briefing(
     retry_backoff=True,
 )
 def run_onboarding_pipeline(self, user_id: int):
-    """Refresh measured scores, then regenerate FINN's owner-scoped briefing.
+    """Refresh owner-scoped source history and scores, then regenerate FINN.
 
     Onboarding no longer starts the legacy chain of independent AI agents.
     FINN Today and chat read the same persisted scores and setup matches.
@@ -163,10 +163,12 @@ def run_onboarding_pipeline(self, user_id: int):
         from backend.celery_task.store_daily_scores_task import (
             store_daily_scores_task,
         )
+        from backend.celery_task.indicator_history_task import bootstrap_indicator_histories
         from backend.celery_task.daily_report_task import generate_daily_report
         # A first briefing may already be generating from the just-saved
         # plan. Re-enqueue after scores so a changed context is regenerated.
         workflow = chain(
+            bootstrap_indicator_histories.si(user_id=user_id, enqueue_score_refresh=False),
             store_daily_scores_task.si(user_id),
             enqueue_first_dashboard_briefing.si(user_id, trigger="onboarding_scores_ready"),
             generate_daily_report.si(user_id),

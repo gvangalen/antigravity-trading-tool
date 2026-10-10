@@ -303,6 +303,15 @@ def test_new_owner_reuses_existing_asset_history_without_waiting_for_new_days(mo
          {"kwargs": {"user_id": 9}}),
     ]
 
+    # Onboarding chains one score rebuild after history ingestion and must
+    # not enqueue a competing rebuild from the history task itself.
+    queued.clear()
+    asyncio.run(task_module._bootstrap_indicator_histories(
+        user_id=9, symbol="BTC", category="market", indicator="price",
+        enqueue_score_refresh=False,
+    ))
+    assert queued == []
+
 
 def test_targeted_rsi_history_materializes_reading_and_rebuilds_owner_score(monkeypatch):
     from backend.celery_task import indicator_history_task as task_module

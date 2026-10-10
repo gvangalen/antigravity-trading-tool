@@ -4,15 +4,13 @@ import { useEffect } from "react";
 import { CheckCircle2, ArrowRight, LayoutDashboard, FileText, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import useBootstrapAgents from "@/hooks/useBootstrapAgents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { runBootstrap, loading } = useBootstrapAgents();
-  const { activeAsset, finish, saving } = useOnboarding();
+  const { activeAsset, finish, saving, error } = useOnboarding();
 
   useEffect(() => {
     trackAssistantEvent({
@@ -32,12 +30,7 @@ export default function OnboardingCompletePage() {
       action_type: "open_finn_shell",
     });
 
-    try {
-      await finish();
-      await runBootstrap();
-    } catch (err) {
-      console.error("Bootstrap agents error:", err);
-    } finally {
+    if (await finish()) {
       router.push(activeAsset ? `/dashboard?symbol=${encodeURIComponent(activeAsset)}` : "/dashboard");
     }
   };
@@ -84,14 +77,20 @@ export default function OnboardingCompletePage() {
 
       <button
         onClick={handleOpenFinn}
-        disabled={loading || saving}
+        disabled={saving}
         className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-3 font-semibold text-white shadow-md transition hover:bg-[var(--primary-dark)] hover:shadow-lg disabled:opacity-60"
       >
-        {loading || saving
+        {saving
           ? t?.traderProfile?.onboardingComplete?.preparingDashboard || "Preparing analysis"
           : t?.traderProfile?.onboardingComplete?.openDashboard || "Ga naar Analysis"}
         <ArrowRight size={18} />
       </button>
+
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-red-600">
+          {t?.traderProfile?.onboardingComplete?.finishError || "Onboarding afronden mislukt. Probeer het opnieuw."}
+        </p>
+      )}
 
       <p className="mt-6 text-sm text-[var(--text-light)]">
         {t?.traderProfile?.onboardingComplete?.footer ||

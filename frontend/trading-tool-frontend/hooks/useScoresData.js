@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getDailyScores, getAiMasterScore, getScoreHistory, updateIntelligenceWeights } from '@/lib/api/scores';
+import { getDailyScores, getBenchmarkScore, getScoreHistory, updateIntelligenceWeights } from '@/lib/api/scores';
 import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   fetchCachedResource,
@@ -81,7 +81,7 @@ export function useScoresData(symbol = "BTC", options = {}) {
       fetcher: async () => {
       const [dailyRes, masterRes, historyRes] = await Promise.allSettled([
         getDailyScores(symbol, { fallbackOnError }),
-        includeMaster ? getAiMasterScore(symbol) : Promise.resolve(null),
+        includeMaster ? getBenchmarkScore(symbol) : Promise.resolve(null),
         includeHistory ? getScoreHistory(30, symbol) : Promise.resolve([])
       ]);
 

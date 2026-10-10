@@ -621,7 +621,7 @@
       "report": "Dagrapport",
       "setup": "Actieve setup",
       "setupLabel": "Setup",
-      "master_score": "AI-hoofdscore",
+      "master_score": "Benchmarkscore",
       "bot": "AI-tradingbot",
       "no_setup": "Geen actieve setup gevonden.",
       "no_strategy": "Nog geen strategie beschikbaar.",
@@ -1205,6 +1205,7 @@
       },
       "openDashboard": "Open Dashboard",
       "preparingDashboard": "Dashboard wordt voorbereid...",
+      "finishError": "Onboarding afronden mislukt. Probeer het opnieuw.",
       "footer": "Je kunt later altijd terug naar markt, setup of strategie om context verder aan te scherpen."
     },
     "onboardingPage": {

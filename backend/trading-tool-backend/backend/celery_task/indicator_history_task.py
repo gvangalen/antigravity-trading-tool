@@ -33,6 +33,7 @@ def _source_failure_code(exc: Exception) -> str:
 async def _bootstrap_indicator_histories(
     *, user_id: int | None = None, symbol: str | None = None,
     category: str | None = None, indicator: str | None = None,
+    enqueue_score_refresh: bool = True,
 ) -> dict:
     async with async_session_factory() as session:
         query = select(UserIndicatorConfig).where(
@@ -150,7 +151,7 @@ async def _bootstrap_indicator_histories(
                 results.append({"type": scope_type, "target": str(target),
                                 "status": "source_unavailable", "inserted": 0,
                                 "error_code": error_code})
-        if score_refreshes:
+        if score_refreshes and enqueue_score_refresh:
             from backend.celery_task.celery_app import celery_app
             for owner_id in sorted(score_refreshes):
                 try:
@@ -174,7 +175,9 @@ async def _bootstrap_indicator_histories(
 def bootstrap_indicator_histories(
     user_id: int | None = None, symbol: str | None = None,
     category: str | None = None, indicator: str | None = None,
+    enqueue_score_refresh: bool = True,
 ) -> dict:
     return asyncio.run(_bootstrap_indicator_histories(
         user_id=user_id, symbol=symbol, category=category, indicator=indicator,
+        enqueue_score_refresh=enqueue_score_refresh,
     ))

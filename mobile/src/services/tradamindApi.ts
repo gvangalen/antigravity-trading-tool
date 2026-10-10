@@ -116,7 +116,7 @@ export type WatchlistMutationResponse = {
 };
 
 export type DailyScoresResponse = Record<string, unknown>;
-export type MasterScoreResponse = Record<string, unknown>;
+export type BenchmarkScoreResponse = Record<string, unknown>;
 export type MarketLatestResponse = Record<string, unknown>;
 export type MarketChartPoint = {
   id: number;
@@ -417,8 +417,8 @@ export const intelligenceApi = {
     return apiClient.get<DailyScoresResponse>('/api/scores/daily', { symbol });
   },
 
-  masterScore(symbol: string) {
-    return apiClient.get<MasterScoreResponse>('/api/ai/master_score', { symbol });
+  benchmarkScore(symbol: string) {
+    return apiClient.get<BenchmarkScoreResponse>('/api/scores/benchmark', { symbol });
   },
 
   activeSetups(symbol?: string) {

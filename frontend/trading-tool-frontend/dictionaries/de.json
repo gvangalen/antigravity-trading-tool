@@ -621,7 +621,7 @@
       "report": "Daily Report",
       "setup": "Active Setup",
       "setupLabel": "Setup",
-      "master_score": "AI Master Score",
+      "master_score": "Benchmark-Score",
       "bot": "AI Trading Bot",
       "no_setup": "No active setup found.",
       "no_strategy": "No strategy available yet.",
@@ -1205,6 +1205,7 @@
       },
       "openDashboard": "Dashboard öffnen",
       "preparingDashboard": "Dashboard wird vorbereitet...",
+      "finishError": "Onboarding konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
       "footer": "Du kannst jederzeit zur Marktanalyse, zum Setup oder zur Strategie zurückkehren, um deinen Plan zu verbessern."
     },
     "onboardingPage": {
