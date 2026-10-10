@@ -39,7 +39,7 @@ ALLOWED_PROFILES = {
 }
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
-INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh"}
+INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh", "database_evidence_unavailable"}
 _DIAGNOSTIC_LOOP: Optional[asyncio.AbstractEventLoop] = None
 _DATABASE_LOOP: Optional[asyncio.AbstractEventLoop] = None
 QA_NAMESPACE_TOKEN = "{{qa_run_namespace}}"
@@ -96,7 +96,13 @@ ACCEPTANCE_REPORT_EVIDENCE_FIELDS = (
     "polling_sse_equal",
     "contract_evidence",
     "fixture_action.proposal",
+    "fixture_action.database_before_run",
+    "fixture_action.database_after_attempt",
+    "fixture_action.no_write_after_attempt",
     "fixture_action.database_before_confirmation",
+    "fixture_action.no_write_during_proposal",
+    "fixture_action.database_after_publish",
+    "fixture_action.no_write_after_publish",
     "fixture_action.database_after_confirmation",
     "fixture_action.database_after_execution",
     "fixture_action.database_after_replay",
@@ -244,6 +250,26 @@ async def _load_owner_scoped_database_snapshot(
         """)
     async with async_session_factory() as session:
         rows = (await session.execute(statement, params)).mappings().all()
+        domain_rows = (await session.execute(text("""
+            SELECT 'setups' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            FROM setups AS t WHERE user_id = :user_id
+            UNION ALL
+            SELECT 'strategies' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            FROM strategies AS t WHERE user_id = :user_id
+            UNION ALL
+            SELECT 'bot_configs' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            FROM bot_configs AS t WHERE user_id = :user_id
+            UNION ALL
+            SELECT 'watchlists' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            FROM watchlists AS t WHERE user_id = :user_id
+            UNION ALL
+            SELECT 'user_indicator_configs' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            FROM user_indicator_configs AS t WHERE user_id = :user_id
+            ORDER BY domain, id
+        """), {"user_id": user_id})).mappings().all()
+        user_state = (await session.execute(text("""
+            SELECT ai_preferences FROM users WHERE id = :user_id
+        """), {"user_id": user_id})).scalar_one_or_none()
         live_bot_count = int((await session.execute(
             text("SELECT COUNT(*) FROM bot_configs WHERE user_id=:user_id AND COALESCE(is_live, false)=true"),
             {"user_id": user_id},
@@ -259,12 +285,20 @@ async def _load_owner_scoped_database_snapshot(
     digest = hashlib.sha256(
         json.dumps(normalized, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+    domain_digest = hashlib.sha256(json.dumps({
+        "rows": [
+            {"domain": row["domain"], "id": int(row["id"]), "state": row["state"]}
+            for row in domain_rows
+        ],
+        "ai_preferences": user_state,
+    }, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")).hexdigest()
     return {
         "scope": scope,
         "owner_scoped": True,
         "row_count": len(normalized),
         "entity_ids": [row["id"] for row in normalized],
         "state_sha256": digest,
+        "owner_domain_state_sha256": domain_digest,
         "live_bot_count": live_bot_count,
         "broker_order_count": broker_order_count,
     }
@@ -286,6 +320,20 @@ def owner_scoped_database_snapshot(*, operation_id: str, fixture_namespace: str)
         )
     except Exception as error:
         return {"status": "unavailable", "error_category": classify_internal_issue(error)}
+
+
+def same_owner_database_state(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
+    """Require both the target entity and broad owner domain to stay unchanged."""
+    return (
+        before.get("status") != "unavailable"
+        and after.get("status") != "unavailable"
+        and before.get("state_sha256") == after.get("state_sha256")
+        and before.get("owner_domain_state_sha256") is not None
+        and before.get("owner_domain_state_sha256") == after.get("owner_domain_state_sha256")
+        and before.get("row_count") == after.get("row_count")
+        and before.get("broker_order_count") == after.get("broker_order_count")
+        and before.get("live_bot_count") == after.get("live_bot_count")
+    )
 
 
 def redact(value: Any) -> Any:
@@ -836,6 +884,8 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
         return "runner"
     action_error = (case_result.get("fixture_action") or {}).get("error_category")
     if action_error:
+        if action_error in INFRASTRUCTURE_ERROR_CATEGORIES:
+            return "infrastructure"
         return "product"
     if case_result.get("create_http_status") != 200:
         return "product" if category == "server_http_response" else "infrastructure"
@@ -928,6 +978,9 @@ def action_contract_acceptance_summary(
             "replay_http_status": action.get("idempotency_replay_status"),
             "replay_status": action.get("idempotency_replay_execution_status"),
             "no_write_before_confirmation": action.get("no_write_before_confirmation"),
+            "no_write_during_proposal": action.get("no_write_during_proposal"),
+            "no_write_after_publish": action.get("no_write_after_publish"),
+            "database_before_run": action.get("database_before_run"),
             "database_before": action.get("database_before_confirmation"),
             "database_after": action.get("database_after_execution"),
             "database_after_replay": action.get("database_after_replay"),
@@ -1002,7 +1055,7 @@ def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dic
         "completed_count": completed,
         "failed_count": failed,
         "not_run_count": not_run,
-        "incomplete": attempted < planned_count or not_run > 0 or len(rows) < planned_count,
+        "incomplete": completed < planned_count or not_run > 0 or len(rows) < planned_count,
     }
 
 
@@ -1080,6 +1133,7 @@ def _run_fixture_action(
     case: Dict[str, Any],
     terminal: Dict[str, Any],
     remaining_seconds=None,
+    database_before_run: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Exercise only an explicitly enabled non-financial QA fixture action."""
     action_mode = case.get("fixture_action", "read_only")
@@ -1110,6 +1164,21 @@ def _run_fixture_action(
         return result
     if action_mode == "read_only":
         return result
+    if database_evidence_required and database_before_run is not None:
+        result["database_before_run"] = database_before_run
+        result["database_before_confirmation"] = database_snapshot()
+        result["no_write_during_proposal"] = same_owner_database_state(
+            database_before_run, result["database_before_confirmation"],
+        )
+        if not result["no_write_during_proposal"]:
+            result["error_category"] = (
+                "database_evidence_unavailable"
+                if (database_before_run.get("status") == "unavailable"
+                    or result["database_before_confirmation"].get("status") == "unavailable")
+                else "write_during_proposal"
+            )
+            result["outcome"] = "proposal_write_detected"
+            return result
     proposal_id = _proposal_id(terminal)
     if not proposal_id:
         trace = terminal.get("runtime_trace") if isinstance(terminal.get("runtime_trace"), dict) else {}
@@ -1140,7 +1209,8 @@ def _run_fixture_action(
         if key in proposal
     }
     if database_evidence_required:
-        result["database_before_confirmation"] = database_snapshot()
+        if "database_before_confirmation" not in result:
+            result["database_before_confirmation"] = database_snapshot()
     trace = terminal.get("runtime_trace") if isinstance(terminal.get("runtime_trace"), dict) else {}
     if "contract_revision" in trace:
         result["proposal"]["contract_revision"] = trace["contract_revision"]
@@ -1151,6 +1221,15 @@ def _run_fixture_action(
     )
     result["publish_status"] = status
     result["publish_latency_ms"] = round(publish_latency, 2)
+    if database_evidence_required and database_before_run is not None:
+        result["database_after_publish"] = database_snapshot()
+        result["no_write_after_publish"] = same_owner_database_state(
+            database_before_run, result["database_after_publish"],
+        )
+        if not result["no_write_after_publish"]:
+            result["error_category"] = "write_during_publish_or_database_evidence_unavailable"
+            result["outcome"] = "publish_write_detected"
+            return result
     if status != 200 or error:
         result["error_category"] = error or "proposal_publish_failed"
         return result
@@ -1179,15 +1258,9 @@ def _run_fixture_action(
     before: Dict[str, Any] = {}
     if database_evidence_required:
         result["database_after_confirmation"] = database_snapshot()
-        before = result["database_before_confirmation"]
+        before = result.get("database_after_publish", result["database_before_confirmation"])
         after_confirmation = result["database_after_confirmation"]
-        result["no_write_before_confirmation"] = (
-            before.get("status") != "unavailable"
-            and before.get("state_sha256") == after_confirmation.get("state_sha256")
-            and before.get("row_count") == after_confirmation.get("row_count")
-            and before.get("broker_order_count") == after_confirmation.get("broker_order_count")
-            and before.get("live_bot_count") == after_confirmation.get("live_bot_count")
-        )
+        result["no_write_before_confirmation"] = same_owner_database_state(before, after_confirmation)
         if not result["no_write_before_confirmation"]:
             result["error_category"] = "write_before_confirmation_or_database_evidence_unavailable"
             return result
@@ -1314,9 +1387,51 @@ def run_cases(
             break
         if fixture_namespace:
             case = materialize_fixture_namespace(case, namespace=fixture_namespace)
+        database_before_run = None
+        operation_id = str(case.get("expected_operation_id") or "")
+        if (case.get("fixture_action", "read_only") != "read_only"
+                and operation_id in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS
+                and fixture_namespace):
+            database_before_run = owner_scoped_database_snapshot(
+                operation_id=operation_id, fixture_namespace=fixture_namespace,
+            )
+            if database_before_run.get("status") == "unavailable":
+                result = {
+                    "case_id": case["case_id"], "case_status": "completed",
+                    "error_category": "database_evidence_unavailable",
+                    "fixture_action": {
+                        "mode": case.get("fixture_action"),
+                        "outcome": "not_run",
+                        "database_before_run": database_before_run,
+                    },
+                }
+                result["failure_classification"] = classify_case_failure(result)
+                results.append(result)
+                if checkpoint:
+                    checkpoint(results, planned_count=len(case_list))
+                continue
         case_deadline = time.monotonic() + case_timeout_seconds
         def remaining() -> float:
             return case_deadline - time.monotonic()
+        def check_aborted_write_attempt(result: Dict[str, Any]) -> None:
+            if database_before_run is None:
+                return
+            after_attempt = owner_scoped_database_snapshot(
+                operation_id=operation_id, fixture_namespace=fixture_namespace,
+            )
+            action = result.setdefault("fixture_action", {})
+            action["database_before_run"] = database_before_run
+            action["database_after_attempt"] = after_attempt
+            action["no_write_after_attempt"] = same_owner_database_state(
+                database_before_run, after_attempt,
+            )
+            if not action["no_write_after_attempt"]:
+                action["outcome"] = "run_write_detected"
+                action["error_category"] = (
+                    "database_evidence_unavailable"
+                    if after_attempt.get("status") == "unavailable"
+                    else "write_during_run"
+                )
         conversation_key = _logical_conversation_key(case)
         request_payload = {
             "message": case["message"],
@@ -1327,6 +1442,19 @@ def run_cases(
         }
         if conversation_key in conversations:
             request_payload["conversation_id"] = conversations[conversation_key]
+        # Persist the attempt before its first product request. A process
+        # interruption must not cause --resume to repeat a possible write.
+        in_progress: Dict[str, Any] = {
+            "case_id": case["case_id"], "case_status": "in_progress",
+            "error_category": "interrupted_attempt",
+            "fixture_action": {"mode": case.get("fixture_action", "read_only")},
+        }
+        if database_before_run is not None:
+            in_progress["fixture_action"]["database_before_run"] = database_before_run
+        result_index = len(results)
+        results.append(in_progress)
+        if checkpoint:
+            checkpoint(results, planned_count=len(case_list))
         status, created, latency, error_category = request_json(url=f"{base_url}/api/assistant/v2/runs", method="POST", token=token, payload=request_payload, timeout_seconds=max(0.1, min(20.0, remaining())))
         run_id = created.get("run_id") if isinstance(created.get("run_id"), str) else None
         conversation_id = created.get("conversation_id") if isinstance(created.get("conversation_id"), str) else None
@@ -1339,8 +1467,12 @@ def run_cases(
             "case_status": "completed",
             "fixture_action": {"mode": case.get("fixture_action", "read_only")},
         }
+        if database_before_run is not None:
+            result["fixture_action"]["database_before_run"] = database_before_run
         if status != 200 or not run_id:
-            results.append(result)
+            check_aborted_write_attempt(result)
+            result["failure_classification"] = classify_case_failure(result)
+            results[result_index] = result
             if checkpoint:
                 checkpoint(results, planned_count=len(case_list))
             continue
@@ -1417,12 +1549,15 @@ def run_cases(
                 case=case,
                 terminal=terminal,
                 remaining_seconds=remaining,
+                database_before_run=database_before_run,
             )
             if terminal.get("status") in TERMINAL_STATUSES and not result.get("error_category")
             else {"mode": case.get("fixture_action", "read_only"), "outcome": "not_run", "error_category": None}
         )
+        if result["fixture_action"]["outcome"] == "not_run":
+            check_aborted_write_attempt(result)
         result["failure_classification"] = classify_case_failure(result)
-        results.append(result)
+        results[result_index] = result
         if checkpoint:
             checkpoint(results, planned_count=len(case_list))
     return results
@@ -1584,6 +1719,14 @@ def main() -> int:
                     report["action_contract_acceptance"] = acceptance
                     write_evidence = acceptance["write_results"]
                     report["safety"].update({
+                        "no_write_during_proposal": all(
+                            item.get("no_write_during_proposal") is True
+                            for item in write_evidence
+                        ),
+                        "no_write_after_publish": all(
+                            item.get("no_write_after_publish") is True
+                            for item in write_evidence
+                        ),
                         "no_write_before_confirmation": all(
                             item.get("no_write_before_confirmation") is True
                             for item in write_evidence

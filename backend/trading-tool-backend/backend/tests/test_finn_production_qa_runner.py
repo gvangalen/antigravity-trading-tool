@@ -533,10 +533,10 @@ def test_safe_write_captures_owner_database_effect_and_idempotent_replay(monkeyp
     ])
     monkeypatch.setattr(module, "request_json", lambda **kwargs: (calls.append(kwargs) or next(responses)))
     snapshots = iter([
-        {"owner_scoped": True, "row_count": 0, "state_sha256": "before", "broker_order_count": 0, "live_bot_count": 0},
-        {"owner_scoped": True, "row_count": 0, "state_sha256": "before", "broker_order_count": 0, "live_bot_count": 0},
-        {"owner_scoped": True, "row_count": 1, "state_sha256": "after", "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [41]},
-        {"owner_scoped": True, "row_count": 1, "state_sha256": "after", "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [41]},
+        {"owner_scoped": True, "row_count": 0, "state_sha256": "before", "owner_domain_state_sha256": "before-all", "broker_order_count": 0, "live_bot_count": 0},
+        {"owner_scoped": True, "row_count": 0, "state_sha256": "before", "owner_domain_state_sha256": "before-all", "broker_order_count": 0, "live_bot_count": 0},
+        {"owner_scoped": True, "row_count": 1, "state_sha256": "after", "owner_domain_state_sha256": "after-all", "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [41]},
+        {"owner_scoped": True, "row_count": 1, "state_sha256": "after", "owner_domain_state_sha256": "after-all", "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [41]},
     ])
     monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: next(snapshots))
 
@@ -557,6 +557,152 @@ def test_safe_write_captures_owner_database_effect_and_idempotent_replay(monkeyp
     assert result["no_duplicate_effect"] is True
     assert result["safety_database_unchanged"] == {"broker_orders": True, "live_bots": True}
     assert result.get("error_category") is None
+
+
+def test_fixture_write_during_proposal_stops_before_publish_or_confirmation(monkeypatch):
+    module = _module()
+    calls = []
+    monkeypatch.setattr(module, "request_json", lambda **kwargs: (
+        calls.append(kwargs) or (200, {
+            "proposal_id": "proposal-1", "status": "draft", "payload_hash": "hash",
+            "confirmation_required": True,
+        }, 1.0, None)
+    ))
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: {
+        "owner_scoped": True, "row_count": 1, "state_sha256": "after",
+        "owner_domain_state_sha256": "after-all",
+        "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [41],
+    })
+    baseline = {
+        "owner_scoped": True, "row_count": 0, "state_sha256": "before",
+        "owner_domain_state_sha256": "before-all",
+        "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [],
+    }
+
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={
+            "fixture_action": "safe_execution", "expected_operation_id": "create_setup",
+            "client_context": {"fixture_namespace": "qa-acceptance-a1b2c3d4"},
+        },
+        terminal={"response": {"proposal_id": "proposal-1"}},
+        database_before_run=baseline,
+    )
+
+    assert calls == []
+    assert result["no_write_during_proposal"] is False
+    assert result["error_category"] == "write_during_proposal"
+    assert result["outcome"] == "proposal_write_detected"
+    assert result["confirm_status"] is None
+    assert result["execute_status"] is None
+
+
+def test_owner_database_fingerprint_detects_write_outside_target_namespace():
+    module = _module()
+    baseline = {
+        "row_count": 0, "state_sha256": "same-target", "owner_domain_state_sha256": "before-all",
+        "broker_order_count": 0, "live_bot_count": 0,
+    }
+    after = {**baseline, "owner_domain_state_sha256": "after-all"}
+    assert module.same_owner_database_state(baseline, after) is False
+
+
+def test_missing_proposal_still_checks_for_preconfirmation_write(monkeypatch):
+    module = _module()
+    baseline = {
+        "row_count": 0, "state_sha256": "before", "owner_domain_state_sha256": "before-all",
+        "broker_order_count": 0, "live_bot_count": 0,
+    }
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: {
+        **baseline, "owner_domain_state_sha256": "after-all",
+    })
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: pytest.fail("unexpected product request"))
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={
+            "fixture_action": "safe_execution", "expected_operation_id": "create_setup",
+            "client_context": {"fixture_namespace": "qa-acceptance-a1b2c3d4"},
+        },
+        terminal={"runtime_trace": {}}, database_before_run=baseline,
+    )
+    assert result["error_category"] == "write_during_proposal"
+    assert result["confirm_status"] is None
+
+
+def test_publish_write_stops_before_confirmation(monkeypatch):
+    module = _module()
+    calls = []
+    responses = iter([
+        (200, {"proposal_id": "proposal-1", "status": "draft", "payload_hash": "hash"}, 1.0, None),
+        (200, {"confirmation_token": "secret", "payload_hash": "hash"}, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **kwargs: calls.append(kwargs) or next(responses))
+    baseline = {
+        "row_count": 0, "state_sha256": "before", "owner_domain_state_sha256": "before-all",
+        "broker_order_count": 0, "live_bot_count": 0,
+    }
+    snapshots = iter([baseline, {**baseline, "owner_domain_state_sha256": "after-all"}])
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: next(snapshots))
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={
+            "fixture_action": "safe_execution", "expected_operation_id": "create_setup",
+            "client_context": {"fixture_namespace": "qa-acceptance-a1b2c3d4"},
+        },
+        terminal={"response": {"proposal_id": "proposal-1"}}, database_before_run=baseline,
+    )
+    assert len(calls) == 2
+    assert result["error_category"] == "write_during_publish_or_database_evidence_unavailable"
+    assert result["no_write_after_publish"] is False
+    assert result["confirm_status"] is None
+
+
+def test_interrupted_case_is_checkpointed_before_request_and_not_replayed(monkeypatch):
+    module = _module()
+    checkpoints = []
+
+    def interrupted_request(**_kwargs):
+        raise RuntimeError("simulated_runner_interruption")
+
+    monkeypatch.setattr(module, "request_json", interrupted_request)
+    cases = [{"case_id": "write-1", "message": "Maak een setup.", "fixture_action": "proposal"}]
+    with pytest.raises(RuntimeError, match="simulated_runner_interruption"):
+        module.run_cases(
+            base_url="https://example.test", token="token", cases=cases,
+            checkpoint=lambda rows, **_kwargs: checkpoints.append([dict(row) for row in rows]),
+        )
+
+    assert checkpoints[0][0]["case_status"] == "in_progress"
+    assert module.case_progress(cases=checkpoints[0], planned_count=1)["incomplete"] is True
+    resumed = module.run_cases(
+        base_url="https://example.test", token="token", cases=cases,
+        existing_results=checkpoints[0],
+    )
+    assert resumed == checkpoints[0]
+
+
+def test_failed_run_create_still_checks_owner_database_effect(monkeypatch):
+    module = _module()
+    baseline = {
+        "row_count": 0, "state_sha256": "before", "owner_domain_state_sha256": "before-all",
+        "broker_order_count": 0, "live_bot_count": 0,
+    }
+    snapshots = iter([baseline, {**baseline, "owner_domain_state_sha256": "after-all"}])
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: next(snapshots))
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: (503, {}, 1.0, "server_http_response"))
+    results = module.run_cases(
+        base_url="https://example.test", token="token",
+        cases=[{
+            "case_id": "write-1", "message": "Maak een setup.",
+            "fixture_action": "safe_execution", "expected_operation_id": "create_setup",
+        }],
+        fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+    )
+    action = results[0]["fixture_action"]
+    assert action["no_write_after_attempt"] is False
+    assert action["error_category"] == "write_during_run"
+    assert action["outcome"] == "run_write_detected"
+    assert action.get("confirm_status") is None
 
 
 def test_missing_namespace_is_blocked_before_any_product_call(tmp_path, monkeypatch):
@@ -738,7 +884,9 @@ def test_case_timeout_is_checkpointed_and_does_not_block_the_next_case(monkeypat
     assert results[0]["timeout_cleanup"]["cancel_http_status"] == 200
     assert results[0]["timeout_cleanup"]["server_active_after_cleanup"] is False
     assert results[1]["run_id"] == "fast"
-    assert len(checkpoints) == 2
+    assert len(checkpoints) == 4
+    assert checkpoints[0][0]["case_status"] == "in_progress"
+    assert checkpoints[-1][1]["case_status"] == "completed"
 
 
 def test_resume_replaces_not_run_placeholders_without_duplicate_cases(monkeypatch):
@@ -960,7 +1108,8 @@ def test_broken_transport_after_a_checkpoint_resumes_a_37_case_matrix_without_du
 
     persisted = json.loads(checkpoint_path.read_text(encoding="utf-8"))["cases"]
     assert len(persisted) == 18
-    assert len(created_case_ids) == 18
+    assert len(created_case_ids) == 17
+    assert persisted[-1]["case_status"] == "in_progress"
 
     def final_checkpoint(rows, **_kwargs):
         checkpoint_path.write_text(json.dumps({"cases": rows}), encoding="utf-8")
@@ -975,10 +1124,11 @@ def test_broken_transport_after_a_checkpoint_resumes_a_37_case_matrix_without_du
 
     assert len(resumed) == 37
     assert {item["case_id"] for item in resumed} == {case["case_id"] for case in cases}
-    assert len(created_case_ids) == 37
-    assert len(set(created_case_ids)) == 37
-    assert all(item["case_status"] == "completed" for item in resumed)
-    assert module.case_progress(cases=resumed, planned_count=37)["incomplete"] is False
+    assert len(created_case_ids) == 36
+    assert len(set(created_case_ids)) == 36
+    assert resumed[17]["case_status"] == "in_progress"
+    assert all(item["case_status"] == "completed" for item in resumed if item["case_id"] != "case-17")
+    assert module.case_progress(cases=resumed, planned_count=37)["incomplete"] is True
 
 
 def test_runner_crash_after_case_thirty_two_resumes_without_duplicate_cases(monkeypatch, tmp_path):
@@ -1016,9 +1166,10 @@ def test_runner_crash_after_case_thirty_two_resumes_without_duplicate_cases(monk
 
     resumed = module.run_cases(base_url="https://example.test", token="token", cases=cases, existing_results=checkpointed)
     assert len(resumed) == 37
-    assert len(created) == 37
-    assert len(set(created)) == 37
-    assert module.case_progress(cases=resumed, planned_count=37)["incomplete"] is False
+    assert len(created) == 36
+    assert len(set(created)) == 36
+    assert resumed[31]["case_status"] == "in_progress"
+    assert module.case_progress(cases=resumed, planned_count=37)["incomplete"] is True
 
 
 def test_case_progress_marks_thirty_two_of_thirty_seven_as_incomplete():
