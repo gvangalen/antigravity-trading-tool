@@ -11,6 +11,11 @@ LEGACY_BASELINE = """
 -- create_all cannot add it to an existing table.
 CREATE UNIQUE INDEX IF NOT EXISTS daily_scores_user_symbol_report_date_unique
     ON daily_scores (user_id, symbol, report_date);
+-- ORM create_all maps the generic JSON column to PostgreSQL JSON, while the
+-- deployed Score 2.0 migration and pre-start health contract require JSONB.
+ALTER TABLE daily_scores
+    ALTER COLUMN indicator_evidence TYPE JSONB
+    USING indicator_evidence::text::jsonb;
 ALTER TABLE user_indicator_configs
     ALTER COLUMN config_json TYPE JSONB USING config_json::text::jsonb,
     ALTER COLUMN config_json SET DEFAULT '{}'::jsonb,

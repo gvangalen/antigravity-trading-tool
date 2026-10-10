@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from backend.scripts.check_finn_v2_schema import FinnV2SchemaHealthError, assert_finn_v2_schema
+from backend.scripts.check_finn_v2_schema import (
+    FinnV2SchemaHealthError,
+    REQUIRED_FINN_V2_COLUMNS,
+    assert_finn_v2_schema,
+)
 
 
 RUNTIME_CONTRACT_METADATA = {
@@ -40,11 +44,24 @@ def test_local_bootstrap_expands_bot_ledger_for_portfolio_reads():
         assert f"ADD COLUMN IF NOT EXISTS {column}" in source
 
 
+def test_local_bootstrap_converts_score_evidence_to_the_production_jsonb_type():
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "bootstrap_local_finn_schema.py").read_text(encoding="utf-8")
+    assert "ALTER COLUMN indicator_evidence TYPE JSONB" in source
+
+
 class _Cursor:
-    def __init__(self, metadata, *, constraints=True, indexes=True):
+    def __init__(
+        self,
+        metadata,
+        *,
+        constraints=True,
+        indexes=True,
+        bot_mode_constraint="CHECK (mode IN ('manual', 'semi-auto', 'auto'))",
+    ):
         self.metadata = metadata
         self.constraints = constraints
         self.indexes = indexes
+        self.bot_mode_constraint = bot_mode_constraint
         self.executed = []
 
     def __enter__(self):
@@ -62,6 +79,8 @@ class _Cursor:
             return (1,) if self.constraints else None
         if "FROM pg_indexes" in statement:
             return (1,) if self.indexes else None
+        if "FROM pg_constraint" in statement:
+            return (self.bot_mode_constraint,) if self.bot_mode_constraint else None
         if parameters:
             if isinstance(self.metadata, dict) and len(parameters) == 2:
                 return self.metadata.get((parameters[0], parameters[1]), RUNTIME_CONTRACT_METADATA.get((parameters[0], parameters[1])))
@@ -72,8 +91,20 @@ class _Cursor:
 
 
 class _Connection:
-    def __init__(self, metadata, *, constraints=True, indexes=True):
-        self.cursor_instance = _Cursor(metadata, constraints=constraints, indexes=indexes)
+    def __init__(
+        self,
+        metadata,
+        *,
+        constraints=True,
+        indexes=True,
+        bot_mode_constraint="CHECK (mode IN ('manual', 'semi-auto', 'auto'))",
+    ):
+        self.cursor_instance = _Cursor(
+            metadata,
+            constraints=constraints,
+            indexes=indexes,
+            bot_mode_constraint=bot_mode_constraint,
+        )
 
     def cursor(self):
         return self.cursor_instance
@@ -112,6 +143,24 @@ def test_schema_health_accepts_the_conversation_context_contract():
     assert constraint_queries
     assert all(" AS constraint" not in statement for statement in constraint_queries)
     assert all(" AS table_constraint" in statement for statement in constraint_queries)
+
+
+def test_schema_health_rejects_the_legacy_bot_mode_constraint():
+    metadata = {
+        (required.table_name, required.column_name):
+            ("", required.udt_name, "YES" if required.nullable else "NO", required.default_fragment)
+        for required in REQUIRED_FINN_V2_COLUMNS
+    }
+    connection = _Connection(metadata, bot_mode_constraint="CHECK (mode IN ('manual', 'semi', 'auto'))")
+    with pytest.raises(FinnV2SchemaHealthError, match="finn_v2_schema_invalid_bot_mode_constraint"):
+        assert_finn_v2_schema(connection)
+
+
+def test_bot_mode_migration_runs_before_schema_health():
+    deploy_script = (Path(__file__).resolve().parents[4] / "ops/deploy/deploy_env.sh").read_text(encoding="utf-8")
+    assert deploy_script.index("2026_10_10_bot_mode_semi_auto.py") < deploy_script.index(
+        "advance_deploy_step 'schema_health'"
+    )
 
 
 @pytest.mark.parametrize(

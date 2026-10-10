@@ -8,13 +8,54 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `DEPLOYED_QA_NOT_ACCEPTED`. The protected QA fixture is restored and an independent read-only run completed, but the complete fresh/missing/stale Score 2.0 → setup match → Paper matrix is not yet proven. The latest bot score provenance UI fix is deployed and awaits independent live review. |
+| Phase | `LOCAL_REPAIR_VALIDATING`. Independent QA on the deployed release proved a positive setup match, then found a Paper-bot creation HTTP 500. The bot-mode schema and execution-safety repair is local; the complete Score 2.0 → Paper matrix is not yet accepted. |
 | Goal | Prove the shared Score 2.0 → setup match → Paper chain for fresh, missing and stale sources, plus chat/Today/report parity. Preserve fixed/Smart DCA planned amounts and distinguish bot budget limits from cash. |
-| Candidate | [PR #153](https://github.com/gvangalen/antigravity-trading-tool/pull/153), merged as `f324e391e4d54ee1d702096a6bd45bc38d7538f5`. |
-| Production identity | On 2026-10-10, backend health and frontend build-info each returned HTTP 200 and SHA `f324e391e4d54ee1d702096a6bd45bc38d7538f5`; [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38079282227) and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38079414386) passed. This status-only update will create a later SHA; verify public identity before the next QA run. |
+| Candidate | Bot-mode schema repair on `codex/finn-bot-mode-contract`; not yet deployed. Previous provenance UI candidate was [PR #153](https://github.com/gvangalen/antigravity-trading-tool/pull/153). |
+| Production identity | On 2026-10-10, backend health and frontend build-info each returned HTTP 200 and SHA `6b81d9e69561ab76a9d3f4e8a5456ce87cf166d9`; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38079790288) passed. |
 | Last updated | 2026-10-10. |
 
 ### Protected QA and fixture recovery
+
+Independent browser QA on `6b81d9e` observed ETH Market 40, Macro 20,
+Technical 40 and benchmark 33.3 in Analyse. A new daily setup with boundaries
+20–60/0–70/40–80 appeared in Mijn Plan as a positive match at 81%. Its
+semi-automatic Paper-bot creation failed with `POST /api/bot/configs` HTTP 500;
+after refresh the new bot was absent and no decision or order was made. The
+server trace shows a PostgreSQL `bot_configs_mode_check` violation: the API
+accepts and writes `semi-auto`, while the deployed constraint allowed only
+`semi`. The repair migrates existing `semi` rows to `semi-auto`, updates the
+constraint, and makes the pre-start schema gate reject the old constraint.
+The report viewed during QA was a 03:36 historical snapshot, so it is not
+evidence for parity with the newly created 81% setup. QA verdict: **NOT_ACCEPTED**
+for the complete positive Score 2.0 → Paper chain.
+
+Security review of the failed bot-creation path found a related worker defect:
+the worker previously auto-executed every proposed order without checking the
+bot's `mode`. A newly creatable `semi-auto` live bot could therefore have sent
+an order to an exchange without per-order confirmation. The repair leaves
+`manual` and `semi-auto` orders pending for the explicit execution route and
+permits automatic execution only for `auto`. The executor also locks and
+rechecks the current owner-scoped bot mode, active state and Paper/Live setting
+before any exchange call. No exchange order was placed
+in local validation.
+
+Local repair validation so far: the migration was applied twice in disposable
+PostgreSQL 16, converted an existing `semi` row, accepted a new `semi-auto`
+row, rejected a new `semi` row, and rolled back successfully.
+The real-provider Luna/Responses selector development set passed **18/18**
+and regression passed **109/109** with zero provider, schema, timeout, parse or
+validation failures. After the mode-safety repair, the backend suite passed
+**3170**, skipped **3**; the focused mode test passed **18**. The refreshed
+worker-driven action matrix passed **16/16** with zero failed contracts, broker
+orders, live bots, live-trading calls or production connections
+(SHA-256 `f3afb08fbdd9cd6934e007cc2e1faeed8a2997e0ff7f9056cd51bbb9fdf33f6d`);
+adapter tests passed **19**. Frontend production build, typecheck, i18n lint
+and tests, command, proposal and setup tests passed. `audit:high` exited 0
+with one moderate Next.js advisory and no high vulnerability. Candidate CI
+and deployment are still pending. A local bootstrap mismatch
+(`daily_scores.indicator_evidence` as JSON instead of production JSONB) was
+also corrected; a reset local database passed all migrations and the pre-start
+schema health gate.
 
 The earlier protected preflight failed with `fixture_binding_invalid` before product testing. A protected, sanitized diagnosis found no valid Build or QA binding. [PRs #148–#150](https://github.com/gvangalen/antigravity-trading-tool/pull/150) added the Operations-only diagnosis/provisioning path and created separate nonadmin Build and QA fixtures with server-only bindings. [Preflight run 38077460653](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38077460653) then authenticated the QA fixture successfully (`/api/auth/me` HTTP 200). No fixture ID or credential was exposed in the handoff.
 
