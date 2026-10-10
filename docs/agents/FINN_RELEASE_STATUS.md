@@ -8,17 +8,29 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `DEPLOYED_QA_BLOCKED`. Build gates and deployment identity passed; independent authenticated product QA cannot start until Operations restores the protected `FINN_QA_USER_ID` binding. The preceding SHA `c8c76d02f5003975f81f7d4ac429b925eba8d84a` remains `NOT_ACCEPTED` because its protected preflight stopped before product cases. |
-| Goal | Prove the shared Score 2.0 → setup match → Paper chain for fresh, missing and stale sources, and chat/Today/report parity. Preserve exact fixed/Smart DCA planned amounts without a second macro multiplier, while validating the amount rule before any execution exception. |
-| Candidate branch | `codex/score2-local-chain-parity`; [PR #146](https://github.com/gvangalen/antigravity-trading-tool/pull/146), merged as `3eb0785881ebf7010d13ede47482b76425633694`. |
-| Production identity | Backend health and frontend build-info each returned HTTP 200 and commit SHA `3eb0785881ebf7010d13ede47482b76425633694` on 2026-10-10. This status-only update may create a later public SHA; QA must bind to the current public endpoints. |
+| Phase | `DEPLOYED_QA_NOT_ACCEPTED`. The protected QA fixture is restored and an independent read-only run completed, but the complete fresh/missing/stale Score 2.0 → setup match → Paper matrix is not yet proven. The latest bot score provenance UI fix is deployed and awaits independent live review. |
+| Goal | Prove the shared Score 2.0 → setup match → Paper chain for fresh, missing and stale sources, plus chat/Today/report parity. Preserve fixed/Smart DCA planned amounts and distinguish bot budget limits from cash. |
+| Candidate | [PR #153](https://github.com/gvangalen/antigravity-trading-tool/pull/153), merged as `f324e391e4d54ee1d702096a6bd45bc38d7538f5`. |
+| Production identity | On 2026-10-10, backend health and frontend build-info each returned HTTP 200 and SHA `f324e391e4d54ee1d702096a6bd45bc38d7538f5`; [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38079282227) and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38079414386) passed. This status-only update will create a later SHA; verify public identity before the next QA run. |
 | Last updated | 2026-10-10. |
+
+### Protected QA and fixture recovery
+
+The earlier protected preflight failed with `fixture_binding_invalid` before product testing. A protected, sanitized diagnosis found no valid Build or QA binding. [PRs #148–#150](https://github.com/gvangalen/antigravity-trading-tool/pull/150) added the Operations-only diagnosis/provisioning path and created separate nonadmin Build and QA fixtures with server-only bindings. [Preflight run 38077460653](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38077460653) then authenticated the QA fixture successfully (`/api/auth/me` HTTP 200). No fixture ID or credential was exposed in the handoff.
+
+The first encrypted read-only QA manifest stopped before case execution because its storage root was not writable. [PRs #151–#152](https://github.com/gvangalen/antigravity-trading-tool/pull/152) moved it under the protected secrets directory. [QA run 38078492411](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38078492411) then completed six HTTP-200 runs with polling/SSE parity and no confirmation, execution, or live-trading calls. The six failed manifest assertions required legacy operation IDs, but the Responses read-only path intentionally publishes an answer without one; those failures do not establish six failed coach answers. The runner redacts answer content, so that artifact also does not prove factual correctness.
+
+Independent browser QA on the same prior release SHA `3b77ab6a4cbaa3a71db192ca280a2be8f78aa965`, using a separate authenticated ETH account, found Analyse and FINN consistent for the missing-Market path: Macro 20, Technical 40, combined unknown, setup boundaries 20–60 / 30–70 / 40–80, and no current setup match. The bot remained Paper / Hold; its €20 amount was described as a budget limit, not cash. Today's report contained an older 40/20/40 snapshot; it is historical relative to the later Analyse read. A one-time client-side `/report` loading error cleared on reload and did not recur in one fresh navigation, so its cause is unresolved. Neither this browser run nor the protected manifest proves a positive fresh match or a scored Paper decision.
+
+[PR #153](https://github.com/gvangalen/antigravity-trading-tool/pull/153) prevents Automation from ranking bots by historical decision scores and labels a verified saved setup score with the decision timestamp. It changes presentation only; score calculation and bot execution are unchanged. Frontend build, typecheck, i18n checks and relevant tests passed locally; candidate and main CI passed. Independent live QA has not yet reviewed this new presentation SHA.
+
+## Previous Score 2.0 Repair
 
 Independent browser QA of the preceding release observed a fresh BTC benchmark and a persistent Paper bot, but did **not** accept the full chain: report retrieval returned a 502 during the run, onboarding silently saved score boundaries that the user had never seen, the trade panel described a bot budget limit as available balance, and FINN did not reliably confirm the saved bot's Paper state. The observed Macro score was below the hidden setup minimum, so no positive setup match or completed Paper decision was demonstrated. The exact cause of the live 502 is not established from browser evidence; its timing overlapped deployment activity.
 
 This repair gives report generation a short-lived database connection instead of disposing the shared API engine, projects verified category scores into a single-asset report, starts first-report generation when the API returns its pending placeholder, shows and saves the setup score ranges during onboarding, labels bot spending limits accurately, and exposes a direct owner-scoped saved-bot read through the existing portfolio adapter. A new independent QA run must still prove the positive and missing/stale Paper paths on one identified live SHA.
 
-## Current Deployed Candidate
+## Previous Score 2.0 Candidate
 
 [PR #146](https://github.com/gvangalen/antigravity-trading-tool/pull/146), with implementation commit `407b90b35f2b2ba746c1d14d1b5113f2a5fe82e2`, repairs the clean-local-database Score 2.0 upsert key and prevents a second macro-score multiplier from altering a confirmed fixed or Smart DCA amount. Cash, budget, exposure and kill-switch limits remain in the Paper path; the macro multiplier remains for non-DCA trades. This release is deployed but has not passed independent authenticated live QA.
 
