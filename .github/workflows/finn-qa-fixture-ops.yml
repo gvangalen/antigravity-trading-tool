@@ -1,0 +1,65 @@
+name: FINN QA Fixture Operations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.repository == 'gvangalen/antigravity-trading-tool'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Prepare protected connection
+        shell: bash
+        env:
+          QA_HOST: ${{ secrets.QA_SSH_HOST || secrets.HOST || secrets.SERVER_IP }}
+          QA_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          QA_KNOWN_HOSTS: ${{ secrets.QA_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "$QA_HOST" && test -n "$QA_KEY" && test -n "$QA_KNOWN_HOSTS"
+          printf '%s\n' "$QA_KEY" > "$RUNNER_TEMP/qa-key"
+          chmod 600 "$RUNNER_TEMP/qa-key"
+          printf '%s\n' "$QA_KNOWN_HOSTS" > "$RUNNER_TEMP/qa-known-hosts"
+          chmod 600 "$RUNNER_TEMP/qa-known-hosts"
+          ssh -i "$RUNNER_TEMP/qa-key" -o "UserKnownHostsFile=$RUNNER_TEMP/qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@$QA_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path.home() / '.secrets'
+          primary = root / 'trading.env'
+          candidates = sorted(p for p in root.glob('trading.env*') if p.is_file())
+          print('secret_file_present=' + str(primary.is_file()).lower())
+          print('historical_secret_files_present=' + str(any(p != primary for p in candidates)).lower())
+          for label, path in [('active', primary)]:
+              if not path.is_file():
+                  print(f'{label}_qa_binding=missing_file')
+                  continue
+              lines = path.read_text().splitlines()
+              assignments = [line for line in lines if re.match(r'^\s*(?:export\s+)?FINN_QA_USER_ID\s*=', line)]
+              if not assignments:
+                  print(f'{label}_qa_binding=missing')
+              elif len(assignments) != 1:
+                  print(f'{label}_qa_binding=ambiguous')
+              else:
+                  raw = assignments[0].split('=', 1)[1].strip().strip('"\'')
+                  print(f'{label}_qa_binding=' + ('numeric' if raw.isdecimal() and int(raw) > 0 else 'invalid'))
+          historical = []
+          for path in candidates:
+              if path == primary:
+                  continue
+              for line in path.read_text().splitlines():
+                  if re.match(r'^\s*(?:export\s+)?FINN_QA_USER_ID\s*=', line):
+                      raw = line.split('=', 1)[1].strip().strip('"\'')
+                      if raw.isdecimal() and int(raw) > 0:
+                          historical.append(raw)
+          print('historical_qa_binding_count=' + str(len(set(historical))))
+          PY
+          REMOTE
