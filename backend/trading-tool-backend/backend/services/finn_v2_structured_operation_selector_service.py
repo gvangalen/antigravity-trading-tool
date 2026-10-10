@@ -70,8 +70,10 @@ class FinnV2StructuredOperationSelectorService:
         else:
             injected = self._provider(**captured)
             response = await injected if asyncio.iscoroutine(injected) else injected
-        if self._incomplete_provider_output(response):
-            retry_request = {**captured, "max_output_tokens": self._retry_token_budget(captured)}
+        for budget in (self._retry_token_budget(captured), self._final_retry_token_budget(captured)):
+            if not self._incomplete_provider_output(response):
+                break
+            retry_request = {**captured, "max_output_tokens": budget}
             if self._provider is openai_client.ask_gpt_structured_response:
                 response = await openai_client.ask_gpt_structured_response_async(**retry_request)
             else:
@@ -203,10 +205,10 @@ class FinnV2StructuredOperationSelectorService:
                 client_max_retries=0,
             )
             response = self._provider(**request)
-            if self._incomplete_provider_output(response):
-                response = self._provider(
-                    **{**request, "max_output_tokens": self._retry_token_budget(request)}
-                )
+            for budget in (self._retry_token_budget(request), self._final_retry_token_budget(request)):
+                if not self._incomplete_provider_output(response):
+                    break
+                response = self._provider(**{**request, "max_output_tokens": budget})
         except Exception as exc:
             return None, f"selector_provider_exception:{type(exc).__name__}"
         if response.get("error"):
@@ -294,6 +296,10 @@ class FinnV2StructuredOperationSelectorService:
     @staticmethod
     def _retry_token_budget(request: Mapping[str, Any]) -> int:
         return min(1800, max(1200, int(request.get("max_output_tokens") or 900) * 2))
+
+    @staticmethod
+    def _final_retry_token_budget(request: Mapping[str, Any]) -> int:
+        return min(3000, max(2200, int(request.get("max_output_tokens") or 900) * 3))
 
     @staticmethod
     def _selector_manifest(candidate_contracts: tuple[OperationContract, ...]) -> list[dict[str, object]]:

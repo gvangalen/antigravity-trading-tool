@@ -73,6 +73,23 @@ def test_structured_selector_retries_only_incomplete_provider_output():
     assert [request["max_output_tokens"] for request in requests] == [900, 1800]
 
 
+def test_structured_selector_recovers_after_two_truncated_provider_responses():
+    requests = []
+
+    def provider(**kwargs):
+        requests.append(kwargs)
+        return ({"error": "incomplete_structured_response"}
+                if len(requests) < 3 else _provider())
+
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Beoordeel mijn strategie.",
+        candidate_contracts=(FinnV2OperationRegistry().get("evaluate_strategy"),),
+        facts={"entities": ("strategy",)}, verified_context=None,
+    )
+    assert error is None and selection is not None
+    assert [request["max_output_tokens"] for request in requests] == [900, 1800, 2700]
+
+
 def test_async_structured_selector_retries_incomplete_provider_output():
     requests = []
 

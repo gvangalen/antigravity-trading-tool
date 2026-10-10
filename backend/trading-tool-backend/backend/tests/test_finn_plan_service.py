@@ -1133,6 +1133,17 @@ def test_first_dashboard_analysis_query_failure_is_unknown_not_absent(monkeypatc
     assert result == {"availability": "unknown", "source": "query_failed"}
 
 
+def test_first_dashboard_query_failure_never_revives_old_mission_scores():
+    result = FinnPlanService(db_session=object())._first_dashboard_market_snapshot(
+        {"market_score": 100, "macro_score": 80, "technical_score": 75, "setup_score": 90},
+        data_readiness={"status": "score_generation_missing", "message": "Beoordeling onbekend."},
+        has_scores=False,
+        blockers=[],
+        latest_analysis={"availability": "unknown", "source": "query_failed"},
+    )
+    assert result["scores"] == {"market": None, "macro": None, "technical": None, "setup": None}
+
+
 def test_first_dashboard_discards_older_mission_scores_and_blockers(monkeypatch):
     service = FinnPlanService(db_session=object())
     benchmark = {

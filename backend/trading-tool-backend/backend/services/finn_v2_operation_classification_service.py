@@ -149,6 +149,23 @@ class FinnV2OperationClassificationService:
                 (contract,),
                 conversation_context=conversation_context,
             )
+        if (
+            facts.discourse_act == "operation_request"
+            and facts.action_polarity == "update"
+            and facts.primary_entity is None
+            and not facts.explicit_entities
+            and not facts.referenced_asset
+            and not (conversation_context or {}).get("active_guided_operation")
+            and not (conversation_context or {}).get("previous_action_result")
+        ):
+            # A request to change an unspecified trading approach has no
+            # owner-scoped target or concrete outcome. Ask what to change;
+            # do not let a model turn the mutation into an unrelated review.
+            contract = self.registry.require_supported("clarify_request")
+            return self._result(
+                contract.operation_id, facts, "high", "registry_constraint",
+                (contract,), conversation_context=conversation_context,
+            )
         if facts.discourse_act == "capability":
             # Capability is a registry-defined informational operation once
             # the deterministic preprocessor has identified the discourse
@@ -752,6 +769,14 @@ class FinnV2OperationClassificationService:
         if not selected_entities.get("asset") and supplied_inputs.get("symbol"):
             selected_entities["asset"] = str(supplied_inputs["symbol"])
         selected_reference = getattr(selection, "conversation_reference", None)
+        if not selected_reference and "contextual_entity" in facts.conversation_reference_markers:
+            verified = dict((conversation_context or {}).get("last_verified_context") or {})
+            resolved = dict(verified.get("resolved_entities") or {})
+            if any(
+                field in supplied_inputs and str(supplied_inputs[field]) == str(resolved.get(field))
+                for field in contract.contextual_reference_inputs
+            ):
+                selected_reference = "previous_verified_response"
         action_result = dict((conversation_context or {}).get("previous_action_result") or {})
         if (
             not selected_reference
@@ -850,6 +875,12 @@ class FinnV2OperationClassificationService:
             value = resolved.get(field)
             if value is not None and str(selected_entities.get(field) or "") == str(value):
                 supplied.setdefault(field, value)
+            elif value is not None and "contextual_entity" in facts.conversation_reference_markers:
+                # The user explicitly points to the immediately verified
+                # object. Its persisted typed ID is safer than asking the
+                # provider to reproduce an internal database identifier.
+                supplied.setdefault(field, value)
+                selected_entities.setdefault(field, str(value))
         # A confirmed action result is authoritative lineage. The runtime
         # already hydrates these typed values before proposal construction;
         # retain the same safe projection at the selector boundary rather

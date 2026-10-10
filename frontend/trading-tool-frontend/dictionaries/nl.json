@@ -621,7 +621,7 @@
       "report": "Dagrapport",
       "setup": "Actieve setup",
       "setupLabel": "Setup",
-      "master_score": "AI-hoofdscore",
+      "master_score": "Benchmarkscore",
       "bot": "AI-tradingbot",
       "no_setup": "Geen actieve setup gevonden.",
       "no_strategy": "Nog geen strategie beschikbaar.",

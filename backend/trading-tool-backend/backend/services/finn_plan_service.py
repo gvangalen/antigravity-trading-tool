@@ -14337,7 +14337,9 @@ class FinnPlanService:
         blockers: List[Dict[str, Any]],
         latest_analysis: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        verified = (latest_analysis or {}).get("reported_scores") if latest_analysis is not None else None
+        # A failed Score 2.0 lookup must not revive older mission-control
+        # scores as if they were current measurements.
+        verified = (latest_analysis or {}).get("reported_scores") or {}
         return {
             "status": data_readiness.get("status") or ("ready" if has_scores else "score_generation_missing"),
             "freshness": data_readiness.get("message"),
@@ -14352,10 +14354,10 @@ class FinnPlanService:
                 if isinstance(blocker, dict)
             ],
             "scores": {
-                "macro": verified.get("macro_score") if verified is not None else asset_analysis.get("macro_score"),
-                "technical": verified.get("technical_score") if verified is not None else asset_analysis.get("technical_score"),
-                "market": verified.get("market_score") if verified is not None else asset_analysis.get("market_score"),
-                "setup": (latest_analysis or {}).get("setup_match_score") if latest_analysis is not None else asset_analysis.get("setup_score"),
+                "macro": verified.get("macro_score"),
+                "technical": verified.get("technical_score"),
+                "market": verified.get("market_score"),
+                "setup": (latest_analysis or {}).get("setup_match_score"),
             },
         }
 

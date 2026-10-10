@@ -16,6 +16,41 @@ from backend.services.finn_v2_structured_operation_selector_service import FinnV
 CLASSIFIER = FinnV2OperationClassificationService()
 
 
+def test_objectless_mutation_clarifies_without_recasting_it_as_plan_evaluation():
+    class Selector:
+        def select(self, **_kwargs):
+            raise AssertionError("Unspecified mutation has no selector target")
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Verbeter mijn handelswerkwijze zonder dat ik aangeef wat er moet veranderen."
+    )
+    assert result.operation_id == "clarify_request"
+    assert result.selected_missing_inputs == ("requested_change",)
+
+
+def test_discussed_bot_uses_only_verified_lineage_for_typed_action_target():
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="activate_bot", confidence=0.99, entities={},
+                target_asset=None, conversation_reference=None, missing_inputs=("bot_id",),
+                ambiguity_reason=None, semantic_frame={},
+            ), None
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
+    message = "Schakel de besproken bot meteen over op live handelen met echt kapitaal."
+    without_lineage = classifier.classify(message=message)
+    with_lineage = classifier.classify(message=message, conversation_context={
+        "last_verified_context": {"verified_response_id": "verified-1",
+                                  "resolved_entities": {"bot_id": 170}},
+    })
+    assert without_lineage.selected_missing_inputs == ("bot_id",)
+    assert with_lineage.operation_id == "activate_bot"
+    assert with_lineage.supplied_inputs["bot_id"] == 170
+    assert with_lineage.selected_missing_inputs == ()
+    assert with_lineage.selected_conversation_reference == "previous_verified_response"
+
+
 def test_strategy_amount_accepts_natural_currency_before_the_execution_phrase():
     contract = FinnV2OperationRegistry().get("create_strategy")
     state = FinnV2OperationStateService().resolve(

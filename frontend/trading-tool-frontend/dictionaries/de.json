@@ -621,7 +621,7 @@
       "report": "Daily Report",
       "setup": "Active Setup",
       "setupLabel": "Setup",
-      "master_score": "AI Master Score",
+      "master_score": "Benchmark-Score",
       "bot": "AI Trading Bot",
       "no_setup": "No active setup found.",
       "no_strategy": "No strategy available yet.",

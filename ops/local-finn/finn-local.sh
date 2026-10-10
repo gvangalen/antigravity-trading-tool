@@ -48,13 +48,11 @@ case "${1:-}" in
   matrix)
     require_env; load_env
     shift
-    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/run_finn_v2_local_matrix.py "$@")
-    # The end-to-end runner exercises one safe fixture action. For a full
-    # matrix invocation, also prove that every existing supported V1 write
-    # contract still resolves to exactly one existing adapter.
-    if test "$#" -eq 0; then
-      (cd "$BACKEND" && PYTHONPATH=. pytest -q backend/tests/test_finn_v2_action_adapter_registry.py)
-    fi ;;
+    mkdir -p "$ROOT/.local-finn-parity-artifacts"
+    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/run_finn_v2_full_action_matrix.py \
+      --base-url http://127.0.0.1:18000 \
+      --output "$ROOT/.local-finn-parity-artifacts/full-action-matrix.json" "$@")
+    (cd "$BACKEND" && PYTHONPATH=. pytest -q backend/tests/test_finn_v2_action_adapter_registry.py) ;;
   selector-eval)
     require_env; load_env
     shift

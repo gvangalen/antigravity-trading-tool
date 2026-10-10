@@ -62,7 +62,10 @@ export async function getDailyScores(symbol = "BTC", options = {}) {
 export async function getBenchmarkScore(symbol = "BTC") {
   try {
     const data = await fetchAuth(`/api/scores/benchmark?symbol=${symbol}`);
-    const masterScore = Number(data?.master_score);
+    const rawScore = data?.master_score;
+    const masterScore = rawScore === null || rawScore === undefined || rawScore === ''
+      ? NaN
+      : Number(rawScore);
     if (!Number.isFinite(masterScore)) {
       return { master_score: null, data_status: 'insufficient_data' };
     }
