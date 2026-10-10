@@ -11,7 +11,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 | Phase | `LOCAL_VALIDATED`; candidate CI, Auto Deploy, public SHA check and independent authenticated QA have not run for this batch. |
 | Goal | Prove the shared Score 2.0 → setup match → Paper path for fresh, missing and stale inputs; align FINN chat, Today and report evidence; move admin-log AI to explicit Luna/Responses; retire unused public legacy routes and labels. |
 | Candidate branch | `codex/finn-score-chain-convergence`. |
-| Candidate SHA | Pending final commit. |
+| Implementation commits | `bf1fb40856aad9b6e1502d35f21a4d171be3b491` and `5ca2d9150c6ab247ab9eba0104f7938438c6ad0b`; Git HEAD after this status update is the candidate SHA. |
 | Production SHA | Pending deployment. |
 | Last updated | 2026-10-10. |
 
