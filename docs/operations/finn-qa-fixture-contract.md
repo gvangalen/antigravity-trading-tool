@@ -50,7 +50,15 @@ non-logging shell process.
 
 If either required binding is absent, malformed, inactive, or does not identify
 its approved fixture, the corresponding gate is blocked. Do not select a
-fallback user, mint a local JWT, create an account, or use a browser cookie.
+fallback user, mint a local JWT, or use a browser cookie. A missing QA binding
+may be restored only by Operations under explicit user authorization through
+the protected `FINN QA Fixture Operations` workflow. Its provision mode creates
+the designated, marked, non-admin QA owner with an unknown generated password,
+checks that it differs from the Build fixture and has no exchange keys, and
+writes the binding only to the server secret environment. It never prints or
+exports the owner ID. Re-running may use only that exact marked QA owner; a
+different existing account is never selected. Run `auth_preflight` after
+provisioning before any product cases.
 
 ## Fixture Safety
 
