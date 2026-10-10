@@ -533,7 +533,7 @@ def test_asset_catalog_fallback_rolls_back_failed_session():
 def test_freshness_service_accepts_date_values_for_daily_tools():
     service = FinnV2FreshnessService()
 
-    freshness = service.freshness_for("read_asset_scores", date.today())
+    freshness = service.freshness_for("read_asset_scores", datetime.now(timezone.utc).date())
 
     assert freshness == "fresh"
 

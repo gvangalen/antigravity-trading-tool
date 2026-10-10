@@ -326,6 +326,7 @@ def test_create_strategy_auto_uses_exactly_one_owner_scoped_setup():
 def test_create_bot_requires_a_name_when_multiple_owner_strategies_exist():
     service = FinnV2EntityResolutionService(session=object())
     service.strategies = _FakeStrategyRepo()
+    service.setups = _FakeSetupRepo()
 
     with pytest.raises(LookupError, match="strategy_ambiguous"):
         asyncio.run(service.resolve_contract_reference_inputs(
@@ -335,6 +336,171 @@ def test_create_bot_requires_a_name_when_multiple_owner_strategies_exist():
             operation_id="create_bot",
             message="Maak een paper-bot.",
         ))
+
+
+def test_create_bot_resolves_the_only_strategy_linked_to_explicit_owner_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+
+    async def setups(user_id):
+        return [
+            {"id": 293, "name": "ETH DCA QA", "symbol": "ETH"},
+            {"id": 294, "name": "Other Plan", "symbol": "BTC"},
+        ] if user_id == 388 else []
+
+    async def strategies(user_id, filters):
+        rows = [
+            {"id": 309, "name": "ETH DCA QA Strategy", "setup_id": 293},
+            {"id": 310, "name": "Other Strategy", "setup_id": 294},
+        ] if user_id == 388 else []
+        return [row for row in rows if row["setup_id"] == filters["setup_id"]] if filters.get("setup_id") else rows
+
+    service.setups.get_user_setups = setups
+    service.strategies.query_strategies = strategies
+
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388, selector={}, required_inputs=("strategy_id",),
+        operation_id="create_bot",
+        message="Maak een nieuwe Paper-bot voor de strategie bij ETH DCA QA.",
+    ))
+
+    assert resolved == {"strategy_id": 309}
+
+
+def test_create_bot_does_not_choose_among_multiple_strategies_on_named_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "ETH DCA QA", "symbol": "ETH"},
+    ])
+
+    with pytest.raises(LookupError, match="strategy_ambiguous"):
+        asyncio.run(service.resolve_contract_reference_inputs(
+            user_id=388, selector={}, required_inputs=("strategy_id",),
+            operation_id="create_bot",
+            message="Maak een Paper-bot voor ETH DCA QA.",
+        ))
+
+    # A prior-turn strategy under the same setup is still not a choice in
+    # this turn. An explicit current-turn name is a valid disambiguation.
+    with pytest.raises(LookupError, match="strategy_ambiguous"):
+        asyncio.run(service.resolve_contract_reference_inputs(
+            user_id=388,
+            selector={"strategy_id": 309, "strategy_name": "Matrix Strategy"},
+            required_inputs=("strategy_id",), operation_id="create_bot",
+            message="Maak een Paper-bot voor ETH DCA QA.",
+        ))
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388,
+        selector={"strategy_id": 310, "strategy_name": "Other Strategy"},
+        required_inputs=("strategy_id",), operation_id="create_bot",
+        message="Maak een Paper-bot voor Matrix Strategy bij ETH DCA QA.",
+    ))
+    assert resolved == {"strategy_id": 309}
+
+
+def test_create_bot_treats_two_distinct_setup_mentions_as_ambiguous():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "BTC Base", "symbol": "BTC"},
+        {"id": 294, "name": "Apple Full Setup", "symbol": "AAPL"},
+    ])
+
+    with pytest.raises(LookupError, match="setup_ambiguous"):
+        asyncio.run(service.resolve_contract_reference_inputs(
+            user_id=388, selector={}, required_inputs=("strategy_id",),
+            operation_id="create_bot",
+            message="Maak een bot voor BTC Base of Apple Full Setup.",
+        ))
+
+
+def test_nested_setup_name_in_one_occurrence_is_one_target():
+    service = FinnV2EntityResolutionService(session=object())
+    rows = [
+        {"id": 293, "name": "BTC Base"},
+        {"id": 294, "name": "BTC Base Advanced"},
+    ]
+
+    assert service._explicit_message_matches("Maak een bot voor BTC Base Advanced.", rows) == [rows[1]]
+    assert service._explicit_message_matches(
+        "Vergelijk BTC Base en BTC Base Advanced.", rows,
+    ) == [rows[1], rows[0]]
+
+
+def test_create_bot_does_not_treat_setup_name_as_strategy_name_when_they_collide():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "ETH DCA", "symbol": "ETH"},
+    ])
+
+    async def strategies(_user_id, filters):
+        rows = [
+            {"id": 309, "name": "ETH DCA", "setup_id": 293},
+            {"id": 310, "name": "ETH DCA Variant", "setup_id": 293},
+        ]
+        return [row for row in rows if row["setup_id"] == filters["setup_id"]] if filters.get("setup_id") else rows
+
+    service.strategies.query_strategies = strategies
+    with pytest.raises(LookupError, match="strategy_ambiguous"):
+        asyncio.run(service.resolve_contract_reference_inputs(
+            user_id=388, selector={}, required_inputs=("strategy_id",),
+            operation_id="create_bot",
+            message="Maak een Paper-bot voor de setup ETH DCA.",
+        ))
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388, selector={}, required_inputs=("strategy_id",),
+        operation_id="create_bot",
+        message="Maak een Paper-bot voor strategie ETH DCA bij setup ETH DCA.",
+    ))
+    assert resolved == {"strategy_id": 309}
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388, selector={}, required_inputs=("strategy_id",),
+        operation_id="create_bot",
+        message="Maak een Paper-bot voor strategie ETH DCA Variant bij setup ETH DCA.",
+    ))
+    assert resolved == {"strategy_id": 310}
+
+
+def test_create_bot_rejects_named_strategy_outside_named_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "ETH DCA", "symbol": "ETH"},
+        {"id": 294, "name": "Other Setup", "symbol": "BTC"},
+    ])
+
+    async def strategies(_user_id, _filters):
+        return [
+            {"id": 309, "name": "ETH Strategy", "setup_id": 293},
+            {"id": 310, "name": "Other Strategy", "setup_id": 294},
+        ]
+
+    service.strategies.query_strategies = strategies
+    with pytest.raises(LookupError, match="strategy_not_resolved"):
+        asyncio.run(service.resolve_contract_reference_inputs(
+            user_id=388, selector={}, required_inputs=("strategy_id",),
+            operation_id="create_bot",
+            message="Maak een bot voor strategie Other Strategy bij setup ETH DCA.",
+        ))
+
+
+def test_create_bot_current_strategy_name_overrides_stale_strategy_id_without_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[])
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388, selector={"strategy_id": 310}, required_inputs=("strategy_id",),
+        operation_id="create_bot", message="Maak een Paper-bot voor Matrix Strategy.",
+    ))
+    assert resolved == {"strategy_id": 309}
 
 
 def test_entity_resolution_follows_explicit_child_identity_to_its_parent_setup():

@@ -387,6 +387,27 @@ def test_canonical_bot_graph_replaces_stale_conversation_parent_ids():
     assert references["canonical_entity_target"]["entity_id"] == 4
 
 
+def test_create_bot_ambiguous_linked_strategy_becomes_clarification_not_failure():
+    message = "Maak een Paper-bot voor mijn bestaande DCA-setup."
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    analysis = _analysis_for_operation(message, "create_bot")
+    service.entities.resolve_contract_reference_inputs = AsyncMock(
+        side_effect=LookupError("strategy_ambiguous")
+    )
+
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=message, analysis=analysis,
+        conversation_context={}, workspace_hints={}, client_context={},
+    ))
+
+    assert resolved.request_plan.operation_id == "create_bot"
+    assert resolved.request_plan.referenced_entities["target_resolution"] == {
+        "status": "ambiguous", "entity_type": "strategy",
+        "candidate_names": [], "source": "owner_scoped_reference",
+    }
+    assert "strategy_id" in resolved.request_plan.operation_state["missing_required_inputs"]
+
+
 def test_orchestrator_preserves_typed_ambiguity_before_tools():
     message = "Vat mijn strategie samen."
     service = FinnV2OrchestratorService(session=_QueryableSession())
