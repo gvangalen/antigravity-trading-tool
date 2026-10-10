@@ -16,8 +16,8 @@ from pathlib import Path
 
 
 FIXTURES = (
-    ("FINN_BUILD_SMOKE_USER_ID", "finn-protected-build@tradamind.com", "finn_production_build_v1", "Protected Build"),
-    ("FINN_QA_USER_ID", "finn-protected-qa@tradamind.com", "finn_production_qa_v1", "Protected QA"),
+    ("FINN_BUILD_SMOKE_USER_ID", "finn-protected-build@tradamind.example", "finn_production_build_v1", "Protected Build"),
+    ("FINN_QA_USER_ID", "finn-protected-qa@tradamind.example", "finn_production_qa_v1", "Protected QA"),
 )
 
 
