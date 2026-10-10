@@ -277,13 +277,34 @@ class FinnV2OrchestratorService:
                     if relation_value is not None:
                         selectors[relation_field] = relation_value
                 selectors["canonical_entity_target"] = target_dict
-        resolved = await self.entities.resolve_contract_reference_inputs(
-            user_id=user_id,
-            selector=selectors,
-            required_inputs=contract.required_inputs,
-            message=message,
-            operation_id=operation_id,
-        )
+        try:
+            resolved = await self.entities.resolve_contract_reference_inputs(
+                user_id=user_id,
+                selector=selectors,
+                required_inputs=contract.required_inputs,
+                message=message,
+                operation_id=operation_id,
+            )
+        except LookupError as exc:
+            # An owner-scoped name can be absent or ambiguous. That is a
+            # clarification outcome, not a lifecycle exception. Preserve the
+            # registry operation while preventing any proposal for a guessed
+            # related object.
+            code = str(exc)
+            if code not in {
+                "setup_ambiguous", "strategy_ambiguous", "bot_ambiguous",
+                "entity_not_found", "setup_not_resolved", "strategy_not_resolved",
+            }:
+                raise
+            selectors["target_resolution"] = {
+                "status": "ambiguous" if code.endswith("_ambiguous") else "not_found",
+                "entity_type": "setup" if code.startswith("setup_") else (
+                    "bot" if code.startswith("bot_") else "strategy"
+                ),
+                "candidate_names": [],
+                "source": "owner_scoped_reference",
+            }
+            resolved = {}
         if (
             not resolved
             and canonical_target is None

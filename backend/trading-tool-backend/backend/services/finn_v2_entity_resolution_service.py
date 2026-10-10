@@ -444,15 +444,67 @@ class FinnV2EntityResolutionService:
         message: str,
         rows: list[Dict[str, Any]],
     ) -> list[Dict[str, Any]]:
-        matches = [row for row in rows if self._message_mentions_name(message, row.get("name"))]
-        if len(matches) <= 1:
-            return matches
-        # If one visible name fully contains another ("Alpha" / "Alpha Bot"),
-        # the most specific name is the user's explicit target. Equal-length
-        # matches remain genuinely ambiguous.
-        lengths = [len(self._normalized_name(row.get("name")) or "") for row in matches]
-        longest = max(lengths, default=0)
-        return [row for row, length in zip(matches, lengths) if length == longest]
+        normalized_message = " ".join(str(message or "").casefold().split())
+        occurrences: list[tuple[int, int, Dict[str, Any]]] = []
+        for row in rows:
+            name = self._normalized_name(row.get("name"))
+            if not name:
+                continue
+            for match in re.finditer(
+                rf"(?<!\w){re.escape(name)}(?!\w)", normalized_message,
+            ):
+                occurrences.append((match.start(), match.end(), row))
+        # A short name nested in the very same textual occurrence of a longer
+        # name is not a second target. Two names mentioned at distinct spans
+        # are separate choices even if one name happens to be longer.
+        selected: list[tuple[int, int, Dict[str, Any]]] = []
+        for start, end, row in sorted(occurrences, key=lambda item: item[1] - item[0], reverse=True):
+            if any(other_start <= start and end <= other_end for other_start, other_end, _ in selected):
+                continue
+            selected.append((start, end, row))
+        unique: list[Dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for _start, _end, row in selected:
+            identity = (str(row.get("id") or row.get("setup_id") or row.get("strategy_id") or ""),
+                        self._normalized_name(row.get("name")) or "")
+            if identity not in seen:
+                seen.add(identity)
+                unique.append(row)
+        return unique
+
+    def _explicit_strategy_matches(
+        self, message: str, strategies: list[Dict[str, Any]], *, setup_name: str = "",
+    ) -> list[Dict[str, Any]]:
+        """Find owner strategies named in this turn, excluding a parent setup mention."""
+        normalized_message = " ".join(str(message or "").casefold().split())
+        normalized_setup = self._normalized_name(setup_name) or ""
+        setup_spans = [
+            (match.start(), match.end())
+            for match in re.finditer(
+                rf"(?<!\w){re.escape(normalized_setup)}(?!\w)", normalized_message,
+            )
+        ] if normalized_setup else []
+        spans = [
+            (match.start(), match.end(), row)
+            for row in strategies
+            for name in [self._normalized_name(row.get("name"))]
+            if name
+            for match in re.finditer(rf"(?<!\w){re.escape(name)}(?!\w)", normalized_message)
+        ]
+        selected_spans: list[tuple[int, int]] = []
+        selected: list[Dict[str, Any]] = []
+        for start, end, row in sorted(spans, key=lambda item: item[1] - item[0], reverse=True):
+            if any(left <= start and end <= right for left, right in selected_spans):
+                continue
+            selected_spans.append((start, end))
+            inside_setup = any(left <= start and end <= right for left, right in setup_spans)
+            explicit_strategy = re.search(
+                r"\b(?:strategie|strategy)\s+(?:(?:met\s+de\s+naam|genaamd)\s+)?$",
+                normalized_message[max(0, start - 48):start],
+            )
+            if (not inside_setup or explicit_strategy) and row not in selected:
+                selected.append(row)
+        return selected
 
     async def resolve_asset(
         self,
@@ -545,6 +597,7 @@ class FinnV2EntityResolutionService:
             selector=selector,
             required_inputs=required_inputs,
             message=message,
+            operation_id=operation_id,
         )
         resolved: Dict[str, int] = {}
         if operation_id == "create_strategy" and "setup_id" in required_inputs and not self._coerce_int(selector.get("setup_id")):
@@ -553,12 +606,58 @@ class FinnV2EntityResolutionService:
                 resolved["setup_id"] = self._coerce_int(setups[0].get("id") or setups[0].get("setup_id"))
             elif len(setups) > 1 and not self._normalized_name(selector.get("setup_name")):
                 raise LookupError("setup_ambiguous")
-        if operation_id == "create_bot" and "strategy_id" in required_inputs and not self._coerce_int(selector.get("strategy_id")):
-            strategies = [dict(row) for row in await self.strategies.query_strategies(user_id, {})]
-            if len(strategies) == 1:
-                resolved["strategy_id"] = self._coerce_int(strategies[0].get("id") or strategies[0].get("strategy_id"))
-            elif len(strategies) > 1 and not self._normalized_name(selector.get("strategy_name")):
-                raise LookupError("strategy_ambiguous")
+        if operation_id == "create_bot" and "strategy_id" in required_inputs:
+            # A bot request may name its parent setup rather than the linked
+            # strategy. Resolve that owner-scoped relationship before looking
+            # at the user's unrelated strategies. One setup may have several
+            # strategies; in that case the action must ask which one.
+            setups = [dict(row) for row in await self.setups.get_user_setups(user_id)]
+            named_setups = self._explicit_message_matches(message, setups)
+            if len(named_setups) > 1:
+                raise LookupError("setup_ambiguous")
+            setup = named_setups[0] if named_setups else None
+            if setup is None and self._normalized_name(selector.get("setup_name")):
+                setup = (await self.resolve_setup(user_id=user_id, selector=selector, asset=None))["setup"]
+            if setup is not None:
+                setup_id = self._coerce_int(setup.get("id") or setup.get("setup_id"))
+                strategies = [dict(row) for row in await self.strategies.query_strategies(user_id, {})]
+                linked = [
+                    row for row in strategies
+                    if self._coerce_int(row.get("setup_id")) == setup_id
+                ]
+                current_turn_strategy = self._explicit_strategy_matches(
+                    message, strategies, setup_name=str(setup.get("name") or ""),
+                )
+                if len(current_turn_strategy) > 1:
+                    raise LookupError("strategy_ambiguous")
+                if current_turn_strategy and current_turn_strategy[0] not in linked:
+                    raise LookupError("strategy_not_resolved")
+                # A previously selected strategy ID/name may belong to the
+                # same setup yet be the wrong variant for this new request.
+                # Only the current turn can choose among linked strategies.
+                strategy_selector = (
+                    {"strategy_name": current_turn_strategy[0]["name"]}
+                    if current_turn_strategy else {}
+                )
+                strategy = (await self.resolve_strategy(
+                    user_id=user_id, selector=strategy_selector, setup=setup,
+                ))["strategy"]
+                resolved["strategy_id"] = self._coerce_int(
+                    strategy.get("id") or strategy.get("strategy_id")
+                )
+            else:
+                strategies = [dict(row) for row in await self.strategies.query_strategies(user_id, {})]
+                named_strategies = self._explicit_strategy_matches(message, strategies)
+                if len(named_strategies) > 1:
+                    raise LookupError("strategy_ambiguous")
+                if len(named_strategies) == 1:
+                    resolved["strategy_id"] = self._coerce_int(
+                        named_strategies[0].get("id") or named_strategies[0].get("strategy_id")
+                    )
+                elif not self._coerce_int(selector.get("strategy_id")) and len(strategies) == 1:
+                    resolved["strategy_id"] = self._coerce_int(strategies[0].get("id") or strategies[0].get("strategy_id"))
+                elif not self._coerce_int(selector.get("strategy_id")) and len(strategies) > 1 and not self._normalized_name(selector.get("strategy_name")):
+                    raise LookupError("strategy_ambiguous")
         if "setup_id" in required_inputs and not self._coerce_int(selector.get("setup_id")):
             if resolved.get("setup_id"):
                 pass
@@ -590,6 +689,7 @@ class FinnV2EntityResolutionService:
         selector: Dict[str, Any],
         required_inputs: tuple[str, ...],
         message: str,
+        operation_id: str = "",
     ) -> Dict[str, Any]:
         enriched = dict(selector)
         repositories = {
@@ -600,6 +700,11 @@ class FinnV2EntityResolutionService:
         for entity, loader in repositories.items():
             id_field, name_field = f"{entity}_id", f"{entity}_name"
             if id_field not in required_inputs:
+                continue
+            if operation_id == "create_bot" and entity == "strategy":
+                # The create-bot path resolves a strategy inside the named
+                # setup. Global name matching here can mistake the setup name
+                # for a second strategy before that relationship is checked.
                 continue
             rows = await loader(user_id)
             matches = self._explicit_message_matches(message, [dict(row) for row in rows])

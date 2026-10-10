@@ -72,7 +72,7 @@ def test_direct_dxy_index_uses_same_completed_source_for_reading_and_history(mon
 
 
 def _day(offset):
-    return date.today() - timedelta(days=offset)
+    return datetime.now(timezone.utc).date() - timedelta(days=offset)
 
 
 class _Result:
@@ -152,7 +152,7 @@ def test_market_backfill_uses_closed_dated_candles_and_is_idempotent(monkeypatch
     assert second == {"inserted": 0, "status": "ready", "coverage": {"price": 6, "volume": 6}}
     assert provider.calls == 1
     assert session.commits == 1
-    assert all(row.source_observed_at.date() < date.today() for row in session.rows)
+    assert all(row.source_observed_at.date() < datetime.now(timezone.utc).date() for row in session.rows)
     assert len({row.source_observed_at.date() for row in session.rows}) == 6
 
 
