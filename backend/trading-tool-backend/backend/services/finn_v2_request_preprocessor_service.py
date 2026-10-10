@@ -307,6 +307,16 @@ class FinnV2RequestPreprocessorService:
             for marker, terms in self._REFERENCE_MARKERS.items()
             if self._contains_any(normalized, terms)
         )
+        # Evidence questions about a prior answer are semantically different
+        # from requests to restyle that answer. Recognize the evidence and
+        # prior-assessment noun classes together, including inflected forms,
+        # without depending on one particular question wording.
+        if (
+            re.search(r"\b(?:bewijs\w*|bron\w*|feit\w*|evidence|sources?|facts?|beleg\w*|quell\w*|fakt\w*)\b", normalized)
+            and re.search(r"\b(?:oordeel|conclusie|antwoord|advies|beoordeling|judg\w*|assessment|answer|conclusion|advice|verdict|urteil|antwort|einsch[aä]tzung|bewertung)\b", normalized)
+            and "previous_verified_conclusion" not in references
+        ):
+            references = (*references, "previous_verified_conclusion")
         # A bare causal question is only a follow-up when the resolver later
         # finds persisted lineage.  Without that authority it becomes a
         # targeted clarification rather than an unrelated request.

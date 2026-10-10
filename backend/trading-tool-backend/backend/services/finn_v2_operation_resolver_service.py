@@ -66,6 +66,21 @@ class FinnV2OperationResolverService:
     ) -> FinnV2StructuredOperationSelection:
         frame = getattr(selection, "semantic_frame", None)
         selected_contract = self.registry.get(selection.operation_id)
+        # A schema-valid selector can confuse "which evidence supported that
+        # answer?" with "say that answer again". The typed discourse act
+        # distinguishes those operations; only route to the evidence contract
+        # when a persisted previous response is actually available.
+        if (
+            selection.operation_id == "reformulate_previous_response"
+            and str((request_facts or {}).get("discourse_act") or "") == "evidence_follow_up"
+            and self._has_any_eligible_lineage(conversation_context)
+            and any(contract.operation_id == "explain_previous_evidence" for contract in candidates)
+        ):
+            return self._with_resolved_operation(
+                selection,
+                operation_id="explain_previous_evidence",
+                conversation_reference=selection.conversation_reference,
+            )
         explicit_entities = {
             self._normalized(item)
             for item in (request_facts or {}).get("explicit_entities", ())
