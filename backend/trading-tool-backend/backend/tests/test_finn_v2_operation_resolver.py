@@ -70,6 +70,56 @@ def test_reformulation_uses_released_lineage_without_promoting_it_to_evidence():
     assert resolved.conversation_reference == "previous_released_response"
 
 
+@pytest.mark.parametrize("message", [
+    "Welke bewijsstukken ondersteunden je vorige oordeel?",
+    "Welke bronnen onderbouwen je eerdere antwoord?",
+    "Which sources supported your previous assessment?",
+    "Welche Belege stützen dein vorheriges Urteil?",
+])
+def test_prior_assessment_source_questions_are_evidence_follow_ups(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.discourse_act == "evidence_follow_up"
+
+
+def test_typed_evidence_follow_up_cannot_be_reduced_to_rephrasing():
+    registry = FinnV2OperationRegistry()
+    context = {
+        "last_verified_context": {
+            "verified_response_id": "verified-plan",
+            "evidence_refs": ["plan-source"],
+        },
+    }
+    evidence = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("reformulate_previous_response", {
+            "goal": "reformulate", "object": "response", "reference_kind": "previous_response",
+        }),
+        candidates=registry.list(),
+        conversation_context=context,
+        request_facts={"discourse_act": "evidence_follow_up"},
+    )
+    assert evidence.operation_id == "explain_previous_evidence"
+
+    rephrase = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("reformulate_previous_response", {
+            "goal": "reformulate", "object": "response", "reference_kind": "previous_response",
+        }),
+        candidates=registry.list(),
+        conversation_context=context,
+        request_facts={"discourse_act": "reformulation"},
+    )
+    assert rephrase.operation_id == "reformulate_previous_response"
+
+    unbound = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("reformulate_previous_response", {
+            "goal": "reformulate", "object": "response", "reference_kind": "previous_response",
+        }),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"discourse_act": "evidence_follow_up"},
+    )
+    assert unbound.operation_id != "explain_previous_evidence"
+
+
 def test_bot_consequence_uses_evaluate_contract_without_prior_lineage():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

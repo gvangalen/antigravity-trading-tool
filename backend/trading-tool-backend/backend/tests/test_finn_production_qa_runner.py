@@ -141,6 +141,21 @@ def test_workflow_scopes_fixture_authorization_to_the_runner_subprocess():
     assert "--fixture-namespace \"$fixture_namespace\"" in workflow
 
 
+def test_workflow_serializes_protected_fixture_runs_across_reconnects_and_profiles():
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    runner = workflow.split('cat > "$state_dir/run.sh" <<RUNNER', 1)[1].split('\n          RUNNER', 1)[0]
+    assert 'exec 9>>"\\$HOME/.finn-production-qa-fixture.lock"' in runner
+    assert "flock -n -E 75 9" in runner
+    assert runner.index("flock -n -E 75 9") < runner.index("PYTHONPATH=backend/trading-tool-backend python3")
+    assert "runner_fixture_lock_unavailable" in runner
+    assert 'if [ "$lock_status" = "runner_fixture_lock_unavailable" ]; then' in workflow
+    assert 'workflow_attempt_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' in workflow
+    assert 'remote_state_dir="/tmp/finn-production-qa-${workflow_attempt_id}"' in workflow
+    assert 'name: finn-production-qa-${{ github.run_id }}-${{ github.run_attempt }}' in workflow
+    assert 'runner.child.pid' in runner
+    assert 'wait "\\$runner_child"' in runner
+
+
 def test_workflow_runs_hashed_control_plane_runner_against_product_checkout():
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "Checkout QA control plane" in workflow
@@ -155,10 +170,11 @@ def test_workflow_runs_hashed_control_plane_runner_against_product_checkout():
 
 def test_workflow_runs_the_server_job_detached_and_resumes_from_checkpoint():
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
-    assert "remote_state_dir=\"/tmp/finn-production-qa-${GITHUB_RUN_ID}\"" in workflow
+    assert "remote_state_dir=\"/tmp/finn-production-qa-${workflow_attempt_id}\"" in workflow
     assert "nohup \"$state_dir/run.sh\"" in workflow
     assert "--resume >\"$state_dir/runner.log\"" in workflow
     assert "elif test -s '$remote_state_dir/runner.pid'" in workflow
+    assert "elif test -s '$remote_state_dir/runner.child.pid'" in workflow
     assert "restarted=0" in workflow
     assert "honest partial checkpoint" in workflow
     assert "json.load(open(sys.argv[1]" in workflow
