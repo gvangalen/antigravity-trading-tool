@@ -8,10 +8,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_REPAIR_VALIDATING`. Independent QA on the deployed release proved a positive setup match, then found a Paper-bot creation HTTP 500. The bot-mode schema and execution-safety repair is local; the complete Score 2.0 → Paper matrix is not yet accepted. |
+| Phase | `READY_FOR_INDEPENDENT_QA`. Build's local gates, candidate CI, main CI and Auto Deploy passed. The complete authenticated Score 2.0 → Paper and chat/Today/report matrix is not yet accepted. |
 | Goal | Prove the shared Score 2.0 → setup match → Paper chain for fresh, missing and stale sources, plus chat/Today/report parity. Preserve fixed/Smart DCA planned amounts and distinguish bot budget limits from cash. |
-| Candidate | Bot-mode schema repair on `codex/finn-bot-mode-contract`; not yet deployed. Previous provenance UI candidate was [PR #153](https://github.com/gvangalen/antigravity-trading-tool/pull/153). |
-| Production identity | On 2026-10-10, backend health and frontend build-info each returned HTTP 200 and SHA `6b81d9e69561ab76a9d3f4e8a5456ce87cf166d9`; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38079790288) passed. |
+| Candidate | [PR #155](https://github.com/gvangalen/antigravity-trading-tool/pull/155), merged code commit `048c22a571c411fe7c83855386032e48d560e70c`. A later documentation-only deployment may have a different SHA; QA must use the actual public SHA. |
+| Production identity | On 2026-10-10, backend health and frontend build-info each returned HTTP 200 and SHA `048c22a571c411fe7c83855386032e48d560e70c`; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38081918936) passed. |
 | Last updated | 2026-10-10. |
 
 ### Protected QA and fixture recovery
@@ -51,8 +51,10 @@ orders, live bots, live-trading calls or production connections
 (SHA-256 `f3afb08fbdd9cd6934e007cc2e1faeed8a2997e0ff7f9056cd51bbb9fdf33f6d`);
 adapter tests passed **19**. Frontend production build, typecheck, i18n lint
 and tests, command, proposal and setup tests passed. `audit:high` exited 0
-with one moderate Next.js advisory and no high vulnerability. Candidate CI
-and deployment are still pending. A local bootstrap mismatch
+with one moderate Next.js advisory and no high vulnerability. [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38081674469)
+and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38081801647) passed all five jobs; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38081918936)
+passed. Backend health and frontend build-info returned HTTP 200 on the merged
+code SHA. A local bootstrap mismatch
 (`daily_scores.indicator_evidence` as JSON instead of production JSONB) was
 also corrected; a reset local database passed all migrations and the pre-start
 schema health gate.
