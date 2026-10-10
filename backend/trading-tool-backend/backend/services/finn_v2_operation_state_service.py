@@ -59,6 +59,7 @@ class FinnV2OperationStateService:
         conversation_context: Optional[Mapping[str, object]],
         supplied_inputs: Optional[Mapping[str, object]] = None,
         derived_inputs: Optional[Mapping[str, object]] = None,
+        verified_action_inputs: Optional[Mapping[str, object]] = None,
         model_tool_inputs: bool = False,
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
@@ -317,6 +318,17 @@ class FinnV2OperationStateService:
             if field in accepted_inputs and not self._is_missing(resolved_context.get(field)):
                 collected.setdefault(field, resolved_context[field])
                 sources.setdefault(field, "context")
+        # A confirmed action result is stronger evidence than a selector's
+        # extraction or an older guided draft. Restrict this override to the
+        # linked strategy slot of bot creation.
+        if contract.operation_id == "create_bot":
+            value = (verified_action_inputs or {}).get("strategy_id")
+            if "strategy_id" in accepted_inputs and not self._is_missing(value):
+                collected["strategy_id"] = self._canonical_input("strategy_id", value)
+                sources["strategy_id"] = "verified_action_result"
+                provenance["strategy_id"] = {
+                    "source": "verified_action_result", "state_revision": next_revision,
+                }
         missing = [
             field
             for field in contract.required_inputs_for(collected)

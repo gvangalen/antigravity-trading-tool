@@ -319,6 +319,25 @@ def test_action_result_projects_the_committed_entity_snapshot():
     }
 
 
+def test_confirmed_dca_action_result_keeps_atomic_setup_strategy_pair():
+    proposal = SimpleNamespace(
+        id="proposal-dca", run_id="run-dca", user_id=7,
+        operation_type="create_setup",
+        payload_json={"change": {"setup_fields": {"name": "ETH Plan", "setup_type": "dca"}}},
+    )
+    execution = SimpleNamespace(
+        id="execution-dca", status="succeeded", completed_at=datetime.now(timezone.utc),
+    )
+    action_result = FinnV2ExecutionService._action_result(
+        proposal=proposal, execution=execution,
+        result={"setup_id": 41, "strategy_id": 81, "name": "ETH Plan"},
+    )
+    assert action_result["entity_type"] == "setup"
+    assert action_result["entity_id"] == "41"
+    assert action_result["canonical_entity"]["setup_id"] == 41
+    assert action_result["canonical_entity"]["strategy_id"] == 81
+
+
 def test_confirmed_strategy_rename_keeps_verified_old_and_new_names():
     proposal = SimpleNamespace(
         id="proposal-rename", run_id="run-rename", user_id=7,

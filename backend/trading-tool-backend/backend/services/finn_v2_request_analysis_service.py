@@ -7,6 +7,7 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, F
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_target_asset_resolver import FinnV2TargetAssetResolver
+from backend.services.asset_catalog_service import resolve_catalog_symbol
 from backend.services.finn_v2_operation_classification_service import (
     FinnV2OperationClassificationService,
     FinnV2OperationClassificationValidator,
@@ -14,6 +15,52 @@ from backend.services.finn_v2_operation_classification_service import (
 
 
 class FinnV2RequestAnalysisService:
+    @staticmethod
+    def _generic_recent_setup_reference(message: str) -> bool:
+        """Only a generic, recently created DCA setup may use action lineage.
+
+        A name followed by "die net aangemaakt is" is an explicit object
+        reference and must go through owner-scoped resolution instead.
+        """
+        match = re.search(
+            r"\b(?:zojuist|net)\s+aangemaakte?\s+"
+            r"(?:(?P<asset_nl>[A-Z]{2,8})\s+)?(?:DCA[-\s]+)?(?:plan|setup)\b"
+            r"(?=\s*(?:[,.;!?]|$)|\s+(?:met|with|en|and|und)\b)"
+            r"|\bjust\s+created\s+(?:(?P<asset_en>[A-Z]{2,8})\s+)?(?:DCA[-\s]+)?(?:plan|setup)\b"
+            r"(?=\s*(?:[,.;!?]|$)|\s+(?:met|with|en|and|und)\b)",
+            message,
+            re.IGNORECASE,
+        )
+        if not match:
+            return False
+        asset = match.group("asset_nl") or match.group("asset_en")
+        if asset and asset.casefold() != "dca" and resolve_catalog_symbol(asset) is None:
+            return False
+        suffix = message[match.end():].lstrip()
+        # Allow only a grammatical boundary or an unambiguous bot instruction.
+        # An open "met" clause can name a different plan in many ways (naam,
+        # titel, label), so a blacklist is unsafe here.
+        if not suffix or suffix in {".", ";", "!", "?"}:
+            return True
+        if suffix.startswith(","):
+            suffix = suffix[1:].lstrip()
+            if not suffix:
+                return True
+        suffix = suffix.rstrip(".;!?").strip()
+        amount = r"€?\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?"
+        budget = rf"(?:(?:met|with|en|and)\s+)?(?:(?:een|a)\s+)?(?:budget\s+(?:(?:van|of)\s+)?{amount}|{amount}\s+budget)"
+        if re.fullmatch(budget, suffix, re.IGNORECASE):
+            return True
+        # A bot name is safe only when the user explicitly assigns it to the
+        # bot and no further free-form plan reference follows.
+        name_word = r"(?!(?:met|with|budget|plan|setup|strategie|genaamd|naam|name|titel|label)\b)[\w-]+"
+        bot_name = rf"{name_word}(?:\s+{name_word}){{0,11}}"
+        return bool(re.fullmatch(
+            rf"(?:en|and|,)\s+(?:noem|name)\s+(?:de|the)?\s*bot\s+{bot_name}"
+            rf"(?:\s+{budget})?",
+            suffix, re.IGNORECASE,
+        ))
+
     def __init__(self):
         self.operations = FinnV2OperationRegistry()
         self.operation_state = FinnV2OperationStateService()
@@ -98,6 +145,48 @@ class FinnV2RequestAnalysisService:
         explicit_setup_name = self._extract_quoted_entity_name(text, "setup")
         explicit_strategy_name = self._extract_quoted_entity_name(text, "strateg")
         explicit_bot_name = self._extract_quoted_entity_name(text, "bot")
+        recent_action_reference = (
+            semantic.operation_id == "create_bot"
+            and self._generic_recent_setup_reference(text)
+            and not explicit_setup_name
+            and (not explicit_strategy_name or re.fullmatch(
+                r"bij\s+(?:het|de)\s+(?:zojuist|net)\s+aangemaakte?\s+"
+                r"(?:[A-Z]{2,8}\s+)?DCA[-\s]+plan",
+                explicit_strategy_name, re.IGNORECASE,
+            ))
+        )
+        recent_lineage_blocked = False
+        temporal_bot_reference = (
+            semantic.operation_id == "create_bot"
+            and any(phrase in normalized for phrase in (
+                "zojuist", "net aangemaakt", "net aangemaakte", "net gemaakt",
+                "net gemaakte", "just created", "recently created",
+            ))
+        )
+        if (conversation_context or {}).get("strict_immediate_action_lineage") and temporal_bot_reference and not recent_action_reference:
+            recent_lineage_blocked = True
+            conversation_context = {}
+        if recent_action_reference and (conversation_context or {}).get("strict_immediate_action_lineage"):
+            immediate = dict((conversation_context or {}).get("immediate_previous_action_result") or {})
+            canonical = dict(immediate.get("canonical_entity") or {})
+            immediate_setup_id = self._context_entity_id(immediate.get("entity_id"))
+            action_symbol = self._context_asset(canonical.get("symbol") or canonical.get("asset"))
+            if not (
+                immediate.get("result_status") == "succeeded"
+                and immediate.get("operation_id") == "create_setup"
+                and immediate.get("entity_type") == "setup"
+                and immediate_setup_id is not None
+                and self._context_entity_id(canonical.get("setup_id")) == immediate_setup_id
+                and self._context_entity_id(canonical.get("strategy_id")) is not None
+                and (not message_asset or (action_symbol and message_asset == action_symbol))
+            ):
+                recent_lineage_blocked = True
+                # No older successful action or guided draft may satisfy a
+                # reference to an immediately preceding failed/other action.
+                conversation_context = {}
+            else:
+                conversation_context = dict(conversation_context or {})
+                conversation_context["previous_action_result"] = immediate
         # Only the preprocessor may mark a conversation reference.  This
         # avoids turning ordinary Dutch pronouns into stale conversation
         # selectors later in the pipeline.
@@ -123,6 +212,7 @@ class FinnV2RequestAnalysisService:
         # an ID while polling/SSE falsely reports no conversation reference.
         selected_reference = str(getattr(semantic, "selected_conversation_reference", "") or "")
         previous_action_result = dict((conversation_context or {}).get("previous_action_result") or {})
+        action_linked_strategy_id = None
         if (
             selected_reference == "previous_action_result"
             and previous_action_result.get("result_status") == "succeeded"
@@ -160,7 +250,32 @@ class FinnV2RequestAnalysisService:
             entity_type = str(action_result.get("entity_type") or "")
             entity_id = self._context_entity_id(action_result.get("entity_id"))
             if entity_type == "setup":
-                explicit_setup_id = explicit_setup_id or entity_id
+                # A confirmed DCA setup action creates its strategy in the
+                # same transaction. On a genuine follow-up about that action,
+                # use the verified pair rather than an older read target.
+                canonical = dict(action_result.get("canonical_entity") or {})
+                linked_setup_id = self._context_entity_id(canonical.get("setup_id"))
+                linked_strategy_id = self._context_entity_id(canonical.get("strategy_id"))
+                refers_to_action = (
+                    semantic.operation_id == "create_bot"
+                    and recent_action_reference
+                    and action_result.get("operation_id") == "create_setup"
+                    and action_result.get("result_status") == "succeeded"
+                    and entity_id is not None
+                    and linked_setup_id == entity_id
+                    and linked_strategy_id is not None
+                    and (not message_asset or message_asset == self._context_asset(
+                        canonical.get("symbol") or canonical.get("asset")
+                    ))
+                    and not explicit_setup_name
+                    and not explicit_strategy_name
+                )
+                if refers_to_action:
+                    explicit_setup_id = entity_id
+                    explicit_strategy_id = linked_strategy_id
+                    action_linked_strategy_id = linked_strategy_id
+                else:
+                    explicit_setup_id = explicit_setup_id or entity_id
             elif entity_type == "strategy":
                 explicit_strategy_id = explicit_strategy_id or entity_id
             elif entity_type == "bot":
@@ -311,8 +426,21 @@ class FinnV2RequestAnalysisService:
                 message=text,
                 explicit_asset=operation_asset,
                 conversation_context=conversation_context,
-                supplied_inputs=semantic.supplied_inputs,
-                derived_inputs=semantic.derived_inputs,
+                supplied_inputs=(
+                    {key: value for key, value in dict(semantic.supplied_inputs or {}).items()
+                     if key not in {"strategy_id", "setup_id"}}
+                    if recent_lineage_blocked else semantic.supplied_inputs
+                ),
+                derived_inputs={
+                    **({key: value for key, value in dict(semantic.derived_inputs or {}).items()
+                        if key not in {"strategy_id", "setup_id"}}
+                       if recent_lineage_blocked else dict(semantic.derived_inputs or {})),
+                    **({"strategy_id": action_linked_strategy_id} if action_linked_strategy_id else {}),
+                },
+                verified_action_inputs=(
+                    {"strategy_id": action_linked_strategy_id}
+                    if action_linked_strategy_id else None
+                ),
             ) if operation.required_inputs and not concept_input_is_present else None
         )
         if guided_state is not None:

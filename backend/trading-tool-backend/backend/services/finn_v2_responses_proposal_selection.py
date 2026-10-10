@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 from backend.services.asset_catalog_service import (
     mentioned_catalog_symbols, resolve_catalog_symbol, unsupported_catalog_pair_mention,
 )
+from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
@@ -35,6 +36,62 @@ class FinnResponsesProposalSelection:
         if contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             raise ValueError("proposal_operation_not_write_contract")
         inputs = dict(call.inputs)
+        verified_action_inputs: dict[str, object] = {}
+        temporal_bot_reference = (
+            contract.operation_id == "create_bot"
+            and any(phrase in message.casefold() for phrase in (
+                "zojuist", "net aangemaakt", "net aangemaakte", "net gemaakt",
+                "net gemaakte", "just created", "recently created",
+            ))
+        )
+        if temporal_bot_reference:
+            # The Responses proposal tool is FINN's actual write selection
+            # path. A model-provided strategy ID or an older guided draft may
+            # not decide what "just created" refers to.
+            immediate = dict(
+                (conversation_context.get("immediate_previous_action_result")
+                 if conversation_context.get("strict_immediate_action_lineage")
+                 else conversation_context.get("previous_action_result"))
+                or {}
+            )
+            canonical = dict(immediate.get("canonical_entity") or {})
+            setup_id = str(immediate.get("entity_id") or "")
+            linked_setup_id = str(canonical.get("setup_id") or "")
+            strategy_id = str(canonical.get("strategy_id") or "")
+            action_asset = resolve_catalog_symbol(canonical.get("symbol") or canonical.get("asset"))
+            current_assets = mentioned_catalog_symbols(message)
+            setup_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(message, "setup")
+            strategy_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(message, "strateg")
+            generic_strategy_relation = bool(strategy_name and re.fullmatch(
+                r"bij\s+(?:het|de)\s+(?:zojuist|net)\s+aangemaakte?\s+"
+                r"(?:[A-Z]{2,8}\s+)?DCA[-\s]+plan",
+                strategy_name, re.IGNORECASE,
+            ))
+            named_related_object = bool(setup_name or (strategy_name and not generic_strategy_relation))
+            pair_is_valid = bool(
+                FinnV2RequestAnalysisService._generic_recent_setup_reference(message)
+                and immediate.get("operation_id") == "create_setup"
+                and immediate.get("entity_type") == "setup"
+                and immediate.get("result_status") == "succeeded"
+                and setup_id.isdigit() and setup_id == linked_setup_id
+                and strategy_id.isdigit() and action_asset
+                and not named_related_object
+                and (not current_assets or current_assets == {action_asset})
+            )
+            if pair_is_valid:
+                verified_action_inputs["strategy_id"] = int(strategy_id)
+                inputs["strategy_id"] = int(strategy_id)
+                # The confirmed setup owns the bot's asset. An older
+                # workspace asset cannot change that relationship.
+                verified_asset = action_asset
+                for field in ("asset", "symbol"):
+                    if field in inputs and resolve_catalog_symbol(inputs[field]) != action_asset:
+                        inputs.pop(field)
+            else:
+                inputs.pop("strategy_id", None)
+                # An invalid immediate reference must not borrow any older
+                # guided state, correction draft or conversation target.
+                conversation_context = {}
         explicitly_named = self.states._name_input_from_text(message)
         if contract.operation_id.startswith("create_") and explicitly_named and "name" in contract.required_inputs:
             # Explicit user input outranks a model candidate that shortened the name.
@@ -222,6 +279,7 @@ class FinnResponsesProposalSelection:
             conversation_context=context,
             supplied_inputs=inputs,
             derived_inputs={**correction_inputs, **dict(verified_parent_setup or {})},
+            verified_action_inputs=verified_action_inputs,
             model_tool_inputs=True,
         )
         inputs = dict(state.collected_inputs)
