@@ -140,8 +140,8 @@ async def update_intelligence_weights(
 # =========================================================
 # Gewogen benchmark uit de actuele Score 2.0-bronnen.
 # =========================================================
-@router.get("/ai/master_score", response_model=MasterScoreResponse)
-async def get_ai_master_score(
+@router.get("/scores/benchmark", response_model=MasterScoreResponse)
+async def get_benchmark_score(
     symbol: str = "BTC",
     current_user: dict = Depends(get_current_user),
     service: ScoreService = Depends(get_score_service),
@@ -153,5 +153,5 @@ async def get_ai_master_score(
         locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
         return await localize_generic_payload(_payload_to_dict(payload), locale)
     except Exception as e:
-        logger.error(f"❌ Fout bij ophalen AI Master Score: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Fout bij ophalen master score")
+        logger.error(f"❌ Fout bij ophalen Score 2.0-benchmark: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Fout bij ophalen benchmarkscore")

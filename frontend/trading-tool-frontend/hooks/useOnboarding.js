@@ -99,11 +99,12 @@ export function useOnboarding() {
       setSaving(true);
       setError(null);
 
-      await finishOnboarding();
-      cacheOnboardingStatus({
-        ...(status || {}),
-        onboarding_complete: true,
-      });
+      const completed = await finishOnboarding();
+      if (!completed?.onboarding_complete) {
+        setError("Onboarding is nog niet volledig afgerond.");
+        return false;
+      }
+      cacheOnboardingStatus(completed);
       trackAssistantEvent({
         event_name: "onboarding_completed",
         page: pathname || "/onboarding",
@@ -111,10 +112,12 @@ export function useOnboarding() {
         flow_type: "onboarding",
       });
       await fetchStatus();
+      return true;
 
     } catch (err) {
       console.error("❌ [Onboarding] Finish onboarding failed:", err);
       setError("Onboarding afronden mislukt.");
+      return false;
     } finally {
       setSaving(false);
     }

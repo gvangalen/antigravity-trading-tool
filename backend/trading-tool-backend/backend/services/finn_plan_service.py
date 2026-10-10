@@ -13590,15 +13590,23 @@ class FinnPlanService:
                 active_asset,
                 self.trace_id,
             )
-        data_readiness = asset_analysis.get("data_readiness") or {}
-        has_scores = bool(asset_analysis.get("has_scores"))
-        blockers = asset_analysis.get("blockers") or []
-        market_snapshot = self._first_dashboard_market_snapshot(asset_analysis, data_readiness=data_readiness, has_scores=has_scores, blockers=blockers)
+        data_readiness = dict(asset_analysis.get("data_readiness") or {})
         latest_analysis = await self._first_dashboard_latest_analysis(
             user_id,
             asset=active_asset,
             asset_analysis=asset_analysis,
-            has_scores=has_scores,
+            has_scores=bool(asset_analysis.get("has_scores")),
+        )
+        # The mission-control summary may have been assembled before the
+        # source-verified Score 2.0 read. Never put its older scores or setup
+        # blockers into the first FINN briefing as current evidence.
+        has_scores = latest_analysis.get("source_status") == "available"
+        blockers = latest_analysis.get("blockers") or []
+        data_readiness["status"] = "ready" if has_scores else "score_generation_missing"
+        data_readiness["message"] = latest_analysis.get("summary") or "Actuele scorebeoordeling niet beschikbaar."
+        market_snapshot = self._first_dashboard_market_snapshot(
+            asset_analysis, data_readiness=data_readiness, has_scores=has_scores,
+            blockers=blockers, latest_analysis=latest_analysis,
         )
         observation, next_action = self._first_dashboard_observation_and_action(
             active_asset,
@@ -14327,7 +14335,9 @@ class FinnPlanService:
         data_readiness: Dict[str, Any],
         has_scores: bool,
         blockers: List[Dict[str, Any]],
+        latest_analysis: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        verified = (latest_analysis or {}).get("reported_scores") if latest_analysis is not None else None
         return {
             "status": data_readiness.get("status") or ("ready" if has_scores else "score_generation_missing"),
             "freshness": data_readiness.get("message"),
@@ -14342,10 +14352,10 @@ class FinnPlanService:
                 if isinstance(blocker, dict)
             ],
             "scores": {
-                "macro": asset_analysis.get("macro_score"),
-                "technical": asset_analysis.get("technical_score"),
-                "market": asset_analysis.get("market_score"),
-                "setup": asset_analysis.get("setup_score"),
+                "macro": verified.get("macro_score") if verified is not None else asset_analysis.get("macro_score"),
+                "technical": verified.get("technical_score") if verified is not None else asset_analysis.get("technical_score"),
+                "market": verified.get("market_score") if verified is not None else asset_analysis.get("market_score"),
+                "setup": (latest_analysis or {}).get("setup_match_score") if latest_analysis is not None else asset_analysis.get("setup_score"),
             },
         }
 
@@ -14386,11 +14396,33 @@ class FinnPlanService:
         complete = benchmark.get("source_status") == "available"
         if complete:
             score_parts.append(f"Totale benchmark {benchmark['benchmark_score']}")
+        setup_id = (asset_analysis.get("setup") or {}).get("id")
+        selected_match = next(
+            (item for item in benchmark.get("matches") or []
+             if setup_id is not None and str(item.get("setup_id")) == str(setup_id)),
+            None,
+        )
+        blockers = [
+            {
+                "category": category,
+                "range": f"{component.get('minimum')}–{component.get('maximum')}",
+                "value": component.get("score"),
+            }
+            for category, component in (selected_match or {}).get("components", {}).items()
+            if component.get("within_range") is False
+        ] if complete else []
         return {
             "availability": "available" if complete else ("partial" if score_parts else "absent"),
             "source": "owner_scoped_benchmark",
             "source_status": benchmark.get("source_status"),
             "component_source_status": status,
+            "reported_scores": {
+                key: components.get(key) if status.get(key) == "fresh" else None
+                for key in ("market_score", "macro_score", "technical_score")
+            },
+            "benchmark_score": benchmark.get("benchmark_score") if complete else None,
+            "setup_match_score": selected_match.get("score") if selected_match and complete else None,
+            "blockers": blockers,
             "report_date": str(benchmark.get("as_of") or "") or None,
             "summary": ", ".join(score_parts)[:600] or None,
         }

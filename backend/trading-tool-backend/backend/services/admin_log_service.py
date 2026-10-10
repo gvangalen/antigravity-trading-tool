@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,7 +107,13 @@ Guidelines:
             entry_point="admin_log_service:analyze_errors_with_ai",
             completion_status="success",
         ):
-            analysis = await ask_gpt_json_async(prompt=prompt, system_role=system_role)
+            analysis = await ask_gpt_json_async(
+                prompt=prompt,
+                system_role=system_role,
+                model_override=os.getenv("ADMIN_LOG_ANALYSIS_MODEL")
+                or os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+                reasoning_effort="none",
+            )
         
         # Ensure it has all required fields for our schema
         return {

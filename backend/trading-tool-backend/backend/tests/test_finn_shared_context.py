@@ -8,6 +8,9 @@ from backend.services.finn_shared_context_service import FinnSharedContextServic
 from backend.services import finn_unified_report_service as reports
 from backend.schemas.finn_v2_evidence_schema import IndicatorConfigurationData, IndicatorConfigurationItem
 from backend.celery_task import daily_report_task
+from backend.services.finn_plan_service import FinnPlanService
+from backend.services import finn_plan_service as finn_plan_module
+from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 
 
 class _Rows:
@@ -123,6 +126,47 @@ def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(m
     assert "geen bevestigde setupmatch" in result["setup_validation"]
     assert result["watchlist"][0]["benchmark"]["benchmark_score"] is None
     assert result["meta"]["source"] == "finn_shared_context.v1"
+
+
+def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypatch):
+    assessment = {
+        "symbol": "ETH", "as_of": "2026-10-10", "source_status": "available",
+        "benchmark_score": 70,
+        "benchmark_weights": {"market_score": 1 / 3, "macro_score": 1 / 3, "technical_score": 1 / 3},
+        "reported_scores": {"market_score": 80, "macro_score": 70, "technical_score": 60},
+        "component_source_status": {
+            "market_score": "fresh", "macro_score": "fresh", "technical_score": "fresh",
+        },
+        "matches": [{"setup_id": 9, "name": "ETH Plan", "symbol": "ETH",
+                     "status": "matches", "score": 80, "is_active": True,
+                     "components": {}}],
+    }
+    context = {
+        "locale": "nl", "profile": {}, "assets": [{
+            "symbol": "ETH", "benchmark": assessment,
+            "setups": [{"id": 9, "name": "ETH Plan", "symbol": "ETH", "timeframe": "1D"}],
+            "strategies": [{"id": 10, "setup_id": 9, "name": "ETH Strategy"}],
+            "bots": [], "indicator_lookup_status": "available",
+            "indicator_configuration": {"market": [], "macro": [], "technical": []},
+        }],
+    }
+    source = SimpleNamespace(benchmark_for_asset=AsyncMock(return_value=assessment))
+    chat_adapter = ScoreToolAdapter(object())
+    chat_adapter.context = source
+    chat = asyncio.run(chat_adapter.execute(user_id=7, asset="ETH"))["data"]
+
+    monkeypatch.setattr(finn_plan_module, "FinnSharedContextService", lambda _session: source)
+    today = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
+        7, asset="ETH", asset_analysis={"setup": {"id": 9}}, has_scores=True,
+    ))
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {"error": "provider_unavailable"})
+    report = reports.generate_unified_daily_report_sections(7)
+
+    assert chat.benchmark_score == today["benchmark_score"] == report["watchlist"][0]["benchmark"]["benchmark_score"] == 70
+    assert chat.reported_scores["market_score"] == today["reported_scores"]["market_score"] == report["watchlist"][0]["benchmark"]["reported_scores"]["market_score"] == 80
+    assert today["setup_match_score"] == report["setup_score"] == 80
+    assert report["active_strategy"]["setup_name"] == "ETH Strategy"
 
 
 def test_period_report_uses_dated_owner_facts_and_does_not_count_planned_decision_as_trade(monkeypatch):

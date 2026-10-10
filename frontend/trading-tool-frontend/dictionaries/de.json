@@ -1205,6 +1205,7 @@
       },
       "openDashboard": "Dashboard öffnen",
       "preparingDashboard": "Dashboard wird vorbereitet...",
+      "finishError": "Onboarding konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
       "footer": "Du kannst jederzeit zur Marktanalyse, zum Setup oder zur Strategie zurückkehren, um deinen Plan zu verbessern."
     },
     "onboardingPage": {

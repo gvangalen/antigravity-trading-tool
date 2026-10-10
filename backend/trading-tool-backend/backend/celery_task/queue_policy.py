@@ -54,7 +54,6 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.asset_initialization.initialize_asset_data": "market_data",
     "backend.celery_task.btc_price_history_task.update_btc_history": "market_data",
     "backend.celery_task.onboarding_task.run_onboarding_pipeline": "ai_generation",
-    "backend.celery_task.bootstrap_agents_task.bootstrap_agents_task": "ai_generation",
     "backend.celery_task.celery_task_generate_pdf.generate_report_pdf": "ai_generation",
     "backend.celery_task.daily_usage_reset.reset_daily_ai_quotas": "scoring",
     "backend.celery_task.finn_v2_task.process_shadow_foundation_run": "ai_generation",

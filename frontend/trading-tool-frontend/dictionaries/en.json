@@ -1204,6 +1204,7 @@
       },
       "openDashboard": "Open dashboard",
       "preparingDashboard": "Preparing dashboard...",
+      "finishError": "Could not complete onboarding. Please try again.",
       "footer": "You can always come back later to market, setup, or strategy to sharpen your context."
     },
     "onboardingPage": {

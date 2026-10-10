@@ -1205,6 +1205,7 @@
       },
       "openDashboard": "Open Dashboard",
       "preparingDashboard": "Dashboard wordt voorbereid...",
+      "finishError": "Onboarding afronden mislukt. Probeer het opnieuw.",
       "footer": "Je kunt later altijd terug naar markt, setup of strategie om context verder aan te scherpen."
     },
     "onboardingPage": {

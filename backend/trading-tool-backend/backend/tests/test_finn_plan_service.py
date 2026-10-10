@@ -1133,6 +1133,85 @@ def test_first_dashboard_analysis_query_failure_is_unknown_not_absent(monkeypatc
     assert result == {"availability": "unknown", "source": "query_failed"}
 
 
+def test_first_dashboard_discards_older_mission_scores_and_blockers(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    benchmark = {
+        "source_status": "missing_scores", "as_of": "2026-10-10", "benchmark_score": None,
+        "reported_scores": {"market_score": 40, "macro_score": None, "technical_score": 75},
+        "component_source_status": {
+            "market_score": "fresh", "macro_score": "missing_score", "technical_score": "fresh",
+        },
+        "matches": [{"setup_id": 9, "status": "insufficient_data", "score": None}],
+    }
+    monkeypatch.setattr(finn_plan_module, "FinnSharedContextService", lambda _session: SimpleNamespace(
+        benchmark_for_asset=AsyncMock(return_value=benchmark),
+    ))
+    monkeypatch.setattr(service, "_fetch_onboarding_status", AsyncMock(return_value={
+        "onboarding_complete": True, "active_asset": "ETH",
+    }))
+    monkeypatch.setattr(service, "_first_dashboard_linked_bot", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_first_dashboard_indicator_context", AsyncMock(return_value={
+        "market": ["Price"], "macro": ["DXY"], "technical": ["RSI"],
+    }))
+    monkeypatch.setattr(finn_plan_module, "UserRepository", lambda _session: SimpleNamespace(
+        get_by_id=AsyncMock(return_value=SimpleNamespace(ai_preferences={"locale": "nl"})),
+    ))
+
+    payload = asyncio.run(service._prepare_first_dashboard_payload(
+        user_id=7,
+        analysis={"assets": [{
+            "asset": "ETH", "setup": {"id": 9, "name": "ETH Plan", "timeframe": "1D"},
+            "active_strategy": {"strategy": {"id": 10, "name": "ETH Strategy"}},
+            "data_readiness": {"status": "ready", "message": "all scores fresh"},
+            "has_scores": True, "market_score": 100, "macro_score": 100,
+            "technical_score": 100, "setup_score": 95,
+            "blockers": [{"category": "market", "range": "20–60", "value": 100}],
+        }]},
+        mission={"bot_review_queue": []}, activity_feed=[], day_log={},
+    ))
+
+    assert payload["market_snapshot"]["scores"] == {
+        "market": 40, "macro": None, "technical": 75, "setup": None,
+    }
+    assert payload["market_snapshot"]["has_scores"] is False
+    assert payload["market_snapshot"]["blockers"] == []
+    assert payload["input_snapshot"]["indicator_configuration"]["complete_current_benchmark"] is False
+    assert payload["ai_prompt_context"]["latest_analysis"]["reported_scores"]["macro_score"] is None
+    assert payload["input_snapshot"]["setup"]["name"] == "ETH Plan"
+    assert payload["input_snapshot"]["strategy"]["name"] == "ETH Strategy"
+
+
+def test_first_dashboard_uses_only_selected_setup_match_for_blockers(monkeypatch):
+    benchmark = {
+        "source_status": "available", "as_of": "2026-10-10", "benchmark_score": 50,
+        "reported_scores": {"market_score": 80, "macro_score": 20, "technical_score": 50},
+        "component_source_status": {
+            "market_score": "fresh", "macro_score": "fresh", "technical_score": "fresh",
+        },
+        "matches": [
+            {"setup_id": 8, "score": 90, "components": {"market": {
+                "score": 80, "minimum": 20, "maximum": 60, "within_range": False,
+            }}},
+            {"setup_id": 9, "score": 45, "components": {"macro": {
+                "score": 20, "minimum": 30, "maximum": 70, "within_range": False,
+            }}},
+        ],
+    }
+    monkeypatch.setattr(finn_plan_module, "FinnSharedContextService", lambda _session: SimpleNamespace(
+        benchmark_for_asset=AsyncMock(return_value=benchmark),
+    ))
+
+    latest = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
+        7, asset="ETH", asset_analysis={"setup": {"id": 9}}, has_scores=True,
+    ))
+
+    assert latest["reported_scores"] == {
+        "market_score": 80, "macro_score": 20, "technical_score": 50,
+    }
+    assert latest["setup_match_score"] == 45
+    assert latest["blockers"] == [{"category": "macro", "range": "30–70", "value": 20}]
+
+
 def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failures(monkeypatch):
     service = FinnPlanService(db_session=object())
 
