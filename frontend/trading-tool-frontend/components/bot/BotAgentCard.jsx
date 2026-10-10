@@ -475,7 +475,14 @@ export default function BotAgentCard({
       normalizedDecision?.setup_match?.name ||
       bot?.strategy?.setup?.name ||
       copy.noStrategy;
+    // This score belongs to the saved bot decision, not the current market.
+    const decisionAt = normalizedDecision?.created_at;
     const setupScore = Number(normalizedDecision?.setup_match?.score ?? NaN);
+    const hasVerifiedDecisionScore =
+      normalizedDecision?.scores_json?.score_semantics === "verified_score_2" &&
+      decisionAt &&
+      !Number.isNaN(new Date(decisionAt).getTime()) &&
+      Number.isFinite(setupScore);
     const stopLoss = planSource?.stop_loss?.price ?? planSource?.stop_loss ?? null;
     const parsedStopLoss = stopLoss == null || stopLoss === "" ? null : Number(stopLoss);
     const hasStopLoss = Number.isFinite(parsedStopLoss) && parsedStopLoss > 0;
@@ -495,7 +502,15 @@ export default function BotAgentCard({
           ? formatCurrency(amount, locale, "EUR", { maximumFractionDigits: 0 })
           : copy.insufficientData,
       setupName,
-      setupScoreLabel: Number.isFinite(setupScore) ? `${Math.round(setupScore)}/100` : copy.insufficientData,
+      setupScoreLabel: hasVerifiedDecisionScore ? `${Math.round(setupScore)}/100` : copy.insufficientData,
+      setupScoreAt: hasVerifiedDecisionScore
+        ? formatDateTime(decisionAt, locale, {
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : null,
       stopLossLabel:
         hasStopLoss
           ? formatCurrency(parsedStopLoss, locale, "EUR", { maximumFractionDigits: 0 })
@@ -1030,7 +1045,10 @@ export default function BotAgentCard({
                   <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.setupLabel}</div>
                     <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.setupName}</div>
-                    <div className="mt-1 text-[11px] font-bold text-slate-500">{copy.setupScoreLabel}: {executionSummary.setupScoreLabel}</div>
+                    <div className="mt-1 text-[11px] font-bold text-slate-500">
+                      {copy.setupScoreLabel}: {executionSummary.setupScoreLabel}
+                      {executionSummary.setupScoreAt ? ` · ${executionSummary.setupScoreAt}` : ""}
+                    </div>
                   </div>
                 </div>
 

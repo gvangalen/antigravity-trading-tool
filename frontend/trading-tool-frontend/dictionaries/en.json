@@ -2434,7 +2434,7 @@
       "diagnosticsReady": "Diagnostics",
       "amountLabel": "Amount",
       "setupLabel": "Setup",
-      "setupScoreLabel": "Setup score",
+      "setupScoreLabel": "Setup score at last decision",
       "stopLossLabel": "Stop loss",
       "targetCountLabel": "Targets",
       "notAvailable": "n/a",
