@@ -8,6 +8,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `BUILD_IN_PROGRESS`; the first live FOMO failure still needs its sanitized run-ID and terminal error code. Do not deploy or call this accepted yet. |
+| Goal | Diagnose the intermittent first-turn FOMO failure, verify the fresh-quote/missing-score boundary, and present DXY with the same two-decimal precision and readable source time as Analyse. |
+| Candidate branch | `codex/finn-fomo-turn-and-display`. |
+| Previous live SHA | `3ae758d3a4fc1a1f7559764f49ea38437c6382c0`, independently tested: price and valid Market score were distinguished, but the first FOMO turn failed once; a repeat succeeded. The missing-score state was not present in that live run. |
+| Last updated | 2026-10-10. |
+
+The live FOMO failure's root cause is **not established**. The same visible sentence can come from a failed or unavailable backend run, or from the browser exhausting terminal polling. The live report contains no run-ID, terminal status or error code, and Build may not query the protected QA fixture. The backend has a bounded 40-second visible-run deadline; a local synthetic multi-tool FOMO conversation succeeded on the first attempt, so that deadline is a risk hypothesis, not a proven explanation for this run. The frontend now writes only run-ID, terminal status and error code to the console for failed/unavailable runs, and a distinct diagnostic for polling exhaustion. These diagnostics are not added to FINN's chat answer.
+
+The model-facing DXY snapshot now shows two decimal places and source timestamps to whole seconds. Stored readings, Score 2.0 calculations and bot decisions are unchanged. A deterministic local test covers a four-minute-old Price observation with a saved Market score that still refers to older evidence: the price source is fresh, the Market score remains unavailable pending rebuild, and no benchmark is fabricated. This is **local proof**, not an authenticated production observation of that transient state.
+
+Local validation so far: backend **3124 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command/proposal tests and `audit:high` passed; isolated worker-driven action matrix **16/16**, artifact `.local-finn-parity-artifacts/fomo-display-action-matrix.json` SHA-256 `eae0f28726f4580c3f5b4898f2856e48833758fb917fef87937f22faf7032320`. A local synthetic real-provider score → FOMO continuation completed on its first attempt with no proposal, artifact `.local-finn-parity-artifacts/market-score-fomo-probe.json` SHA-256 `0379a8a98e38c67abe204b1a1cf376b6768b2adecea154cdba7a39af6ffd0116`; it does not reproduce the live failure. Provider selector development passed **18/18** operation matches, artifact SHA-256 `89cd2468f166a6cfa6b2f1fad0b3ac20671647f1796772b54864e1d2d4a193b0`; the full regression is still running. Build performed no authenticated production QA.
+
+The next diagnostic input is the failed run's sanitized `run_id`, `status`, `error_code` and terminal trace stage (or the exact first FOMO prompt and time so authorized QA can retrieve them). Diagnose that error before changing the 40-second budget, provider retries or answer controls. After a complete repair candidate is validated and deployed, independent QA should replay the FOMO question and inspect the new failure diagnostic if it recurs. QA should also verify DXY presentation and opportunistically check a live fresh-price/missing-score state without manufacturing scores or trading.
+
+## Previous Release (market score evidence parity)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated live QA remains pending. |
 | Goal | Keep a fresh Price measurement distinct from a verified Score 2.0 Market score, and avoid exposing raw status codes or binary-float artifacts in FINN's explanation. |
 | Candidate branch | `codex/finn-market-score-evidence-parity`. |

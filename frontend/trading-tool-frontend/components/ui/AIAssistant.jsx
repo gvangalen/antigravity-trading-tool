@@ -4336,6 +4336,15 @@ function AIAssistantContent({
       })
       .finally(() => { sseFinished = true; });
     const completeTerminal = async (run) => {
+      if (["failed", "unavailable"].includes(String(run?.status || "").toLowerCase())) {
+        // Keep diagnostics out of FINN's answer. A failed run can otherwise
+        // look identical to client polling exhaustion in the visible chat.
+        console.warn("FINN V2 terminal failure", {
+          run_id: runId,
+          status: run.status,
+          error_code: run.error_code || null,
+        });
+      }
       const verified = run?.response;
       const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};
       const setupDraft = projection?.setup_draft || null;
@@ -4498,6 +4507,7 @@ function AIAssistantContent({
     }
     sseController.abort();
     if (activeStreamIdRef.current === streamId) {
+      console.warn("FINN V2 terminal polling exhausted", { run_id: runId });
       await refreshProposalCards();
       setMessages((prev) => prev.map((message) => message.streamId === streamId
         ? { ...message, text: "FINN kon dit antwoord niet afronden. Probeer het opnieuw.", isError: true, isComplete: true }
