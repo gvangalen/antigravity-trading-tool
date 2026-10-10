@@ -133,6 +133,7 @@ test("reads indicator configuration copy from the shared dictionary namespace", 
 
 test("recovers a failed navigation chunk with a cache-busting reload", () => {
   assert.match(rootLayout, /ChunkLoadError\|Loading chunk\|Cannot find module/);
+  assert.doesNotMatch(rootLayout, /\|Minified React error\|/);
   assert.match(rootLayout, /RECOVERY_COOLDOWN_MS\s*=\s*30000/);
   assert.match(rootLayout, /searchParams\.set\("__tm_recover"/);
   assert.match(rootLayout, /window\.location\.replace/);
