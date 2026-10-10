@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - diagnose
+          - diagnose-manifest
           - provision
 
 permissions:
@@ -45,6 +46,26 @@ jobs:
             source "$HOME/.secrets/trading.env"
             set +a
             PYTHONPATH=backend/trading-tool-backend python3 ops/qa/provision_finn_qa_fixture.py
+            exit
+          fi
+          if [ "$mode" = diagnose-manifest ]; then
+            set -a
+            source "$HOME/.secrets/trading.env"
+            set +a
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ.get('FINN_QA_MANIFEST_ROOT') or (Path.home() / 'ops/finn-qa-manifests'))
+          parent = root.parent
+          key = Path.home() / '.secrets/finn-qa-manifest.key'
+          print('manifest_root_exists=' + str(root.exists()).lower())
+          print('manifest_root_is_directory=' + str(root.is_dir()).lower())
+          print('manifest_root_writable=' + str(os.access(root, os.W_OK)).lower())
+          print('manifest_parent_exists=' + str(parent.exists()).lower())
+          print('manifest_parent_writable=' + str(os.access(parent, os.W_OK)).lower())
+          print('manifest_key_exists=' + str(key.is_file()).lower())
+          PY
             exit
           fi
           test "$mode" = diagnose
