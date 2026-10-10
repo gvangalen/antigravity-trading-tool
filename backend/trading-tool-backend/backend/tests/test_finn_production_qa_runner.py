@@ -368,6 +368,20 @@ def test_runner_materializes_a_unique_natural_fixture_namespace_without_ids():
     assert "setup_id" not in json.dumps(materialized)
 
 
+def test_runner_binds_new_bot_name_without_rewriting_linked_setup_reference():
+    module = _module()
+    message = (
+        "Maak een nieuwe bot met de naam QA Paper Dagbot voor de strategie "
+        "die gekoppeld is aan de bestaande DCA-setup met exacte naam "
+        "QA DCA Setup qa-existing-123, met totaalbudget 20 EUR."
+    )
+
+    bound = module.bind_fixture_natural_name(message, namespace="qa-new-45678")
+
+    assert "met de naam QA Paper Dagbot qa-new-45678 voor de strategie" in bound
+    assert "met exacte naam QA DCA Setup qa-existing-123," in bound
+
+
 @pytest.mark.parametrize("message", [
     "Maak een swingsetup met de naam Atlas, symbool XLM en timeframe 4H.",
     "Create a manual strategy from that setup and call it Atlas Plan.",
@@ -611,6 +625,59 @@ def test_fixture_write_during_proposal_stops_before_publish_or_confirmation(monk
     assert result["outcome"] == "proposal_write_detected"
     assert result["confirm_status"] is None
     assert result["execute_status"] is None
+
+
+def test_matrix_stops_all_later_cases_after_protected_write_failure(monkeypatch):
+    module = _module()
+    requests = []
+    terminal = {
+        "run_id": "run-write", "conversation_id": "conversation-one",
+        "status": "completed", "mode": "CREATE_PROPOSAL", "response": {},
+        "runtime_trace": {"initial_operation_id": "create_setup", "final_operation_id": "create_setup"},
+    }
+
+    def request(**kwargs):
+        requests.append(kwargs)
+        return 200, terminal, 1.0, None
+
+    monkeypatch.setattr(module, "request_json", request)
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **_kwargs: (terminal, None))
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: {
+        "status": "ok", "row_count": 0, "state_sha256": "before",
+        "owner_domain_state_sha256": "before-all", "broker_order_count": 0,
+        "live_bot_count": 0,
+    })
+    monkeypatch.setattr(module, "_run_fixture_action", lambda **_kwargs: {
+        "mode": "safe_execution", "outcome": "proposal_write_detected",
+        "error_category": "write_during_proposal",
+    })
+    cases = [
+        {"case_id": "unsafe", "message": "Maak een setup met de naam QA Test.",
+         "expected_operation_id": "create_setup", "fixture_action": "safe_execution"},
+        {"case_id": "later-write", "message": "Maak een bot.",
+         "expected_operation_id": "create_bot", "fixture_action": "safe_execution"},
+        {"case_id": "later-read", "message": "Lees het plan."},
+    ]
+    checkpointed = []
+    results = module.run_cases(
+        base_url="https://example.test", token="token", cases=cases,
+        fixture_namespace="qa-acceptance-a1b2c3d4",
+        checkpoint=lambda rows, **_kwargs: checkpointed.append(list(rows)),
+    )
+
+    assert [item["case_status"] for item in results] == ["completed", "not_run", "not_run"]
+    assert [item.get("error_category") for item in results[1:]] == [
+        "prior_write_case_failed", "prior_write_case_failed",
+    ]
+    assert len([call for call in requests if call.get("method") == "POST"]) == 1
+    assert checkpointed[-1] == results
+
+    resumed = module.run_cases(
+        base_url="https://example.test", token="token", cases=cases,
+        fixture_namespace="qa-acceptance-a1b2c3d4", existing_results=results,
+    )
+    assert [item["case_status"] for item in resumed] == ["completed", "not_run", "not_run"]
+    assert len([call for call in requests if call.get("method") == "POST"]) == 1
 
 
 def test_owner_database_fingerprint_detects_write_outside_target_namespace():
