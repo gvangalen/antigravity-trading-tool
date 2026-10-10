@@ -16,8 +16,8 @@ from pathlib import Path
 
 
 FIXTURES = (
-    ("FINN_BUILD_SMOKE_USER_ID", "finn-protected-build@tradamind.invalid", "finn_production_build_v1", "Protected Build"),
-    ("FINN_QA_USER_ID", "finn-protected-qa@tradamind.invalid", "finn_production_qa_v1", "Protected QA"),
+    ("FINN_BUILD_SMOKE_USER_ID", "finn-protected-build@tradamind.com", "finn_production_build_v1", "Protected Build"),
+    ("FINN_QA_USER_ID", "finn-protected-qa@tradamind.com", "finn_production_qa_v1", "Protected QA"),
 )
 
 
@@ -43,7 +43,11 @@ def provision(secret_path: Path) -> str:
 
     from backend.infrastructure.database import SessionLocal
     from backend.infrastructure.models import ExchangeKey, User
+    from backend.schemas.auth_schema import RegisterRequest
     from backend.utils.auth_utils import hash_password
+
+    for _, email, _, display_name in FIXTURES:
+        RegisterRequest(first_name="FINN", last_name=display_name, email=email, password="not-a-login")
 
     resolved: dict[str, int] = {}
     with SessionLocal() as session:
