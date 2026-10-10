@@ -3075,6 +3075,109 @@ def test_proposal_candidate_uses_registry_contract_and_existing_guided_state():
     assert plan.missing_information == ["timeframe", "name", "dca_frequency", "dca_amount_mode", "base_amount"]
 
 
+def test_responses_bot_candidate_uses_immediate_confirmed_dca_pair():
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "inputs": {"name": "New Paper Bot", "budget_total_eur": 20}},
+    )
+    action = {
+        "operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+        "result_status": "succeeded",
+        "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"},
+    }
+    result = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Maak een Paper-bot voor het zojuist aangemaakte DCA-plan en noem de bot New Paper Bot met budget 20 euro.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": action,
+            "last_verified_context": {"resolved_entities": {"strategy_id": 66}},
+        },
+        verified_asset="ETH",
+    )
+    state = result.request_plan.operation_state
+    assert state["collected_inputs"]["strategy_id"] == 81
+    assert state["input_sources"]["strategy_id"] == "verified_action_result"
+    assert "strategy_id" not in state["missing_required_inputs"]
+
+
+def test_responses_bot_candidate_uses_generic_strategy_at_recent_dca_setup():
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "inputs": {"name": "New Paper Bot", "budget_total_eur": 20}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Maak een Paper-bot voor de strategie bij het zojuist aangemaakte DCA-plan met 20 euro budget.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": {
+                "operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+                "result_status": "succeeded",
+                "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"},
+            },
+        },
+        verified_asset="ETH",
+    )
+    assert result.request_plan.operation_state["collected_inputs"]["strategy_id"] == 81
+
+
+@pytest.mark.parametrize("immediate, message", [
+    ({"operation_id": "create_setup", "result_status": "failed"},
+     "Maak een Paper-bot voor het zojuist aangemaakte DCA-plan."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "BTC"}},
+     "Maak een Paper-bot voor het zojuist aangemaakte ETH DCA-plan."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor strategie Other Strategy die net aangemaakt is, naam New Paper Bot."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor Alpha Prime die net aangemaakt is, naam New Paper Bot."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor het zojuist aangemaakte plan Alpha Prime, naam New Paper Bot."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor het zojuist aangemaakte plan met de naam Alpha Prime, noem de bot Paper Bot."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor het zojuist aangemaakte plan, Alpha Prime, noem de bot Paper Bot."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor het zojuist aangemaakte plan met als naam Alpha Prime en noem de bot Paper Bot."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor het zojuist aangemaakte plan met titel Alpha Prime en noem de bot Paper Bot."),
+    ({"operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+      "result_status": "succeeded", "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"}},
+     "Maak een Paper-bot voor het zojuist aangemaakte plan met budget €20 genaamd Alpha Prime en noem de bot Paper Bot."),
+])
+def test_responses_bot_temporal_reference_rejects_failed_or_wrong_asset(immediate, message):
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "inputs": {"name": "New Paper Bot", "budget_total_eur": 20}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call, message=message,
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": immediate,
+            "active_guided_operation": {
+                "operation_id": "create_bot", "collected_inputs": {"strategy_id": 66},
+                "missing_required_inputs": [], "next_missing_input": None,
+            },
+            "proposal_correction_result": {
+                "status": "cancelled", "operation_id": "create_bot",
+                "requested_instrument": "ETH", "previous_asset": "BTC",
+                "prior_inputs": {"strategy_id": 66},
+            },
+            "last_verified_context": {"resolved_entities": {"strategy_id": 66}},
+        }, verified_asset="ETH",
+    )
+    assert "strategy_id" in result.request_plan.operation_state["missing_required_inputs"]
+
+
 def test_explicit_setup_name_overrides_truncated_model_candidate():
     call = FinnResponsesToolCatalog().validate(
         "create_dca_plan_proposal",

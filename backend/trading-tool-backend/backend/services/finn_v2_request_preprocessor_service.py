@@ -184,6 +184,8 @@ class FinnV2RequestPreprocessorService:
         ),
         "contextual_entity": (
             "die setup", "die strategie", "die bot", "die gekoppelde bot",
+            "zojuist", "net aangemaakt", "net aangemaakte", "net gemaakt", "net gemaakte",
+            "just created", "recently created",
             "de besproken setup", "de besproken strategie", "de besproken bot",
             "diezelfde setup", "diezelfde strategie", "diezelfde bot",
             "dezelfde setup", "dezelfde strategie", "dezelfde bot",

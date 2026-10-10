@@ -1430,6 +1430,168 @@ def test_contextual_action_result_is_projected_as_typed_contract_lineage(monkeyp
     assert analysis.request_plan.conversation_reference_kind == "previous_action_result"
 
 
+def test_recent_confirmed_dca_pair_can_supply_linked_bot_strategy(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="create_bot",
+            action="create",
+            domain="bot",
+            discourse="operation_request",
+            confidence="high",
+            selector_source="structured",
+        ),
+    )
+    analysis = service.analyze(
+        message="Maak een Paper-bot voor het zojuist aangemaakte DCA-plan met een budget van 20 euro.",
+        conversation_context={
+            "previous_action_result": {
+                "run_id": "run-confirmed-dca",
+                "operation_id": "create_setup",
+                "entity_type": "setup",
+                "entity_id": "41",
+                "result_status": "succeeded",
+                "canonical_entity": {"setup_id": 41, "strategy_id": 81},
+            },
+        },
+    )
+
+    assert analysis.request_plan.operation_id == "create_bot"
+    assert analysis.request_plan.conversation_reference_kind == "previous_action_result"
+    assert analysis.request_plan.referenced_entities["setup_id"] == 41
+    assert analysis.request_plan.referenced_entities["strategy_id"] == 81
+    assert analysis.request_plan.operation_state["collected_inputs"]["strategy_id"] == 81
+    assert "strategy_id" not in analysis.request_plan.operation_state["missing_required_inputs"]
+
+
+def test_recent_confirmed_pair_overrides_stale_selector_and_verified_context(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(service.classifier, "classify", lambda **_kwargs: SemanticOperationClassification(
+        operation_id="create_bot", action="create", domain="bot",
+        discourse="operation_request", confidence="high", selector_source="structured",
+        supplied_inputs={"strategy_id": 66, "name": "Nieuwe Paper Bot"},
+    ))
+    result = {
+        "run_id": "run-new", "operation_id": "create_setup", "entity_type": "setup",
+        "entity_id": 41, "result_status": "succeeded",
+        "canonical_entity": {"setup_id": 41, "strategy_id": 81},
+    }
+    analysis = service.analyze(
+        message="Maak een Paper-bot voor het zojuist aangemaakte DCA-plan.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": result,
+            "previous_action_result": result,
+            "last_verified_context": {"resolved_entities": {"setup_id": 55, "strategy_id": 66}},
+        },
+    )
+    state = analysis.request_plan.operation_state
+    assert analysis.request_plan.referenced_entities["setup_id"] == 41
+    assert analysis.request_plan.referenced_entities["strategy_id"] == 81
+    assert state["collected_inputs"]["strategy_id"] == 81
+    assert state["input_sources"]["strategy_id"] == "verified_action_result"
+
+
+def test_recent_failed_action_cannot_reuse_older_success_or_selector(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(service.classifier, "classify", lambda **_kwargs: SemanticOperationClassification(
+        operation_id="create_bot", action="create", domain="bot",
+        discourse="operation_request", confidence="high", selector_source="structured",
+        supplied_inputs={"strategy_id": 66, "name": "Nieuwe Paper Bot"},
+    ))
+    analysis = service.analyze(
+        message="Maak een Paper-bot voor het zojuist aangemaakte DCA-plan.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": {"result_status": "failed", "operation_id": "create_setup"},
+            "previous_action_result": {
+                "run_id": "run-old", "operation_id": "create_setup", "entity_type": "setup",
+                "entity_id": 55, "result_status": "succeeded",
+                "canonical_entity": {"setup_id": 55, "strategy_id": 66},
+            },
+            "last_verified_context": {"resolved_entities": {"setup_id": 55, "strategy_id": 66}},
+        },
+    )
+    assert "strategy_id" in analysis.request_plan.operation_state["missing_required_inputs"]
+    assert analysis.request_plan.operation_state["collected_inputs"].get("strategy_id") is None
+
+
+def test_named_recent_plan_cannot_borrow_previous_action_strategy(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(service.classifier, "classify", lambda **_kwargs: SemanticOperationClassification(
+        operation_id="create_bot", action="create", domain="bot",
+        discourse="operation_request", confidence="high", selector_source="structured",
+        supplied_inputs={"strategy_id": 81, "name": "Paper Bot"},
+    ))
+    action = {
+        "run_id": "run-eth", "operation_id": "create_setup", "entity_type": "setup",
+        "entity_id": 41, "result_status": "succeeded",
+        "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"},
+    }
+    analysis = service.analyze(
+        message="Maak een Paper-bot voor het zojuist aangemaakte plan met als naam Alpha Prime.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": action,
+            "previous_action_result": action,
+        },
+    )
+    assert "strategy_id" in analysis.request_plan.operation_state["missing_required_inputs"]
+
+
+def test_recent_action_pair_must_match_explicit_current_asset(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(service.classifier, "classify", lambda **_kwargs: SemanticOperationClassification(
+        operation_id="create_bot", action="create", domain="bot",
+        discourse="operation_request", confidence="high", selector_source="structured",
+        supplied_inputs={"strategy_id": 81, "name": "Nieuwe Paper Bot"},
+    ))
+    result = {
+        "run_id": "run-btc", "operation_id": "create_setup", "entity_type": "setup",
+        "entity_id": 41, "result_status": "succeeded",
+        "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "BTC"},
+    }
+    analysis = service.analyze(
+        message="Maak een Paper-bot voor het zojuist aangemaakte ETH DCA-plan.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": result,
+            "previous_action_result": result,
+        },
+    )
+    assert analysis.request_plan.target_asset == "ETH"
+    assert "strategy_id" in analysis.request_plan.operation_state["missing_required_inputs"]
+
+
+def test_recent_dca_pair_needs_successful_consistent_action_result(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="create_bot", action="create", domain="bot",
+            discourse="operation_request", confidence="high", selector_source="structured",
+        ),
+    )
+    base = {
+        "run_id": "run-dca", "operation_id": "create_setup",
+        "entity_type": "setup", "entity_id": "41", "result_status": "succeeded",
+        "canonical_entity": {"setup_id": 41, "strategy_id": 81},
+    }
+    for mutation in (
+        {"result_status": "failed"},
+        {"canonical_entity": {"setup_id": 99, "strategy_id": 81}},
+        {"canonical_entity": {"setup_id": 41}},
+    ):
+        analysis = service.analyze(
+            message="Maak een Paper-bot voor het zojuist aangemaakte DCA-plan.",
+            conversation_context={"previous_action_result": {**base, **mutation}},
+        )
+        assert "strategy_id" in analysis.request_plan.operation_state["missing_required_inputs"]
+
+
 def test_setup_relation_name_stops_before_execution_details():
     service = FinnV2RequestAnalysisService()
 

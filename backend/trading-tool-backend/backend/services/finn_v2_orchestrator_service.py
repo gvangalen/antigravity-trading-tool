@@ -187,6 +187,19 @@ class FinnV2OrchestratorService:
         contract = FinnV2OperationRegistry().require_supported(operation_id)
         operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
         collected_inputs = dict(operation_state.get("collected_inputs") or {})
+        if (
+            operation_id == "create_bot"
+            and conversation_context.get("strict_immediate_action_lineage")
+            and any(phrase in message.casefold() for phrase in (
+                "zojuist", "net aangemaakt", "net aangemaakte", "net gemaakt",
+                "net gemaakte", "just created", "recently created",
+            ))
+            and "strategy_id" in list(operation_state.get("missing_required_inputs") or [])
+        ):
+            # A temporal reference without a valid immediate action must
+            # clarify. Do not let owner candidates or older conversation
+            # lineage silently supply a strategy in a second resolution pass.
+            return analysis
         selectors = {
             **{
                 field: collected_inputs[field]
@@ -331,6 +344,13 @@ class FinnV2OrchestratorService:
             # must be allowed to satisfy an ID slot during disambiguation even
             # though arbitrary selector values are ignored on guided turns.
             derived_inputs=resolved,
+            verified_action_inputs=(
+                {"strategy_id": collected_inputs["strategy_id"]}
+                if operation_id == "create_bot"
+                and dict(operation_state.get("input_sources") or {}).get("strategy_id") == "verified_action_result"
+                and collected_inputs.get("strategy_id") is not None
+                else None
+            ),
         )
         request_plan = request_plan.copy(
             update={
@@ -1066,6 +1086,12 @@ class FinnV2OrchestratorService:
         elif verified_conversation_target.get("owner_id") == user_id:
             context["canonical_entity_target"] = verified_conversation_target
         action_result = dict(previous_state.get("action_result") or {})
+        # Temporal references such as "zojuist aangemaakt" may use only the
+        # immediately preceding run. The general latest-success lookup below
+        # remains useful for non-temporal conversation references.
+        if previous_contract is not None:
+            context["strict_immediate_action_lineage"] = True
+            context["immediate_previous_action_result"] = action_result
         if conversation_id and callable(
             getattr(self.runtime_contracts, "get_latest_action_result_for_conversation", None)
         ):

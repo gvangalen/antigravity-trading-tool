@@ -24,6 +24,14 @@ def test_specific_setup_evaluation_is_not_the_whole_plan_subject():
     assert facts.explicit_plan_subject is False
 
 
+@pytest.mark.parametrize("phrase", ["zojuist aangemaakte", "net aangemaakte", "just created"])
+def test_recently_created_plan_is_a_contextual_entity_reference(phrase):
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message=f"Maak een Paper-bot voor het {phrase} DCA-plan."
+    )
+    assert "contextual_entity" in facts.conversation_reference_markers
+
+
 def test_confirmation_adjective_in_a_question_is_a_read_not_a_proposal_confirmation():
     service = FinnV2RequestPreprocessorService()
     question = service.preprocess(

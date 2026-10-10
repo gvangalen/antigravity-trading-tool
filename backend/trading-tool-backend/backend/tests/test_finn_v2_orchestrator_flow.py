@@ -408,6 +408,108 @@ def test_create_bot_ambiguous_linked_strategy_becomes_clarification_not_failure(
     assert "strategy_id" in resolved.request_plan.operation_state["missing_required_inputs"]
 
 
+def test_create_bot_continues_from_confirmed_dca_pair_in_same_conversation():
+    message = "Maak een Paper-bot voor het zojuist aangemaakte DCA-plan met 20 euro budget."
+    action = {
+        "run_id": "run-confirmed-dca", "operation_id": "create_setup",
+        "entity_type": "setup", "entity_id": "41", "result_status": "succeeded",
+        "canonical_entity": {"setup_id": 41, "strategy_id": 81},
+    }
+    analyzer = FinnV2RequestAnalysisService()
+    analyzer.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id="create_bot", action="create", domain="bot",
+        discourse="operation_request", confidence="high", selector_source="structured",
+    )
+    analysis = analyzer.analyze(
+        message=message, conversation_context={"previous_action_result": action},
+    )
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+
+    async def _resolve_inputs(**kwargs):
+        assert kwargs["selector"]["setup_id"] == 41
+        assert kwargs["selector"]["strategy_id"] == 81
+        return {}
+
+    service.entities.resolve_contract_reference_inputs = AsyncMock(side_effect=_resolve_inputs)
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=message, analysis=analysis,
+        conversation_context={"previous_action_result": action},
+        workspace_hints={}, client_context={},
+    ))
+    assert resolved.request_plan.operation_id == "create_bot"
+    assert resolved.request_plan.conversation_reference_kind == "previous_action_result"
+    assert resolved.request_plan.operation_state["collected_inputs"]["strategy_id"] == 81
+    assert "strategy_id" not in resolved.request_plan.operation_state["missing_required_inputs"]
+
+
+def test_create_bot_recent_pair_wins_over_stale_selector_through_resolution():
+    message = "Maak een Paper-bot voor het zojuist aangemaakte DCA-plan."
+    action = {
+        "run_id": "run-new", "operation_id": "create_setup", "entity_type": "setup",
+        "entity_id": 41, "result_status": "succeeded",
+        "canonical_entity": {"setup_id": 41, "strategy_id": 81},
+    }
+    context = {
+        "strict_immediate_action_lineage": True,
+        "immediate_previous_action_result": action,
+        "previous_action_result": action,
+        "last_verified_context": {"resolved_entities": {"setup_id": 55, "strategy_id": 66}},
+    }
+    analyzer = FinnV2RequestAnalysisService()
+    analyzer.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id="create_bot", action="create", domain="bot",
+        discourse="operation_request", confidence="high", selector_source="structured",
+        supplied_inputs={"strategy_id": 66, "name": "Nieuwe Paper Bot"},
+    )
+    analysis = analyzer.analyze(message=message, conversation_context=context)
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+
+    async def _resolve_inputs(**kwargs):
+        assert kwargs["selector"]["setup_id"] == 41
+        assert kwargs["selector"]["strategy_id"] == 81
+        return {"strategy_id": 81}
+
+    service.entities.resolve_contract_reference_inputs = AsyncMock(side_effect=_resolve_inputs)
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=message, analysis=analysis, conversation_context=context,
+        workspace_hints={}, client_context={},
+    ))
+    state = resolved.request_plan.operation_state
+    assert state["collected_inputs"]["strategy_id"] == 81
+    assert state["input_sources"]["strategy_id"] == "verified_action_result"
+
+
+def test_create_bot_recent_failed_action_does_not_resolve_old_strategy():
+    message = "Maak een Paper-bot voor het zojuist aangemaakte DCA-plan."
+    context = {
+        "strict_immediate_action_lineage": True,
+        "immediate_previous_action_result": {"operation_id": "create_setup", "result_status": "failed"},
+        "previous_action_result": {
+            "run_id": "run-old", "operation_id": "create_setup", "entity_type": "setup",
+            "entity_id": 55, "result_status": "succeeded",
+            "canonical_entity": {"setup_id": 55, "strategy_id": 66},
+        },
+        "last_verified_context": {"resolved_entities": {"setup_id": 55, "strategy_id": 66}},
+    }
+    analyzer = FinnV2RequestAnalysisService()
+    analyzer.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id="create_bot", action="create", domain="bot",
+        discourse="operation_request", confidence="high", selector_source="structured",
+        supplied_inputs={"strategy_id": 66, "name": "Nieuwe Paper Bot"},
+    )
+    analysis = analyzer.analyze(message=message, conversation_context=context)
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    service.entities.resolve_contract_reference_inputs = AsyncMock(
+        side_effect=AssertionError("old strategy must not be resolved")
+    )
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=message, analysis=analysis, conversation_context=context,
+        workspace_hints={}, client_context={},
+    ))
+    assert "strategy_id" in resolved.request_plan.operation_state["missing_required_inputs"]
+    service.entities.resolve_contract_reference_inputs.assert_not_called()
+
+
 def test_orchestrator_preserves_typed_ambiguity_before_tools():
     message = "Vat mijn strategie samen."
     service = FinnV2OrchestratorService(session=_QueryableSession())
