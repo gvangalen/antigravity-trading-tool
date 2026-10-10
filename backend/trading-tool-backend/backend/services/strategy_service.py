@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.domain.strategy_level_geometry import strategy_level_geometry
+from backend.domain.finn_dca_plan_contract import is_confirmed_dca_amount_rule
 from backend.schemas.trading_schema import StrategyCreateSchema
 from backend.utils.data_normalizers import (
     normalize_targets,
@@ -233,6 +234,11 @@ class StrategyService:
         setup_type = (setup_row.get("setup_type") or "").lower()
         if setup_type not in ["dca", "trade", "position"]:
             raise HTTPException(400, "Ongeldig setup_type")
+        if raw_data.get("dca_amount_semantics") is not None and not is_confirmed_dca_amount_rule({
+            **raw_data, "setup_type": setup_type, "execution_mode": execution_mode,
+            "base_amount": payload.base_amount,
+        }):
+            raise HTTPException(422, "Ongeldige bevestigde DCA-bedragregel")
 
         if setup_type in {"trade", "position"} and not allow_incomplete_trade_draft:
             self._validate_trade_strategy(raw_data)
@@ -374,6 +380,10 @@ class StrategyService:
             raise HTTPException(400, "decision_curve verplicht")
 
         setup_type = (existing.get("existing_setup_type") or "").lower()
+        if merged_data.get("dca_amount_semantics") is not None and not is_confirmed_dca_amount_rule({
+            **merged_data, "setup_type": setup_type,
+        }):
+            raise HTTPException(422, "Ongeldige bevestigde DCA-bedragregel")
         merged_data["name"] = str(merged_data.get("name") or existing.get("name") or "").strip()
         merged_data["canonical_name"] = self.canonical_strategy_name(merged_data["name"])
         if await self.repository.check_strategy_name_exists(

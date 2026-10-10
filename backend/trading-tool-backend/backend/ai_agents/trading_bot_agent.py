@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from backend.utils.db import get_db_connection
 # ✅ Engine brain (single source of truth)
 from backend.engine.bot_brain import run_bot_brain
-from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
+from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights, is_confirmed_dca_amount_rule
 from backend.domain.setup_market_match import match_setup_from_daily_scores
 import asyncio
 from backend.services.exchange_service import ExchangeService
@@ -435,6 +435,13 @@ def _get_strategy_setup_payload(
     if execution_mode == "custom":
         payload["decision_curve"] = curve or {}
     if stored_data.get("dca_amount_semantics") == "planned_exact" and normalized_type == "dca":
+        # Preserve malformed historical plans as marked plans so the brain
+        # holds them instead of silently treating them as ordinary DCA.
+        payload["dca_amount_semantics"] = "planned_exact"
+    if is_confirmed_dca_amount_rule({
+        **stored_data, "setup_type": normalized_type, "execution_mode": execution_mode,
+        "base_amount": base_amount, "decision_curve": curve,
+    }):
         payload["dca_amount_semantics"] = "planned_exact"
 
     return payload

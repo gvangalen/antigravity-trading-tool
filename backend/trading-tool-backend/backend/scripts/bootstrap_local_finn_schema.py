@@ -6,6 +6,11 @@ from sqlalchemy import text
 
 
 LEGACY_BASELINE = """
+-- The score writer upserts one row per owner, asset and day. Older disposable
+-- databases may have been created before DailyScore declared this key;
+-- create_all cannot add it to an existing table.
+CREATE UNIQUE INDEX IF NOT EXISTS daily_scores_user_symbol_report_date_unique
+    ON daily_scores (user_id, symbol, report_date);
 ALTER TABLE user_indicator_configs
     ALTER COLUMN config_json TYPE JSONB USING config_json::text::jsonb,
     ALTER COLUMN config_json SET DEFAULT '{}'::jsonb,

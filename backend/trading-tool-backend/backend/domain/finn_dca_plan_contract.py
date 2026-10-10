@@ -125,6 +125,49 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
     return setup_fields, strategy_fields
 
 
+def is_confirmed_dca_amount_rule(strategy: dict[str, Any]) -> bool:
+    """Accept the exact-amount exemption only for a valid saved amount rule.
+
+    The JSON marker is user supplied on general strategy routes, so it cannot
+    establish this exception by itself. Reconstruct the canonical curve before
+    the decision and guardrail engines trust it.
+    """
+    if (str(strategy.get("setup_type") or "").lower() != "dca"
+            or strategy.get("dca_amount_semantics") != "planned_exact"):
+        return False
+    mode = strategy.get("execution_mode")
+    base = strategy.get("base_amount")
+    if mode == "fixed":
+        fields = {"setup_type": "dca", "dca_amount_mode": "fixed", "base_amount": base}
+    elif mode == "custom":
+        curve = strategy.get("decision_curve")
+        if not isinstance(curve, dict):
+            return False
+        points = curve.get("points")
+        if not isinstance(points, list) or len(points) != 4 or any(not isinstance(p, dict) for p in points):
+            return False
+        try:
+            fields = {
+                "setup_type": "dca", "dca_amount_mode": "score_bands", "base_amount": base,
+                "score_source": curve.get("input"),
+                "low_threshold": points[1]["x"], "high_threshold": points[2]["x"],
+                "low_score_percent": points[0]["y"] * 100,
+                "mid_score_percent": points[1]["y"] * 100,
+                "high_score_percent": points[2]["y"] * 100,
+            }
+        except (KeyError, TypeError):
+            return False
+    else:
+        return False
+    try:
+        _, canonical = split_confirmed_dca_plan(fields)
+    except (ValueError, TypeError):
+        return False
+    if mode == "fixed":
+        return not strategy.get("decision_curve") and math.isclose(float(base), canonical["base_amount"], abs_tol=0.005)
+    return curve == canonical["decision_curve"] and math.isclose(float(base), canonical["base_amount"], abs_tol=0.005)
+
+
 def dca_due_on_date(setup: dict[str, Any], report_date: date) -> bool:
     """Evaluate the saved setup cadence for a nominal local report date."""
     frequency = str(setup.get("dca_frequency") or "").lower()

@@ -6,7 +6,7 @@ from datetime import date
 from typing import Any, Dict, Optional
 
 from backend.engine.position_engine import calculate_position
-from backend.domain.finn_dca_plan_contract import benchmark_score
+from backend.domain.finn_dca_plan_contract import benchmark_score, is_confirmed_dca_amount_rule
 from backend.engine.market_intelligence_engine import get_market_intelligence
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.engine.trade_plan_engine import build_trade_plan
@@ -515,7 +515,7 @@ def run_bot_brain(
         rules=rules,
         live_price=live_price,
         final_amount=suggested_amount,
-        planned_dca_amount=setup.get("dca_amount_semantics") == "planned_exact",
+        planned_dca_amount=is_confirmed_dca_amount_rule(setup),
     )
     if (
         setup_type == "dca"
@@ -554,6 +554,21 @@ def run_bot_brain(
     strategy_reason = setup_result.get("reason", "No setup reason")
     setup_intent_note = setup_result.get("intent_note", "")
     confidence_score = _safe_float(setup_result.get("confidence_score"), 0.0) or 0.0
+    if (setup_type == "dca" and setup.get("dca_amount_semantics") == "planned_exact"
+            and not is_confirmed_dca_amount_rule(setup)):
+        # Old or directly written malformed amount rules must never fall
+        # through to ordinary DCA sizing or bypass the execution guardrail.
+        action = "hold"
+        suggested_amount = 0.0
+        position_size = 0.0
+        strategy_reason = (
+            "Smart DCA requires the total benchmark score"
+            if setup.get("execution_mode") == "custom"
+            and (setup.get("decision_curve") or {}).get("input") != "benchmark_score"
+            else "Invalid saved DCA amount rule"
+        )
+        setup_intent_note = "Review the saved DCA plan before execution"
+        confidence_score = 0.0
 
     # snapshot confidence blijft leading, maar fallback op regime/market als leeg
     if confidence_score <= 0:
@@ -576,7 +591,11 @@ def run_bot_brain(
     # -------------------------------------------------
     try:
         proposed_amount = suggested_amount if action == "buy" else 0.0
-        macro_score_for_guardrail = normalized_scores.get("macro_score")
+        # A confirmed DCA plan already encodes the score policy in its fixed
+        # amount or benchmark curve. Do not apply the generic trade macro
+        # multiplier again; cash, budget, exposure and kill-switch still apply.
+        planned_dca = is_confirmed_dca_amount_rule(setup)
+        macro_score_for_guardrail = None if planned_dca else normalized_scores.get("macro_score")
 
         guardrails_result = apply_guardrails(
             proposed_amount_eur=proposed_amount,
@@ -601,7 +620,7 @@ def run_bot_brain(
 
     except Exception as e:
         logger.warning("Guardrails fallback triggered: %s", e)
-        planned_dca = setup_type == "dca" and setup.get("dca_amount_semantics") == "planned_exact"
+        planned_dca = is_confirmed_dca_amount_rule(setup)
         guardrails_result = {
             "allowed": False if planned_dca else suggested_amount > 0,
             "adjusted_amount_eur": 0.0 if planned_dca else round(float(suggested_amount), 2),
@@ -617,7 +636,7 @@ def run_bot_brain(
         guardrails_result.get("adjusted_amount_eur"),
         suggested_amount,
     ) or 0.0
-    if setup_type == "dca" and setup.get("dca_amount_semantics") == "planned_exact":
+    if is_confirmed_dca_amount_rule(setup):
         adjusted_amount = (
             max(0.0, min(adjusted_amount, suggested_amount))
             if action == "buy" and guardrails_result.get("allowed") is True else 0.0

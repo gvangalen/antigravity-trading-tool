@@ -3,6 +3,7 @@ from datetime import date
 
 from backend.domain.finn_dca_plan_contract import (
     split_confirmed_dca_plan, dca_due_on_date, benchmark_score, normalize_benchmark_weights,
+    is_confirmed_dca_amount_rule,
 )
 from backend.engine.decision_engine import decide_amount
 from backend.ai_agents.trading_bot_agent import _get_current_benchmark_weights
@@ -15,6 +16,20 @@ def _schedule():
         "name": "BTC maandag DCA", "symbol": "BTC", "setup_type": "dca",
         "timeframe": "1D", "dca_frequency": "weekly", "dca_day": "monday",
     }
+
+
+def test_exact_amount_marker_requires_the_canonical_saved_rule():
+    _, fixed = split_confirmed_dca_plan({**_schedule(), "dca_amount_mode": "fixed", "base_amount": 100})
+    _, smart = split_confirmed_dca_plan({
+        **_schedule(), "dca_amount_mode": "score_bands", "base_amount": 100,
+        "score_source": "benchmark_score", "low_threshold": 40, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
+    })
+    assert is_confirmed_dca_amount_rule({**fixed, "setup_type": "dca"})
+    assert is_confirmed_dca_amount_rule({**smart, "setup_type": "dca"})
+    assert not is_confirmed_dca_amount_rule({**fixed, "setup_type": "dca", "base_amount": 0})
+    assert not is_confirmed_dca_amount_rule({**smart, "setup_type": "dca", "decision_curve": {"input": "market_score"}})
+    assert not is_confirmed_dca_amount_rule({**smart, "setup_type": "trade"})
 
 
 def test_fixed_dca_splits_schedule_and_exact_strategy_amount():

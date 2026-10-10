@@ -322,6 +322,10 @@ class DailySetupScore(Base):
 
 class DailyScore(Base):
     __tablename__ = 'daily_scores'
+    __table_args__ = (
+        UniqueConstraint("user_id", "symbol", "report_date",
+                         name="daily_scores_user_symbol_report_date_unique"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))

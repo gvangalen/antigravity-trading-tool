@@ -121,6 +121,27 @@ class _Session:
         return None
 
 
+def test_general_strategy_write_rejects_unvalidated_exact_dca_marker():
+    class _DcaRepository(_MultipleStrategyRepository):
+        async def get_setup_for_verification(self, setup_id, user_id):
+            return {"id": setup_id, "name": "BTC DCA", "symbol": "BTC", "timeframe": "1D", "setup_type": "dca"}
+
+    async def run():
+        service = StrategyService(_Session())
+        service.repository = _DcaRepository()
+        with pytest.raises(HTTPException) as exc_info:
+            await service.save_strategy(
+                StrategyCreateSchema(setup_id=77, name="Forged", execution_mode="custom", base_amount=100),
+                {"setup_id": 77, "name": "Forged", "execution_mode": "custom", "base_amount": 100,
+                 "dca_amount_semantics": "planned_exact", "decision_curve": {"input": "market_score", "points": []}},
+                9,
+            )
+        assert exc_info.value.status_code == 422
+        assert service.repository.rows == []
+
+    asyncio.run(run())
+
+
 def test_multiple_strategies_can_share_a_setup_when_names_differ(monkeypatch):
     async def _mark_step_completed(*_args, **_kwargs):
         return None

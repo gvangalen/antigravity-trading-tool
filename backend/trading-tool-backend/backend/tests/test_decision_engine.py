@@ -1,6 +1,7 @@
 import pytest
 
 from backend.engine.decision_engine import decide_amount
+from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 from backend.engine.decision_presets import (
     DCA_CONTRARIAN,
     DCA_TREND_FOLLOWING,
@@ -83,23 +84,13 @@ def test_invalid_setup_raises():
     (80, 80, 150.0),
 ])
 def test_confirmed_dca_score_bands_keep_exact_planned_amount(market_score, setup_score, expected):
-    strategy = {
-        "setup_type": "dca",
-        "execution_mode": "custom",
-        "base_amount": 100,
-        "dca_amount_semantics": "planned_exact",
-        "decision_curve": {
-            "input": "benchmark_score",
-            "weights_policy": "current_user_preferences",
-            "interpolation": "step",
-            "points": [
-                {"x": 0, "y": 0.5},
-                {"x": 40, "y": 1.0},
-                {"x": 70, "y": 1.5},
-                {"x": 100, "y": 1.5},
-            ],
-        },
-    }
+    _, amount_rule = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "BTC DCA", "dca_amount_mode": "score_bands",
+        "base_amount": 100, "score_source": "benchmark_score",
+        "low_threshold": 40, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
+    })
+    strategy = {**amount_rule, "setup_type": "dca"}
 
     components = ("market_score", "macro_score", "technical_score")
     result = decide_amount(strategy, {
