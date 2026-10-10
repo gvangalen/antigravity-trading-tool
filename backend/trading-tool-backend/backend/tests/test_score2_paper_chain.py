@@ -89,8 +89,58 @@ class _Cursor:
         return self.rows
 
 
+@pytest.mark.parametrize("mode", ["manual", "semi-auto", "semi", "unknown"])
+def test_auto_executor_rejects_unapproved_bot_modes(mode):
+    with pytest.raises(RuntimeError, match="requires auto mode"):
+        paper_worker._auto_execute_decision(
+            conn=None, user_id=7, bot_id=11, decision_id=13,
+            order={"symbol": "ETH", "side": "buy", "estimated_price": 100,
+                   "estimated_qty": 1},
+            is_live=True, mode=mode,
+        )
+
+
+@pytest.mark.parametrize(
+    ("saved_bot", "error"),
+    [
+        (None, "active auto bot"),
+        (("manual", True, True), "active auto bot"),
+        (("semi-auto", True, True), "active auto bot"),
+        (("auto", True, False), "active auto bot"),
+        (("auto", False, True), "environment changed"),
+    ],
+)
+def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
+    class BotCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, statement, params):
+            assert "FOR UPDATE" in statement
+            assert params == (11, 7)
+
+        def fetchone(self):
+            return saved_bot
+
+    class BotConnection:
+        def cursor(self):
+            return BotCursor()
+
+    with pytest.raises(RuntimeError, match=error):
+        paper_worker._auto_execute_decision(
+            conn=BotConnection(), user_id=7, bot_id=11, decision_id=13,
+            order={"symbol": "ETH", "side": "buy", "estimated_price": 100,
+                   "estimated_qty": 1},
+            is_live=True, mode="auto",
+        )
+
+
 @pytest.mark.parametrize("unavailable", [None, "missing", "stale"])
-def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailable):
+@pytest.mark.parametrize("mode", ["manual", "semi-auto", "auto"])
+def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailable, mode):
     store = _SourceStore(
         missing="technical" if unavailable == "missing" else None,
         stale="technical" if unavailable == "stale" else None,
@@ -157,6 +207,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     monkeypatch.setattr(paper_worker, "_get_active_bots", lambda *_: [{
         "bot_id": 11, "strategy_id": 12, "setup_id": 9, "symbol": "ETH",
         "setup_type": "dca", "dca_frequency": "daily", "is_live": False,
+        "mode": mode,
         "budget": {},
     }])
     monkeypatch.setattr(paper_worker, "_get_live_price", lambda *_: 100)
@@ -172,7 +223,13 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     monkeypatch.setattr(paper_worker, "get_today_spent_eur", lambda *_: 0)
     monkeypatch.setattr(paper_worker, "_clear_existing_pending_orders_for_day", lambda **_: None)
     monkeypatch.setattr(paper_worker, "_touch_bot_last_run", lambda **_: None)
-    monkeypatch.setattr(paper_worker, "build_order_proposal", lambda **_: None)
+    order = {"symbol": "ETH", "side": "buy", "quote_amount_eur": 150,
+             "estimated_price": 100, "estimated_qty": 1.5}
+    monkeypatch.setattr(paper_worker, "build_order_proposal", lambda **_: None if unavailable else order)
+    saved_orders = []
+    auto_calls = []
+    monkeypatch.setattr(paper_worker, "_persist_bot_order", lambda **kwargs: saved_orders.append(kwargs) or 14)
+    monkeypatch.setattr(paper_worker, "_auto_execute_decision", lambda **kwargs: auto_calls.append(kwargs))
     persisted = {}
     monkeypatch.setattr(paper_worker, "_persist_decision_and_order", lambda **kwargs: persisted.update(kwargs) or 13)
 
@@ -180,7 +237,11 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     assert result["ok"] is True
     assert result["decisions"][0]["action"] == ("hold" if unavailable else "buy")
     assert result["decisions"][0]["decision"]["amount_eur"] == (0 if unavailable else 150)
-    assert result["decisions"][0]["execution_status"] == "no_order"
+    assert result["decisions"][0]["execution_status"] == (
+        "no_order" if unavailable else "filled" if mode == "auto" else "pending_confirmation"
+    )
+    assert len(saved_orders) == (0 if unavailable else 1)
+    assert len(auto_calls) == (1 if not unavailable and mode == "auto" else 0)
     assert persisted["scores"]["_setup_match"]["status"] == (
         "insufficient_data" if unavailable else "matches"
     )

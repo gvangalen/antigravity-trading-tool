@@ -247,6 +247,21 @@ def assert_finn_v2_schema(connection: Any) -> None:
                     f"finn_v2_schema_missing_index:{required.table_name}.{required.index_name}"
                 )
 
+        # BotService and both bot clients persist ``semi-auto``. A legacy
+        # CHECK accepting only ``semi`` turns a valid Paper-bot creation into
+        # an HTTP 500 after the normal API validation has passed.
+        cursor.execute(
+            """
+            SELECT pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid = 'bot_configs'::regclass
+              AND conname = 'bot_configs_mode_check'
+            """
+        )
+        bot_mode_constraint = cursor.fetchone()
+        if not bot_mode_constraint or "'semi-auto'" not in (bot_mode_constraint[0] or ""):
+            raise FinnV2SchemaHealthError("finn_v2_schema_invalid_bot_mode_constraint")
+
         # This read catches permissions or a malformed relation before PM2 starts.
         cursor.execute("SELECT context_json FROM finn_v2_conversations LIMIT 1")
         cursor.fetchone()

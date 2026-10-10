@@ -1742,20 +1742,26 @@ def run_trading_bot_agent(
                     order=order,
                 )
 
-                try:
-                    _auto_execute_decision(
-                        conn=conn,
-                        user_id=user_id,
-                        bot_id=bot["bot_id"],
-                        decision_id=decision_id,
-                        order=order,
-                        is_live=bot.get("is_live", False),
-                    )
-                    execution_status = "filled"
-
-                except Exception as e:
-                    logger.exception("❌ Auto execution failed")
-                    execution_status = f"failed: {e}"
+                # A planned order is not consent to execute it. Manual and
+                # semi-automatic bots wait for the explicit execution route,
+                # including when an exchange connection is present.
+                if bot.get("mode") == "auto":
+                    try:
+                        _auto_execute_decision(
+                            conn=conn,
+                            user_id=user_id,
+                            bot_id=bot["bot_id"],
+                            decision_id=decision_id,
+                            order=order,
+                            is_live=bot.get("is_live", False),
+                            mode=bot.get("mode"),
+                        )
+                        execution_status = "filled"
+                    except Exception as e:
+                        logger.exception("❌ Auto execution failed")
+                        execution_status = f"failed: {e}"
+                else:
+                    execution_status = "pending_confirmation"
             else:
                 execution_status = "no_order"
 
@@ -1842,7 +1848,28 @@ def _auto_execute_decision(
     decision_id: int,
     order: dict,
     is_live: bool = False,
+    mode: str = "manual",
 ):
+    if mode != "auto":
+        raise RuntimeError("Automatic execution requires auto mode")
+    # Lock the current owner-scoped configuration before any exchange call.
+    # A stale worker snapshot must not execute after a user switches mode,
+    # disables the bot, or changes its Paper/Live setting.
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT mode, is_live, is_active
+            FROM bot_configs
+            WHERE id=%s AND user_id=%s
+            FOR UPDATE
+            """,
+            (bot_id, user_id),
+        )
+        current_bot = cur.fetchone()
+    if not current_bot or current_bot[0] != "auto" or not current_bot[2]:
+        raise RuntimeError("Automatic execution requires an active auto bot")
+    if bool(current_bot[1]) != bool(is_live):
+        raise RuntimeError("Bot execution environment changed")
     symbol = (order.get("symbol") or DEFAULT_SYMBOL).upper()
     side = (order.get("side") or "buy").lower().strip()
 
