@@ -705,6 +705,39 @@ def test_failed_run_create_still_checks_owner_database_effect(monkeypatch):
     assert action.get("confirm_status") is None
 
 
+def test_expired_fixture_action_still_checks_owner_database_effect(monkeypatch):
+    from types import SimpleNamespace
+
+    module = _module()
+    baseline = {
+        "row_count": 0, "state_sha256": "before", "owner_domain_state_sha256": "before-all",
+        "broker_order_count": 0, "live_bot_count": 0,
+    }
+    snapshots = iter([baseline, {**baseline, "owner_domain_state_sha256": "after-all"}])
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: next(snapshots))
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: (
+        200, {"run_id": "run-1", "conversation_id": "conversation-1"}, 1.0, None,
+    ))
+    terminal = {"status": "completed", "runtime_trace": {"initial_operation_id": "create_setup"}}
+    monkeypatch.setattr(module, "observe_terminal", lambda **_kwargs: SimpleNamespace(
+        terminal=terminal, sse_terminal=terminal, sse_error=None,
+        fallback_poll_error=None, snapshot_error=None,
+    ))
+    monkeypatch.setattr(module, "_run_fixture_action", lambda **_kwargs: {
+        "mode": "safe_execution", "outcome": "case_timeout", "error_category": "case_timeout",
+    })
+    results = module.run_cases(
+        base_url="https://example.test", token="token",
+        cases=[{
+            "case_id": "write-1", "message": "Maak een setup.",
+            "fixture_action": "safe_execution", "expected_operation_id": "create_setup",
+        }],
+        fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+    )
+    assert results[0]["fixture_action"]["outcome"] == "run_write_detected"
+    assert results[0]["fixture_action"]["error_category"] == "write_during_run"
+
+
 def test_missing_namespace_is_blocked_before_any_product_call(tmp_path, monkeypatch):
     module = _module()
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")

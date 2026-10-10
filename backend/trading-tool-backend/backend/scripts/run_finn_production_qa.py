@@ -1554,7 +1554,7 @@ def run_cases(
             if terminal.get("status") in TERMINAL_STATUSES and not result.get("error_category")
             else {"mode": case.get("fixture_action", "read_only"), "outcome": "not_run", "error_category": None}
         )
-        if result["fixture_action"]["outcome"] == "not_run":
+        if result["fixture_action"]["outcome"] in {"not_run", "case_timeout"}:
             check_aborted_write_attempt(result)
         result["failure_classification"] = classify_case_failure(result)
         results[result_index] = result
