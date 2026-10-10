@@ -100,6 +100,44 @@ def test_previous_market_only_smart_dca_plan_holds_even_with_a_valid_market_scor
     assert "total benchmark" in result["reason"]
 
 
+def test_persisted_forged_dca_marker_is_read_and_held_without_exact_amount_exemption(monkeypatch, paper_engines):
+    from backend.ai_agents import trading_bot_agent as worker
+
+    class Cursor:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, *_args):
+            return None
+        def fetchone(self):
+            return (100, "custom", {"input": "market_score", "points": [{"x": 0, "y": 0.5}]},
+                    "dca", {"dca_amount_semantics": "planned_exact"})
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(worker, "_table_exists", lambda *_args: True)
+    saved = worker._get_strategy_setup_payload(Connection(), user_id=9, strategy_id=3, symbol="BTC")
+    assert saved["dca_amount_semantics"] == "planned_exact"
+    observed = {}
+    def guardrails(**kwargs):
+        observed.update(kwargs)
+        return {"allowed": True, "adjusted_amount_eur": kwargs["proposed_amount_eur"]}
+    monkeypatch.setattr(bot_brain, "apply_guardrails", guardrails)
+    result = bot_brain.run_bot_brain(
+        user_id=9, setup=saved,
+        scores={"market_score": 80, "macro_score": 20, "technical_score": 80,
+                "_source_available": {"market_score": True, "macro_score": True, "technical_score": True}},
+        portfolio_context={"active_strategy": {"setup_type": "dca", "confidence_score": 80}},
+        backtest_mode=True,
+    )
+    assert result["action"] == "hold"
+    assert result["amount_eur"] == 0
+    assert observed["global_macro_score"] == 20
+
+
 @pytest.mark.parametrize("weights,expected", [
     ({"market_score": 1/3, "macro_score": 1/3, "technical_score": 1/3}, 100),
     ({"market_score": 0.8, "macro_score": 0.1, "technical_score": 0.1}, 50),

@@ -1,7 +1,7 @@
 from typing import Dict, Any
 
 from backend.engine.curve_engine import calculate_position_size
-from backend.domain.finn_dca_plan_contract import benchmark_score
+from backend.domain.finn_dca_plan_contract import benchmark_score, is_confirmed_dca_amount_rule
 from backend.engine.exposure_engine import (
     compute_exposure_multiplier,
     apply_exposure_to_amount,
@@ -32,6 +32,12 @@ def decide_amount(
 
     if not setup:
         raise DecisionEngineError("Setup ontbreekt")
+    if (setup.get("dca_amount_semantics") == "planned_exact"
+            and not is_confirmed_dca_amount_rule(setup)):
+        if (setup.get("execution_mode") == "custom"
+                and (setup.get("decision_curve") or {}).get("input") != "benchmark_score"):
+            raise DecisionEngineError("Smart DCA requires the total benchmark score")
+        raise DecisionEngineError("Ongeldige DCA-bedragregel")
 
     base_amount = setup.get("base_amount")
     execution_mode = setup.get("execution_mode", "fixed")
@@ -91,10 +97,7 @@ def decide_amount(
 
     setup_score = scores.get("setup_score", scores.get("setup"))
 
-    exact_dca_amount = (
-        str(setup.get("setup_type") or "").lower() == "dca"
-        and setup.get("dca_amount_semantics") == "planned_exact"
-    )
+    exact_dca_amount = is_confirmed_dca_amount_rule(setup)
     if exact_dca_amount:
         setup_reason = "DCA planned amount; setup conviction cannot raise or lower its score band"
     elif isinstance(setup_score, (int, float)):
