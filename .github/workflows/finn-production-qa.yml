@@ -291,6 +291,7 @@ jobs:
               complete)
                 # Lock contention is a terminal infrastructure failure, not
                 # an incomplete matrix eligible for an automatic restart.
+                # shellcheck disable=SC2029 # The attempt-scoped remote path intentionally expands on the client.
                 lock_status="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "if test -f '$remote_state_dir/runner.lock_status'; then cat '$remote_state_dir/runner.lock_status'; fi" 2>/dev/null || true)"
                 if [ "$lock_status" = "runner_fixture_lock_unavailable" ]; then
                   completed=1
@@ -324,6 +325,7 @@ jobs:
             sleep 10
           done
           mkdir -p qa-artifacts
+          # shellcheck disable=SC2029 # The attempt-scoped remote path intentionally expands on the client.
           lock_status="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "if test -f '$remote_state_dir/runner.lock_status'; then cat '$remote_state_dir/runner.lock_status'; fi" 2>/dev/null || true)"
           if [ "$lock_status" = "runner_fixture_lock_unavailable" ]; then
             printf '{"schema_version":1,"outcome":"failed","error_category":"runner_fixture_lock_unavailable","profile":"%s"}\n' "$QA_PROFILE" > "qa-artifacts/${report_name}"
