@@ -72,6 +72,13 @@ test("ties automation context scores to the selected execution chain", () => {
   assert.match(botScores, /copy\.reviewPlanAction/);
 });
 
+test("never presents a saved Paper decision score as a current setup match", () => {
+  assert.doesNotMatch(botPage, /getBotMarketFitScore/);
+  assert.match(botAgentCard, /score_semantics === "verified_score_2"/);
+  assert.match(botAgentCard, /const decisionAt = normalizedDecision\?\.created_at/);
+  assert.match(botAgentCard, /setupScoreAt: hasVerifiedDecisionScore/);
+});
+
 test("keeps my plan linked to concrete bot activation state", () => {
   assert.match(myPlanWorkflow, /fetchBotConfigs/);
   assert.match(myPlanWorkflow, /fetchActiveSetup\(activeSymbol\)/);

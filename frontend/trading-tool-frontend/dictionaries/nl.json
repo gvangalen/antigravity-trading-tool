@@ -2435,7 +2435,7 @@
       "diagnosticsReady": "Diagnostiek",
       "amountLabel": "Bedrag",
       "setupLabel": "Setup",
-      "setupScoreLabel": "Setup score",
+      "setupScoreLabel": "Setupscore bij laatste beslissing",
       "stopLossLabel": "Stop loss",
       "targetCountLabel": "Targets",
       "notAvailable": "n.v.t.",

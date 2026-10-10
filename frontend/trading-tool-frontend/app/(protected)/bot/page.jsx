@@ -115,30 +115,12 @@ function getBotChainState(bot, strategies = []) {
   };
 }
 
-function getBotMarketFitScore(decision) {
-  const rawScore =
-    decision?.setup_match?.score ??
-    decision?.scores_json?.setup_match?.score ??
-    decision?.scores_json?.setup_score ??
-    decision?.setup_score ??
-    null;
-  const setupMatchScore = rawScore == null ? NaN : Number(rawScore);
-
-  return Number.isFinite(setupMatchScore) ? setupMatchScore : -1;
-}
-
-function compareBotsForAutomation(a, b, strategies = [], decisionsByBot = {}) {
+function compareBotsForAutomation(a, b, strategies = []) {
   const aChain = getBotChainState(a, strategies);
   const bChain = getBotChainState(b, strategies);
 
   if (aChain.isComplete !== bChain.isComplete) {
     return aChain.isComplete ? -1 : 1;
-  }
-
-  const aScore = getBotMarketFitScore(decisionsByBot?.[a.id] || {});
-  const bScore = getBotMarketFitScore(decisionsByBot?.[b.id] || {});
-  if (aScore !== bScore) {
-    return bScore - aScore;
   }
 
   if (a.is_active !== b.is_active) {
@@ -255,9 +237,9 @@ function BotPageInner() {
 
   const rankedBots = useMemo(() => {
     return [...resolvedBots].sort((left, right) => (
-      compareBotsForAutomation(left, right, strategies, decisionsByBot)
+      compareBotsForAutomation(left, right, strategies)
     ));
-  }, [resolvedBots, strategies, decisionsByBot]);
+  }, [resolvedBots, strategies]);
 
   useEffect(() => {
     trackAssistantEvent({
