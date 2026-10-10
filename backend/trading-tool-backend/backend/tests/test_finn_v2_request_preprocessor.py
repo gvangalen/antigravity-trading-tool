@@ -294,6 +294,38 @@ def test_read_only_coaching_request_does_not_turn_a_described_urge_into_an_updat
     ).action_polarity == "update"
 
 
+@pytest.mark.parametrize(("message", "polarity"), (
+    ("Als ETH vandaag stijgt en ik uit FOMO €10 extra wil bijkopen: zijn de "
+     "prijsmeting en de scores die je net noemde nog bruikbaar voor mijn plan? "
+     "Wat zegt mijn setup en Paper-botbudget? Alleen sparren, geen voorstel of aankoop.", "read"),
+    ("Does my BTC setup still fit the scores? No proposal or purchase.", "evaluate"),
+    ("Passt meine BTC-Setup zu den Scores? Kein Vorschlag und kein Kauf.", "read"),
+))
+def test_declined_proposal_in_a_question_is_read_only(message, polarity):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == polarity
+    assert facts.financial_execution_intent is False
+
+
+def test_declined_secondary_proposal_preserves_affirmative_creation():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Maak een BTC-setup, geen voorstel voor een bot."
+    )
+    assert facts.action_polarity == "create"
+
+
+def test_rephrasing_a_previous_assessment_is_read_only_despite_make_verb():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Maak de vorige beoordeling compacter."
+    )
+    assert facts.action_polarity == "read"
+    assert facts.discourse_act == "reformulation"
+    assert "previous_verified_conclusion" in facts.conversation_reference_markers
+    assert FinnV2RequestPreprocessorService().preprocess(
+        message="Maak een nieuwe BTC-setup."
+    ).action_polarity == "create"
+
+
 @pytest.mark.parametrize(
     "message",
     (

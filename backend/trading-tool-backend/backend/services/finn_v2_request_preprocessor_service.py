@@ -312,6 +312,17 @@ class FinnV2RequestPreprocessorService:
         if re.fullmatch(r"(?:waarom|why|wieso|weshalb|warum)[?!\.\s]*", normalized):
             references = (*references, "previous_verified_conclusion")
         action = self._action_polarity(normalized)
+        # "Maak de vorige beoordeling compacter" changes the wording of a
+        # prior response, not a saved product object. The reformulation and
+        # prior-answer markers are extracted independently of mutation verbs;
+        # keep their read-only meaning when no concrete object is requested.
+        if (
+            action == "create"
+            and "reformulation" in references
+            and "previous_verified_conclusion" in references
+            and not {"setup", "strategy", "bot", "indicator_configuration", "watchlist"}.intersection(entities)
+        ):
+            action = "read"
         market_mention = bool(
             asset and re.search(
                 r"\b(?:koop\w*|kopen|verkoop\w*|verkopen|buy\w*|sell\w*|"
@@ -624,6 +635,18 @@ class FinnV2RequestPreprocessorService:
             return "create"
         if "niet langer" in text and any(term in text for term in ("watchlist", "volglijst", "gevolgde", "marktenlijst")):
             return "remove"
+        # A declined proposal is not a request to prepare one merely because
+        # the same sentence also names a setup. Keep any affirmative action
+        # before the refusal ("maak een setup, geen voorstel voor een bot") intact.
+        declined_proposal = re.search(
+            r"\b(?:geen|no|kein\w*)\s+(?:(?:nieuw|new|neues?)\s+)?"
+            r"(?:voorstel|proposal|concept)\b",
+            text,
+        )
+        if declined_proposal:
+            preceding_action = self._action_polarity(text[:declined_proposal.start()].rstrip(" ,;"))
+            if preceding_action in {"read", "evaluate"}:
+                return preceding_action
         # A requested concept/proposal is an operation request even when it is
         # phrased as a question. This recognizes the product act, not a fixed
         # sentence or a specific asset.
