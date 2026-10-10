@@ -2,6 +2,14 @@ name: FINN QA Fixture Operations
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Diagnose or provision the designated protected QA fixture
+        required: true
+        type: choice
+        options:
+          - diagnose
+          - provision
 
 permissions:
   contents: read
@@ -15,6 +23,7 @@ jobs:
       - name: Prepare protected connection
         shell: bash
         env:
+          QA_MODE: ${{ inputs.mode }}
           QA_HOST: ${{ secrets.QA_SSH_HOST || secrets.HOST || secrets.SERVER_IP }}
           QA_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           QA_KNOWN_HOSTS: ${{ secrets.QA_SSH_KNOWN_HOSTS }}
@@ -26,9 +35,19 @@ jobs:
           chmod 600 "$RUNNER_TEMP/qa-key"
           printf '%s\n' "$QA_KNOWN_HOSTS" > "$RUNNER_TEMP/qa-known-hosts"
           chmod 600 "$RUNNER_TEMP/qa-known-hosts"
-          ssh -i "$RUNNER_TEMP/qa-key" -o "UserKnownHostsFile=$RUNNER_TEMP/qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@$QA_HOST" 'bash -s' <<'REMOTE'
+          ssh -i "$RUNNER_TEMP/qa-key" -o "UserKnownHostsFile=$RUNNER_TEMP/qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@$QA_HOST" "bash -s -- $(printf '%q' "$QA_MODE")" <<'REMOTE'
           set -euo pipefail
           set +x
+          mode="$1"
+          if [ "$mode" = provision ]; then
+            cd /home/ubuntu/antigravity-trading-tool
+            set -a
+            source "$HOME/.secrets/trading.env"
+            set +a
+            PYTHONPATH=backend/trading-tool-backend python3 ops/qa/provision_finn_qa_fixture.py
+            exit
+          fi
+          test "$mode" = diagnose
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -51,6 +70,9 @@ jobs:
               else:
                   raw = assignments[0].split('=', 1)[1].strip().strip('"\'')
                   print(f'{label}_qa_binding=' + ('numeric' if raw.isdecimal() and int(raw) > 0 else 'invalid'))
+              build_assignments = [line for line in lines if re.match(r'^\s*(?:export\s+)?FINN_BUILD_SMOKE_USER_ID\s*=', line)]
+              build_raw = build_assignments[0].split('=', 1)[1].strip().strip('"\'') if len(build_assignments) == 1 else ''
+              print('active_build_binding=' + ('numeric' if build_raw.isdecimal() and int(build_raw) > 0 else 'missing_or_invalid'))
           historical = []
           for path in candidates:
               if path == primary:
