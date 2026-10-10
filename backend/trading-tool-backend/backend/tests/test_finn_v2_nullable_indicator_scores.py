@@ -22,7 +22,7 @@ def test_macro_snapshot_preserves_missing_and_stale_scores():
     assert [item.score for item in result["data"].items] == [None, None]
     assert result["data"].items[0].value == 5400
     assert result["data"].items[0].source_observed_at is None
-    assert result["as_of"] == old
+    assert result["as_of"] == old.replace(microsecond=0)
     assert result["freshness_status"] == "unknown"
     assert [item.source_status for item in result["data"].items] == ["unknown", "stale"]
 

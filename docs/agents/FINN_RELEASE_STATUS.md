@@ -8,6 +8,25 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `LOCAL_VALIDATED_PENDING_CI`; do not call this live accepted until CI, Auto Deploy and independent QA finish. |
+| Goal | Diagnose the intermittent first-turn FOMO failure, verify the fresh-quote/missing-score boundary, and present DXY with the same two-decimal precision and readable source time as Analyse. |
+| Candidate branch | `codex/finn-fomo-turn-and-display`. |
+| Candidate implementation SHA | `2d6ae86725a76a68babd9313318afab3287d9c49`; the release-status evidence commit follows. |
+| Previous live SHA | `3ae758d3a4fc1a1f7559764f49ea38437c6382c0`, independently tested: price and valid Market score were distinguished, but the first FOMO turn failed once; a repeat succeeded. The missing-score state was not present in that live run. |
+| Last updated | 2026-10-10. |
+
+The original production FOMO run was located through a read-only, metadata-only runtime-store query using the exact user-supplied prompt and UTC window. It terminalized `unavailable` with `responses_tool_round_limit` after **five completed read tools** in about 12 seconds. The immediate retry completed after four read tools. This was neither browser polling exhaustion nor the 40-second lifecycle deadline. The request preprocessor also classified the explicit “geen voorstel” coach question as `create` because it mentioned both “voorstel” and “setup”; that disabled the read-only continuation boundary. The repair treats a declined proposal as read-only unless an affirmative earlier mutation exists, and permits one answer-only Responses round after five successful read calls on a read-only coach turn. No further tools or actions are allowed in that final round. The model still owns the answer, and action requests retain the original round limit. The frontend now writes only run-ID, terminal status and error code to the console for failed/unavailable runs, and a distinct diagnostic for polling exhaustion. These diagnostics are not added to FINN's chat answer.
+
+The model-facing DXY snapshot now shows two decimal places and source timestamps to whole seconds. Stored readings, Score 2.0 calculations and bot decisions are unchanged. A deterministic local test covers a four-minute-old Price observation with a saved Market score that still refers to older evidence: the price source is fresh, the Market score remains unavailable pending rebuild, and no benchmark is fabricated. This is **local proof**, not an authenticated production observation of that transient state.
+
+Local validation on the final repair: backend **3131 passed, 3 skipped**. Targeted regressions verify that the exact FOMO request is read-only, that an explicit mutation remains a mutation, and that Luna can answer after five completed reads without a sixth tool. The rebuilt isolated worker-driven safe-action matrix passed **16/16**, with zero broker orders and live-trading calls; artifact `.local-finn-parity-artifacts/fomo-round-final-safe-action-16.json` SHA-256 `a352833ff82a8106a1e5f6b15833b8749647a66d1f5a8690bce9de7357369be5`. A local synthetic real-provider replay of the exact FOMO wording selected **five read tools and then one tool-free answer round**, completing without a proposal in 12.1 seconds; artifact `.local-finn-parity-artifacts/market-score-fomo-exact-probe.json` SHA-256 `42334071ffe16769b220c38f391485c1bf02200609badc4c618d4739003f2fcc`. Real-provider selector development passed **18/18**, SHA-256 `bfffeb5e5606939ffb07cdffb89b787b9f6d7d3f18fecc8945eef0367f9259e8`, and regression passed **109/109**, SHA-256 `d810f4398bfc29406308057888fd17dedb7520c3a570a2e7c6f580547063c0bd`, with zero provider, schema or timeout failures. Earlier candidate regression runs with one elliptical-reformulation mismatch (**108/109**) remain recorded as red diagnostics. A broader 37-case legacy parity harness was also red: it expects selector `operation_id` metadata on model-led read turns and reported a separate delete-operation mismatch. That harness is not the safe-action matrix and needs separate contract maintenance. Frontend build, typecheck, i18n lint/tests, command/proposal tests and `audit:high` passed before the backend-only repair; CI will repeat applicable checks on the final candidate. Build performed no authenticated production QA.
+
+After a complete repair candidate is validated and deployed, independent QA should replay the exact score → FOMO conversation and inspect the new failure diagnostic if it recurs. QA should also verify DXY presentation and opportunistically check a live fresh-price/missing-score state without manufacturing scores or trading.
+
+## Previous Release (market score evidence parity)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA checks passed. Authenticated live QA remains pending. |
 | Goal | Keep a fresh Price measurement distinct from a verified Score 2.0 Market score, and avoid exposing raw status codes or binary-float artifacts in FINN's explanation. |
 | Candidate branch | `codex/finn-market-score-evidence-parity`. |

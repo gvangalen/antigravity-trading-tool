@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
-from backend.services.finn_v2_tool_adapters.macro_tool_adapter import MacroToolAdapter
+from backend.services.finn_v2_tool_adapters.macro_tool_adapter import MacroToolAdapter, _display_value
 from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
 from backend.utils.scoring_utils import score_source_is_fresh
 
@@ -96,7 +96,7 @@ def test_macro_snapshot_uses_score_2_source_window_for_dxy():
 
 
 def test_macro_snapshot_hides_binary_float_storage_noise():
-    observed = datetime.now(timezone.utc)
+    observed = datetime.now(timezone.utc).replace(microsecond=123456)
     adapter = MacroToolAdapter(None)
 
     async def readings(_user_id, *, symbol):
@@ -107,6 +107,26 @@ def test_macro_snapshot_hides_binary_float_storage_noise():
     adapter.repository.get_active_day_macro_data = readings
     result = asyncio.run(adapter.execute(user_id=1, asset="ETH"))
     assert result["data"].items[0].value == 102.14
+    assert result["data"].items[0].source_observed_at == observed.replace(microsecond=0)
+    assert result["data"].items[0].timestamp == observed.replace(microsecond=0)
+    assert result["as_of"] == observed.replace(microsecond=0)
+
+
+def test_macro_snapshot_dxy_matches_analysis_display_precision():
+    observed = datetime.now(timezone.utc).replace(microsecond=987654)
+    adapter = MacroToolAdapter(None)
+
+    async def readings(_user_id, *, symbol):
+        return [SimpleNamespace(name="DXY", value=102.231, score=20,
+                                trend=None, timestamp=observed,
+                                source_observed_at=observed)]
+
+    adapter.repository.get_active_day_macro_data = readings
+    result = asyncio.run(adapter.execute(user_id=1, asset="ETH"))
+    assert result["data"].items[0].value == 102.23
+    assert result["data"].items[0].source_observed_at.isoformat().endswith("+00:00")
+    assert "." not in result["data"].items[0].source_observed_at.isoformat()
+    assert _display_value("DXY", 102.235) == 102.24
 
 
 def test_macro_snapshot_keeps_individual_freshness_when_sources_differ():

@@ -1,8 +1,26 @@
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
+
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.schemas.finn_v2_evidence_schema import MacroSnapshotData, MacroSnapshotItem
 from backend.utils.scoring_utils import score_source_is_fresh
+
+
+def _display_moment(value: datetime | None) -> datetime | None:
+    return value.replace(microsecond=0) if value is not None else None
+
+
+def _display_value(name: str, value: float | None) -> float | None:
+    if value is None:
+        return None
+    measured = float(value)
+    # DXY is shown to two decimals in Analyse. Keep the same precision in
+    # FINN's read evidence; the stored measurement and score stay untouched.
+    if name.strip().casefold() == "dxy":
+        return float(Decimal(str(measured)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    return float(f"{measured:.6g}")
 
 
 class MacroToolAdapter:
@@ -22,16 +40,13 @@ class MacroToolAdapter:
         payload = [
             MacroSnapshotItem(
                 indicator=row.name,
-                # Provider floats can be stored as e.g. 102.13999938964844.
-                # Keep six meaningful digits in the model-facing measurement;
-                # scoring still reads the unchanged stored value.
-                value=float(f"{float(row.value):.6g}") if row.value is not None else None,
+                value=_display_value(row.name, row.value),
                 trend=row.trend,
                 score=(float(row.score) if row.score is not None and source_status == "fresh"
                        else None),
                 source_status=source_status,
-                timestamp=row.timestamp,
-                source_observed_at=getattr(row, "source_observed_at", None),
+                timestamp=_display_moment(row.timestamp),
+                source_observed_at=_display_moment(getattr(row, "source_observed_at", None)),
             )
             for row, source_status in zip(rows, source_statuses)
         ]
@@ -49,7 +64,7 @@ class MacroToolAdapter:
         return {
             "data": MacroSnapshotData(symbol=asset, items=payload),
             "summary": {"title": "macro_snapshot", "symbol": asset, "count": len(payload)},
-            "as_of": latest,
+            "as_of": _display_moment(latest),
             "freshness_status": freshness_status,
             "source": "macro_data",
             "schema_name": "MacroSnapshotData",

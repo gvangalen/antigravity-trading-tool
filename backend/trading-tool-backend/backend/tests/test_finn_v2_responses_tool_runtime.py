@@ -8676,6 +8676,60 @@ def test_responses_loop_bounds_tool_rounds_without_silent_answer():
         ).run(message="Welke asset?", instructions="Check feiten"))
 
 
+def test_read_only_coach_can_answer_after_five_successful_reads():
+    tool_names = (
+        "get_current_asset_scores", "get_market_snapshot", "get_saved_setup",
+        "get_portfolio_and_exposure", "get_active_plan_and_strategy",
+    )
+    fake = FakeResponses(*(
+        response(f"r{index}", calls=(tool_call(f"c{index}", name, {}),))
+        for index, name in enumerate(tool_names, start=1)
+    ), response("answer", text="Macro 20 ligt onder je setupgrens van 30; het Paper-budget is geen vrije cash."))
+    executed = []
+
+    async def execute(call):
+        executed.append(call.name)
+        return {"status": "completed", "results": []}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message=(
+            "Als ETH vandaag stijgt en ik uit FOMO €10 extra wil bijkopen: zijn de "
+            "prijsmeting en de scores die je net noemde nog bruikbaar voor mijn plan? "
+            "Wat zegt mijn setup en Paper-botbudget? Alleen sparren, geen voorstel of aankoop."
+        ),
+        instructions="Gebruik gelezen feiten en doe geen voorstel.",
+        model_led_coach=True, read_only_turn=True,
+    ))
+
+    assert executed == list(tool_names)
+    assert len(result.tool_trace) == 5
+    assert result.text.startswith("Macro 20")
+    assert len(fake.requests) == 6
+    assert fake.requests[-1]["tool_choice"] == "none"
+    assert fake.requests[-1]["tools"] == []
+
+
+def test_read_only_coach_rejects_tool_call_in_final_answer_round():
+    fake = FakeResponses(
+        response("read", calls=(tool_call("c1", "get_current_asset_scores", {}),)),
+        response("unexpected-tool", calls=(tool_call("c2", "get_market_snapshot", {}),)),
+    )
+    executed = []
+
+    async def execute(call):
+        executed.append(call.name)
+        return {"status": "completed", "results": []}
+
+    with pytest.raises(FinnResponsesError, match="responses_tool_round_limit"):
+        asyncio.run(FinnResponsesLoop(
+            client=SimpleNamespace(responses=fake), executor=execute, max_rounds=1,
+        ).run(message="Leg mijn score uit", instructions="Lees bewijs", model_led_coach=True, read_only_turn=True))
+    assert executed == ["get_current_asset_scores"]
+    assert fake.requests[-1]["tool_choice"] == "none"
+
+
 def test_responses_loop_rejects_duplicate_call_ids():
     fake = FakeResponses(response("r1", calls=(
         tool_call("c1", "get_active_asset_context", {}),

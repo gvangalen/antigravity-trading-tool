@@ -430,7 +430,18 @@ class FinnResponsesLoop:
         incomplete_output_retry_used = False
         transient_provider_retry_used = False
         output_token_override: int | None = None
-        for _ in range(self.max_rounds):
+        # A read-only coach turn may use the last allowed round to fetch its
+        # final piece of evidence. Leave one answer-only provider round after
+        # those reads; otherwise a fully successful fifth read terminalizes as
+        # responses_tool_round_limit without ever asking the model to answer.
+        for _ in range(self.max_rounds + 1):
+            answer_only_round = tool_rounds >= self.max_rounds
+            if answer_only_round and not (
+                read_only_coaching and trace and not proposal_selected
+                and not repair_tool_name
+                and all(item["status"] in {"completed", "partial", "unavailable"} for item in trace)
+            ):
+                raise FinnResponsesError("responses_tool_round_limit")
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
                 raise FinnResponsesError("responses_lifecycle_budget_exhausted")
@@ -793,7 +804,7 @@ class FinnResponsesLoop:
                 # function-call exchange instead of crossing models with that cursor.
                 kwargs.pop("previous_response_id", None)
                 kwargs["input"] = initial_input + tool_exchange
-            if (proposal_selected or repair_exhausted or limited_evaluations
+            if (answer_only_round or proposal_selected or repair_exhausted or limited_evaluations
                     or previous_answer_only
                     or (rejection_feedback and rejection_feedback.get("repair_mode") == "explain_limit")
                     or (not model_led_coach and tool_rounds >= 2 and not repair_tool_name
@@ -976,6 +987,8 @@ class FinnResponsesLoop:
                 raise FinnResponsesError("responses_missing_id")
             calls = [item for item in (getattr(response, "output", None) or []) if getattr(item, "type", None) == "function_call"]
             logger.info("FINN Responses provider output classified call_count=%d round=%d", len(calls), tool_rounds + 1)
+            if answer_only_round and calls:
+                raise FinnResponsesError("responses_tool_round_limit")
             if not calls:
                 logger.info("FINN Responses answer extraction starting")
                 answer = str(getattr(response, "output_text", "") or "").strip()
