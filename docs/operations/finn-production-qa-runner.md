@@ -52,8 +52,9 @@ confirmation, after execution, and after idempotency replay.
   host-key secret `QA_SSH_KNOWN_HOSTS`; the existing deploy host/key are a
   backward-compatible fallback, never a fallback for host verification.
 - Every non-preflight manifest is resolved by ID from the protected,
-  QA-owned server manifest root (`FINN_QA_MANIFEST_ROOT`, defaulting to
-  `/home/ubuntu/ops/finn-qa-manifests`). Build never reads that material.
+  QA-owned server manifest root `/home/ubuntu/.secrets/finn-qa-manifests`.
+  Build never reads that material. The earlier `/home/ubuntu/ops` default was
+  not writable by the protected runner and stopped intake before any cases.
   QA can additionally stage an encrypted manifest bundle for one run; its
   plaintext exists only in the protected host directory with mode `0600`.
 - `manifest_key` publishes only the server's manifest-encryption public key in

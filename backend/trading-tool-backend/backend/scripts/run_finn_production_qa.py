@@ -1437,7 +1437,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default="https://tradamind.com")
     parser.add_argument("--checkout", required=True)
     parser.add_argument("--release-marker", required=True)
-    parser.add_argument("--manifest-root", default="/home/ubuntu/ops/finn-qa-manifests")
+    parser.add_argument("--manifest-root", default="/home/ubuntu/.secrets/finn-qa-manifests")
     parser.add_argument("--manifest-bundle-path")
     parser.add_argument("--manifest-private-key-path", default="/home/ubuntu/.secrets/finn-qa-manifest.key")
     parser.add_argument("--manifest-crypto-script")

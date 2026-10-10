@@ -226,7 +226,7 @@ jobs:
               --run-label "$run_label" \
               --checkout "$remote_dir" \
               --release-marker "$remote_dir/ops/deploy/production/LAST_GOOD_COMMIT" \
-              --manifest-root "${FINN_QA_MANIFEST_ROOT:-$HOME/ops/finn-qa-manifests}" \
+              --manifest-root "$HOME/.secrets/finn-qa-manifests" \
               --workflow-run-id "$workflow_run_id" \
               --fixture-namespace "$fixture_namespace" \
               --runner-revision "$runner_revision" \

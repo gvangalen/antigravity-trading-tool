@@ -56,7 +56,7 @@ jobs:
           import os
           from pathlib import Path
 
-          root = Path(os.environ.get('FINN_QA_MANIFEST_ROOT') or (Path.home() / 'ops/finn-qa-manifests'))
+          root = Path.home() / '.secrets/finn-qa-manifests'
           parent = root.parent
           key = Path.home() / '.secrets/finn-qa-manifest.key'
           print('manifest_root_exists=' + str(root.exists()).lower())
