@@ -720,7 +720,7 @@ def bind_fixture_natural_name(message: str, *, namespace: str) -> str:
     namespace = validate_fixture_namespace(namespace)
     patterns = (
         # NL: "met de naam Atlas, ..." / "genaamd Atlas"
-        r"(?P<prefix>\b(?:met\s+de\s+naam|onder\s+de\s+naam|genaamd|naam)\s+)(?P<name>[\w][\w .-]{1,76}?)(?=(?:[,.;!?]|\s+(?:symbool|symbol|timeframe|en|and|und)\b|$))",
+        r"(?P<prefix>\b(?:met\s+de\s+naam|onder\s+de\s+naam|genaamd|naam)\s+)(?P<name>[\w][\w .-]{1,76}?)(?=(?:[,.;!?]|\s+(?:symbool|symbol|timeframe|en|and|und)\b|\s+voor\s+(?:de|mijn|een|het)\s+(?:strategie|setup|bot)\b|$))",
         # EN: "call it Atlas Plan" / "named Atlas"
         r"(?P<prefix>\b(?:call\s+it|named|called|name)\s+)(?P<name>[\w][\w .-]{1,76}?)(?=(?:[,.;!?]|\s+(?:with|for|and)\b|$))",
         # DE: "namens Atlas Bot" / "genannt Atlas"
@@ -1360,6 +1360,28 @@ def run_cases(
     unknown_ids = completed_ids.difference(case_ids)
     if unknown_ids:
         raise ValueError("checkpoint_case_not_in_manifest")
+    def stop_after_write_failure(start_index: int) -> list[Dict[str, Any]]:
+        """Never advance a protected write matrix after an uncertain write.
+
+        In particular, a proposal-time database change must not be followed
+        by another confirmation-capable case in the same fixture.  Preserve
+        every remaining case as explicit not-run evidence, including on resume.
+        """
+        stopped = add_missing_not_run_cases(
+            results=results,
+            cases=case_list[start_index:],
+            error_category="prior_write_case_failed",
+        )
+        if checkpoint:
+            checkpoint(stopped, planned_count=len(case_list))
+        return stopped
+
+    if any(
+        (item.get("fixture_action") or {}).get("mode", "read_only") != "read_only"
+        and classify_case_failure(item)
+        for item in results
+    ):
+        return stop_after_write_failure(0)
     conversations: Dict[str, str] = {
         str(item["conversation_key"]): str(item["conversation_id"])
         for item in results
@@ -1409,7 +1431,7 @@ def run_cases(
                 results.append(result)
                 if checkpoint:
                     checkpoint(results, planned_count=len(case_list))
-                continue
+                return stop_after_write_failure(index + 1)
         case_deadline = time.monotonic() + case_timeout_seconds
         def remaining() -> float:
             return case_deadline - time.monotonic()
@@ -1475,6 +1497,8 @@ def run_cases(
             results[result_index] = result
             if checkpoint:
                 checkpoint(results, planned_count=len(case_list))
+            if case.get("fixture_action", "read_only") != "read_only":
+                return stop_after_write_failure(index + 1)
             continue
         # Both public Build matrices and the protected QA runner use the same
         # bounded SSE-first observation engine.  The QA layer only supplies
@@ -1560,6 +1584,8 @@ def run_cases(
         results[result_index] = result
         if checkpoint:
             checkpoint(results, planned_count=len(case_list))
+        if case.get("fixture_action", "read_only") != "read_only" and classify_case_failure(result):
+            return stop_after_write_failure(index + 1)
     return results
 
 
