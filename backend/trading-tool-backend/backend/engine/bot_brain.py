@@ -576,7 +576,11 @@ def run_bot_brain(
     # -------------------------------------------------
     try:
         proposed_amount = suggested_amount if action == "buy" else 0.0
-        macro_score_for_guardrail = normalized_scores.get("macro_score")
+        # A confirmed DCA plan already encodes the score policy in its fixed
+        # amount or benchmark curve. Do not apply the generic trade macro
+        # multiplier again; cash, budget, exposure and kill-switch still apply.
+        planned_dca = setup_type == "dca" and setup.get("dca_amount_semantics") == "planned_exact"
+        macro_score_for_guardrail = None if planned_dca else normalized_scores.get("macro_score")
 
         guardrails_result = apply_guardrails(
             proposed_amount_eur=proposed_amount,

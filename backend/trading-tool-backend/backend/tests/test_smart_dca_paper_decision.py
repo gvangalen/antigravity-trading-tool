@@ -6,6 +6,7 @@ from datetime import date
 
 from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 from backend.engine import bot_brain
+from backend.engine.guardrails_engine import apply_guardrails
 
 
 @pytest.fixture
@@ -218,6 +219,70 @@ def test_fixed_dca_with_unknown_scores_keeps_amount_without_fake_score(paper_eng
     assert result["debug"]["scores"]["market_score"] is None
     assert result["trade_context"]["setup_score_reference"] is None
     assert result["market_pressure"] is None
+
+
+@pytest.mark.parametrize("mode,expected", [("fixed", 100), ("score_bands", 50)])
+def test_confirmed_dca_is_not_discounted_twice_by_the_macro_guardrail(monkeypatch, mode, expected):
+    monkeypatch.setattr(bot_brain, "get_regime_memory", lambda _user_id: None)
+    monkeypatch.setattr(bot_brain, "get_market_intelligence", lambda **_: {
+        "trend": {}, "state": {"market_pressure": 0.8, "transition_risk": 0.1},
+        "metrics": {},
+    })
+    monkeypatch.setattr(bot_brain, "build_trade_plan", lambda **_: {})
+    fields = {
+        "setup_type": "dca", "name": "BTC confirmed", "base_amount": 100,
+        "dca_amount_mode": mode,
+    }
+    if mode == "score_bands":
+        fields.update({
+            "score_source": "benchmark_score", "low_threshold": 40,
+            "high_threshold": 70, "low_score_percent": 50,
+            "mid_score_percent": 100, "high_score_percent": 150,
+        })
+    _, strategy = split_confirmed_dca_plan(fields)
+    scores = {
+        "market_score": 40, "macro_score": 20, "technical_score": 40,
+        "setup_score": 87,
+        "_benchmark_weights": {key: 1 / 3 for key in (
+            "market_score", "macro_score", "technical_score")},
+        "_source_available": {key: True for key in (
+            "market_score", "macro_score", "technical_score")},
+    }
+    portfolio = {
+        "cash_balance_eur": 1000, "portfolio_value_eur": 1000,
+        "max_trade_risk_eur": 200, "daily_allocation_eur": 200,
+        "max_asset_exposure_pct": 100, "total_budget_eur": 1000,
+        "min_order_eur": 1, "active_strategy": {"setup_type": "dca"},
+    }
+    result = bot_brain.run_bot_brain(
+        user_id=1, setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
+        scores=scores, portfolio_context=portfolio,
+    )
+    assert result["action"] == "buy"
+    assert result["amount_eur"] == expected
+    assert "defensive_macro_override_active" not in result["guardrails_result"]["warnings"]
+
+    if mode == "score_bands":
+        limited = bot_brain.run_bot_brain(
+            user_id=1, setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
+            scores=scores, portfolio_context={**portfolio, "cash_balance_eur": 30},
+        )
+        assert limited["amount_eur"] == 30
+        assert "cash_balance_trimmed" in limited["guardrails_result"]["warnings"]
+        budget_limited = bot_brain.run_bot_brain(
+            user_id=1, setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
+            scores=scores, portfolio_context={**portfolio, "total_budget_eur": 25},
+        )
+        assert budget_limited["amount_eur"] == 25
+
+
+def test_macro_defensive_limit_still_applies_to_non_dca_trades():
+    guarded = apply_guardrails(
+        proposed_amount_eur=100, portfolio_value_eur=1000,
+        cash_balance_eur=1000, global_macro_score=20,
+    )
+    assert guarded["adjusted_amount_eur"] == 20
+    assert "defensive_macro_override_active" in guarded["warnings"]
 
 
 def test_trade_with_unknown_market_score_holds_without_a_weak_score_claim(paper_engines):
