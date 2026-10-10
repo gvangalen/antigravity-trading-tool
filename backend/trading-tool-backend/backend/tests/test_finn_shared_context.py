@@ -74,6 +74,34 @@ def test_shared_context_keeps_failed_indicator_lookup_unknown():
     assert snapshot["assets"][0]["benchmark"]["benchmark_score"] is None
 
 
+def test_report_context_uses_a_scoped_connection_without_disposing_the_api_pool(monkeypatch):
+    disposed = []
+
+    class _Engine:
+        async def dispose(self):
+            disposed.append(True)
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    class _Sessions:
+        def __call__(self):
+            return _Session()
+
+    monkeypatch.setattr(reports, "create_async_engine", lambda url, **kwargs: _Engine())
+    monkeypatch.setattr(reports, "async_sessionmaker", lambda engine, **kwargs: _Sessions())
+    monkeypatch.setattr(reports, "FinnSharedContextService", lambda session: SimpleNamespace(
+        for_user=AsyncMock(return_value={"assets": []}),
+    ))
+
+    assert asyncio.run(reports._load_context(7)) == {"assets": []}
+    assert disposed == [True]
+
+
 def test_shared_context_serializes_real_indicator_schema_without_losing_configuration():
     class _Session:
         async def execute(self, _query, _params):
@@ -165,6 +193,7 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
 
     assert chat.benchmark_score == today["benchmark_score"] == report["watchlist"][0]["benchmark"]["benchmark_score"] == 70
     assert chat.reported_scores["market_score"] == today["reported_scores"]["market_score"] == report["watchlist"][0]["benchmark"]["reported_scores"]["market_score"] == 80
+    assert (report["market_score"], report["macro_score"], report["technical_score"]) == (80, 70, 60)
     assert today["setup_match_score"] == report["setup_score"] == 80
     assert report["active_strategy"]["setup_name"] == "ETH Strategy"
 

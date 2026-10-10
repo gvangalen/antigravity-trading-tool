@@ -8,7 +8,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA`; candidate/main CI, Auto Deploy and public SHA check passed. Independent authenticated QA has not run for this batch. |
+| Phase | `BUILD_LOCAL_COMPLETE`; awaiting candidate CI and Auto Deploy. The preceding release was not accepted in independent authenticated browser QA. This repair is not yet deployed. |
+| Goal | Repair report score parity and database isolation, disclose and edit onboarding setup score ranges, distinguish bot limits from cash, and make saved Paper status directly readable by FINN. Retain the broader Score 2.0 → setup match → Paper acceptance goal. |
+| Candidate branch | `codex/finn-qa-parity-repair`. |
+| Production identity | The prior candidate was deployed; this repair has no production SHA yet. |
+| Last updated | 2026-10-10. |
+
+Independent browser QA of the preceding release observed a fresh BTC benchmark and a persistent Paper bot, but did **not** accept the full chain: report retrieval returned a 502 during the run, onboarding silently saved score boundaries that the user had never seen, the trade panel described a bot budget limit as available balance, and FINN did not reliably confirm the saved bot's Paper state. The observed Macro score was below the hidden setup minimum, so no positive setup match or completed Paper decision was demonstrated. The exact cause of the live 502 is not established from browser evidence; its timing overlapped deployment activity.
+
+This repair gives report generation a short-lived database connection instead of disposing the shared API engine, projects verified category scores into a single-asset report, starts first-report generation when the API returns its pending placeholder, shows and saves the setup score ranges during onboarding, labels bot spending limits accurately, and exposes a direct owner-scoped saved-bot read through the existing portfolio adapter. Full local, provider, CI and deployment evidence will be recorded only after each gate completes. A new independent QA run must still prove the positive and missing/stale Paper paths on one identified live SHA.
+
+Local Build evidence for this repair: root pytest **3146 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command and proposal tests, first-report pending-state test and `audit:high` passed (only a moderate advisory remains); mobile typecheck, lint and web/iOS/Android bundle smokes passed, with lint warnings but no errors. The isolated local FastAPI/Celery/PostgreSQL/Redis/Responses action matrix passed **16/16**, zero failed contracts, broker orders, live bots, live-trading calls or production connections; `.local-finn-parity-artifacts/full-action-matrix.json` SHA-256 `802f39a60cd47e0cd563d1e526c7f968470c42eca3fa29da912037f07a847b14`. Real-provider Luna selector development passed **18/18**, SHA-256 `55459f079868b36de8fa6240214e1fb8e1772ac8c3e0263030f487e80f78b0a2`, and regression passed **109/109**, SHA-256 `38f05e4c0986c6251bb719c05d58461367119a30fdd72833cc6858e9fe6b4bb4`; both had zero provider, schema, parse, validation or timeout failures. A report read from the synthetic local database loaded the owner context through the scoped connection, and a real `/v1/responses` call returned all required daily sections. These are local Build facts, not authenticated live QA or a proven cause of the earlier 502.
+
+## Previous Release (shared Score 2.0 chain)
+
+| Field | Value |
+| --- | --- |
+| Phase | `NOT_ACCEPTED` after independent authenticated browser QA; release deployment gates passed, but product parity and the positive Paper path remain open. |
 | Goal | Prove the shared Score 2.0 → setup match → Paper path for fresh, missing and stale inputs; align FINN chat, Today and report evidence; move admin-log AI to explicit Luna/Responses; retire unused public legacy routes and labels. |
 | Candidate branch | `codex/finn-score-chain-convergence`; [PR #142](https://github.com/gvangalen/antigravity-trading-tool/pull/142). |
 | Implementation commits | `bf1fb40856aad9b6e1502d35f21a4d171be3b491` and `5ca2d9150c6ab247ab9eba0104f7938438c6ad0b`. |
@@ -23,7 +39,7 @@ Local validation: backend **3144 passed, 3 skipped**; frontend build, typecheck,
 
 [Candidate CI run 38065766320](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38065766320) and [main CI run 38065893062](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38065893062) each passed all five jobs. [Auto Deploy run 38066012202](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38066012202) succeeded. Build verified public backend/frontend identity and performed no authenticated production QA.
 
-Independent QA after deployment should compare the same owner and dated evidence in Analyse, FINN chat, FINN Today and the report; verify one complete fresh benchmark and a controlled Paper decision, then missing/stale source behavior. It should also check that no old onboarding agent bootstrap or master-score URL is called, while confirming normal action confirmation and no live order.
+Independent browser QA confirmed a fresh BTC benchmark and a persistent Paper bot but found the report, onboarding-boundary, budget-label and Paper-read issues summarized in the active repair above. It did not demonstrate a positive matched Paper decision. A later repair must be deployed and independently retested before this chain can be accepted.
 
 ## Previous Release (React recovery and source moments)
 

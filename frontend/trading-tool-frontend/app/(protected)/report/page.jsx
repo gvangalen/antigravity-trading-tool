@@ -39,6 +39,7 @@ import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
 import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 import { useTranslation } from '@/app/providers/I18nProvider';
+import { isReadyReport } from '@/lib/report/reportState';
 import { useAsset } from '@/app/providers/AssetProvider';
 import { formatDateTime, getIntlLocale, getLocaleValue, normalizeLocale } from '@/lib/i18n';
 import {
@@ -1948,7 +1949,7 @@ LOAD
 
       setDates(sortDatesDesc(rawDates || []));
 
-      if (!data && AUTO_GENERATE_IF_EMPTY) {
+      if (!isReadyReport(data) && AUTO_GENERATE_IF_EMPTY) {
         setLoading(false);
         handleGenerate(true, date);
         return;
@@ -1994,7 +1995,7 @@ GENERATE
 
       const sig = getReportSignature(data);
 
-      if (sig && sig !== lastSignatureRef.current) {
+      if (isReadyReport(data) && sig && sig !== lastSignatureRef.current) {
         lastSignatureRef.current = sig;
         setReport(data);
         return;

@@ -255,7 +255,7 @@ class FinnResponsesReadExecutor:
                 "the current market satisfies the rule. If the user asks whether a trade "
                 "is personally suitable now, say which evaluation is still needed."
             )
-        if call.name == "get_portfolio_and_exposure":
+        if call.name in {"get_portfolio_and_exposure", "get_saved_bots"}:
             output["evidence_boundary"] = (
                 "Each bots[].budget_total_eur is that saved Paper-bot's own budget. "
                 "global.total_budget_limit is the sum across the selected bots, not a "
