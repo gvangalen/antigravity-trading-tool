@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
@@ -23,6 +23,7 @@ const FOREGROUND_REFRESH_COOLDOWN_MS = 30_000;
 const WORKSPACE_FORCE_REFRESH_COOLDOWN_MS = 2_500;
 const EVIDENCE_MATERIALIZATION_RETRY_MS = 60_000;
 const MAX_EVIDENCE_MATERIALIZATION_RETRIES = 1;
+const EMPTY_WATCHLIST = Object.freeze([]);
 
 const workspaceCache = new Map();
 const workspaceInFlightRequests = new Map();
@@ -175,10 +176,13 @@ function buildWorkspaceFallback(symbol, periods, quote, daily) {
 
 export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const { user } = useAuth() || {};
-  const normalizedWatchlistSymbols = Array.from(
+  const watchlistKey = Array.from(
     new Set((watchlistSymbols || []).map((item) => String(item || "").toUpperCase()).filter(Boolean))
+  ).join(",");
+  const normalizedWatchlistSymbols = useMemo(
+    () => watchlistKey ? watchlistKey.split(",") : EMPTY_WATCHLIST,
+    [watchlistKey]
   );
-  const watchlistKey = normalizedWatchlistSymbols.join(",");
   const workspaceKey = JSON.stringify({
     symbol: String(symbol || "BTC").toUpperCase(),
     market: periods?.market || "day",
@@ -189,7 +193,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const cachedWorkspace = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
   const cachedWatchlist = Array.isArray(cachedWorkspace?.watchlist?.rows)
     ? cachedWorkspace.watchlist.rows
-    : [];
+    : EMPTY_WATCHLIST;
 
   const [workspace, setWorkspace] = useState(cachedWorkspace);
   const [watchlist, setWatchlist] = useState(cachedWatchlist);

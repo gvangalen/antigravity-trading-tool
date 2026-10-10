@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.schemas.finn_v2_evidence_schema import AssetScoresData
 from backend.services.finn_shared_context_service import FinnSharedContextService
+from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
 
 
 class ScoreToolAdapter:
@@ -15,7 +16,13 @@ class ScoreToolAdapter:
             "benchmark_weights", "reported_scores", "component_source_status",
         )}
         payload["component_status_explanation"] = assessment.get("component_status_explanation") or {}
-        payload["component_source_observed_at"] = assessment.get("component_source_observed_at") or {}
+        payload["component_source_observed_at"] = {
+            component: {
+                indicator: display_source_moment(moment)
+                for indicator, moment in indicators.items()
+            }
+            for component, indicators in (assessment.get("component_source_observed_at") or {}).items()
+        }
         payload["component_indicator_source_status"] = assessment.get("component_indicator_source_status") or {}
         return {
             "data": AssetScoresData(**payload),

@@ -14,6 +14,7 @@ from backend.schemas.finn_v2_evidence_schema import ActiveSetupData
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
 
 
 class FinnResponsesReadExecutor:
@@ -107,6 +108,15 @@ class FinnResponsesReadExecutor:
                 data = {**data, "level_geometry": strategy_level_geometry(
                     data.get("entry"), data.get("stop_loss"), data.get("targets"),
                 )}
+            if read_tool == "read_market_snapshot" and isinstance(data, dict):
+                # Preserve the exact provider instant for freshness checks in
+                # the tool service; format only the model-facing evidence.
+                data = {
+                    **data,
+                    "as_of": display_source_moment(data.get("as_of")),
+                    "source_observed_at": display_source_moment(data.get("source_observed_at")),
+                }
+                as_of = display_source_moment(as_of)
             if read_tool == "read_active_setup" and self._facts_only_local_experiment():
                 data = self._setup_facts_for_local_experiment(data)
             evidence = {

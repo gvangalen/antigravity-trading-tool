@@ -1425,7 +1425,12 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
 
   useEffect(() => {
-    if (!isEditing) setLocalWeights(normalizeWeights(weights));
+    if (!isEditing) {
+      setLocalWeights((current) => {
+        const next = normalizeWeights(weights);
+        return Object.keys(next).every((key) => current[key] === next[key]) ? current : next;
+      });
+    }
   }, [isEditing, weights]);
 
   const items = [
@@ -2421,7 +2426,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const technical = { score: technicalTimeframe === "day" ? workspace?.daily?.technical?.score ?? null : categoryData.technical?.score?.score ?? null };
   const workspaceAsset = workspace?.asset || null;
   const master = {
-    weights: workspace?.master?.weights || {},
+    weights: workspace?.master?.weights || DEFAULT_INTELLIGENCE_WEIGHTS,
     bias: workspace?.master?.master_bias || "–",
   };
   const assetLive = workspace?.quote || null;

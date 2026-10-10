@@ -2,7 +2,7 @@
 9:I[57150,[],""]
 :HL["/_next/static/css/bfe0af340f969c82.css","style"]
 :HL["/_next/static/css/965a7aa047811ad4.css","style"]
-2:Tc60,
+2:Tca1,
 (function () {
   var VERSION = "static-export";
   var VERSION_KEY = "tradamind_app_cache_version";
@@ -11,7 +11,9 @@
 
   function shouldRecover(reason) {
     var text = String(reason || "");
-    return /copy|ChunkLoadError|Loading chunk|Cannot find module|page-6ba98bbaffeb4e74|Minified React error|undefined is not an object|Cannot read properties of undefined|Widget Crash Detected/i.test(text);
+    // A React runtime error is an application defect. Clearing caches and
+    // reloading on every such error hides the cause and can interrupt a chat.
+    return /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Cannot find module/i.test(text);
   }
 
   function recoveryKind(reason) {

@@ -8,6 +8,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
+| Phase | `CI_VALIDATED_PENDING_DEPLOY`; independent authenticated live acceptance remains pending. |
+| Goal | Stop the Analyse page's React-runtime reload loop and give FINN readable source moments for its first price/score response without changing Score 2.0 freshness decisions. |
+| Candidate branch | `codex/finn-chat-react-render`. |
+| Previous live SHA | `feb0b1ebe03c1c0acaee520a5004ffb0ef8dc49f`. Independent QA replayed the exact FOMO question once: FINN answered without a proposal or action. The browser also reloaded automatically and logged React error #185; the first price/score answer still showed milliseconds. |
+| Last updated | 2026-10-10. |
+
+React error #185 denotes excessive state updates. The frontend recovery script certainly treated every minified React error as a stale-cache event and reloaded the page. The Analyse workspace also supplied newly allocated empty watchlist and score-weight objects during incomplete responses; those render dependencies have been stabilized and weight state writes now stop when values have not changed. Without the original browser component stack, the exact state loop cannot be attributed to one component from this evidence alone. Runtime errors will now remain visible instead of triggering a cache purge and reload; chunk-loading failures still use cache recovery.
+
+The FINN score adapter now displays component source moments to whole seconds, and the Responses read boundary does the same for the market snapshot. Tool freshness is still calculated from the unrounded provider moment. Stored measurements, scores and bot decisions are unchanged. Focused tests cover both model-facing timestamps and the unchanged market-source freshness input.
+
+Local validation: backend **3133 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command/proposal tests, release-hardening tests and `audit:high` passed. The isolated worker-driven action matrix passed **16/16**, with zero broker orders, live-trading calls or production connections; artifact `.local-finn-parity-artifacts/react-score-display-action-final.json` SHA-256 `e6b6c0924eacc00bd6b4bb774e3bbfd1538b09bc65c3752257f2dbb1b84ed705`. Real-provider Luna selector development passed **18/18**; artifact `.local-finn-parity-artifacts/react-score-display-selector-development.json` SHA-256 `db47325f2e6dceced92d2dc4d26b35de5f13cd3b85466ae3c1bdcf5b52e32aaa`. The first full regression was **108/109** because `reg-ambiguous-improvement-variant` chose `evaluate_plan` instead of `clarify_request`; that red artifact remains recorded. Three immediate isolated replays of that case chose `clarify_request` (**3/3**). The complete rerun passed **109/109** with zero provider, schema, parse or timeout failures; artifact `.local-finn-parity-artifacts/react-score-display-selector-regression-rerun.json` SHA-256 `d5c1264a2e08d2fc109ce4d7ee6f4a25ec68a32bb9fc4adc5826ad78c8cf643c`. Candidate [CI run 38050844986](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38050844986) passed all five jobs. Build did no authenticated production QA.
+
+Independent QA should replay the price/score → FOMO conversation once and monitor for a reload or React error, including a partial Analyse response. It should check that the first price/score answer and the DXY answer show readable source moments. The fresh-price/missing-score transient state remains opportunistic; no score or trade should be manufactured to trigger it.
+
+## Previous Release (FOMO turn and source display)
+
+| Field | Value |
+| --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA`; candidate and main CI, Auto Deploy, and public deployment identity passed. Authenticated live acceptance remains pending. |
 | Goal | Diagnose the intermittent first-turn FOMO failure, verify the fresh-quote/missing-score boundary, and present DXY with the same two-decimal precision and readable source time as Analyse. |
 | Candidate branch | `codex/finn-fomo-turn-and-display`. |

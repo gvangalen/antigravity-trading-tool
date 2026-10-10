@@ -59,3 +59,28 @@ def test_score_adapter_returns_weighted_total_only_when_shared_context_proves_it
 
     assert result["data"].benchmark_score == 72
     assert result["data"].source_status == "available"
+
+
+def test_score_adapter_presents_component_source_times_without_milliseconds():
+    class SharedContext:
+        async def benchmark_for_asset(self, user_id, asset, *, setups):
+            return {
+                "symbol": asset,
+                "as_of": date.today(),
+                "source_status": "available",
+                "benchmark_score": 40,
+                "benchmark_weights": None,
+                "reported_scores": {"market_score": 40},
+                "component_source_status": {"market_score": "fresh"},
+                "component_source_observed_at": {
+                    "market": {"price": "2026-10-10T04:20:11.926000+00:00"},
+                },
+            }
+
+    adapter = object.__new__(ScoreToolAdapter)
+    adapter.context = SharedContext()
+    result = asyncio.run(adapter.execute(user_id=17, asset="ETH"))
+
+    assert result["data"].component_source_observed_at == {
+        "market": {"price": "2026-10-10T04:20:11+00:00"},
+    }

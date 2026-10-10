@@ -6882,6 +6882,38 @@ def test_evaluation_requires_fresh_dated_sources_and_projects_their_as_of():
     assert fresh["evidence_coverage"]["full_assessment"]["status"] == "available"
 
 
+def test_market_source_moment_is_formatted_only_after_tool_freshness_check():
+    exact_moment = "2026-10-10T04:20:11.926000+00:00"
+
+    class Reads:
+        async def execute_tool(self, **kwargs):
+            tool = kwargs["tool_name"]
+            if tool == "read_macro_snapshot":
+                return SimpleNamespace(
+                    success=False, availability="unavailable", freshness_status="unknown",
+                    as_of=None, source="macro_data", asset="ETH", result=None,
+                    error_codes=["source_unavailable"],
+                )
+            assert tool == "read_market_snapshot"
+            return SimpleNamespace(
+                success=True, availability="available", freshness_status="fresh",
+                as_of=exact_moment, source="market_data", asset="ETH",
+                result={"symbol": "ETH", "price": 2500, "as_of": exact_moment,
+                        "source_observed_at": exact_moment},
+                error_codes=[],
+            )
+
+    executor = FinnResponsesReadExecutor(session=object(), user_id=44, run_id="run-time-format")
+    executor.reads = Reads()
+    result = asyncio.run(executor(FinnResponsesToolCatalog().validate(
+        "get_market_snapshot", {"asset": "ETH"},
+    )))
+    market = next(item for item in result["results"] if item["scope"] == "read_market_snapshot")
+    assert market["freshness"] == "fresh"
+    assert market["as_of"] == "2026-10-10T04:20:11+00:00"
+    assert market["data"]["source_observed_at"] == "2026-10-10T04:20:11+00:00"
+
+
 def test_portfolio_evaluation_repair_uses_portfolio_evidence_not_plan_template():
     semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=[
         SimpleNamespace(available=True, passes=False, reason_codes=["insufficient_evidence"]),
