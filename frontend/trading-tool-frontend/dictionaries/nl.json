@@ -934,6 +934,11 @@
       "saveError": "Opslaan van deze analyse-stap is mislukt. Probeer het opnieuw."
     },
     "planOnboardingStep": {
+      "scoreRangesTitle": "Wanneer past deze setup bij de scores?",
+      "scoreRangesHelp": "Deze grenzen bepalen alleen de setupmatch. De voorgestelde waarden zijn nog geen persoonlijk instapsignaal; pas ze aan voordat je opslaat.",
+      "scoreCategories": { "market": "Markt", "macro": "Macro", "technical": "Technisch" },
+      "scoreMinLabel": "Vanaf",
+      "scoreMaxLabel": "Tot en met",
       "stepNumber": "Mijn Plan · 3 van 4",
       "title": "Maak één setup en één strategie",
       "description": "Zet je eerste analyse voor {symbol} om in een concreet plan. Sla eerst één setup op en koppel daarna direct één strategie.",
@@ -2678,7 +2683,9 @@
     "tradePanel": {
       "status": "Status",
       "title": "Trade",
-      "availableBalance": "Beschikbaar saldo",
+      "remainingBotBudget": "Maximum volgens botlimieten",
+      "positionQuantity": "Positiehoeveelheid",
+      "budgetIsNotCash": "Een botbudget is geen beschikbaar kassaldo.",
       "cappedByBudget": "Begrensd door budgetlimieten",
       "buy": "Kopen",
       "sell": "Verkopen",

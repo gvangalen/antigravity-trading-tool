@@ -310,7 +310,7 @@ export default function TradePanel({
         </div>
 
         <div className="text-right">
-          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{copy.availableBalance}</div>
+          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{side === "buy" ? copy.remainingBotBudget : copy.positionQuantity}</div>
           <div className="flex items-center gap-2 justify-end">
              {side === "buy"
                ? (
@@ -324,6 +324,7 @@ export default function TradePanel({
                : <div className="text-lg font-black text-emerald-600 tracking-tighter">{fmt(balanceBase, locale, 6)} <span className="text-[10px] opacity-60 ml-0.5">{baseSymbol}</span></div>
              }
           </div>
+          {side === "buy" ? <div className="mt-1 max-w-48 text-[10px] text-slate-500">{copy.budgetIsNotCash}</div> : null}
         </div>
       </div>
 

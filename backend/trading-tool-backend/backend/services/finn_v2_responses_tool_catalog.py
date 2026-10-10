@@ -22,6 +22,7 @@ _READ_SCOPES: dict[str, tuple[str, ...]] = {
     "get_indicator_snapshot": ("indicator_configuration",),
     "get_current_technical_snapshot": ("technical_snapshot",),
     "get_portfolio_and_exposure": ("portfolio",),
+    "get_saved_bots": ("portfolio",),
     "get_decision_history": ("review_history", "latest_report"),
 }
 
@@ -188,6 +189,15 @@ class FinnResponsesToolCatalog:
                     "and technical minimum and maximum score boundaries. These are setup fields, "
                     "independent of how many strategies are linked. Do not read or choose a strategy "
                     "to answer a question only about these setup fields."
+                )
+            if name == "get_saved_bots":
+                description += (
+                    " Read the owner's saved bot rows directly, including name, asset, "
+                    "is_active and is_live flags and budget limit. Use this when asked whether "
+                    "a saved bot is Paper or Live; no strategy selection is needed. Match an "
+                    "explicitly named bot against the returned owner-scoped rows. If several "
+                    "bots could match, ask which one. is_live=false means Paper even when "
+                    "is_active=true. The budget is a limit, not available cash."
                 )
             if name == "get_current_asset_scores":
                 description += (

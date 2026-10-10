@@ -933,6 +933,11 @@
       "saveError": "Saving this analysis step failed. Please try again."
     },
     "planOnboardingStep": {
+      "scoreRangesTitle": "When does this setup match the scores?",
+      "scoreRangesHelp": "These bounds only determine the setup match. Suggested values are not a personal entry signal; adjust them before saving.",
+      "scoreCategories": { "market": "Market", "macro": "Macro", "technical": "Technical" },
+      "scoreMinLabel": "From",
+      "scoreMaxLabel": "Through",
       "stepNumber": "My Plan · 3 of 4",
       "title": "Create one setup and one strategy",
       "description": "Turn the first analysis for {symbol} into a concrete plan. Save one setup first, then link one strategy to it.",
@@ -2677,7 +2682,9 @@
     "tradePanel": {
       "status": "Status",
       "title": "Trade",
-      "availableBalance": "Available balance",
+      "remainingBotBudget": "Maximum under bot limits",
+      "positionQuantity": "Position quantity",
+      "budgetIsNotCash": "A bot budget is not available cash.",
       "cappedByBudget": "Capped by budget limits",
       "buy": "Buy",
       "sell": "Sell",

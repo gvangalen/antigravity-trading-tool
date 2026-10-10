@@ -5459,6 +5459,15 @@ def test_portfolio_tool_description_matches_its_actual_evidence_scope():
     assert "tax calculations" in definition["description"]
 
 
+def test_saved_bot_status_reads_owner_scoped_bot_rows_without_strategy_selection():
+    catalog = FinnResponsesToolCatalog()
+    call = catalog.validate("get_saved_bots", {"asset": "ETH"})
+    assert call.read_tools == ("read_portfolio",)
+    definition = next(tool for tool in catalog.definitions() if tool["name"] == "get_saved_bots")
+    assert "no strategy selection is needed" in definition["description"]
+    assert "is_live=false means Paper" in definition["description"]
+
+
 def test_model_led_general_explanation_does_not_invite_invented_example_amounts():
     instructions = FinnResponsesFrontDoor._model_led_instructions("nl")
     assert "answer without account reads" in instructions

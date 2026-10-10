@@ -10,8 +10,10 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
-from backend.infrastructure.database import async_session_factory, engine, sync_engine
+from backend.infrastructure.database import ASYNC_DATABASE_URL
 from backend.services.finn_shared_context_service import FinnSharedContextService
 from backend.utils.openai_client import ask_gpt_json
 
@@ -27,12 +29,17 @@ PERIOD_SECTIONS = (
 
 
 async def _load_context(user_id: int) -> dict[str, Any]:
-    # Background workers and report previews can enter on different event
-    # loops. Do not reuse a pooled asyncpg connection from a previous loop.
-    await engine.dispose()
-    sync_engine.dispose()
-    async with async_session_factory() as session:
-        return await FinnSharedContextService(session).for_user(user_id)
+    # Celery invokes this from a short-lived event loop, while preview runs in
+    # a thread beside live API requests. Give each invocation its own unpooled
+    # connection; disposing the application's shared engines can interrupt a
+    # concurrent /report/daily/latest request.
+    report_engine = create_async_engine(ASYNC_DATABASE_URL, poolclass=NullPool)
+    try:
+        sessions = async_sessionmaker(report_engine, expire_on_commit=False)
+        async with sessions() as session:
+            return await FinnSharedContextService(session).for_user(user_id)
+    finally:
+        await report_engine.dispose()
 
 
 def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
@@ -225,8 +232,10 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "id": best.get("setup_id"), "name": best.get("name"), "symbol": best.get("symbol"),
         "timeframe": best.get("timeframe"), "score": best.get("score"), "status": best.get("status"),
     } if best else None)
-    # The report table's scalar score columns cannot represent a multi-asset
-    # benchmark. Leave them null; the per-asset facts live in the report body.
+    # A report for one asset can fill its scalar score cards. With multiple
+    # assets there is no single category score; the prose and watchlist retain
+    # the per-asset values instead of silently selecting the first asset.
+    single_scores = facts["assets"][0]["scores"] if len(facts["assets"]) == 1 else {}
     return {
         **prose,
         "watchlist": [{"symbol": item["symbol"], "benchmark": {
@@ -251,7 +260,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "macro_indicator_highlights": _configured_highlights(facts, "macro"),
         "technical_indicator_highlights": _configured_highlights(facts, "technical"),
         "price": None, "change_24h": None, "volume": None,
-        "macro_score": None, "technical_score": None, "market_score": None,
+        "macro_score": single_scores.get("macro_score"),
+        "technical_score": single_scores.get("technical_score"),
+        "market_score": single_scores.get("market_score"),
         "setup_score": best_setup.get("score") if best_setup else None,
         "meta": {"source": "finn_shared_context.v1", "report_facts_version": 2,
                  "observed_at": context.get("observed_at")},
@@ -269,28 +280,31 @@ def _period_start(period: str, today: date) -> date:
 
 
 async def _load_period_context(user_id: int, period: str) -> dict[str, Any]:
-    await engine.dispose()
-    sync_engine.dispose()
     today = date.today()
     start = _period_start(period, today)
-    async with async_session_factory() as session:
-        shared = await FinnSharedContextService(session).for_user(user_id)
-        params = {"user_id": user_id, "start": start, "end": today}
-        scores = (await session.execute(text("""
+    report_engine = create_async_engine(ASYNC_DATABASE_URL, poolclass=NullPool)
+    try:
+        sessions = async_sessionmaker(report_engine, expire_on_commit=False)
+        async with sessions() as session:
+            shared = await FinnSharedContextService(session).for_user(user_id)
+            params = {"user_id": user_id, "start": start, "end": today}
+            scores = (await session.execute(text("""
             SELECT symbol, report_date, market_score, macro_score, technical_score,
                    calculated_at, indicator_evidence
             FROM daily_scores
             WHERE user_id = :user_id AND report_date BETWEEN :start AND :end
             ORDER BY report_date ASC, symbol ASC LIMIT 150
-        """), params)).mappings().all()
-        decisions = (await session.execute(text("""
+            """), params)).mappings().all()
+            decisions = (await session.execute(text("""
             SELECT d.decision_date, d.symbol, d.action, d.status, d.amount_eur,
                    b.name AS bot_name
             FROM bot_decisions d
             JOIN bot_configs b ON b.id = d.bot_id AND b.user_id = d.user_id
             WHERE d.user_id = :user_id AND d.decision_date BETWEEN :start AND :end
             ORDER BY d.decision_date ASC, d.id ASC LIMIT 150
-        """), params)).mappings().all()
+            """), params)).mappings().all()
+    finally:
+        await report_engine.dispose()
     return jsonable_encoder({
         "period": period, "period_start": start, "period_end": today,
         "shared": shared,

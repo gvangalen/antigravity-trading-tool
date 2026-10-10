@@ -934,6 +934,11 @@
       "saveError": "Das Speichern dieses Analyseschritts ist fehlgeschlagen. Bitte versuche es erneut."
     },
     "planOnboardingStep": {
+      "scoreRangesTitle": "Wann passt dieses Setup zu den Scores?",
+      "scoreRangesHelp": "Diese Grenzen bestimmen nur den Setup-Abgleich. Die vorgeschlagenen Werte sind kein persönliches Einstiegssignal; passe sie vor dem Speichern an.",
+      "scoreCategories": { "market": "Markt", "macro": "Makro", "technical": "Technisch" },
+      "scoreMinLabel": "Ab",
+      "scoreMaxLabel": "Bis einschließlich",
       "stepNumber": "Mein Plan · 3 von 4",
       "title": "Erstelle ein Setup und eine Strategie",
       "description": "Verwandle die erste Analyse für {symbol} in einen konkreten Plan. Speichere zuerst ein Setup und verknüpfe danach direkt eine Strategie.",
@@ -2678,7 +2683,9 @@
     "tradePanel": {
       "status": "Status",
       "title": "Handel",
-      "availableBalance": "Verfügbares Guthaben",
+      "remainingBotBudget": "Maximum gemäß Botlimits",
+      "positionQuantity": "Positionsmenge",
+      "budgetIsNotCash": "Ein Botbudget ist kein verfügbares Bargeld.",
       "cappedByBudget": "Durch Budgetlimits begrenzt",
       "buy": "Kaufen",
       "sell": "Verkaufen",
