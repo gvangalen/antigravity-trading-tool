@@ -19,6 +19,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 import { initialSetupFormState } from "@/lib/setup/setupFormState.mjs";
+import { hasPartialSetupScoreConditions, hasSetupScoreConditions, setupScorePayload } from "@/lib/setup/scoreConditions.mjs";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
@@ -53,6 +54,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   const [macroScore, setMacroScore] = useState([30, 70]);
   const [technicalScore, setTechnicalScore] = useState([40, 80]);
   const [marketScore, setMarketScore] = useState([20, 60]);
+  const [useScoreConditions, setUseScoreConditions] = useState(() =>
+    isEdit ? hasSetupScoreConditions(initialData) : false
+  );
+  const [scoreConditionsTouched, setScoreConditionsTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -76,6 +81,8 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     if (!initialData) return;
 
     setFormData(initialSetupFormState(initialData));
+    setUseScoreConditions(hasSetupScoreConditions(initialData));
+    setScoreConditionsTouched(false);
 
     setMacroScore([
       initialData.min_macro_score ?? 30,
@@ -150,12 +157,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         dca_month_day: null,
       }),
 
-      min_macro_score: macroScore[0],
-      max_macro_score: macroScore[1],
-      min_technical_score: technicalScore[0],
-      max_technical_score: technicalScore[1],
-      min_market_score: marketScore[0],
-      max_market_score: marketScore[1],
+      ...setupScorePayload(
+        useScoreConditions, macroScore, technicalScore, marketScore,
+        isEdit && !scoreConditionsTouched ? initialData : null
+      ),
     };
 
     try {
@@ -173,6 +178,8 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         setMacroScore([30, 70]);
         setTechnicalScore([40, 80]);
         setMarketScore([20, 60]);
+        setUseScoreConditions(false);
+        setScoreConditionsTouched(false);
       }
 
       const normalizedSetup = normalizeSetupSaveResponse(savedSetup);
@@ -201,6 +208,8 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     selectedAsset,
     showSnackbar,
     technicalScore,
+    useScoreConditions,
+    scoreConditionsTouched,
   ]);
 
   useImperativeHandle(ref, () => ({
@@ -257,7 +266,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           min={0} 
           max={100} 
           value={score} 
-          onChange={setScore}
+          onChange={(value) => {
+            setScore(value);
+            setScoreConditionsTouched(true);
+          }}
           trackStyle={[{ backgroundColor: '#2563eb', height: 10, borderRadius: 5, border: '2px solid #1e40af', top: '51%' }]}
           handleStyle={[
             { borderColor: '#1e40af', height: 26, width: 26, marginTop: -9, backgroundColor: '#fff', boxShadow: '0 8px 16px rgba(30, 64, 175, 0.2)', borderWidth: 4, opacity: 1 },
@@ -448,21 +460,39 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           copy.activationTitle
         )}
 
-        <div className="flex items-start gap-2 text-sm text-[var(--text-soft)]">
-          <Info size={16} className="mt-0.5" />
-          <p>
-            {copy.scoreIntroPrefix} <strong>{copy.scoreIntroBold}</strong> {copy.scoreIntroSuffix}
-          </p>
-        </div>
-        <p className="text-xs text-[var(--text-soft)]">{copy.scoreDefaultOrigin}</p>
+        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-900">
+          <input
+            type="checkbox"
+            checked={useScoreConditions}
+            onChange={(event) => {
+              setUseScoreConditions(event.target.checked);
+              setScoreConditionsTouched(true);
+            }}
+            className="mt-0.5 h-4 w-4 accent-blue-600"
+          />
+          <span>{copy.scoreConditionToggle}</span>
+        </label>
 
-        {scoreBlock(copy.macroTitle, macroScore, setMacroScore, copy.macroDescription)}
-        {scoreBlock(copy.technicalTitle, technicalScore, setTechnicalScore, copy.technicalDescription)}
-        {scoreBlock(
-          copy.marketTitle,
-          marketScore,
-          setMarketScore,
-          copy.marketDescription
+        {useScoreConditions ? (
+          <>
+            <div className="flex items-start gap-2 text-sm text-[var(--text-soft)]">
+              <Info size={16} className="mt-0.5" />
+              <p>
+                {copy.scoreIntroPrefix} <strong>{copy.scoreIntroBold}</strong> {copy.scoreIntroSuffix}
+              </p>
+            </div>
+            <p className="text-xs text-[var(--text-soft)]">
+              {isEdit && !scoreConditionsTouched && hasPartialSetupScoreConditions(initialData)
+                ? copy.scorePartialOrigin
+                : copy.scoreDefaultOrigin}
+            </p>
+
+            {scoreBlock(copy.macroTitle, macroScore, setMacroScore, copy.macroDescription)}
+            {scoreBlock(copy.technicalTitle, technicalScore, setTechnicalScore, copy.technicalDescription)}
+            {scoreBlock(copy.marketTitle, marketScore, setMarketScore, copy.marketDescription)}
+          </>
+        ) : (
+          <p className="text-sm text-[var(--text-soft)]">{copy.scoreConditionOff}</p>
         )}
       </div>
 

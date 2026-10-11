@@ -460,7 +460,7 @@ class BotService:
                 409,
                 {
                     "code": "BOT_RISK_ACK_REQUIRED",
-                    "message": "Deze bot-wijziging verhoogt risico of automatisering. Bevestig bewust met risk_acknowledged=true.",
+                    "message": "Deze bot-wijziging verhoogt risico of automatisering. Bevestig deze wijziging bewust om op te slaan.",
                     "behavioral_event": pressure_event,
                 },
             )

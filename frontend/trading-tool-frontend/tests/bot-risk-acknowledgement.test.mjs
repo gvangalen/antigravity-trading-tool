@@ -49,3 +49,9 @@ test("bot forms require an explicit acknowledgement before retrying a risk-chang
     assert.match(source, /submitForm\(true\)/);
   }
 });
+
+test("the budget drawer forwards the confirmed risk acknowledgement to the API", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const page = await readFile(new URL("../app/(protected)/bot/page.jsx", import.meta.url), "utf8");
+  assert.match(page, /risk_acknowledged: budget\.risk_acknowledged === true/);
+});

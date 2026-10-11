@@ -1249,6 +1249,7 @@ function BotPageInner() {
               budget_daily_limit_eur: budget.daily_limit_eur,
               budget_max_order_eur: budget.max_order_eur,
               max_asset_exposure_pct: budget.max_asset_exposure_pct,
+              risk_acknowledged: budget.risk_acknowledged === true,
             });
             await handleGenerateDecision(drawer.bot, { silent: true });
             return result;
