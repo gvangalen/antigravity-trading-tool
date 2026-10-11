@@ -4,6 +4,16 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Pending Five-Flow Repair Candidate
+
+Phase: candidate branch `codex/finn-five-flow-repair` is pushed as draft [PR #193](https://github.com/gvangalen/antigravity-trading-tool/pull/193). [CI for the repaired code](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38129718371) and all local Build gates passed. The evidence-only status commit awaits its exact CI run; this candidate has not been merged or deployed. Independent authenticated QA has not assessed this batch.
+
+Scope: preserve shared verified report facts; reuse a recent daily report without waiting for a new signature; stop silently inserting setup score limits; show and confirm suggested limits in onboarding and display the actual limits or their absence on FINN proposal cards; clarify bot budgets as limits; return separate setup and strategy timeframes plus the saved DCA purchase schedule; and hold buys when measured Score 2.0 components fall outside an owner's saved setup limits. Missing scores leave a fixed calendar DCA active, while score-dependent buys hold. Sell/exit decisions remain available. This implements the user's 2026-10-11 clarification for the Paper acceptance matrix.
+
+Measured local evidence: backend `pytest -q` **3363 passed, 3 skipped** on commit `bffa12d1a`; frontend build, typecheck, i18n lint/tests, command tests and high-severity audit passed before the final backend-only gate correction (one moderate Next.js advisory). The isolated local FastAPI/Celery/PostgreSQL/Redis/Responses action matrix was rerun after the correction and passed **16/16**, with no live bot, broker order or production connection (artifact SHA-256 `df076bd9309a258572f3b4f489fec9f1db5fecd87b27641e64d63ed95230e388`); action-adapter tests passed **19/19**. Real-provider Luna/Responses selector development was rerun and passed **18/18**, artifact SHA-256 `459ddcabf57c7478efe9a578eabb005a8edaacbaf15ce8323a4c5b10fa8a9876`; regression passed **109/109**, artifact SHA-256 `624e76421c91f5c6426b3cc0d2ef59b9fe8678cc2dc797e1ceecae8c3ed791ac`. Both runs reported zero provider, schema, timeout, parse and validation failures. After Security found a fixed-DCA buy-gate reversal, the final code was corrected and its real match outcomes and order check passed 32 focused tests. Security independently rechecked score-free fixed DCA, bounded fixed DCA with missing data, outside-condition holds and unaffected sell decisions, with no remaining concrete blocker. A local Score 2.0 chain test covers positive match, measured non-match, missing and stale source data through the Paper worker; it does not prove a production Paper execution.
+
+Open release evidence: candidate CI, Auto Deploy, matching public backend/frontend SHA and independent authenticated live QA. The earlier live report 502 has no confirmed production root cause; a successful local report parity test and this UI retry correction do not establish that it is gone. QA must compare same-time Analyse, FINN and report facts and complete the positive-match Paper execution, measured non-match hold and missing/stale cases on one live SHA.
+
 ## Active Release
 
 | Field | Value |

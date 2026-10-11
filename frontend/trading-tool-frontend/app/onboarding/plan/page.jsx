@@ -126,6 +126,7 @@ export default function OnboardingPlanPage() {
   const [error, setError] = useState(null);
 
   const [setup, setSetup] = useState(DEFAULT_SETUP);
+  const [scoreBoundsConfirmed, setScoreBoundsConfirmed] = useState(false);
   const [strategy, setStrategy] = useState(DEFAULT_STRATEGY);
   const [savedSetup, setSavedSetup] = useState(null);
   const [savedStrategy, setSavedStrategy] = useState(null);
@@ -240,7 +241,7 @@ export default function OnboardingPlanPage() {
   );
 
   const handleSaveSetup = async () => {
-    if (!setupValid) {
+    if (!setupValid || !scoreBoundsConfirmed) {
       setError(copy.setupValidationError || "Complete the setup fields first.");
       return;
     }
@@ -505,12 +506,19 @@ export default function OnboardingPlanPage() {
             </div>
           </div>
 
+          {!setupDone && (
+            <label className="mt-4 flex items-start gap-3 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={scoreBoundsConfirmed} onChange={(event) => setScoreBoundsConfirmed(event.target.checked)} disabled={savingSetup || loading} className="mt-1" />
+              <span>{copy.scoreRangesConfirm}</span>
+            </label>
+          )}
+
           {!setupDone ? (
             <div className="mt-5">
               <button
                 type="button"
                 onClick={handleSaveSetup}
-                disabled={!setupValid || savingSetup || loading}
+                disabled={!setupValid || !scoreBoundsConfirmed || savingSetup || loading}
                 className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {savingSetup ? copy.setupSaving || "Saving setup…" : copy.setupSave || "Save setup"}

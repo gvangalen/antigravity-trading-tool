@@ -2017,7 +2017,16 @@ GENERATE
     );
 
     try {
-      await current.generate();
+      const generation = await current.generate();
+      if (generation?.source === 'existing_daily_report' && preferDate === 'latest') {
+        const existing = await current.getLatest({ forceFresh: true });
+        if (isReadyReport(existing)) {
+          lastSignatureRef.current = getReportSignature(existing);
+          setReport(existing);
+          showSnackbar(`${fallbackLabel} staat klaar`, 'success');
+          return;
+        }
+      }
       await pollUntilNewReport(preferDate);
       showSnackbar(`${fallbackLabel} staat klaar`, 'success');
     } catch (err) {

@@ -364,6 +364,9 @@ def test_bot_contract_exposes_consistent_top_level_ids_and_nested_strategy():
         "setup_symbol": "BTC",
         "symbol": "BTC",
         "timeframe": "1W",
+        "setup_timeframe": "1D",
+        "dca_frequency": "monthly",
+        "dca_month_day": 5,
         "is_active": True,
         "is_live": False,
         "mode": "manual",
@@ -383,9 +386,41 @@ def test_bot_contract_exposes_consistent_top_level_ids_and_nested_strategy():
     assert contract["strategy_id"] == 42
     assert contract["verified"]["bot"] is True
     assert contract["bot"]["bot_id"] == 9
+    assert contract["bot"]["is_live"] is False
+    assert contract["bot"]["strategy"]["timeframe"] == "1W"
+    assert contract["bot"]["strategy"]["setup"]["timeframe"] == "1D"
+    assert contract["bot"]["strategy"]["setup"]["dca_month_day"] == 5
     assert contract["bot"]["strategy_id"] == 42
     assert contract["bot"]["strategy"]["id"] == 42
     assert contract["budget"]["total_eur"] == 1000
+
+
+def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
+    class Repo:
+        async def get_bot_configs(self, user_id):
+            assert user_id == 7
+            return [{
+                "id": 9, "name": "ETH Paper", "is_active": True, "is_live": False,
+                "mode": "manual", "cadence": "daily", "risk_profile": "balanced",
+                "strategy_id": 42, "strategy_name": "ETH Strategy", "setup_type": "dca",
+                "setup_id": 5, "setup_name": "ETH DCA", "symbol": "ETH",
+                "timeframe": "1W", "setup_timeframe": "1D",
+                "dca_frequency": "monthly", "dca_day": None, "dca_month_day": 5,
+                "base_currency": "EUR", "last_run": None, "created_at": None,
+                "updated_at": None, "budget_total_eur": 100,
+                "budget_daily_limit_eur": 100, "budget_min_order_eur": 1,
+                "budget_max_order_eur": 100, "max_asset_exposure_pct": 100,
+            }]
+
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+    bot = asyncio.run(service.get_bot_configs(7))[0]
+
+    assert bot["is_live"] is False
+    assert bot["strategy"]["timeframe"] == "1W"
+    assert bot["strategy"]["setup"]["timeframe"] == "1D"
+    assert bot["strategy"]["setup"]["dca_frequency"] == "monthly"
+    assert bot["strategy"]["setup"]["dca_month_day"] == 5
 
 
 def test_bot_update_pressure_event_detects_budget_live_and_mode_risk():
