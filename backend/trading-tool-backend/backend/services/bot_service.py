@@ -77,6 +77,54 @@ class BotService:
         except Exception:
             return fallback
 
+    async def _paper_manual_buy_match(self, user_id: int, bot: Dict[str, Any], payload: BotManualOrderSchema) -> Dict[str, Any]:
+        """Use the same owner-scoped setup match as Analyse before a Paper buy.
+
+        A manual Paper buy must not silently bypass saved score conditions. An
+        unbounded setup has no score condition to enforce; this preserves fixed
+        calendar DCA when score data is absent.
+        """
+        if bot.get("is_live") or payload.side != "buy":
+            return {"allowed": True, "status": "not_applicable"}
+
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        setup_id = bot.get("setup_id")
+        setup = await SetupRepository(self.session).get_setup_by_id(setup_id, user_id) if setup_id else None
+        if not setup or str(setup.get("symbol") or "").upper() != payload.symbol:
+            return {
+                "allowed": False, "status": "unverified_setup",
+                "message": "De gekoppelde setup voor deze Paper-bot is niet eenduidig te controleren.",
+                "safe_next_step": "Controleer de gekoppelde strategie en setup voordat je een kooporder plaatst.",
+            }
+
+        has_score_conditions = any(
+            setup.get(f"{limit}_{component}_score") is not None
+            for component in ("market", "macro", "technical")
+            for limit in ("min", "max")
+        )
+        if not has_score_conditions:
+            return {"allowed": True, "status": "unconfigured", "setup_id": setup_id}
+
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, payload.symbol, setups=[setup]
+        )
+        match = next((item for item in assessment["matches"] if item.get("setup_id") == setup_id), None)
+        status = match.get("status") if match else "unverified_setup"
+        if status == "matches":
+            return {"allowed": True, "status": status, "setup_id": setup_id}
+        if status == "outside_conditions":
+            message = "De gemeten scores vallen buiten de opgeslagen setupvoorwaarden. Deze Paper-koop wacht."
+            next_step = "Controleer de setupvoorwaarden en laat de bot opnieuw beoordelen."
+        else:
+            message = "De actuele markt-, macro- en technische scores zijn niet compleet geverifieerd. Deze Paper-koop wacht."
+            next_step = "Wacht op complete, actuele scores en laat de bot opnieuw beoordelen."
+        return {
+            "allowed": False, "status": status, "setup_id": setup_id,
+            "message": message, "safe_next_step": next_step,
+        }
+
     def _bot_contract(self, bot: Optional[dict]) -> dict:
         if not bot:
             return {
@@ -1231,6 +1279,18 @@ class BotService:
 
         self._validate_manual_order_payload(payload)
 
+        paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
+        if not paper_match["allowed"]:
+            return {
+                "ok": False, "blocked": True, "code": "PAPER_SETUP_MATCH_REQUIRED",
+                "message": paper_match["message"],
+                "safe_next_step": paper_match["safe_next_step"],
+                "setup_match_status": paper_match["status"],
+                "bot_id": payload.bot_id, "symbol": payload.symbol,
+                "side": payload.side, "is_live": False,
+                "not_persisted": True, "exchange_order_created": False,
+            }
+
         # Default values from payload
         price = payload.price
         amount_eur = payload.value_eur or (payload.quantity * payload.price)
@@ -1356,6 +1416,15 @@ class BotService:
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
             raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
+
+        paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
+        if not paper_match["allowed"]:
+            raise HTTPException(409, {
+                "code": "PAPER_SETUP_MATCH_REQUIRED",
+                "message": paper_match["message"],
+                "safe_next_step": paper_match["safe_next_step"],
+                "setup_match_status": paper_match["status"],
+            })
 
         live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
 
@@ -1518,6 +1587,15 @@ class BotService:
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
             raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
+
+        paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
+        if not paper_match["allowed"]:
+            raise HTTPException(409, {
+                "code": "PAPER_SETUP_MATCH_REQUIRED",
+                "message": paper_match["message"],
+                "safe_next_step": paper_match["safe_next_step"],
+                "setup_match_status": paper_match["status"],
+            })
 
         live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
