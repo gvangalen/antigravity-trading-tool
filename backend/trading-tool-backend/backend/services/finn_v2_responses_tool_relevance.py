@@ -13,6 +13,60 @@ from backend.services.finn_v2_responses_model import finn_responses_model_option
 
 
 class FinnResponsesToolRelevanceGuard:
+    async def immediate_bot_target(self, *, message: str) -> str:
+        """Independent semantic verdict for an unrecognized bot follow-up.
+
+        The model cannot select an ID or authorize a write. A positive verdict
+        only permits the server to use the direct, already verified action
+        lineage; ambiguity and provider failure leave the target unresolved.
+        """
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 7:
+            return "unclear"
+        timeout = min(12.0, remaining - 3 if remaining is not None else 12.0)
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    **finn_responses_model_options(), store=False, tool_choice="none",
+                    instructions=(
+                        "Judge the ENTIRE latest user message, not an isolated positive phrase. "
+                        "The conversation just confirmed a plan owned by this user. Return "
+                        "create_for_immediate only when the user clearly asks FINN to PREPARE "
+                        "a Paper-bot proposal for exactly that just-confirmed plan. Do not "
+                        "treat questions about how a bot would work, hypothetical language, "
+                        "negated proposals, or coaching as authorization to prepare a proposal. "
+                        "Asking to SEE A DRAFT while saying 'confirm nothing' still requests "
+                        "a proposal; it does not authorize saving or activating the bot. "
+                        "Return other_target if ANY clause instead refers to an older, "
+                        "different, third-party or other-account plan, even when another "
+                        "clause says 'for that'. Return unclear if the relationship or "
+                        "action is ambiguous. Never supply IDs or execute anything."
+                    ),
+                    input=json.dumps({"latest_user_message": message}, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_immediate_bot_target", "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {"verdict": {"type": "string", "enum": [
+                                "create_for_immediate", "other_target", "read_only", "unclear",
+                            ]}},
+                            "required": ["verdict"],
+                        },
+                    }},
+                    max_output_tokens=48,
+                ), timeout=timeout,
+            )
+            verdict = json.loads(str(getattr(response, "output_text", "") or "")).get("verdict")
+            return verdict if verdict in {
+                "create_for_immediate", "other_target", "read_only", "unclear",
+            } else "unclear"
+        except Exception:
+            return "unclear"
+
     async def saved_plan_query_kind(
         self, *, message: str, previous_kind: str = "", previous_answer: str = "",
     ) -> dict[str, str] | None:

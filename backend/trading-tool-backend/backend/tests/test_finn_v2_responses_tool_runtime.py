@@ -3790,6 +3790,34 @@ def test_direct_answer_read_boundary_distinguishes_saved_fact_from_general_coach
     assert all("temperature" not in request for request in fake.requests)
 
 
+@pytest.mark.parametrize("verdict", [
+    "create_for_immediate", "other_target", "read_only", "unclear",
+])
+def test_immediate_bot_semantic_target_is_typed_and_has_no_ids(verdict):
+    fake = FakeResponses(response("target", text=f'{{"verdict":"{verdict}"}}'))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    message = "Maak voor het zojuist bevestigde plan een Paper-botvoorstel."
+
+    assert asyncio.run(guard.immediate_bot_target(message=message)) == verdict
+    request = fake.requests[0]
+    assert request["tool_choice"] == "none" and request["store"] is False
+    assert request["text"]["format"]["schema"]["required"] == ["verdict"]
+    assert request["model"] == "gpt-6-luna"
+    assert request["reasoning"] == {"effort": "none"}
+    assert message in request["input"]
+    assert "user_id" not in request["input"] and "strategy_id" not in request["input"]
+
+
+def test_immediate_bot_semantic_target_fails_closed_on_provider_error():
+    async def failed(**_kwargs):
+        raise TimeoutError("provider unavailable")
+
+    guard = FinnResponsesToolRelevanceGuard(
+        SimpleNamespace(responses=SimpleNamespace(create=failed)),
+    )
+    assert asyncio.run(guard.immediate_bot_target(message="Maak daarvoor een Paper-bot.")) == "unclear"
+
+
 def test_tool_relevance_guard_uses_typed_responses_without_exposing_identity():
     fake = FakeResponses(response("judge", text='{"aligned": false}'))
     guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))

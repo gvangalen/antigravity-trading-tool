@@ -262,6 +262,87 @@ def _analysis_for_operation(message, operation_id):
     return analyzer.analyze(message=message, conversation_context={})
 
 
+def test_semantic_bot_target_stays_unresolved_until_explicit_owner_choice():
+    first_message = (
+        "Kun je daarvoor een Paper-bot voorbereiden? Noem de bot ETH Paper. "
+        "Budget €20. Laat eerst het voorstel zien."
+    )
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "confirmed_previous_plan",
+         "inputs": {"name": "ETH Paper", "budget_total_eur": 20, "strategy_id": 81}},
+    )
+    first = FinnResponsesProposalSelection().from_call(
+        call=call, message=first_message,
+        conversation_context={"immediate_bot_pair_semantic_candidate": True,
+                              "immediate_bot_pair_guard_reason": "unsupported_utterance"},
+        verified_asset="ETH",
+    )
+    assert first.request_plan.operation_state["target_choice_required"] is True
+    assert "strategy_id" in first.request_plan.operation_state["missing_required_inputs"]
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    service.entities.resolve_contract_reference_inputs = AsyncMock(
+        side_effect=AssertionError("unresolved bot target must not enter auto resolver")
+    )
+    unresolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=first_message, analysis=first,
+        conversation_context={}, workspace_hints={}, client_context={}, model_selected=True,
+    ))
+    assert "strategy_id" not in unresolved.request_plan.operation_state["collected_inputs"]
+    service.entities.resolve_contract_reference_inputs.assert_not_called()
+
+    context = {"active_guided_operation": first.request_plan.operation_state}
+    second = FinnResponsesProposalSelection().from_call(
+        call=call, message="ETH DCA Strategy", conversation_context=context,
+        verified_asset="ETH",
+    )
+    service.entities._entity_candidates = AsyncMock(return_value=[
+        {"id": 81, "name": "ETH DCA Strategy"},
+        {"id": 82, "name": "Other Strategy"},
+        {"id": 83, "name": "Nee"},
+    ])
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={})
+    for rejected_reply in (
+        "Niet ETH DCA Strategy, ik bedoel de andere variant.",
+        "De setup ETH DCA Strategy",
+        "Nee",
+    ):
+        excluded = asyncio.run(service._resolve_explicit_action_references(
+            user_id=7, message=rejected_reply, analysis=second,
+            conversation_context=context, workspace_hints={}, client_context={},
+            model_selected=True,
+        ))
+        assert "strategy_id" in excluded.request_plan.operation_state["missing_required_inputs"]
+        assert excluded.request_plan.operation_state["target_choice_required"] is True
+        service.entities.resolve_contract_reference_inputs.assert_not_called()
+    chosen = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message="ETH DCA Strategy", analysis=second,
+        conversation_context=context, workspace_hints={}, client_context={}, model_selected=True,
+    ))
+    chosen_state = chosen.request_plan.operation_state
+    assert chosen_state["collected_inputs"]["strategy_id"] == 81
+    assert chosen_state["collected_inputs"]["name"] == "ETH Paper"
+    assert chosen_state["collected_inputs"]["budget_total_eur"] == 20
+    assert chosen_state["target_choice_required"] is False
+    assert chosen_state["selection_diagnostic"]["binding_guard_reason"] == "explicit_owner_choice"
+    other_reference_call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "other_saved_plan",
+         "inputs": {"strategy_id": 999}},
+    )
+    other_reference = FinnResponsesProposalSelection().from_call(
+        call=other_reference_call, message="ETH DCA Strategy",
+        conversation_context=context, verified_asset="ETH",
+    )
+    other_chosen = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message="ETH DCA Strategy", analysis=other_reference,
+        conversation_context=context, workspace_hints={}, client_context={},
+        model_selected=True,
+    ))
+    assert other_chosen.request_plan.operation_state["collected_inputs"]["strategy_id"] == 81
+    assert other_chosen.request_plan.operation_state["collected_inputs"]["name"] == "ETH Paper"
+
+
 def test_orchestrator_projects_canonical_target_separately_for_read_contract():
     message = "Vat strategie BTC Breakout samen."
     service = FinnV2OrchestratorService(session=_QueryableSession())

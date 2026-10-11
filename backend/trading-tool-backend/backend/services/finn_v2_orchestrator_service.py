@@ -189,6 +189,34 @@ class FinnV2OrchestratorService:
         contract = FinnV2OperationRegistry().require_supported(operation_id)
         operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
         collected_inputs = dict(operation_state.get("collected_inputs") or {})
+        explicit_bot_strategy_choice = None
+        if operation_id == "create_bot" and operation_state.get("target_choice_required"):
+            # The first turn's semantic reference is deliberately unresolved.
+            # On a later guided turn, only a unique strategy name written by
+            # the user and found within this owner's records can unlock it.
+            prior_guided = dict(conversation_context.get("active_guided_operation") or {})
+            if not prior_guided.get("target_choice_required"):
+                return analysis
+            raw_choice = message.strip().rstrip(".!?").strip()
+            if raw_choice.casefold() in {"nee", "no", "stop", "annuleer", "cancel"}:
+                return analysis
+            literal_choice = raw_choice.strip(" \t\r\n\"'“”‘’").casefold()
+            try:
+                owner_strategies = await self.entities._entity_candidates(
+                    user_id=user_id, entity_type="strategy",
+                )
+                named = [
+                    dict(row) for row in owner_strategies
+                    if str(row.get("name") or "").strip().casefold() == literal_choice
+                ]
+                if len(named) != 1:
+                    return analysis
+                explicit_bot_strategy_choice = int(
+                    named[0].get("id") or named[0].get("strategy_id")
+                )
+            except (ValueError, TypeError, LookupError):
+                return analysis
+            collected_inputs.pop("strategy_id", None)
         if (
             operation_id == "create_bot"
             and conversation_context.get("strict_immediate_action_lineage")
@@ -320,6 +348,8 @@ class FinnV2OrchestratorService:
                 "source": "owner_scoped_reference",
             }
             resolved = {}
+        if explicit_bot_strategy_choice is not None:
+            resolved["strategy_id"] = explicit_bot_strategy_choice
         if (
             not resolved
             and canonical_target is None
@@ -355,8 +385,15 @@ class FinnV2OrchestratorService:
             ),
         )
         resolved_operation_state = state.dict()
+        if explicit_bot_strategy_choice is not None:
+            resolved_operation_state["target_choice_required"] = False
         if model_selected and isinstance(operation_state.get("selection_diagnostic"), dict):
             resolved_operation_state["selection_diagnostic"] = operation_state["selection_diagnostic"]
+            if explicit_bot_strategy_choice is not None:
+                resolved_operation_state["selection_diagnostic"] = {
+                    **resolved_operation_state["selection_diagnostic"],
+                    "binding_guard_reason": "explicit_owner_choice",
+                }
         request_plan = request_plan.copy(
             update={
                 **({
@@ -1368,9 +1405,10 @@ class FinnV2OrchestratorService:
             rf"ik\s+wil\s+(?:ook\s+)?{bot_with_amount}\s+(?:voor|bij|aan)\s+{target}{tail}",
             rf"maak\s+(?:op\s+basis\s+van|voor)\s+{target}\s+{bot_with_amount}{tail}",
         )
-        if not any(re.fullmatch(rf"{pattern}{guidance}", utterance, re.IGNORECASE)
-                   for pattern in patterns):
-            return reject("unsupported_utterance")
+        utterance_supported = any(
+            re.fullmatch(rf"{pattern}{guidance}", utterance, re.IGNORECASE)
+            for pattern in patterns
+        )
         resolver = FinnV2EntityResolutionService(self.session)
         for entity_type, expected in (("setup", setup_id), ("strategy", strategy_id)):
             try:
@@ -1397,6 +1435,12 @@ class FinnV2OrchestratorService:
                 for row in named
             ):
                 return reject("unmatched_explicit_name")
+        if not utterance_supported:
+            # The direct confirmed pair has passed owner/lineage/asset/name
+            # checks. Natural wording still needs an independent semantic
+            # action-and-target verdict before it may be bound to a proposal.
+            context["immediate_bot_pair_semantic_candidate"] = True
+            return reject("unsupported_utterance")
         context["immediate_bot_pair_guard_reason"] = "accepted"
         return True
 

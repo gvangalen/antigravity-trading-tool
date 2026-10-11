@@ -322,10 +322,16 @@ class FinnResponsesFrontDoor:
                 if other.operation_id != pending_operation
                 for alias in other.aliases
             )
-            if self.binds_guided_slot(
+            if (
+                (pending_operation == "create_bot"
+                 and requested_slot == "strategy_id"
+                 and guided_state.get("target_choice_required") is True)
+                or self.binds_guided_slot(
                 message=message, contract=contract, registry=self.proposals.registry,
                 requested_slot=requested_slot,
-            ) or (states._is_explicit_correction(message) and not switches_operation and "?" not in message):
+                )
+                or (states._is_explicit_correction(message) and not switches_operation and "?" not in message)
+            ):
                 selected = self.proposals.from_call(
                     call=FinnResponsesToolCall(
                         name=catalog.proposal_tool_for_operation(pending_operation),
@@ -1498,10 +1504,24 @@ class FinnResponsesFrontDoor:
                 return {"status": "unavailable", "reason": "guided_operation_still_active"}
             if selected is not None:
                 return {"status": "unavailable", "reason": "one_proposal_per_run"}
+            proposal_context = conversation_context
+            immediate_target_choice_required = False
+            if (
+                call.operation_id == "create_bot"
+                and call.target_reference == "confirmed_previous_plan"
+                and conversation_context.get("immediate_bot_pair_semantic_candidate") is True
+                and conversation_context.get("immediate_bot_pair_guard_reason") == "unsupported_utterance"
+            ):
+                verdict = await guard.immediate_bot_target(message=message)
+                if verdict in {"other_target", "read_only"}:
+                    return {"status": "unavailable", "reason": "bot_target_or_action_not_immediate"}
+                # A model verdict never establishes which stored strategy to
+                # target, including on provider failure or an unclear result.
+                immediate_target_choice_required = True
             analysis = self.proposals.from_call(
                 call=call,
                 message=message,
-                conversation_context=conversation_context,
+                conversation_context=proposal_context,
                 verified_asset=verified_asset,
                 read_context=read_context,
                 verified_parent_setup=(
@@ -1612,7 +1632,7 @@ class FinnResponsesFrontDoor:
                 elif requested_domain in {None, "unknown"}:
                     return {"status": "unavailable", "reason": "write_target_domain_unverified"}
             selected = analysis
-            return {
+            result = {
                 "status": "needs_input" if state.get("missing_required_inputs") else "validation_pending",
                 "operation_id": call.operation_id,
                 "supplied_inputs": {
@@ -1622,6 +1642,34 @@ class FinnResponsesFrontDoor:
                 "missing_inputs": state.get("missing_required_inputs", []),
                 "confirmation_required": True,
             }
+            if immediate_target_choice_required:
+                result["status"] = "needs_input"
+                result["target_choice_required"] = True
+                action = dict(conversation_context.get("immediate_previous_action_result") or {})
+                strategy_id = str(dict(action.get("canonical_entity") or {}).get("strategy_id") or "")
+                session_factory = getattr(self.reads, "session_factory", None)
+                if strategy_id.isdigit() and session_factory is not None:
+                    try:
+                        async with session_factory() as session:
+                            owner_strategies = await FinnV2EntityResolutionService(
+                                session,
+                            )._entity_candidates(user_id=self.user_id, entity_type="strategy")
+                        candidate = next((
+                            str(row.get("name") or "") for row in owner_strategies
+                            if str(row.get("id") or row.get("strategy_id") or "") == strategy_id
+                        ), "")
+                        if candidate:
+                            result["candidate_strategy_name"] = candidate
+                    except Exception:
+                        logger.exception("FINN bot strategy choice label lookup failed")
+                result["instruction"] = (
+                    "Ask the user to reply with only the exact saved strategy name; "
+                    "if candidate_strategy_name is present, show it as one possible "
+                    "choice. A negated name or 'the other one' is not a choice. "
+                    "No Paper-bot proposal can be confirmed before that exact "
+                    "owner-scoped choice. Preserve the other supplied inputs."
+                )
+            return result
 
         async def checkpoint(response_id: str, trace: tuple[dict[str, Any], ...]) -> None:
             session_factory = getattr(self.reads, "session_factory", None)

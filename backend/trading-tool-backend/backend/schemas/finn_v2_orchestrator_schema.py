@@ -136,6 +136,9 @@ class FinnV2OperationState(BaseModel):
     # A watchlist target, for example, must never become the asset selector
     # used by the owner-scoped reads that prepare its proposal.
     target_entities: Dict[str, object] = Field(default_factory=dict)
+    # A bot draft whose target was only inferred from conversation wording
+    # cannot become confirmable until a later explicit owner-scoped choice.
+    target_choice_required: bool = False
     missing_required_inputs: List[str] = Field(default_factory=list)
     next_missing_input: Optional[str] = None
     open_proposal_id: Optional[str] = None
