@@ -294,7 +294,7 @@ export default function OrderPreviewModal({
             <div className="flex flex-wrap items-center gap-2">
               <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${badgeTone(readinessStatus)}`}>
                 {isBlocked ? <ShieldAlert size={12} /> : isLive ? <ShieldCheck size={12} /> : <Shield size={12} />}
-                {isBlocked ? (preview?.code || copy.blocked) : isLive ? copy.livePreflight : copy.orderPreview}
+                {isBlocked ? copy.blocked : isLive ? copy.livePreflight : copy.orderPreview}
               </span>
               {isLivePreflight && !isBlocked && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-700">
