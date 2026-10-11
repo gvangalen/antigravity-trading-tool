@@ -8,10 +8,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED_PENDING_CI`; the new bot-continuation candidate is not yet deployed or independently accepted. The prior live QA verdict is `NOT_ACCEPTED`. |
+| Phase | `DEPLOYED_PENDING_INDEPENDENT_QA`; the bot-continuation candidate is live but not independently accepted. The prior live QA verdict remains `NOT_ACCEPTED`. |
 | Goal | Repair the direct, same-conversation confirmed DCA → linked Paper-bot proposal without changing owner scope or confirmation safety. The broader Score 2.0 → setup match → Paper and chat/Today/report parity goal remains open for independent QA. |
-| Candidate | Branch `codex/finn-bot-reference-repair`, implementation SHA `403e90f1a630d4e810d11295662c2de744729ae4`; PR, merge and deployed SHA pending. |
-| Production identity | Last verified public backend and frontend SHA before this candidate: `f86523d6d120eced8a7711c7166b17984828d983` (both HTTP 200). Do not infer the new candidate is live from this status document. |
+| Candidate | [PR #186](https://github.com/gvangalen/antigravity-trading-tool/pull/186), branch `codex/finn-bot-reference-repair`, implementation SHA `403e90f1a630d4e810d11295662c2de744729ae4`, merge SHA `6f92101a0a5de501426b92b570cb4965a6a5eded`. |
+| Production identity | On 2026-10-11, public backend health and frontend build-info both returned HTTP 200 and SHA `6f92101a0a5de501426b92b570cb4965a6a5eded`. [Candidate CI 38120320217](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38120320217), [main CI 38120430262](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38120430262), and [Auto Deploy 38120541301](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38120541301) succeeded. This status-only update may create a newer deployment SHA; QA preflight must compare the live surfaces and release marker. |
 | Last updated | 2026-10-11. |
 
 Independent protected [QA run 38118793637](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38118793637) on `f86523d6d120eced8a7711c7166b17984828d983` returned **NOT_ACCEPTED**: 8 of 12 cases executed, 7 passed, 1 product failure, and 4 safely skipped. The model selected `create_bot` with `confirmed_previous_plan` after a confirmed owner-scoped DCA setup and strategy, but the server guard returned `unsupported_utterance`; no `strategy_id` or bot proposal resulted. The direct action was safe and idempotent, six read cases and polling/SSE parity passed, and there were zero broker orders or live activations. The QA prompt and protected fixture remain QA-owned.
