@@ -2018,7 +2018,7 @@ GENERATE
 
     try {
       const generation = await current.generate();
-      if (generation?.source === 'existing_daily_report') {
+      if (generation?.source === 'existing_daily_report' && preferDate === 'latest') {
         const existing = await current.getLatest({ forceFresh: true });
         if (isReadyReport(existing)) {
           lastSignatureRef.current = getReportSignature(existing);
