@@ -81,7 +81,7 @@ export default function BotPortfolioSection({ bot }) {
                 <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.dailySpend}</span>
                 <span className="text-xs font-black text-slate-700 font-mono tracking-tighter">
                   {formatCurrency(Number(todaySpent ?? 0), locale, "EUR", { maximumFractionDigits: 0 })} /{" "}
-                  {dailyLimit !== null
+                  {dailyLimit !== null && Number(dailyLimit) > 0
                     ? formatCurrency(Number(dailyLimit), locale, "EUR", { maximumFractionDigits: 0 })
                     : copy.unlimited}
                 </span>
@@ -89,7 +89,7 @@ export default function BotPortfolioSection({ bot }) {
               <div className="flex flex-col">
                 <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.maxOrderSize}</span>
                 <span className="text-xs font-black text-slate-700 font-mono tracking-tighter">
-                  {maxOrder !== null
+                  {maxOrder !== null && Number(maxOrder) > 0
                     ? formatCurrency(Number(maxOrder), locale, "EUR", { maximumFractionDigits: 0 })
                     : copy.unlimited}
                 </span>

@@ -1863,7 +1863,7 @@
       "hudMacro": "Macro",
       "hudTechnical": "Technical",
       "hudMarket": "Market",
-      "hudSetup": "Setup"
+      "hudSetup": "Active setup match"
     }
   },
   "setupPage": {
@@ -2359,6 +2359,10 @@
       "lastChecked": "Last checked",
       "dataUpdating": "Data is updating",
       "noDecisionYet": "No bot evaluation has run yet",
+      "staleDecisionLabel": "New evaluation needed",
+      "staleDecisionTitle": "Setup changed since the last bot evaluation",
+      "staleDecisionBody": "The previous bot decision used the old setup conditions. This plan has not been evaluated again yet.",
+      "staleDecisionStep": "The Paper bot remains active. Wait for the next evaluation before treating this status as current.",
       "collapseDiagnostics": "Collapse diagnostics",
       "viewFullDiagnostics": "View full diagnostics",
       "scenarioLoading": "Running parallel scenarios...",
@@ -2575,7 +2579,7 @@
     "guardrailsPanel": {
       "safetyCheck": "Safety check",
       "goClear": "GO / CLEAR",
-      "systemBlocked": "SYSTEM BLOCKED",
+      "systemBlocked": "BOT DECISION ON HOLD",
       "maxRiskPerTrade": "Max risk / trade",
       "exposureRatio": "Exposure ratio",
       "adjustedPositionSize": "Adjusted position size",
@@ -2701,7 +2705,7 @@
       "max": "Max",
       "insufficientAsset": "Insufficient {asset}",
       "totalOrderValue": "Total order value",
-      "readyToPlace": "Ready to place",
+      "readyToPlace": "Ready for order check",
       "placing": "Placing...",
       "placeOrder": "Place order",
       "loadingMarketPrice": "Loading market price...",
@@ -2965,7 +2969,7 @@
         "macroLabel": "Macro",
         "technicalLabel": "Technical",
         "marketLabel": "Market",
-        "setupLabel": "Setup"
+        "setupLabel": "Active setup match"
       },
       "setupMatch": {
         "cardTitle": "Optimal setup",

@@ -596,6 +596,33 @@ def test_generate_first_dashboard_briefing_reuses_same_version_ready_state(monke
     assert result["response_source"] == "cached_ai"
 
 
+@pytest.mark.parametrize("has_existing_briefing", [False, True])
+@pytest.mark.parametrize("method", ["enqueue_first_dashboard_briefing", "generate_and_store_first_dashboard_briefing"])
+def test_first_dashboard_background_refresh_keeps_existing_owner_eligible_after_plan_edit(
+    monkeypatch, has_existing_briefing, method,
+):
+    service = FinnPlanService(db_session=object())
+    payload = _first_dashboard_payload("edited-plan")
+    state = {"first_dashboard_briefing": {"status": "queued", "context_version": "edited-plan"}} if has_existing_briefing else {}
+    prepare = AsyncMock(side_effect=lambda **kwargs: payload if not kwargs["require_first_dashboard_eligibility"] else None)
+    queue = AsyncMock(return_value={"status": "queued"})
+    generate = AsyncMock(return_value={"status": "ready"})
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", AsyncMock(return_value=state))
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", prepare)
+    monkeypatch.setattr(service, "_enqueue_first_dashboard_briefing_from_payload", queue)
+    monkeypatch.setattr(service, "_generate_and_store_first_dashboard_briefing_from_payload", generate)
+
+    result = asyncio.run(getattr(service, method)(7, trigger="mission_control_read"))
+
+    assert prepare.await_args.kwargs["require_first_dashboard_eligibility"] is not has_existing_briefing
+    if has_existing_briefing:
+        assert result["status"] in {"queued", "ready"}
+        assert (queue.await_count, generate.await_count) in {(1, 0), (0, 1)}
+    else:
+        assert result == {"status": "skipped", "reason": "not_first_dashboard"}
+        assert queue.await_count == generate.await_count == 0
+
+
 def test_generate_first_dashboard_briefing_retries_transient_fallback_when_due(monkeypatch):
     service = FinnPlanService(db_session=object())
     stored_state = {}

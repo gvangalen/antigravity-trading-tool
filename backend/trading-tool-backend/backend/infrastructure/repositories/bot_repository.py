@@ -85,8 +85,9 @@ class BotRepository:
             SELECT b.id, b.name,
               COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol,
               COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe, '—') AS timeframe,
-              s.setup_type,
-              st.name AS setup_name
+              s.setup_type, s.id AS strategy_id,
+              st.name AS setup_name, st.id AS setup_id,
+              st.last_validated AS setup_last_validated
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id
             LEFT JOIN setups st    ON st.id = s.setup_id

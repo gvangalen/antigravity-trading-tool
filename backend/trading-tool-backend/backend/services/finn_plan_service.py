@@ -12984,11 +12984,18 @@ class FinnPlanService:
         trigger: str = "onboarding_pipeline",
         owner_task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        payload = await self._prepare_first_dashboard_payload(user_id=user_id)
+        state = await self._load_first_dashboard_briefing_state(user_id)
+        # Mission Control may queue a newer plan version after onboarding.
+        # Once this owner has a briefing record, later activity must not make
+        # its background refresh ineligible while the dashboard waits for it.
+        has_briefing = bool(state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY))
+        payload = await self._prepare_first_dashboard_payload(
+            user_id=user_id,
+            require_first_dashboard_eligibility=not has_briefing,
+        )
         if not payload:
             return {"status": "skipped", "reason": "not_first_dashboard"}
 
-        state = await self._load_first_dashboard_briefing_state(user_id)
         return await self._enqueue_first_dashboard_briefing_from_payload(
             user_id,
             payload,
@@ -13008,11 +13015,15 @@ class FinnPlanService:
         queue_name: Optional[str] = None,
         owner_task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        payload = await self._prepare_first_dashboard_payload(user_id=user_id)
+        state = await self._load_first_dashboard_briefing_state(user_id)
+        has_briefing = bool(state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY))
+        payload = await self._prepare_first_dashboard_payload(
+            user_id=user_id,
+            require_first_dashboard_eligibility=not has_briefing,
+        )
         if not payload:
             return {"status": "skipped", "reason": "not_first_dashboard"}
 
-        state = await self._load_first_dashboard_briefing_state(user_id)
         return await self._generate_and_store_first_dashboard_briefing_from_payload(
             user_id,
             payload,

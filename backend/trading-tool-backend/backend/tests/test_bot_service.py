@@ -77,6 +77,106 @@ def test_bot_today_does_not_relabel_an_old_decision_score_as_current(monkeypatch
     assert old["setup_match"] is None
 
 
+def test_bot_today_does_not_show_decision_for_previous_setup_revision(monkeypatch):
+    decision_at = datetime(2026, 10, 11, 10, 0)
+
+    class Repo:
+        async def get_active_bots_with_setups(self, user_id):
+            return [{"id": 8, "name": "Paper", "symbol": "ETH", "timeframe": "1D",
+                     "setup_type": "trade", "setup_name": "ETH Plan", "setup_id": 9,
+                     "setup_last_validated": decision_at + timedelta(minutes=5)}]
+
+        async def get_bot_decisions_by_date(self, user_id, day):
+            return [{"id": 12, "bot_id": 8, "symbol": "ETH", "action": "hold",
+                     "decision_ts": decision_at, "setup_id": 9, "strategy_id": 10,
+                     "scores_json": json.dumps({"score_semantics": "verified_score_2",
+                                                  "setup_match": {"status": "outside_conditions"}}),
+                     "reason_json": "[]", "created_at": decision_at}]
+
+    async def verified(self, user_id, symbol, *, setups=None):
+        return {"reported_scores": {"macro_score": 20, "technical_score": 50,
+                                     "market_score": 30}}
+
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService.for_asset", verified,
+    )
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+
+    result = asyncio.run(service.get_bot_today(7, "ETH", lean=True))
+
+    assert result["scores"]["macro"] == 20
+    decision = result["decisions"][0]
+    assert decision["decision_stale"] is True
+    assert decision["action"] is None
+    assert decision["setup_match"] is None
+    assert decision["guardrails_result"] is None
+
+
+def test_bot_today_prefers_recorded_setup_revision_over_decision_timestamp(monkeypatch):
+    decision_at = datetime(2026, 10, 11, 10, 10)
+    setup_revision = datetime(2026, 10, 11, 10, 5)
+
+    class Repo:
+        async def get_active_bots_with_setups(self, user_id):
+            return [{"id": 8, "name": "Paper", "symbol": "ETH", "timeframe": "1D",
+                     "setup_type": "trade", "setup_name": "ETH Plan", "setup_id": 9,
+                     "setup_last_validated": setup_revision}]
+
+        async def get_bot_decisions_by_date(self, user_id, day):
+            return [{"id": 12, "bot_id": 8, "symbol": "ETH", "action": "buy",
+                     "decision_ts": decision_at, "setup_id": 9, "strategy_id": 10,
+                     "scores_json": json.dumps({"score_semantics": "verified_score_2",
+                                                  "setup_revision": datetime(2026, 10, 11, 10, 0).isoformat()}),
+                     "reason_json": "[]", "created_at": decision_at}]
+
+    async def verified(self, user_id, symbol, *, setups=None):
+        return {"reported_scores": {"macro_score": 20, "technical_score": 50,
+                                     "market_score": 30}}
+
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService.for_asset", verified,
+    )
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+
+    decision = asyncio.run(service.get_bot_today(7, "ETH", lean=True))["decisions"][0]
+
+    assert decision["decision_stale"] is True
+    assert decision["action"] is None
+
+
+def test_bot_today_hides_old_decision_after_strategy_relink(monkeypatch):
+    class Repo:
+        async def get_active_bots_with_setups(self, user_id):
+            return [{"id": 8, "name": "Paper", "symbol": "ETH", "timeframe": "1D",
+                     "setup_type": "trade", "setup_name": "ETH Plan", "setup_id": 9,
+                     "strategy_id": 11, "setup_last_validated": None}]
+
+        async def get_bot_decisions_by_date(self, user_id, day):
+            return [{"id": 12, "bot_id": 8, "symbol": "ETH", "action": "buy",
+                     "decision_ts": datetime(2026, 10, 11, 10, 10),
+                     "setup_id": 9, "strategy_id": 10,
+                     "scores_json": json.dumps({"score_semantics": "verified_score_2",
+                                                  "setup_revision": None}),
+                     "created_at": None}]
+
+    async def verified(self, user_id, symbol, *, setups=None):
+        return {"reported_scores": {"macro_score": 20, "technical_score": 50,
+                                     "market_score": 30}}
+
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService.for_asset", verified,
+    )
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+
+    decision = asyncio.run(service.get_bot_today(7, "ETH", lean=True))["decisions"][0]
+
+    assert decision["decision_stale"] is True
+    assert decision["action"] is None
+
+
 class _FakeResult:
     def __init__(self, row=None):
         self._row = row
