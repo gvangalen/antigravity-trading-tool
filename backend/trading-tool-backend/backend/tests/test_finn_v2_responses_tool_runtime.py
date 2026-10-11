@@ -222,10 +222,23 @@ def test_explicit_plan_scope_questions_read_owner_setup_collection_without_provi
      "Vergelijk al mijn ETH-setups, vooral ETH C; noem per setup de strategie en bot.",
      {"asset": "ETH"}),
     ("get_saved_bots",
+     "Vergelijk al mijn drie ETH-setups, met nadruk op ETH A en ETH B; noem ze allemaal.",
+     {"asset": "ETH"}),
+    ("get_saved_bots",
+     "Vergelijk mijn ETH-setups, vooral ETH A en ETH B; noem ze allemaal.",
+     {"asset": "ETH"}),
+    ("get_saved_bots",
      "Vergelijk mijn drie opgeslagen ETH-setups; noem per setup de strategie en bot.",
      {"asset": "ETH"}),
     ("get_saved_bots",
      "Vergelijk de drie ETH-setups; noem per setup de strategie en bot.",
+     {"asset": "ETH"}),
+    ("get_saved_setup",
+     "Ik heb drie ETH-setups, waaronder ETH C zonder gekoppelde strategie. "
+     "Noem ze alle drie uit mijn opgeslagen plannen en zeg welke wel of geen strategie en bot hebben.",
+     {"asset": "ETH"}),
+    ("get_saved_setup",
+     "Noem de namen van alle drie ETH-setups en hun gekoppelde strategieën en bots.",
      {"asset": "ETH"}),
 ])
 def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
@@ -242,7 +255,8 @@ def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
     fake = FakeResponses(
         response("relation-read", calls=[tool_call(
             "call-relations", requested_tool,
-            {"asset": "ETH", "timeframe": "1D"},
+            ({"setup_name": "ETH C"} if requested_tool == "get_saved_setup"
+             else {"asset": "ETH", "timeframe": "1D"}),
         )]),
         response("relation-answer", text="Ik zie drie ETH-setups; de derde heeft geen strategie of bot."),
     )
@@ -273,6 +287,49 @@ def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
     assert evidence["setup_count"] == 3
     assert [row["name"] for row in evidence["setups"]] == ["ETH A", "ETH B", "ETH C"]
     assert result.response.text.startswith("Ik zie drie ETH-setups")
+
+
+@pytest.mark.parametrize("message", [
+    "Ik heb drie ETH-setups; vergelijk ETH A met ETH B.",
+    "Ik heb drie ETH-setups; vergelijk ETH A en ETH B.",
+    "Ik heb drie ETH-setups; vergelijk ETH A met ETH B uit mijn setups.",
+])
+def test_counted_collection_context_preserves_explicit_named_pair(message):
+    rows = [
+        {"setup_id": 11, "name": "ETH A", "symbol": "ETH"},
+        {"setup_id": 12, "name": "ETH B", "symbol": "ETH"},
+        {"setup_id": 13, "name": "ETH C", "symbol": "ETH"},
+    ]
+    fake = FakeResponses(
+        response("pair-read", calls=[tool_call("call-pair", "get_saved_bots", {"asset": "ETH"})]),
+        response("pair-answer", text="ETH A en ETH B verschillen in hun voorwaarden."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="named-pair", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    async def read(call):
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"setups": rows, "setup_count": len(rows), "complete": True},
+            }]}
+        assert call.name == "get_active_plan_and_strategy"
+        assert call.inputs["setup_id"] in {11, 12}
+        return {"status": "completed", "results": [{
+            "scope": "read_active_setup", "status": "completed",
+            "data": {"setup_id": call.inputs["setup_id"], "symbol": "ETH"},
+        }]}
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message,
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    evidence = result.response.tool_trace[0]["result"]["results"][0]["data"]
+    assert [row["name"] for row in evidence["setups"]] == ["ETH A", "ETH B"]
+    assert evidence["setup_count"] == 2
 
 
 def test_hypothetical_reflection_does_not_attribute_unread_entry_rule_to_saved_plan():
@@ -1532,7 +1589,12 @@ def test_inventory_count_is_not_mistaken_for_asset_units():
     )
 
 
-def test_strategy_field_followup_reads_linked_strategy_instead_of_setup_names():
+@pytest.mark.parametrize("message", [
+    "Welke strategienaam, entryniveau en aparte trigger horen bij die BTC-setup uit mijn setups?",
+    "Ik heb drie BTC-setups; wat is de entry van BTC Full Base?",
+    "Welke entry staat in die BTC-setup uit mijn setups? Noem alle velden.",
+])
+def test_strategy_field_followup_reads_linked_strategy_instead_of_setup_names(message):
     draft = "BTC Full Base Strategy heeft entry 76.000; een aparte trigger is niet bevestigd."
     fake = FakeResponses(
         response("strategy-read", calls=[tool_call(
@@ -1559,7 +1621,7 @@ def test_strategy_field_followup_reads_linked_strategy_instead_of_setup_names():
 
     front.reads = read
     result = asyncio.run(front.run(
-        message="Welke strategienaam, entryniveau en aparte trigger horen bij die BTC-setup uit mijn setups?",
+        message=message,
         instructions=front._model_led_instructions("nl"), conversation_context={},
         verified_asset="BTC", previous_response={
             "answer": "Voor BTC Full Base heb ik de gekoppelde strategie gelezen.",
@@ -1579,7 +1641,7 @@ def test_strategy_field_followup_reads_linked_strategy_instead_of_setup_names():
         available=True, passes=True, reason_codes=[],
     )))
     verified = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
-        message="Welke strategienaam, entryniveau en aparte trigger horen bij die BTC-setup uit mijn setups?",
+        message=message,
         result=result.response, locale="nl",
     ))
     assert verified.status == "completed"

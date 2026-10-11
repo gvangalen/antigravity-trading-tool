@@ -151,7 +151,11 @@ def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(m
         return context
 
     monkeypatch.setattr(reports, "_load_context", _load)
-    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {"error": "provider_unavailable"})
+    prompts = []
+    def _model_stub(**kwargs):
+        prompts.append(json.loads(kwargs["prompt"]))
+        return {"error": "provider_unavailable"}
+    monkeypatch.setattr(reports, "ask_gpt_json", _model_stub)
 
     result = reports.generate_unified_daily_report_sections(7)
 
@@ -164,6 +168,9 @@ def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(m
     assert "Ingesteld: DXY" in result["macro_context"]
     assert "Ingesteld: RSI" in result["technical_analysis"]
     assert "Ingesteld: price" not in result["market_analysis"]
+    assert prompts[0]["context"]["assets"][0]["configured_indicators"] == {
+        "market": ["Prijs"], "macro": ["DXY"], "technical": ["RSI"],
+    }
 
 
 def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypatch):

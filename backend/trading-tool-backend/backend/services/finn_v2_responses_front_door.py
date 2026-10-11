@@ -579,19 +579,39 @@ class FinnResponsesFrontDoor:
             r"voorwaard\w*|conditions?|strategie\w*|strateg\w*|entry\w*|"
             r"instap\w*|stop\w*|trigger\w*)\b", message, re.I,
         ))
-        # A broad comparison needs the complete owner-scoped collection,
+        # A quantified collection read needs the complete owner-scoped collection,
         # including setups without any linked strategy or bot. This is a
         # data read only; the model still composes the coaching answer.
-        complete_collection_comparison = bool(
-            is_read_request and collection_cue
-            and re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*)\b", message, re.I)
+        collection_answer_requested = bool(
+            re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*|per\s+setup|"
+                      r"voor\s+elke\s+setup|welke\s+van|which\s+of|hoeveel\s+setups?)\b",
+                      message, re.I)
+            or re.search(r"\b(?:noem|toon|list|show|nenne|zeige)\s+(?:ze|hen|them)\b",
+                         message, re.I)
+            or re.search(r"\b(?:noem|toon|list|show|nenne|zeige)\s+(?:alle\s+)?"
+                         r"(?:\d+|twee|drie|vier|vijf|two|three|four|five|zwei|drei|vier|fünf)\b",
+                         message, re.I)
+            or re.search(r"\b(?:noem|toon|list|show|nenne|zeige)\b.{0,60}"
+                         r"\b(?:alle|all)\s+(?:\d+|twee|drie|vier|vijf|two|three|four|five|"
+                         r"zwei|drei|vier|fünf)\b", message, re.I)
+        )
+        complete_collection_read = bool(
+            is_read_request and collection_cue and collection_answer_requested
             and (
                 re.search(r"\b(?:al\s+mijn|alle|all\s+my|all)\b", message, re.I)
-                or re.search(r"\b(?:mijn|my|meine)\b.{0,80}\b(?:setups|set-ups|plannen|plans)\b", message, re.I)
+                or re.search(
+                    r"\b(?:\d+|twee|drie|vier|vijf|two|three|four|five|"
+                    r"zwei|drei|vier|fünf)\b.{0,60}\b(?:setups|set-ups|plannen|plans)\b",
+                    message, re.I,
+                )
                 or re.search(
                     r"\b(?:de|the|die)\s+(?:\d+|twee|drie|vier|vijf|two|three|four|five|"
                     r"zwei|drei|vier|fünf)\b.{0,80}\b(?:setups|set-ups|plannen|plans)\b",
                     message, re.I,
+                )
+                or (
+                    re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*)\b", message, re.I)
+                    and re.search(r"\b(?:mijn|my|meine)\b.{0,80}\b(?:setups|set-ups|plannen|plans)\b", message, re.I)
                 )
             )
         )
@@ -937,7 +957,7 @@ class FinnResponsesFrontDoor:
                 # still-open proposal. Bind the source, not the answer, to
                 # the verified proposal in this conversation.
                 return read_open_dca_draft()
-            if complete_collection_comparison and call.operation_id is None:
+            if complete_collection_read and call.operation_id is None:
                 # Normalize the read before relevance selection. A narrower
                 # strategy/bot tool cannot represent every saved setup.
                 all_assets = entity_resolution_module.FinnV2EntityResolutionService.is_all_assets_collection_request(message)
@@ -951,7 +971,7 @@ class FinnResponsesFrontDoor:
             should_check = (
                 not pending_operation
                 and not resuming_clarification
-                and not (complete_collection_comparison and call.operation_id is None)
+                and not (complete_collection_read and call.operation_id is None)
                 and (
                     call.operation_id is not None
                     or (not getattr(self, "model_led_coach", False)
@@ -1095,14 +1115,14 @@ class FinnResponsesFrontDoor:
                         required_inputs=(), missing_inputs=(),
                     )
                 if (call.name == "get_saved_setup_inventory" and (multiple_targets or pair_followup)
-                        and not complete_collection_comparison):
+                        and not complete_collection_read):
                     # One global asset or timeframe would silently remove the
                     # other side of a multi-object read.
                     call = replace(call, inputs=(
                         {"strategy_name": selected_strategy_name} if selected_strategy_name else {}
                     ))
                 if (call.name == "get_saved_setup_inventory" and listed_setup_id is not None
-                        and not complete_collection_comparison):
+                        and not complete_collection_read):
                     # The model chose the read; the server binds an ordinal to
                     # the preceding owner-scoped inventory, never to a model ID.
                     call = replace(call, inputs={"setup_ids": [listed_setup_id]})
@@ -1330,12 +1350,33 @@ class FinnResponsesFrontDoor:
                             projected_results.append(item)
                             continue
                         available_rows = [row for row in rows if isinstance(row, dict)]
-                        named_rows = (available_rows if complete_collection_comparison else
-                                      referenced_setup_rows(
-                                          message=message,
-                                          rows=available_rows,
-                                          previous_contract=previous_turn_contract,
-                                      ))
+                        referenced_rows = referenced_setup_rows(
+                            message=message,
+                            rows=available_rows,
+                            previous_contract=previous_turn_contract,
+                        )
+                        comparison_verb = re.search(
+                            r"\b(?:vergelijk\w*|compare\w*|vergleich\w*)\b",
+                            message, re.I,
+                        )
+                        comparison_target = message[comparison_verb.end():] if comparison_verb else ""
+                        all_setups_target = bool(re.search(
+                            r"\b(?:al\s+mijn|alle|all\s+my|all|de\s+\d+|"
+                            r"de\s+twee|de\s+drie|de\s+vier|the\s+\d+)\b"
+                            r".{0,80}\b(?:setups|set-ups|plannen|plans)\b",
+                            comparison_target, re.I,
+                        ) or re.match(
+                            r"\s*(?:nu\s+)?(?:mijn|my)\b.{0,80}"
+                            r"\b(?:setups|set-ups|plannen|plans)\b",
+                            comparison_target, re.I,
+                        ))
+                        explicit_pair = bool(
+                            comparison_verb and len(referenced_rows) == 2
+                            and not all_setups_target
+                        )
+                        named_rows = (
+                            referenced_rows if explicit_pair else available_rows
+                        ) if complete_collection_read else referenced_rows
                         if call.setup_names:
                             by_name = {
                                 str(row.get("name") or "").casefold(): row

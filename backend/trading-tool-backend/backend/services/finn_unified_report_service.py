@@ -174,13 +174,21 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     context = asyncio.run(_load_context(user_id))
     assets = context.get("assets") or []
     facts = _report_facts(context)
-    factual_context = {**facts, "assets": facts["assets"][:30]}
+    locale = str(context.get("locale") or "nl").lower()
+    factual_context = {**facts, "assets": [
+        {**item, "configured_indicators": {
+            category: [_report_indicator_label(name, locale) for name in names]
+            for category, names in (item.get("configured_indicators") or {}).items()
+        } if item.get("configured_indicators") is not None else None}
+        for item in facts["assets"][:30]
+    ]}
     result = ask_gpt_json(
         system_role=(
             "You are FINN, the user's trading coach. Write a careful daily report from only the "
             "provided owner-scoped facts. Missing or stale scores are unknown, never zero. "
             "A setup match is not an entry signal; a bot budget is not cash. "
             "Do not claim an order or trade occurred unless the supplied facts prove it. "
+            "Use the localized indicator display names supplied in the context. "
             "Return valid JSON with the eight requested string fields."
         ),
         prompt=json.dumps({
@@ -202,7 +210,6 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     # assembled from typed source status and owner-scoped configuration. A
     # prompt alone cannot prevent a persisted report from calling a stale score
     # current or claiming a saved strategy does not exist.
-    locale = str(context.get("locale") or "nl").lower()
     labels = {
         "nl": {"missing": "Geen bruikbare actuele score", "configured": "Ingesteld",
                "not_configured": "Geen indicatoren ingesteld", "unknown": "Indicatorconfiguratie niet beschikbaar",
