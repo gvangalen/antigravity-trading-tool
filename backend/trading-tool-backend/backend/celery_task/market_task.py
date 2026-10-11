@@ -248,6 +248,23 @@ def sync_configured_market_snapshots():
     """Persist fresh quotes for configured watchlist assets without blocking FINN."""
     try:
         result = asyncio.run(_sync_configured_market_snapshots())
+        # Score 2.0 verifies that the saved score used these exact source
+        # measurements. Rebuild after the indicator transaction commits;
+        # otherwise a fresh quote can make the previous score unavailable
+        # until the separate fifteen-minute scoring schedule catches up.
+        from backend.celery_task.store_daily_scores_task import store_daily_scores_task
+
+        queued_users = []
+        queue_failures = []
+        for user_id in sorted({scope["user_id"] for scope in result.get("rehydrated_scopes", [])}):
+            try:
+                store_daily_scores_task.apply_async(args=(user_id,))
+                queued_users.append(user_id)
+            except Exception:
+                logger.exception("Cannot enqueue Score 2.0 rebuild for user_id=%s", user_id)
+                queue_failures.append(user_id)
+        result["score_rebuild_queued_users"] = queued_users
+        result["score_rebuild_queue_failures"] = queue_failures
         logger.info(
             "Configured market snapshot refresh completed: %s ingested, %s pending.",
             result["success_count"],

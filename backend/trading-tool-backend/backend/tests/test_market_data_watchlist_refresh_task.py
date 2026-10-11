@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from backend.celery_task import market_task
+from backend.celery_task.store_daily_scores_task import store_daily_scores_task
 
 
 class _Scalars:
@@ -196,3 +197,45 @@ def test_configured_scope_windows_eventually_cover_every_scope():
     assert len(first) == market_task.MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN
     assert len(second) == market_task.MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN
     assert set(first + second + third) == set(scopes)
+
+
+def test_successful_indicator_refresh_queues_one_score_rebuild_per_owner(monkeypatch):
+    async def refreshed():
+        return {
+            "success_count": 2, "failure_count": 0,
+            "rehydrated_scopes": [
+                {"user_id": 7, "symbol": "BTC", "category": "market"},
+                {"user_id": 7, "symbol": "BTC", "category": "technical"},
+                {"user_id": 8, "symbol": "ETH", "category": "macro"},
+            ],
+            "rehydration_failures": [{"user_id": 9, "symbol": "AAPL", "category": "technical"}],
+        }
+
+    queued = []
+    monkeypatch.setattr(market_task, "_sync_configured_market_snapshots", refreshed)
+    monkeypatch.setattr(store_daily_scores_task, "apply_async", lambda *, args: queued.append(args))
+
+    result = market_task.sync_configured_market_snapshots()
+
+    assert queued == [(7,), (8,)]
+    assert result["score_rebuild_queued_users"] == [7, 8]
+    assert result["score_rebuild_queue_failures"] == []
+
+
+def test_score_queue_failure_keeps_refreshed_measurement_and_reports_retry_need(monkeypatch):
+    async def refreshed():
+        return {"success_count": 1, "failure_count": 0, "rehydrated_scopes": [
+            {"user_id": 7, "symbol": "BTC", "category": "market"},
+        ]}
+
+    def unavailable_queue(*, args):
+        raise ConnectionError("local broker unavailable")
+
+    monkeypatch.setattr(market_task, "_sync_configured_market_snapshots", refreshed)
+    monkeypatch.setattr(store_daily_scores_task, "apply_async", unavailable_queue)
+
+    result = market_task.sync_configured_market_snapshots()
+
+    assert result["score_rebuild_queued_users"] == []
+    assert result["score_rebuild_queue_failures"] == [7]
+    assert result["success_count"] == 1
