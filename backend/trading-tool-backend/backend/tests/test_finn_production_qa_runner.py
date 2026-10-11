@@ -92,6 +92,25 @@ def test_runtime_diagnostic_reuses_one_private_event_loop(monkeypatch):
     assert calls == ["run-one", "run-two"]
 
 
+def test_bot_lineage_diagnostic_reuses_private_loop_and_hides_failure(monkeypatch):
+    module = _module()
+    module._DIAGNOSTIC_LOOP = None
+    calls = []
+
+    async def diagnostic(run_id, conversation_id):
+        calls.append((run_id, conversation_id))
+        if run_id == "missing":
+            raise RuntimeError("private owner data")
+        return {"parent_strategy_identity_present": True}
+
+    monkeypatch.setattr(module, "_load_bot_lineage_diagnostic", diagnostic)
+    assert module.bot_lineage_diagnostic("safe", "conversation") == {"parent_strategy_identity_present": True}
+    first_loop = module._DIAGNOSTIC_LOOP
+    assert module.bot_lineage_diagnostic("missing", "conversation") == {"diagnostic_status": "unavailable"}
+    assert module._DIAGNOSTIC_LOOP is first_loop
+    assert calls == [("safe", "conversation"), ("missing", "conversation")]
+
+
 def test_redaction_removes_credentials_and_fixture_identity():
     module = _module()
     report = module.redact({"access_token": "secret", "user_id": 7, "run_id": "safe", "nested": {"email": "x@example.test"}})

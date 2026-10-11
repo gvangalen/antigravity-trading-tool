@@ -192,6 +192,81 @@ def runtime_diagnostic(run_id: str) -> Dict[str, Any]:
         return {"diagnostic_status": "unavailable"}
 
 
+async def _load_bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dict[str, Any]:
+    """Report only typed identity-presence flags for a QA-created bot turn.
+
+    Raw owner IDs, entity IDs, prompts, and provider payloads never leave the
+    protected host. This distinguishes missing execution evidence from lost
+    continuation evidence without exposing the protected fixture.
+    """
+    from sqlalchemy import select, desc
+
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.models import FinnV2Run, FinnV2RuntimeContract
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
+
+    async with async_session_factory() as session:
+        child = (await session.execute(select(FinnV2Run).where(FinnV2Run.id == run_id))).scalars().first()
+        if child is None:
+            return {"diagnostic_status": "run_missing"}
+        expected_user_id = os.environ.get("FINN_QA_USER_ID", "")
+        if (
+            not expected_user_id.isdigit()
+            or child.user_id != int(expected_user_id)
+            or not conversation_id
+            or child.conversation_id != conversation_id
+        ):
+            return {"diagnostic_status": "fixture_scope_mismatch"}
+        parent = (await session.execute(
+            select(FinnV2RuntimeContract)
+            .join(FinnV2Run, FinnV2Run.id == FinnV2RuntimeContract.run_id)
+            .where(
+                FinnV2RuntimeContract.conversation_id == child.conversation_id,
+                FinnV2RuntimeContract.user_id == child.user_id,
+                FinnV2RuntimeContract.run_id != run_id,
+                FinnV2Run.created_at < child.created_at,
+            )
+            .order_by(desc(FinnV2Run.created_at))
+            .limit(1)
+        )).scalars().first()
+        child_contract = (await session.execute(
+            select(FinnV2RuntimeContract).where(FinnV2RuntimeContract.run_id == run_id)
+        )).scalars().first()
+        latest_action = await FinnV2RuntimeContractRepository(session).get_latest_action_result_for_conversation(
+            conversation_id=child.conversation_id, user_id=child.user_id, exclude_run_id=run_id,
+        )
+        parent_action = dict((parent.state_json or {}).get("action_result") or {}) if parent else {}
+        latest_action_result = dict((latest_action.state_json or {}).get("action_result") or {}) if latest_action else {}
+        canonical = dict(parent_action.get("canonical_entity") or {})
+        child_state = dict((child_contract.state_json or {}) if child_contract else {})
+        guided = dict(child_state.get("guided_state") or {})
+        action_draft = dict(child_state.get("action_draft") or {})
+        input_sources = dict(guided.get("input_sources") or action_draft.get("field_sources") or {})
+        return {
+            "diagnostic_status": "available",
+            "parent_contract_present": parent is not None,
+            "parent_operation": parent_action.get("operation_id") if parent_action.get("operation_id") in {"create_setup", "create_strategy"} else "other_or_none",
+            "parent_action_succeeded": parent_action.get("result_status") == "succeeded",
+            "parent_setup_identity_present": bool(parent_action.get("entity_id")) and str(canonical.get("setup_id")) == str(parent_action.get("entity_id")),
+            "parent_strategy_identity_present": bool(canonical.get("strategy_id")),
+            "parent_owner_matches_child": parent_action.get("owner_user_id") == child.user_id,
+            "latest_action_is_parent": bool(parent and latest_action and parent.run_id == latest_action.run_id),
+            "latest_action_has_strategy": bool(dict(latest_action_result.get("canonical_entity") or {}).get("strategy_id")),
+            "child_guided_has_strategy": bool(dict(guided.get("collected_inputs") or {}).get("strategy_id")),
+            "child_strategy_input_source": input_sources.get("strategy_id") if input_sources.get("strategy_id") in {"verified_action_result", "context", "explicit", "model"} else "none",
+        }
+
+
+def bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dict[str, Any]:
+    global _DIAGNOSTIC_LOOP
+    try:
+        if _DIAGNOSTIC_LOOP is None:
+            _DIAGNOSTIC_LOOP = asyncio.new_event_loop()
+        return _DIAGNOSTIC_LOOP.run_until_complete(_load_bot_lineage_diagnostic(run_id, conversation_id))
+    except Exception:
+        return {"diagnostic_status": "unavailable"}
+
+
 _DATABASE_SCOPE_BY_OPERATION = {
     "select_asset": ("users", "preferences"),
     "watchlist_add": ("watchlists", "watchlist"),
@@ -1538,6 +1613,8 @@ def run_cases(
         result["sse_terminal"] = sse_projection
         if terminal.get("status") in {"failed", "downgraded", "rejected", "blocked"}:
             result["runtime_diagnostic"] = runtime_diagnostic(run_id)
+        if actual == "create_bot" and "strategy_id" in (projection["runtime_trace"].get("missing_inputs") or []):
+            result["bot_lineage_diagnostic"] = bot_lineage_diagnostic(run_id, str(created.get("conversation_id") or ""))
         result["polling_sse_equal"] = bool(sse_projection) and projection == sse_projection
         result["poll_error"] = poll_error
         result["sse_error"] = sse_error
