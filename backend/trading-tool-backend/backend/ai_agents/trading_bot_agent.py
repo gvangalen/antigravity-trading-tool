@@ -480,6 +480,36 @@ def _build_setup_match(
     }
 
 
+def _enforce_setup_match_on_buy(
+    brain: Dict[str, Any], current_match: Dict[str, Any], setup: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Keep the bot active, but never buy against measured setup conditions.
+
+    A fixed DCA contribution can keep its independent calendar policy when
+    scores are missing. Smart DCA and trade buys require complete score data.
+    Sell/exit decisions remain available regardless of the match.
+    """
+    if _normalize_action(brain.get("action")) != "buy":
+        return brain
+    status = current_match.get("status")
+    score_dependent = not (
+        str(setup.get("setup_type") or "").lower() == "dca"
+        and setup.get("execution_mode") == "fixed"
+    )
+    if status in {"outside_conditions", "unconfigured"}:
+        reason = "Opgeslagen setupvoorwaarden passen niet bij de actuele scores."
+    elif status == "insufficient_data" and score_dependent:
+        reason = "Actuele benchmarkgegevens zijn onvoldoende voor deze aankoop."
+    else:
+        return brain
+    blocked = dict(brain)
+    blocked.update(action="hold", amount_eur=0.0, position_size=0.0,
+                   execution_position_size=0.0, reason=reason)
+    blocked["debug"] = {**(brain.get("debug") or {}), "suggested_amount": 0.0,
+                        "setup_match_gate": status}
+    return blocked
+
+
 # =====================================================
 # 📦 Actieve bots + strategy context
 # =====================================================
@@ -1607,6 +1637,7 @@ def run_trading_bot_agent(
                 },
                 portfolio_context=portfolio_context,
             )
+            brain = _enforce_setup_match_on_buy(brain, current_match, setup_payload)
 
             action = _normalize_action(brain.get("action"))
 

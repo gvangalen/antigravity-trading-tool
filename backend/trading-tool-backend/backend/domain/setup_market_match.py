@@ -1,6 +1,8 @@
 """Match an owner's saved setup conditions against measured benchmark components.
 
-This is a read-only assessment of plan fit, never an entry or execution signal.
+This is a read-only assessment of plan fit, not an entry signal. The Paper
+worker may use a measured non-match to prevent a buy, but a positive match
+does not by itself authorize an order.
 """
 
 from __future__ import annotations

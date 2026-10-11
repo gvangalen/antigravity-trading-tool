@@ -14,6 +14,41 @@ from backend.utils import scoring_utils
 from backend.utils import macro_interpreter, market_interpreter, technical_interpreter
 
 
+@pytest.mark.parametrize(
+    ("status", "setup", "expected_action"),
+    [
+        ("matches", {"setup_type": "dca", "execution_mode": "custom"}, "buy"),
+        ("outside_conditions", {"setup_type": "dca", "execution_mode": "custom"}, "hold"),
+        ("outside_conditions", {"setup_type": "dca", "execution_mode": "fixed"}, "hold"),
+        ("unconfigured", {"setup_type": "trade", "execution_mode": "fixed"}, "hold"),
+        ("insufficient_data", {"setup_type": "dca", "execution_mode": "custom"}, "hold"),
+        ("insufficient_data", {"setup_type": "dca", "execution_mode": "fixed"}, "buy"),
+        ("insufficient_data", {"setup_type": "trade", "execution_mode": "fixed"}, "hold"),
+    ],
+)
+def test_paper_buy_respects_measured_setup_match_without_disabling_fixed_dca(
+    status, setup, expected_action,
+):
+    brain = {"action": "buy", "amount_eur": 100, "position_size": 1,
+             "debug": {"suggested_amount": 100}}
+    result = paper_worker._enforce_setup_match_on_buy(brain, {"status": status}, setup)
+    assert result["action"] == expected_action
+    if expected_action == "hold":
+        assert result["amount_eur"] == 0
+        assert paper_worker.build_order_proposal(
+            bot={"budget": {}}, decision=result, today_spent_eur=0,
+            total_balance_eur=1000, live_price=100,
+        ) is None
+    assert brain["action"] == "buy"
+
+
+def test_setup_match_gate_never_blocks_a_sell_exit():
+    brain = {"action": "sell", "amount_eur": 100}
+    assert paper_worker._enforce_setup_match_on_buy(
+        brain, {"status": "outside_conditions"}, {"setup_type": "trade"},
+    ) == brain
+
+
 class _SourceStore:
     def __init__(self, *, missing=None, stale=None):
         now = datetime.now(timezone.utc)
@@ -138,7 +173,7 @@ def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
         )
 
 
-@pytest.mark.parametrize("unavailable", [None, "missing", "stale"])
+@pytest.mark.parametrize("unavailable", [None, "missing", "stale", "outside"])
 @pytest.mark.parametrize("mode", ["manual", "semi-auto", "auto"])
 def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailable, mode):
     store = _SourceStore(
@@ -161,15 +196,20 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     saved = store.daily
     assert saved is not None
     assert saved["market_score"] == 80 and saved["macro_score"] == 70
-    assert saved["technical_score"] == (None if unavailable else 60)
+    assert saved["technical_score"] == (None if unavailable in {"missing", "stale"} else 60)
 
     verified = paper_worker._get_daily_scores(store, 7, date.today(), "ETH")
     weights = {key: 1 / 3 for key in ("market_score", "macro_score", "technical_score")}
     setup = {"id": 9, "name": "ETH Smart", "symbol": "ETH", "setup_type": "dca",
-             "min_market_score": 70, "min_macro_score": 60, "min_technical_score": 50}
+             "min_market_score": 90 if unavailable == "outside" else 70,
+             "min_macro_score": 60, "min_technical_score": 50}
     match = match_setup_from_daily_scores(setup, verified, weights)
-    assert match["status"] == ("insufficient_data" if unavailable else "matches")
-    if unavailable:
+    expected_match_status = (
+        "insufficient_data" if unavailable in {"missing", "stale"}
+        else "outside_conditions" if unavailable == "outside" else "matches"
+    )
+    assert match["status"] == expected_match_status
+    if unavailable in {"missing", "stale"}:
         assert match["score"] is None
     else:
         assert match["score"] is not None
@@ -198,8 +238,8 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
         portfolio_context={"active_strategy": {"setup_type": "dca"}},
         backtest_mode=True,
     )
-    assert decision["action"] == ("hold" if unavailable else "buy")
-    assert decision["amount_eur"] == (0 if unavailable else 150)
+    assert decision["action"] == ("hold" if unavailable in {"missing", "stale"} else "buy")
+    assert decision["amount_eur"] == (0 if unavailable in {"missing", "stale"} else 150)
 
     # Exercise the worker's actual paper decision path with the same saved
     # score row. No order is created; only the decision payload is inspected.
@@ -225,7 +265,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     monkeypatch.setattr(paper_worker, "_touch_bot_last_run", lambda **_: None)
     order = {"symbol": "ETH", "side": "buy", "quote_amount_eur": 150,
              "estimated_price": 100, "estimated_qty": 1.5}
-    monkeypatch.setattr(paper_worker, "build_order_proposal", lambda **_: None if unavailable else order)
+    monkeypatch.setattr(paper_worker, "build_order_proposal", lambda **kwargs: order if kwargs["decision"]["action"] == "buy" else None)
     saved_orders = []
     auto_calls = []
     monkeypatch.setattr(paper_worker, "_persist_bot_order", lambda **kwargs: saved_orders.append(kwargs) or 14)
@@ -242,6 +282,4 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     )
     assert len(saved_orders) == (0 if unavailable else 1)
     assert len(auto_calls) == (1 if not unavailable and mode == "auto" else 0)
-    assert persisted["scores"]["_setup_match"]["status"] == (
-        "insufficient_data" if unavailable else "matches"
-    )
+    assert persisted["scores"]["_setup_match"]["status"] == expected_match_status
