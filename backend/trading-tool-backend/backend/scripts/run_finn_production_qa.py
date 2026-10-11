@@ -245,6 +245,7 @@ async def _load_bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dic
         canonical = dict(parent_action.get("canonical_entity") or {})
         child_state = dict((child_contract.state_json or {}) if child_contract else {})
         guided = dict(child_state.get("guided_state") or {})
+        selection_diagnostic = dict(guided.get("selection_diagnostic") or {})
         action_draft = dict(child_state.get("action_draft") or {})
         input_sources = dict(guided.get("input_sources") or action_draft.get("field_sources") or {})
         return {
@@ -259,6 +260,12 @@ async def _load_bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dic
             "latest_action_has_strategy": bool(dict(latest_action_result.get("canonical_entity") or {}).get("strategy_id")),
             "child_guided_has_strategy": bool(dict(guided.get("collected_inputs") or {}).get("strategy_id")),
             "child_strategy_input_source": input_sources.get("strategy_id") if input_sources.get("strategy_id") in {"verified_action_result", "context", "explicit", "model"} else "none",
+            "child_target_reference": selection_diagnostic.get("target_reference")
+            if selection_diagnostic.get("target_reference") in {"confirmed_previous_plan", "other_saved_plan", "unspecified"}
+            else "not_available",
+            "child_bound_immediate_pair": selection_diagnostic.get("bound_immediate_pair")
+            if isinstance(selection_diagnostic.get("bound_immediate_pair"), bool)
+            else "not_available",
         }
 
 

@@ -354,6 +354,9 @@ class FinnV2OrchestratorService:
                 else None
             ),
         )
+        resolved_operation_state = state.dict()
+        if model_selected and isinstance(operation_state.get("selection_diagnostic"), dict):
+            resolved_operation_state["selection_diagnostic"] = operation_state["selection_diagnostic"]
         request_plan = request_plan.copy(
             update={
                 **({
@@ -362,7 +365,7 @@ class FinnV2OrchestratorService:
                     "referenced_asset": None,
                 } if all_assets_collection else {}),
                 "referenced_entities": {**selectors, **resolved},
-                "operation_state": state.dict(),
+                "operation_state": resolved_operation_state,
                 "missing_information": list(state.missing_required_inputs),
             }
         )
@@ -1205,12 +1208,23 @@ class FinnV2OrchestratorService:
         else:
             context.pop("active_guided_operation", None)
             context.pop("operation_state", None)
-        verified_bot_pair_default = await self._verified_immediate_bot_pair_default(
+        if await self._verified_immediate_bot_pair_default(
             user_id=user_id, message=message, context=context,
-        )
-        if verified_bot_pair_default:
+        ):
             context["verified_immediate_bot_pair_default"] = True
         return context
+
+    @staticmethod
+    def _references_immediate_plan(message: str) -> bool:
+        return bool(re.search(
+            r"\b(?:daarvoor|hiervoor|hier|hieraan|daaraan|erbij|zojuist|"
+            r"net\s+(?:aangemaak\w*|opgeslag\w*|gemaak\w*)|"
+            r"(?:dit|dat|deze|die|hetzelfde|dezelfde)\s+"
+            r"(?:DCA[-\s]+)?(?:plan|setup|strategie)|"
+            r"(?:just|recently)\s+(?:created|saved)|"
+            r"(?:this|that|same)\s+(?:plan|setup|strategy))\b",
+            message, re.IGNORECASE,
+        ))
 
     async def _verified_immediate_bot_pair_default(
         self, *, user_id: int, message: str, context: dict,
@@ -1222,6 +1236,8 @@ class FinnV2OrchestratorService:
         in the current turn always wins over the immediate action.
         """
         if not re.search(r"\b(?:bot|paper|automation)\b", message, re.IGNORECASE):
+            return False
+        if not self._references_immediate_plan(message):
             return False
         action = dict(context.get("immediate_previous_action_result") or {})
         canonical = dict(action.get("canonical_entity") or {})
@@ -1274,34 +1290,52 @@ class FinnV2OrchestratorService:
             message, re.IGNORECASE,
         ):
             return False
-        # Match the entire target-bearing request. A deictic word in one
-        # clause cannot authorize the parent if another clause selects a
-        # different plan or somebody else's account.
+        if re.search(
+            r"\b(?:voor|van|for|of)\s+(?:mijn|my|zijn|haar|hun|his|her|their)\b|"
+            r"\b(?:vriend|vriendin|broer|zus|partner|collega|vader|moeder|"
+            r"friend|brother|sister|spouse|colleague|father|mother)\s+"
+            r"(?:DCA[-\s]+)?(?:plan|setup)\b|"
+            r"\b(?:op|on)\s+(?:mijn|my)\s+(?:scherm|screen)\b|"
+            r"\b(?:maar|instead|rather)\b",
+            message, re.IGNORECASE,
+        ):
+            return False
+        # Only one bounded target expression may refer to the confirmed
+        # parent. Arbitrary free text after a deictic word could select an
+        # unrelated person's plan, so the model's target enum is insufficient.
         utterance = message.strip().rstrip(".!?").strip()
         amount = r"€?\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?"
         budget = rf"(?:met\s+)?(?:een\s+)?budget\s*(?:van\s+)?{amount}"
+        amount_clause = rf"(?:met|van)\s+{amount}(?:\s+budget)?"
         name_word = r"(?!(?:voor|van|uit|maar|plan|setup|strategie|andere|other)\b)[\w-]+"
         bot_name = rf"{name_word}(?:\s+{name_word}){{0,7}}"
         name = rf"(?:met\s+(?:de\s+)?naam|noem\s+(?:de\s+bot|hem))\s+{bot_name}"
-        tail = rf"(?:\s*,?\s*(?:en\s+)?(?:{budget}|{name})){{0,2}}"
+        tail = rf"(?:\s*,?\s*(?:en\s+)?(?:{budget}|{amount_clause}|{name})){{0,2}}"
         bot = r"(?:een\s+)?(?:paper[-\s]+)?bot"
+        bot_with_amount = rf"{bot}(?:\s+{amount_clause})?"
         confirmed_asset = re.escape(asset)
         recent = (r"(?:het|de)\s+(?:zojuist|net)\s+"
                   rf"(?:aangemaakte?|opgeslagen)\s+(?:{confirmed_asset}\s+)?"
                   r"(?:DCA[-\s]+)?(?:plan|setup)")
-        relation = rf"(?:de\s+)?strategie\s+(?:die\s+bij\s+{recent}\s+hoort|van\s+{recent})"
+        demonstrative = r"(?:dit|dat|deze|die|hetzelfde|dezelfde)\s+(?:DCA[-\s]+)?(?:plan|setup)"
+        strategy = rf"(?:de\s+)?strategie\s+(?:die\s+bij\s+(?:{recent}|{demonstrative})\s+hoort|van\s+(?:{recent}|{demonstrative}))"
+        target = rf"(?:{recent}|{demonstrative}|{strategy})"
+        guidance = (r"(?:[.!?]\s*(?:toon\s+eerst\s+(?:een|het)\s+voorstel|"
+                    r"laat\s+(?:me\s+)?(?:eerst\s+)?(?:een|de)\s+conceptkaart\s+zien|"
+                    r"maak\s+eerst\s+een\s+voorstel|"
+                    r"bevestig\s+niets|sla\s+niets\s+op))?")
         patterns = (
             rf"maak\s+(?:daarvoor|hiervoor)\s+{bot}{tail}",
-            rf"kun\s+je\s+(?:daarvoor|hiervoor)\s+{bot}\s+voorbereiden{tail}",
+            rf"ik\s+wil\s+(?:daarvoor|hiervoor)\s+(?:nu\s+)?{bot_with_amount}{tail}",
+            rf"(?:kun|kan)\s+je\s+(?:daarvoor|hiervoor)\s+{bot}\s+voorbereiden{tail}",
             rf"voeg\s+(?:hier|erbij|hieraan|daaraan)\s+{bot}\s+aan\s+toe{tail}",
-            rf"maak\s+(?:voor|bij|aan)\s+{recent}\s+{bot}{tail}",
-            rf"maak\s+{bot}\s+(?:voor|bij)\s+{recent}{tail}",
-            rf"maak\s+{bot}\s+voor\s+{relation}{tail}",
-            rf"maak\s+voor\s+{relation}\s+{bot}{tail}",
-            rf"ik\s+wil\s+(?:nu\s+)?voor\s+{relation}\s+{bot}\s+met\s+{amount}\s+budget"
-            r"(?:\.\s*maak\s+eerst\s+een\s+voorstel)?",
+            rf"maak\s+(?:voor|bij|aan)\s+{target}\s+{bot}{tail}",
+            rf"maak\s+{bot_with_amount}\s+(?:voor|bij)\s+{target}{tail}",
+            rf"(?:kun|kan)\s+je\s+(?:voor|bij)\s+{target}\s+(?:ook\s+)?{bot}\s+voorbereiden{tail}",
+            rf"ik\s+wil\s+(?:nu\s+)?voor\s+{target}\s+{bot}\s+met\s+{amount}\s+budget",
         )
-        if not any(re.fullmatch(pattern, utterance, re.IGNORECASE) for pattern in patterns):
+        if not any(re.fullmatch(rf"{pattern}{guidance}", utterance, re.IGNORECASE)
+                   for pattern in patterns):
             return False
         resolver = FinnV2EntityResolutionService(self.session)
         for entity_type, expected in (("setup", setup_id), ("strategy", strategy_id)):
@@ -1318,7 +1352,8 @@ class FinnV2OrchestratorService:
             )
             if explicit_name and re.match(
                 r"(?:die\s+)?(?:bij|aan|van)\s+(?:het|de)?\s*"
-                r"(?:zojuist|net)\s+(?:aangemaakte?|opgeslagen)\s+"
+                r"(?:(?:zojuist|net)\s+(?:aangemaakte?|opgeslagen)\s+|"
+                r"(?:dit|dat|deze)\s+)"
                 r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)\b",
                 explicit_name, re.IGNORECASE,
             ):

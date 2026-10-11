@@ -78,6 +78,10 @@ class FinnResponsesProposalSelection:
                 r"(?:aangemaakte?|opgeslagen)\s+"
                 r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)\b",
                 strategy_name, re.IGNORECASE,
+            )) or bool(strategy_name and re.match(
+                r"(?:die\s+)?(?:bij|van)\s+(?:dit|dat|deze)\s+"
+                r"(?:DCA[-\s]+)?(?:plan|setup)\b",
+                strategy_name, re.IGNORECASE,
             ))
             named_related_object = bool(setup_name or (strategy_name and not generic_strategy_relation))
             pair_is_valid = bool(
@@ -303,6 +307,14 @@ class FinnResponsesProposalSelection:
         )
         inputs = dict(state.collected_inputs)
         asset = str(inputs.get("asset") or inputs.get("symbol") or verified_asset or "").upper() or None
+        operation_state = state.dict()
+        if contract.operation_id == "create_bot":
+            # Enum and boolean only: enough to diagnose a lost immediate
+            # target without persisting model text or an owner-scoped ID.
+            operation_state["selection_diagnostic"] = {
+                "target_reference": call.target_reference or "unspecified",
+                "bound_immediate_pair": bool(verified_action_inputs.get("strategy_id")),
+            }
         plan = RequestPlan(
             user_goal=contract.semantic_description or contract.operation_id,
             initial_operation_id=contract.operation_id,
@@ -322,7 +334,7 @@ class FinnResponsesProposalSelection:
             candidate_operation_ids=[contract.operation_id],
             selection_domain=contract.domain,
             selection_supported=True,
-            operation_state=state.dict(),
+            operation_state=operation_state,
             missing_information=list(state.missing_required_inputs),
             clarification_required=bool(state.missing_required_inputs),
             confidence_score=1.0,
