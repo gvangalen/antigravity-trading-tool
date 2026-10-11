@@ -43,9 +43,9 @@ def sync_snapshot_all_for_user(user_id: int):
     snapshot_all_for_user(user_id, bucket="1h")
     snapshot_all_for_user(user_id, bucket="1d")
 
-def sync_run_trading_bot_agent(user_id: int, report_date: date, bot_id: int):
+def sync_run_trading_bot_agent(user_id: int, report_date: date, bot_id: int, paper_only: bool = False):
     from backend.ai_agents.trading_bot_agent import run_trading_bot_agent
-    return run_trading_bot_agent(user_id=user_id, report_date=report_date, bot_id=bot_id)
+    return run_trading_bot_agent(user_id=user_id, report_date=report_date, bot_id=bot_id, paper_only=paper_only)
 
 def sync_execute_manual_decision(user_id: int, bot_id: int, decision_id: int):
     from backend.utils.db import get_db_connection
@@ -1205,6 +1205,7 @@ class BotService:
                 "timeframe": r["timeframe"], "setup_type": r["setup_type"], "setup_name": r["setup_name"],
                 "setup_id": r.get("setup_id"), "strategy_id": r.get("strategy_id"),
                 "setup_last_validated": r.get("setup_last_validated"),
+                "bot_updated_at": r.get("bot_updated_at"),
             } for r in bot_rows
         }
         
@@ -1237,6 +1238,11 @@ class BotService:
                 revision_utc = setup_revision.replace(tzinfo=timezone.utc) if setup_revision.tzinfo is None else setup_revision.astimezone(timezone.utc)
                 decision_utc = decision_time.replace(tzinfo=timezone.utc) if decision_time.tzinfo is None else decision_time.astimezone(timezone.utc)
                 decision_stale = decision_stale or revision_utc > decision_utc
+            bot_updated_at = bot.get("bot_updated_at")
+            if bot_updated_at and decision_time and r.get("status") != "executed":
+                updated_utc = bot_updated_at.replace(tzinfo=timezone.utc) if bot_updated_at.tzinfo is None else bot_updated_at.astimezone(timezone.utc)
+                decision_utc = decision_time.replace(tzinfo=timezone.utc) if decision_time.tzinfo is None else decision_time.astimezone(timezone.utc)
+                decision_stale = decision_stale or updated_utc > decision_utc
             if decision_stale:
                 decisions_by_bot[bot_id] = {
                     "bot_id": bot_id, "bot_name": bot["bot_name"], "symbol": r["symbol"],
@@ -1822,14 +1828,32 @@ class BotService:
         report_date_str: Optional[str],
         user_id: int,
         trace_id: Optional[str] = None,
+        paper_only: bool = False,
     ) -> dict:
-        report_date = date.fromisoformat(report_date_str) if report_date_str else date.today()
-        
-        result = await asyncio.to_thread(sync_run_trading_bot_agent, user_id, report_date, bot_id)
+        report_date = date.today() if paper_only else (
+            date.fromisoformat(report_date_str) if report_date_str else date.today()
+        )
+        if paper_only:
+            bot = await self.repository.get_bot_config(user_id, bot_id)
+            if not bot or bool(bot.get("is_live")) or not bool(bot.get("is_active")):
+                raise HTTPException(409, "Paper-bot is niet meer actief als Paper")
+
+        result = await asyncio.to_thread(sync_run_trading_bot_agent, user_id, report_date, bot_id, paper_only)
         
         if not result or not getattr(result, "get", lambda k: False)("ok"):
-            return {"ok": False, "trace_id": trace_id}
-        return {"ok": True, "bot_id": bot_id, "date": str(report_date), "trace_id": trace_id}
+            if result and result.get("error") == "paper_mode_changed":
+                raise HTTPException(409, "Bot is niet meer actief als Paper")
+            raise HTTPException(502, "Botbeoordeling kon niet worden afgerond")
+        decisions = result.get("decisions") or []
+        execution_statuses = [str(row.get("execution_status") or "") for row in decisions]
+        return {
+            "ok": True, "bot_id": bot_id, "date": str(report_date),
+            "generated": bool(decisions),
+            "paper_order_filled": any(status == "filled" for status in execution_statuses),
+            "execution_failed": any(status.startswith("failed:") for status in execution_statuses),
+            "decision_ids": [row.get("decision_id") for row in decisions if row.get("decision_id") is not None],
+            "trace_id": trace_id,
+        }
 
     async def mark_bot_executed(self, bot_id: int, decision_id: int, user_id: int) -> dict:
         try:

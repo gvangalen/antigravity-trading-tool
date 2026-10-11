@@ -1497,6 +1497,7 @@ def _persist_decision_and_order(
                 scores_json = EXCLUDED.scores_json,
                 status = EXCLUDED.status,
                 updated_at = NOW()
+            WHERE bot_decisions.status NOT IN ('executed', 'executing')
             RETURNING id
             """,
             (
@@ -1513,7 +1514,12 @@ def _persist_decision_and_order(
             ),
         )
 
-        decision_id = int(cur.fetchone()[0])
+        persisted = cur.fetchone()
+        if persisted is None:
+            # A concurrent manual execution may have completed after the
+            # assessment began. Never turn its decision back into a proposal.
+            return None
+        decision_id = int(persisted[0])
 
     _persist_trade_plan(
         conn=conn,
@@ -1534,6 +1540,7 @@ def run_trading_bot_agent(
     user_id: int,
     report_date: Optional[date] = None,
     bot_id: Optional[int] = None,
+    paper_only: bool = False,
 ) -> Dict[str, Any]:
 
     report_date = report_date or date.today()
@@ -1547,8 +1554,13 @@ def run_trading_bot_agent(
 
         if bot_id is not None:
             bots = [b for b in bots if b["bot_id"] == bot_id]
+        if paper_only:
+            if any(b.get("is_live") for b in bots):
+                return {"ok": False, "error": "paper_mode_changed"}
 
         if not bots:
+            if paper_only:
+                return {"ok": False, "error": "paper_mode_changed"}
             return {
                 "ok": True,
                 "date": str(report_date),
@@ -1813,6 +1825,8 @@ def run_trading_bot_agent(
                 scores=scores,
                 setup_revision=bot.get("setup_revision"),
             )
+            if decision_id is None:
+                continue
 
             _clear_existing_pending_orders_for_day(
                 conn=conn,

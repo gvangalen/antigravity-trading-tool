@@ -434,6 +434,7 @@ export default function useBotData(options = {}) {
   
         console.error(err);
         setError(err.message);
+        throw err;
   
       } finally {
   

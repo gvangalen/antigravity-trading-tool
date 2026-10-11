@@ -106,3 +106,21 @@ def test_paper_hold_persists_the_actual_guardrail_reason(monkeypatch):
     assert saved_scores["guardrail_reason"] == "insufficient_funds"
     assert saved_scores["guardrails_result"]["blocked_by"] == "insufficient_funds"
     assert saved_scores["strategy_reason"].startswith("Scheduled DCA blocked")
+
+
+def test_reassessment_cannot_reopen_an_executed_daily_decision(monkeypatch):
+    conn = _Connection(None)
+
+    def unexpected_trade_plan(**_kwargs):
+        raise AssertionError("an executed decision must not receive a new plan")
+
+    monkeypatch.setattr(trading_bot_agent, "_persist_trade_plan", unexpected_trade_plan)
+    decision_id = _persist_decision_and_order(
+        conn=conn, user_id=7, bot_id=8, strategy_id=10, setup_id=9,
+        report_date=date(2026, 10, 11),
+        decision={"action": "hold", "symbol": "ETH", "amount_eur": 0},
+        scores={},
+    )
+
+    assert decision_id is None
+    assert "bot_decisions.status NOT IN ('executed', 'executing')" in conn.last_cursor.query

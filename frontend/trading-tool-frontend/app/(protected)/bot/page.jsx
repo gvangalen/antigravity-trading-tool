@@ -651,9 +651,14 @@ function BotPageInner() {
   const handleGenerateDecision = async (bot, { silent = false } = {}) => {
     try {
       setGeneratingBotId(bot.id);
-      await generateDecisionForBot({ bot_id: bot.id });
+      const result = await generateDecisionForBot({ bot_id: bot.id });
       if (!silent) {
-        showSnackbar(`${copy.proposalCreatedPrefix} ${bot.name}`, "success");
+        showSnackbar(
+          result?.execution_failed ? copy.paperRecheckExecutionFailed :
+            result?.paper_order_filled ? copy.paperRecheckFilled :
+              result?.generated === false ? copy.paperRecheckNoNew : copy.paperRecheckSuccess,
+          result?.execution_failed ? "danger" : result?.generated === false ? "info" : "success"
+        );
       }
     } catch {
       if (!silent) {
@@ -662,6 +667,22 @@ function BotPageInner() {
     } finally {
       setGeneratingBotId(null);
     }
+  };
+
+  const requestPaperDecision = (bot) => {
+    if (!bot || bot.is_live || bot.is_active === false) return;
+    openConfirm({
+      title: copy.paperRecheckTitle,
+      statusLabel: copy.modePaper,
+      tone: "info",
+      context: <p>{bot.name} · {bot.symbol || copy.botLabel}</p>,
+      impact: <p>{bot.mode === "auto" ? copy.paperRecheckAutoImpact : copy.paperRecheckManualImpact}</p>,
+      safety: <p>{copy.paperRecheckSafety}</p>,
+      consequence: <p>{copy.paperRecheckConsequence}</p>,
+      confirmText: copy.paperRecheckConfirm,
+      busyText: copy.paperRecheckBusy,
+      onConfirm: async () => { await handleGenerateDecision(bot); },
+    });
   };
 
   const handleContinue = () => {
@@ -1108,7 +1129,7 @@ function BotPageInner() {
                           trades={tradesByBot?.[bot.id] ?? []}
                           history={history}
                           loadingDecision={generatingBotId === bot.id}
-                          onGenerate={() => handleGenerateDecision(bot)}
+                          onGenerate={() => requestPaperDecision(bot)}
                           onExecute={() => {}}
                           onSkip={() => {}}
                           onOpenSettings={handleOpenBotSettings}
@@ -1151,7 +1172,7 @@ function BotPageInner() {
               <GlobalTradePanel
                 decision={decisionsByBot?.[activeBot?.id]}
                 portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
-                onManualTrade={() => handleGenerateDecision(activeBot)}
+                onManualTrade={() => reloadAll({ includeHistory: false })}
                 onClose={() => setTradePanelBotId(null)}
               />
             </div>
@@ -1260,7 +1281,7 @@ function BotPageInner() {
               max_asset_exposure_pct: budget.max_asset_exposure_pct,
               risk_acknowledged: budget.risk_acknowledged === true,
             });
-            await handleGenerateDecision(drawer.bot, { silent: true });
+            await reloadAll({ includeHistory: false });
             return result;
           }}
           onSaved={(savedBot) => focusSavedBot(savedBot, drawer?.bot || null)}
