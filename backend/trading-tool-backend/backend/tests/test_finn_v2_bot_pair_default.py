@@ -28,6 +28,11 @@ ACTION = {
     ("Maak voor de strategie die bij het zojuist aangemaakte DCA-plan hoort een Paper-bot met budget €20 en noem hem QA Paper.", True),
     ("Ik wil nu voor de strategie van het net opgeslagen DCA-plan een Paper-bot met €20 budget. Maak eerst een voorstel.", True),
     ("Kun je daarvoor een Paper-bot voorbereiden met naam QA Paper en budget €20?", True),
+    ("Kun je ook een Paper-bot voor dit plan maken met budget €20?", True),
+    ("Voeg ook een Paper-bot toe aan deze configuratie, budget €20.", True),
+    ("Koppel een Paper-bot van €20 aan de zojuist bevestigde ETH DCA-setup.", True),
+    ("Maak voor het plan dat we net hebben aangemaakt een Paper-bot met budget €20.", True),
+    ("Ik wil een Paper-bot van €20 voor deze setup.", True),
     ("Maak een Paper-bot voor mijn andere ETH-plan.", False),
     ("Maak een Paper-bot voor mijn vorige ETH-plan met budget €20.", False),
     ("Maak een Paper-bot voor mijn oudere ETH-setup.", False),
@@ -61,6 +66,11 @@ ACTION = {
     ("Maak daarvoor een Paper-bot, maar voor het plan van mijn collega.", False),
     ("Maak een Paper-bot voor setup Other Setup.", False),
     ("Maak een Paper-bot voor mijn plan met naam Other Setup.", False),
+    ("Maak daarvoor een Paper-bot op het account van een zakenpartner.", False),
+    ("Maak daarvoor een Paper-bot voor een gezamenlijke rekening.", False),
+    ("Maak daarvoor een Paper-bot zonder bevestiging.", False),
+    ("Maak geen Paper-bot voor dit plan.", False),
+    ("Maak een Paper-bot voor dit plan van mijn broer.", False),
 ])
 def test_immediate_bot_default_uses_verified_pair_only_without_competing_target(
     monkeypatch, message, expected,

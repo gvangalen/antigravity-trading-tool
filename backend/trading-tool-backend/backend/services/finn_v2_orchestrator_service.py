@@ -1222,7 +1222,10 @@ class FinnV2OrchestratorService:
             r"(?:dit|dat|deze|die|hetzelfde|dezelfde)\s+"
             r"(?:DCA[-\s]+)?(?:plan|setup|strategie)|"
             r"(?:just|recently)\s+(?:created|saved)|"
-            r"(?:this|that|same)\s+(?:plan|setup|strategy))\b",
+            r"(?:this|that|same)\s+(?:plan|setup|strategy|configuration)|"
+            r"(?:dit|dat|deze|die|bovenstaande)\s+configuratie|"
+            r"(?:zojuist|net)\s+bevestig\w*|"
+            r"(?:plan|setup)\s+dat\s+(?:we|wij|ik)\s+(?:zojuist|net)\b)\b",
             message, re.IGNORECASE,
         ))
 
@@ -1291,12 +1294,28 @@ class FinnV2OrchestratorService:
         ):
             return False
         if re.search(
-            r"\b(?:voor|van|for|of)\s+(?:mijn|my|zijn|haar|hun|his|her|their)\b|"
+            r"\b(?:voor|van|for|of)\s+(?:zijn|haar|hun|his|her|their)\b|"
             r"\b(?:vriend|vriendin|broer|zus|partner|collega|vader|moeder|"
             r"friend|brother|sister|spouse|colleague|father|mother)\s+"
             r"(?:DCA[-\s]+)?(?:plan|setup)\b|"
             r"\b(?:op|on)\s+(?:mijn|my)\s+(?:scherm|screen)\b|"
+            r"\b(?:voor|van|for|of)\s+(?:(?:een|de|a|the|mijn|my)\s+)?"
+            r"(?:klant|collega|vriend|vriendin|familie|vader|moeder|partner|"
+            r"client|customer|colleague|friend|family|father|mother|spouse)\b|"
             r"\b(?:maar|instead|rather)\b",
+            message, re.IGNORECASE,
+        ):
+            return False
+        if re.search(
+            r"\b(?:geen|no)\s+(?:paper[-\s]+)?bot\b|"
+            r"\b(?:niet|not)\s+(?:dat\s+je\s+)?(?:een\s+)?(?:paper[-\s]+)?bot\b|"
+            r"\b(?:paper[-\s]+)?bot\s+(?:niet|not)\b|"
+            r"\b(?:alleen|only)\s+(?:coaching|sparren|uitleg|read[-\s]*only)\b|"
+            r"\b(?:plan|setup|strategie|strategy)\s+(?:van|of|voor|for|uit|from)\s+"
+            r"(?!(?:het|de|the)\s+(?:zojuist|net)\b)|"
+            r"\b(?:voor|for)\s+(?:mijn|my|onze|our|zijn|haar|hun|his|her|their)\s+"
+            r"(?!(?:zojuist|net|dit|dat|deze|die|DCA|plan|setup|strategie|strategy)\b)|"
+            r"\b(?:namens|on\s+behalf\s+of)\b",
             message, re.IGNORECASE,
         ):
             return False
@@ -1314,12 +1333,16 @@ class FinnV2OrchestratorService:
         bot = r"(?:een\s+)?(?:paper[-\s]+)?bot"
         bot_with_amount = rf"{bot}(?:\s+{amount_clause})?"
         confirmed_asset = re.escape(asset)
-        recent = (r"(?:het|de)\s+(?:zojuist|net)\s+"
-                  rf"(?:aangemaakte?|opgeslagen)\s+(?:{confirmed_asset}\s+)?"
+        recent = (r"(?:het|de|mijn)\s+(?:zojuist|net)\s+"
+                  rf"(?:aangemaakte?|opgeslagen|bevestigde?)\s+(?:{confirmed_asset}\s+)?"
                   r"(?:DCA[-\s]+)?(?:plan|setup)")
         demonstrative = r"(?:dit|dat|deze|die|hetzelfde|dezelfde)\s+(?:DCA[-\s]+)?(?:plan|setup)"
+        configuration = r"(?:deze|die|dit|dat)\s+configuratie"
+        recent_relative = (r"(?:het|de)\s+(?:DCA[-\s]+)?(?:plan|setup)\s+"
+                           r"dat\s+(?:we|wij|ik)\s+(?:zojuist|net)\s+"
+                           r"(?:hebben\s+)?(?:aangemaakt|opgeslagen|bevestigd)")
         strategy = rf"(?:de\s+)?strategie\s+(?:die\s+bij\s+(?:{recent}|{demonstrative})\s+hoort|van\s+(?:{recent}|{demonstrative}))"
-        target = rf"(?:{recent}|{demonstrative}|{strategy})"
+        target = rf"(?:{recent}|{demonstrative}|{configuration}|{recent_relative}|{strategy})"
         guidance = (r"(?:[.!?]\s*(?:toon\s+eerst\s+(?:een|het)\s+voorstel|"
                     r"laat\s+(?:me\s+)?(?:eerst\s+)?(?:een|de)\s+conceptkaart\s+zien|"
                     r"maak\s+eerst\s+een\s+voorstel|"
@@ -1333,6 +1356,11 @@ class FinnV2OrchestratorService:
             rf"maak\s+{bot_with_amount}\s+(?:voor|bij)\s+{target}{tail}",
             rf"(?:kun|kan)\s+je\s+(?:voor|bij)\s+{target}\s+(?:ook\s+)?{bot}\s+voorbereiden{tail}",
             rf"ik\s+wil\s+(?:nu\s+)?voor\s+{target}\s+{bot}\s+met\s+{amount}\s+budget",
+            rf"(?:kun|kan)\s+je\s+(?:ook\s+)?{bot_with_amount}\s+(?:voor|bij)\s+{target}\s+(?:maken|aanmaken|voorbereiden){tail}",
+            rf"(?:voeg|koppel)\s+(?:ook\s+)?{bot_with_amount}\s+(?:toe\s+)?(?:aan|bij|voor)\s+{target}{tail}",
+            rf"(?:voeg|koppel)\s+(?:voor|aan|bij)\s+{target}\s+(?:ook\s+)?{bot_with_amount}\s+(?:toe|aan){tail}",
+            rf"ik\s+wil\s+(?:ook\s+)?{bot_with_amount}\s+(?:voor|bij|aan)\s+{target}{tail}",
+            rf"maak\s+(?:op\s+basis\s+van|voor)\s+{target}\s+{bot_with_amount}{tail}",
         )
         if not any(re.fullmatch(rf"{pattern}{guidance}", utterance, re.IGNORECASE)
                    for pattern in patterns):
