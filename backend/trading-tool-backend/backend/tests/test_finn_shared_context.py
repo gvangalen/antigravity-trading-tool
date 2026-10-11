@@ -11,6 +11,7 @@ from backend.celery_task import daily_report_task
 from backend.services.finn_plan_service import FinnPlanService
 from backend.services import finn_plan_service as finn_plan_module
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
+from backend.services.report_service import ReportService
 
 
 class _Rows:
@@ -196,6 +197,36 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
     assert (report["market_score"], report["macro_score"], report["technical_score"]) == (80, 70, 60)
     assert today["setup_match_score"] == report["setup_score"] == 80
     assert report["active_strategy"]["setup_name"] == "ETH Strategy"
+    assert "alle gevolgde assets" in report["setup_validation"]
+    assert report["best_setup"]["name"] == "ETH Plan"
+    # The persisted report reader must retain this measured match. Without
+    # provenance it treats the new report as an old AI-score snapshot and
+    # clears the side card despite the matching setup in the prose.
+    served = ReportService._mark_daily_setup_semantics(report)
+    assert served["setup_score_semantics"] == "benchmark_setup_match_v1"
+    assert served["best_setup"]["name"] == "ETH Plan"
+    assert served["top_setups"][0]["score_semantics"] == "benchmark_setup_match_v1"
+
+
+def test_multi_asset_report_keeps_btc_match_when_aapl_scores_are_missing(monkeypatch):
+    context = {"locale": "nl", "assets": [
+        {"symbol": "BTC", "setups": [], "strategies": [], "bots": [],
+         "benchmark": {"source_status": "available", "matches": [
+             {"setup_id": 9, "name": "BTC Plan", "symbol": "BTC", "timeframe": "4H",
+              "status": "matches", "score": 67, "is_active": True},
+         ]}},
+        {"symbol": "AAPL", "setups": [], "strategies": [], "bots": [],
+         "benchmark": {"source_status": "missing_scores", "matches": []}},
+    ]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {})
+
+    report = reports.generate_unified_daily_report_sections(7)
+    served = ReportService._mark_daily_setup_semantics(report)
+    assert "Over alle gevolgde assets" in served["setup_validation"]
+    assert served["best_setup"]["symbol"] == "BTC"
+    assert served["top_setups"][0]["score"] == 67
+    assert served["watchlist"][1]["benchmark"]["source_status"] == "missing_scores"
 
 
 def test_period_report_uses_dated_owner_facts_and_does_not_count_planned_decision_as_trade(monkeypatch):

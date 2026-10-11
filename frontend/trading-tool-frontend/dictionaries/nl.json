@@ -2977,7 +2977,7 @@
       },
       "setupMatch": {
         "cardTitle": "Optimale setup",
-        "empty": "Geen passende setups gevonden voor deze periode.",
+        "empty": "Geen bevestigde actuele setupmatch in dit rapport.",
         "bestMatch": "Beste match",
         "matchScore": "Matchscore",
         "comparison": "Vergelijking",
