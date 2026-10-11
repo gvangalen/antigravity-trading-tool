@@ -381,6 +381,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
               <option value="4H">{copy.timeframe4h}</option>
               <option value="1W">{copy.timeframe1w}</option>
             </select>
+            {isEdit && <p className="text-xs text-[var(--text-soft)]">{copy.timeframeEditHelp}</p>}
           </div>
         </div>
 

@@ -2815,6 +2815,7 @@
       "assetEth": "ETH (Ethereum)",
       "assetSol": "SOL (Solana)",
       "timeframeLabel": "Timeframe",
+      "timeframeEditHelp": "Dies ändert das Chart-Zeitfenster des Setups. Eine verknüpfte Strategie behält ihr eigenes Zeitfenster; der DCA-Kaufrhythmus ändert sich nur, wenn du den Plan unten bearbeitest.",
       "timeframe1d": "1D (Daily)",
       "timeframe4h": "4H (4 Hour)",
       "timeframe1w": "1W (Weekly)",

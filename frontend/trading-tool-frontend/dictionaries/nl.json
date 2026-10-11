@@ -2815,6 +2815,7 @@
       "assetEth": "ETH (Ethereum)",
       "assetSol": "SOL (Solana)",
       "timeframeLabel": "Tijdsframe",
+      "timeframeEditHelp": "Dit wijzigt het grafiektijdsframe van de setup. Een gekoppelde strategie behoudt haar eigen tijdsframe; het DCA-aankoopritme verandert alleen als je het schema hieronder wijzigt.",
       "timeframe1d": "1D (Daily)",
       "timeframe4h": "4H (4 Hour)",
       "timeframe1w": "1W (Weekly)",

@@ -2814,6 +2814,7 @@
       "assetEth": "ETH (Ethereum)",
       "assetSol": "SOL (Solana)",
       "timeframeLabel": "Timeframe",
+      "timeframeEditHelp": "This changes the setup chart timeframe. A linked strategy keeps its own timeframe; the DCA purchase schedule changes only if you edit the schedule below.",
       "timeframe1d": "1D (Daily)",
       "timeframe4h": "4H (4 Hour)",
       "timeframe1w": "1W (Weekly)",
