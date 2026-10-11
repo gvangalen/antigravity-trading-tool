@@ -30,6 +30,26 @@ export default function ActiveStrategyReportCard({ report }) {
     );
   }
 
+  if (Array.isArray(strategy.strategies)) {
+    return (
+      <ReportCard title={copy.multipleTitle || copy.cardTitle} icon={<TrendingUp size={16} />}>
+        <ul className="space-y-3">
+          {strategy.strategies.slice(0, 5).map((item, index) => (
+            <li key={`${item.symbol || "asset"}-${index}`} className="rounded-xl border border-slate-100 p-3">
+              <div className="text-sm font-bold text-foreground">{item.strategy_name}</div>
+              <div className="text-xs text-secondary">
+                {copy.linkedSetup || "Setup"}: {item.setup_name || "—"} · {item.symbol || "—"} · {item.timeframe || "—"}
+              </div>
+            </li>
+          ))}
+        </ul>
+        {strategy.strategies.length > 5 && (
+          <p className="mt-3 text-xs text-secondary">+{strategy.strategies.length - 5} {copy.moreStrategies || "strategieën"}</p>
+        )}
+      </ReportCard>
+    );
+  }
+
   const {
     strategy_name,
     setup_name,
@@ -100,10 +120,10 @@ export default function ActiveStrategyReportCard({ report }) {
           <div className="space-y-3">
              <div className="text-[11px] font-bold text-secondary tracking-tight">{copy.targets}</div>
              <div className="flex flex-wrap gap-2">
-                {targets.split(",").map((t, i) => (
+                {(Array.isArray(targets) ? targets : String(targets).split(",")).map((t, i) => (
                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50/50 border border-slate-100 rounded-lg">
                     <Target size={12} className="text-secondary" />
-                    <span className="text-xs font-bold text-slate-700 font-mono">{t.trim()}</span>
+                    <span className="text-xs font-bold text-slate-700 font-mono">{String(typeof t === "object" ? t.price ?? "" : t).trim()}</span>
                   </div>
                 ))}
              </div>

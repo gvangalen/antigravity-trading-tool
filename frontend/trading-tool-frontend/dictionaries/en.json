@@ -1637,6 +1637,7 @@
       "recent": "Recent",
       "pdf": "PDF",
       "new": "New",
+      "recentReport": "This daily report was created recently; the existing version is shown.",
       "pdfStarted": "PDF download started",
       "pdfFailed": "Downloading the PDF failed",
       "errorTitle": "Report is temporarily incomplete",
@@ -2986,6 +2987,9 @@
       },
       "activeStrategy": {
         "cardTitle": "Saved strategy",
+        "multipleTitle": "Saved strategies",
+        "linkedSetup": "Linked setup",
+        "moreStrategies": "more strategies",
         "empty": "Review your saved strategies in My Plan.",
         "strategyLabel": "Saved strategy",
         "referencePrice": "Reference price",

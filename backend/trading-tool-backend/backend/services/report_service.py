@@ -436,7 +436,7 @@ class ReportService:
         self._store_cached_daily_preview(user_id, response)
         return await localize_report_payload(response, locale)
 
-    async def generate_report(self, user_id: int, period: str) -> Dict[str, Any]:
+    async def generate_report(self, user_id: int, period: str, *, manual_refresh: bool = False) -> Dict[str, Any]:
         if period == "daily" and hasattr(self.repository, "get_latest_report"):
             latest_report = await self.repository.get_latest_report(user_id, "daily_reports")
             latest_report_date = latest_report.get("report_date") if latest_report else None
@@ -447,7 +447,8 @@ class ReportService:
                 and isinstance(generated_at, datetime)
             ):
                 age_seconds = int((datetime.utcnow() - generated_at.replace(tzinfo=None)).total_seconds())
-                if age_seconds < max(60, DAILY_REPORT_REGEN_COOLDOWN_SECONDS):
+                cooldown_seconds = 60 if manual_refresh else max(60, DAILY_REPORT_REGEN_COOLDOWN_SECONDS)
+                if age_seconds < cooldown_seconds:
                     return {
                         "message": "Dagrapport al recent gegenereerd; bestaand rapport wordt hergebruikt.",
                         "task_id": None,

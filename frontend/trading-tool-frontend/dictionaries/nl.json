@@ -1638,6 +1638,7 @@
       "recent": "Recent",
       "pdf": "PDF",
       "new": "Nieuw",
+      "recentReport": "Dit dagrapport is onlangs gemaakt; de bestaande versie is getoond.",
       "pdfStarted": "PDF-download gestart",
       "pdfFailed": "Downloaden van de PDF mislukt",
       "errorTitle": "Rapport tijdelijk niet compleet",
@@ -2987,6 +2988,9 @@
       },
       "activeStrategy": {
         "cardTitle": "Opgeslagen strategie",
+        "multipleTitle": "Opgeslagen strategieën",
+        "linkedSetup": "Gekoppelde setup",
+        "moreStrategies": "meer strategieën",
         "empty": "Bekijk je opgeslagen strategieën in Mijn Plan.",
         "strategyLabel": "Opgeslagen strategie",
         "referencePrice": "Referentieprijs",

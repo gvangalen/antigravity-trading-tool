@@ -266,6 +266,42 @@ def test_daily_report_uses_dated_fresh_price_and_distinct_strategy_name(monkeypa
     assert reports.generate_unified_daily_report_sections(7)["price"] is None
 
 
+def test_daily_report_lists_multiple_linked_strategies_and_rejects_false_missing_outlook(monkeypatch):
+    context = {"locale": "nl", "assets": [{
+        "symbol": "ETH",
+        "benchmark": {
+            "source_status": "available", "benchmark_score": 40,
+            "component_source_status": {"market_score": "fresh", "macro_score": "fresh",
+                                        "technical_score": "fresh"},
+            "reported_scores": {"market_score": 40, "macro_score": 20,
+                                "technical_score": 40},
+            "matches": [],
+        },
+        "indicator_configuration": {"market": [{"indicator": "price"}],
+                                    "macro": [{"indicator": "dxy"}],
+                                    "technical": [{"indicator": "rsi"}]},
+        "setups": [{"id": 1, "name": "ETH Setup A"}, {"id": 2, "name": "ETH Setup B"}],
+        "strategies": [{"id": 11, "setup_id": 1, "name": "ETH Strategy A"},
+                       {"id": 12, "setup_id": 2, "name": "ETH Strategy B"}],
+        "bots": [],
+    }]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {
+        "outlook": "De DXY- en RSI-waarden ontbreken nog, dus wacht af."})
+
+    report = reports.generate_unified_daily_report_sections(7)
+
+    assert report["active_strategy"]["strategies"] == [
+        {"strategy_name": "ETH Strategy A", "setup_name": "ETH Setup A",
+         "symbol": "ETH", "timeframe": None},
+        {"strategy_name": "ETH Strategy B", "setup_name": "ETH Setup B",
+         "symbol": "ETH", "timeframe": None},
+    ]
+    assert "ontbreken" not in report["outlook"]
+    assert "20/100" in report["macro_context"]
+    assert "40/100" in report["technical_analysis"]
+
+
 def test_multi_asset_report_keeps_btc_match_when_aapl_scores_are_missing(monkeypatch):
     context = {"locale": "nl", "assets": [
         {"symbol": "BTC", "setups": [], "strategies": [], "bots": [],
