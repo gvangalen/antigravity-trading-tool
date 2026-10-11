@@ -597,7 +597,7 @@ class FinnV2OperationClassificationService:
         candidates: tuple[OperationContract, ...],
     ) -> tuple[OperationContract, ...]:
         """Keep a typed released-response follow-up within its safe contract family."""
-        released = context.get("last_released_context")
+        released = context.get("last_released_context") or context.get("last_verified_context")
         if (
             facts.discourse_act != "reformulation"
             or not isinstance(released, Mapping)

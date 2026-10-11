@@ -1391,7 +1391,8 @@ def test_low_confidence_lineage_selection_requires_safe_persisted_context():
     assert with_context.operation_id == "explain_previous_evidence"
 
 
-def test_released_lineage_reformulation_constrains_the_structured_contract_manifest():
+@pytest.mark.parametrize("lineage_key", ["last_released_context", "last_verified_context"])
+def test_released_lineage_reformulation_constrains_the_structured_contract_manifest(lineage_key):
     captured = {}
 
     class Selector:
@@ -1405,7 +1406,7 @@ def test_released_lineage_reformulation_constrains_the_structured_contract_manif
 
     result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
         message="Kun je dat korter en eenvoudiger uitleggen?",
-        conversation_context={"last_released_context": {"run_id": "run-1", "response": "Veilige uitleg."}},
+        conversation_context={lineage_key: {"run_id": "run-1", "response": "Veilige uitleg."}},
     )
 
     assert result.operation_id == "reformulate_previous_response"
