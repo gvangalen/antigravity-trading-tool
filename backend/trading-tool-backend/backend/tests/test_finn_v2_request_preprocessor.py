@@ -3,6 +3,18 @@ import pytest
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 
 
+@pytest.mark.parametrize("message, expected", [
+    ("Ik wil hier nu ook een Paper-bot bij, naam Probe Bot, budget €20. Laat het concept zien.", "create"),
+    ("En een Paper-bot voor deze strategie? €20 budget; eerst een voorstel.", "create"),
+    ("Ik wil geen Paper-bot maken. Lees alleen mijn strategie.", "read"),
+    ("Ik wil een Paper-bot niet maken; geef alleen uitleg.", "read"),
+    ("Ik wil een Paper-bot met naam Vraag Bot en budget €20 voor deze setup, maar eerst alleen sparren.", "read"),
+    ("Ik wil een Paper-bot met naam Vader Bot en budget €20 voor mijn vader.", "read"),
+])
+def test_bot_proposal_desire_and_negation_have_distinct_polarity(message, expected):
+    assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == expected
+
+
 @pytest.mark.parametrize("message", [
     "Welk onderdeel maakt mijn handelsaanpak het meest robuust?",
     "Mijn aanpak: waar liggen de grootste resterende risico's?",

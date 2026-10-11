@@ -1135,7 +1135,7 @@ class FinnV2OperationStateService:
             r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
             r"\s*(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
             r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|"
-            r"\s+en\s+(?:een\s+)?budget\b|[\"'”’]?[,;.!?\n]|[\"'”’]?$)",
+            r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|[\"'”’]?[,;.!?\n]|[\"'”’]?$)",
             text,
             re.IGNORECASE,
         )
