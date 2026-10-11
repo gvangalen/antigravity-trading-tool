@@ -12,6 +12,7 @@ logger.setLevel(logging.INFO)
 
 RULE_BASED_SCORES_LEASE_KEY = "task-lease:run_rule_based_daily_scores"
 RULE_BASED_SCORES_LEASE_SECONDS = 30 * 60
+SCORE_OWNER_LOCK_NAMESPACE = 271024
 
 
 def _jsonb(value):
@@ -93,6 +94,15 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
         return
 
     try:
+        # The periodic sweep, onboarding, history repair and market-refresh
+        # handoff all write the same daily score row. Serialize them per owner
+        # before reading any sources, through the final UPSERT/commit, so an
+        # older calculation cannot finish after and replace newer evidence.
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(%s, %s)",
+                (SCORE_OWNER_LOCK_NAMESPACE, int(user_id)),
+            )
         # 1. Haal watchlist op
         if symbols is None:
             with conn.cursor() as cur:
