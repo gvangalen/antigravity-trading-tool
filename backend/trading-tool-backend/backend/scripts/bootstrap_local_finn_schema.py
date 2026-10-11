@@ -114,7 +114,12 @@ CREATE TABLE IF NOT EXISTS bot_decisions (
     confidence VARCHAR,
     amount_eur NUMERIC,
     scores_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-    status VARCHAR NOT NULL DEFAULT 'planned',
+    status VARCHAR NOT NULL DEFAULT 'planned'
+        CONSTRAINT bot_decisions_status_check
+        CHECK (status IN (
+            'planned', 'ready', 'approved', 'executing', 'executed',
+            'failed_execution', 'skipped', 'failed'
+        )),
     executed_by VARCHAR,
     executed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
