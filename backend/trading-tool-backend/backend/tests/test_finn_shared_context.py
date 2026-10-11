@@ -134,6 +134,11 @@ def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(m
         "locale": "nl", "profile": {}, "observed_at": "2026-10-07T12:00:00+00:00",
         "assets": [{
             "symbol": "BTC", "setups": [], "strategies": [], "bots": [],
+            "indicator_configuration": {
+                "market": [{"indicator": "price"}],
+                "macro": [{"indicator": "dxy"}],
+                "technical": [{"indicator": "rsi"}],
+            },
             "benchmark": {
                 "source_status": "missing_scores", "benchmark_score": None,
                 "reported_scores": {"market_score": None, "macro_score": None, "technical_score": None},
@@ -155,6 +160,10 @@ def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(m
     assert "geen bevestigde setupmatch" in result["setup_validation"]
     assert result["watchlist"][0]["benchmark"]["benchmark_score"] is None
     assert result["meta"]["source"] == "finn_shared_context.v1"
+    assert "Ingesteld: Prijs" in result["market_analysis"]
+    assert "Ingesteld: DXY" in result["macro_context"]
+    assert "Ingesteld: RSI" in result["technical_analysis"]
+    assert "Ingesteld: price" not in result["market_analysis"]
 
 
 def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypatch):
@@ -324,7 +333,7 @@ def test_daily_report_keeps_saved_plan_and_unscored_indicators_without_stale_sco
         assert "50/100" not in result[key]
         assert "Geen strategie" not in result[key]
     assert "ETH DCA strategie" in result["strategy_implication"]
-    assert "Price" in result["market_analysis"]
+    assert "Prijs" in result["market_analysis"]
     assert "DXY" in result["macro_context"]
     assert "RSI" in result["technical_analysis"]
     assert result["active_strategy"]["setup_name"] == "ETH maandelijkse DCA"

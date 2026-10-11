@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from backend.infrastructure.database import ASYNC_DATABASE_URL
+from backend.domain.indicator_display import indicator_display_name
 from backend.services.finn_shared_context_service import FinnSharedContextService
 from backend.utils.openai_client import ask_gpt_json
 
@@ -156,6 +157,18 @@ def _configured_highlights(facts: dict[str, Any], category: str) -> list[dict[st
             for name in (item.get("configured_indicators") or {}).get(category, [])]
 
 
+def _report_indicator_label(name: object, locale: str) -> str:
+    key = str(name or "").strip().casefold().replace("-", "_").replace(" ", "_")
+    translations = {
+        "nl": {"price": "Prijs", "volume": "Volume", "change_24h": "Koerswijziging 24 uur",
+               "inflation_rate": "Inflatie", "cpi": "Consumentenprijsindex"},
+        "en": {"change_24h": "24-hour price change", "inflation_rate": "Inflation rate"},
+        "de": {"price": "Preis", "volume": "Volumen", "change_24h": "Kursänderung 24 Stunden",
+               "inflation_rate": "Inflationsrate", "cpi": "Verbraucherpreisindex"},
+    }
+    return translations.get(locale, translations["en"]).get(key) or indicator_display_name(name)
+
+
 def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     """Generate prose, preserving the report storage shape without old agent snapshots."""
     context = asyncio.run(_load_context(user_id))
@@ -208,7 +221,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         parts = []
         for item in facts["assets"]:
             names = (item.get("configured_indicators") or {}).get(category)
-            configuration = (f"{labels['configured']}: {', '.join(names)}" if names
+            configuration = (f"{labels['configured']}: {', '.join(_report_indicator_label(name, locale) for name in names)}" if names
                              else labels["not_configured"] if names is not None
                              else labels["unknown"])
             value = item["scores"].get(f"{category}_score")
