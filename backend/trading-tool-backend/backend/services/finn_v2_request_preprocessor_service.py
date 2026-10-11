@@ -518,6 +518,18 @@ class FinnV2RequestPreprocessorService:
         return {"strategie": "strategy"}.get(matches[-1], matches[-1])
 
     def _action_polarity(self, text: str) -> str:
+        # A negated opening clause is not an authorization. Classify any
+        # following clause on its own, so "geen bot; maak een strategie" can
+        # still select the requested strategy operation.
+        clauses = re.split(r"[.;!?]\s*", text, maxsplit=1)
+        opening = clauses[0]
+        if re.search(
+            r"^\s*(?:ik\s+wil\s+geen\s+(?:paper[-\s]+)?bot\b|"
+            r"ik\s+wil\s+een\s+(?:paper[-\s]+)?bot\s+niet\b|"
+            r"maak\s+geen\s+(?:paper[-\s]+)?bot\b)",
+            opening,
+        ):
+            return self._action_polarity(clauses[1]) if len(clauses) > 1 and clauses[1].strip() else "read"
         # An explicit request for advice plus an explicit refusal of changes
         # is a read. The trader may describe an urge to change a position in
         # the first sentence; that description is not an imperative to FINN.
@@ -660,6 +672,34 @@ class FinnV2RequestPreprocessorService:
             preceding_action = self._action_polarity(text[:declined_proposal.start()].rstrip(" ,;"))
             if preceding_action in {"read", "evaluate"}:
                 return preceding_action
+        # A user can request a proposal without an imperative verb. Preserve
+        # that explicit act for the model-led proposal contract; the server
+        # still resolves the owner-scoped target and requires confirmation.
+        # Do not turn a negated bot request into a creation request.
+        bot_negated = bool(re.search(
+            r"\b(?:geen|no|kein\w*|niet|not)\b[^.!?]{0,60}\b(?:paper[-\s]+)?bot\b|"
+            r"\b(?:paper[-\s]+)?bot\b[^.!?]{0,30}\b(?:niet|not)\b",
+            text,
+        ))
+        bot_read_only = bool(re.search(
+            r"\b(?:maar|but|aber)\s+(?:eerst\s+)?(?:alleen|only|nur)\s+"
+            r"(?:sparren|coaching|advies|uitleg|lezen|read|discuss|advice|explain)\b",
+            text,
+        ))
+        if not bot_negated and not bot_read_only and re.search(r"\b(?:paper[-\s]+)?bot\b", text):
+            if re.search(
+                r"\bik\s+wil\s+(?:hier|er)\s+(?:nu\s+)?(?:ook\s+)?(?:een\s+)?"
+                r"(?:paper[-\s]+)?bot\s+bij\b",
+                text,
+            ) or (
+                re.search(r"\b(?:eerst|toon|laat)\s+(?:een|het|de)\s+voorstel\b", text)
+                and re.search(
+                    r"\b(?:een|a)\s+(?:paper[-\s]+)?bot\s+voor\s+"
+                    r"(?:dit|dat|deze|die)\s+(?:setup|plan|strategie)\b",
+                    text,
+                )
+            ):
+                return "create"
         # A requested concept/proposal is an operation request even when it is
         # phrased as a question. This recognizes the product act, not a fixed
         # sentence or a specific asset.

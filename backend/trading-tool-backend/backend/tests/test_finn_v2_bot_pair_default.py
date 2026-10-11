@@ -33,6 +33,15 @@ ACTION = {
     ("Koppel een Paper-bot van €20 aan de zojuist bevestigde ETH DCA-setup.", True),
     ("Maak voor het plan dat we net hebben aangemaakt een Paper-bot met budget €20.", True),
     ("Ik wil een Paper-bot van €20 voor deze setup.", True),
+    ("Maak voor dit zojuist opgeslagen plan een Paper-bot met naam Probe Bot en €20 budget.", True),
+    ("Ik wil hier nu ook een Paper-bot bij, naam Probe Bot, budget €20. Laat het concept zien.", True),
+    ("En een Paper-bot voor deze strategie? €20 budget; eerst een voorstel.", True),
+    ("En een Paper-bot voor deze strategie? €20 budget, naam Probe Bot; eerst een voorstel.", True),
+    ("Ik wil voor de zojuist opgeslagen strategie een Paper-bot met €20 budget en de naam Probe Bot. Maak een voorstel.", True),
+    ("Maak voor dit zojuist opgeslagen plan van mijn vader een Paper-bot met €20 budget.", False),
+    ("Ik wil voor de zojuist opgeslagen strategie van mijn broer een Paper-bot met €20 budget.", False),
+    ("Ik wil hier nu ook een Paper-bot bij voor het plan van mijn vader.", False),
+    ("Ik wil hier nu ook geen Paper-bot bij; lees mijn plan.", False),
     ("Maak een Paper-bot voor mijn andere ETH-plan.", False),
     ("Maak een Paper-bot voor mijn vorige ETH-plan met budget €20.", False),
     ("Maak een Paper-bot voor mijn oudere ETH-setup.", False),
@@ -91,7 +100,7 @@ def test_immediate_bot_default_uses_verified_pair_only_without_competing_target(
     actual = asyncio.run(service._verified_immediate_bot_pair_default(
         user_id=7, message=message, context=context,
     ))
-    assert actual is expected
+    assert actual is expected, context.get("immediate_bot_pair_guard_reason")
 
 
 def test_immediate_bot_default_rejects_other_owner_and_failed_action():
@@ -340,6 +349,27 @@ def test_unverified_model_recent_reference_clears_older_context(message):
     result = FinnResponsesProposalSelection().from_call(
         call=call, message=message,
         conversation_context={"last_verified_context": {"resolved_entities": {"strategy_id": 82}}},
+        verified_asset="ETH",
+    )
+    state = result.request_plan.operation_state
+    assert "strategy_id" not in state["collected_inputs"]
+    assert "strategy_id" in state["missing_required_inputs"]
+
+
+def test_rejected_immediate_reference_cannot_borrow_older_strategy():
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "inputs": {
+            "name": "Vraag Bot", "budget_total_eur": 20, "strategy_id": 81,
+        }},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Ik wil hier een Paper-bot bij, maar eerst alleen sparren.",
+        conversation_context={
+            "immediate_bot_pair_guard_reason": "other_owner_marker",
+            "last_verified_context": {"resolved_entities": {"strategy_id": 81}},
+        },
         verified_asset="ETH",
     )
     state = result.request_plan.operation_state

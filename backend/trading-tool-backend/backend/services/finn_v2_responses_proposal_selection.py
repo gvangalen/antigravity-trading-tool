@@ -122,11 +122,14 @@ class FinnResponsesProposalSelection:
                 # An invalid immediate reference must not borrow any older
                 # guided state, correction draft or conversation target.
                 conversation_context = {}
-        elif not pending_target_choice and (mentions_recent_plan or (
-            contract.operation_id == "create_bot"
-            and (call.target_reference == "confirmed_previous_plan"
-                 or conversation_context.get("immediate_bot_pair_semantic_candidate") is True)
-        )):
+        elif not pending_target_choice and (
+            immediate_guard_reason not in {"not_evaluated", "accepted", "no_direct_reference"}
+            or mentions_recent_plan or (
+                contract.operation_id == "create_bot"
+                and (call.target_reference == "confirmed_previous_plan"
+                     or conversation_context.get("immediate_bot_pair_semantic_candidate") is True)
+            )
+        ):
             # A claimed recent target that was not verified against the exact
             # parent action must not inherit an older guided strategy.
             inputs.pop("strategy_id", None)
