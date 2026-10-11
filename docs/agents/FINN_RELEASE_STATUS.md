@@ -4,6 +4,16 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Pending Five-Flow Repair Candidate
+
+Phase: local Build gates passed; candidate branch `codex/finn-five-flow-repair` has not been pushed, merged or deployed. Independent authenticated QA has not assessed this batch.
+
+Scope: preserve shared verified report facts; reuse a recent daily report without waiting for a new signature; stop silently inserting setup score limits; show and confirm suggested limits in onboarding and display the actual limits or their absence on FINN proposal cards; clarify bot budgets as limits; return separate setup and strategy timeframes plus the saved DCA purchase schedule; and hold buys when measured Score 2.0 components fall outside an owner's saved setup limits. Missing scores leave a fixed calendar DCA active, while score-dependent buys hold. Sell/exit decisions remain available. This implements the user's 2026-10-11 clarification for the Paper acceptance matrix.
+
+Measured local evidence: backend `pytest -q` **3360 passed, 3 skipped**; frontend build, typecheck, i18n lint/tests, command tests and high-severity audit passed (one moderate Next.js advisory). The isolated local FastAPI/Celery/PostgreSQL/Redis/Responses action matrix passed **16/16** with no live bot, broker order or production connection (artifact SHA-256 `83bc2f694b43e042971142cc67a511fedfad73a713d985f464f2631876879e05`); action-adapter tests passed **19/19**. Real-provider Luna/Responses selector development passed **18/18**, artifact SHA-256 `65b3fd8978234a022058ee65ff85531344bc641cdcbd07450cd3ef218f593c92`; regression passed **109/109**, artifact SHA-256 `41cc58bd9a14dc438a60544177701b97876f8418be213b41880b5fe9bdfe0662`. Both reported zero provider, schema, timeout, parse and validation failures. A local Score 2.0 chain test covers positive match, measured non-match, missing and stale source data through the Paper worker; it does not prove a production Paper execution.
+
+Open release evidence: candidate CI, Auto Deploy, matching public backend/frontend SHA and independent authenticated live QA. The earlier live report 502 has no confirmed production root cause; a successful local report parity test and this UI retry correction do not establish that it is gone. QA must compare same-time Analyse, FINN and report facts and complete the positive-match Paper execution, measured non-match hold and missing/stale cases on one live SHA.
+
 ## Active Release
 
 | Field | Value |
