@@ -50,7 +50,7 @@ class ReportService:
         self.repository = repository
 
     @staticmethod
-    def _mark_daily_setup_semantics(row: Dict[str, Any]) -> Dict[str, Any]:
+    def _mark_daily_setup_semantics(row: Dict[str, Any], locale: str = "nl") -> Dict[str, Any]:
         """Keep pre-migration report scores distinct from measured matches."""
         import json
 
@@ -70,6 +70,30 @@ class ReportService:
             result["setup_score"] = None
             result["best_setup"] = None
             result["top_setups"] = []
+            # Legacy prose has no verified Score 2.0 provenance, even when
+            # the old score fields are empty. Treat all such claims alike.
+            if row.get("setup_validation"):
+                notice = {
+                    "nl": "Dit historische rapport bevat geen geverifieerde Score 2.0-setupmatch. Bekijk Analyse voor de actuele voorwaarden en scores.",
+                    "en": "This historical report has no verified Score 2.0 setup match. Check Analysis for current conditions and scores.",
+                    "de": "Dieser historische Bericht enthält keinen verifizierten Score-2.0-Setup-Treffer. Prüfe die aktuellen Bedingungen und Werte in Analyse.",
+                }.get(locale, "This historical report has no verified Score 2.0 setup match. Check Analysis for current conditions and scores.")
+                result["setup_validation"] = notice
+            else:
+                notice = None
+            meta = row.get("meta_json")
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except (TypeError, ValueError):
+                    meta = None
+            if isinstance(meta, dict):
+                meta = dict(meta)
+                meta["setup_score"] = None
+                meta["best_setup"] = None
+                meta["top_setups"] = []
+                meta["setup_validation"] = notice
+                result["meta_json"] = json.dumps(meta) if isinstance(row.get("meta_json"), str) else meta
         return result
 
     @staticmethod
@@ -328,7 +352,7 @@ class ReportService:
                 return {"_status": "pending"}
                 
         if table_name == "daily_reports":
-            row = self._mark_daily_setup_semantics(row)
+            row = self._mark_daily_setup_semantics(row, locale)
 
         # Format for mobile if requested
         if format_type == "mobile":
@@ -346,7 +370,7 @@ class ReportService:
             raise ValueError(f"Report niet gevonden voor {date_str}")
 
         if table_name == "daily_reports":
-            row = self._mark_daily_setup_semantics(row)
+            row = self._mark_daily_setup_semantics(row, locale)
 
         # Format for mobile if requested
         if format_type == "mobile":
@@ -371,6 +395,7 @@ class ReportService:
             latest_report = await self.repository.get_latest_report(user_id, "daily_reports")
         latest_report_date = latest_report.get("report_date") if latest_report else None
         if latest_report and hasattr(latest_report_date, "isoformat") and latest_report_date == datetime.utcnow().date():
+            latest_report = self._mark_daily_setup_semantics(latest_report, locale)
             response = {
                 "status": "ok",
                 "generated_at": datetime.utcnow().isoformat(),

@@ -291,17 +291,55 @@ def test_historical_ai_setup_score_is_not_served_as_current_match():
     old = ReportService._mark_daily_setup_semantics({
         "setup_score": 91, "best_setup": {"name": "Old AI choice"},
         "top_setups": [{"name": "Old AI choice", "score": 91}],
+        "setup_validation": "De actieve setup matcht vandaag met 91.",
     })
     assert old["setup_score"] is None
     assert old["best_setup"] is None
+    assert "geen geverifieerde Score 2.0-setupmatch" in old["setup_validation"]
     current = ReportService._mark_daily_setup_semantics({
         "setup_score": 76, "top_setups": [{
             "name": "Saved setup", "score": 76,
             "score_semantics": "benchmark_setup_match_v1",
         }],
+        "setup_validation": "Een bevestigde actuele setupmatch van 76.",
     })
     assert current["setup_score"] == 76
     assert current["setup_score_semantics"] == "benchmark_setup_match_v1"
+    assert current["setup_validation"] == "Een bevestigde actuele setupmatch van 76."
+    empty = ReportService._mark_daily_setup_semantics({
+        "setup_score": None, "best_setup": None, "top_setups": [],
+        "setup_validation": "Er is geen bevestigde actuele setupmatch.",
+    })
+    assert "geen geverifieerde Score 2.0-setupmatch" in empty["setup_validation"]
+
+
+def test_daily_preview_does_not_revive_legacy_setup_claims_from_metadata(monkeypatch):
+    from backend.services import report_service as report_module
+
+    old = {
+        "report_date": datetime.utcnow().date(),
+        "setup_score": 81,
+        "best_setup": {"name": "Old setup"},
+        "setup_validation": "Actieve setupmatch 81.",
+        "meta_json": {
+            "setup_score": 81,
+            "best_setup": {"name": "Old setup"},
+            "setup_validation": "Actieve setupmatch 81 volgens oude metadata.",
+        },
+    }
+    repository = SimpleNamespace(get_latest_report=AsyncMock(return_value=old))
+    service = ReportService(repository)
+    service._get_user_locale = AsyncMock(return_value="nl")
+    monkeypatch.setattr(report_module, "localize_report_payload", AsyncMock(side_effect=lambda value, _: value))
+    report_module._daily_report_preview_cache.pop(991991, None)
+    first = asyncio.run(service.preview_daily_report(991991))
+    cached = asyncio.run(service.preview_daily_report(991991))
+    for response in (first, cached):
+        preview = response["report"]
+        assert preview.get("setup_score") is None
+        assert preview.get("best_setup") is None
+        assert "geen geverifieerde Score 2.0-setupmatch" in preview["setup_validation"]
+    report_module._daily_report_preview_cache.pop(991991, None)
 
 
 def test_setup_match_is_not_a_hard_bot_policy_gate():

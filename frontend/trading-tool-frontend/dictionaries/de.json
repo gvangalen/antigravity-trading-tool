@@ -2968,7 +2968,7 @@
     "blocks": {
       "marketSnapshot": {
         "cardTitle": "Market analysis",
-        "priceLabel": "Bitcoin price",
+        "priceLabel": "Preis",
         "volumeLabel": "Total volume",
         "macroLabel": "Macro",
         "technicalLabel": "Technical",
@@ -3014,7 +3014,8 @@
       "indicatorHighlights": {
         "cardTitle": "Indicator highlights",
         "empty": "No indicator data is available for this section yet.",
-        "unknown": "Unknown"
+        "unknown": "Unbekannt",
+        "labels": {"price": "Preis", "volume": "Volumen", "dxy": "DXY", "rsi": "RSI"}
       },
       "weeklyRegime": {
         "title": "Weekly regime overview",
