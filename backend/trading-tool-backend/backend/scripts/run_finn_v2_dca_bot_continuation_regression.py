@@ -19,7 +19,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
-    parser.add_argument("--bot-prompt-variant", choices=("linked_strategy", "natural_followup", "typed_target"),
+    parser.add_argument("--bot-prompt-variant", choices=("linked_strategy", "natural_followup", "typed_target", "semantic_natural"),
                         default="linked_strategy")
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
@@ -48,6 +48,10 @@ def main() -> None:
     bot_message = {
         "natural_followup": (
             "Kun je voor dit plan ook een Paper-bot voorbereiden "
+            f"met naam Matrix Direct Paper {suffix} en budget €20? Toon eerst het voorstel."
+        ),
+        "semantic_natural": (
+            "Kun je voor dit plan een Paper-bot regelen "
             f"met naam Matrix Direct Paper {suffix} en budget €20? Toon eerst het voorstel."
         ),
         "typed_target": (

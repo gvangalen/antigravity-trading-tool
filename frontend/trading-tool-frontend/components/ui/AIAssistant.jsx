@@ -37,7 +37,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
-import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
@@ -4370,7 +4370,8 @@ function AIAssistantContent({
       let resolvedSetupName = actionDraft?.supplied_inputs?.setup_name || activeSetup?.name || null;
       let resolvedSetupSymbol = null;
       let resolvedSetupTimeframe = null;
-      let resolvedStrategyName = actionDraft?.supplied_inputs?.strategy_name || activeBot?.strategy_name || null;
+      let resolvedStrategyName = actionDraft?.supplied_inputs?.strategy_name || null;
+      let verifiedBotStrategyName = null;
       let resolvedBotName = activeBot?.name || null;
       let immutableProposalState = null;
       try {
@@ -4387,7 +4388,15 @@ function AIAssistantContent({
           const botId = actionDraft?.supplied_inputs?.bot_id || projection?.supplied_inputs?.bot_id;
           const matchedBot = ownerBots.find((item) => Number(item.id || item.bot_id) === Number(botId));
           const linkedStrategyId = strategyId || matchedBot?.strategy_id;
-          const matchedStrategy = ownerStrategies.find((item) => Number(item.id || item.strategy_id) === Number(linkedStrategyId));
+          const verifiedBotStrategy = operationId === "create_bot" ? verifiedPaperBotStrategy({
+            target: immutableProposalState?.target,
+            draftStrategyId: strategyId,
+            ownerStrategies,
+          }) : null;
+          const matchedStrategy = operationId === "create_bot"
+            ? verifiedBotStrategy
+            : ownerStrategies.find((item) => Number(item.id || item.strategy_id) === Number(linkedStrategyId));
+          if (verifiedBotStrategy) verifiedBotStrategyName = verifiedBotStrategy.name || null;
           const linkedSetupId = setupId || matchedStrategy?.setup_id;
           const matchedSetup = ownerSetups.find((item) => Number(item.id || item.setup_id) === Number(linkedSetupId));
           resolvedSetupName = matchedSetup?.name
@@ -4409,7 +4418,9 @@ function AIAssistantContent({
               ...(resolvedSetupName ? { setup_name: resolvedSetupName } : {}),
               ...(resolvedSetupSymbol && !actionDraft?.supplied_inputs?.symbol ? { symbol: resolvedSetupSymbol } : {}),
               ...(resolvedSetupTimeframe && !actionDraft?.supplied_inputs?.timeframe ? { timeframe: resolvedSetupTimeframe } : {}),
-              ...(resolvedStrategyName ? { strategy_name: resolvedStrategyName } : {}),
+              ...(operationId === "create_bot"
+                ? { strategy_name: verifiedBotStrategyName }
+                : resolvedStrategyName ? { strategy_name: resolvedStrategyName } : {}),
             },
           }
         : null;
@@ -4432,7 +4443,9 @@ function AIAssistantContent({
               setupDraft,
               actionDraft: visibleActionDraft,
               reasoning: null,
-              canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id),
+              canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id
+                && (operationId !== "create_bot" || verifiedBotStrategyName)),
+              confirmationSuspended: Boolean(verified?.proposal_id && operationId === "create_bot" && !verifiedBotStrategyName),
               actions: verified?.proposal_id ? [{
                 type: "v2_proposal",
                 proposal_id: verified.proposal_id,
@@ -4455,7 +4468,7 @@ function AIAssistantContent({
                   symbol: actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || projection?.canonical_target || activeSetup?.symbol || null,
                   timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || null,
                   setup_name: resolvedSetupName,
-                  strategy_name: resolvedStrategyName,
+                  strategy_name: operationId === "create_bot" ? verifiedBotStrategyName : resolvedStrategyName,
                   supplied_inputs: projection?.supplied_inputs || {},
                   before_state: immutableProposalState?.before_state || {},
                   requested_state: immutableProposalState?.requested_state || projection?.supplied_inputs?.changed_fields || {},

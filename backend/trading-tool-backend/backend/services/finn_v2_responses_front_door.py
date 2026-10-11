@@ -306,13 +306,39 @@ class FinnResponsesFrontDoor:
                 ),
                 selected, previous_response, locale=locale,
             )
-        if conversation_context.get("verified_immediate_bot_pair_default"):
-            # The owner-scoped parent action and this turn's explicit bot
-            # request have already passed the bounded target guard. Dispatch
-            # the registry proposal directly: a free-form model READ choice
-            # must not silently drop an unambiguous action request. Missing
-            # name/budget inputs still become a guided draft, and execution
-            # still requires the normal user confirmation.
+        unsupported_pair = unsupported_catalog_pair_mention(message)
+        semantic_candidate = bool(
+            conversation_context.get("immediate_bot_pair_semantic_candidate")
+            and conversation_context.get("immediate_bot_pair_guard_reason") == "unsupported_utterance"
+            and not unsupported_pair
+        )
+        if semantic_candidate:
+            verdict = await self.relevance_guard.immediate_bot_target(message=message)
+            conversation_context["immediate_bot_semantic_verdict"] = verdict
+            if verdict == "create_for_immediate":
+                domain = await self.relevance_guard.requested_mutation_domain(
+                    message=message,
+                    domains=[
+                        {"domain": "bot", "purpose": "Prepare a Paper-bot proposal"},
+                        {"domain": "setup", "purpose": "Create or change a setup"},
+                        {"domain": "strategy", "purpose": "Create or change a strategy"},
+                    ],
+                )
+                conversation_context["immediate_bot_domain_verdict"] = domain
+                if domain == "bot":
+                    # The server has already checked immediate owner-scoped
+                    # action lineage and competing targets. The intent guard
+                    # recognizes a proposal request and the separate domain
+                    # check confirms that the requested object is a bot.
+                    # The user still confirms the exact strategy on its card.
+                    conversation_context["verified_immediate_bot_pair_default"] = True
+                    conversation_context["immediate_bot_pair_guard_reason"] = "accepted"
+        if conversation_context.get("verified_immediate_bot_pair_default") and not unsupported_pair:
+            # The owner-scoped parent action and this turn's bot request have
+            # passed either the bounded guard or the semantic checks above.
+            # Dispatch the registry proposal directly so a later READ choice
+            # cannot drop a clear action request. Missing name/budget inputs
+            # remain guided; execution still requires user confirmation.
             contract = self.proposals.registry.require_supported("create_bot")
             explicit = self.proposals.states.explicit_inputs(
                 contract=contract, message=message, explicit_asset=None,
@@ -1547,12 +1573,24 @@ class FinnResponsesFrontDoor:
                 and conversation_context.get("immediate_bot_pair_semantic_candidate") is True
                 and conversation_context.get("immediate_bot_pair_guard_reason") == "unsupported_utterance"
             ):
-                verdict = await guard.immediate_bot_target(message=message)
+                verdict = conversation_context.get("immediate_bot_semantic_verdict")
+                if verdict is None:
+                    verdict = await guard.immediate_bot_target(message=message)
                 if verdict in {"other_target", "read_only"}:
                     return {"status": "unavailable", "reason": "bot_target_or_action_not_immediate"}
-                # A model verdict never establishes which stored strategy to
-                # target, including on provider failure or an unclear result.
-                immediate_target_choice_required = True
+                if (verdict == "create_for_immediate"
+                        and conversation_context.get("immediate_bot_domain_verdict") == "bot"):
+                    # The proposal tool independently chose create_bot for
+                    # the just-confirmed plan. The server has already checked
+                    # action lineage, owner, and competing saved targets.
+                    # Only this joint positive verdict may use the verified
+                    # strategy ID. A later confirmation still owns the write.
+                    conversation_context["verified_immediate_bot_pair_default"] = True
+                    conversation_context["immediate_bot_pair_guard_reason"] = "accepted"
+                else:
+                    # Unclear wording or a provider failure never binds the
+                    # strategy. Ask for an explicit owner-scoped choice.
+                    immediate_target_choice_required = True
             analysis = self.proposals.from_call(
                 call=call,
                 message=message,
