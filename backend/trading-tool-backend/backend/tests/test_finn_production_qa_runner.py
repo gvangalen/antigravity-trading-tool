@@ -111,6 +111,30 @@ def test_bot_lineage_diagnostic_reuses_private_loop_and_hides_failure(monkeypatc
     assert calls == [("safe", "conversation"), ("missing", "conversation")]
 
 
+def test_bot_lineage_diagnostic_uses_snapshot_database_loop(monkeypatch):
+    """asyncpg pooled connections cannot migrate between QA runner loops."""
+    import asyncio
+
+    module = _module()
+    observed = []
+
+    async def snapshot(*, operation_id, fixture_namespace):
+        observed.append(asyncio.get_running_loop())
+        return {"status": "available"}
+
+    async def diagnostic(run_id, conversation_id):
+        observed.append(asyncio.get_running_loop())
+        return {"diagnostic_status": "available"}
+
+    monkeypatch.setattr(module, "_load_owner_scoped_database_snapshot", snapshot)
+    monkeypatch.setattr(module, "_load_bot_lineage_diagnostic", diagnostic)
+    assert module.owner_scoped_database_snapshot(
+        operation_id="create_setup", fixture_namespace="qa-shared-loop-test",
+    )["status"] == "available"
+    assert module.bot_lineage_diagnostic("run", "conversation")["diagnostic_status"] == "available"
+    assert observed[0] is observed[1] is module._DATABASE_LOOP is module._DIAGNOSTIC_LOOP
+
+
 def test_redaction_removes_credentials_and_fixture_identity():
     module = _module()
     report = module.redact({"access_token": "secret", "user_id": 7, "run_id": "safe", "nested": {"email": "x@example.test"}})
