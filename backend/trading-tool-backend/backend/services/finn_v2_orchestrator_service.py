@@ -1274,26 +1274,32 @@ class FinnV2OrchestratorService:
             message, re.IGNORECASE,
         ):
             return False
-        # Accept only a complete, unambiguous reference. A word such as
-        # "hier" anywhere in a free sentence is not proof of the target:
-        # a second clause may select another person's or another saved plan.
+        # Match the entire target-bearing request. A deictic word in one
+        # clause cannot authorize the parent if another clause selects a
+        # different plan or somebody else's account.
         utterance = message.strip().rstrip(".!?").strip()
         amount = r"€?\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?"
         budget = rf"(?:met\s+)?(?:een\s+)?budget\s*(?:van\s+)?{amount}"
         name_word = r"(?!(?:voor|van|uit|maar|plan|setup|strategie|andere|other)\b)[\w-]+"
         bot_name = rf"{name_word}(?:\s+{name_word}){{0,7}}"
-        name = rf"(?:met\s+naam|noem\s+de\s+bot)\s+{bot_name}"
+        name = rf"(?:met\s+(?:de\s+)?naam|noem\s+(?:de\s+bot|hem))\s+{bot_name}"
         tail = rf"(?:\s*,?\s*(?:en\s+)?(?:{budget}|{name})){{0,2}}"
         bot = r"(?:een\s+)?(?:paper[-\s]+)?bot"
+        confirmed_asset = re.escape(asset)
         recent = (r"(?:het|de)\s+(?:zojuist|net)\s+"
-                  r"(?:aangemaakte?|opgeslagen)\s+(?:[A-Z]{2,8}\s+)?"
+                  rf"(?:aangemaakte?|opgeslagen)\s+(?:{confirmed_asset}\s+)?"
                   r"(?:DCA[-\s]+)?(?:plan|setup)")
+        relation = rf"(?:de\s+)?strategie\s+(?:die\s+bij\s+{recent}\s+hoort|van\s+{recent})"
         patterns = (
             rf"maak\s+(?:daarvoor|hiervoor)\s+{bot}{tail}",
+            rf"kun\s+je\s+(?:daarvoor|hiervoor)\s+{bot}\s+voorbereiden{tail}",
             rf"voeg\s+(?:hier|erbij|hieraan|daaraan)\s+{bot}\s+aan\s+toe{tail}",
             rf"maak\s+(?:voor|bij|aan)\s+{recent}\s+{bot}{tail}",
             rf"maak\s+{bot}\s+(?:voor|bij)\s+{recent}{tail}",
-            rf"maak\s+{bot}\s+voor\s+(?:de\s+)?strategie\s+die\s+bij\s+{recent}\s+hoort{tail}",
+            rf"maak\s+{bot}\s+voor\s+{relation}{tail}",
+            rf"maak\s+voor\s+{relation}\s+{bot}{tail}",
+            rf"ik\s+wil\s+(?:nu\s+)?voor\s+{relation}\s+{bot}\s+met\s+{amount}\s+budget"
+            r"(?:\.\s*maak\s+eerst\s+een\s+voorstel)?",
         )
         if not any(re.fullmatch(pattern, utterance, re.IGNORECASE) for pattern in patterns):
             return False
@@ -1310,13 +1316,10 @@ class FinnV2OrchestratorService:
             explicit_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(
                 message, "setup" if entity_type == "setup" else "strateg",
             )
-            if explicit_name and re.fullmatch(
-                r"(?:die\s+)?(?:bij|aan)\s+(?:het|de)?\s*"
+            if explicit_name and re.match(
+                r"(?:die\s+)?(?:bij|aan|van)\s+(?:het|de)?\s*"
                 r"(?:zojuist|net)\s+(?:aangemaakte?|opgeslagen)\s+"
-                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)\s+hoort|"
-                r"(?:die\s+)?(?:bij|aan)\s+(?:het|de)?\s*"
-                r"(?:zojuist|net)\s+(?:aangemaakte?|opgeslagen)\s+"
-                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)",
+                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)\b",
                 explicit_name, re.IGNORECASE,
             ):
                 explicit_name = None

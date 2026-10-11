@@ -1017,6 +1017,13 @@ def test_shared_name_parser_stops_before_asset_and_timeframe_context():
     ) == "FINN DCA Flow 1759B"
 
 
+def test_bot_name_stops_before_budget_clause():
+    assert FinnV2OperationStateService._name_input_from_text(
+        "Maak voor de strategie van het net opgeslagen DCA-plan een Paper-bot "
+        "met de naam Matrix Direct Paper en budget €20."
+    ) == "Matrix Direct Paper"
+
+
 def test_requested_name_slot_extracts_only_name_from_followup_instructions():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_setup")

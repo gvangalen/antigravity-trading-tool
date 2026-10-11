@@ -73,10 +73,10 @@ class FinnResponsesProposalSelection:
             current_assets = mentioned_catalog_symbols(message)
             setup_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(message, "setup")
             strategy_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(message, "strateg")
-            generic_strategy_relation = bool(strategy_name and re.fullmatch(
-                r"(?:die\s+)?bij\s+(?:het|de)\s+(?:zojuist|net)\s+"
+            generic_strategy_relation = bool(strategy_name and re.match(
+                r"(?:die\s+)?(?:bij|van)\s+(?:het|de)\s+(?:zojuist|net)\s+"
                 r"(?:aangemaakte?|opgeslagen)\s+"
-                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)(?:\s+hoort)?",
+                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)\b",
                 strategy_name, re.IGNORECASE,
             ))
             named_related_object = bool(setup_name or (strategy_name and not generic_strategy_relation))
