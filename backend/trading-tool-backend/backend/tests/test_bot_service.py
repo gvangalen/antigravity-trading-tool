@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from datetime import datetime, timedelta, timezone
 
-from backend.schemas.bot_schema import BotManualOrderSchema
+from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema, BotManualOrderSchema
 from backend.services.bot_service import BotService
 
 
@@ -219,6 +219,149 @@ class _FakeSession:
         self.commits += 1
 
 
+def test_explicit_paper_funding_is_separate_from_budget_and_atomic(monkeypatch):
+    session = _FakeSession()
+    service = BotService(session)
+    events = []
+
+    async def validate(payload, _user_id, **_kwargs):
+        payload["symbol"] = "ETH"
+
+    class Repo:
+        async def create_bot_config(self, payload):
+            events.append(("create", payload["budget_total_eur"], payload["paper_initial_cash_eur"]))
+            return 41
+
+        async def seed_initial_paper_cash(self, **fields):
+            events.append(("fund", fields["symbol"], fields["amount_eur"]))
+            assert session.commits == 0
+            return True
+
+        async def get_bot_config(self, _user_id, bot_id):
+            return {"id": bot_id, "strategy_id": 5, "symbol": "ETH",
+                    "paper_initial_cash_eur": 25, "budget_total_eur": 100,
+                    "is_live": False, "mode": "manual"}
+
+    monkeypatch.setattr(service, "validate_bot_payload", validate)
+    service.repository = Repo()
+    result = asyncio.run(service.create_bot_config(BotConfigCreateSchema(
+        name="ETH Paper", strategy_id=5, budget_total_eur=100,
+        paper_initial_cash_eur=25,
+    ), user_id=7))
+
+    assert events == [("create", 100, 25), ("fund", "ETH", 25)]
+    assert session.commits == 1
+    assert result["bot"]["budget"]["total_eur"] == 100
+    assert result["bot"]["paper_initial_cash_eur"] == 25
+
+
+def test_existing_unused_paper_bot_can_receive_one_explicit_initial_credit(monkeypatch):
+    session = _FakeSession()
+    service = BotService(session)
+    events = []
+
+    async def validate(_payload, _user_id, **_kwargs):
+        return None
+
+    class Repo:
+        async def get_bot_config(self, _user_id, _bot_id):
+            return {"id": 41, "strategy_id": 5, "symbol": "ETH", "mode": "auto",
+                    "is_live": False, "is_active": True, "paper_initial_cash_eur": 0,
+                    "budget_total_eur": 100, "budget_daily_limit_eur": 20,
+                    "budget_min_order_eur": 1, "budget_max_order_eur": 20,
+                    "base_currency": "EUR"}
+
+        async def can_seed_existing_paper_bot(self, **_fields):
+            events.append("eligibility")
+            return True
+
+        async def update_bot_config(self, _user_id, _bot_id, fields):
+            events.append(("update", fields["paper_initial_cash_eur"]))
+            return 41
+
+        async def seed_initial_paper_cash(self, **fields):
+            assert session.commits == 0
+            events.append(("credit", fields["symbol"], fields["amount_eur"]))
+            return True
+
+    monkeypatch.setattr(service, "validate_bot_payload", validate)
+    service.repository = Repo()
+    asyncio.run(service.update_bot_config(41, BotConfigUpdateSchema(
+        paper_initial_cash_eur=25, risk_acknowledged=True,
+    ), user_id=7))
+
+    assert events == ["eligibility", ("update", 25), ("credit", "ETH", 25)]
+    assert session.commits == 2  # bot+credit transaction, then behavioral audit
+
+
+def test_paper_order_preflight_uses_virtual_cash_not_unused_budget(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class Repo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual")
+            return bot
+
+        async def get_paper_cash(self, **_fields):
+            return 0.0
+
+    service.repository = Repo()
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    async def no_live_context(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    monkeypatch.setattr(service, "require_live_manual_order_preflight_context", no_live_context)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.0002, price=50000)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.preflight_manual_order(payload, user_id=7))
+    assert exc.value.status_code == 400
+    assert "cash" in str(exc.value.detail).lower()
+
+
+def test_paper_manual_buy_rejects_guardrail_cash_trimming():
+    service = BotService.__new__(BotService)
+    bot = {
+        "is_live": False, "is_active": True, "budget_total_eur": 1000,
+        "budget_daily_limit_eur": 1000, "budget_min_order_eur": 10,
+        "budget_max_order_eur": 1000, "max_asset_exposure_pct": 100,
+    }
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.002, price=50000)
+    stats = {"executed_cash": 0, "today_spent": 0, "net_qty": 0}
+    with pytest.raises(HTTPException) as exc:
+        service._validate_manual_order_budget_context(bot, stats, payload, 100, paper_cash_eur=50)
+    assert exc.value.status_code == 400
+    assert "Paper-kassaldo" in str(exc.value.detail)
+
+
+def test_paper_manual_preview_uses_actual_cash(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class Repo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual")
+            return bot
+
+        async def get_paper_cash(self, **_fields):
+            return 0.0
+
+    service.repository = Repo()
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.0002, price=50000)
+    result = asyncio.run(service.preview_manual_order(payload, user_id=7))
+    assert result["guardrails"]["allowed"] is False
+    assert result["guardrails"]["blocked_by"] == "insufficient_paper_cash"
+
+
 _DEFAULT_MARKET_SNAPSHOT = object()
 
 
@@ -413,6 +556,60 @@ def test_bot_payload_uses_owner_scoped_strategy_asset_over_stale_workspace_asset
     assert payload["symbol"] == "BTC"
 
 
+def test_paper_startkapitaal_requires_whole_cents():
+    service = BotService(_FakeSession())
+    payload = {
+        "name": "BTC Paper Bot",
+        "strategy_id": 42,
+        "mode": "manual",
+        "is_live": False,
+        "paper_initial_cash_eur": 0.001,
+    }
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.validate_bot_payload(payload, user_id=1))
+
+    assert exc.value.status_code == 400
+    assert "eurocenten" in exc.value.detail
+
+
+def test_manual_paper_order_rechecks_budget_after_bot_lock(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class Repo(_ManualOrderRepo):
+        reads = 0
+
+        async def get_bot_config(self, user_id, bot_id):
+            self.reads += 1
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual", budget_total_eur=100 if self.reads == 1 else 20)
+            return bot
+
+        async def get_paper_cash(self, **_fields):
+            return 100
+
+    repo = Repo()
+    service.repository = repo
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    async def no_live_context(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    monkeypatch.setattr(service, "require_live_manual_order_preflight_context", no_live_context)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 400
+    assert "Totaal budget overschreden" in exc.value.detail
+    assert repo.reads == 2
+    assert repo.created_orders == 0
+
+
 def test_bot_creation_rejects_duplicate_strategy_bot():
     service = BotService(_FakeSession(duplicate_strategy_bot_id=7))
     payload = {
@@ -508,6 +705,7 @@ def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
                 "dca_frequency": "monthly", "dca_day": None, "dca_month_day": 5,
                 "base_currency": "EUR", "last_run": None, "created_at": None,
                 "updated_at": None, "budget_total_eur": 100,
+                "paper_initial_cash_eur": 25,
                 "budget_daily_limit_eur": 100, "budget_min_order_eur": 1,
                 "budget_max_order_eur": 100, "max_asset_exposure_pct": 100,
             }]
@@ -521,6 +719,7 @@ def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
     assert bot["strategy"]["setup"]["timeframe"] == "1D"
     assert bot["strategy"]["setup"]["dca_frequency"] == "monthly"
     assert bot["strategy"]["setup"]["dca_month_day"] == 5
+    assert bot["paper_initial_cash_eur"] == 25
 
 
 def test_bot_update_pressure_event_detects_budget_live_and_mode_risk():

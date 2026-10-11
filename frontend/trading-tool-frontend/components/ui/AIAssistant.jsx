@@ -5260,7 +5260,8 @@ function AIAssistantContent({
           [supplied.high_threshold != null ? `Score vanaf ${supplied.high_threshold}` : "Hoge score", dcaBand(supplied.high_score_percent)]]
         : [["Uitvoering", [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
       : isBot
-        ? [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]]
+        ? [[({ en: "Bot budget limit", de: "Bot-Budgetlimit" }[locale] || "Botbudgetlimiet"), supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null],
+          [({ en: "Virtual Paper starting capital", de: "Virtuelles Paper-Startkapital" }[locale] || "Virtueel Paper-startkapitaal"), supplied.paper_initial_cash_eur ? `€${supplied.paper_initial_cash_eur}` : null]]
         : isIndicator
           ? [["Indicator", supplied.indicator ? indicatorDisplayName(supplied.indicator) : null], ["Categorie", ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category)], ["Weging", supplied.weight]]
           : [];

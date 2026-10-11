@@ -347,7 +347,7 @@ class FinnResponsesFrontDoor:
                 call=FinnResponsesToolCall(
                     name=catalog.proposal_tool_for_operation("create_bot"),
                     operation_id="create_bot",
-                    inputs={key: explicit[key] for key in ("name", "budget_total_eur") if key in explicit},
+                    inputs={key: explicit[key] for key in ("name", "budget_total_eur", "paper_initial_cash_eur") if key in explicit},
                     read_tools=(),
                     required_inputs=contract.required_inputs, missing_inputs=(),
                     draft_intent="new", target_reference="confirmed_previous_plan",

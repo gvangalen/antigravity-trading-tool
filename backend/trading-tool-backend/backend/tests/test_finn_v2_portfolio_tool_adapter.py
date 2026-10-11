@@ -193,6 +193,27 @@ def test_uninitialized_bot_portfolio_is_not_reported_as_zero_balance():
     assert result["data"].bots[0].equity is None
 
 
+def test_paper_and_live_cash_are_not_summed_as_one_spendable_balance():
+    adapter = _adapter()
+
+    async def mixed(_user_id):
+        return {"bots": [
+            {"bot_id": 1, "name": "Paper", "symbol": "ETH", "cash": 80,
+             "position_value": 0, "invested": 0, "budget_total": 100,
+             "portfolio_initialized": True, "price_available": True, "is_live": False},
+            {"bot_id": 2, "name": "Live", "symbol": "BTC", "cash": 20,
+             "position_value": 0, "invested": 0, "budget_total": 100,
+             "portfolio_initialized": True, "price_available": True, "is_live": True},
+        ]}
+
+    adapter.repository.get_portfolio_intelligence_context = mixed
+    result = asyncio.run(adapter.execute(user_id=17))
+    assert result["data"].global_.cash_balance is None
+    assert result["data"].global_.total_equity is None
+    assert result["data"].bots[0].paper_cash_eur == 80
+    assert result["data"].bots[1].paper_cash_eur is None
+
+
 def test_missing_position_price_does_not_become_zero_market_value():
     adapter = _adapter()
 

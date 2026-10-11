@@ -1,8 +1,10 @@
 import logging
+import math
 import asyncio
 import json
 import os
 import uuid
+from decimal import Decimal, InvalidOperation
 from datetime import date, timedelta, datetime, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException
@@ -186,6 +188,7 @@ class BotService:
             "base_currency": bot.get("base_currency") or "EUR",
             "symbol": bot.get("symbol"),
             "budget": budget,
+            "paper_initial_cash_eur": float(bot.get("paper_initial_cash_eur") or 0),
             "strategy": strategy,
             "created_at": bot["created_at"].isoformat() if bot.get("created_at") else None,
             "updated_at": bot["updated_at"].isoformat() if bot.get("updated_at") else None,
@@ -238,6 +241,7 @@ class BotService:
                 "strategy_id": r.get("strategy_id"),
                 "symbol": r.get("symbol"),
                 "base_currency": r.get("base_currency") or "EUR",
+                "paper_initial_cash_eur": float(r.get("paper_initial_cash_eur") or 0),
                 "last_run": r["last_run"].isoformat() if r.get("last_run") else None,
                 "budget": {
                     "total_eur": float(r["budget_total_eur"] or 0),
@@ -317,6 +321,7 @@ class BotService:
 
         # 3. Budget checks
         budget_total = raw_payload.get("budget_total_eur", 0.0)
+        paper_initial_cash = raw_payload.get("paper_initial_cash_eur", 0.0)
         budget_daily = raw_payload.get("budget_daily_limit_eur", 0.0)
         budget_min = raw_payload.get("budget_min_order_eur", 0.0)
         budget_max = raw_payload.get("budget_max_order_eur", 0.0)
@@ -324,6 +329,7 @@ class BotService:
         # Basic non-negative validation
         for label, val in [
             ("budget_total_eur", budget_total),
+            ("paper_initial_cash_eur", paper_initial_cash),
             ("budget_daily_limit_eur", budget_daily),
             ("budget_min_order_eur", budget_min),
             ("budget_max_order_eur", budget_max)
@@ -331,10 +337,18 @@ class BotService:
             if val is not None:
                 try:
                     num_val = float(val)
-                    if num_val < 0:
+                    if not math.isfinite(num_val) or num_val < 0:
                         raise ValueError()
                 except (ValueError, TypeError):
                     raise HTTPException(400, f"{label} moet een positief getal (of 0) zijn.")
+
+        try:
+            paper_cash_cents = Decimal(str(paper_initial_cash or 0)) * 100
+        except InvalidOperation:
+            raise HTTPException(400, "Virtueel Paper-startkapitaal moet in hele eurocenten zijn.")
+        if paper_cash_cents != paper_cash_cents.to_integral_value():
+            raise HTTPException(400, "Virtueel Paper-startkapitaal moet in hele eurocenten zijn.")
+        raw_payload["paper_initial_cash_eur"] = float(paper_cash_cents / 100)
 
         # Logical budget consistency validations
         budget_total_num = float(budget_total or 0)
@@ -355,6 +369,10 @@ class BotService:
                 raise HTTPException(400, "budget_max_order_eur mag niet groter zijn dan het totaal budget.")
 
         is_live = bool(raw_payload.get("is_live"))
+        if is_live and float(paper_initial_cash or 0) > 0:
+            raise HTTPException(400, "Virtueel Paper-startkapitaal kan niet op een live bot worden gezet.")
+        if float(paper_initial_cash or 0) > 0 and str(raw_payload.get("base_currency") or "EUR").upper() != "EUR":
+            raise HTTPException(400, "Virtueel Paper-startkapitaal vereist EUR als basisvaluta.")
         mode_value = str(raw_payload.get("mode") or "manual").lower()
         is_active = bool(raw_payload.get("is_active", True))
         requires_budget = is_live or (is_active and mode_value in {"semi-auto", "auto"})
@@ -430,7 +448,18 @@ class BotService:
         # Meticulously validate payload
         await self.validate_bot_payload(data, user_id, is_update=False)
 
+        initial_cash = float(data.get("paper_initial_cash_eur") or 0)
+        if not data["is_live"] and initial_cash > 0:
+            symbol = str(data.get("symbol") or "").strip().upper()
+            if not symbol:
+                raise HTTPException(400, "Geen gekoppelde asset voor Paper-startkapitaal gevonden.")
         bot_id = await self.repository.create_bot_config(data)
+        if not data["is_live"] and initial_cash > 0:
+            credited = await self.repository.seed_initial_paper_cash(
+                user_id=user_id, bot_id=bot_id, symbol=symbol, amount_eur=initial_cash,
+            )
+            if not credited:
+                raise HTTPException(409, "Paper-startkapitaal is al geboekt.")
         await self.session.commit()
         bot = await self.repository.get_bot_config(user_id, bot_id)
         return {"ok": True, "id": bot_id, **self._bot_contract(bot)}
@@ -447,6 +476,17 @@ class BotService:
         if "daily_limit_eur" in updates: updates["budget_daily_limit_eur"] = updates.pop("daily_limit_eur")
         if "min_order_eur" in updates: updates["budget_min_order_eur"] = updates.pop("min_order_eur")
         if "max_order_eur" in updates: updates["budget_max_order_eur"] = updates.pop("max_order_eur")
+
+        funding_amount = None
+        if "paper_initial_cash_eur" in updates:
+            requested_cash = float(updates["paper_initial_cash_eur"] or 0)
+            existing_cash = float(existing.get("paper_initial_cash_eur") or 0)
+            if requested_cash == existing_cash:
+                updates.pop("paper_initial_cash_eur")
+            elif existing_cash > 0 or requested_cash <= 0:
+                raise HTTPException(409, "Paper-startkapitaal kan slechts eenmaal worden ingesteld.")
+            else:
+                funding_amount = requested_cash
 
         # Merge updates on top of existing config for cross-field consistency validations
         merged = dict(existing)
@@ -465,9 +505,24 @@ class BotService:
                 },
             )
 
+        if funding_amount is not None:
+            if not await self.repository.can_seed_existing_paper_bot(user_id=user_id, bot_id=bot_id):
+                raise HTTPException(409, "Deze Paper-bot heeft al portefeuille- of orderactiviteit. Startkapitaal vereist handmatige controle.")
+
         updated_id = await self.repository.update_bot_config(user_id, bot_id, updates)
         if not updated_id:
             raise HTTPException(404, "Bot niet gevonden")
+
+        if funding_amount is not None:
+            symbol = str(merged.get("symbol") or "").strip().upper()
+            if not symbol:
+                raise HTTPException(400, "Geen gekoppelde asset voor Paper-startkapitaal gevonden.")
+            credited = await self.repository.seed_initial_paper_cash(
+                user_id=user_id, bot_id=bot_id, symbol=symbol,
+                amount_eur=funding_amount,
+            )
+            if not credited:
+                raise HTTPException(409, "Paper-startkapitaal is al geboekt.")
             
         await self.session.commit()
         bot = await self.repository.get_bot_config(user_id, bot_id)
@@ -487,7 +542,7 @@ class BotService:
 
     def _bot_update_pressure_event(self, existing: Dict[str, Any], merged: Dict[str, Any], updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         reasons: List[str] = []
-        for field in ["budget_total_eur", "budget_daily_limit_eur", "budget_max_order_eur", "max_asset_exposure_pct"]:
+        for field in ["budget_total_eur", "budget_daily_limit_eur", "budget_max_order_eur", "max_asset_exposure_pct", "paper_initial_cash_eur"]:
             if field not in updates:
                 continue
             before = self._as_float(existing.get(field))
@@ -883,6 +938,7 @@ class BotService:
         stats: Dict[str, Any],
         payload: BotManualOrderSchema,
         notional: float,
+        paper_cash_eur: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         min_order = float(bot.get("budget_min_order_eur", 0) or 0)
         if min_order > 0 and notional < (min_order - 0.01):
@@ -909,7 +965,11 @@ class BotService:
                 current_asset_value_eur=max(float(stats.get("net_qty", 0) or 0), 0.0) * payload.price,
                 invested_eur=invested,
                 today_allocated_eur=today_spent,
-                cash_balance_eur=max(total_budget - invested, 0.0) if total_budget > 0 else notional,
+                cash_balance_eur=(
+                    max(float(paper_cash_eur or 0), 0.0)
+                    if not bot.get("is_live") else
+                    (max(total_budget - invested, 0.0) if total_budget > 0 else notional)
+                ),
                 kill_switch=bool(bot.get("is_active", True)),
                 max_trade_risk_eur=bot.get("budget_max_order_eur"),
                 daily_allocation_eur=bot.get("budget_daily_limit_eur"),
@@ -919,6 +979,8 @@ class BotService:
             )
             if not guardrails.get("allowed", False):
                 raise HTTPException(400, guardrails.get("reason") or "Order geblokkeerd door bot guardrails.")
+            if not bot.get("is_live") and float(guardrails.get("adjusted_amount_eur") or 0) + 0.001 < notional:
+                raise HTTPException(400, "Onvoldoende virtueel Paper-kassaldo voor het gevraagde bedrag.")
             return guardrails
 
         current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
@@ -1359,7 +1421,13 @@ class BotService:
         today_allocated = float(stats.get("today_spent", 0) or 0) + float(stats.get("today_reserved", 0) or 0)
         current_asset_value = max(float(stats.get("net_qty", 0) or 0), 0.0) * price
         total_budget = float(bot.get("budget_total_eur", 0) or 0)
-        cash_balance = max(total_budget - invested, 0.0) if total_budget > 0 else max(amount_eur, 0.0)
+        if not bot.get("is_live") and str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
+            raise HTTPException(400, "Paper-orderasset wijkt af van de gekoppelde botasset.")
+        cash_balance = (
+            max(total_budget - invested, 0.0) if total_budget > 0 else max(amount_eur, 0.0)
+        ) if bot.get("is_live") else await self.repository.get_paper_cash(
+            user_id=user_id, bot_id=payload.bot_id, symbol=str(payload.symbol).upper(),
+        )
         portfolio_value = max(total_budget, current_asset_value, invested, amount_eur)
         guardrails = apply_guardrails(
             proposed_amount_eur=gross_eur if payload.side == "buy" else 0.0,
@@ -1375,6 +1443,8 @@ class BotService:
             total_budget_eur=bot.get("budget_total_eur"),
             min_order_eur=bot.get("budget_min_order_eur"),
         )
+        if payload.side == "buy" and not bot.get("is_live") and float(guardrails.get("adjusted_amount_eur") or 0) + 0.001 < gross_eur:
+            guardrails.update(allowed=False, blocked_by="insufficient_paper_cash", reason="Onvoldoende virtueel Paper-kassaldo voor het gevraagde bedrag.")
 
         if payload.side == "sell":
             current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
@@ -1441,11 +1511,38 @@ class BotService:
 
         live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
 
+        paper_cash = None
+        if not bot.get("is_live"):
+            if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
+                raise HTTPException(400, "Paper-orderasset wijkt af van de gekoppelde botasset.")
+            paper_cash = await self.repository.get_paper_cash(
+                user_id=user_id, bot_id=payload.bot_id,
+                symbol=str(payload.symbol).upper(), lock=True,
+            )
+            # get_paper_cash locks the bot row. Read the configuration again after
+            # waiting for that lock so concurrent budget or mode edits cannot be
+            # checked against the pre-lock snapshot.
+            bot = await self.repository.get_bot_config(user_id, payload.bot_id)
+            if not bot:
+                raise HTTPException(404, "Bot niet gevonden")
+            if bot.get("is_live"):
+                raise HTTPException(409, "Botmodus is gewijzigd. Controleer het voorstel opnieuw.")
+            if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
+                raise HTTPException(409, "Botasset is gewijzigd. Controleer het voorstel opnieuw.")
+            paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
+            if not paper_match["allowed"]:
+                raise HTTPException(409, {
+                    "code": "PAPER_SETUP_MATCH_REQUIRED",
+                    "message": paper_match["message"],
+                    "safe_next_step": paper_match["safe_next_step"],
+                    "setup_match_status": paper_match["status"],
+                })
+
         # 2. Fetch current stats
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
         
         # 3. Guardrail check for BUY and SELL orders
-        self._validate_manual_order_budget_context(bot, stats, payload, notional)
+        self._validate_manual_order_budget_context(bot, stats, payload, notional, paper_cash)
 
         live_keys = None
         if bot.get("is_live"):
@@ -1612,7 +1709,15 @@ class BotService:
 
         live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
-        bot_guardrails = self._validate_manual_order_budget_context(bot, stats, payload, notional)
+        paper_cash = None
+        if not bot.get("is_live"):
+            if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
+                raise HTTPException(400, "Paper-orderasset wijkt af van de gekoppelde botasset.")
+            paper_cash = await self.repository.get_paper_cash(
+                user_id=user_id, bot_id=payload.bot_id,
+                symbol=str(payload.symbol).upper(),
+            )
+        bot_guardrails = self._validate_manual_order_budget_context(bot, stats, payload, notional, paper_cash)
 
         result = {
             "ok": True,
@@ -1758,9 +1863,13 @@ class BotService:
                 "last_price": None,
                 "position_value_eur": None,
                 "invested_eur": abs(stats_raw["executed_cash"]),
+                "paper_cash_eur": (
+                    float(b["paper_cash_eur"])
+                    if not b["is_live"] and b.get("paper_cash_eur") is not None else None
+                ),
             }
             
-            stats["available_eur"] = max(float(b["budget_total_eur"]) - stats["invested_eur"], 0)
+            stats["remaining_budget_limit_eur"] = max(float(b["budget_total_eur"]) - stats["invested_eur"], 0)
             stats["remaining_daily_eur"] = max(float(b["budget_daily_limit_eur"]) - stats["today_spent_eur"], 0)
             
             # Fetch price individually

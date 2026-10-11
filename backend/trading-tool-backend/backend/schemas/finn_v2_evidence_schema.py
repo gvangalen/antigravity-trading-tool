@@ -214,6 +214,7 @@ class LinkedBotData(BaseModel):
     is_live: bool = False
     mode: Optional[str] = None
     budget_total_eur: Optional[float] = None
+    paper_initial_cash_eur: Optional[float] = None
 
 
 class BotStatusData(BaseModel):
@@ -259,6 +260,7 @@ class PortfolioBotData(BaseModel):
     mode: Optional[str] = None
     equity: Optional[float] = None
     budget_total_eur: Optional[float] = None
+    paper_cash_eur: Optional[float] = None
     is_active: Optional[bool] = None
     is_live: Optional[bool] = None
     price_as_of: Optional[datetime] = None

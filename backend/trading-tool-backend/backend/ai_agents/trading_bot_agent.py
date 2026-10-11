@@ -438,10 +438,17 @@ def _get_strategy_setup_payload(
         # Preserve malformed historical plans as marked plans so the brain
         # holds them instead of silently treating them as ordinary DCA.
         payload["dca_amount_semantics"] = "planned_exact"
-    if is_confirmed_dca_amount_rule({
+    # The strategy editor stored fixed DCA plans before it wrote the FINN
+    # marker. The persisted DCA type, fixed mode and validated amount are the
+    # same rule; the linked setup cadence is checked separately before a
+    # worker may assess a buy. Do not extend this inference to custom curves.
+    amount_rule = {
         **stored_data, "setup_type": normalized_type, "execution_mode": execution_mode,
         "base_amount": base_amount, "decision_curve": curve,
-    }):
+    }
+    if normalized_type == "dca" and execution_mode == "fixed" and not curve:
+        amount_rule["dca_amount_semantics"] = "planned_exact"
+    if is_confirmed_dca_amount_rule(amount_rule):
         payload["dca_amount_semantics"] = "planned_exact"
 
     return payload
@@ -1418,6 +1425,9 @@ def _persist_decision_and_order(
         "amount_eur": amount_eur,
 
         "trade_plan": decision.get("trade_plan"),
+        "strategy_reason": decision.get("strategy_reason"),
+        "guardrail_reason": decision.get("guardrail_reason"),
+        "guardrails_result": decision.get("guardrails_result"),
         "watch_levels": decision.get("watch_levels"),
         "monitoring": decision.get("monitoring"),
         "alerts_active": decision.get("alerts_active"),
@@ -1982,6 +1992,16 @@ def _auto_execute_decision(
         raise RuntimeError("Decision already processing or executed")
 
     try:
+        if not is_live and side == "buy":
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT cash_eur FROM bot_portfolios
+                       WHERE user_id=%s AND bot_id=%s AND symbol=%s FOR UPDATE""",
+                    (user_id, bot_id, symbol),
+                )
+                cash_row = cur.fetchone()
+            if cash_row is None or float(cash_row[0] or 0) + 0.001 < notional:
+                raise RuntimeError("Paper-bot heeft onvoldoende virtueel kassaldo")
         if side == "buy":
             _require_current_setup_revision_for_buy(
                 conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
@@ -2085,6 +2105,18 @@ def execute_manual_decision(
     bot_id: int,
     decision_id: int,
 ):
+    # Match the automatic executor's lock order: bot, decision, order, then
+    # Paper portfolio. This serializes all debits for a bot without creating
+    # a manual-versus-auto lock inversion.
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT is_live FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE",
+            (bot_id, user_id),
+        )
+        bot_row = cur.fetchone()
+    if bot_row is None:
+        raise RuntimeError("Bot not found")
+    bot_live = bool(bot_row[0])
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
         user_id=user_id,
@@ -2132,9 +2164,16 @@ def execute_manual_decision(
         cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
 
         # 1.5) Live Execution
-        with conn.cursor() as cur:
-            cur.execute("SELECT is_live FROM bot_configs WHERE id=%s", (bot_id,))
-            bot_live = cur.fetchone()[0]
+        if not bot_live and side == "buy":
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT cash_eur FROM bot_portfolios
+                       WHERE user_id=%s AND bot_id=%s AND symbol=%s FOR UPDATE""",
+                    (user_id, bot_id, symbol),
+                )
+                cash_row = cur.fetchone()
+            if cash_row is None or float(cash_row[0] or 0) + 0.001 < notional:
+                raise RuntimeError("Paper-bot heeft onvoldoende virtueel kassaldo")
         
         if bot_live:
             _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)

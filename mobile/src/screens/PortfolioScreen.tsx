@@ -2182,7 +2182,7 @@ function mapBots(portfolios: UnknownRecord[], configs: UnknownRecord[]): Portfol
       const budgetTotal = readNumber(budget, ['total_eur'], readNumber(config, ['budget_total_eur', 'budget_total'], 0));
 
       return {
-        available: readNumber(stats, ['available_eur'], Math.max(budgetTotal - invested, 0)),
+        available: readNumber(stats, ['remaining_budget_limit_eur'], Math.max(budgetTotal - invested, 0)),
         budgetDailyLimit: readNumber(budget, ['daily_limit_eur'], readNumber(config, ['budget_daily_limit_eur'], 0)),
         budgetMaxOrder: readNumber(budget, ['max_order_eur'], readNumber(config, ['budget_max_order_eur'], 0)),
         budgetTotal,

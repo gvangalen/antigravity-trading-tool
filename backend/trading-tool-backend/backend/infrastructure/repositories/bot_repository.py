@@ -39,7 +39,7 @@ class BotRepository:
         query = text("""
             SELECT
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
-              b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
+              b.budget_total_eur, b.paper_initial_cash_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, """ + base_currency_select + """, b.last_run,
               COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
@@ -62,7 +62,7 @@ class BotRepository:
         query = text("""
             SELECT
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
-              b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
+              b.budget_total_eur, b.paper_initial_cash_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, """ + base_currency_select + """, b.last_run,
               COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
@@ -297,16 +297,104 @@ class BotRepository:
         query = text("""
             INSERT INTO bot_configs (
                 user_id, name, strategy_id, mode, is_live, risk_profile, cadence,
-                budget_total_eur, budget_daily_limit_eur, budget_min_order_eur,
+                budget_total_eur, paper_initial_cash_eur, budget_daily_limit_eur, budget_min_order_eur,
                 budget_max_order_eur, max_asset_exposure_pct, base_currency, symbol, created_at, updated_at
             )
             VALUES (:user_id, :name, :strategy_id, :mode, :is_live, :risk_profile, :cadence,
-                    :budget_total_eur, :budget_daily_limit_eur, :budget_min_order_eur,
+                    :budget_total_eur, :paper_initial_cash_eur, :budget_daily_limit_eur, :budget_min_order_eur,
                     :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, :symbol, NOW(), NOW())
             RETURNING id
         """)
         result = await self.session.execute(query, payload)
         return result.fetchone()[0]
+
+    async def seed_initial_paper_cash(self, *, user_id: int, bot_id: int, symbol: str, amount_eur: float) -> bool:
+        """Book one explicit virtual credit in the same transaction as bot creation."""
+        result = await self.session.execute(text("""
+            INSERT INTO bot_ledger (
+                user_id, bot_id, entry_type, symbol, cash_delta_eur, qty_delta,
+                note, meta, ts
+            ) VALUES (
+                :user_id, :bot_id, 'paper_initial_funding', :symbol, :amount_eur, 0,
+                'Virtueel Paper-startkapitaal', CAST(:meta AS JSONB), NOW()
+            )
+            ON CONFLICT (user_id, bot_id, entry_type)
+            WHERE entry_type = 'paper_initial_funding' DO NOTHING
+            RETURNING id
+        """), {
+            "user_id": user_id, "bot_id": bot_id, "symbol": symbol,
+            "amount_eur": amount_eur,
+            "meta": json.dumps({"source": "paper_bot_creation", "currency": "EUR"}),
+        })
+        if result.fetchone() is None:
+            return False
+        await self.session.execute(text("""
+            INSERT INTO bot_portfolios (
+                user_id, bot_id, symbol, cash_eur, position_qty, invested_eur,
+                avg_entry, realized_pnl_eur, updated_at
+            ) VALUES (:user_id, :bot_id, :symbol, :amount_eur, 0, 0, 0, 0, NOW())
+            ON CONFLICT (bot_id, symbol) DO UPDATE SET
+                cash_eur = bot_portfolios.cash_eur + EXCLUDED.cash_eur,
+                updated_at = NOW()
+        """), {
+            "user_id": user_id, "bot_id": bot_id, "symbol": symbol,
+            "amount_eur": amount_eur,
+        })
+        return True
+
+    async def get_paper_cash(self, *, user_id: int, bot_id: int, symbol: str, lock: bool = False) -> float:
+        """Read actual virtual cash; lock both rows before any Paper debit."""
+        if lock:
+            # Separate statements make the cash read use a snapshot taken after
+            # waiting for a concurrent bot transaction to finish.
+            owner = await self.session.execute(text("""
+                SELECT id FROM bot_configs
+                WHERE id=:bot_id AND user_id=:user_id AND is_live=FALSE
+                FOR UPDATE
+            """), {"user_id": user_id, "bot_id": bot_id})
+            if owner.fetchone() is None:
+                raise ValueError("paper_bot_not_found")
+            cash = await self.session.execute(text("""
+                SELECT cash_eur FROM bot_portfolios
+                WHERE bot_id=:bot_id AND user_id=:user_id AND symbol=:symbol
+                FOR UPDATE
+            """), {"user_id": user_id, "bot_id": bot_id, "symbol": symbol})
+            row = cash.fetchone()
+            return float(row[0] or 0) if row else 0.0
+        query = text("""
+            SELECT COALESCE(p.cash_eur, 0) AS cash_eur
+            FROM bot_configs b
+            LEFT JOIN bot_portfolios p
+              ON p.bot_id = b.id AND p.user_id = b.user_id AND p.symbol = :symbol
+            WHERE b.id = :bot_id AND b.user_id = :user_id AND b.is_live = FALSE
+        """)
+        result = await self.session.execute(query, {
+            "user_id": user_id, "bot_id": bot_id, "symbol": symbol,
+        })
+        row = result.fetchone()
+        if row is None:
+            raise ValueError("paper_bot_not_found")
+        return float(row[0] or 0)
+
+    async def can_seed_existing_paper_bot(self, *, user_id: int, bot_id: int) -> bool:
+        """Lock the bot and allow first funding only before any Paper activity."""
+        result = await self.session.execute(text("""
+            SELECT b.id,
+                   NOT EXISTS (
+                       SELECT 1 FROM bot_portfolios p WHERE p.bot_id=b.id
+                         AND (COALESCE(p.cash_eur, 0) <> 0
+                           OR COALESCE(p.position_qty, 0) <> 0
+                           OR COALESCE(p.invested_eur, 0) <> 0
+                           OR COALESCE(p.realized_pnl_eur, 0) <> 0)
+                   ) AS no_funded_or_invested_portfolio,
+                   NOT EXISTS (SELECT 1 FROM bot_ledger l WHERE l.bot_id=b.id) AS no_ledger,
+                   NOT EXISTS (SELECT 1 FROM bot_orders o WHERE o.bot_id=b.id) AS no_orders
+            FROM bot_configs b
+            WHERE b.id=:bot_id AND b.user_id=:user_id AND b.is_live=FALSE
+            FOR UPDATE OF b
+        """), {"user_id": user_id, "bot_id": bot_id})
+        row = result.fetchone()
+        return bool(row and row[1] and row[2] and row[3])
 
     async def update_bot_config(self, user_id: int, bot_id: int, updates: dict) -> Optional[int]:
         if not updates:
@@ -374,10 +462,16 @@ class BotRepository:
               COALESCE(b.budget_total_eur,0) as budget_total_eur, COALESCE(b.budget_daily_limit_eur,0) as budget_daily_limit_eur,
               COALESCE(b.budget_min_order_eur,0) as budget_min_order_eur, COALESCE(b.budget_max_order_eur,0) as budget_max_order_eur,
               COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol,
+              p.cash_eur AS paper_cash_eur,
               """ + base_currency_select + """
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = b.user_id
+            LEFT JOIN bot_portfolios p ON p.bot_id = b.id AND p.user_id = b.user_id
+              AND p.symbol = COALESCE(
+                NULLIF(UPPER(b.symbol), ''), NULLIF(UPPER(s.symbol), ''),
+                NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), '')
+              )
             WHERE b.user_id=:user_id
             ORDER BY b.id ASC
         """)
