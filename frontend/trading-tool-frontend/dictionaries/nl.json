@@ -2968,7 +2968,7 @@
     "blocks": {
       "marketSnapshot": {
         "cardTitle": "Marktanalyse",
-        "priceLabel": "Bitcoin prijs",
+        "priceLabel": "Prijs",
         "volumeLabel": "Totaal volume",
         "macroLabel": "Macro",
         "technicalLabel": "Technisch",
@@ -3014,7 +3014,8 @@
       "indicatorHighlights": {
         "cardTitle": "Indicator-highlights",
         "empty": "Nog geen indicator-data beschikbaar voor dit onderdeel.",
-        "unknown": "Onbekend"
+        "unknown": "Onbekend",
+        "labels": {"price": "Prijs", "volume": "Volume", "dxy": "DXY", "rsi": "RSI"}
       },
       "weeklyRegime": {
         "title": "Weekregime-overzicht",

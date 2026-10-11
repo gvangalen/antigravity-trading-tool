@@ -81,6 +81,9 @@ export default function DataListBlock({
               i?.name ??
               t?.reports?.blocks?.indicatorHighlights?.unknown ??
               'Unknown';
+            const displayName = t?.reports?.blocks?.indicatorHighlights?.labels?.[
+              String(name).trim().toLowerCase()
+            ] || name;
             const score = i?.score;
             const interp =
               i?.interpretation ??
@@ -111,7 +114,7 @@ export default function DataListBlock({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <div className="text-[12px] font-bold text-muted tracking-tight truncate">
-                      {name}
+                      {displayName}
                     </div>
 
                     {typeof score === 'number' && (

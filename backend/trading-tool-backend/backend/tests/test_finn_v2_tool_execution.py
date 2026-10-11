@@ -436,6 +436,42 @@ def test_linked_strategy_collection_reads_every_owner_strategy_without_selecting
     service.resolver.strategies.query_strategies.assert_awaited_once_with(7, {"setup_id": 42})
 
 
+def test_setup_inventory_carries_owner_scoped_strategy_and_bot_relationships_for_comparison():
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    service.resolver.setups.get_user_setups = AsyncMock(return_value=[
+        {"id": 41, "name": "ETH DCA", "symbol": "ETH", "timeframe": "1D"},
+        {"id": 42, "name": "ETH Trade", "symbol": "ETH", "timeframe": "4H"},
+    ])
+    service.resolver.strategies.query_strategies = AsyncMock(return_value=[
+        {"id": 71, "setup_id": 41, "user_id": 7, "name": "ETH DCA Strategy"},
+        {"id": 72, "setup_id": 42, "user_id": 7, "name": "ETH Trade Strategy"},
+        {"id": 73, "setup_id": 42, "user_id": 8, "name": "Foreign Strategy"},
+    ])
+    service.resolver.bots.get_bot_configs = AsyncMock(return_value=[
+        {"id": 91, "strategy_id": 71, "name": "ETH Paper", "mode": "manual", "is_live": False},
+        {"id": 92, "strategy_id": 73, "name": "Foreign Bot", "mode": "auto", "is_live": True},
+    ])
+
+    result = asyncio.run(service._dispatch_tool(
+        tool_name="read_saved_setup_inventory", user_id=7, selector={"asset": "ETH"},
+        run=SimpleNamespace(workspace_hints_json={}, client_context_json={}), shared_state={},
+    ))
+
+    rows = {row["name"]: row for row in result["data"].setups}
+    assert rows["ETH DCA"]["linked_strategies"] == [
+        {"strategy_id": 71, "name": "ETH DCA Strategy"},
+    ]
+    assert rows["ETH DCA"]["linked_bots"] == [
+        {"bot_id": 91, "name": "ETH Paper", "strategy_id": 71,
+         "mode": "manual", "is_live": False},
+    ]
+    assert rows["ETH Trade"]["linked_strategies"] == [
+        {"strategy_id": 72, "name": "ETH Trade Strategy"},
+    ]
+    assert rows["ETH Trade"]["linked_bots"] == []
+    service.resolver.strategies.query_strategies.assert_awaited_once_with(7, {})
+
+
 def test_tool_redaction_service_serializes_nested_objects():
     service = FinnV2ToolRedactionService()
 

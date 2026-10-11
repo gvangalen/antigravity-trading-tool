@@ -613,9 +613,23 @@ class FinnV2ToolExecutionService:
                 rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset_filter]
             if timeframe_filter:
                 rows = [row for row in rows if str(row.get("timeframe") or "").upper() == timeframe_filter]
+            # One owner-scoped collection includes relationships for every
+            # returned setup. A broad comparison can then answer from one
+            # typed read instead of depending on a second model tool choice.
+            setup_ids = {row.get("setup_id") or row.get("id") for row in rows}
+            strategies = [
+                row for row in await self.resolver.strategies.query_strategies(user_id, {})
+                if row.get("user_id") == user_id and row.get("setup_id") in setup_ids
+            ] if setup_ids else []
+            strategy_ids = {row.get("strategy_id") or row.get("id") for row in strategies}
+            bots = [
+                row for row in await self.resolver.bots.get_bot_configs(user_id)
+                if row.get("strategy_id") in strategy_ids
+            ] if strategy_ids else []
             return await self.setup_inventory_adapter.execute(
                 setups=rows, asset_filter=asset_filter,
-                timeframe_filter=timeframe_filter, complete=complete,
+                timeframe_filter=timeframe_filter, strategies=strategies,
+                bots=bots, complete=complete,
             )
         if tool_name == "read_linked_strategy":
             setup_state = await self._ensure_setup(user_id=user_id, selector=selector, run=run, shared_state=shared_state)

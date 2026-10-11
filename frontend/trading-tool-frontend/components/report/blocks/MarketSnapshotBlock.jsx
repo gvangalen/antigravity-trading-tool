@@ -42,8 +42,8 @@ function scoreValue(v) {
 
 function ScoreItem({ label, value }) {
   return (
-    <div className="rounded-xl border border-slate-50 bg-white/50 p-3 flex flex-col items-center justify-center transition-all hover:bg-white hover:shadow-sm group">
-      <div className="text-[11px] font-bold text-secondary tracking-tight mb-1 group-hover:text-slate-500">{label}</div>
+    <div className="min-w-0 rounded-xl border border-slate-50 bg-white/50 p-3 flex flex-col items-center justify-center transition-all hover:bg-white hover:shadow-sm group">
+      <div className="max-w-full break-words text-center text-[11px] font-bold text-secondary leading-tight mb-1 group-hover:text-slate-500">{label}</div>
       <div className="text-lg font-bold text-foreground font-mono tracking-tight">
         {scoreValue(value)}
       </div>
