@@ -353,6 +353,7 @@ class FinnResponsesLoop:
         horizon_classification_check: Callable[[], bool] | None = None,
         locale: str | None = None,
         force_read_repair: bool = False,
+        required_read_tool_name: str | None = None,
         model_led_coach: bool = False,
         read_only_turn: bool = False,
         open_draft_available: bool = False,
@@ -816,7 +817,9 @@ class FinnResponsesLoop:
             elif not trace:
                 kwargs["tool_choice"] = (
                     {"type": "function", "name": self.catalog.proposal_tool_for_operation(guided_operation_id)}
-                    if guided_operation_id else "required" if force_read_repair else "auto"
+                    if guided_operation_id else
+                    {"type": "function", "name": required_read_tool_name}
+                    if required_read_tool_name else "required" if force_read_repair else "auto"
                 )
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
