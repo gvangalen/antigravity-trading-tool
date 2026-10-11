@@ -39,6 +39,7 @@ class FinnResponsesProposalSelection:
         semantic_target_candidate = bool(
             contract.operation_id == "create_bot"
             and conversation_context.get("immediate_bot_pair_semantic_candidate") is True
+            and not conversation_context.get("verified_immediate_bot_pair_default")
         )
         pending_target_choice = bool(
             contract.operation_id == "create_bot"

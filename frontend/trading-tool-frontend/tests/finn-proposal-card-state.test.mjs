@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+
+test("a Paper-bot card is confirmable only for its owner-scoped proposal strategy", () => {
+  const strategies = [{ id: 81, name: "ETH DCA" }, { id: 82, name: "Other" }];
+  const target = { target_type: "strategy", target_id: "81" };
+  assert.equal(verifiedPaperBotStrategy({ target, draftStrategyId: 81, ownerStrategies: strategies })?.name, "ETH DCA");
+  assert.equal(verifiedPaperBotStrategy({ target, draftStrategyId: 82, ownerStrategies: strategies }), null);
+  assert.equal(verifiedPaperBotStrategy({ target: { target_type: "bot", target_id: 81 }, draftStrategyId: 81, ownerStrategies: strategies }), null);
+  assert.equal(verifiedPaperBotStrategy({ target, draftStrategyId: 81, ownerStrategies: [] }), null);
+  assert.equal(verifiedPaperBotStrategy({ target: null, draftStrategyId: 81, ownerStrategies: strategies }), null);
+});
 
 test("retired server proposal loses its confirmation card while a new draft remains", () => {
   const oldCard = {

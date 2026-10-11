@@ -227,6 +227,30 @@ def test_semantic_candidate_cannot_bind_a_model_supplied_strategy_id():
     assert state["selection_diagnostic"]["bound_immediate_pair"] is False
 
 
+def test_joint_semantic_approval_binds_only_verified_action_strategy():
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "confirmed_previous_plan",
+         "inputs": {"name": "QA Paper", "budget_total_eur": 20, "strategy_id": 999}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Kun je voor dit plan een Paper-bot regelen met naam QA Paper en budget €20?",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": ACTION,
+            "immediate_bot_pair_semantic_candidate": True,
+            "immediate_bot_pair_guard_reason": "accepted",
+            "verified_immediate_bot_pair_default": True,
+        },
+        verified_asset="ETH",
+    )
+    state = result.request_plan.operation_state
+    assert state["collected_inputs"]["strategy_id"] == 81
+    assert state["target_choice_required"] is False
+    assert state["selection_diagnostic"]["bound_immediate_pair"] is True
+
+
 def test_responses_proposal_binds_verified_immediate_pair_without_temporal_phrase():
     call = FinnResponsesToolCatalog().validate(
         "manage_paper_bot_proposal",

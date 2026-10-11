@@ -39,3 +39,12 @@ export function retireFinnProposalCards(messages, proposalIds) {
     };
   });
 }
+
+export function verifiedPaperBotStrategy({ target, draftStrategyId, ownerStrategies }) {
+  const proposalId = Number(target?.target_id);
+  const draftId = Number(draftStrategyId);
+  if (target?.target_type !== "strategy"
+      || !Number.isSafeInteger(proposalId) || proposalId <= 0
+      || !Number.isSafeInteger(draftId) || draftId !== proposalId) return null;
+  return ownerStrategies.find((item) => Number(item.id || item.strategy_id) === proposalId) || null;
+}

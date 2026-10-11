@@ -6003,6 +6003,127 @@ def test_inconclusive_relevance_does_not_veto_confirmation_gated_draft():
     assert result.response.tool_trace[0]["result"]["status"] == "needs_input"
 
 
+@pytest.mark.parametrize("verdict, domain, expected_bound", [
+    ("create_for_immediate", "bot", True),
+    ("create_for_immediate", "unknown", False),
+    ("create_for_immediate", None, False),
+    ("unclear", None, False),
+])
+def test_semantic_bot_followup_requires_two_positive_verdicts_or_target_choice(
+    verdict, domain, expected_bound,
+):
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "manage_paper_bot_proposal", {
+            "operation_id": "create_bot", "draft_intent": "new",
+            "target_reference": "confirmed_previous_plan",
+            "inputs": {"name": "QA Paper", "budget_total_eur": 20, "strategy_id": 999},
+        }),)),
+        response("r2", text="Ik heb een Paper-botconcept voorbereid."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(),
+        user_id=7, run_id="semantic-bot-followup",
+    )
+    front.relevance_guard = SimpleNamespace(
+        immediate_bot_target=AsyncMock(return_value=verdict),
+        requested_mutation_domain=AsyncMock(return_value=domain),
+        is_relevant=AsyncMock(return_value=True),
+    )
+    front.reads = SimpleNamespace(session_factory=None)
+    context = {
+        "strict_immediate_action_lineage": True,
+        "immediate_previous_action_result": {
+            "operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+            "owner_user_id": 7, "result_status": "succeeded",
+            "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"},
+        },
+        "immediate_bot_pair_semantic_candidate": True,
+        "immediate_bot_pair_guard_reason": "unsupported_utterance",
+    }
+    result = asyncio.run(front.run(
+        message="Kun je voor dit plan een Paper-bot regelen met naam QA Paper en budget €20?",
+        instructions="Use FINN tools", conversation_context=context, verified_asset="ETH",
+    ))
+    state = result.proposal_analysis.request_plan.operation_state
+    assert (state["collected_inputs"].get("strategy_id") == 81) is expected_bound
+    assert state["target_choice_required"] is not expected_bound
+    assert state["selection_diagnostic"]["bound_immediate_pair"] is expected_bound
+    assert front.relevance_guard.immediate_bot_target.await_count == 1
+    assert front.relevance_guard.requested_mutation_domain.await_count == (1 if verdict == "create_for_immediate" else 0)
+    if expected_bound:
+        assert fake.requests == []
+
+
+@pytest.mark.parametrize("verdict", ["other_target", "read_only"])
+def test_semantic_bot_followup_rejects_other_target_or_read_only(verdict):
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "manage_paper_bot_proposal", {
+            "operation_id": "create_bot", "draft_intent": "new",
+            "target_reference": "confirmed_previous_plan",
+            "inputs": {"name": "QA Paper", "budget_total_eur": 20},
+        }),)),
+        response("r2", text="Ik maak hiervoor geen voorstel."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(),
+        user_id=7, run_id="semantic-bot-reject",
+    )
+    front.relevance_guard = SimpleNamespace(
+        immediate_bot_target=AsyncMock(return_value=verdict),
+        requested_mutation_domain=AsyncMock(return_value="unknown"),
+        is_relevant=AsyncMock(return_value=True),
+    )
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message="Kun je voor dit plan een Paper-bot regelen?",
+        instructions="Use FINN tools",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": {
+                "operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+                "owner_user_id": 7, "result_status": "succeeded",
+                "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"},
+            },
+            "immediate_bot_pair_semantic_candidate": True,
+            "immediate_bot_pair_guard_reason": "unsupported_utterance",
+        },
+        verified_asset="ETH",
+    ))
+    assert result.proposal_analysis is None
+    assert result.response.tool_trace[0]["result"]["reason"] == "bot_target_or_action_not_immediate"
+
+
+def test_semantic_bot_followup_cannot_rebind_an_unsupported_trading_pair():
+    fake = FakeResponses(response("r1", text="ETH/EUR is niet ondersteund."))
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(),
+        user_id=7, run_id="semantic-unsupported-pair",
+    )
+    front.relevance_guard = SimpleNamespace(
+        immediate_bot_target=AsyncMock(return_value="create_for_immediate"),
+        requested_mutation_domain=AsyncMock(return_value="bot"),
+    )
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message="Kun je voor dit ETH/EUR-plan een Paper-bot regelen?",
+        instructions="Use FINN tools",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": {
+                "operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
+                "owner_user_id": 7, "result_status": "succeeded",
+                "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"},
+            },
+            "immediate_bot_pair_semantic_candidate": True,
+            "immediate_bot_pair_guard_reason": "unsupported_utterance",
+        },
+        verified_asset="ETH",
+    ))
+    assert result.proposal_analysis is None
+    front.relevance_guard.immediate_bot_target.assert_not_awaited()
+    front.relevance_guard.requested_mutation_domain.assert_not_awaited()
+
+
 def test_model_led_read_question_cannot_start_a_select_asset_proposal():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "manage_asset_watchlist_proposal", {
