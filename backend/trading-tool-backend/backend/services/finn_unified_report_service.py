@@ -62,7 +62,7 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
             "market_analysis": "The market layer needs current source measurements before it can support a conclusion.",
             "macro_context": "A missing or stale macro score is unknown, not neutral market evidence.",
             "technical_analysis": "Technical timing requires current indicator measurements.",
-            "setup_validation": f"There are {len(active)} confirmed current setup matches." if active
+            "setup_validation": f"Across all followed assets, there are {len(active)} confirmed current setup matches." if active
             else "There is no confirmed setup match without a complete current benchmark." if missing
             else f"There is no current setup match: {len(outside)} saved setup(s) are outside their score conditions." if outside
             else "There is no confirmed current setup match.",
@@ -76,7 +76,7 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
             "market_analysis": "Die Marktlage braucht aktuelle Quellmessungen, bevor sie eine Schlussfolgerung stützen kann.",
             "macro_context": "Ein fehlender oder veralteter Makrowert ist unbekannt und kein neutrales Marktsignal.",
             "technical_analysis": "Für eine technische Einschätzung sind aktuelle Indikatormessungen nötig.",
-            "setup_validation": f"Es gibt {len(active)} bestätigte aktuelle Setup-Treffer." if active
+            "setup_validation": f"Über alle beobachteten Assets gibt es {len(active)} bestätigte aktuelle Setup-Treffer." if active
             else "Ohne vollständigen aktuellen Benchmark gibt es keinen bestätigten Setup-Treffer." if missing
             else f"Es gibt keinen aktuellen Setup-Treffer: {len(outside)} gespeicherte Setups liegen außerhalb ihrer Score-Bedingungen." if outside
             else "Es gibt keinen bestätigten aktuellen Setup-Treffer.",
@@ -90,7 +90,7 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
         "market_analysis": "De marktlaag is alleen bruikbaar als de onderliggende indicatoren een actuele bronmeting hebben.",
         "macro_context": "Een ontbrekende of verouderde macro-score is geen neutrale score en geen bevestiging van het marktbeeld.",
         "technical_analysis": "De technische laag vraagt actuele indicatorbronnen voordat FINN er een timingconclusie aan verbindt.",
-        "setup_validation": f"Er zijn {len(active)} bevestigde actuele setupmatches." if active
+        "setup_validation": f"Over alle gevolgde assets zijn er {len(active)} bevestigde actuele setupmatches." if active
         else "Er is zonder complete actuele benchmark geen bevestigde setupmatch." if missing
         else f"Er is geen actuele setupmatch: {len(outside)} opgeslagen setups vallen buiten hun scorevoorwaarden." if outside
         else "Er is geen bevestigde actuele setupmatch.",
@@ -237,12 +237,19 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     prose["executive_summary"] = fallbacks["executive_summary"]
     prose["bot_strategy"] = fallbacks["bot_strategy"]
     all_strategies = [row for item in assets for row in item.get("strategies") or []]
-    matches = [match for item in facts["assets"] for match in item["matches"]]
+    # ReportService deliberately hides historical AI setup scores unless each
+    # stored match declares the measured Score 2.0 semantics. Preserve that
+    # provenance when projecting the shared match into the report row.
+    matches = [
+        {**match, "score_semantics": "benchmark_setup_match_v1"}
+        for item in facts["assets"] for match in item["matches"]
+    ]
     matches.sort(key=lambda item: (bool(item.get("is_active")), item.get("score") or -1), reverse=True)
     best = next((match for match in matches if match.get("is_active")), None)
     best_setup = ({
         "id": best.get("setup_id"), "name": best.get("name"), "symbol": best.get("symbol"),
         "timeframe": best.get("timeframe"), "score": best.get("score"), "status": best.get("status"),
+        "score_semantics": best.get("score_semantics"),
     } if best else None)
     # A report for one asset can fill its scalar score cards. With multiple
     # assets there is no single category score; the prose and watchlist retain

@@ -6391,6 +6391,7 @@ function AIAssistantContent({
                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">
                         <Shield size={12} />
                         {uiText.workspaceSummary}
+                        {firstDashboardContext?.asset ? ` · ${String(firstDashboardContext.asset).toUpperCase()}` : null}
                       </div>
                       {firstDashboardPhaseLabel ? (
                         <p className="mt-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400" aria-live="polite">
