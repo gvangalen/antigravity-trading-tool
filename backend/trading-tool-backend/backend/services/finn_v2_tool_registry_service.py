@@ -25,7 +25,8 @@ class FinnV2ToolRegistryService:
             ToolDefinition(
                 name="read_portfolio",
                 description=(
-                    "Read owner-scoped Paper-bot portfolio valuation, budgets, balances and exposure. "
+                    "Read owner-scoped Paper-bot portfolio valuation, budgets, balances, exposure, "
+                    "and each saved bot's linked setup, strategy and execution mode. "
                     "This source does not contain trade transaction history, tax records or tax calculations."
                 ),
             ),

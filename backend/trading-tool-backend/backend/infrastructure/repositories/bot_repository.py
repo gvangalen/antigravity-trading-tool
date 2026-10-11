@@ -617,7 +617,7 @@ class BotRepository:
             SELECT 
                 c.id AS bot_id, 
                 c.name, 
-                COALESCE(p.symbol, st.symbol, 'BTC') AS symbol, 
+                COALESCE(p.symbol, NULLIF(UPPER(c.symbol), ''), st.symbol, 'BTC') AS symbol,
                 p.bot_id IS NOT NULL AS portfolio_initialized,
                 COALESCE(p.cash_eur, 0) AS cash_eur, 
                 COALESCE(p.position_qty, 0) AS position_qty, 
@@ -626,6 +626,11 @@ class BotRepository:
                 COALESCE(p.realized_pnl_eur, 0) AS realized_pnl_eur,
                 c.is_active, 
                 c.is_live,
+                c.mode,
+                s.id AS strategy_id,
+                s.name AS strategy_name,
+                st.id AS setup_id,
+                st.name AS setup_name,
                 COALESCE(c.budget_total_eur, 0) AS budget_total_eur,
                 COALESCE(c.budget_daily_limit_eur, 0) AS budget_daily_limit_eur,
                 COALESCE(c.risk_profile, 'balanced') AS risk_profile
@@ -701,6 +706,11 @@ class BotRepository:
                 "budget_total": budget,
                 "is_active": is_active,
                 "is_live": is_live,
+                "mode": mapping["mode"],
+                "strategy_id": mapping["strategy_id"],
+                "strategy_name": mapping["strategy_name"],
+                "setup_id": mapping["setup_id"],
+                "setup_name": mapping["setup_name"],
                 "risk_profile": risk
             })
             

@@ -262,6 +262,8 @@ class FinnResponsesReadExecutor:
                 "separate budget for one bot. When asked about a particular bot's budget, "
                 "use its matching bot row and never say its budget is missing when that "
                 "field is present. A budget limit is not available cash or invested capital. "
+                "For a named bot, use that bot row's strategy_name, setup_name and mode "
+                "when present; missing fields do not prove that no link exists. "
                 "data.read_at is when FINN fetched the records, not the date of a market price. "
                 "A bot's price_as_of is its market-price date; the outer as_of is the oldest "
                 "required price date when a valuation is available. If valuation_available is "
