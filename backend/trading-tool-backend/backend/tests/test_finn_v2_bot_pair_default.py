@@ -56,6 +56,9 @@ ACTION = {
     ("Maak een Paper-bot voor BTC met budget €20.", False),
     ("Maak voor het net opgeslagen vriend DCA-plan een Paper-bot met budget €20.", False),
     ("Maak voor het net opgeslagen XYZ DCA-plan een Paper-bot met budget €20.", False),
+    ("Maak een Paper-bot voor dit plan van mijn collega.", False),
+    ("Maak een Paper-bot voor dit plan van mijn vader.", False),
+    ("Maak daarvoor een Paper-bot, maar voor het plan van mijn collega.", False),
     ("Maak een Paper-bot voor setup Other Setup.", False),
     ("Maak een Paper-bot voor mijn plan met naam Other Setup.", False),
 ])
@@ -111,6 +114,47 @@ def test_responses_proposal_binds_verified_immediate_pair_without_temporal_phras
     state = result.request_plan.operation_state
     assert state["collected_inputs"]["strategy_id"] == 81
     assert state["input_sources"]["strategy_id"] == "verified_action_result"
+    assert state["selection_diagnostic"] == {
+        "target_reference": "unspecified", "bound_immediate_pair": True,
+    }
+
+
+@pytest.mark.parametrize("message", [
+    "Kun je voor dit plan ook een Paper-bot voorbereiden met €20 budget? Toon eerst het voorstel.",
+    "Ik wil daarvoor nu een Paper-bot van €20. Laat me de conceptkaart zien.",
+    "Maak een Paper-bot van €20 voor de strategie die bij deze setup hoort.",
+])
+def test_immediate_pair_accepts_natural_followup_wording(monkeypatch, message):
+    async def candidates(_self, *, user_id, entity_type):
+        assert user_id == 7
+        return ([{"id": 41, "name": "ETH DCA"}, {"id": 42, "name": "Other Setup"}]
+                if entity_type == "setup" else
+                [{"id": 81, "name": "ETH DCA Strategy"},
+                 {"id": 82, "name": "Other Strategy"}])
+
+    monkeypatch.setattr(FinnV2EntityResolutionService, "_entity_candidates", candidates)
+    service = object.__new__(FinnV2OrchestratorService)
+    service.session = object()
+    context = {"strict_immediate_action_lineage": True,
+               "immediate_previous_action_result": ACTION}
+    context["verified_immediate_bot_pair_default"] = asyncio.run(
+        service._verified_immediate_bot_pair_default(
+            user_id=7, message=message, context=context,
+        )
+    )
+    assert context["verified_immediate_bot_pair_default"] is True
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "confirmed_previous_plan",
+         "inputs": {"name": "QA Paper", "budget_total_eur": 20}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call, message=message, conversation_context=context, verified_asset="ETH",
+    )
+    assert result.request_plan.operation_state["collected_inputs"]["strategy_id"] == 81
+    assert result.request_plan.operation_state["selection_diagnostic"] == {
+        "target_reference": "confirmed_previous_plan", "bound_immediate_pair": True,
+    }
 
 
 def test_relative_strategy_reference_flows_from_verified_context_to_proposal(monkeypatch):

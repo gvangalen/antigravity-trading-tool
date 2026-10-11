@@ -19,6 +19,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--bot-prompt-variant", choices=("linked_strategy", "natural_followup"),
+                        default="linked_strategy")
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
     if urlparse(base_url).hostname not in {"127.0.0.1", "localhost"}:
@@ -43,10 +45,16 @@ def main() -> None:
         raise AssertionError("confirmed_dca_parent_missing_verified_strategy")
 
     before_child = _safety_snapshot(int(user["id"]))
+    bot_message = (
+        "Kun je voor dit plan ook een Paper-bot voorbereiden "
+        f"met naam Matrix Direct Paper {suffix} en budget €20? Toon eerst het voorstel."
+        if args.bot_prompt_variant == "natural_followup" else
+        "Maak voor de strategie die bij het zojuist aangemaakte DCA-plan hoort "
+        f"een Paper-bot met de naam Matrix Direct Paper {suffix} en budget €20."
+    )
     child = run_gate(
         base_url=base_url, bearer_token=token, conversation_id=conversation_id,
-        message=("Maak voor de strategie die bij het zojuist aangemaakte DCA-plan hoort "
-                 f"een Paper-bot met de naam Matrix Direct Paper {suffix} en budget €20."),
+        message=bot_message,
         timeout_seconds=75,
     )
     child_record = _runtime_record(child["run_id"])
