@@ -454,6 +454,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
             {copy.scoreIntroPrefix} <strong>{copy.scoreIntroBold}</strong> {copy.scoreIntroSuffix}
           </p>
         </div>
+        <p className="text-xs text-[var(--text-soft)]">{copy.scoreDefaultOrigin}</p>
 
         {scoreBlock(copy.macroTitle, macroScore, setMacroScore, copy.macroDescription)}
         {scoreBlock(copy.technicalTitle, technicalScore, setTechnicalScore, copy.technicalDescription)}

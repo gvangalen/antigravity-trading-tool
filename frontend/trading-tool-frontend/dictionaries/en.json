@@ -2834,6 +2834,7 @@
       "scoreIntroPrefix": "These score ranges determine",
       "scoreIntroBold": "in which market phase",
       "scoreIntroSuffix": "this setup is valid.",
+      "scoreDefaultOrigin": "The starting bounds shown here are general product suggestions, not derived from your market data. Saving confirms the values displayed here.",
       "macroTitle": "Macro",
       "macroDescription": "Macro environment",
       "technicalTitle": "Technical",
