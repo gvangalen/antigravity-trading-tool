@@ -36,6 +36,16 @@ class FinnResponsesProposalSelection:
         if contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             raise ValueError("proposal_operation_not_write_contract")
         inputs = dict(call.inputs)
+        semantic_target_candidate = bool(
+            contract.operation_id == "create_bot"
+            and conversation_context.get("immediate_bot_pair_semantic_candidate") is True
+        )
+        pending_target_choice = bool(
+            contract.operation_id == "create_bot"
+            and dict(conversation_context.get("active_guided_operation") or {}).get("target_choice_required")
+        )
+        if pending_target_choice:
+            inputs.pop("strategy_id", None)
         verified_action_inputs: dict[str, object] = {}
         immediate_guard_reason = str(
             conversation_context.get("immediate_bot_pair_guard_reason") or "not_evaluated"
@@ -53,7 +63,9 @@ class FinnResponsesProposalSelection:
                 message, re.IGNORECASE,
             )
         )
-        if contract.operation_id == "create_bot" and call.target_reference == "other_saved_plan":
+        if (contract.operation_id == "create_bot"
+                and call.target_reference == "other_saved_plan"
+                and not pending_target_choice):
             # The model explicitly selected a different saved plan. The
             # immediate action and older guided draft are not candidates for
             # its strategy slot; owner-scoped resolution must find that plan.
@@ -110,10 +122,11 @@ class FinnResponsesProposalSelection:
                 # An invalid immediate reference must not borrow any older
                 # guided state, correction draft or conversation target.
                 conversation_context = {}
-        elif mentions_recent_plan or (
+        elif not pending_target_choice and (mentions_recent_plan or (
             contract.operation_id == "create_bot"
-            and call.target_reference == "confirmed_previous_plan"
-        ):
+            and (call.target_reference == "confirmed_previous_plan"
+                 or conversation_context.get("immediate_bot_pair_semantic_candidate") is True)
+        )):
             # A claimed recent target that was not verified against the exact
             # parent action must not inherit an older guided strategy.
             inputs.pop("strategy_id", None)
@@ -311,6 +324,11 @@ class FinnResponsesProposalSelection:
         inputs = dict(state.collected_inputs)
         asset = str(inputs.get("asset") or inputs.get("symbol") or verified_asset or "").upper() or None
         operation_state = state.dict()
+        if contract.operation_id == "create_bot" and (
+            pending_target_choice
+            or semantic_target_candidate
+        ):
+            operation_state["target_choice_required"] = True
         if contract.operation_id == "create_bot":
             # Enum and boolean only: enough to diagnose a lost immediate
             # target without persisting model text or an owner-scoped ID.

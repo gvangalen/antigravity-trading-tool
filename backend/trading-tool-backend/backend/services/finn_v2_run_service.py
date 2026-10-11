@@ -750,7 +750,34 @@ class FinnV2RunService:
                 target for target in explicit_targets
                 if len(target.display_name or "") == longest_name
             ]
-            if len(longest_targets) == 1 and longest_targets[0].entity_type != contract.domain:
+            if pending_guided == "create_bot" and guided.get("target_choice_required") is True:
+                # A strategy name answers this bot draft's target slot. It is
+                # not an instruction to start creating a new strategy, even
+                # though the named object belongs to the strategy domain.
+                raw_choice = message.strip().rstrip(".!?").strip()
+                literal_choice = raw_choice.strip(" \t\r\n\"'“”‘’").casefold()
+                exact_owner_choice = (
+                    raw_choice.casefold() not in {"nee", "no", "stop", "annuleer", "cancel"}
+                    and any(
+                        target.entity_type == "strategy"
+                        and str(target.display_name or "").strip().casefold() == literal_choice
+                        for target in explicit_targets
+                    )
+                )
+                if exact_owner_choice:
+                    continuation = True
+                elif cls._independent_linked_read(message):
+                    continuation = False
+                else:
+                    continuation = await FinnResponsesToolRelevanceGuard(client).continues_guided_operation(
+                        message=message, operation_id=pending_guided,
+                        operation_purpose=str(contract.semantic_description or pending_guided),
+                        requested_slot=requested_slot,
+                        question=FinnV2OperationStateService.clarification_question(
+                            requested_slot, contract=contract, collected_inputs=guided_inputs,
+                        ),
+                    )
+            elif len(longest_targets) == 1 and longest_targets[0].entity_type != contract.domain:
                 corrected_domain = longest_targets[0].entity_type
                 if contract.action_polarity and await FinnResponsesToolRelevanceGuard(client).corrects_guided_target(
                     message=message, original_operation=pending_guided,

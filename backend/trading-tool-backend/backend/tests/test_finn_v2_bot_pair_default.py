@@ -132,6 +132,53 @@ def test_immediate_bot_pair_records_only_a_typed_guard_reason(monkeypatch, messa
     assert context["immediate_bot_pair_guard_reason"] == reason
 
 
+def test_unrecognized_wording_retains_only_a_verified_semantic_candidate(monkeypatch):
+    message = (
+        "Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden "
+        "met €20 budget. Laat eerst het voorstel zien."
+    )
+
+    async def candidates(_self, *, user_id, entity_type):
+        return ([{"id": 41, "name": "ETH DCA"}] if entity_type == "setup"
+                else [{"id": 81, "name": "ETH DCA Strategy"}])
+
+    monkeypatch.setattr(FinnV2EntityResolutionService, "_entity_candidates", candidates)
+    service = object.__new__(FinnV2OrchestratorService)
+    service.session = object()
+    context = {"strict_immediate_action_lineage": True,
+               "immediate_previous_action_result": ACTION}
+
+    assert asyncio.run(service._verified_immediate_bot_pair_default(
+        user_id=7, message=message, context=context,
+    )) is False
+    assert context["immediate_bot_pair_guard_reason"] == "unsupported_utterance"
+    assert context["immediate_bot_pair_semantic_candidate"] is True
+    assert "verified_immediate_bot_pair_default" not in context
+
+
+def test_semantic_candidate_cannot_bind_a_model_supplied_strategy_id():
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "confirmed_previous_plan",
+         "inputs": {"name": "QA Paper", "budget_total_eur": 20, "strategy_id": 81}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Ik wil bij dit zojuist bevestigde plan een Paper-bot voorbereiden.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": ACTION,
+            "immediate_bot_pair_semantic_candidate": True,
+            "immediate_bot_pair_guard_reason": "unsupported_utterance",
+        },
+        verified_asset="ETH",
+    )
+    state = result.request_plan.operation_state
+    assert "strategy_id" not in state["collected_inputs"]
+    assert "strategy_id" in state["missing_required_inputs"]
+    assert state["selection_diagnostic"]["bound_immediate_pair"] is False
+
+
 def test_responses_proposal_binds_verified_immediate_pair_without_temporal_phrase():
     call = FinnResponsesToolCatalog().validate(
         "manage_paper_bot_proposal",

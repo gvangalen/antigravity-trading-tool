@@ -64,6 +64,8 @@ class FinnV2OperationStateService:
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
+        if contract.operation_id == "create_bot" and existing is not None and existing.target_choice_required:
+            collected.pop("strategy_id", None)
         dca_strategy = (
             contract.operation_id == "create_strategy"
             and str((derived_inputs or {}).get("setup_type") or collected.get("setup_type") or "").lower() == "dca"
@@ -315,7 +317,8 @@ class FinnV2OperationStateService:
         # This keeps required-input semantics registry-owned while allowing a
         # new natural-language turn to continue the immediately prior action.
         for field in ("setup_id", "strategy_id", "bot_id"):
-            if field in accepted_inputs and not self._is_missing(resolved_context.get(field)):
+            if (field in accepted_inputs and not self._is_missing(resolved_context.get(field))
+                    and not (field == "strategy_id" and existing is not None and existing.target_choice_required)):
                 collected.setdefault(field, resolved_context[field])
                 sources.setdefault(field, "context")
         # A confirmed action result is stronger evidence than a selector's
@@ -362,6 +365,7 @@ class FinnV2OperationStateService:
             input_provenance=provenance,
             resolved_entities=resolved_entities,
             target_entities=target_entities,
+            target_choice_required=bool(existing.target_choice_required) if existing is not None else False,
             missing_required_inputs=missing,
             next_missing_input=missing[0] if missing else None,
             status="collecting" if missing else "complete",
