@@ -1864,7 +1864,7 @@
       "hudMacro": "Makro",
       "hudTechnical": "Technisch",
       "hudMarket": "Markt",
-      "hudSetup": "Setup"
+      "hudSetup": "Aktiver Setup-Abgleich"
     }
   },
   "setupPage": {
@@ -2360,6 +2360,10 @@
       "lastChecked": "Zuletzt geprüft",
       "dataUpdating": "Daten werden aktualisiert",
       "noDecisionYet": "Noch keine Bot-Bewertung ausgeführt",
+      "staleDecisionLabel": "Neue Bewertung nötig",
+      "staleDecisionTitle": "Setup seit der letzten Bot-Bewertung geändert",
+      "staleDecisionBody": "Die vorige Bot-Entscheidung beruhte auf den alten Setup-Bedingungen. Dieses Vorhaben wurde noch nicht erneut bewertet.",
+      "staleDecisionStep": "Der Paper-Bot bleibt aktiv. Warte auf die nächste Bewertung, bevor du diesen Status als aktuell ansiehst.",
       "collapseDiagnostics": "Diagnostik einklappen",
       "viewFullDiagnostics": "Vollständige Diagnostik ansehen",
       "scenarioLoading": "Parallele Szenarien berechnen...",
@@ -2576,7 +2580,7 @@
     "guardrailsPanel": {
       "safetyCheck": "Safety check",
       "goClear": "GO / CLEAR",
-      "systemBlocked": "SYSTEM BLOCKED",
+      "systemBlocked": "BOT-ENTSCHEIDUNG PAUSIERT",
       "maxRiskPerTrade": "Max risk / trade",
       "exposureRatio": "Exposure ratio",
       "adjustedPositionSize": "Adjusted position size",
@@ -2702,7 +2706,7 @@
       "max": "Max",
       "insufficientAsset": "Nicht genügend {asset}",
       "totalOrderValue": "Gesamter Orderwert",
-      "readyToPlace": "Bereit zum Platzieren",
+      "readyToPlace": "Bereit zur Orderprüfung",
       "placing": "Wird platziert...",
       "placeOrder": "Order platzieren",
       "loadingMarketPrice": "Marktpreis wird geladen...",
@@ -2966,7 +2970,7 @@
         "macroLabel": "Macro",
         "technicalLabel": "Technical",
         "marketLabel": "Market",
-        "setupLabel": "Setup"
+        "setupLabel": "Aktiver Setup-Abgleich"
       },
       "setupMatch": {
         "cardTitle": "Optimal setup",

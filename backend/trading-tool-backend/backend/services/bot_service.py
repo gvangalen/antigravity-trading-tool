@@ -1079,7 +1079,9 @@ class BotService:
         bots_by_id = {
             int(r["id"]): {
                 "bot_id": int(r["id"]), "bot_name": r["name"], "symbol": r["symbol"], 
-                "timeframe": r["timeframe"], "setup_type": r["setup_type"], "setup_name": r["setup_name"]
+                "timeframe": r["timeframe"], "setup_type": r["setup_type"], "setup_name": r["setup_name"],
+                "setup_id": r.get("setup_id"), "strategy_id": r.get("strategy_id"),
+                "setup_last_validated": r.get("setup_last_validated"),
             } for r in bot_rows
         }
         
@@ -1091,8 +1093,38 @@ class BotService:
             if bot_id in decisions_by_bot: continue
             bot = bots_by_id.get(bot_id)
             if not bot: continue
-            
             scores_payload = self._safe_json(r["scores_json"], {})
+
+            # A saved setup edit changes the meaning of the decision. Keep the
+            # stored decision in history, but never present its old match or
+            # guardrail result as today's assessment of the edited setup.
+            setup_revision = bot.get("setup_last_validated")
+            decision_time = r.get("decision_ts") or r.get("created_at")
+            decision_stale = (
+                bot.get("setup_id") is not None
+                and r.get("setup_id") != bot.get("setup_id")
+            ) or (
+                bot.get("strategy_id") is not None
+                and r.get("strategy_id") != bot.get("strategy_id")
+            )
+            if "setup_revision" in scores_payload:
+                current_revision = setup_revision.isoformat() if setup_revision else None
+                decision_stale = decision_stale or scores_payload["setup_revision"] != current_revision
+            elif setup_revision and decision_time and bot.get("setup_id") == r.get("setup_id"):
+                revision_utc = setup_revision.replace(tzinfo=timezone.utc) if setup_revision.tzinfo is None else setup_revision.astimezone(timezone.utc)
+                decision_utc = decision_time.replace(tzinfo=timezone.utc) if decision_time.tzinfo is None else decision_time.astimezone(timezone.utc)
+                decision_stale = decision_stale or revision_utc > decision_utc
+            if decision_stale:
+                decisions_by_bot[bot_id] = {
+                    "bot_id": bot_id, "bot_name": bot["bot_name"], "symbol": r["symbol"],
+                    "setup_name": bot.get("setup_name"), "setup_id": r["setup_id"],
+                    "strategy_id": r["strategy_id"], "decision_stale": True,
+                    "setup_last_validated": setup_revision.isoformat() if setup_revision else None,
+                    "previous_decision_at": decision_time.isoformat() if decision_time else None,
+                    "action": None, "setup_match": None, "guardrails_result": None,
+                }
+                continue
+
             if scores_payload and scores_payload.get("score_semantics") != "verified_score_2":
                 # Old decisions can contain fabricated 10/50 placeholders.
                 # Preserve the decision record, never present those values as

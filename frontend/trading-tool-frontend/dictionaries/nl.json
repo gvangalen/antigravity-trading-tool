@@ -1864,7 +1864,7 @@
       "hudMacro": "Macro",
       "hudTechnical": "Technisch",
       "hudMarket": "Markt",
-      "hudSetup": "Setup"
+      "hudSetup": "Actieve setupmatch"
     }
   },
   "setupPage": {
@@ -2360,6 +2360,10 @@
       "lastChecked": "Laatst gecontroleerd",
       "dataUpdating": "Data wordt bijgewerkt",
       "noDecisionYet": "Nog geen botbeoordeling uitgevoerd",
+      "staleDecisionLabel": "Nieuwe beoordeling nodig",
+      "staleDecisionTitle": "Setup gewijzigd sinds laatste botbeoordeling",
+      "staleDecisionBody": "De vorige botbeslissing hoort bij de oude setupvoorwaarden. Er is nog geen nieuwe botbeoordeling voor dit plan.",
+      "staleDecisionStep": "De bot blijft actief in Paper. Wacht op de volgende beoordeling voordat je deze status als actueel leest.",
       "collapseDiagnostics": "Diagnostiek inklappen",
       "viewFullDiagnostics": "Volledige diagnostiek bekijken",
       "scenarioLoading": "Parallelle scenario's doorrekenen...",
@@ -2576,7 +2580,7 @@
     "guardrailsPanel": {
       "safetyCheck": "Veiligheidscheck",
       "goClear": "GROEN / VRIJ",
-      "systemBlocked": "SYSTEEM GEBLOKKEERD",
+      "systemBlocked": "BOTBESLISSING HOUDT VAST",
       "maxRiskPerTrade": "Max risico / trade",
       "exposureRatio": "Blootstellingsratio",
       "adjustedPositionSize": "Aangepaste inzet",
@@ -2702,7 +2706,7 @@
       "max": "Max",
       "insufficientAsset": "Onvoldoende {asset}",
       "totalOrderValue": "Totale orderwaarde",
-      "readyToPlace": "Klaar om te plaatsen",
+      "readyToPlace": "Klaar voor ordercontrole",
       "placing": "Plaatsen...",
       "placeOrder": "Plaats order",
       "loadingMarketPrice": "Marktprijs laden...",
@@ -2966,7 +2970,7 @@
         "macroLabel": "Macro",
         "technicalLabel": "Technisch",
         "marketLabel": "Markt",
-        "setupLabel": "Setup"
+        "setupLabel": "Actieve setupmatch"
       },
       "setupMatch": {
         "cardTitle": "Optimale setup",

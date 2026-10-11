@@ -63,7 +63,8 @@ export default function BotAgentCard({
 
   /* ================= SAFE BASE DATA ================= */
 
-  const safeDecision = decision || {};
+  const decisionStale = decision?.decision_stale === true;
+  const safeDecision = decisionStale ? {} : (decision || {});
 
   const symbol = (
     bot?.strategy?.setup?.symbol ||
@@ -147,6 +148,7 @@ export default function BotAgentCard({
   /* ================= BOT STATE ================= */
   const normalizedAction = String(safeDecision?.action || "").toLowerCase();
   const marketActionLabel =
+    (decisionStale ? copy.staleDecisionLabel : null) ||
     actionLabels[normalizedActionLabel] ||
     (!hasLinkedStrategy
       ? copy.marketActionNeedsStrategy
@@ -268,13 +270,17 @@ export default function BotAgentCard({
 
     const decisionReason = deriveDecisionReason(normalizedDecision);
 
-    const summaryReason = !hasCompleteChain
+    const summaryReason = decisionStale
+      ? copy.staleDecisionBody
+      : !hasCompleteChain
       ? copy.noStrategy
       : !hasBudget
         ? copy.blockerBudgetBody
       : decisionReason || copy.noDecisionYet;
 
-    const blocker = !hasCompleteChain
+    const blocker = decisionStale
+      ? { tone: "amber", title: copy.staleDecisionTitle, body: copy.staleDecisionBody, nextStep: copy.staleDecisionStep }
+      : !hasCompleteChain
       ? {
         tone: "amber",
         title: copy.noStrategy,
@@ -325,7 +331,7 @@ export default function BotAgentCard({
       blocker,
       blockerToneClasses,
     };
-  }, [bot?.is_active, copy, hasBudget, hasCompleteChain, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
+  }, [bot?.is_active, copy, decisionStale, hasBudget, hasCompleteChain, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
 
   const {
     normalizedDecision,
@@ -1016,10 +1022,11 @@ export default function BotAgentCard({
 
               <div className="bg-white/60 rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
                 <div className="p-6 lg:p-8">
-                  <GuardrailsPanel
-                    decision={normalizedDecision}
-                    bot={bot}
-                  />
+                  {decisionStale ? (
+                    <div className="p-6 text-sm font-semibold text-amber-800">{copy.staleDecisionBody}</div>
+                  ) : (
+                    <GuardrailsPanel decision={normalizedDecision} bot={bot} />
+                  )}
                 </div>
               </div>
             </div>

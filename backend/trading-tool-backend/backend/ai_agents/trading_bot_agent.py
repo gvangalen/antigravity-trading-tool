@@ -544,7 +544,8 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
               st.timeframe,
               st.dca_frequency,
               st.dca_day,
-              st.dca_month_day
+              st.dca_month_day,
+              st.last_validated
 
             FROM bot_configs b
             JOIN strategies s ON s.id = b.strategy_id
@@ -579,6 +580,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
             dca_frequency,
             dca_day,
             dca_month_day,
+            setup_last_validated,
         ) = r
 
         bots.append(
@@ -599,6 +601,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
                 "dca_frequency": dca_frequency,
                 "dca_day": dca_day,
                 "dca_month_day": dca_month_day,
+                "setup_revision": setup_last_validated.isoformat() if setup_last_validated else None,
                 "last_run": last_run.isoformat() if last_run else None,
                 "budget": {
                     "total_eur": float(budget_total_eur or 0),
@@ -1082,6 +1085,43 @@ def _mark_bot_decision_execution_failed(
         )
 
 
+def _require_current_setup_revision_for_buy(
+    *, conn, user_id: int, bot_id: int, decision_id: int,
+) -> None:
+    """Recheck the exact owner setup used by a planned buy before execution.
+
+    The row locks keep a concurrent plan edit or bot relink from overtaking
+    this check before the Paper ledger write or live exchange call.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT d.setup_id, d.strategy_id, d.scores_json->>'setup_revision',
+                   d.scores_json ? 'setup_revision',
+                   b.strategy_id, s.setup_id, st.last_validated
+            FROM bot_decisions d
+            JOIN bot_configs b ON b.id=d.bot_id AND b.user_id=d.user_id
+            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=d.user_id
+            JOIN setups st ON st.id=s.setup_id AND st.user_id=d.user_id
+            WHERE d.id=%s AND d.user_id=%s AND d.bot_id=%s
+            FOR SHARE OF b, s, st
+            """,
+            (decision_id, user_id, bot_id),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise RuntimeError("Bot plan is no longer available")
+    decision_setup_id, decision_strategy_id, recorded_revision, has_revision, strategy_id, setup_id, current = row
+    current_revision = current.isoformat() if current else None
+    if (
+        decision_setup_id != setup_id
+        or decision_strategy_id != strategy_id
+        or not has_revision
+        or recorded_revision != current_revision
+    ):
+        raise RuntimeError("Bot plan changed since this decision; evaluate it again")
+
+
 # =====================================================
 # 📸 BOT BALANCE
 # =====================================================
@@ -1322,6 +1362,7 @@ def _persist_decision_and_order(
     report_date: date,
     decision: Dict[str, Any],
     scores: Dict[str, Any],
+    setup_revision: Optional[str] = None,
 ) -> int:
 
     action = _normalize_action(decision.get("action"))
@@ -1329,6 +1370,20 @@ def _persist_decision_and_order(
     symbol = (decision.get("symbol") or DEFAULT_SYMBOL).upper()
 
     amount_eur = float(decision.get("amount_eur") or 0.0)
+
+    if action == "buy" and setup_id is not None:
+        # A worker can read a setup before an owner edits it and only persist
+        # the result afterwards. Lock the current setup row and reject that
+        # obsolete buy before a ready order can be created.
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT last_validated FROM setups WHERE id=%s AND user_id=%s FOR SHARE",
+                (setup_id, user_id),
+            )
+            row = cur.fetchone()
+        current_revision = row[0].isoformat() if row and row[0] else None
+        if not row or current_revision != setup_revision:
+            raise RuntimeError("Setup changed during bot assessment")
 
     metrics = decision.get("metrics") or {}
     availability = scores.get("_source_available") or {}
@@ -1341,6 +1396,7 @@ def _persist_decision_and_order(
 
     scores_payload = {
         "score_semantics": "verified_score_2",
+        "setup_revision": setup_revision,
         **verified_components,
         "setup": (scores.get("_setup_match") or {}).get("score"),
         "setup_match": decision.get("setup_match"),
@@ -1745,6 +1801,7 @@ def run_trading_bot_agent(
                 report_date=report_date,
                 decision=decision,
                 scores=scores,
+                setup_revision=bot.get("setup_revision"),
             )
 
             _clear_existing_pending_orders_for_day(
@@ -1925,6 +1982,10 @@ def _auto_execute_decision(
         raise RuntimeError("Decision already processing or executed")
 
     try:
+        if side == "buy":
+            _require_current_setup_revision_for_buy(
+                conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+            )
         # 0) Live Execution
         if is_live:
             _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
@@ -2062,6 +2123,11 @@ def execute_manual_decision(
 
         if qty <= 0 or price <= 0:
             raise RuntimeError("Invalid order execution values")
+
+        if side == "buy":
+            _require_current_setup_revision_for_buy(
+                conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+            )
 
         cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
 
