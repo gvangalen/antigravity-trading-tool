@@ -81,7 +81,8 @@ const COPY = {
     active: "Actief",
     ready: "Klaar",
     concept: "Concept",
-    botActive: "Bot actief",
+    botActive: "Live-bot actief",
+    paperBot: "Paper-bot gekoppeld",
     botPaused: "Bot gepauzeerd",
     noBotLinked: "Geen bot gekoppeld",
     missingStrategy: "Strategie ontbreekt",
@@ -161,7 +162,8 @@ const COPY = {
     active: "Active",
     ready: "Ready",
     concept: "Draft",
-    botActive: "Bot active",
+    botActive: "Live bot active",
+    paperBot: "Paper bot linked",
     botPaused: "Bot paused",
     noBotLinked: "No linked bot",
     missingStrategy: "Strategy missing",
@@ -241,7 +243,8 @@ const COPY = {
     active: "Aktiv",
     ready: "Bereit",
     concept: "Entwurf",
-    botActive: "Bot aktiv",
+    botActive: "Live-Bot aktiv",
+    paperBot: "Paper-Bot verknüpft",
     botPaused: "Bot pausiert",
     noBotLinked: "Kein Bot verknüpft",
     missingStrategy: "Strategie fehlt",
@@ -351,8 +354,14 @@ function formatNumber(value) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(number);
 }
 
+function getBotStatusLabel(bot, copy) {
+  if (!bot) return copy.noBotLinked;
+  if (!bot.is_active) return copy.botPaused;
+  return bot.is_live ? copy.botActive : copy.paperBot;
+}
+
 function PlanStatus({ plan, copy }) {
-  const isBotActive = Boolean(plan.bot?.is_active && plan.complete);
+  const isBotActive = Boolean(plan.bot?.is_active && plan.bot?.is_live && plan.complete);
   const label = isBotActive ? copy.active : plan.complete ? copy.ready : copy.concept;
   const tone = isBotActive
     ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
@@ -776,8 +785,8 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                   <span className="text-sm font-black text-slate-900 dark:text-white">{activePlan.complete ? copy.readyForAutomation : copy.notReady}</span>
                 </div>
                 <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
-                  <span className={`h-1.5 w-1.5 rounded-full ${activePlan.bot?.is_active ? "bg-emerald-500" : activePlan.bot ? "bg-amber-500" : "bg-slate-300"}`} />
-                  {activePlan.bot ? (activePlan.bot.is_active ? copy.botActive : copy.botPaused) : copy.noBotLinked}
+                  <span className={`h-1.5 w-1.5 rounded-full ${activePlan.bot?.is_active && activePlan.bot?.is_live ? "bg-emerald-500" : activePlan.bot ? "bg-amber-500" : "bg-slate-300"}`} />
+                  {getBotStatusLabel(activePlan.bot, copy)}
                 </div>
                 <button
                   type="button"
@@ -938,7 +947,7 @@ function PlanRow({ plan, copy, matchesLoading, onEditSetup, onDuplicateSetup, on
         </div>
         <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{plan.setup?.symbol || plan.strategy?.symbol || "–"} · {plan.setup?.timeframe || plan.strategy?.timeframe || "–"}</p>
         <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
-          {plan.bot ? (plan.bot.is_active ? copy.botActive : copy.botPaused) : copy.noBotLinked}
+          {getBotStatusLabel(plan.bot, copy)}
         </p>
       </div>
 

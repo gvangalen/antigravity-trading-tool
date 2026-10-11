@@ -14,11 +14,13 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 
 from backend.infrastructure.repositories.bot_repository import BotRepository
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.finn_v2_tool_adapters.indicator_tool_adapter import IndicatorToolAdapter
 from backend.services.setup_market_match_service import SetupMarketMatchService
+from backend.utils.scoring_utils import score_source_is_fresh
 from backend.services.trader_profile_service import normalize_trader_context, normalize_trader_profile_preferences
 
 
@@ -28,6 +30,7 @@ class FinnSharedContextService:
         self.setups = SetupRepository(session)
         self.strategies = StrategyRepository(session)
         self.bots = BotRepository(session)
+        self.market_data = MarketDataRepository(session)
         self.users = UserRepository(session)
         self.matches = SetupMarketMatchService(session)
         self.indicators = IndicatorToolAdapter(session)
@@ -66,6 +69,17 @@ class FinnSharedContextService:
             strategy_ids = {int(row["id"]) for row in asset_strategies if row.get("id") is not None}
             asset_bots = [row for row in owned_bots if row.get("strategy_id") in strategy_ids]
             benchmark = await self.benchmark_for_asset(user_id, asset, setups=owned_setups)
+            price_row = await self.market_data.get_latest_snapshot(asset)
+            price_as_of = getattr(price_row, "source_observed_at", None)
+            price_fresh = score_source_is_fresh("market", "price", price_as_of, symbol=asset)
+            market_snapshot = {
+                "source_status": "fresh" if price_fresh else "stale_or_missing",
+                "as_of": price_as_of,
+                "price": float(price_row.price) if price_fresh and price_row.price is not None else None,
+                "change_24h": float(price_row.change_24h) if price_fresh and price_row.change_24h is not None else None,
+                "volume": float(price_row.volume) if price_fresh and price_row.volume is not None else None,
+            } if price_row is not None else {"source_status": "missing", "as_of": None,
+                                              "price": None, "change_24h": None, "volume": None}
             try:
                 indicator_result = await self.indicators.execute(user_id=user_id, asset=asset)
                 # The evidence schema is a Pydantic v1 model in the deployed
@@ -82,6 +96,7 @@ class FinnSharedContextService:
                 "indicator_configuration": configuration,
                 "indicator_lookup_status": configuration_status,
                 "benchmark": benchmark,
+                "market_snapshot": market_snapshot,
                 "setups": asset_setups,
                 "strategies": asset_strategies,
                 "bots": asset_bots,
