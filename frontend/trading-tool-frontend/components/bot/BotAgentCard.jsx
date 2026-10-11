@@ -34,6 +34,7 @@ export default function BotAgentCard({
   history = [],
   trades = [],
   loadingDecision = false,
+  onGenerate,
   loadingMarketIntelligence = false,
   onOpenSettings,
   onBacktest,
@@ -629,6 +630,22 @@ export default function BotAgentCard({
           </div>
 
           <div className="relative flex items-center gap-2" ref={settingsRef}>
+            {!bot?.is_live && onGenerate ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onGenerate();
+                }}
+                disabled={loadingDecision || bot?.is_active === false}
+                aria-label={copy.paperRecheck || "Nieuwe Paper-beoordeling"}
+                title={copy.paperRecheckHelp || "Controleer het plan opnieuw met actuele scores"}
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300"
+              >
+                <RotateCcw size={14} className={loadingDecision ? "animate-spin" : ""} />
+                <span className="hidden sm:inline">{loadingDecision ? copy.analyzing : copy.paperRecheck}</span>
+              </button>
+            ) : null}
             {onTrade ? (
               <button
                 type="button"

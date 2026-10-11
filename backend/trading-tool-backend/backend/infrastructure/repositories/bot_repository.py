@@ -82,7 +82,7 @@ class BotRepository:
 
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
-            SELECT b.id, b.name,
+            SELECT b.id, b.name, b.updated_at AS bot_updated_at,
               COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol,
               COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe, '—') AS timeframe,
               s.setup_type, s.id AS strategy_id,

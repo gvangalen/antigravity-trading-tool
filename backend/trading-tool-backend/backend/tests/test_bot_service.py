@@ -113,6 +113,40 @@ def test_bot_today_does_not_show_decision_for_previous_setup_revision(monkeypatc
     assert decision["guardrails_result"] is None
 
 
+def test_bot_today_marks_pre_funding_hold_as_previous_decision(monkeypatch):
+    decision_at = datetime(2026, 10, 11, 10, 0)
+
+    class Repo:
+        async def get_active_bots_with_setups(self, user_id):
+            return [{"id": 8, "name": "Paper", "symbol": "ETH", "timeframe": "1D",
+                     "setup_type": "trade", "setup_name": "ETH Plan", "setup_id": 9,
+                     "strategy_id": 10, "setup_last_validated": None,
+                     "bot_updated_at": decision_at + timedelta(minutes=5)}]
+
+        async def get_bot_decisions_by_date(self, user_id, day):
+            return [{"id": 12, "bot_id": 8, "symbol": "ETH", "action": "hold",
+                     "status": "planned", "decision_ts": decision_at,
+                     "setup_id": 9, "strategy_id": 10,
+                     "scores_json": json.dumps({"score_semantics": "verified_score_2"}),
+                     "created_at": decision_at}]
+
+    async def verified(self, user_id, symbol, *, setups=None):
+        return {"reported_scores": {"macro_score": 20, "technical_score": 40,
+                                     "market_score": 40}}
+
+    monkeypatch.setattr(
+        "backend.services.setup_market_match_service.SetupMarketMatchService.for_asset", verified,
+    )
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+
+    decision = asyncio.run(service.get_bot_today(7, "ETH", lean=True))["decisions"][0]
+
+    assert decision["decision_stale"] is True
+    assert decision["action"] is None
+    assert decision["previous_decision_at"] == decision_at.isoformat()
+
+
 def test_bot_today_prefers_recorded_setup_revision_over_decision_timestamp(monkeypatch):
     decision_at = datetime(2026, 10, 11, 10, 10)
     setup_revision = datetime(2026, 10, 11, 10, 5)
@@ -571,6 +605,102 @@ def test_paper_startkapitaal_requires_whole_cents():
 
     assert exc.value.status_code == 400
     assert "eurocenten" in exc.value.detail
+
+
+def test_paper_reassessment_reports_whether_a_new_decision_was_saved(monkeypatch):
+    from backend.services import bot_service as module
+
+    service = BotService(_FakeSession())
+    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {
+        "ok": True, "decisions": [],
+    })
+    unchanged = asyncio.run(service.run_bot_agent_generate(9, None, user_id=1))
+    assert unchanged["ok"] is True
+    assert unchanged["generated"] is False
+    assert unchanged["decision_ids"] == []
+
+    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {
+        "ok": True, "decisions": [{"decision_id": 42, "action": "hold"}],
+    })
+    created = asyncio.run(service.run_bot_agent_generate(9, None, user_id=1))
+    assert created["generated"] is True
+    assert created["decision_ids"] == [42]
+
+
+def test_paper_reassessment_rejects_live_bot_before_worker(monkeypatch):
+    from backend.services import bot_service as module
+
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            assert (user_id, bot_id) == (1, 9)
+            return {"is_live": True, "is_active": True}
+
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: pytest.fail("worker called"))
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.run_bot_agent_generate(9, None, user_id=1, paper_only=True))
+    assert exc.value.status_code == 409
+
+
+def test_paper_reassessment_reports_execution_outcome_and_worker_failure(monkeypatch):
+    from backend.services import bot_service as module
+
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"is_live": False, "is_active": True}
+
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {
+        "ok": True, "decisions": [{"decision_id": 43, "execution_status": "failed: cash"}],
+    })
+    failed_execution = asyncio.run(service.run_bot_agent_generate(9, None, user_id=1, paper_only=True))
+    assert failed_execution["generated"] is True
+    assert failed_execution["paper_order_filled"] is False
+    assert failed_execution["execution_failed"] is True
+
+    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {"ok": False})
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.run_bot_agent_generate(9, None, user_id=1, paper_only=True))
+    assert exc.value.status_code == 502
+
+
+def test_paper_only_worker_does_not_assess_live_bot(monkeypatch):
+    from backend.ai_agents import trading_bot_agent as worker
+
+    class Connection:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(worker, "get_db_connection", Connection)
+    monkeypatch.setattr(worker, "_get_active_bots", lambda *_args: [{
+        "bot_id": 9, "is_live": True, "is_active": True,
+    }])
+    result = worker.run_trading_bot_agent(user_id=1, bot_id=9, paper_only=True)
+    assert result == {"ok": False, "error": "paper_mode_changed"}
+
+
+def test_paper_reassessment_uses_server_today_even_with_caller_date(monkeypatch):
+    from datetime import date
+    from backend.services import bot_service as module
+
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"is_live": False, "is_active": True}
+
+    calls = []
+
+    def worker(user_id, report_date, bot_id, paper_only):
+        calls.append((user_id, report_date, bot_id, paper_only))
+        return {"ok": True, "decisions": []}
+
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+    monkeypatch.setattr(module, "sync_run_trading_bot_agent", worker)
+    asyncio.run(service.run_bot_agent_generate(9, "2030-01-15", user_id=1, paper_only=True))
+    assert calls == [(1, date.today(), 9, True)]
 
 
 def test_manual_paper_order_rechecks_budget_after_bot_lock(monkeypatch):

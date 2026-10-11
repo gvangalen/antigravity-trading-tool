@@ -149,7 +149,7 @@ export const generateBotDecision = async ({ bot_id, report_date = null }) => {
   if (!bot_id) throw new Error("bot_id is verplicht");
 
   return handleApi(
-    fetchAuth(`/api/bot/generate/today`, {
+    fetchAuth(`/api/bot/paper/reassess`, {
       method: "POST",
       body: JSON.stringify({
         bot_id,

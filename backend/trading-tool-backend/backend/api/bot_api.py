@@ -114,6 +114,21 @@ async def generate_bot_today(
         trace_id=getattr(request.state, "trace_id", None),
     )
 
+@router.post("/bot/paper/reassess")
+async def reassess_paper_bot(
+    payload: BotGenerateTodaySchema,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service),
+):
+    return await service.run_bot_agent_generate(
+        payload.bot_id,
+        payload.report_date,
+        current_user["id"],
+        trace_id=getattr(request.state, "trace_id", None),
+        paper_only=True,
+    )
+
 @router.post("/bot/skip")
 async def skip_bot_today(
     payload: BotSkipSchema,
