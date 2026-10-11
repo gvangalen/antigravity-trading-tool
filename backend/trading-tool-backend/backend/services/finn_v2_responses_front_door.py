@@ -579,6 +579,14 @@ class FinnResponsesFrontDoor:
             r"voorwaard\w*|conditions?|strategie\w*|strateg\w*|entry\w*|"
             r"instap\w*|stop\w*|trigger\w*)\b", message, re.I,
         ))
+        # A broad comparison needs the complete owner-scoped collection,
+        # including setups without any linked strategy or bot. This is a
+        # data read only; the model still composes the coaching answer.
+        complete_collection_comparison = bool(
+            is_read_request and collection_cue
+            and re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*)\b", message, re.I)
+            and re.search(r"\b(?:al\s+mijn|alle|all\s+my|all)\b", message, re.I)
+        )
         query: dict[str, str] | None = None
         if is_read_request and explicit_rule_transfer:
             query = {"kind": "cross_asset_scope", "source_asset": explicit_rule_transfer[0],
@@ -921,9 +929,21 @@ class FinnResponsesFrontDoor:
                 # still-open proposal. Bind the source, not the answer, to
                 # the verified proposal in this conversation.
                 return read_open_dca_draft()
+            if complete_collection_comparison and call.operation_id is None:
+                # Normalize the read before relevance selection. A narrower
+                # strategy/bot tool cannot represent every saved setup.
+                all_assets = entity_resolution_module.FinnV2EntityResolutionService.is_all_assets_collection_request(message)
+                call = replace(
+                    call, name="get_saved_setup_inventory",
+                    inputs=({"asset": next(iter(mentioned_assets))}
+                            if len(mentioned_assets) == 1 and not all_assets else {}),
+                    setup_names=(), read_tools=("read_saved_setup_inventory",),
+                    required_inputs=(), missing_inputs=(),
+                )
             should_check = (
                 not pending_operation
                 and not resuming_clarification
+                and not (complete_collection_comparison and call.operation_id is None)
                 and (
                     call.operation_id is not None
                     or (not getattr(self, "model_led_coach", False)
@@ -1066,13 +1086,15 @@ class FinnResponsesFrontDoor:
                         read_tools=("read_saved_setup_inventory",),
                         required_inputs=(), missing_inputs=(),
                     )
-                if call.name == "get_saved_setup_inventory" and (multiple_targets or pair_followup):
+                if (call.name == "get_saved_setup_inventory" and (multiple_targets or pair_followup)
+                        and not complete_collection_comparison):
                     # One global asset or timeframe would silently remove the
                     # other side of a multi-object read.
                     call = replace(call, inputs=(
                         {"strategy_name": selected_strategy_name} if selected_strategy_name else {}
                     ))
-                if call.name == "get_saved_setup_inventory" and listed_setup_id is not None:
+                if (call.name == "get_saved_setup_inventory" and listed_setup_id is not None
+                        and not complete_collection_comparison):
                     # The model chose the read; the server binds an ordinal to
                     # the preceding owner-scoped inventory, never to a model ID.
                     call = replace(call, inputs={"setup_ids": [listed_setup_id]})
@@ -1300,11 +1322,12 @@ class FinnResponsesFrontDoor:
                             projected_results.append(item)
                             continue
                         available_rows = [row for row in rows if isinstance(row, dict)]
-                        named_rows = referenced_setup_rows(
-                            message=message,
-                            rows=available_rows,
-                            previous_contract=previous_turn_contract,
-                        )
+                        named_rows = (available_rows if complete_collection_comparison else
+                                      referenced_setup_rows(
+                                          message=message,
+                                          rows=available_rows,
+                                          previous_contract=previous_turn_contract,
+                                      ))
                         if call.setup_names:
                             by_name = {
                                 str(row.get("name") or "").casefold(): row

@@ -208,6 +208,67 @@ def test_explicit_plan_scope_questions_read_owner_setup_collection_without_provi
         assert all(row["name"] in verified.text for row in rows)
 
 
+@pytest.mark.parametrize("requested_tool,message,expected_inputs", [
+    ("get_saved_setup_inventory",
+     "Vergelijk al mijn drie opgeslagen ETH-setups. Noem per setup de gekoppelde strategie en eventuele bot.",
+     {"asset": "ETH"}),
+    ("get_saved_bots",
+     "Vergelijk al mijn drie opgeslagen ETH-setups. Noem per setup de gekoppelde strategie en eventuele bot.",
+     {"asset": "ETH"}),
+    ("get_saved_bots",
+     "Vergelijk al mijn setups voor alle assets, waaronder ETH C; noem per setup de strategie en bot.",
+     {}),
+    ("get_saved_bots",
+     "Vergelijk al mijn ETH-setups, vooral ETH C; noem per setup de strategie en bot.",
+     {"asset": "ETH"}),
+])
+def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
+    requested_tool, message, expected_inputs,
+):
+    rows = [
+        {"setup_id": 11, "name": "ETH A", "symbol": "ETH", "timeframe": "1D",
+         "linked_strategies": [{"name": "Strategy A"}], "linked_bots": [{"name": "Paper A"}]},
+        {"setup_id": 12, "name": "ETH B", "symbol": "ETH", "timeframe": "1D",
+         "linked_strategies": [{"name": "Strategy B"}], "linked_bots": [{"name": "Paper B"}]},
+        {"setup_id": 13, "name": "ETH C", "symbol": "ETH", "timeframe": "4H",
+         "linked_strategies": [], "linked_bots": []},
+    ]
+    fake = FakeResponses(
+        response("relation-read", calls=[tool_call(
+            "call-relations", requested_tool,
+            {"asset": "ETH", "timeframe": "1D"},
+        )]),
+        response("relation-answer", text="Ik zie drie ETH-setups; de derde heeft geen strategie of bot."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7, run_id="all-relations",
+        model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": rows, "setup_count": len(rows), "complete": True},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message,
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    assert len(calls) == 1
+    assert calls[0].name == "get_saved_setup_inventory"
+    assert calls[0].inputs == expected_inputs
+    evidence = result.response.tool_trace[0]["result"]["results"][0]["data"]
+    assert evidence["setup_count"] == 3
+    assert [row["name"] for row in evidence["setups"]] == ["ETH A", "ETH B", "ETH C"]
+    assert result.response.text.startswith("Ik zie drie ETH-setups")
+
+
 def test_hypothetical_reflection_does_not_attribute_unread_entry_rule_to_saved_plan():
     message = (
         "Stel: ik nam deze maand 9 impulsieve trades, 7 verlies en 2 winst. "
