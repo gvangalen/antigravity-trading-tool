@@ -2901,6 +2901,7 @@
       "paused": "Paused",
       "namePlaceholder": "Name",
       "setupPlaceholder": "-- Choose a setup --",
+      "setupLockedHelp": "Diese Strategie bleibt mit diesem Setup verknüpft. Erstelle eine neue Strategie für ein anderes Setup.",
       "entryPlaceholder": "Entry",
       "targetsPlaceholder": "Targets (comma separated)",
       "stopLossPlaceholder": "Stop-loss",
