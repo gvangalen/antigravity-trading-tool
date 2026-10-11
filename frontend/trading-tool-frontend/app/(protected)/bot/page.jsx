@@ -425,10 +425,16 @@ function BotPageInner() {
       return;
     }
     if (!filteredBots.some((bot) => bot.id === activeBot?.id)) {
-      const nextBot = filteredBots[0];
+      const requestedBotId = Number(new URLSearchParams(window.location.search).get("bot_id"));
+      const requestedBot = Number.isFinite(requestedBotId) && requestedBotId > 0
+        ? filteredBots.find((bot) => Number(bot.id) === requestedBotId)
+        : null;
+      const nextBot = requestedBot || filteredBots[0];
       setActiveBot(nextBot);
       setExpandedBotId(nextBot.id);
-      persistBotSelection(nextBot.id);
+      // Preserve a deep link while its bot is still loading or temporarily
+      // hidden by a filter; the URL selection effect can resolve it later.
+      if (!requestedBotId || requestedBot) persistBotSelection(nextBot.id);
     }
   }, [activeBot, filteredBots, setActiveBot]);
 
