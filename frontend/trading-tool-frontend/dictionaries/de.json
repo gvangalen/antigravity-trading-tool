@@ -2363,7 +2363,7 @@
       "staleDecisionLabel": "Neue Bewertung nötig",
       "staleDecisionTitle": "Setup seit der letzten Bot-Bewertung geändert",
       "staleDecisionBody": "Die vorige Bot-Entscheidung beruhte auf den alten Setup-Bedingungen. Dieses Vorhaben wurde noch nicht erneut bewertet.",
-      "staleDecisionStep": "Der Paper-Bot bleibt aktiv. Warte auf die nächste Bewertung, bevor du diesen Status als aktuell ansiehst.",
+      "staleDecisionStep": "Der Paper-Bot bleibt aktiv. Diese alte Entscheidung darf nicht ausgeführt werden. Eine manuelle Paper-Order wird erneut anhand der aktuellen Setup-Bedingungen geprüft und erfordert eine eigene Bestätigung.",
       "collapseDiagnostics": "Diagnostik einklappen",
       "viewFullDiagnostics": "Vollständige Diagnostik ansehen",
       "scenarioLoading": "Parallele Szenarien berechnen...",
