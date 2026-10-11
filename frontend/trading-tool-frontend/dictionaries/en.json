@@ -2975,11 +2975,12 @@
         "setupLabel": "Active setup match"
       },
       "setupMatch": {
-        "cardTitle": "Optimal setup",
+        "cardTitle": "Setup comparison",
         "empty": "No confirmed current setup match in this report.",
         "bestMatch": "Best match",
         "matchScore": "Match score",
         "comparison": "Comparison",
+        "unknownScore": "Unknown",
         "explanation": "Explanation: The best setup is selected based on the current macro and market conditions."
       },
       "activeStrategy": {

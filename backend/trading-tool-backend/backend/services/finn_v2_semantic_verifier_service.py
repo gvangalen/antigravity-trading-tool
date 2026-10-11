@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from functools import partial
 from time import monotonic
 from typing import Any, Dict, Optional
 
@@ -231,7 +232,7 @@ class FinnV2SemanticVerifierService:
             )
         try:
             started = monotonic()
-            response = await openai_client.ask_gpt_structured_response_async(
+            request_verdict = partial(openai_client.ask_gpt_structured_response_async,
                 prompt=str({
                     "user_message": user_message,
                     "draft": sanitized_draft,
@@ -291,6 +292,16 @@ class FinnV2SemanticVerifierService:
                 max_output_tokens=750 if coach_answer else 1000,
                 client_max_retries=0,
             )
+            response = await request_verdict()
+            if response.get("error") == "incomplete_structured_response":
+                retry_budget = remaining_lifecycle_seconds()
+                if retry_budget is None or retry_budget > 2:
+                    retry_timeout = (
+                        effective_timeout if retry_budget is None
+                        else min(effective_timeout, retry_budget - 0.5)
+                    )
+                    logger.info("FINN semantic verifier retrying incomplete structured response")
+                    response = await request_verdict(timeout_seconds=retry_timeout)
             logger.info(
                 "FINN V2 semantic verifier async call finished",
                 extra={

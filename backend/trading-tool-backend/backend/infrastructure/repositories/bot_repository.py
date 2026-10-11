@@ -48,8 +48,8 @@ class BotRepository:
               st.timeframe AS setup_timeframe,
               st.dca_frequency, st.dca_day, st.dca_month_day
             FROM bot_configs b
-            LEFT JOIN strategies s ON s.id = b.strategy_id
-            LEFT JOIN setups st    ON st.id = s.setup_id
+            LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
+            LEFT JOIN setups st    ON st.id = s.setup_id AND st.user_id = b.user_id
             WHERE b.user_id = :user_id
             ORDER BY b.id ASC
         """)
@@ -71,8 +71,8 @@ class BotRepository:
               st.timeframe AS setup_timeframe,
               st.dca_frequency, st.dca_day, st.dca_month_day
             FROM bot_configs b
-            LEFT JOIN strategies s ON s.id = b.strategy_id
-            LEFT JOIN setups st    ON st.id = s.setup_id
+            LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
+            LEFT JOIN setups st    ON st.id = s.setup_id AND st.user_id = b.user_id
             WHERE b.user_id = :user_id AND b.id = :bot_id
             LIMIT 1
         """)
@@ -89,8 +89,8 @@ class BotRepository:
               st.name AS setup_name, st.id AS setup_id,
               st.last_validated AS setup_last_validated
             FROM bot_configs b
-            LEFT JOIN strategies s ON s.id = b.strategy_id
-            LEFT JOIN setups st    ON st.id = s.setup_id
+            LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
+            LEFT JOIN setups st    ON st.id = s.setup_id AND st.user_id = b.user_id
             WHERE b.user_id=:user_id AND b.is_active=TRUE
             ORDER BY b.id ASC
         """)
@@ -630,8 +630,8 @@ class BotRepository:
                 COALESCE(c.budget_daily_limit_eur, 0) AS budget_daily_limit_eur,
                 COALESCE(c.risk_profile, 'balanced') AS risk_profile
             FROM bot_configs c
-            LEFT JOIN strategies s     ON s.id = c.strategy_id
-            LEFT JOIN setups st        ON st.id = s.setup_id
+            LEFT JOIN strategies s     ON s.id = c.strategy_id AND s.user_id = c.user_id
+            LEFT JOIN setups st        ON st.id = s.setup_id AND st.user_id = c.user_id
             LEFT JOIN bot_portfolios p
                    ON p.bot_id = c.id
                   AND p.symbol = COALESCE(NULLIF(UPPER(c.symbol), ''), NULLIF(UPPER(st.symbol), ''), 'BTC')

@@ -207,6 +207,9 @@ class LinkedBotData(BaseModel):
     name: Optional[str] = None
     symbol: Optional[str] = None
     strategy_id: Optional[int] = None
+    strategy_name: Optional[str] = None
+    setup_id: Optional[int] = None
+    setup_name: Optional[str] = None
     is_active: bool = False
     is_live: bool = False
     mode: Optional[str] = None

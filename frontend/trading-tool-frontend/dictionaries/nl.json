@@ -2976,11 +2976,12 @@
         "setupLabel": "Actieve setupmatch"
       },
       "setupMatch": {
-        "cardTitle": "Optimale setup",
+        "cardTitle": "Setupvergelijking",
         "empty": "Geen bevestigde actuele setupmatch in dit rapport.",
         "bestMatch": "Beste match",
         "matchScore": "Matchscore",
         "comparison": "Vergelijking",
+        "unknownScore": "Onbekend",
         "explanation": "Toelichting: De beste setup is geselecteerd op basis van de huidige macro- en marktomstandigheden."
       },
       "activeStrategy": {

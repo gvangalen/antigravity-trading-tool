@@ -9,7 +9,8 @@ import { useTranslation } from "@/app/providers/I18nProvider";
    - Refined V2 PRO ScoreBar
 ------------------------------------------------------- */
 function ScoreBar({ score }) {
-  const pct = Math.max(0, Math.min(100, Number(score) || 0));
+  if (score === null || score === undefined || score === "" || !Number.isFinite(Number(score))) return null;
+  const pct = Math.max(0, Math.min(100, Number(score)));
 
   let color = "bg-slate-400";
   if (pct >= 80) color = "bg-green-500";
@@ -33,6 +34,10 @@ export default function SetupMatchReportCard({ report }) {
   const copy = t?.reports?.blocks?.setupMatch || {};
   const best = report?.best_setup;
   const topSetups = report?.top_setups || [];
+  const displayScore = (score) =>
+    score === null || score === undefined || score === "" || !Number.isFinite(Number(score))
+      ? copy.unknownScore
+      : `${score}%`;
 
   if (!best) {
     return (
@@ -40,6 +45,16 @@ export default function SetupMatchReportCard({ report }) {
         <p className="text-sm text-secondary italic">
           {copy.empty}
         </p>
+        {topSetups.length > 0 && (
+          <div className="mt-5 space-y-3">
+            {topSetups.map((setup) => (
+              <div key={setup.id ?? setup.setup_id} className="flex justify-between gap-3 text-sm">
+                <span>{setup.name}</span>
+                <span>{displayScore(setup.score)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </ReportCard>
     );
   }
@@ -66,7 +81,7 @@ export default function SetupMatchReportCard({ report }) {
         <div className="space-y-2">
            <div className="flex justify-between items-end">
               <span className="text-[11px] font-bold text-secondary tracking-tight">{copy.matchScore}</span>
-              <span className="text-sm font-bold text-foreground font-mono tracking-tight">{best.score}%</span>
+              <span className="text-sm font-bold text-foreground font-mono tracking-tight">{displayScore(best.score)}</span>
            </div>
            <ScoreBar score={best.score} />
         </div>
@@ -87,7 +102,7 @@ export default function SetupMatchReportCard({ report }) {
                     {s.name}
                   </span>
                   <span className="text-sm font-bold text-foreground font-mono tracking-tight">
-                    {s.score}%
+                    {displayScore(s.score)}
                   </span>
                 </div>
                 <ScoreBar score={s.score} />

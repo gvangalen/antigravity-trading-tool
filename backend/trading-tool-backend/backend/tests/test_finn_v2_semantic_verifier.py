@@ -126,6 +126,35 @@ def test_model_led_coach_verifier_keeps_hard_flags_with_bounded_schema(monkeypat
     assert result.unverified_outcome_claim is True
 
 
+def test_coach_verifier_retries_one_incomplete_response_without_bypassing_verdict(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+    service.flags.coach_verifier_model = lambda: "gpt-coach-test"
+    service.flags.semantic_verifier_timeout_seconds = lambda: 8
+    attempts = []
+
+    async def fake_response(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            return {"error": "incomplete_structured_response"}
+        return {"parsed": {
+            "passes": False, "unsupported_unavailable_cause": False,
+            "unverified_guardrail_override": False, "unverified_outcome_claim": True,
+            "outcome_claim_quote": "guaranteed profit",
+            "reason_codes": ["unverified_outcome_claim"],
+        }, "model": "gpt-coach-test"}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response_async", fake_response)
+    result = asyncio.run(service.verify_async(
+        mode="READ", user_message="Wat veranderde?",
+        sanitized_draft={"direct_answer": "guaranteed profit"},
+        compact_evidence=[], deterministic_summary={}, mandatory=True,
+        coach_answer=True,
+    ))
+    assert len(attempts) == 2
+    assert result.available is True
+    assert result.passes is False
+
+
 def test_coach_guardrail_flag_requires_quotes_from_both_turn_and_answer(monkeypatch):
     service = FinnV2SemanticVerifierService()
     parsed = {

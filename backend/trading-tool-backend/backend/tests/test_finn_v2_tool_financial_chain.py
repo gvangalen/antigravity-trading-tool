@@ -3,6 +3,9 @@ from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistrySer
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from types import SimpleNamespace
 import asyncio
+from backend.services.finn_v2_tool_adapters.bot_tool_adapter import BotToolAdapter
+from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
+from backend.infrastructure.repositories.bot_repository import BotRepository
 
 
 def test_financial_tool_chain_preserves_required_execution_order():
@@ -39,3 +42,50 @@ def test_setup_strategy_bot_linkage_stays_user_scoped(monkeypatch):
     assert setup["setup"]["id"] == 11
     assert strategy["strategy"]["setup_id"] == 11
     assert bot["bot"]["strategy_id"] == 22
+
+
+def test_linked_bot_read_keeps_verified_parent_names_and_mode_for_coaching():
+    result = asyncio.run(BotToolAdapter().execute_linked_bot(
+        bot={
+            "id": 33, "name": "AAPL Paper Bot", "symbol": "AAPL",
+            "strategy_id": 22, "strategy_name": "Apple Full Strategy",
+            "setup_id": 11, "setup_name": "Apple Full Setup",
+            "is_active": True, "is_live": False, "mode": "manual",
+        },
+        resolution_source="explicit_bot_name",
+    ))
+
+    facts = FinnV2ReasoningContextService(session=object())._sanitize_facts(
+        result["data"].dict(), "read_linked_bot",
+    )
+
+    assert facts["strategy_name"] == "Apple Full Strategy"
+    assert facts["setup_name"] == "Apple Full Setup"
+    assert facts["strategy_id"] == 22
+    assert facts["setup_id"] == 11
+    assert facts["mode"] == "manual"
+    assert facts["is_live"] is False
+
+
+def test_bot_parent_reads_scope_both_joins_to_owner():
+    class Session:
+        def __init__(self):
+            self.queries = []
+
+        async def execute(self, query, params):
+            self.queries.append((str(query), params))
+            return SimpleNamespace(fetchall=lambda: [], fetchone=lambda: None)
+
+    session = Session()
+    repo = BotRepository(session)
+    async def run():
+        await repo.get_bot_configs(7)
+        await repo.get_bot_config(7, 33)
+    asyncio.run(run())
+
+    for query, params in session.queries:
+        if "FROM bot_configs b" not in query:
+            continue
+        assert "s.user_id = b.user_id" in query
+        assert "st.user_id = b.user_id" in query
+        assert params["user_id"] == 7
