@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from types import SimpleNamespace
 from time import monotonic
 from typing import Awaitable, Callable, Optional
@@ -30,6 +31,7 @@ from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionS
 from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
+from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
 
 
 logger = logging.getLogger(__name__)
@@ -403,6 +405,7 @@ class FinnV2OrchestratorService:
             conversation_id=conversation_id,
             user_id=user_id,
             run_id=run_id,
+            message=run.message,
             has_prior_run=(getattr(run, "client_context_json", {}) or {}).get(
                 "_conversation_has_prior_run"
             ),
@@ -987,6 +990,7 @@ class FinnV2OrchestratorService:
         conversation_id: Optional[str],
         user_id: int,
         run_id: str,
+        message: str = "",
         has_prior_run: Optional[bool] = None,
     ) -> dict:
         """Load the parent contract state before selector classification.
@@ -1006,6 +1010,10 @@ class FinnV2OrchestratorService:
                 )
                 or {}
             )
+            # This is computed for one turn from its owner-scoped parent run;
+            # an older conversation projection must never authorize a later
+            # bot target.
+            context.pop("verified_immediate_bot_pair_default", None)
             # Confirmation/execution occurs after the orchestration turn that
             # created the proposal.  This is a locked mirror of that later,
             # verified runtime-contract postcondition, not a second source of
@@ -1116,6 +1124,17 @@ class FinnV2OrchestratorService:
             ):
                 context["previous_action_result"] = latest_action_result
                 context["previous_action_result_source"] = "conversation_action_result"
+                # Confirmation is persisted after the proposal run. The
+                # action repository can therefore hold the verified result
+                # while the parent run's state_json still lacks action_result.
+                # Promote it to immediate lineage only when both records
+                # identify the exact same parent run.
+                if (
+                    previous_contract is not None
+                    and not context.get("immediate_previous_action_result")
+                    and latest_action_contract.run_id == previous_contract.run_id
+                ):
+                    context["immediate_previous_action_result"] = latest_action_result
         elif (
             action_result.get("entity_id")
             and action_result.get("owner_user_id") == user_id
@@ -1132,6 +1151,15 @@ class FinnV2OrchestratorService:
         ):
             context["previous_action_result"] = verified_conversation_result
             context["previous_action_result_source"] = "verified_conversation_projection"
+        if (
+            previous_contract is not None
+            and not context.get("immediate_previous_action_result")
+            and bool(verified_conversation_result.get("run_id"))
+            and verified_conversation_result.get("run_id") == getattr(previous_contract, "run_id", None)
+            and verified_conversation_result.get("owner_user_id") == user_id
+            and verified_conversation_result.get("result_status") == "succeeded"
+        ):
+            context["immediate_previous_action_result"] = verified_conversation_result
         recent_results_loader = getattr(
             self.runtime_contracts, "get_recent_action_results_for_conversation", None
         )
@@ -1177,7 +1205,98 @@ class FinnV2OrchestratorService:
         else:
             context.pop("active_guided_operation", None)
             context.pop("operation_state", None)
+        verified_bot_pair_default = await self._verified_immediate_bot_pair_default(
+            user_id=user_id, message=message, context=context,
+        )
+        if verified_bot_pair_default:
+            context["verified_immediate_bot_pair_default"] = True
         return context
+
+    async def _verified_immediate_bot_pair_default(
+        self, *, user_id: int, message: str, context: dict,
+    ) -> bool:
+        """One-turn default after confirmed DCA creation, guarded by owner names.
+
+        This is a target selection for a confirmable Paper proposal, never an
+        authorization to create or activate a bot. A competing saved target
+        in the current turn always wins over the immediate action.
+        """
+        if not re.search(r"\b(?:bot|paper|automation)\b", message, re.IGNORECASE):
+            return False
+        action = dict(context.get("immediate_previous_action_result") or {})
+        canonical = dict(action.get("canonical_entity") or {})
+        setup_id = str(action.get("entity_id") or "")
+        strategy_id = str(canonical.get("strategy_id") or "")
+        asset = resolve_catalog_symbol(canonical.get("symbol") or canonical.get("asset"))
+        if not (
+            context.get("strict_immediate_action_lineage")
+            and action.get("owner_user_id") == user_id
+            and action.get("operation_id") == "create_setup"
+            and action.get("entity_type") == "setup"
+            and action.get("result_status") == "succeeded"
+            and setup_id.isdigit()
+            and str(canonical.get("setup_id") or "") == setup_id
+            and strategy_id.isdigit() and asset
+        ):
+            return False
+        named_assets = mentioned_catalog_symbols(message)
+        if named_assets and named_assets != {asset}:
+            return False
+        if re.search(
+            r"\b(?:ander\w*|other|another|different|niet deze|not this|"
+            r"vorig\w*|oud\w*|bestaand\w*|previous|older|existing|"
+            r"eerste|tweede|derde|first|second|third|nummer|number)\b",
+            message, re.IGNORECASE,
+        ):
+            return False
+        # The narrow temporal form is already validated separately. Other
+        # temporal forms may mean a named plan; do not guess from suffix text.
+        if re.search(r"\b(?:zojuist|net aangemaakt|net gemaakte?|just created|recently created)\b", message, re.IGNORECASE):
+            if not FinnV2RequestAnalysisService._generic_recent_setup_reference(message):
+                return False
+        simple_match = re.search(
+            r"\b(?:daarvoor|hiervoor|erbij|hieraan|daaraan)\b|\bfor it\b",
+            message, re.IGNORECASE,
+        )
+        # Only a bare anaphor plus bot parameters may select the previous
+        # action. Free-form clauses can point to another target ("die van
+        # gisteren") even without naming a plan or strategy.
+        simple_reference = bool(
+            simple_match
+            and not re.search(r"\b(?:plan|setup|strategie|strategy)\b", message, re.IGNORECASE)
+            and re.fullmatch(
+                r"\s*(?:maak|creëer|create|bouw|koppel|start|zet|wil je|kun je|kan je)"
+                r"(?:\s+(?:(?:een|a)\s+)?(?:paper[-\s]*)?bot)?(?:\s+voor)?\s*",
+                message[:simple_match.start()], re.IGNORECASE,
+            )
+            and re.fullmatch(
+                r"\s*(?:(?:een|a)\s+(?:paper[-\s]*)?bot\s*)?(?:[,.;!?]\s*)?"
+                r"(?:(?:met|with)\s+(?:(?:een|a)\s+)?"
+                r"(?:budget\s+(?:(?:van|of)\s+)?)?€?\s*\d+(?:[,.]\d+)?"
+                r"(?:\s*(?:euro|eur))?\s*)?(?:[.;!?]\s*)?",
+                message[simple_match.end():], re.IGNORECASE,
+            )
+        )
+        if not simple_reference and not FinnV2RequestAnalysisService._generic_recent_setup_reference(message):
+            return False
+        resolver = FinnV2EntityResolutionService(self.session)
+        for entity_type, expected in (("setup", setup_id), ("strategy", strategy_id)):
+            try:
+                candidates = await resolver._entity_candidates(user_id=user_id, entity_type=entity_type)
+            except Exception:
+                logger.exception("FINN immediate bot target owner lookup failed")
+                return False
+            named = resolver._explicit_message_matches(message, candidates)
+            if any(str(row.get("id") or row.get(f"{entity_type}_id") or "") != expected for row in named):
+                return False
+        # An unlabeled or quoted name cannot be assumed to be the just-created
+        # setup. Such a request must go through owner-scoped resolution.
+        reference_clause = re.split(r"\b(?:noem|name)\s+(?:de|the)?\s*bot\b", message, maxsplit=1, flags=re.IGNORECASE)[0]
+        if re.search(r"\b(?:naam|name|titel|title|label|genaamd|called)\b", reference_clause, re.IGNORECASE):
+            return False
+        if re.search(r"[\"'“”]", reference_clause):
+            return False
+        return True
 
     @staticmethod
     def _is_collecting_guided_draft(*, request_plan) -> bool:
@@ -1231,6 +1350,7 @@ class FinnV2OrchestratorService:
         selectors = dict(getattr(result.tool_plan, "entity_selectors", {}) or {})
         request_plan = getattr(result.analysis, "request_plan", None)
         context = dict(existing_context or {})
+        context.pop("verified_immediate_bot_pair_default", None)
         from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
         contract_view = await self._contract_execution_view(

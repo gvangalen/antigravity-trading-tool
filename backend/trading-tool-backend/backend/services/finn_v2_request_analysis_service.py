@@ -145,9 +145,13 @@ class FinnV2RequestAnalysisService:
         explicit_setup_name = self._extract_quoted_entity_name(text, "setup")
         explicit_strategy_name = self._extract_quoted_entity_name(text, "strateg")
         explicit_bot_name = self._extract_quoted_entity_name(text, "bot")
+        verified_immediate_bot_pair_default = bool(
+            semantic.operation_id == "create_bot"
+            and (conversation_context or {}).get("verified_immediate_bot_pair_default")
+        )
         recent_action_reference = (
             semantic.operation_id == "create_bot"
-            and self._generic_recent_setup_reference(text)
+            and (self._generic_recent_setup_reference(text) or verified_immediate_bot_pair_default)
             and not explicit_setup_name
             and (not explicit_strategy_name or re.fullmatch(
                 r"bij\s+(?:het|de)\s+(?:zojuist|net)\s+aangemaakte?\s+"
@@ -202,7 +206,7 @@ class FinnV2RequestAnalysisService:
         # durable lineage actually exists. Evidence and reformulation acts,
         # on the other hand, remain explicit lineage requests and must safely
         # clarify when no prior response is available.
-        uses_conversation_reference = bool(reference_markers - {"contextual_entity"}) or (
+        uses_conversation_reference = recent_action_reference or bool(reference_markers - {"contextual_entity"}) or (
             "contextual_entity" in reference_markers and has_existing_safe_lineage
         )
         # Confirmed action results are typed, owner-scoped lineage.  A
