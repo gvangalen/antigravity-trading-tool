@@ -270,6 +270,10 @@ export default function TradePanelContainer({
       setPreviewData({
         ok: false,
         blocked: true,
+        symbol: tradeSymbol,
+        side: order.side,
+        bot_id: botId,
+        is_live: Boolean(bot?.is_live),
         message: err.message || copy.previewFailed,
       });
     } finally {

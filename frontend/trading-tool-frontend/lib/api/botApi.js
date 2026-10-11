@@ -281,19 +281,25 @@ export const previewManualOrder = async ({
   if (!bot_id) throw new Error("bot_id is verplicht");
   if (!side) throw new Error("side is verplicht");
 
-  return handleApi(
-    fetchAuth(`/api/orders/preview`, {
-      method: "POST",
-      body: JSON.stringify({
-        bot_id,
-        symbol,
-        side,
-        quantity: toNumber(quantity, 0),
-        price: toNumber(price, 0),
-        value_eur: toNumber(value_eur, 0),
-      }),
-    })
-  );
+  const preview = await fetchAuth(`/api/orders/preview`, {
+    method: "POST",
+    body: JSON.stringify({
+      bot_id,
+      symbol,
+      side,
+      quantity: toNumber(quantity, 0),
+      price: toNumber(price, 0),
+      value_eur: toNumber(value_eur, 0),
+    }),
+  });
+  // A setup-match refusal is an expected, structured preview. Keep its
+  // explanation and order identity so the modal can show why confirmation is
+  // disabled. Other API failures still use the normal error path.
+  if (preview?.blocked === true && preview?.code === "PAPER_SETUP_MATCH_REQUIRED") {
+    return preview;
+  }
+  if (preview?.ok === false) throw new Error(preview.error || "API error");
+  return preview;
 };
 
 export const createManualOrder = async ({

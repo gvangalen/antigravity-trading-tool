@@ -115,7 +115,20 @@ class BotService:
         if status == "matches":
             return {"allowed": True, "status": status, "setup_id": setup_id}
         if status == "outside_conditions":
-            message = "De gemeten scores vallen buiten de opgeslagen setupvoorwaarden. Deze Paper-koop wacht."
+            labels = {"market": "Markt", "macro": "Macro", "technical": "Technisch"}
+            outside_details = []
+            for component, values in (match.get("components") or {}).items():
+                if not isinstance(values, dict) or values.get("within_range") is not False:
+                    continue
+                score = values.get("score")
+                minimum = values.get("minimum")
+                maximum = values.get("maximum")
+                if score is not None and minimum is not None and score < minimum:
+                    outside_details.append(f"{labels.get(component, component)} {score:g} ligt onder minimum {minimum:g}")
+                elif score is not None and maximum is not None and score > maximum:
+                    outside_details.append(f"{labels.get(component, component)} {score:g} ligt boven maximum {maximum:g}")
+            reason = "; ".join(outside_details) or "De gemeten scores vallen buiten de opgeslagen setupvoorwaarden"
+            message = f"{reason}. Deze Paper-koop wacht."
             next_step = "Controleer de setupvoorwaarden en laat de bot opnieuw beoordelen."
         else:
             message = "De actuele markt-, macro- en technische scores zijn niet compleet geverifieerd. Deze Paper-koop wacht."
