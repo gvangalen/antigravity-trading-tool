@@ -2362,7 +2362,7 @@
       "staleDecisionLabel": "New evaluation needed",
       "staleDecisionTitle": "Setup changed since the last bot evaluation",
       "staleDecisionBody": "The previous bot decision used the old setup conditions. This plan has not been evaluated again yet.",
-      "staleDecisionStep": "The Paper bot remains active. Wait for the next evaluation before treating this status as current.",
+      "staleDecisionStep": "The Paper bot remains active. This old decision cannot be executed. A manual Paper order gets a new check against the current setup conditions and requires its own confirmation.",
       "collapseDiagnostics": "Collapse diagnostics",
       "viewFullDiagnostics": "View full diagnostics",
       "scenarioLoading": "Running parallel scenarios...",

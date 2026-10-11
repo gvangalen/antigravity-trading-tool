@@ -2363,7 +2363,7 @@
       "staleDecisionLabel": "Nieuwe beoordeling nodig",
       "staleDecisionTitle": "Setup gewijzigd sinds laatste botbeoordeling",
       "staleDecisionBody": "De vorige botbeslissing hoort bij de oude setupvoorwaarden. Er is nog geen nieuwe botbeoordeling voor dit plan.",
-      "staleDecisionStep": "De bot blijft actief in Paper. Wacht op de volgende beoordeling voordat je deze status als actueel leest.",
+      "staleDecisionStep": "De bot blijft actief in Paper. Deze oude beslissing mag niet worden uitgevoerd. Een handmatige Paper-order krijgt een nieuwe controle van de actuele setupvoorwaarden en vraagt een eigen bevestiging.",
       "collapseDiagnostics": "Diagnostiek inklappen",
       "viewFullDiagnostics": "Volledige diagnostiek bekijken",
       "scenarioLoading": "Parallelle scenario's doorrekenen...",
