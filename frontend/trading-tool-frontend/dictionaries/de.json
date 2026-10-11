@@ -2338,6 +2338,7 @@
     },
     "agentCard": {
       "chartTimeframe": "Chart",
+      "strategyTimeframe": "Strategie",
       "riskConservative": "Risiko: Konservativ",
       "riskBalanced": "Risiko: Ausgewogen",
       "riskAggressive": "Risiko: Aggressiv",

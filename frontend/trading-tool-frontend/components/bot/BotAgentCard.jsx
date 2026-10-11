@@ -79,6 +79,7 @@ export default function BotAgentCard({
     bot?.timeframe ||
     "—";
   const dcaSchedule = formatDcaSchedule(bot?.strategy?.setup, t?.botPage?.form || {});
+  const strategyTimeframe = bot?.strategy?.timeframe;
 
   const normalizedActionLabel = String(safeDecision?.action || "").toLowerCase();
 
@@ -581,6 +582,12 @@ export default function BotAgentCard({
                 <span className="text-dim bg-[var(--color-border-subtle)] px-2 py-0.5 rounded-md">{symbol}</span>
                 <div className="w-1 h-1 rounded-full bg-slate-300" />
                 <span>{copy.chartTimeframe || "Chart"}: {timeframe}</span>
+                {strategyTimeframe && strategyTimeframe !== timeframe && (
+                  <>
+                    <div className="w-1 h-1 rounded-full bg-slate-300" />
+                    <span>{copy.strategyTimeframe || "Strategy"}: {strategyTimeframe}</span>
+                  </>
+                )}
                 {dcaSchedule && (
                   <>
                     <div className="w-1 h-1 rounded-full bg-slate-300" />
