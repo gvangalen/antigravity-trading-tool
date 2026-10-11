@@ -345,7 +345,8 @@ const StrategyForm = forwardRef(function StrategyForm({
         name="setup_id"
         value={form.setup_id}
         onChange={handleChange}
-        className="input"
+        disabled={isEdit}
+        className="input disabled:cursor-not-allowed disabled:opacity-60"
       >
         <option value="">{copy.setupPlaceholder}</option>
         {availableSetups.map((s) => (
@@ -354,6 +355,9 @@ const StrategyForm = forwardRef(function StrategyForm({
           </option>
         ))}
       </select>
+      {isEdit ? (
+        <p className="text-sm text-muted">{copy.setupLockedHelp}</p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block space-y-2">

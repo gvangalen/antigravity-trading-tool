@@ -2901,6 +2901,7 @@
       "paused": "Gepauzeerd",
       "namePlaceholder": "Naam",
       "setupPlaceholder": "-- Kies een setup --",
+      "setupLockedHelp": "Deze strategie blijft gekoppeld aan deze setup. Maak een nieuwe strategie om een andere setup te gebruiken.",
       "entryPlaceholder": "Instap",
       "targetsPlaceholder": "Doelen (komma gescheiden)",
       "stopLossPlaceholder": "Stop-loss",

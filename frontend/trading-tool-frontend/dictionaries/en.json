@@ -2900,6 +2900,7 @@
       "paused": "Paused",
       "namePlaceholder": "Name",
       "setupPlaceholder": "-- Choose a setup --",
+      "setupLockedHelp": "This strategy stays linked to this setup. Create a new strategy to use another setup.",
       "entryPlaceholder": "Entry",
       "targetsPlaceholder": "Targets (comma separated)",
       "stopLossPlaceholder": "Stop-loss",
