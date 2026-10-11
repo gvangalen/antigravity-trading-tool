@@ -266,6 +266,15 @@ async def _load_bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dic
             "child_bound_immediate_pair": selection_diagnostic.get("bound_immediate_pair")
             if isinstance(selection_diagnostic.get("bound_immediate_pair"), bool)
             else "not_available",
+            "child_binding_guard_reason": selection_diagnostic.get("binding_guard_reason")
+            if selection_diagnostic.get("binding_guard_reason") in {
+                "not_evaluated", "no_bot_intent", "no_direct_reference",
+                "invalid_parent_lineage", "asset_mismatch", "alternate_target_marker",
+                "negated_reference", "historical_target", "dated_target",
+                "other_owner_marker", "safety_or_relation_marker",
+                "unsupported_utterance", "owner_lookup_failed",
+                "competing_named_entity", "unmatched_explicit_name", "accepted",
+            } else "not_available",
         }
 
 

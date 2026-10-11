@@ -37,6 +37,9 @@ class FinnResponsesProposalSelection:
             raise ValueError("proposal_operation_not_write_contract")
         inputs = dict(call.inputs)
         verified_action_inputs: dict[str, object] = {}
+        immediate_guard_reason = str(
+            conversation_context.get("immediate_bot_pair_guard_reason") or "not_evaluated"
+        )
         verified_immediate_bot_pair_default = bool(
             contract.operation_id == "create_bot"
             and conversation_context.get("verified_immediate_bot_pair_default")
@@ -314,6 +317,7 @@ class FinnResponsesProposalSelection:
             operation_state["selection_diagnostic"] = {
                 "target_reference": call.target_reference or "unspecified",
                 "bound_immediate_pair": bool(verified_action_inputs.get("strategy_id")),
+                "binding_guard_reason": immediate_guard_reason,
             }
         plan = RequestPlan(
             user_goal=contract.semantic_description or contract.operation_id,
