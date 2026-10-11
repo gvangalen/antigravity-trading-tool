@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime } from "@/lib/i18n";
+import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
 
 export default function BotAgentCard({
   bot,
@@ -77,6 +78,7 @@ export default function BotAgentCard({
     bot?.strategy?.timeframe ||
     bot?.timeframe ||
     "—";
+  const dcaSchedule = formatDcaSchedule(bot?.strategy?.setup, t?.botPage?.form || {});
 
   const normalizedActionLabel = String(safeDecision?.action || "").toLowerCase();
 
@@ -578,7 +580,13 @@ export default function BotAgentCard({
               {!compact ? <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
                 <span className="text-dim bg-[var(--color-border-subtle)] px-2 py-0.5 rounded-md">{symbol}</span>
                 <div className="w-1 h-1 rounded-full bg-slate-300" />
-                <span>{timeframe}</span>
+                <span>{copy.chartTimeframe || "Chart"}: {timeframe}</span>
+                {dcaSchedule && (
+                  <>
+                    <div className="w-1 h-1 rounded-full bg-slate-300" />
+                    <span>{dcaSchedule}</span>
+                  </>
+                )}
                 {bot?.strategy && (
                   <>
                     <div className="w-1 h-1 rounded-full bg-slate-300" />

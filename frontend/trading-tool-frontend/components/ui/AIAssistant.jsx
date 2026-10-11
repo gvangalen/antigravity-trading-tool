@@ -267,6 +267,7 @@ function buildAssistantUiText(at) {
     marketConditionEarlyDip: at("uiText.marketConditionEarlyDip"),
     dcaParameters: at("uiText.dcaParameters"),
     scoreThresholds: at("uiText.scoreThresholds"),
+    scoreThresholdsMissing: at("uiText.scoreThresholdsMissing"),
     baseBudget: at("uiText.baseBudget"),
     entryTarget: at("uiText.entryTarget"),
     stopLoss: at("uiText.stopLoss"),
@@ -7360,6 +7361,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
     setupType: at("uiText.setupType"),
     dcaParameters: at("uiText.dcaParameters"),
     scoreThresholds: at("uiText.scoreThresholds"),
+    scoreThresholdsMissing: at("uiText.scoreThresholdsMissing"),
     baseBudget: at("uiText.baseBudget"),
     entryTarget: at("uiText.entryTarget"),
     stopLoss: at("uiText.stopLoss"),
@@ -7535,24 +7537,27 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                   </span>
                 </div>
               )}
-              {!(payload.market_condition || inferSetupMarketConditionFromScores(payload)) && (payload.min_macro_score !== undefined || payload.min_technical_score !== undefined) && (
+              {["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
                   <div className="grid grid-cols-3 gap-2 mt-1">
                     <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
-                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? 30}-{payload.max_macro_score ?? 70}</div>
+                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? "—"}-{payload.max_macro_score ?? "—"}</div>
                     </div>
                     <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
-                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? 40}-{payload.max_technical_score ?? 80}</div>
+                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? "—"}-{payload.max_technical_score ?? "—"}</div>
                     </div>
                     <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
-                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? 20}-{payload.max_market_score ?? 60}</div>
+                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? "—"}-{payload.max_market_score ?? "—"}</div>
                     </div>
                   </div>
                 </div>
+              )}
+              {!["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
+                <div className="col-span-2 text-xs text-slate-500">{uiText.scoreThresholdsMissing}</div>
               )}
             </div>
           )}
@@ -8025,24 +8030,27 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                   </span>
                 </div>
               )}
-              {!(payload.market_condition || inferSetupMarketConditionFromScores(payload)) && (
+              {["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
                   <div className="grid grid-cols-3 gap-2 mt-1">
                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
-                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? 30}-{payload.max_macro_score ?? 70}</div>
+                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? "—"}-{payload.max_macro_score ?? "—"}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
-                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? 40}-{payload.max_technical_score ?? 80}</div>
+                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? "—"}-{payload.max_technical_score ?? "—"}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
                       <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
-                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? 20}-{payload.max_market_score ?? 60}</div>
+                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? "—"}-{payload.max_market_score ?? "—"}</div>
                     </div>
                   </div>
                 </div>
+              )}
+              {!["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
+                <div className="col-span-2 text-xs text-slate-500">{uiText.scoreThresholdsMissing}</div>
               )}
             </div>
           )}

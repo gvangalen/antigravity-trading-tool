@@ -33,9 +33,8 @@ WEEKDAY_TO_NUMBER = {
 }
 
 class SetupService:
-    # These are product defaults for a setup created without explicit score
-    # ranges (for example the compact onboarding form).  The backend owns
-    # them so different frontend surfaces cannot silently diverge.
+    # Suggested ranges for explicit forms only. They are never applied to an
+    # omitted field in save_setup: a score limit changes trading eligibility.
     SETUP_SCORE_DEFAULTS = {
         "min_macro_score": 30,
         "max_macro_score": 70,
@@ -286,11 +285,8 @@ class SetupService:
 
     async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int,
                          *, commit: bool = True) -> dict:
-        defaulted_score_fields = []
-        for field, value in self.SETUP_SCORE_DEFAULTS.items():
-            if raw_payload.get(field) is None:
-                raw_payload[field] = value
-                defaulted_score_fields.append(field)
+        # Score limits are trading conditions. Never invent them during a
+        # write: an omitted limit must remain absent until the user chooses it.
         if not raw_payload.get("timeframe"):
             raw_payload["timeframe"] = self._default_timeframe_for_setup_type(raw_payload.get("setup_type"))
 
@@ -326,7 +322,7 @@ class SetupService:
             "setup_id": setup_id,
             "setup": self._format_setup(created),
             "field_sources": {
-                field: "default" if field in defaulted_score_fields else "supplied"
+                field: "supplied" if raw_payload.get(field) is not None else "absent"
                 for field in self.SETUP_SCORE_DEFAULTS
             },
         }

@@ -935,7 +935,8 @@
     },
     "planOnboardingStep": {
       "scoreRangesTitle": "Wann passt dieses Setup zu den Scores?",
-      "scoreRangesHelp": "Diese Grenzen bestimmen nur den Setup-Abgleich. Die vorgeschlagenen Werte sind kein persönliches Einstiegssignal; passe sie vor dem Speichern an.",
+      "scoreRangesHelp": "Dies sind allgemeine Produktvorschläge, nicht aus deinen Marktdaten oder deinem Handelsstil berechnet. Sie bestimmen den Setup-Abgleich; prüfe sie vor dem Speichern.",
+      "scoreRangesConfirm": "Ich habe die Markt-, Makro- und technischen Score-Grenzen geprüft und möchte sie als Bedingungen für mein Setup speichern.",
       "scoreCategories": { "market": "Markt", "macro": "Makro", "technical": "Technisch" },
       "scoreMinLabel": "Ab",
       "scoreMaxLabel": "Bis einschließlich",
@@ -2146,8 +2147,8 @@
       "cadenceCardValue": "{timeframe}-Strategie",
       "cadenceCardHelp": "Die Strategiekadenz bestimmt, wie oft der Bot handeln darf. Eine Wochenstrategie sollte sich nicht wie ein High-Frequency-Bot anfuehlen.",
       "budgetCardLabel": "Budgetlogik",
-      "budgetCardValue": "Budget ist dein Gesamtrahmen",
-      "budgetCardHelp": "Das Gesamtbudget ist das volle Kapital, das dieser Bot nutzen darf. Das Tageslimit ist nur die Obergrenze pro Kalendertag.",
+      "budgetCardValue": "Bot-Budget ist ein Limit, kein Guthaben",
+      "budgetCardHelp": "Das Bot-Budget begrenzt den moeglichen Einsatz; es belegt kein verfuegbares Guthaben. Das Tageslimit ist die Obergrenze pro Kalendertag.",
       "orderCardLabel": "Orderlogik",
       "orderCardValue": "Orders gelten pro Einzelaktion",
       "orderCardHelp": "Minimale und maximale Ordergroesse gelten pro einzelner Order, nicht fuer den gesamten Wochenplan.",
@@ -2336,6 +2337,7 @@
       "version": "Version"
     },
     "agentCard": {
+      "chartTimeframe": "Chart",
       "riskConservative": "Risiko: Konservativ",
       "riskBalanced": "Risiko: Ausgewogen",
       "riskAggressive": "Risiko: Aggressiv",
@@ -3427,6 +3429,7 @@
       "marketConditionEarlyDip": "Also on an early dip",
       "dcaParameters": "DCA parameters",
       "scoreThresholds": "Score thresholds",
+      "scoreThresholdsMissing": "Keine Score-Grenzen festgelegt; dieses Setup hat noch keinen bestaetigten Abgleich.",
       "followUpChooseDca": "DCA waehlen",
       "followUpChooseDcaPrompt": "Ich moechte ein DCA-Setup fuer {symbol} erstellen.",
       "followUpChooseTrade": "Aktiven Trade waehlen",

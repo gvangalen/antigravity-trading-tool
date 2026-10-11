@@ -104,8 +104,12 @@ class BotService:
                 "setup": {
                     "id": bot.get("setup_id"),
                     "name": bot.get("setup_name"),
+                    "setup_type": bot.get("setup_type"),
                     "symbol": bot.get("setup_symbol") or bot.get("symbol"),
-                    "timeframe": bot.get("timeframe"),
+                    "timeframe": bot.get("setup_timeframe"),
+                    "dca_frequency": bot.get("dca_frequency"),
+                    "dca_day": bot.get("dca_day"),
+                    "dca_month_day": bot.get("dca_month_day"),
                 },
             }
         normalized_bot = {
@@ -149,11 +153,16 @@ class BotService:
                     "id": r["strategy_id"],
                     "setup_type": r["setup_type"],
                     "name": r["strategy_name"],
+                    "timeframe": r["timeframe"],
                     "setup": {
                         "id": r["setup_id"],
                         "name": r["setup_name"],
+                        "setup_type": r["setup_type"],
                         "symbol": r["symbol"],
-                        "timeframe": r["timeframe"],
+                        "timeframe": r.get("setup_timeframe"),
+                        "dca_frequency": r.get("dca_frequency"),
+                        "dca_day": r.get("dca_day"),
+                        "dca_month_day": r.get("dca_month_day"),
                     },
                 }
             out.append({
