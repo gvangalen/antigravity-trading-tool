@@ -57,7 +57,10 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
   } = strategy;
 
   const linkedBot = bots.find(b => b.strategy_id === id);
-  const isBotActive = linkedBot?.is_active;
+  const isBotActive = Boolean(linkedBot?.is_active && linkedBot?.is_live);
+  const botStatusLabel = !linkedBot ? copy.noBot
+    : !linkedBot.is_active ? copy.botPaused
+    : linkedBot.is_live ? copy.botActive : copy.paperBot;
 
   const strategyName = name || strategy.setup_name || copy.fallbackName;
   const strategyType = strategy_type || strategy.setup_type;
@@ -163,7 +166,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
           <div className="flex items-center gap-1.5 ml-1">
              <div className={`w-2 h-2 rounded-full ${isBotActive ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" : "bg-slate-300"}`} />
              <span className={`font-black ${isBotActive ? "text-green-600" : "text-secondary"}`}>
-                {linkedBot ? (isBotActive ? copy.botActive : copy.botPaused) : copy.noBot}
+                {botStatusLabel}
              </span>
           </div>
 

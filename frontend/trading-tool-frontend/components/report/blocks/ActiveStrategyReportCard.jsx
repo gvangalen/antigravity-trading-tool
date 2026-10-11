@@ -18,7 +18,7 @@ export default function ActiveStrategyReportCard({ report }) {
   const { t, locale } = useTranslation();
   const copy = t?.reports?.blocks?.activeStrategy || {};
   const strategy = report?.active_strategy;
-  const currentPrice = report?.market_snapshot?.price ?? null;
+  const currentPrice = report?.market_snapshot?.price ?? report?.kpi_metrics?.price ?? null;
 
   if (!strategy) {
     return (
@@ -31,6 +31,7 @@ export default function ActiveStrategyReportCard({ report }) {
   }
 
   const {
+    strategy_name,
     setup_name,
     symbol,
     timeframe,
@@ -58,7 +59,7 @@ export default function ActiveStrategyReportCard({ report }) {
       <div className="mb-6">
         <div className="text-[11px] font-bold text-secondary tracking-tight mb-1">{copy.strategyLabel}</div>
         <div className="flex items-baseline gap-2">
-           <span className="text-xl font-bold text-foreground tracking-tight">{setup_name}</span>
+           <span className="text-xl font-bold text-foreground tracking-tight">{strategy_name || setup_name}</span>
            <span className="text-xs font-medium text-secondary font-mono">· {symbol} · {timeframe}</span>
         </div>
       </div>

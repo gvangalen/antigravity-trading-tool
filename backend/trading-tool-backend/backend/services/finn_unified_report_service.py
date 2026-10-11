@@ -123,20 +123,29 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                        if isinstance(row, dict) and row.get("enabled", True) and row.get("indicator")]
             for category in ("market", "macro", "technical")
         } if isinstance(configuration, dict) else None
+        setups_by_id = {row.get("id"): row for row in item.get("setups") or []}
         assets.append({
             "symbol": item.get("symbol"),
             "score_status": benchmark.get("source_status"),
             "scores": scores,
             "benchmark_score": benchmark.get("benchmark_score"),
+            "market_snapshot": item.get("market_snapshot") or {},
             "configured_indicators": configured,
             "indicator_lookup_status": item.get("indicator_lookup_status"),
             "setups": [{"id": row.get("id"), "name": row.get("name"),
                         "timeframe": row.get("timeframe"), "setup_type": row.get("setup_type")}
                        for row in item.get("setups") or []],
             "strategies": [{"id": row.get("id"), "setup_id": row.get("setup_id"),
-                            "name": row.get("name"), "setup_name": row.get("setup_name"),
+                            "name": row.get("name"),
+                            "setup_name": (setups_by_id.get(row.get("setup_id")) or {}).get("name")
+                                          or row.get("setup_name"),
+                            "symbol": item.get("symbol"),
+                            "timeframe": row.get("timeframe") or
+                                         (setups_by_id.get(row.get("setup_id")) or {}).get("timeframe"),
                             "execution_mode": row.get("execution_mode"),
-                            "base_amount": row.get("base_amount")}
+                            "base_amount": row.get("base_amount"),
+                            "entry": row.get("entry"), "stop_loss": row.get("stop_loss"),
+                            "targets": row.get("targets")}
                            for row in item.get("strategies") or []],
             "bots": [{"id": row.get("id"), "name": row.get("name"),
                       "is_live": row.get("is_live")}
@@ -256,7 +265,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     # assertions. It uses the same owner-scoped names as the fact cards.
     prose["executive_summary"] = fallbacks["executive_summary"]
     prose["bot_strategy"] = fallbacks["bot_strategy"]
-    all_strategies = [row for item in assets for row in item.get("strategies") or []]
+    all_strategies = [row for item in facts["assets"] for row in item.get("strategies") or []]
     # ReportService deliberately hides historical AI setup scores unless each
     # stored match declares the measured Score 2.0 semantics. Preserve that
     # provenance when projecting the shared match into the report row.
@@ -280,6 +289,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     # assets there is no single category score; the prose and watchlist retain
     # the per-asset values instead of silently selecting the first asset.
     single_scores = facts["assets"][0]["scores"] if len(facts["assets"]) == 1 else {}
+    single_market_snapshot = facts["assets"][0]["market_snapshot"] if len(facts["assets"]) == 1 else {}
+    if single_market_snapshot.get("source_status") != "fresh":
+        single_market_snapshot = {}
     return {
         **prose,
         "watchlist": [{"symbol": item["symbol"], "benchmark": {
@@ -291,7 +303,8 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "best_setup": best_setup,
         "top_setups": matches[:5],
         "active_strategy": ({
-            "setup_name": all_strategies[0].get("setup_name") or all_strategies[0].get("name"),
+            "strategy_name": all_strategies[0].get("name"),
+            "setup_name": all_strategies[0].get("setup_name"),
             "symbol": all_strategies[0].get("symbol"),
             "timeframe": all_strategies[0].get("timeframe"),
             "entry": all_strategies[0].get("entry"),
@@ -303,7 +316,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "market_indicator_highlights": _configured_highlights(facts, "market"),
         "macro_indicator_highlights": _configured_highlights(facts, "macro"),
         "technical_indicator_highlights": _configured_highlights(facts, "technical"),
-        "price": None, "change_24h": None, "volume": None,
+        "price": single_market_snapshot.get("price"),
+        "change_24h": single_market_snapshot.get("change_24h"),
+        "volume": single_market_snapshot.get("volume"),
         "macro_score": single_scores.get("macro_score"),
         "technical_score": single_scores.get("technical_score"),
         "market_score": single_scores.get("market_score"),

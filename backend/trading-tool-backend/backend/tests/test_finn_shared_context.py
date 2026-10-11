@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -35,6 +36,7 @@ def test_shared_context_reads_twenty_owner_assets_without_turning_missing_scores
     service.setups.get_all_setups = AsyncMock(return_value=[])
     service.strategies.query_strategies = AsyncMock(return_value=[])
     service.bots.get_bot_configs = AsyncMock(return_value=[])
+    service.market_data.get_latest_snapshot = AsyncMock(return_value=None)
     service.benchmark_for_asset = AsyncMock(side_effect=lambda user_id, asset, **_: {
         "symbol": asset, "source_status": "missing_scores", "benchmark_score": None,
         "reported_scores": {"market_score": None, "macro_score": None, "technical_score": None},
@@ -63,6 +65,7 @@ def test_shared_context_keeps_failed_indicator_lookup_unknown():
     service.setups.get_all_setups = AsyncMock(return_value=[])
     service.strategies.query_strategies = AsyncMock(return_value=[])
     service.bots.get_bot_configs = AsyncMock(return_value=[])
+    service.market_data.get_latest_snapshot = AsyncMock(return_value=None)
     service.benchmark_for_asset = AsyncMock(return_value={
         "source_status": "missing_scores", "benchmark_score": None, "matches": [],
     })
@@ -113,6 +116,10 @@ def test_shared_context_serializes_real_indicator_schema_without_losing_configur
     service.setups.get_all_setups = AsyncMock(return_value=[])
     service.strategies.query_strategies = AsyncMock(return_value=[])
     service.bots.get_bot_configs = AsyncMock(return_value=[])
+    service.market_data.get_latest_snapshot = AsyncMock(return_value=SimpleNamespace(
+        source_observed_at=datetime.now(timezone.utc), price=61234.5,
+        change_24h=1.2, volume=12345,
+    ))
     service.benchmark_for_asset = AsyncMock(return_value={
         "source_status": "missing_scores", "benchmark_score": None, "matches": [],
     })
@@ -127,6 +134,15 @@ def test_shared_context_serializes_real_indicator_schema_without_losing_configur
     assert asset["indicator_lookup_status"] == "available"
     assert [asset["indicator_configuration"][category][0]["indicator"]
             for category in ("market", "macro", "technical")] == ["Price", "DXY", "RSI"]
+    assert asset["market_snapshot"]["source_status"] == "fresh"
+    assert asset["market_snapshot"]["price"] == 61234.5
+
+    service.market_data.get_latest_snapshot.return_value.source_observed_at = (
+        datetime.now(timezone.utc) - timedelta(days=10)
+    )
+    stale = asyncio.run(service.for_user(7, symbol="ETH"))
+    assert stale["assets"][0]["market_snapshot"]["source_status"] == "stale_or_missing"
+    assert stale["assets"][0]["market_snapshot"]["price"] is None
 
 
 def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(monkeypatch):
@@ -212,7 +228,8 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
     assert chat.reported_scores["market_score"] == today["reported_scores"]["market_score"] == report["watchlist"][0]["benchmark"]["reported_scores"]["market_score"] == 80
     assert (report["market_score"], report["macro_score"], report["technical_score"]) == (80, 70, 60)
     assert today["setup_match_score"] == report["setup_score"] == 80
-    assert report["active_strategy"]["setup_name"] == "ETH Strategy"
+    assert report["active_strategy"]["strategy_name"] == "ETH Strategy"
+    assert report["active_strategy"]["setup_name"] == "ETH Plan"
     assert "alle gevolgde assets" in report["setup_validation"]
     assert report["best_setup"]["name"] == "ETH Plan"
     # The persisted report reader must retain this measured match. Without
@@ -222,6 +239,31 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
     assert served["setup_score_semantics"] == "benchmark_setup_match_v1"
     assert served["best_setup"]["name"] == "ETH Plan"
     assert served["top_setups"][0]["score_semantics"] == "benchmark_setup_match_v1"
+
+
+def test_daily_report_uses_dated_fresh_price_and_distinct_strategy_name(monkeypatch):
+    now = datetime.now(timezone.utc)
+    context = {"locale": "nl", "assets": [{
+        "symbol": "BTC",
+        "benchmark": {"source_status": "missing_scores", "matches": []},
+        "market_snapshot": {"source_status": "fresh", "as_of": now.isoformat(),
+                            "price": 61234.5, "change_24h": 1.2, "volume": 12345},
+        "setups": [{"id": 9, "name": "BTC Setup", "timeframe": "4H"}],
+        "strategies": [{"id": 10, "setup_id": 9, "name": "BTC Strategy",
+                        "entry": 60000, "stop_loss": 58000, "targets": [65000]}],
+        "bots": [],
+    }]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {})
+    report = reports.generate_unified_daily_report_sections(7)
+    assert (report["price"], report["change_24h"], report["volume"]) == (61234.5, 1.2, 12345)
+    assert report["active_strategy"]["strategy_name"] == "BTC Strategy"
+    assert report["active_strategy"]["setup_name"] == "BTC Setup"
+    assert report["active_strategy"]["timeframe"] == "4H"
+    assert report["active_strategy"]["entry"] == 60000
+
+    context["assets"][0]["market_snapshot"]["source_status"] = "stale_or_missing"
+    assert reports.generate_unified_daily_report_sections(7)["price"] is None
 
 
 def test_multi_asset_report_keeps_btc_match_when_aapl_scores_are_missing(monkeypatch):
