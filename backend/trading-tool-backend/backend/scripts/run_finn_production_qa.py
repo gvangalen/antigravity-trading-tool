@@ -42,6 +42,17 @@ FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh", "database_evidence_unavailable"}
 _DIAGNOSTIC_LOOP: Optional[asyncio.AbstractEventLoop] = None
 _DATABASE_LOOP: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _shared_database_loop() -> asyncio.AbstractEventLoop:
+    """Keep every read using the module's asyncpg pool on the same loop."""
+    global _DATABASE_LOOP, _DIAGNOSTIC_LOOP
+    loop = _DATABASE_LOOP or _DIAGNOSTIC_LOOP
+    if loop is None or loop.is_closed():
+        loop = asyncio.new_event_loop()
+    _DATABASE_LOOP = loop
+    _DIAGNOSTIC_LOOP = loop
+    return loop
 QA_NAMESPACE_TOKEN = "{{qa_run_namespace}}"
 NAMESPACED_FIXTURE_CREATE_OPERATIONS = {
     "create_setup",
@@ -180,14 +191,8 @@ async def _load_runtime_diagnostic(run_id: str) -> Dict[str, Any]:
 
 def runtime_diagnostic(run_id: str) -> Dict[str, Any]:
     """Keep diagnostic read failures separate from the product result."""
-    global _DIAGNOSTIC_LOOP
     try:
-        # SQLAlchemy's async pool belongs to an event loop. Reusing one loop
-        # for this short-lived runner avoids cross-loop transport failures on
-        # later cases without touching the production application's loop.
-        if _DIAGNOSTIC_LOOP is None:
-            _DIAGNOSTIC_LOOP = asyncio.new_event_loop()
-        return _DIAGNOSTIC_LOOP.run_until_complete(_load_runtime_diagnostic(run_id))
+        return _shared_database_loop().run_until_complete(_load_runtime_diagnostic(run_id))
     except Exception:
         return {"diagnostic_status": "unavailable"}
 
@@ -258,11 +263,8 @@ async def _load_bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dic
 
 
 def bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dict[str, Any]:
-    global _DIAGNOSTIC_LOOP
     try:
-        if _DIAGNOSTIC_LOOP is None:
-            _DIAGNOSTIC_LOOP = asyncio.new_event_loop()
-        return _DIAGNOSTIC_LOOP.run_until_complete(_load_bot_lineage_diagnostic(run_id, conversation_id))
+        return _shared_database_loop().run_until_complete(_load_bot_lineage_diagnostic(run_id, conversation_id))
     except Exception:
         return {"diagnostic_status": "unavailable"}
 
@@ -381,13 +383,10 @@ async def _load_owner_scoped_database_snapshot(
 
 def owner_scoped_database_snapshot(*, operation_id: str, fixture_namespace: str) -> Dict[str, Any]:
     """Keep database evidence on one private loop and expose only safe fingerprints."""
-    global _DATABASE_LOOP
     try:
         if operation_id not in _DATABASE_SCOPE_BY_OPERATION:
             return {"status": "not_applicable"}
-        if _DATABASE_LOOP is None:
-            _DATABASE_LOOP = asyncio.new_event_loop()
-        return _DATABASE_LOOP.run_until_complete(
+        return _shared_database_loop().run_until_complete(
             _load_owner_scoped_database_snapshot(
                 operation_id=operation_id,
                 fixture_namespace=validate_fixture_namespace(fixture_namespace),
