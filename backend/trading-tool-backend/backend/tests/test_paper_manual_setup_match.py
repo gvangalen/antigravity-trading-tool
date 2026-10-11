@@ -14,7 +14,7 @@ def _payload(side="buy"):
     return BotManualOrderSchema(bot_id=9, symbol="BTC", side=side, quantity=1, price=100)
 
 
-def _service(monkeypatch, *, setup, match_status="insufficient_data"):
+def _service(monkeypatch, *, setup, match_status="insufficient_data", match_components=None):
     service = BotService(AsyncMock())
     service.repository.get_bot_config = AsyncMock(return_value={
         "id": 9, "setup_id": 7, "strategy_id": 11,
@@ -24,7 +24,8 @@ def _service(monkeypatch, *, setup, match_status="insufficient_data"):
     service.repository.create_manual_order = AsyncMock()
     get_setup = AsyncMock(return_value=setup)
     for_asset = AsyncMock(return_value={
-        "matches": [{"setup_id": 7, "status": match_status}],
+        "matches": [{"setup_id": 7, "status": match_status,
+                     "components": match_components or {}}],
     })
     monkeypatch.setattr(SetupRepository, "get_setup_by_id", get_setup)
     monkeypatch.setattr(SetupMarketMatchService, "for_asset", for_asset)
@@ -53,6 +54,23 @@ def test_paper_preview_and_write_hold_when_saved_score_conditions_do_not_match(m
     service.repository.create_manual_order.assert_not_awaited()
     get_setup.assert_awaited_with(7, 3)
     assert for_asset.await_count == 3
+
+
+def test_outside_score_preview_explains_the_verified_boundary(monkeypatch):
+    service, _, _ = _service(
+        monkeypatch,
+        setup={"id": 7, "symbol": "BTC", "min_macro_score": 30},
+        match_status="outside_conditions",
+        match_components={
+            "macro": {"score": 20, "minimum": 30, "maximum": None, "within_range": False},
+        },
+    )
+
+    preview = asyncio.run(service.preview_manual_order(_payload(), user_id=3))
+
+    assert preview["ok"] is False and preview["blocked"] is True
+    assert preview["symbol"] == "BTC" and preview["side"] == "buy"
+    assert "Macro 20 ligt onder minimum 30" in preview["message"]
 
 
 def test_matching_setup_allows_paper_buy_check(monkeypatch):

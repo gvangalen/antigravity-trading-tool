@@ -48,6 +48,7 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
     missing = [item["symbol"] for item in assets if item["benchmark"].get("source_status") != "available"]
     matches = [match for item in assets for match in item["benchmark"].get("matches") or []]
     active = [match for match in matches if match.get("is_active")]
+    outside = [match for match in matches if match.get("status") == "outside_conditions"]
     bots = [bot for item in assets for bot in item.get("bots") or []]
     setup_names = [str(setup.get("name")) for item in assets
                    for setup in item.get("setups") or [] if setup.get("name")]
@@ -61,7 +62,10 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
             "market_analysis": "The market layer needs current source measurements before it can support a conclusion.",
             "macro_context": "A missing or stale macro score is unknown, not neutral market evidence.",
             "technical_analysis": "Technical timing requires current indicator measurements.",
-            "setup_validation": f"There are {len(active)} confirmed current setup matches." if active else "There is no confirmed setup match without a complete current benchmark.",
+            "setup_validation": f"There are {len(active)} confirmed current setup matches." if active
+            else "There is no confirmed setup match without a complete current benchmark." if missing
+            else f"There is no current setup match: {len(outside)} saved setup(s) are outside their score conditions." if outside
+            else "There is no confirmed current setup match.",
             "strategy_implication": "Review a saved strategy with its linked setup and current evidence; a stored entry price is not a live entry signal.",
             "bot_strategy": f"There are {len(bots)} linked bots; their budgets do not prove available cash or an executed purchase.",
             "outlook": "At the next data refresh, check which source measurements and setup conditions are actually available.",
@@ -72,7 +76,10 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
             "market_analysis": "Die Marktlage braucht aktuelle Quellmessungen, bevor sie eine Schlussfolgerung stützen kann.",
             "macro_context": "Ein fehlender oder veralteter Makrowert ist unbekannt und kein neutrales Marktsignal.",
             "technical_analysis": "Für eine technische Einschätzung sind aktuelle Indikatormessungen nötig.",
-            "setup_validation": f"Es gibt {len(active)} bestätigte aktuelle Setup-Treffer." if active else "Ohne vollständigen aktuellen Benchmark gibt es keinen bestätigten Setup-Treffer.",
+            "setup_validation": f"Es gibt {len(active)} bestätigte aktuelle Setup-Treffer." if active
+            else "Ohne vollständigen aktuellen Benchmark gibt es keinen bestätigten Setup-Treffer." if missing
+            else f"Es gibt keinen aktuellen Setup-Treffer: {len(outside)} gespeicherte Setups liegen außerhalb ihrer Score-Bedingungen." if outside
+            else "Es gibt keinen bestätigten aktuellen Setup-Treffer.",
             "strategy_implication": "Prüfe eine gespeicherte Strategie mit ihrem zugehörigen Setup und aktuellen Daten; ein Einstiegspreis ist kein aktuelles Einstiegssignal.",
             "bot_strategy": f"Es gibt {len(bots)} verknüpfte Bots; ihre Budgets belegen weder verfügbares Guthaben noch einen ausgeführten Kauf.",
             "outlook": "Prüfe nach der nächsten Datenaktualisierung, welche Quellmessungen und Setup-Bedingungen tatsächlich vorliegen.",
@@ -84,7 +91,9 @@ def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
         "macro_context": "Een ontbrekende of verouderde macro-score is geen neutrale score en geen bevestiging van het marktbeeld.",
         "technical_analysis": "De technische laag vraagt actuele indicatorbronnen voordat FINN er een timingconclusie aan verbindt.",
         "setup_validation": f"Er zijn {len(active)} bevestigde actuele setupmatches." if active
-        else "Er is zonder complete actuele benchmark geen bevestigde setupmatch.",
+        else "Er is zonder complete actuele benchmark geen bevestigde setupmatch." if missing
+        else f"Er is geen actuele setupmatch: {len(outside)} opgeslagen setups vallen buiten hun scorevoorwaarden." if outside
+        else "Er is geen bevestigde actuele setupmatch.",
         "strategy_implication": "Vergelijk een opgeslagen strategie pas met de bijbehorende setup en actuele brongegevens; een entryprijs is geen actueel instapsignaal.",
         "bot_strategy": f"Er zijn {len(bots)} gekoppelde bots; hun budget is geen bewijs van beschikbaar kassaldo of een uitgevoerde aankoop.",
         "outlook": "Controleer bij de volgende gegevensverversing welke bronmetingen en setupvoorwaarden daadwerkelijk beschikbaar zijn.",
@@ -217,8 +226,11 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         f"{labels['strategies']}: {', '.join(strategy_names)}. "
         + fallbacks["strategy_implication"] if strategy_names else labels["no_strategies"] + "."
     )
+    # Match status is a computed fact shared with Analyse and FINN. Do not let
+    # generated prose or a fallback imply missing data when the benchmark is
+    # complete and a saved boundary is simply not met.
+    prose["setup_validation"] = fallbacks["setup_validation"]
     if any(item["score_status"] != "available" for item in facts["assets"]):
-        prose["setup_validation"] = fallbacks["setup_validation"]
         prose["outlook"] = fallbacks["outlook"]
     # The summary must not turn unavailable scores or saved plans into model
     # assertions. It uses the same owner-scoped names as the fact cards.
