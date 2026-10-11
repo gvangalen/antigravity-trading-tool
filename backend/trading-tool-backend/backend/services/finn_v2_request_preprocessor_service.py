@@ -518,6 +518,20 @@ class FinnV2RequestPreprocessorService:
         return {"strategie": "strategy"}.get(matches[-1], matches[-1])
 
     def _action_polarity(self, text: str) -> str:
+        # A standalone no-change instruction limits the preceding request.
+        # It is not itself a request to update a saved object. Keep a real
+        # mutation in the preceding clause ("maak een bot. Wijzig niets")
+        # classified as that mutation, so confirmation remains required.
+        no_change_tail = re.search(
+            r"(?:^|[.;!?]\s*|,\s*(?:maar\s+)?|\s+(?:maar|en)\s+)"
+            r"(?:maak\s+of\s+)?"
+            r"(?:wijzig|verander|update|change|ändere|aendere)\s+"
+            r"(?:niets|niks|nothing|nichts)[.!?]*$",
+            text,
+        )
+        if no_change_tail:
+            prefix = text[:no_change_tail.start()].strip(" ,.;!?")
+            return self._action_polarity(prefix) if prefix else "read"
         # A negated opening clause is not an authorization. Classify any
         # following clause on its own, so "geen bot; maak een strategie" can
         # still select the requested strategy operation.

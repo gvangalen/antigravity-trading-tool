@@ -20,6 +20,8 @@ class SetupInventoryToolAdapter:
             strategy_setup[strategy_id] = setup_id
             linked_strategies.setdefault(setup_id, []).append({
                 "strategy_id": strategy_id, "name": strategy.get("name"),
+                **{field: strategy[field] for field in ("execution_mode", "risk_profile")
+                   if strategy.get(field) is not None},
             })
         linked_bots: dict[int, list[dict]] = {}
         for bot in bots or []:

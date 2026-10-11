@@ -615,6 +615,23 @@ class FinnResponsesFrontDoor:
                 )
             )
         )
+        # A setup-and-relations question needs the owner-scoped graph even
+        # when the selector chooses a narrower bot/status operation. The
+        # inventory includes setup, strategy and bot identity/mode together;
+        # a named setup is projected from it below.
+        setup_relationship_read = bool(
+            is_read_request
+            and request_facts.linked_graph_relationship
+            and "setup" in request_facts.explicit_entities
+            and {"strategy", "bot"}.intersection(request_facts.explicit_entities)
+            and re.search(r"\b(?:lees|noem|toon|welke|welk|read|list|show|which|zeige|nenne)\b", message, re.I)
+            and not re.search(
+                r"\b(?:entry|instap\w*|stop(?:-loss)?|target\w*|doel\w*|"
+                r"bedrag\w*|budget\w*|amount|prijs\w*|price|curve|staffel\w*)\b",
+                message, re.I,
+            )
+        )
+        normalized_inventory_read = complete_collection_read or setup_relationship_read
         query: dict[str, str] | None = None
         if is_read_request and explicit_rule_transfer:
             query = {"kind": "cross_asset_scope", "source_asset": explicit_rule_transfer[0],
@@ -957,7 +974,18 @@ class FinnResponsesFrontDoor:
                 # still-open proposal. Bind the source, not the answer, to
                 # the verified proposal in this conversation.
                 return read_open_dca_draft()
-            if complete_collection_read and call.operation_id is None:
+            if normalized_inventory_read and call.operation_id is not None:
+                # A read-only relationship request cannot authorize even a
+                # confirmable mutation draft. Never carry a proposal operation
+                # through the inventory normalization below.
+                return {
+                    "status": "retry", "reason": "read_only_inventory_requires_read_tool",
+                    "instruction": (
+                        "The user requested saved plan facts only. Call "
+                        "get_saved_setup_inventory to read them; do not propose an action."
+                    ),
+                }
+            if normalized_inventory_read:
                 # Normalize the read before relevance selection. A narrower
                 # strategy/bot tool cannot represent every saved setup.
                 all_assets = entity_resolution_module.FinnV2EntityResolutionService.is_all_assets_collection_request(message)
@@ -967,11 +995,12 @@ class FinnResponsesFrontDoor:
                             if len(mentioned_assets) == 1 and not all_assets else {}),
                     setup_names=(), read_tools=("read_saved_setup_inventory",),
                     required_inputs=(), missing_inputs=(),
+                    evaluation_operation_id=None,
                 )
             should_check = (
                 not pending_operation
                 and not resuming_clarification
-                and not (complete_collection_read and call.operation_id is None)
+                and not normalized_inventory_read
                 and (
                     call.operation_id is not None
                     or (not getattr(self, "model_led_coach", False)
@@ -1943,6 +1972,11 @@ class FinnResponsesFrontDoor:
             ),
             locale=locale,
             force_read_repair=force_read_repair,
+            required_read_tool_name=(
+                "get_saved_setup_inventory"
+                if normalized_inventory_read and pending_operation is None
+                and not resuming_clarification else None
+            ),
             rejection_feedback=rejection_feedback,
             model_led_coach=getattr(self, "model_led_coach", False),
             read_only_turn=is_read_request or bool(unsupported_pair),

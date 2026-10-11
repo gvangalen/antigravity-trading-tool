@@ -15,6 +15,21 @@ def test_bot_proposal_desire_and_negation_have_distinct_polarity(message, expect
     assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == expected
 
 
+@pytest.mark.parametrize("message, expected", [
+    ("Ik heb drie ETH-setups. Noem ze alle drie en hun bots. Wijzig niets.", "read"),
+    ("Lees mijn setup en gekoppelde strategie. Wijzig niets.", "read"),
+    ("Lees mijn setup en gekoppelde strategie, maar wijzig niets.", "read"),
+    ("Lees mijn setup en gekoppelde bot en wijzig niets.", "read"),
+    ("Vergelijk al mijn ETH-setups. Verander niets.", "read"),
+    ("Wijzig niets.", "read"),
+    ("Maak een Paper-bot. Wijzig niets.", "create"),
+    ("Maak een Paper-bot, maar wijzig niets.", "create"),
+    ("Wijzig mijn strategiebedrag naar €100. Wijzig niets.", "update"),
+])
+def test_standalone_no_change_clause_does_not_turn_reads_into_updates(message, expected):
+    assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == expected
+
+
 @pytest.mark.parametrize("message", [
     "Welk onderdeel maakt mijn handelsaanpak het meest robuust?",
     "Mijn aanpak: waar liggen de grootste resterende risico's?",

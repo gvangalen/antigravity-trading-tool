@@ -43,6 +43,7 @@ from backend.infrastructure.repositories.finn_v2_runtime_contract_repository imp
 from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_entity_resolution_service import CanonicalEntityTarget
+from backend.services.finn_v2_tool_adapters.setup_inventory_tool_adapter import SetupInventoryToolAdapter
 from backend.schemas.finn_v2_schema import VerifiedResponse
 
 
@@ -238,6 +239,15 @@ def test_explicit_plan_scope_questions_read_owner_setup_collection_without_provi
      "Noem ze alle drie uit mijn opgeslagen plannen en zeg welke wel of geen strategie en bot hebben.",
      {"asset": "ETH"}),
     ("get_saved_setup",
+     "Ik heb drie ETH-setups, waaronder ETH C zonder gekoppelde strategie. "
+     "Noem ze alle drie uit mijn opgeslagen plannen en zeg welke wel of geen strategie en bot hebben. Wijzig niets.",
+     {"asset": "ETH"}),
+    ("get_saved_bots",
+     "Vergelijk al mijn drie opgeslagen ETH-setups. Noem per setup de gekoppelde strategie "
+     "en eventuele bot met Paper/live-status en handmatige of automatische uitvoering. "
+     "Als een relatie niet is gelezen, zeg dat expliciet. Verander niets.",
+     {"asset": "ETH"}),
+    ("get_saved_setup",
      "Noem de namen van alle drie ETH-setups en hun gekoppelde strategieën en bots.",
      {"asset": "ETH"}),
 ])
@@ -280,6 +290,9 @@ def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
         instructions=front._model_led_instructions("nl"),
         conversation_context={}, verified_asset="ETH",
     ))
+    assert fake.requests[0]["tool_choice"] == {
+        "type": "function", "name": "get_saved_setup_inventory",
+    }
     assert len(calls) == 1
     assert calls[0].name == "get_saved_setup_inventory"
     assert calls[0].inputs == expected_inputs
@@ -287,6 +300,121 @@ def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
     assert evidence["setup_count"] == 3
     assert [row["name"] for row in evidence["setups"]] == ["ETH A", "ETH B", "ETH C"]
     assert result.response.text.startswith("Ik zie drie ETH-setups")
+
+
+def test_model_led_named_setup_relationship_read_uses_owner_inventory():
+    message = (
+        "Lees nu alleen de opgeslagen setup ETH A en noem de gekoppelde strategie en bot "
+        "met Paper/live-status en uitvoeringsmodus. Verander niets."
+    )
+    rows = [
+        {"setup_id": 11, "name": "ETH A", "symbol": "ETH",
+         "linked_strategies": [{"name": "Strategy A"}],
+         "linked_bots": [{"name": "Paper A", "is_live": False, "mode": "manual"}]},
+        {"setup_id": 12, "name": "ETH B", "symbol": "ETH",
+         "linked_strategies": [], "linked_bots": []},
+    ]
+    fake = FakeResponses(
+        response("relation-read", calls=[tool_call("call-relations", "get_saved_bots", {"asset": "ETH"})]),
+        response("relation-answer", text="ETH A is gekoppeld aan Strategy A en Paper A."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="named-relations", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": rows, "setup_count": len(rows), "complete": True},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    assert fake.requests[0]["tool_choice"] == {
+        "type": "function", "name": "get_saved_setup_inventory",
+    }
+    assert len(calls) == 1
+    assert calls[0].name == "get_saved_setup_inventory"
+    data = result.response.tool_trace[0]["result"]["results"][0]["data"]
+    assert [row["name"] for row in data["setups"]] == ["ETH A"]
+    assert data["setups"][0]["linked_bots"][0]["is_live"] is False
+
+
+def test_strategy_price_fields_do_not_force_relationship_inventory():
+    fake = FakeResponses(response("strategy-answer", text="Ik moet de strategievelden nog lezen."))
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="strategy-fields", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    asyncio.run(front.run(
+        message="Lees setup ETH A en noem de gekoppelde strategie met entry en stop. Verander niets.",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    assert fake.requests[0]["tool_choice"] == "auto"
+
+
+def test_owner_inventory_exposes_linked_strategy_mode_without_execution_prices():
+    result = asyncio.run(SetupInventoryToolAdapter().execute(
+        setups=[{"setup_id": 11, "name": "ETH A", "symbol": "ETH"}],
+        strategies=[{
+            "strategy_id": 21, "setup_id": 11, "name": "Strategy A",
+            "execution_mode": "fixed", "risk_profile": "conservative",
+            "entry": "100", "stop_loss": "90",
+        }],
+    ))
+    linked = result["data"].setups[0]["linked_strategies"][0]
+    assert linked == {
+        "strategy_id": 21, "name": "Strategy A",
+        "execution_mode": "fixed", "risk_profile": "conservative",
+    }
+
+
+def test_read_only_inventory_rejects_unexpected_proposal_call():
+    message = "Noem alle drie mijn ETH-setups en hun bots. Wijzig niets."
+    fake = FakeResponses(
+        response("unexpected-proposal", calls=[tool_call(
+            "call-proposal", "create_or_update_trade_plan_proposal",
+            {"operation_id": "update_setup", "inputs": {}},
+        )]),
+        response("inventory-read", calls=[tool_call(
+            "call-inventory", "get_saved_setup_inventory", {"asset": "ETH"},
+        )]),
+        response("inventory-answer", text="Ik zie drie ETH-setups."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="no-write-inventory", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    reads = []
+
+    async def read(call):
+        reads.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [
+                {"setup_id": index, "name": f"ETH {index}", "symbol": "ETH"}
+                for index in (11, 12, 13)
+            ], "setup_count": 3, "complete": True},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    assert [item["status"] for item in result.response.tool_trace] == ["retry", "completed"]
+    assert result.response.tool_trace[0]["result"]["reason"] == "read_only_inventory_requires_read_tool"
+    assert len(reads) == 1 and reads[0].name == "get_saved_setup_inventory"
 
 
 @pytest.mark.parametrize("message", [
