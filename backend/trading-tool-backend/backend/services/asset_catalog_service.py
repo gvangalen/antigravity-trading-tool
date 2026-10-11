@@ -677,10 +677,18 @@ def unsupported_catalog_pair_mention(value: object) -> str | None:
         r"\b(?:niet|not|geen|kein)\s+[A-Za-z0-9]{2,10}/[A-Za-z0-9]{2,10}",
         " ", str(value or ""), flags=re.IGNORECASE,
     )
-    pairs = {match.group(0).upper() for match in re.finditer(
-        r"(?<![A-Za-z0-9])(?:[A-Za-z0-9]{2,10})/(?:[A-Za-z0-9]{2,10})(?![A-Za-z0-9])",
+    # A slash also joins ordinary product terms (for example Paper/live).
+    # Treat it as an instrument only when the quote is a known trading quote
+    # or the user wrote two uppercase ticker-like symbols.
+    trading_quotes = {"EUR", "USD", "USDT", "USDC", "GBP", "CHF", "JPY", "BTC", "ETH"}
+    pairs = set()
+    for match in re.finditer(
+        r"(?<![A-Za-z0-9])([A-Za-z0-9]{2,10})/([A-Za-z0-9]{2,10})(?![A-Za-z0-9])",
         positive_text,
-    )}
+    ):
+        base, quote = match.group(1), match.group(2)
+        if quote.upper() in trading_quotes or (base.isupper() and quote.isupper()):
+            pairs.add(match.group(0).upper())
     if len(pairs) != 1:
         return None
     pair = next(iter(pairs))

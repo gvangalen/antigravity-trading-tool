@@ -3541,6 +3541,10 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
 
     assert unsupported_catalog_pair_mention("ETH, niet ETH/EUR") is None
     assert unsupported_catalog_pair_mention("ETH/EUR, niet ETH") == "ETH/EUR"
+    assert unsupported_catalog_pair_mention("Paper/live-status en handmatige uitvoering") is None
+    assert unsupported_catalog_pair_mention("prijs/volume naast elkaar") is None
+    assert unsupported_catalog_pair_mention("SOL/USDT") == "SOL/USDT"
+    assert unsupported_catalog_pair_mention("XYZ/EUR") == "XYZ/EUR"
     assert corrected_catalog_instrument("Ik bedoel ETH/EUR, niet ETH.") == "ETH/EUR"
     assert corrected_catalog_instrument("I mean AAPL, not ETH.") == "AAPL"
     assert corrected_catalog_instrument("Ik bedoel ETH, niet ETH/EUR.") == "ETH"
@@ -3987,6 +3991,18 @@ def test_model_led_coach_uses_one_compact_prompt_without_legacy_answer_rules():
     assert "For this process-choice question" not in sent["instructions"]
     assert "FINN already attempted" not in sent["instructions"]
     assert "Write the entire user-facing response in Dutch" in sent["instructions"]
+
+
+def test_read_tool_is_not_forced_when_catalog_boundary_exposes_no_tools():
+    fake = FakeResponses(response("boundary", text="Dit paar staat niet in de catalogus."))
+    loop = FinnResponsesLoop(client=SimpleNamespace(responses=fake), executor=AsyncMock())
+    result = asyncio.run(loop.run(
+        message="Ik bedoel ETH/EUR.", instructions="FINN", model_led_coach=True,
+        catalog_boundary_only=True, required_read_tool_name="get_saved_setup_inventory",
+    ))
+    assert result.text == "Dit paar staat niet in de catalogus."
+    assert fake.requests[0]["tool_choice"] == "none"
+    assert fake.requests[0]["tools"] == []
 
 
 def test_non_reasoning_clarification_model_does_not_receive_reasoning_option():

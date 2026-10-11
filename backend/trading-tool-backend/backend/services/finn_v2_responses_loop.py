@@ -806,7 +806,7 @@ class FinnResponsesLoop:
                 # function-call exchange instead of crossing models with that cursor.
                 kwargs.pop("previous_response_id", None)
                 kwargs["input"] = initial_input + tool_exchange
-            if (answer_only_round or proposal_selected or repair_exhausted or limited_evaluations
+            if (not definitions or answer_only_round or proposal_selected or repair_exhausted or limited_evaluations
                     or previous_answer_only
                     or (rejection_feedback and rejection_feedback.get("repair_mode") == "explain_limit")
                     or (not model_led_coach and tool_rounds >= 2 and not repair_tool_name
