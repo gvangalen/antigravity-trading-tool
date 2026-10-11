@@ -20,6 +20,18 @@ export function getBotRiskAcknowledgement(error) {
   }
 }
 
+const BUDGET_RISK_FIELDS = [
+  "total_eur", "daily_limit_eur", "max_order_eur", "max_asset_exposure_pct",
+];
+
+export function increasesBotBudgetRisk(next, previous) {
+  return BUDGET_RISK_FIELDS.some((field) => {
+    const before = Number(previous?.[field] ?? 0);
+    const after = Number(next?.[field] ?? 0);
+    return Number.isFinite(before) && Number.isFinite(after) && after > before;
+  });
+}
+
 export function getBotSaveErrorMessage(error, fallback) {
   const acknowledgement = getBotRiskAcknowledgement(error);
   if (acknowledgement?.message) {
