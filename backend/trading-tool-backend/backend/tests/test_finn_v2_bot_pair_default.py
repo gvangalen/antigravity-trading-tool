@@ -35,6 +35,10 @@ ACTION = {
     ("Ik wil een Paper-bot van €20 voor deze setup.", True),
     ("Maak voor dit zojuist opgeslagen plan een Paper-bot met naam Probe Bot en €20 budget.", True),
     ("Ik wil hier nu ook een Paper-bot bij, naam Probe Bot, budget €20. Laat het concept zien.", True),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget. Laat eerst het voorstel zien.", True),
+    ("Zou je voor dit zojuist bevestigde plan ook een Paper-bot willen voorbereiden met €20 budget? Toon eerst een voorstel.", True),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget en naam 'Probe Bot'.", True),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget en naam 'Probe Paper'. Laat eerst het voorstel zien.", True),
     ("En een Paper-bot voor deze strategie? €20 budget; eerst een voorstel.", True),
     ("En een Paper-bot voor deze strategie? €20 budget, naam Probe Bot; eerst een voorstel.", True),
     ("Ik wil voor de zojuist opgeslagen strategie een Paper-bot met €20 budget en de naam Probe Bot. Maak een voorstel.", True),
@@ -80,6 +84,15 @@ ACTION = {
     ("Maak daarvoor een Paper-bot zonder bevestiging.", False),
     ("Maak geen Paper-bot voor dit plan.", False),
     ("Maak een Paper-bot voor dit plan van mijn broer.", False),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget op het account van mijn oom. Laat eerst het voorstel zien.", False),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget. Geef alleen advies over de risico’s, maak nog geen voorstel.", False),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met budget €20 en naam Probe Bot op mijn vaders rekening.", False),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met budget €20 en naam Probe Bot alleen als voorbeeld.", False),
+    ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met budget €20 en naam Probe Bot geef alleen advies.", False),
+    ("Maak daarvoor een Paper-bot met naam Probe Bot puur ter illustratie.", False),
+    ("Maak daarvoor een Paper-bot met naam Probe Bot hypothetisch.", False),
+    ("Maak hiervoor een Paper-bot met naam Probe Bot Op Mijn Vaders Rekening.", False),
+    ("Maak hiervoor een Paper-bot met naam Probe Bot Puur Ter Illustratie.", False),
 ])
 def test_immediate_bot_default_uses_verified_pair_only_without_competing_target(
     monkeypatch, message, expected,
@@ -144,7 +157,7 @@ def test_immediate_bot_pair_records_only_a_typed_guard_reason(monkeypatch, messa
 def test_unrecognized_wording_retains_only_a_verified_semantic_candidate(monkeypatch):
     message = (
         "Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden "
-        "met €20 budget. Laat eerst het voorstel zien."
+        "met €20 budget voor later op vrijdag."
     )
 
     async def candidates(_self, *, user_id, entity_type):
@@ -216,6 +229,7 @@ def test_responses_proposal_binds_verified_immediate_pair_without_temporal_phras
     "Kun je voor dit plan ook een Paper-bot voorbereiden met €20 budget? Toon eerst het voorstel.",
     "Ik wil daarvoor nu een Paper-bot van €20. Laat me de conceptkaart zien.",
     "Maak een Paper-bot van €20 voor de strategie die bij deze setup hoort.",
+    "Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget. Laat eerst het voorstel zien.",
 ])
 def test_immediate_pair_accepts_natural_followup_wording(monkeypatch, message):
     async def candidates(_self, *, user_id, entity_type):
