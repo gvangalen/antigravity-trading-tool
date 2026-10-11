@@ -44,7 +44,11 @@ class FinnResponsesProposalSelection:
                 "net gemaakte", "just created", "recently created",
             ))
         )
-        if temporal_bot_reference:
+        verified_immediate_bot_pair_default = bool(
+            contract.operation_id == "create_bot"
+            and conversation_context.get("verified_immediate_bot_pair_default")
+        )
+        if temporal_bot_reference or verified_immediate_bot_pair_default:
             # The Responses proposal tool is FINN's actual write selection
             # path. A model-provided strategy ID or an older guided draft may
             # not decide what "just created" refers to.
@@ -69,7 +73,8 @@ class FinnResponsesProposalSelection:
             ))
             named_related_object = bool(setup_name or (strategy_name and not generic_strategy_relation))
             pair_is_valid = bool(
-                FinnV2RequestAnalysisService._generic_recent_setup_reference(message)
+                (FinnV2RequestAnalysisService._generic_recent_setup_reference(message)
+                 or verified_immediate_bot_pair_default)
                 and immediate.get("operation_id") == "create_setup"
                 and immediate.get("entity_type") == "setup"
                 and immediate.get("result_status") == "succeeded"
