@@ -1267,6 +1267,72 @@ class FinnV2OrchestratorService:
             message, re.IGNORECASE,
         ))
 
+    @staticmethod
+    def _bounded_immediate_bot_request(message: str, target: str) -> bool:
+        """Accept reordered request parts only when every word is accounted for.
+
+        This broadens natural phrasing without allowing a model verdict to
+        erase an unrecognized owner, target, negation, or read-only clause.
+        Unknown text must remain a clarification, not a bound proposal.
+        """
+        remaining = message.casefold()
+        if not re.search(r"\b(?:maak|aanmaak|voorbereid\w*|voeg|koppel|wil|kun|kan)\b", remaining):
+            return False
+        if not re.search(r"\b(?:paper[-\s]+)?bot\b", remaining):
+            return False
+        target_match = re.search(target, remaining, re.IGNORECASE)
+        if target_match is None:
+            target_match = re.search(
+                r"\b(?:daarvoor|hiervoor|hier|hieraan|daaraan|erbij)\b", remaining,
+            )
+        if target_match is None:
+            return False
+        remaining = remaining[:target_match.start()] + " " + remaining[target_match.end():]
+        remaining, bot_count = re.subn(r"\b(?:paper[-\s]+)?bot\b", " ", remaining, count=1)
+        if bot_count != 1:
+            return False
+        # Values and a named bot may vary, but only behind their explicit
+        # field labels. A free-form tail cannot be interpreted as a target.
+        remaining = re.sub(
+            r"\b(?:met\s+)?(?:een\s+)?budget\s*(?:van\s*)?€?\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?\b",
+            " ", remaining,
+        )
+        remaining = re.sub(
+            r"(?:\bmet\s+)?€\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?\s+budget\b|"
+            r"\b(?:met|van)\s+€?\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?\b",
+            " ", remaining,
+        )
+        if re.search(r"\b(?:naam|noem)\b", remaining):
+            # An unquoted free-form name could swallow an unrelated account
+            # or read-only instruction. Existing bounded sentence forms cover
+            # common unquoted names; this flexible path requires quotes.
+            named = re.search(
+                r"\b(?:met\s+(?:de\s+)?naam|de\s+naam|naam|"
+                r"noem\s+(?:de\s+bot|hem))\s+[\"'“‘]([^\"'”’]{1,80})[\"'”’]",
+                remaining,
+            )
+            if named is None or not re.fullmatch(r"[\w][\w -]{0,79}", named.group(1)):
+                return False
+            remaining = remaining[:named.start()] + " " + remaining[named.end():]
+        remaining = re.sub(
+            r"\b(?:laat\s+(?:me\s+)?(?:eerst\s+)?(?:een|de|het)?\s*"
+            r"(?:concept(?:kaart)?|voorstel)\s+zien|"
+            r"toon\s+(?:me\s+)?(?:eerst\s+)?(?:een|de|het)?\s*"
+            r"(?:concept(?:kaart)?|voorstel)|"
+            r"maak\s+eerst\s+een\s+voorstel|"
+            r"bevestig\s+niets|sla\s+niets\s+op)\b",
+            " ", remaining,
+        )
+        # The residue contains only request grammar. Unknown words are a
+        # potential competing instruction and cannot select the parent pair.
+        allowed = {
+            "ik", "wil", "graag", "zou", "willen", "kun", "kan", "je", "jij",
+            "maak", "aanmaken", "voorbereiden", "voorbereid", "voeg", "koppel",
+            "toe", "aan", "bij", "voor", "met", "een", "de", "het", "ook",
+            "nu", "er", "hier", "en", "eerst", "alsjeblieft", "please",
+        }
+        return all(word in allowed for word in re.findall(r"\b\w+\b", remaining))
+
     async def _verified_immediate_bot_pair_default(
         self, *, user_id: int, message: str, context: dict,
     ) -> bool:
@@ -1358,7 +1424,15 @@ class FinnV2OrchestratorService:
             r"(?!(?:het|de|the)\s+(?:zojuist|net)\b)|"
             r"\b(?:voor|for)\s+(?:mijn|my|onze|our|zijn|haar|hun|his|her|their)\s+"
             r"(?!(?:zojuist|net|dit|dat|deze|die|DCA|plan|setup|strategie|strategy)\b)|"
-            r"\b(?:namens|on\s+behalf\s+of)\b",
+            r"\b(?:namens|on\s+behalf\s+of)\b|"
+            r"\b(?:gezamenlijk\w*\s+rekenin\w*|joint\s+account|"
+            r"zakenpartner|business\s+partner)\b|"
+            r"\b(?:zonder|without)\s+(?:expliciete?\s+)?(?:bevestig\w*|confirmation)\b|"
+            r"\b(?:op|in|voor|via)\s+(?:het|een|mijn|zijn|haar|hun|their|my|his|her)?\s*"
+            r"(?:account|rekening)\b|"
+            r"\b(?:alleen|only)\s+(?:advies|uitleg|een\s+voorbeeld|as\s+an\s+example)\b|"
+            r"\b(?:als|as)\s+(?:een\s+)?(?:voorbeeld|example)\b|"
+            r"\b(?:nog\s+)?geen\s+(?:concept|voorstel|proposal)\b",
             message, re.IGNORECASE,
         ):
             return reject("safety_or_relation_marker")
@@ -1369,8 +1443,10 @@ class FinnV2OrchestratorService:
         amount = r"€?\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?"
         budget = rf"(?:met\s+)?(?:een\s+)?budget\s*(?:van\s+)?{amount}"
         amount_clause = rf"(?:(?:(?:met|van)\s+)?{amount}\s+budget|(?:met|van)\s+{amount})"
-        name_word = r"(?!(?:voor|van|uit|maar|plan|setup|strategie|andere|other)\b)[\w-]+"
-        bot_name = rf"{name_word}(?:\s+{name_word}){{0,7}}"
+        # An unquoted label is at most two title-cased tokens. Longer names
+        # need quotes so following target or read-only prose stays visible.
+        name_word = r"(?-i:[A-Z0-9][A-Za-z0-9_-]*)"
+        bot_name = rf"{name_word}(?:\s+{name_word})?"
         name = rf"(?:met\s+(?:de\s+)?naam|de\s+naam|naam|noem\s+(?:de\s+bot|hem))\s+{bot_name}"
         tail = rf"(?:\s*,?\s*(?:en\s+)?(?:{budget}|{amount_clause}|{name})){{0,2}}"
         bot = r"(?:een\s+)?(?:paper[-\s]+)?bot"
@@ -1411,7 +1487,7 @@ class FinnV2OrchestratorService:
         utterance_supported = any(
             re.fullmatch(rf"{pattern}{guidance}", utterance, re.IGNORECASE)
             for pattern in patterns
-        )
+        ) or self._bounded_immediate_bot_request(message, target)
         resolver = FinnV2EntityResolutionService(self.session)
         for entity_type, expected in (("setup", setup_id), ("strategy", strategy_id)):
             try:
