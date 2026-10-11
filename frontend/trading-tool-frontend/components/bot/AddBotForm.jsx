@@ -87,6 +87,7 @@ const AddBotForm = forwardRef(function AddBotForm({
     risk_profile: "balanced",
     base_currency: "EUR",
     budget_total_eur: 0,
+    paper_initial_cash_eur: 0,
     budget_daily_limit_eur: 0,
     budget_min_order_eur: 0,
     budget_max_order_eur: 0,
@@ -118,6 +119,7 @@ const AddBotForm = forwardRef(function AddBotForm({
       risk_profile: sourceData.risk_profile ?? "balanced",
       base_currency: sourceData.base_currency ?? "EUR",
       budget_total_eur: sourceData.budget_total_eur ?? sourceData.budget?.total_eur ?? 0,
+      paper_initial_cash_eur: sourceData.paper_initial_cash_eur ?? 0,
       budget_daily_limit_eur: sourceData.budget_daily_limit_eur ?? sourceData.budget?.daily_limit_eur ?? 0,
       budget_min_order_eur: sourceData.budget_min_order_eur ?? sourceData.budget?.min_order_eur ?? 0,
       budget_max_order_eur: sourceData.budget_max_order_eur ?? sourceData.budget?.max_order_eur ?? 0,
@@ -261,6 +263,7 @@ const AddBotForm = forwardRef(function AddBotForm({
 
     const numericFields = [
       "budget_total_eur",
+      "paper_initial_cash_eur",
       "budget_daily_limit_eur",
       "budget_min_order_eur",
       "budget_max_order_eur",
@@ -353,6 +356,7 @@ const AddBotForm = forwardRef(function AddBotForm({
       name: String(form.name || "").trim(),
       strategy_id: Number(form.strategy_id),
       budget_total_eur: Number(form.budget_total_eur || 0),
+      paper_initial_cash_eur: Number(form.paper_initial_cash_eur || 0),
       budget_daily_limit_eur: Number(form.budget_daily_limit_eur || 0),
       budget_min_order_eur: Number(form.budget_min_order_eur || 0),
       budget_max_order_eur: Number(form.budget_max_order_eur || 0),
@@ -841,6 +845,28 @@ const AddBotForm = forwardRef(function AddBotForm({
             ))}
           </div>
         )
+      )}
+
+      {!form.is_live && (
+        <div className="space-y-1.5 rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+          <label className="text-[10px] font-black text-blue-700 uppercase tracking-widest" htmlFor="paper_initial_cash_eur">
+            {copy.paperInitialCashLabel}
+          </label>
+          <input
+            id="paper_initial_cash_eur"
+            type="number"
+            min="0"
+            step="0.01"
+            name="paper_initial_cash_eur"
+            disabled={isEdit && Number(sourceData?.paper_initial_cash_eur || 0) > 0}
+            className="w-full bg-card border-2 border-blue-100 rounded-2xl px-4 py-3 text-sm font-bold text-foreground focus:border-blue-600 outline-none disabled:opacity-60"
+            value={form.paper_initial_cash_eur}
+            onChange={(e) => setForm((current) => ({ ...current, paper_initial_cash_eur: Number(e.target.value) }))}
+          />
+          <p className="text-[11px] font-semibold leading-relaxed text-slate-600">
+            {copy.paperInitialCashHelp}
+          </p>
+        </div>
       )}
 
       {/* PROFILE DESCRIPTION */}

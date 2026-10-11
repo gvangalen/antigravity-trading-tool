@@ -85,6 +85,20 @@ def snapshot_all_for_user(
 
             portfolio_rows = cur.fetchall()
 
+            # A missing quote makes the complete valuation unknown. Do not
+            # write a new partial snapshot that silently excludes a funded
+            # bot's cash or treats its held position as worth zero.
+            for bot_id, symbol, _cash, qty, *_rest in portfolio_rows:
+                if float(qty or 0) == 0:
+                    continue
+                symbol = (symbol or "BTC").upper()
+                try:
+                    if symbol not in price_cache:
+                        price_cache[symbol] = _get_latest_price(cur, symbol)
+                except Exception:
+                    logger.warning("Portfolio snapshot uitgesteld: koers ontbreekt voor bot=%s asset=%s", bot_id, symbol)
+                    return
+
             for bot_id, symbol, b_cash, b_qty, b_invested, b_avg, b_realized in portfolio_rows:
                 symbol = (symbol or "BTC").upper()
                 b_cash = float(b_cash or 0)
@@ -92,13 +106,12 @@ def snapshot_all_for_user(
                 b_invested = float(b_invested or 0)
                 b_realized = float(b_realized or 0)
 
-                try:
-                    if symbol not in price_cache:
-                        price_cache[symbol] = _get_latest_price(cur, symbol)
+                if b_qty == 0:
+                    # An unfunded or newly funded Paper bot has no position to
+                    # value. Its virtual cash is known even without a quote.
+                    price = 0.0
+                else:
                     price = price_cache[symbol]
-                except Exception:
-                    logger.exception("❌ %s prijs ophalen mislukt; bot snapshot overgeslagen | bot=%s", symbol, bot_id)
-                    continue
 
                 # Position value at current market price
                 position_value = b_qty * price

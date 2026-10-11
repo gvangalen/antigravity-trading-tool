@@ -322,3 +322,18 @@ def test_portfolio_snapshot_skips_bot_when_symbol_price_missing(monkeypatch):
     portfolio_snapshot_service.snapshot_all_for_user(9)
 
     assert cursor.inserted_bot_snapshots == []
+    assert cursor.inserted_global_snapshots == []
+
+
+def test_uninvested_paper_cash_is_visible_without_a_market_quote(monkeypatch):
+    cursor = _FakeCursor(
+        prices={},
+        portfolios=[(101, "ETH", 25, 0, 0, 0, 0)],
+    )
+    monkeypatch.setattr(portfolio_snapshot_service, "get_db_connection", lambda: _FakeConnection(cursor))
+
+    portfolio_snapshot_service.snapshot_all_for_user(9)
+
+    assert cursor.inserted_bot_snapshots[0][8] == 25
+    assert cursor.inserted_global_snapshots[0][3] == 25
+    assert cursor.inserted_global_snapshots[0][4] == 25

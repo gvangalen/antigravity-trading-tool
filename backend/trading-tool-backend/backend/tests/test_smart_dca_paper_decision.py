@@ -138,6 +138,37 @@ def test_persisted_forged_dca_marker_is_read_and_held_without_exact_amount_exemp
     assert observed["global_macro_score"] == 20
 
 
+@pytest.mark.parametrize(
+    ("base_amount", "mode", "expected_exact"),
+    [(10, "fixed", True), (0, "fixed", False), (10, "custom", False)],
+)
+def test_saved_fixed_dca_from_strategy_editor_uses_its_exact_amount_rule(
+    monkeypatch, base_amount, mode, expected_exact,
+):
+    from backend.ai_agents import trading_bot_agent as worker
+
+    class Cursor:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, *_args):
+            return None
+        def fetchone(self):
+            curve = {"input": "market_score", "points": []} if mode == "custom" else None
+            return (base_amount, mode, curve, "dca", {})
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(worker, "_table_exists", lambda *_args: True)
+    saved = worker._get_strategy_setup_payload(
+        Connection(), user_id=9, strategy_id=3, symbol="ETH",
+    )
+    assert (saved.get("dca_amount_semantics") == "planned_exact") is expected_exact
+
+
 @pytest.mark.parametrize("weights,expected", [
     ({"market_score": 1/3, "macro_score": 1/3, "technical_score": 1/3}, 100),
     ({"market_score": 0.8, "macro_score": 0.1, "technical_score": 0.1}, 50),
@@ -312,6 +343,40 @@ def test_confirmed_dca_is_not_discounted_twice_by_the_macro_guardrail(monkeypatc
             scores=scores, portfolio_context={**portfolio, "total_budget_eur": 25},
         )
         assert budget_limited["amount_eur"] == 25
+
+
+def test_positive_match_and_budget_do_not_create_paper_cash(monkeypatch):
+    monkeypatch.setattr(bot_brain, "get_regime_memory", lambda _user_id: None)
+    monkeypatch.setattr(bot_brain, "get_market_intelligence", lambda **_: {
+        "trend": {}, "state": {"market_pressure": 0.8, "transition_risk": 0.1},
+        "metrics": {},
+    })
+    monkeypatch.setattr(bot_brain, "build_trade_plan", lambda **_: {})
+    _, strategy = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "ETH fixed", "dca_amount_mode": "fixed",
+        "base_amount": 10,
+    })
+    result = bot_brain.run_bot_brain(
+        user_id=1,
+        setup={**strategy, "setup_type": "dca", "symbol": "ETH"},
+        scores={
+            "market_score": 40, "macro_score": 20, "technical_score": 40,
+            "setup_score": 81,
+            "_benchmark_weights": {key: 1 / 3 for key in (
+                "market_score", "macro_score", "technical_score")},
+            "_source_available": {key: True for key in (
+                "market_score", "macro_score", "technical_score", "setup_score")},
+        },
+        portfolio_context={
+            "cash_balance_eur": 0, "portfolio_value_eur": 0,
+            "max_trade_risk_eur": 10, "daily_allocation_eur": 10,
+            "max_asset_exposure_pct": 100, "total_budget_eur": 20,
+            "min_order_eur": 1, "active_strategy": {"setup_type": "dca"},
+        },
+    )
+    assert result["action"] == "hold"
+    assert result["amount_eur"] == 0
+    assert result["guardrails_result"]["blocked_by"] == "insufficient_funds"
 
 
 def test_macro_defensive_limit_still_applies_to_non_dca_trades():

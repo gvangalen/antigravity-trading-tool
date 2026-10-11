@@ -1,7 +1,9 @@
+import json
 from datetime import date, datetime
 
 import pytest
 
+from backend.ai_agents import trading_bot_agent
 from backend.ai_agents.trading_bot_agent import (
     _persist_decision_and_order,
     _require_current_setup_revision_for_buy,
@@ -81,3 +83,26 @@ def test_worker_rejects_buy_if_setup_changed_after_it_was_read():
 
     assert "FOR SHARE" in conn.last_cursor.query
     assert conn.last_cursor.params == (9, 7)
+
+
+def test_paper_hold_persists_the_actual_guardrail_reason(monkeypatch):
+    conn = _Connection((42,))
+    monkeypatch.setattr(trading_bot_agent, "_persist_trade_plan", lambda **kwargs: None)
+
+    decision_id = _persist_decision_and_order(
+        conn=conn, user_id=7, bot_id=8, strategy_id=10, setup_id=9,
+        report_date=date(2026, 10, 11),
+        decision={
+            "action": "hold", "symbol": "ETH", "amount_eur": 0,
+            "strategy_reason": "Scheduled DCA blocked by guardrails: insufficient_funds",
+            "guardrail_reason": "insufficient_funds",
+            "guardrails_result": {"allowed": False, "blocked_by": "insufficient_funds"},
+        },
+        scores={}, setup_revision="2026-10-11T10:00:00",
+    )
+
+    assert decision_id == 42
+    saved_scores = json.loads(conn.last_cursor.params[-1])
+    assert saved_scores["guardrail_reason"] == "insufficient_funds"
+    assert saved_scores["guardrails_result"]["blocked_by"] == "insufficient_funds"
+    assert saved_scores["strategy_reason"].startswith("Scheduled DCA blocked")

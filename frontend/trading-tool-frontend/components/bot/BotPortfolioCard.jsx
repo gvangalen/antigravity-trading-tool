@@ -76,6 +76,17 @@ export default function BotPortfolioSection({ bot }) {
               spent={spentExecuted}
             />
 
+            {!bot.is_live && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900">
+                <span>{copy.paperCashLabel}</span>
+                <span className="font-mono font-black">
+                  {stats.paper_cash_eur == null
+                    ? copy.paperCashMissing
+                    : formatCurrency(Number(stats.paper_cash_eur), locale, "EUR", { maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50">
               <div className="flex flex-col">
                 <span className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.dailySpend}</span>

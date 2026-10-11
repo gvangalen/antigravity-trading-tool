@@ -42,6 +42,9 @@ function PortfolioPageInner() {
       };
     });
   }, [bots, portfolios]);
+  const hasPaperBots = bots.some((bot) => !bot.is_live);
+  const hasLiveBots = bots.some((bot) => bot.is_live);
+  const splitBalances = envFilter === "all" && hasPaperBots && hasLiveBots;
 
   return (
     <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible pb-24">
@@ -74,11 +77,26 @@ function PortfolioPageInner() {
             </div>
           </div>
           <div className="card-p p-8">
-            <PortfolioBalanceCard
-              title={copy.portfolioOverviewCardTitle}
-              defaultRange="1W"
-              is_live={envFilter === "all" ? null : envFilter === "live"}
-            />
+            {splitBalances ? (
+              <div className="grid gap-6 lg:grid-cols-2">
+                <PortfolioBalanceCard
+                  title={`${copy.portfolioOverviewCardTitle} · Paper`}
+                  defaultRange="1W"
+                  is_live={false}
+                />
+                <PortfolioBalanceCard
+                  title={`${copy.portfolioOverviewCardTitle} · Live`}
+                  defaultRange="1W"
+                  is_live={true}
+                />
+              </div>
+            ) : (
+              <PortfolioBalanceCard
+                title={copy.portfolioOverviewCardTitle}
+                defaultRange="1W"
+                is_live={envFilter === "all" ? (hasPaperBots ? false : hasLiveBots ? true : null) : envFilter === "live"}
+              />
+            )}
           </div>
         </div>
 

@@ -21,6 +21,7 @@ class BotConfigCreateSchema(BaseModel):
     is_live: bool = False
     risk_profile: str = "balanced"
     budget_total_eur: float = 0.0
+    paper_initial_cash_eur: float = 0.0
     budget_daily_limit_eur: float = 0.0
     budget_min_order_eur: float = 0.0
     budget_max_order_eur: float = 0.0
@@ -38,6 +39,7 @@ class BotConfigUpdateSchema(BaseModel):
     risk_profile: Optional[str] = None
     is_active: Optional[bool] = None
     budget_total_eur: Optional[float] = None
+    paper_initial_cash_eur: Optional[float] = None
     budget_daily_limit_eur: Optional[float] = None
     budget_min_order_eur: Optional[float] = None
     budget_max_order_eur: Optional[float] = None
