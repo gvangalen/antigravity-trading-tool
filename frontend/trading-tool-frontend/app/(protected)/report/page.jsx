@@ -2023,7 +2023,7 @@ GENERATE
         if (isReadyReport(existing)) {
           lastSignatureRef.current = getReportSignature(existing);
           setReport(existing);
-          showSnackbar(`${fallbackLabel} staat klaar`, 'success');
+          showSnackbar(reportT.recentReport || `${fallbackLabel} is recent gemaakt en opnieuw getoond`, 'info');
           return;
         }
       }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from datetime import date, timedelta
 from typing import Any
 
@@ -261,6 +262,14 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     prose["setup_validation"] = fallbacks["setup_validation"]
     if any(item["score_status"] != "available" for item in facts["assets"]):
         prose["outlook"] = fallbacks["outlook"]
+    elif facts["assets"] and all(
+        all(value is not None for value in item["scores"].values())
+        for item in facts["assets"]
+    ) and re.search(r"\b(?:ontbre\w*|miss\w*|fehl\w*|unavailable)\b", prose["outlook"], re.I):
+        # A complete scored snapshot must not end with an unsupported claim
+        # that its measurements are missing. Keep the model for interpretation
+        # while deriving data availability from typed Score 2.0 facts.
+        prose["outlook"] = fallbacks["outlook"]
     # The summary must not turn unavailable scores or saved plans into model
     # assertions. It uses the same owner-scoped names as the fact cards.
     prose["executive_summary"] = fallbacks["executive_summary"]
@@ -311,7 +320,13 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "targets": all_strategies[0].get("targets"),
             "stop_loss": all_strategies[0].get("stop_loss"),
             "confidence_score": None,
-        } if len(all_strategies) == 1 else None),
+        } if len(all_strategies) == 1 else {
+            "strategies": [{"strategy_name": row.get("name"),
+                            "setup_name": row.get("setup_name"),
+                            "symbol": row.get("symbol"),
+                            "timeframe": row.get("timeframe")}
+                           for row in all_strategies]
+        } if all_strategies else None),
         "bot_snapshot": None,
         "market_indicator_highlights": _configured_highlights(facts, "market"),
         "macro_indicator_highlights": _configured_highlights(facts, "macro"),

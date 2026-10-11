@@ -77,7 +77,7 @@ async def generate_daily(
     service: ReportService = Depends(get_report_service)
 ):
     try:
-        return await service.generate_report(current_user["id"], "daily")
+        return await service.generate_report(current_user["id"], "daily", manual_refresh=True)
     except Exception as e:
         logger.error("❌ generate_daily failed: %s", e, exc_info=True)
         raise _report_internal_error()

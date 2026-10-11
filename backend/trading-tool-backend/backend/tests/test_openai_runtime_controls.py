@@ -187,6 +187,7 @@ class _Repo:
 
 
 def test_generate_report_reuses_recent_daily_report_without_queueing_task(monkeypatch):
+    monkeypatch.setattr("backend.services.report_service.DAILY_REPORT_REGEN_COOLDOWN_SECONDS", 1800)
     now = datetime.utcnow()
     repository = _Repo(
         {
@@ -205,3 +206,28 @@ def test_generate_report_reuses_recent_daily_report_without_queueing_task(monkey
 
     assert result["source"] == "existing_daily_report"
     assert result["task_id"] is None
+
+
+def test_generate_report_can_refresh_older_same_day_report(monkeypatch):
+    monkeypatch.setattr("backend.services.report_service.DAILY_REPORT_REGEN_COOLDOWN_SECONDS", 1800)
+    now = datetime.utcnow()
+    service = ReportService(_Repo({"report_date": now.date(),
+                                   "generated_at": now - timedelta(minutes=5)}))
+    monkeypatch.setattr("backend.services.report_service.generate_daily_report",
+                        SimpleNamespace(delay=lambda **kwargs: SimpleNamespace(id="new-report-task")))
+
+    result = __import__("asyncio").run(service.generate_report(7, "daily", manual_refresh=True))
+
+    assert result["task_id"] == "new-report-task"
+
+
+def test_daily_generate_endpoint_requests_manual_refresh():
+    from backend.api.report_api import generate_daily
+
+    class _Service:
+        async def generate_report(self, user_id, period, *, manual_refresh=False):
+            return {"user_id": user_id, "period": period, "manual_refresh": manual_refresh}
+
+    result = __import__("asyncio").run(generate_daily(current_user={"id": 7}, service=_Service()))
+
+    assert result == {"user_id": 7, "period": "daily", "manual_refresh": True}
