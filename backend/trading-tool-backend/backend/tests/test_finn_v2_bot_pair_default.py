@@ -106,6 +106,32 @@ def test_immediate_bot_default_rejects_other_owner_and_failed_action():
         assert actual is False
 
 
+@pytest.mark.parametrize("message, action, reason", [
+    ("Maak een Paper-bot met budget €20.", ACTION, "no_direct_reference"),
+    ("Maak daarvoor een Paper-bot, maar voor mijn vriend.", ACTION, "other_owner_marker"),
+    ("Maak daarvoor een Paper-bot, maar gebruik mijn vorige ETH-plan.", ACTION, "alternate_target_marker"),
+    ("Maak daarvoor een Paper-bot.", {**ACTION, "result_status": "failed"}, "invalid_parent_lineage"),
+    ("Maak daarvoor een Paper-bot met budget €20.", ACTION, "accepted"),
+])
+def test_immediate_bot_pair_records_only_a_typed_guard_reason(monkeypatch, message, action, reason):
+    async def candidates(_self, *, user_id, entity_type):
+        return ([{"id": 41, "name": "ETH DCA"}] if entity_type == "setup"
+                else [{"id": 81, "name": "ETH DCA Strategy"}])
+
+    monkeypatch.setattr(FinnV2EntityResolutionService, "_entity_candidates", candidates)
+    service = object.__new__(FinnV2OrchestratorService)
+    service.session = object()
+    context = {"strict_immediate_action_lineage": True,
+               "immediate_previous_action_result": action}
+
+    result = asyncio.run(service._verified_immediate_bot_pair_default(
+        user_id=7, message=message, context=context,
+    ))
+
+    assert result is (reason == "accepted")
+    assert context["immediate_bot_pair_guard_reason"] == reason
+
+
 def test_responses_proposal_binds_verified_immediate_pair_without_temporal_phrase():
     call = FinnResponsesToolCatalog().validate(
         "manage_paper_bot_proposal",
@@ -126,6 +152,7 @@ def test_responses_proposal_binds_verified_immediate_pair_without_temporal_phras
     assert state["input_sources"]["strategy_id"] == "verified_action_result"
     assert state["selection_diagnostic"] == {
         "target_reference": "unspecified", "bound_immediate_pair": True,
+        "binding_guard_reason": "not_evaluated",
     }
 
 
@@ -164,6 +191,7 @@ def test_immediate_pair_accepts_natural_followup_wording(monkeypatch, message):
     assert result.request_plan.operation_state["collected_inputs"]["strategy_id"] == 81
     assert result.request_plan.operation_state["selection_diagnostic"] == {
         "target_reference": "confirmed_previous_plan", "bound_immediate_pair": True,
+        "binding_guard_reason": "accepted",
     }
 
 

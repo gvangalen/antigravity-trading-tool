@@ -1017,6 +1017,7 @@ class FinnV2OrchestratorService:
             # an older conversation projection must never authorize a later
             # bot target.
             context.pop("verified_immediate_bot_pair_default", None)
+            context.pop("immediate_bot_pair_guard_reason", None)
             # Confirmation/execution occurs after the orchestration turn that
             # created the proposal.  This is a locked mirror of that later,
             # verified runtime-contract postcondition, not a second source of
@@ -1238,10 +1239,15 @@ class FinnV2OrchestratorService:
         authorization to create or activate a bot. A competing saved target
         in the current turn always wins over the immediate action.
         """
+        def reject(reason: str) -> bool:
+            # Fixed enum only: no request text, identifiers, or owner data.
+            context["immediate_bot_pair_guard_reason"] = reason
+            return False
+
         if not re.search(r"\b(?:bot|paper|automation)\b", message, re.IGNORECASE):
             return False
         if not self._references_immediate_plan(message):
-            return False
+            return reject("no_direct_reference")
         action = dict(context.get("immediate_previous_action_result") or {})
         canonical = dict(action.get("canonical_entity") or {})
         setup_id = str(action.get("entity_id") or "")
@@ -1257,24 +1263,24 @@ class FinnV2OrchestratorService:
             and str(canonical.get("setup_id") or "") == setup_id
             and strategy_id.isdigit() and asset
         ):
-            return False
+            return reject("invalid_parent_lineage")
         named_assets = mentioned_catalog_symbols(message)
         if named_assets and named_assets != {asset}:
-            return False
+            return reject("asset_mismatch")
         if re.search(
             r"\b(?:ander\w*|other|another|different|niet deze|not this|"
             r"vorig\w*|oud\w*|bestaand\w*|previous|older|existing|"
             r"eerste|tweede|derde|first|second|third|nummer|number)\b",
             message, re.IGNORECASE,
         ):
-            return False
+            return reject("alternate_target_marker")
         if re.search(
             r"\b(?:niet|not|kein)\s+(?:daarvoor|hiervoor|erbij|hieraan|daaraan|"
             r"(?:die|deze|dit|that|this)\s+van\s+net|"
             r"voor\s+(?:dit|dat|deze)\s+(?:plan|setup)|for\s+it)\b",
             message, re.IGNORECASE,
         ):
-            return False
+            return reject("negated_reference")
         # A different historical target is a fresh owner-scoped selection,
         # even if the turn also contains a demonstrative such as "daarvoor".
         if re.search(
@@ -1283,7 +1289,7 @@ class FinnV2OrchestratorService:
             r"juli|augustus|september|oktober|november|december))\b",
             message, re.IGNORECASE,
         ):
-            return False
+            return reject("historical_target")
         if re.search(
             r"\b(?:van|uit|in|from|of)\s+(?:19|20)\d{2}\b|"
             r"\b(?:van|uit|in|from|of)\s+(?:januari|februari|maart|april|mei|juni|"
@@ -1292,7 +1298,7 @@ class FinnV2OrchestratorService:
             r"october|november|december)\b",
             message, re.IGNORECASE,
         ):
-            return False
+            return reject("dated_target")
         if re.search(
             r"\b(?:voor|van|for|of)\s+(?:zijn|haar|hun|his|her|their)\b|"
             r"\b(?:vriend|vriendin|broer|zus|partner|collega|vader|moeder|"
@@ -1305,7 +1311,7 @@ class FinnV2OrchestratorService:
             r"\b(?:maar|instead|rather)\b",
             message, re.IGNORECASE,
         ):
-            return False
+            return reject("other_owner_marker")
         if re.search(
             r"\b(?:geen|no)\s+(?:paper[-\s]+)?bot\b|"
             r"\b(?:niet|not)\s+(?:dat\s+je\s+)?(?:een\s+)?(?:paper[-\s]+)?bot\b|"
@@ -1318,7 +1324,7 @@ class FinnV2OrchestratorService:
             r"\b(?:namens|on\s+behalf\s+of)\b",
             message, re.IGNORECASE,
         ):
-            return False
+            return reject("safety_or_relation_marker")
         # Only one bounded target expression may refer to the confirmed
         # parent. Arbitrary free text after a deictic word could select an
         # unrelated person's plan, so the model's target enum is insufficient.
@@ -1364,17 +1370,17 @@ class FinnV2OrchestratorService:
         )
         if not any(re.fullmatch(rf"{pattern}{guidance}", utterance, re.IGNORECASE)
                    for pattern in patterns):
-            return False
+            return reject("unsupported_utterance")
         resolver = FinnV2EntityResolutionService(self.session)
         for entity_type, expected in (("setup", setup_id), ("strategy", strategy_id)):
             try:
                 candidates = await resolver._entity_candidates(user_id=user_id, entity_type=entity_type)
             except Exception:
                 logger.exception("FINN immediate bot target owner lookup failed")
-                return False
+                return reject("owner_lookup_failed")
             named = resolver._explicit_message_matches(message, candidates)
             if any(str(row.get("id") or row.get(f"{entity_type}_id") or "") != expected for row in named):
-                return False
+                return reject("competing_named_entity")
             explicit_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(
                 message, "setup" if entity_type == "setup" else "strateg",
             )
@@ -1390,7 +1396,8 @@ class FinnV2OrchestratorService:
                 str(row.get("id") or row.get(f"{entity_type}_id") or "") == expected
                 for row in named
             ):
-                return False
+                return reject("unmatched_explicit_name")
+        context["immediate_bot_pair_guard_reason"] = "accepted"
         return True
 
     @staticmethod
@@ -1446,6 +1453,7 @@ class FinnV2OrchestratorService:
         request_plan = getattr(result.analysis, "request_plan", None)
         context = dict(existing_context or {})
         context.pop("verified_immediate_bot_pair_default", None)
+        context.pop("immediate_bot_pair_guard_reason", None)
         from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
         contract_view = await self._contract_execution_view(
