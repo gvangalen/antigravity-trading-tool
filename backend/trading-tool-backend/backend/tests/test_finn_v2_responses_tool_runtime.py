@@ -221,6 +221,12 @@ def test_explicit_plan_scope_questions_read_owner_setup_collection_without_provi
     ("get_saved_bots",
      "Vergelijk al mijn ETH-setups, vooral ETH C; noem per setup de strategie en bot.",
      {"asset": "ETH"}),
+    ("get_saved_bots",
+     "Vergelijk mijn drie opgeslagen ETH-setups; noem per setup de strategie en bot.",
+     {"asset": "ETH"}),
+    ("get_saved_bots",
+     "Vergelijk de drie ETH-setups; noem per setup de strategie en bot.",
+     {"asset": "ETH"}),
 ])
 def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
     requested_tool, message, expected_inputs,

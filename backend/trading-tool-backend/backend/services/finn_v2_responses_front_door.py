@@ -585,7 +585,15 @@ class FinnResponsesFrontDoor:
         complete_collection_comparison = bool(
             is_read_request and collection_cue
             and re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*)\b", message, re.I)
-            and re.search(r"\b(?:al\s+mijn|alle|all\s+my|all)\b", message, re.I)
+            and (
+                re.search(r"\b(?:al\s+mijn|alle|all\s+my|all)\b", message, re.I)
+                or re.search(r"\b(?:mijn|my|meine)\b.{0,80}\b(?:setups|set-ups|plannen|plans)\b", message, re.I)
+                or re.search(
+                    r"\b(?:de|the|die)\s+(?:\d+|twee|drie|vier|vijf|two|three|four|five|"
+                    r"zwei|drei|vier|fünf)\b.{0,80}\b(?:setups|set-ups|plannen|plans)\b",
+                    message, re.I,
+                )
+            )
         )
         query: dict[str, str] | None = None
         if is_read_request and explicit_rule_transfer:
