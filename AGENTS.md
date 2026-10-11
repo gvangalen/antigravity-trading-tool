@@ -106,8 +106,10 @@ status source.
   action matrix for affected contracts, real-provider development/regression,
   and the applicable backend and frontend suites. After deployment, Build
   verifies only Auto Deploy, backend health, frontend build information, and
-  matching deployed SHAs. Build must not start, instruct, contact, poll, or
-  otherwise coordinate a QA agent, access the QA fixture, or read the
+  matching deployed SHAs. After the live candidate is documented, Build may
+  assign and follow up on independent testing with the existing QA Agent in
+  its current task; do not create a new QA agent or task for each step. Build
+  must not run the official QA workflow, access the QA fixture, or read the
   QA-exclusive sealed holdout. `FINN_BUILD_SMOKE_USER_ID` is optional for
   targeted production diagnosis only; it is not a release gate.
 - QA owns independent test execution, QA test material, and the protected
@@ -121,9 +123,10 @@ status source.
   QA-exclusive and is used unchanged only when the active QA goal explicitly
   requires it. QA records one evidence-backed verdict for the agreed scope and
   does not repair code, deploy, or direct another agent.
-- The user alone initiates QA after the status file reaches
-  `READY_FOR_INDEPENDENT_QA`. A QA verdict never starts another Build or QA
-  cycle automatically.
+- After the status file documents a complete live candidate, Build may send
+  the agreed QA scope to the existing QA Agent and coordinate follow-up in
+  that task. QA independently executes the test and owns its verdict. A QA
+  verdict never starts another Build or QA cycle automatically.
 - Neither role may call a release green, live, or accepted without the
   corresponding measured evidence recorded in the status file. Build cannot
   accept its own release, lower QA thresholds, or alter rollback markers.

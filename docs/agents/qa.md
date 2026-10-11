@@ -104,6 +104,11 @@ for the SHA of the commit that contains it.
 - QA is read-only: do not change code, configuration, datasets, deployment,
   production records, or release markers, and do not start or direct another
   agent.
+- Accept an agreed test assignment and follow-up from Build in this existing
+  QA task once the status file documents a complete live candidate. A direct
+  message from the user in this QA task is not required for each test step.
+  Keep test execution, protected material, and the verdict independent from
+  Build; do not let Build supply or inspect the sealed holdout.
 - The sealed holdout is QA-exclusive. Use it unchanged only when the active QA
   goal explicitly requires the sealed matrix; a full sealed 32-case matrix is
   never implied by another QA scope.

@@ -16,8 +16,10 @@ runs CI, deploys, and verifies the deployed SHA and public health surfaces.
 Before deployment, Build must run the complete local worker-driven action
 matrix for affected action contracts, real-provider development/regression,
 and applicable backend/frontend suites. Build updates
-`FINN_RELEASE_STATUS.md` only with measured evidence. Build does not start,
-instruct, or contact QA, access the QA fixture, or access the QA-exclusive
+`FINN_RELEASE_STATUS.md` only with measured evidence. After documenting a
+complete live candidate, Build may assign the agreed independent test scope
+to the existing QA Agent and follow up in that same task. Build does not run
+the official QA workflow, access the QA fixture, or access the QA-exclusive
 sealed holdout. The Build smoke fixture is optional diagnostic tooling, not a
 release gate.
 
@@ -76,11 +78,15 @@ precondition and never grants access to the QA fixture or sealed holdout.
 
 ## Independent Production QA
 
-Only the user determines or authorizes an independent QA assignment. For
-production QA, the user starts the existing QA agent after the status file
-documents `READY_FOR_INDEPENDENT_QA` with Build's local and deployment
-evidence. QA reads the role instructions, this process, the status file, and
-its explicit QA goal; then uses the protected `FINN_QA_USER_ID` route to run
+The user sets the product goal and may direct the QA scope. Once the status
+file documents a complete live candidate with Build's local and deployment
+evidence, Build may send the agreed assignment to the existing QA Agent and
+follow up there. Reuse that agent and task across test steps and repair cycles;
+do not create a new QA agent or task for each step. QA decides its own test
+execution and verdict independently. Build cannot invoke the protected QA
+runner or inspect QA-only fixtures, manifests, prompts, or the sealed holdout.
+QA reads the role instructions, this process, the status file, and its
+explicit QA goal; then uses the protected `FINN_QA_USER_ID` route to run
 the goal's authenticated preflight, runtime/dispatch checks, controlled
 fixture actions where authorized, polling/SSE and safety checks, and the
 complete matrix defined by that goal. Individual case failures are recorded

@@ -101,10 +101,12 @@ validates it on production, stores it under the QA-owned manifest root, and
 reports only its SHA-256. Build never reads the plaintext or the sealed
 holdout.
 
-## Start A User-Authorized QA Run
+## Start An Independent QA Run
 
-After the user has authorized the active QA goal, a QA agent can start and
-follow the protected runner without SSH:
+After the live candidate and agreed QA scope are documented, the existing QA
+Agent can receive the assignment from Build and start or follow the protected
+runner without SSH. Build cannot run this workflow or access its protected
+material:
 
 ```bash
 ./ops/qa/run_finn_production_qa.sh \

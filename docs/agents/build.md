@@ -130,12 +130,13 @@ QA status source.
 - `FINN_BUILD_SMOKE_USER_ID` may be used only for voluntary, generic,
   non-sealed production diagnostics. It is not required before independent
   QA, and its token remains in the server-side smoke process.
-- Do not start, instruct, contact, poll, or otherwise coordinate a QA agent.
-  The user initiates independent QA only after the status file documents a
-  complete live candidate.
+- After the status file documents a complete live candidate, send the agreed
+  test scope to the existing QA Agent and follow up in the same task. Reuse
+  that agent across test steps and repair cycles; do not create a new QA agent
+  or task for each step. QA retains independent execution and verdict ownership.
 - Build may implement and validate the protected FINN production-QA runner,
-  but cannot start an official runner workflow. Official QA scope and
-  invocation remain user-authorized and QA-owned.
+  but cannot start an official runner workflow. Its invocation and all
+  protected QA material remain QA-owned.
 
 ## Stop Criteria
 
