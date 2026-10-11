@@ -244,8 +244,13 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         {**match, "score_semantics": "benchmark_setup_match_v1"}
         for item in facts["assets"] for match in item["matches"]
     ]
-    matches.sort(key=lambda item: (bool(item.get("is_active")), item.get("score") or -1), reverse=True)
-    best = next((match for match in matches if match.get("is_active")), None)
+    matches.sort(key=lambda item: (
+        bool(item.get("is_active")),
+        item["score"] if isinstance(item.get("score"), (int, float)) else -1,
+    ), reverse=True)
+    best = next((match for match in matches
+                 if match.get("is_active") and match.get("status") == "matches"
+                 and isinstance(match.get("score"), (int, float))), None)
     best_setup = ({
         "id": best.get("setup_id"), "name": best.get("name"), "symbol": best.get("symbol"),
         "timeframe": best.get("timeframe"), "score": best.get("score"), "status": best.get("status"),

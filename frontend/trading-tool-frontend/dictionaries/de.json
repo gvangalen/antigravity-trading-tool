@@ -2976,12 +2976,13 @@
         "setupLabel": "Aktiver Setup-Abgleich"
       },
       "setupMatch": {
-        "cardTitle": "Optimal setup",
+        "cardTitle": "Setup-Vergleich",
         "empty": "Kein bestätigter aktueller Setup-Treffer in diesem Bericht.",
-        "bestMatch": "Best match",
-        "matchScore": "Match score",
-        "comparison": "Comparison",
-        "explanation": "Explanation: The best setup is selected based on the current macro and market conditions."
+        "bestMatch": "Bester Treffer",
+        "matchScore": "Übereinstimmungswert",
+        "comparison": "Vergleich",
+        "unknownScore": "Unbekannt",
+        "explanation": "Das beste Setup wurde anhand der aktuellen Makro- und Marktbedingungen ausgewählt."
       },
       "activeStrategy": {
         "cardTitle": "Gespeicherte Strategie",

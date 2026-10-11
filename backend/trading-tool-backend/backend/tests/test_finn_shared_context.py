@@ -229,6 +229,24 @@ def test_multi_asset_report_keeps_btc_match_when_aapl_scores_are_missing(monkeyp
     assert served["watchlist"][1]["benchmark"]["source_status"] == "missing_scores"
 
 
+def test_report_does_not_claim_best_match_when_setup_score_is_unknown(monkeypatch):
+    context = {"locale": "nl", "assets": [{
+        "symbol": "AAPL", "setups": [], "strategies": [], "bots": [],
+        "benchmark": {"source_status": "missing_scores", "matches": [{
+            "setup_id": 13, "name": "Apple Plan", "symbol": "AAPL", "timeframe": "1D",
+            "status": "missing_scores", "score": None, "is_active": False,
+        }]},
+    }]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {})
+
+    report = reports.generate_unified_daily_report_sections(7)
+
+    assert report["best_setup"] is None
+    assert report["setup_score"] is None
+    assert report["top_setups"][0]["score"] is None
+
+
 def test_period_report_uses_dated_owner_facts_and_does_not_count_planned_decision_as_trade(monkeypatch):
     captured = {}
     context = {
