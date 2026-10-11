@@ -610,6 +610,7 @@ def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:
     response = envelope.get("response") if isinstance(envelope.get("response"), dict) else {}
     allowed = {
         "contract_id", "contract_revision", "initial_operation_id", "final_operation_id",
+        "immediate_bot_pair_guard_reason",
         "operation_change_reason", "canonical_target", "target_source", "target_type",
         "conversation_reference", "conversation_reference_kind", "dispatch_id", "dispatch_count", "attempt_count",
         "projection_version", "projection_hash", "terminal_response_type", "terminal_status",

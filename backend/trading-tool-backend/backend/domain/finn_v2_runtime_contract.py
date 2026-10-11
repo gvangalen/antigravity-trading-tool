@@ -904,6 +904,16 @@ def terminal_projection(
         "trace_id": identity.get("trace_id"),
         "initial_operation_id": state.get("initial_operation_id"),
         "final_operation_id": operation_id,
+        "immediate_bot_pair_guard_reason": (
+            (state.get("selector_provenance") or {}).get("immediate_bot_pair_guard_reason")
+            if (state.get("selector_provenance") or {}).get("immediate_bot_pair_guard_reason") in {
+                "accepted", "no_direct_reference", "invalid_parent_lineage", "asset_mismatch",
+                "alternate_target_marker", "negated_reference", "historical_target",
+                "dated_target", "other_owner_marker", "safety_or_relation_marker",
+                "owner_lookup_failed", "competing_named_entity", "unmatched_explicit_name",
+                "unsupported_utterance",
+            } else None
+        ),
         "action_polarity": action_polarity,
         "required_inputs": required_inputs,
         "requested_mode": state.get("requested_mode"),

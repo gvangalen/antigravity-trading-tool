@@ -339,6 +339,7 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
             "dispatch_id": "dispatch-1", "dispatch_count": 1, "attempt_count": 1,
             "supplied_inputs": {"asset": "BTC"}, "missing_inputs": [],
             "required_inputs": ["asset"], "action_polarity": "add",
+            "immediate_bot_pair_guard_reason": "unsupported_utterance",
             "private": "omit",
         },
     })
@@ -348,6 +349,7 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
     assert projection["runtime_trace"]["supplied_inputs"] == {"asset": "BTC"}
     assert projection["runtime_trace"]["required_inputs"] == ["asset"]
     assert projection["runtime_trace"]["action_polarity"] == "add"
+    assert projection["runtime_trace"]["immediate_bot_pair_guard_reason"] == "unsupported_utterance"
     assert projection["runtime_trace"]["dispatch_count"] == 1
     assert "private response" not in json.dumps(projection)
     assert "private" not in projection["runtime_trace"]

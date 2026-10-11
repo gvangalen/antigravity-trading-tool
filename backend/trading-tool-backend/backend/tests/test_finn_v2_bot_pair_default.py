@@ -9,6 +9,7 @@ import pytest
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
+from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
 
 
@@ -17,6 +18,26 @@ ACTION = {
     "owner_user_id": 7, "result_status": "succeeded",
     "canonical_entity": {"setup_id": 41, "strategy_id": 81, "symbol": "ETH"},
 }
+
+
+def test_verified_immediate_bot_request_dispatches_proposal_even_if_model_would_read():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="pair-dispatch")
+    context = {
+        "strict_immediate_action_lineage": True,
+        "immediate_previous_action_result": ACTION,
+        "verified_immediate_bot_pair_default": True,
+        "immediate_bot_pair_guard_reason": "accepted",
+    }
+    result = asyncio.run(front.run(
+        message="Maak voor dit zojuist opgeslagen plan een Paper-bot met naam Probe Bot en budget €20.",
+        instructions="", conversation_context=context, verified_asset="ETH",
+    ))
+    state = result.proposal_analysis.request_plan.operation_state
+    assert result.proposal_analysis.request_plan.operation_id == "create_bot"
+    assert state["collected_inputs"]["strategy_id"] == 81
+    assert state["collected_inputs"]["name"] == "Probe Bot"
+    assert state["collected_inputs"]["budget_total_eur"] == 20
+    assert result.response.tool_trace[0]["name"] == "verified_immediate_bot_proposal"
 
 
 @pytest.mark.parametrize("message, expected", [
@@ -39,6 +60,8 @@ ACTION = {
     ("Zou je voor dit zojuist bevestigde plan ook een Paper-bot willen voorbereiden met €20 budget? Toon eerst een voorstel.", True),
     ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget en naam 'Probe Bot'.", True),
     ("Ik wil graag bij dit zojuist bevestigde plan een Paper-bot voorbereiden met €20 budget en naam 'Probe Paper'. Laat eerst het voorstel zien.", True),
+    ("Zou je misschien voor dit zojuist bevestigde plan een Paper-bot kunnen voorbereiden met naam 'Probe Bot' en budget €20?", True),
+    ("Kan je hier ook een Paper-bot aan koppelen met budget €20 en naam 'Probe Bot'?", True),
     ("En een Paper-bot voor deze strategie? €20 budget; eerst een voorstel.", True),
     ("En een Paper-bot voor deze strategie? €20 budget, naam Probe Bot; eerst een voorstel.", True),
     ("Ik wil voor de zojuist opgeslagen strategie een Paper-bot met €20 budget en de naam Probe Bot. Maak een voorstel.", True),
@@ -93,6 +116,9 @@ ACTION = {
     ("Maak daarvoor een Paper-bot met naam Probe Bot hypothetisch.", False),
     ("Maak hiervoor een Paper-bot met naam Probe Bot Op Mijn Vaders Rekening.", False),
     ("Maak hiervoor een Paper-bot met naam Probe Bot Puur Ter Illustratie.", False),
+    ("Zou je misschien voor dit zojuist bevestigde plan een Paper-bot kunnen voorbereiden met naam 'Oom Bot' en budget €20 voor het portfolio van mijn oma?", False),
+    ("Zou je misschien voor dit zojuist bevestigde plan een Paper-bot kunnen voorbereiden met naam 'Test Bot' en budget €20 ter illustratie?", False),
+    ("Ik kan misschien een Paper-bot met naam 'Test Bot' en budget €20 voor dit plan maken.", False),
 ])
 def test_immediate_bot_default_uses_verified_pair_only_without_competing_target(
     monkeypatch, message, expected,
