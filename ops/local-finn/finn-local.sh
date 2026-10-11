@@ -33,7 +33,7 @@ case "${1:-}" in
   start)
     require_env; load_env; stop_local_processes; docker compose -f "$ROOT/docker-compose.finn-local.yml" up -d --wait
     migrate; mkdir -p "$PID_DIR"
-    spawn_detached "$PID_DIR/backend.log" "$PID_DIR/backend.pid" python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18000
+    spawn_detached "$PID_DIR/backend.log" "$PID_DIR/backend.pid" env TRADAMIND_BUILD_SERVICE=backend python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18000
     # macOS Python 3.13 extension modules are not fork-safe. Keep the production
     # Celery app and queue path, but use its supported single-process pool locally.
     spawn_detached "$PID_DIR/finn-worker.log" "$PID_DIR/finn-worker.pid" celery -A backend.celery_task.celery_app worker --pool=solo --loglevel=info -Ofair --concurrency=1 -Q local-finn-finn_interactive -n local-finn-interactive@%h

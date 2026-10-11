@@ -21,6 +21,10 @@ ACTION = {
 
 @pytest.mark.parametrize("message, expected", [
     ("Maak daarvoor een Paper-bot met budget €20.", True),
+    ("Maak bij het zojuist opgeslagen ETH DCA-plan een Paper-bot met naam QA Paper en budget €20.", True),
+    ("Voeg hier een Paper-bot aan toe, noem de bot QA Paper, budget €20.", True),
+    ("Maak een Paper-bot met naam QA Paper en een budget van €20.", False),
+    ("Maak een Paper-bot voor de strategie die bij het zojuist aangemaakte DCA-plan hoort, met budget €20.", True),
     ("Maak een Paper-bot voor mijn andere ETH-plan.", False),
     ("Maak een Paper-bot voor mijn vorige ETH-plan met budget €20.", False),
     ("Maak een Paper-bot voor mijn oudere ETH-setup.", False),
@@ -30,6 +34,15 @@ ACTION = {
     ("Maak daarvoor een Paper-bot, maar gebruik het plan dat ik gisteren maakte.", False),
     ("Maak een Paper-bot voor dat plan uit september.", False),
     ("Maak daarvoor een Paper-bot, maar gebruik die van gisteren.", False),
+    ("Maak een Paper-bot voor die van september met budget €20.", False),
+    ("Maak een Paper-bot voor mijn plan uit 2025 met budget €20.", False),
+    ("Maak een bot voor deze setup van mijn vriend.", False),
+    ("Maak een bot voor dat plan dat op mijn scherm staat.", False),
+    ("Maak hier een bot voor het plan van mijn vriend.", False),
+    ("Maak daarvoor een bot voor mijn vriend.", False),
+    ("Maak bij het net opgeslagen plan van mijn vriend een Paper-bot.", False),
+    ("Voeg hier een Paper-bot aan toe, maar dan voor mijn vriend.", False),
+    ("Maak daarvoor een Paper-bot, maar gebruik die van september.", False),
     ("Maak daarvoor een Paper-bot, maar kies die uit september.", False),
     ("Maak daarvoor een Paper-bot, maar gebruik niet die van net.", False),
     ("Maak niet daarvoor een Paper-bot met budget €20.", False),
@@ -90,6 +103,111 @@ def test_responses_proposal_binds_verified_immediate_pair_without_temporal_phras
     state = result.request_plan.operation_state
     assert state["collected_inputs"]["strategy_id"] == 81
     assert state["input_sources"]["strategy_id"] == "verified_action_result"
+
+
+def test_relative_strategy_reference_flows_from_verified_context_to_proposal(monkeypatch):
+    message = (
+        "Maak een Paper-bot voor de strategie die bij het zojuist aangemaakte "
+        "DCA-plan hoort, met budget €20."
+    )
+
+    async def candidates(_self, *, user_id, entity_type):
+        assert user_id == 7
+        return ([{"id": 41, "name": "ETH DCA"}, {"id": 42, "name": "Older DCA"}]
+                if entity_type == "setup" else
+                [{"id": 81, "name": "ETH DCA Strategy"},
+                 {"id": 82, "name": "Older DCA Strategy"}])
+
+    monkeypatch.setattr(FinnV2EntityResolutionService, "_entity_candidates", candidates)
+    service = object.__new__(FinnV2OrchestratorService)
+    service.session = object()
+    context = {
+        "strict_immediate_action_lineage": True,
+        "immediate_previous_action_result": ACTION,
+    }
+    context["verified_immediate_bot_pair_default"] = asyncio.run(
+        service._verified_immediate_bot_pair_default(
+            user_id=7, message=message, context=context,
+        )
+    )
+    assert context["verified_immediate_bot_pair_default"] is True
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "confirmed_previous_plan",
+         "inputs": {"name": "QA Paper", "budget_total_eur": 20}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call, message=message, conversation_context=context, verified_asset="ETH",
+    )
+    state = result.request_plan.operation_state
+    assert state["collected_inputs"]["strategy_id"] == 81
+    assert state["input_sources"]["strategy_id"] == "verified_action_result"
+
+
+def test_responses_bot_target_reference_keeps_other_plan_separate():
+    catalog = FinnResponsesToolCatalog()
+    call = catalog.validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "draft_intent": "new",
+         "target_reference": "other_saved_plan",
+         "inputs": {"name": "Older Paper", "budget_total_eur": 20}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call, message="Maak een Paper-bot voor mijn andere ETH-plan.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": ACTION,
+            "verified_immediate_bot_pair_default": True,
+        },
+        verified_asset="ETH",
+    )
+    assert "strategy_id" not in result.request_plan.operation_state["collected_inputs"]
+
+
+def test_unverified_recent_phrase_cannot_select_or_inherit_a_strategy():
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "confirmed_previous_plan",
+         "inputs": {"name": "QA Paper", "budget_total_eur": 20,
+                    "strategy_id": 81}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Maak een Paper-bot voor mijn plan uit 2025, niet het zojuist aangemaakte plan.",
+        conversation_context={
+            "strict_immediate_action_lineage": True,
+            "immediate_previous_action_result": ACTION,
+            "active_guided_operation": {
+                "operation_id": "create_bot",
+                "collected_inputs": {"strategy_id": 82},
+                "missing_required_inputs": [],
+            },
+        },
+        verified_asset="ETH",
+    )
+    state = result.request_plan.operation_state
+    assert "strategy_id" not in state["collected_inputs"]
+    assert "strategy_id" in state["missing_required_inputs"]
+
+
+@pytest.mark.parametrize("message", [
+    "Maak een Paper-bot voor het net opgeslagen plan met budget €20.",
+    "Maak een Paper-bot voor dat plan met budget €20.",
+])
+def test_unverified_model_recent_reference_clears_older_context(message):
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "target_reference": "confirmed_previous_plan",
+         "inputs": {"name": "QA Paper", "budget_total_eur": 20}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call, message=message,
+        conversation_context={"last_verified_context": {"resolved_entities": {"strategy_id": 82}}},
+        verified_asset="ETH",
+    )
+    state = result.request_plan.operation_state
+    assert "strategy_id" not in state["collected_inputs"]
+    assert "strategy_id" in state["missing_required_inputs"]
 
 
 def test_confirmation_result_promoted_only_from_exact_parent_run():
