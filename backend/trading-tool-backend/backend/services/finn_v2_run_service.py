@@ -476,6 +476,7 @@ class FinnV2RunService:
             user = await session.get(User, user_id)
             context = await orchestrator._load_continuation_context(
                 conversation_id=conversation_id, user_id=user_id, run_id=run_id,
+                message=message,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
             corrected_instrument = corrected_catalog_instrument(message)

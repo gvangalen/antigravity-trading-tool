@@ -8811,7 +8811,7 @@ def test_provider_timeout_after_typed_evaluation_retains_trace_and_terminalizes(
 
 
 def test_responses_loop_bounds_tool_rounds_without_silent_answer():
-    fake = FakeResponses(response("r1", calls=(tool_call("c1", "get_active_asset_context", {}),)))
+    fake = FakeResponses(response("r1", calls=(tool_call("c1", "ask_for_clarification", {}),)))
 
     async def execute(_call):
         return {"status": "completed"}
@@ -8820,6 +8820,22 @@ def test_responses_loop_bounds_tool_rounds_without_silent_answer():
         asyncio.run(FinnResponsesLoop(
             client=SimpleNamespace(responses=fake), executor=execute, max_rounds=1,
         ).run(message="Welke asset?", instructions="Check feiten"))
+
+
+def test_read_probe_gets_answer_round_even_without_coach_classification():
+    fake = FakeResponses(
+        response("read", calls=(tool_call("c1", "get_current_asset_scores", {}),)),
+        response("answer", text="De bron is verouderd; de huidige score is onbekend."),
+    )
+
+    async def execute(_call):
+        return {"status": "partial", "results": []}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute, max_rounds=1,
+    ).run(message="Is de scorebron nog vers?", instructions="Lees de bron"))
+    assert result.text.startswith("De bron is verouderd")
+    assert fake.requests[-1]["tool_choice"] == "none"
 
 
 def test_read_only_coach_can_answer_after_five_successful_reads():

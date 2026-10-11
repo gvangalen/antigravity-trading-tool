@@ -430,15 +430,16 @@ class FinnResponsesLoop:
         incomplete_output_retry_used = False
         transient_provider_retry_used = False
         output_token_override: int | None = None
-        # A read-only coach turn may use the last allowed round to fetch its
-        # final piece of evidence. Leave one answer-only provider round after
-        # those reads; otherwise a fully successful fifth read terminalizes as
-        # responses_tool_round_limit without ever asking the model to answer.
+        # A turn composed entirely of read tools may use the last allowed
+        # round to fetch its final piece of evidence. Reserve one answer-only
+        # round regardless of whether the front door classified it as coach
+        # mode; a stale-source probe is also a read and needs that answer.
         for _ in range(self.max_rounds + 1):
             answer_only_round = tool_rounds >= self.max_rounds
             if answer_only_round and not (
-                read_only_coaching and trace and not proposal_selected
+                trace and not proposal_selected
                 and not repair_tool_name
+                and all(item["name"].startswith(("get_", "evaluate_")) for item in trace)
                 and all(item["status"] in {"completed", "partial", "unavailable"} for item in trace)
             ):
                 raise FinnResponsesError("responses_tool_round_limit")
