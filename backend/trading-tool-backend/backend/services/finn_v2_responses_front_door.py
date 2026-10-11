@@ -306,6 +306,41 @@ class FinnResponsesFrontDoor:
                 ),
                 selected, previous_response, locale=locale,
             )
+        if conversation_context.get("verified_immediate_bot_pair_default"):
+            # The owner-scoped parent action and this turn's explicit bot
+            # request have already passed the bounded target guard. Dispatch
+            # the registry proposal directly: a free-form model READ choice
+            # must not silently drop an unambiguous action request. Missing
+            # name/budget inputs still become a guided draft, and execution
+            # still requires the normal user confirmation.
+            contract = self.proposals.registry.require_supported("create_bot")
+            explicit = self.proposals.states.explicit_inputs(
+                contract=contract, message=message, explicit_asset=None,
+            )
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation("create_bot"),
+                    operation_id="create_bot",
+                    inputs={key: explicit[key] for key in ("name", "budget_total_eur") if key in explicit},
+                    read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new", target_reference="confirmed_previous_plan",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Ik heb een Paper-botconcept voor dit bevestigde plan voorbereid.",
+                    response_id=f"verified-bot-{self.run_id}",
+                    tool_trace=({
+                        "name": "verified_immediate_bot_proposal", "status": "completed",
+                        "result": {"operation_id": "create_bot"},
+                    },),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
         read_context: list[dict[str, Any]] = []
         completed_read_calls: set[tuple[str, str]] = set()
         pending_operation = FinnV2OperationStateService.pending_operation_id(conversation_context)

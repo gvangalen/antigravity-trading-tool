@@ -541,6 +541,11 @@ class FinnV2OrchestratorService:
                 "source": getattr(request_plan, "selector_source", None),
                 "confidence": getattr(request_plan, "selector_confidence", None),
                 "candidate_operation_ids": list(getattr(request_plan, "candidate_operation_ids", []) or []),
+                # Fixed enum only; useful even when the model selected READ
+                # and no bot proposal diagnostic was created.
+                "immediate_bot_pair_guard_reason": conversation_context.get(
+                    "immediate_bot_pair_guard_reason"
+                ),
             },
             supplied_inputs={
                 **dict(getattr(request_plan, "referenced_entities", {}) or {}),
@@ -1276,7 +1281,13 @@ class FinnV2OrchestratorService:
         Unknown text must remain a clarification, not a bound proposal.
         """
         remaining = message.casefold()
-        if not re.search(r"\b(?:maak|aanmaak|voorbereid\w*|voeg|koppel|wil|kun|kan)\b", remaining):
+        # A bag of action words would mistake "ik kan misschien ... maken"
+        # for an instruction to FINN. Require a user-directed request before
+        # the flexible token grammar is allowed to dispatch a proposal.
+        if not re.match(
+            r"\s*(?:(?:maak|voeg|koppel|bereid|stel)\b|"
+            r"(?:kun|kan|kunt|zou)\s+je\b|ik\s+wil\b)", remaining,
+        ):
             return False
         if not re.search(r"\b(?:paper[-\s]+)?bot\b", remaining):
             return False
@@ -1326,10 +1337,12 @@ class FinnV2OrchestratorService:
         # The residue contains only request grammar. Unknown words are a
         # potential competing instruction and cannot select the parent pair.
         allowed = {
-            "ik", "wil", "graag", "zou", "willen", "kun", "kan", "je", "jij",
-            "maak", "aanmaken", "voorbereiden", "voorbereid", "voeg", "koppel",
-            "toe", "aan", "bij", "voor", "met", "een", "de", "het", "ook",
-            "nu", "er", "hier", "en", "eerst", "alsjeblieft", "please",
+            "ik", "wil", "graag", "zou", "willen", "kun", "kunt", "kunnen",
+            "kan", "je", "jij", "misschien", "maak", "maken", "aanmaken",
+            "voorbereiden", "voorbereid", "voeg", "toevoegen", "koppel",
+            "koppelen", "toe", "aan", "bij", "voor", "met", "een", "de",
+            "het", "ook", "nu", "er", "hier", "en", "eerst", "alsjeblieft",
+            "please", "concept", "conceptkaart", "voorstel", "zien", "tonen",
         }
         return all(word in allowed for word in re.findall(r"\b\w+\b", remaining))
 

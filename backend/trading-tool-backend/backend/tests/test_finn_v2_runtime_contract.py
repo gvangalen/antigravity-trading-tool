@@ -7,6 +7,17 @@ from backend.domain.finn_v2_runtime_contract import build_terminal_runtime_contr
 from backend.domain.finn_v2_runtime_contract import terminal_projection
 
 
+def test_terminal_projection_keeps_only_typed_immediate_bot_guard_reason():
+    state = {"selector_provenance": {"immediate_bot_pair_guard_reason": "accepted"}}
+    assert terminal_projection(state, status="completed", mode="READ", response={})[
+        "immediate_bot_pair_guard_reason"
+    ] == "accepted"
+    state["selector_provenance"]["immediate_bot_pair_guard_reason"] = "private user text"
+    assert terminal_projection(state, status="completed", mode="READ", response={})[
+        "immediate_bot_pair_guard_reason"
+    ] is None
+
+
 def _artifacts():
     return {
         "orchestrator_result": {

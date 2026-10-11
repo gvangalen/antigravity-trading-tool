@@ -1127,6 +1127,14 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _name_input_from_text(text: str) -> Optional[str]:
+        quoted = re.search(
+            r"\b(?:met\s+(?:de\s+)?naam|naam|name|named|called|"
+            r"noem\s+(?:hem|haar|het|(?:de|het|een)\s+(?:setup|strategie|plan|bot)))"
+            r"\s*(?:is|:|=)?\s*([\"'“‘])([\w .-]{2,80})[\"'”’]",
+            text, re.IGNORECASE,
+        )
+        if quoted:
+            return quoted.group(2).strip() or None
         named = re.search(
             r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|dem\s+namen|met\s+de\s+naam|namens|genannt|"
             r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
