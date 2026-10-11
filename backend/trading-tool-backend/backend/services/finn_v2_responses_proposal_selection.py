@@ -37,18 +37,25 @@ class FinnResponsesProposalSelection:
             raise ValueError("proposal_operation_not_write_contract")
         inputs = dict(call.inputs)
         verified_action_inputs: dict[str, object] = {}
-        temporal_bot_reference = (
-            contract.operation_id == "create_bot"
-            and any(phrase in message.casefold() for phrase in (
-                "zojuist", "net aangemaakt", "net aangemaakte", "net gemaakt",
-                "net gemaakte", "just created", "recently created",
-            ))
-        )
         verified_immediate_bot_pair_default = bool(
             contract.operation_id == "create_bot"
             and conversation_context.get("verified_immediate_bot_pair_default")
+            and call.target_reference != "other_saved_plan"
         )
-        if temporal_bot_reference or verified_immediate_bot_pair_default:
+        mentions_recent_plan = bool(
+            contract.operation_id == "create_bot"
+            and re.search(
+                r"\b(?:zojuist|net\s+(?:aangemaak\w*|opgeslag\w*|gemaak\w*)|"
+                r"(?:just|recently)\s+(?:created|saved))\b",
+                message, re.IGNORECASE,
+            )
+        )
+        if contract.operation_id == "create_bot" and call.target_reference == "other_saved_plan":
+            # The model explicitly selected a different saved plan. The
+            # immediate action and older guided draft are not candidates for
+            # its strategy slot; owner-scoped resolution must find that plan.
+            conversation_context = {}
+        if verified_immediate_bot_pair_default:
             # The Responses proposal tool is FINN's actual write selection
             # path. A model-provided strategy ID or an older guided draft may
             # not decide what "just created" refers to.
@@ -67,20 +74,19 @@ class FinnResponsesProposalSelection:
             setup_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(message, "setup")
             strategy_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(message, "strateg")
             generic_strategy_relation = bool(strategy_name and re.fullmatch(
-                r"bij\s+(?:het|de)\s+(?:zojuist|net)\s+aangemaakte?\s+"
-                r"(?:[A-Z]{2,8}\s+)?DCA[-\s]+plan",
+                r"(?:die\s+)?bij\s+(?:het|de)\s+(?:zojuist|net)\s+"
+                r"(?:aangemaakte?|opgeslagen)\s+"
+                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)(?:\s+hoort)?",
                 strategy_name, re.IGNORECASE,
             ))
             named_related_object = bool(setup_name or (strategy_name and not generic_strategy_relation))
             pair_is_valid = bool(
-                (FinnV2RequestAnalysisService._generic_recent_setup_reference(message)
-                 or verified_immediate_bot_pair_default)
-                and immediate.get("operation_id") == "create_setup"
+                immediate.get("operation_id") == "create_setup"
                 and immediate.get("entity_type") == "setup"
                 and immediate.get("result_status") == "succeeded"
                 and setup_id.isdigit() and setup_id == linked_setup_id
                 and strategy_id.isdigit() and action_asset
-                and not named_related_object
+                and (not named_related_object or verified_immediate_bot_pair_default)
                 and (not current_assets or current_assets == {action_asset})
             )
             if pair_is_valid:
@@ -97,6 +103,14 @@ class FinnResponsesProposalSelection:
                 # An invalid immediate reference must not borrow any older
                 # guided state, correction draft or conversation target.
                 conversation_context = {}
+        elif mentions_recent_plan or (
+            contract.operation_id == "create_bot"
+            and call.target_reference == "confirmed_previous_plan"
+        ):
+            # A claimed recent target that was not verified against the exact
+            # parent action must not inherit an older guided strategy.
+            inputs.pop("strategy_id", None)
+            conversation_context = {}
         explicitly_named = self.states._name_input_from_text(message)
         if contract.operation_id.startswith("create_") and explicitly_named and "name" in contract.required_inputs:
             # Explicit user input outranks a model candidate that shortened the name.

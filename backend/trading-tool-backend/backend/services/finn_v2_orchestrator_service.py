@@ -1249,35 +1249,53 @@ class FinnV2OrchestratorService:
             message, re.IGNORECASE,
         ):
             return False
-        # The narrow temporal form is already validated separately. Other
-        # temporal forms may mean a named plan; do not guess from suffix text.
-        if re.search(r"\b(?:zojuist|net aangemaakt|net gemaakte?|just created|recently created)\b", message, re.IGNORECASE):
-            if not FinnV2RequestAnalysisService._generic_recent_setup_reference(message):
-                return False
-        simple_match = re.search(
-            r"\b(?:daarvoor|hiervoor|erbij|hieraan|daaraan)\b|\bfor it\b",
+        if re.search(
+            r"\b(?:niet|not|kein)\s+(?:daarvoor|hiervoor|erbij|hieraan|daaraan|"
+            r"(?:die|deze|dit|that|this)\s+van\s+net|"
+            r"voor\s+(?:dit|dat|deze)\s+(?:plan|setup)|for\s+it)\b",
             message, re.IGNORECASE,
+        ):
+            return False
+        # A different historical target is a fresh owner-scoped selection,
+        # even if the turn also contains a demonstrative such as "daarvoor".
+        if re.search(
+            r"\b(?:gisteren|eergisteren|eerder|destijds|yesterday|last\s+(?:week|month)|"
+            r"vorige\s+(?:week|maand)|uit\s+(?:januari|februari|maart|april|mei|juni|"
+            r"juli|augustus|september|oktober|november|december))\b",
+            message, re.IGNORECASE,
+        ):
+            return False
+        if re.search(
+            r"\b(?:van|uit|in|from|of)\s+(?:19|20)\d{2}\b|"
+            r"\b(?:van|uit|in|from|of)\s+(?:januari|februari|maart|april|mei|juni|"
+            r"juli|augustus|september|oktober|november|december|"
+            r"january|february|march|april|may|june|july|august|september|"
+            r"october|november|december)\b",
+            message, re.IGNORECASE,
+        ):
+            return False
+        # Accept only a complete, unambiguous reference. A word such as
+        # "hier" anywhere in a free sentence is not proof of the target:
+        # a second clause may select another person's or another saved plan.
+        utterance = message.strip().rstrip(".!?").strip()
+        amount = r"€?\s*\d+(?:[,.]\d+)?\s*(?:euro|eur)?"
+        budget = rf"(?:met\s+)?(?:een\s+)?budget\s*(?:van\s+)?{amount}"
+        name_word = r"(?!(?:voor|van|uit|maar|plan|setup|strategie|andere|other)\b)[\w-]+"
+        bot_name = rf"{name_word}(?:\s+{name_word}){{0,7}}"
+        name = rf"(?:met\s+naam|noem\s+de\s+bot)\s+{bot_name}"
+        tail = rf"(?:\s*,?\s*(?:en\s+)?(?:{budget}|{name})){{0,2}}"
+        bot = r"(?:een\s+)?(?:paper[-\s]+)?bot"
+        recent = (r"(?:het|de)\s+(?:zojuist|net)\s+"
+                  r"(?:aangemaakte?|opgeslagen)\s+(?:[A-Z]{2,8}\s+)?"
+                  r"(?:DCA[-\s]+)?(?:plan|setup)")
+        patterns = (
+            rf"maak\s+(?:daarvoor|hiervoor)\s+{bot}{tail}",
+            rf"voeg\s+(?:hier|erbij|hieraan|daaraan)\s+{bot}\s+aan\s+toe{tail}",
+            rf"maak\s+(?:voor|bij|aan)\s+{recent}\s+{bot}{tail}",
+            rf"maak\s+{bot}\s+(?:voor|bij)\s+{recent}{tail}",
+            rf"maak\s+{bot}\s+voor\s+(?:de\s+)?strategie\s+die\s+bij\s+{recent}\s+hoort{tail}",
         )
-        # Only a bare anaphor plus bot parameters may select the previous
-        # action. Free-form clauses can point to another target ("die van
-        # gisteren") even without naming a plan or strategy.
-        simple_reference = bool(
-            simple_match
-            and not re.search(r"\b(?:plan|setup|strategie|strategy)\b", message, re.IGNORECASE)
-            and re.fullmatch(
-                r"\s*(?:maak|creëer|create|bouw|koppel|start|zet|wil je|kun je|kan je)"
-                r"(?:\s+(?:(?:een|a)\s+)?(?:paper[-\s]*)?bot)?(?:\s+voor)?\s*",
-                message[:simple_match.start()], re.IGNORECASE,
-            )
-            and re.fullmatch(
-                r"\s*(?:(?:een|a)\s+(?:paper[-\s]*)?bot\s*)?(?:[,.;!?]\s*)?"
-                r"(?:(?:met|with)\s+(?:(?:een|a)\s+)?"
-                r"(?:budget\s+(?:(?:van|of)\s+)?)?€?\s*\d+(?:[,.]\d+)?"
-                r"(?:\s*(?:euro|eur))?\s*)?(?:[.;!?]\s*)?",
-                message[simple_match.end():], re.IGNORECASE,
-            )
-        )
-        if not simple_reference and not FinnV2RequestAnalysisService._generic_recent_setup_reference(message):
+        if not any(re.fullmatch(pattern, utterance, re.IGNORECASE) for pattern in patterns):
             return False
         resolver = FinnV2EntityResolutionService(self.session)
         for entity_type, expected in (("setup", setup_id), ("strategy", strategy_id)):
@@ -1289,13 +1307,24 @@ class FinnV2OrchestratorService:
             named = resolver._explicit_message_matches(message, candidates)
             if any(str(row.get("id") or row.get(f"{entity_type}_id") or "") != expected for row in named):
                 return False
-        # An unlabeled or quoted name cannot be assumed to be the just-created
-        # setup. Such a request must go through owner-scoped resolution.
-        reference_clause = re.split(r"\b(?:noem|name)\s+(?:de|the)?\s*bot\b", message, maxsplit=1, flags=re.IGNORECASE)[0]
-        if re.search(r"\b(?:naam|name|titel|title|label|genaamd|called)\b", reference_clause, re.IGNORECASE):
-            return False
-        if re.search(r"[\"'“”]", reference_clause):
-            return False
+            explicit_name = FinnV2RequestAnalysisService._extract_quoted_entity_name(
+                message, "setup" if entity_type == "setup" else "strateg",
+            )
+            if explicit_name and re.fullmatch(
+                r"(?:die\s+)?(?:bij|aan)\s+(?:het|de)?\s*"
+                r"(?:zojuist|net)\s+(?:aangemaakte?|opgeslagen)\s+"
+                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)\s+hoort|"
+                r"(?:die\s+)?(?:bij|aan)\s+(?:het|de)?\s*"
+                r"(?:zojuist|net)\s+(?:aangemaakte?|opgeslagen)\s+"
+                r"(?:[A-Z]{2,8}\s+)?(?:DCA[-\s]+)?(?:plan|setup)",
+                explicit_name, re.IGNORECASE,
+            ):
+                explicit_name = None
+            if explicit_name and not any(
+                str(row.get("id") or row.get(f"{entity_type}_id") or "") == expected
+                for row in named
+            ):
+                return False
         return True
 
     @staticmethod

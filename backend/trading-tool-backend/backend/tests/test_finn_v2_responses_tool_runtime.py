@@ -3090,6 +3090,7 @@ def test_responses_bot_candidate_uses_immediate_confirmed_dca_pair():
         message="Maak een Paper-bot voor het zojuist aangemaakte DCA-plan en noem de bot New Paper Bot met budget 20 euro.",
         conversation_context={
             "strict_immediate_action_lineage": True,
+            "verified_immediate_bot_pair_default": True,
             "immediate_previous_action_result": action,
             "last_verified_context": {"resolved_entities": {"strategy_id": 66}},
         },
@@ -3111,6 +3112,7 @@ def test_responses_bot_candidate_uses_generic_strategy_at_recent_dca_setup():
         message="Maak een Paper-bot voor de strategie bij het zojuist aangemaakte DCA-plan met 20 euro budget.",
         conversation_context={
             "strict_immediate_action_lineage": True,
+            "verified_immediate_bot_pair_default": True,
             "immediate_previous_action_result": {
                 "operation_id": "create_setup", "entity_type": "setup", "entity_id": "41",
                 "result_status": "succeeded",

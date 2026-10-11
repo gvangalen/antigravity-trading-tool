@@ -72,6 +72,7 @@ class FinnResponsesToolCall:
     evaluation_operation_id: str | None = None
     answer_mode: str | None = None
     setup_names: tuple[str, ...] = ()
+    target_reference: str | None = None
 
 
 class FinnResponsesToolCatalog:
@@ -377,33 +378,46 @@ class FinnResponsesToolCatalog:
                     if field_type is None:
                         raise FinnResponsesToolError(f"registry_input_type_missing:{contract.operation_id}:{field}")
                     field_types[field] = field_type
+                properties: dict[str, Any] = {
+                    "operation_id": {"type": "string", "enum": [contract.operation_id]},
+                    "draft_intent": {
+                        "type": "string", "enum": ["new", "revise"],
+                        "description": "Revise only a pending draft in this conversation.",
+                    },
+                    "inputs": {
+                        "type": "object",
+                        "description": (
+                            "Put requested edits inside changed_fields."
+                            if "changed_fields" in contract.input_fields
+                            else "Supply only known fields; FINN asks for missing inputs."
+                        ),
+                        "properties": {
+                            field: {
+                                "type": field_type,
+                                **({"enum": list(contract.allowed_values_for(field))}
+                                   if contract.allowed_values_for(field) else {}),
+                            }
+                            for field, field_type in sorted(field_types.items())
+                        },
+                        "additionalProperties": False,
+                    },
+                }
+                required = ["operation_id", "inputs", "draft_intent"]
+                if contract.operation_id == "create_bot":
+                    properties["target_reference"] = {
+                        "type": "string",
+                        "enum": ["confirmed_previous_plan", "other_saved_plan", "unspecified"],
+                        "description": (
+                            "Use confirmed_previous_plan when the user means the plan just saved "
+                            "in this conversation; other_saved_plan for a different saved plan; "
+                            "unspecified when no target relationship is stated. This does not supply an ID."
+                        ),
+                    }
+                    required.append("target_reference")
                 variants.append({
                     "type": "object",
-                    "properties": {
-                        "operation_id": {"type": "string", "enum": [contract.operation_id]},
-                        "draft_intent": {
-                            "type": "string", "enum": ["new", "revise"],
-                            "description": "Revise only a pending draft in this conversation.",
-                        },
-                        "inputs": {
-                            "type": "object",
-                            "description": (
-                                "Put requested edits inside changed_fields."
-                                if "changed_fields" in contract.input_fields
-                                else "Supply only known fields; FINN asks for missing inputs."
-                            ),
-                            "properties": {
-                                field: {
-                                    "type": field_type,
-                                    **({"enum": list(contract.allowed_values_for(field))}
-                                       if contract.allowed_values_for(field) else {}),
-                                }
-                                for field, field_type in sorted(field_types.items())
-                            },
-                            "additionalProperties": False,
-                        },
-                    },
-                    "required": ["operation_id", "inputs", "draft_intent"],
+                    "properties": properties,
+                    "required": required,
                     "additionalProperties": False,
                 })
             definitions.append({
@@ -536,7 +550,7 @@ class FinnResponsesToolCatalog:
             raise FinnResponsesToolError("tool_unknown")
         if set(arguments) == {"payload"} and isinstance(arguments["payload"], dict):
             arguments = arguments["payload"]
-        if set(arguments).difference({"operation_id", "inputs", "draft_intent"}):
+        if set(arguments).difference({"operation_id", "inputs", "draft_intent", "target_reference"}):
             raise FinnResponsesToolError("proposal_arguments_invalid")
         draft_intent = arguments.get("draft_intent")
         if draft_intent is not None and draft_intent not in {"new", "revise"}:
@@ -554,6 +568,12 @@ class FinnResponsesToolCatalog:
                 details={"recommended_tool_name": recommended_tool} if recommended_tool else {},
             )
         contract = self.registry.require_supported(operation_id)
+        target_reference = arguments.get("target_reference")
+        if target_reference is not None and (
+            operation_id != "create_bot"
+            or target_reference not in {"confirmed_previous_plan", "other_saved_plan", "unspecified"}
+        ):
+            raise FinnResponsesToolError("proposal_target_reference_invalid")
         supplied = arguments.get("inputs")
         if not isinstance(supplied, dict):
             raise FinnResponsesToolError("proposal_inputs_invalid")
@@ -613,4 +633,7 @@ class FinnResponsesToolCatalog:
             )
         required = contract.required_inputs_for(supplied)
         missing = tuple(field for field in required if supplied.get(field) in (None, "", [], {}))
-        return FinnResponsesToolCall(name, operation_id, dict(supplied), (), required, missing, draft_intent)
+        return FinnResponsesToolCall(
+            name, operation_id, dict(supplied), (), required, missing, draft_intent,
+            target_reference=target_reference,
+        )
