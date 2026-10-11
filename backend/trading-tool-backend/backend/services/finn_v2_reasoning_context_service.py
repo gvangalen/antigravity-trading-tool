@@ -410,7 +410,7 @@ class FinnV2ReasoningContextService:
             }
         if tool_name == "read_portfolio":
             global_payload = payload.get("global") or payload.get("global_") or {}
-            return {"global": global_payload, "bots": payload.get("bots", [])[:8]}
+            return {"global": global_payload, "bots": payload.get("bots", [])[:50]}
         if tool_name == "read_latest_report":
             return {key: payload.get(key) for key in ["report_type", "report_date", "symbol", "status", "id"] if payload.get(key) is not None}
         if tool_name == "read_review_history":

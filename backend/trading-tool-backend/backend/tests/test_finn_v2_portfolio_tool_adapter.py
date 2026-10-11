@@ -3,9 +3,14 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+from sqlalchemy import create_engine, text
+
+from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_json_safety import to_json_safe
 
 
@@ -22,6 +27,11 @@ class _PortfolioRepository:
                     "bot_id": 1,
                     "name": "ETH plan",
                     "symbol": "ETH",
+                    "strategy_id": 22,
+                    "strategy_name": "ETH fixed DCA",
+                    "setup_id": 11,
+                    "setup_name": "ETH weekly setup",
+                    "mode": "manual",
                     "cash": 100.0,
                     "invested": 200.0,
                     "position_value": 250.0,
@@ -80,7 +90,15 @@ def test_portfolio_adapter_keeps_owner_scope_and_filters_only_the_existing_ledge
     }
     assert [bot.symbol for bot in result["data"].bots] == ["ETH"]
     assert result["data"].bots[0].budget_total_eur == 400.0
+    assert result["data"].bots[0].strategy_name == "ETH fixed DCA"
+    assert result["data"].bots[0].setup_name == "ETH weekly setup"
+    assert result["data"].bots[0].mode == "manual"
     assert to_json_safe(result["data"])["bots"][0]["budget_total_eur"] == 400.0
+    facts = FinnV2ReasoningContextService(session=object())._sanitize_facts(
+        result["data"].dict(by_alias=True), "read_portfolio",
+    )
+    assert facts["bots"][0]["strategy_name"] == "ETH fixed DCA"
+    assert facts["bots"][0]["mode"] == "manual"
     assert result["data"].covered_scopes == [
         "paper_bot_portfolio_valuation", "budget", "exposure",
     ]
@@ -102,6 +120,42 @@ def test_portfolio_adapter_returns_the_full_existing_owner_ledger_without_a_filt
         "ETH plan": 400.0,
         "BTC plan": 125.0,
     }
+
+
+def test_portfolio_context_keeps_named_bot_beyond_first_eight_rows():
+    facts = FinnV2ReasoningContextService(session=object())._sanitize_facts({
+        "global": {},
+        "bots": [{"bot_id": index, "name": f"Bot {index}", "mode": "manual"}
+                 for index in range(20)],
+    }, "read_portfolio")
+
+    assert len(facts["bots"]) == 20
+    assert facts["bots"][-1]["name"] == "Bot 19"
+
+
+def test_portfolio_repository_keeps_saved_asset_for_bot_without_linked_strategy():
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
+        connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
+        connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
+        connection.execute(text("CREATE TABLE bot_portfolios (bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
+        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'Apple Paper', 'AAPL', NULL, 1, 0, 'manual', 110, 0, 'balanced')"))
+
+        class _Session:
+            async def execute(self, query, parameters):
+                return connection.execute(query, parameters)
+
+        repository = BotRepository(_Session())
+        repository.get_market_prices = AsyncMock(return_value={})
+        repository.get_market_price_timestamps = AsyncMock(return_value={})
+        context = asyncio.run(repository.get_portfolio_intelligence_context(17))
+
+    assert len(context["bots"]) == 1
+    assert context["bots"][0]["symbol"] == "AAPL"
+    assert context["bots"][0]["mode"] == "manual"
+    assert context["bots"][0]["strategy_name"] is None
+    engine.dispose()
 
 
 def test_empty_portfolio_has_no_fabricated_allocation_and_keeps_currency():

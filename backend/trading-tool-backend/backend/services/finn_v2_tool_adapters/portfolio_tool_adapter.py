@@ -24,6 +24,11 @@ class PortfolioToolAdapter:
                 bot_id=row.get("bot_id"),
                 name=row.get("name"),
                 symbol=row.get("symbol"),
+                strategy_id=row.get("strategy_id"),
+                strategy_name=row.get("strategy_name"),
+                setup_id=row.get("setup_id"),
+                setup_name=row.get("setup_name"),
+                mode=row.get("mode"),
                 equity=(row.get("equity") if row.get("portfolio_initialized", True)
                         and row.get("price_available", True) else None),
                 budget_total_eur=row.get("budget_total"),

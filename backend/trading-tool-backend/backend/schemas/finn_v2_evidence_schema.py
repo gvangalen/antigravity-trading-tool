@@ -252,6 +252,11 @@ class PortfolioBotData(BaseModel):
     bot_id: Optional[int] = None
     name: Optional[str] = None
     symbol: Optional[str] = None
+    strategy_id: Optional[int] = None
+    strategy_name: Optional[str] = None
+    setup_id: Optional[int] = None
+    setup_name: Optional[str] = None
+    mode: Optional[str] = None
     equity: Optional[float] = None
     budget_total_eur: Optional[float] = None
     is_active: Optional[bool] = None

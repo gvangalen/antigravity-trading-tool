@@ -194,11 +194,13 @@ class FinnResponsesToolCatalog:
             if name == "get_saved_bots":
                 description += (
                     " Read the owner's saved bot rows directly, including name, asset, "
-                    "is_active and is_live flags and budget limit. Use this when asked whether "
+                    "linked strategy and setup names, execution mode, is_active and is_live "
+                    "flags and budget limit. Use this when asked which plan a named bot follows or whether "
                     "a saved bot is Paper or Live; no strategy selection is needed. Match an "
                     "explicitly named bot against the returned owner-scoped rows. If several "
                     "bots could match, ask which one. is_live=false means Paper even when "
-                    "is_active=true. The budget is a limit, not available cash."
+                    "is_active=true. Use the matching row's mode for manual versus automatic; "
+                    "do not infer it from Paper status. The budget is a limit, not available cash."
                 )
             if name == "get_current_asset_scores":
                 description += (
