@@ -485,20 +485,23 @@ def _enforce_setup_match_on_buy(
 ) -> Dict[str, Any]:
     """Keep the bot active, but never buy against measured setup conditions.
 
-    A fixed DCA contribution can keep its independent calendar policy when
-    scores are missing. Smart DCA and trade buys require complete score data.
+    A fixed DCA without score conditions can keep its independent calendar
+    policy. Saved score conditions must be measurable before any buy.
     Sell/exit decisions remain available regardless of the match.
     """
     if _normalize_action(brain.get("action")) != "buy":
         return brain
     status = current_match.get("status")
-    score_dependent = not (
+    fixed_calendar_dca = (
         str(setup.get("setup_type") or "").lower() == "dca"
         and setup.get("execution_mode") == "fixed"
     )
-    if status in {"outside_conditions", "unconfigured"}:
+    has_score_conditions = bool(current_match.get("conditions"))
+    if status == "outside_conditions":
         reason = "Opgeslagen setupvoorwaarden passen niet bij de actuele scores."
-    elif status == "insufficient_data" and score_dependent:
+    elif status == "unconfigured" and not fixed_calendar_dca:
+        reason = "Deze setup heeft geen beoordeelbare scorevoorwaarden."
+    elif status == "insufficient_data" and (has_score_conditions or not fixed_calendar_dca):
         reason = "Actuele benchmarkgegevens zijn onvoldoende voor deze aankoop."
     else:
         return brain

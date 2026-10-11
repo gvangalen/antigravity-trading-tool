@@ -15,23 +15,26 @@ from backend.utils import macro_interpreter, market_interpreter, technical_inter
 
 
 @pytest.mark.parametrize(
-    ("status", "setup", "expected_action"),
+    ("status", "setup", "conditions", "expected_action"),
     [
-        ("matches", {"setup_type": "dca", "execution_mode": "custom"}, "buy"),
-        ("outside_conditions", {"setup_type": "dca", "execution_mode": "custom"}, "hold"),
-        ("outside_conditions", {"setup_type": "dca", "execution_mode": "fixed"}, "hold"),
-        ("unconfigured", {"setup_type": "trade", "execution_mode": "fixed"}, "hold"),
-        ("insufficient_data", {"setup_type": "dca", "execution_mode": "custom"}, "hold"),
-        ("insufficient_data", {"setup_type": "dca", "execution_mode": "fixed"}, "buy"),
-        ("insufficient_data", {"setup_type": "trade", "execution_mode": "fixed"}, "hold"),
+        ("matches", {"setup_type": "dca", "execution_mode": "custom"}, True, "buy"),
+        ("outside_conditions", {"setup_type": "dca", "execution_mode": "custom"}, True, "hold"),
+        ("outside_conditions", {"setup_type": "dca", "execution_mode": "fixed"}, True, "hold"),
+        ("unconfigured", {"setup_type": "trade", "execution_mode": "fixed"}, False, "hold"),
+        ("unconfigured", {"setup_type": "dca", "execution_mode": "fixed"}, False, "buy"),
+        ("insufficient_data", {"setup_type": "dca", "execution_mode": "custom"}, True, "hold"),
+        ("insufficient_data", {"setup_type": "dca", "execution_mode": "fixed"}, True, "hold"),
+        ("insufficient_data", {"setup_type": "trade", "execution_mode": "fixed"}, True, "hold"),
     ],
 )
 def test_paper_buy_respects_measured_setup_match_without_disabling_fixed_dca(
-    status, setup, expected_action,
+    status, setup, conditions, expected_action,
 ):
     brain = {"action": "buy", "amount_eur": 100, "position_size": 1,
              "debug": {"suggested_amount": 100}}
-    result = paper_worker._enforce_setup_match_on_buy(brain, {"status": status}, setup)
+    result = paper_worker._enforce_setup_match_on_buy(
+        brain, {"status": status, "conditions": {"macro": {"min": 30}} if conditions else {}}, setup,
+    )
     assert result["action"] == expected_action
     if expected_action == "hold":
         assert result["amount_eur"] == 0
@@ -40,6 +43,33 @@ def test_paper_buy_respects_measured_setup_match_without_disabling_fixed_dca(
             total_balance_eur=1000, live_price=100,
         ) is None
     assert brain["action"] == "buy"
+
+
+@pytest.mark.parametrize(
+    ("minimum", "expected_status", "expected_action"),
+    [(None, "unconfigured", "buy"), (30, "insufficient_data", "hold")],
+)
+def test_fixed_dca_missing_macro_follows_saved_score_conditions(
+    minimum, expected_status, expected_action,
+):
+    setup = {"name": "ETH fixed", "symbol": "ETH", "setup_type": "dca"}
+    if minimum is not None:
+        setup["min_macro_score"] = minimum
+    match = match_setup_from_daily_scores(
+        setup, {"market": 40, "macro": None, "technical": 40},
+        {"market_score": 1 / 3, "macro_score": 1 / 3, "technical_score": 1 / 3},
+    )
+    assert match["status"] == expected_status
+    decision = paper_worker._enforce_setup_match_on_buy(
+        {"action": "buy", "amount_eur": 75, "position_size": 1}, match,
+        {"setup_type": "dca", "execution_mode": "fixed"},
+    )
+    assert decision["action"] == expected_action
+    if expected_action == "hold":
+        assert paper_worker.build_order_proposal(
+            bot={"budget": {}}, decision=decision, today_spent_eur=0,
+            total_balance_eur=1000, live_price=100,
+        ) is None
 
 
 def test_setup_match_gate_never_blocks_a_sell_exit():
