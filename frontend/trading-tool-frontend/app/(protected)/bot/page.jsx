@@ -284,13 +284,16 @@ function BotPageInner() {
   useEffect(() => {
     if (!resolvedBots.length) return;
 
-    const requestedBotId = Number(searchParams.get("bot_id"));
-    const requestedSymbol = (searchParams.get("symbol") || "").toUpperCase();
-    const requestedFocus = searchParams.get("focus");
+    // A local selection updates history synchronously. The router snapshot can
+    // lag one render behind and would otherwise reopen the previously selected bot.
+    const currentParams = new URLSearchParams(window.location.search);
+    const requestedBotId = Number(currentParams.get("bot_id"));
+    const requestedSymbol = (currentParams.get("symbol") || "").toUpperCase();
+    const requestedFocus = currentParams.get("focus");
 
     const targetBot =
       (Number.isFinite(requestedBotId) && requestedBotId > 0
-        ? resolvedBots.find((bot) => bot.id === requestedBotId)
+        ? resolvedBots.find((bot) => Number(bot.id) === requestedBotId)
         : null) ||
       (requestedSymbol
         ? resolvedBots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || "").toUpperCase() === requestedSymbol)

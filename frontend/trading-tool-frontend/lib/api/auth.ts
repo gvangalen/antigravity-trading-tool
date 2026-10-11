@@ -269,7 +269,15 @@ async function fetchAuthInternal(
     error.body = text;
     error.path = path;
 
-    if (res.status !== 401) {
+    let expectedRiskAcknowledgement = false;
+    if (res.status === 409) {
+      try {
+        expectedRiskAcknowledgement = JSON.parse(text)?.detail?.code === "BOT_RISK_ACK_REQUIRED";
+      } catch {
+        // Other 409 responses keep their normal error logging.
+      }
+    }
+    if (res.status !== 401 && !expectedRiskAcknowledgement) {
       console.error(`❌ fetchAuth ${path} failed:`, res.status, text);
     }
     throw error;

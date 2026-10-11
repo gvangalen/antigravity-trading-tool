@@ -16,6 +16,7 @@ import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import {
   getBotRiskAcknowledgement,
   getBotSaveErrorMessage,
+  increasesBotBudgetRisk,
 } from "@/lib/bot/riskAcknowledgement.mjs";
 
 /* =====================================================
@@ -66,6 +67,8 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
   useEffect(() => {
     if (!initialBudget) return;
 
+    setRiskAcknowledgement(null);
+    setSubmitError("");
     setForm({
       total_eur: initialBudget.total_eur ?? 0,
       daily_limit_eur: initialBudget.daily_limit_eur ?? 0,
@@ -77,6 +80,12 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
   useEffect(() => {
     onChange?.(form);
   }, [form, onChange]);
+
+  const updateBudgetField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setRiskAcknowledgement(null);
+    setSubmitError("");
+  };
 
   const validateForm = useCallback(() => {
     if (formRef.current && !formRef.current.reportValidity()) {
@@ -169,7 +178,6 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
       onSaved?.(savedBudget ?? payload);
       return { ok: true, data: savedBudget ?? payload };
     } catch (error) {
-      console.error(error);
       const acknowledgement = getBotRiskAcknowledgement(error);
       const message = getBotSaveErrorMessage(
         error,
@@ -177,9 +185,12 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
       );
       if (acknowledgement) {
         setRiskAcknowledgement(acknowledgement);
+        setSubmitError("");
+      } else {
+        console.error(error);
+        setSubmitError(message);
+        showSnackbar(message, "danger");
       }
-      setSubmitError(message);
-      showSnackbar(message, acknowledgement ? "info" : "danger");
       return { ok: false, reason: "api", error };
     } finally {
       setLoading(false);
@@ -196,14 +207,29 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
     validateForm,
   ]);
 
+  const requestSubmit = useCallback(async () => {
+    if (loading) return { ok: false, reason: "busy" };
+    const validation = validateForm();
+    if (!validation.ok) {
+      setSubmitError(validation.message);
+      return { ok: false, reason: "validation" };
+    }
+    if (increasesBotBudgetRisk(form, initialBudget)) {
+      setSubmitError("");
+      setRiskAcknowledgement({ message: copy.riskAcknowledgementBody });
+      return { ok: false, reason: "confirmation_required" };
+    }
+    return submitForm();
+  }, [copy.riskAcknowledgementBody, form, initialBudget, loading, submitForm, validateForm]);
+
   useImperativeHandle(ref, () => ({
-    submit: submitForm,
+    submit: requestSubmit,
     isSubmitting: () => loading,
-  }), [loading, submitForm]);
+  }), [loading, requestSubmit]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    await submitForm();
+    await requestSubmit();
   };
 
   return (
@@ -230,12 +256,7 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
             name="total_eur"
             className="w-full bg-[var(--color-border-subtle)] border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-foreground focus:ring-2 focus:ring-[var(--primary)] outline-none transition-all"
             value={form.total_eur}
-            onChange={(e) =>
-              setForm((s) => ({
-                ...s,
-                total_eur: Number(e.target.value),
-              }))
-            }
+            onChange={(e) => updateBudgetField("total_eur", Number(e.target.value))}
           />
         </div>
 
@@ -251,12 +272,7 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
             name="daily_limit_eur"
             className="w-full bg-[var(--color-border-subtle)] border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-foreground focus:ring-2 focus:ring-[var(--primary)] outline-none transition-all"
             value={form.daily_limit_eur}
-            onChange={(e) =>
-              setForm((s) => ({
-                ...s,
-                daily_limit_eur: Number(e.target.value),
-              }))
-            }
+            onChange={(e) => updateBudgetField("daily_limit_eur", Number(e.target.value))}
           />
         </div>
 
@@ -272,12 +288,7 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
             name="max_order_eur"
             className="w-full bg-[var(--color-border-subtle)] border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-foreground focus:ring-2 focus:ring-[var(--primary)] outline-none transition-all"
             value={form.max_order_eur}
-            onChange={(e) =>
-              setForm((s) => ({
-                ...s,
-                max_order_eur: Number(e.target.value),
-              }))
-            }
+            onChange={(e) => updateBudgetField("max_order_eur", Number(e.target.value))}
           />
         </div>
       </div>
@@ -295,12 +306,7 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
           <TradingSlider
             value={form.max_asset_exposure_pct}
             steps={[0, 25, 50, 75, 100]}
-            onChange={(value) =>
-              setForm((s) => ({
-                ...s,
-                max_asset_exposure_pct: value,
-              }))
-            }
+            onChange={(value) => updateBudgetField("max_asset_exposure_pct", value)}
           />
         </div>
 

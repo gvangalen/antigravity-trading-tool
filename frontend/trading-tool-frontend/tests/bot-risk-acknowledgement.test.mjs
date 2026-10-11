@@ -4,7 +4,16 @@ import test from "node:test";
 import {
   getBotRiskAcknowledgement,
   getBotSaveErrorMessage,
+  increasesBotBudgetRisk,
 } from "../lib/bot/riskAcknowledgement.mjs";
+
+test("budget increases ask for confirmation before contacting the server", () => {
+  const saved = { total_eur: 100, daily_limit_eur: 10, max_order_eur: 10, max_asset_exposure_pct: 50 };
+  assert.equal(increasesBotBudgetRisk({ ...saved, total_eur: 110 }, saved), true);
+  assert.equal(increasesBotBudgetRisk({ ...saved, max_asset_exposure_pct: 75 }, saved), true);
+  assert.equal(increasesBotBudgetRisk({ ...saved, total_eur: 90 }, saved), false);
+  assert.equal(increasesBotBudgetRisk(saved, saved), false);
+});
 
 test("preserves the typed bot risk acknowledgement instead of flattening it to a generic error", () => {
   const error = {
