@@ -6,9 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Daily Report Source Parity Candidate
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI_DEPLOY_QA`. Branch
-`codex/finn-report-source-parity` starts from product SHA
-`4bc75b0d73c63590fc9eecf6acc74342d2a45fd9`. The candidate stores the
+Phase: `READY_FOR_INDEPENDENT_QA`. [PR #250](https://github.com/gvangalen/antigravity-trading-tool/pull/250)
+merged as product SHA `abd3f8532b354981c31703ad5b4312ba130c7ca2`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38221104622),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38221283995),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38221470864)
+passed. Public backend health and frontend build-info returned HTTP 200 and
+exactly that SHA on 2026-10-12. The candidate stores the
 same owner-scoped Score 2.0 component status and indicator source moments used
 by Analyse and FINN alongside each newly generated daily report. The report
 page labels those scores as a saved snapshot, distinguishes their source and
@@ -34,8 +38,13 @@ and `fc3c993888c91eb3643c3ea2797e1ef8500cdcb8fa39d367a91eec1a6ac58d7c`.
 The local parity database intentionally has only a minimal `daily_reports`
 table; repository JSONB round-trip was therefore checked in an isolated full
 temporary table, and production schema/application remain to be verified by
-deployment and independent QA. No production report or trade was created by
-Build.
+independent QA. Build verified only deployment identity and availability; no
+production report or trade was created by Build. Independent QA should create
+one new daily report in the existing QA account, compare its saved score facts
+and source moments with Analyse and FINN at the same observation time, verify
+that later changes are presented as newer rather than contradicting the saved
+report, and check NL/EN/DE report labels. It should inspect an older report's
+historical-source notice and avoid bot or live-trading actions.
 
 ## FINN Coach Consolidation Candidate
 
