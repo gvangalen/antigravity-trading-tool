@@ -6,7 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Historical Report Section Repair and FINN Today Language Candidate
 
-Phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #259](https://github.com/gvangalen/antigravity-trading-tool/pull/259)
+merged as product SHA `090fd29e8a99c4545df2b9cccaa5dd9cef3cea28`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38252359202),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38252586479),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38252830819)
+passed. Public backend health and frontend build-info returned HTTP 200 and
+exactly that SHA on 2026-10-12. Independent QA on previous public SHA
 `146fd87e63ca8bb0a62e2b9da4fd7a094ee4662f` returned `NOT_ACCEPTED` for
 report language. NL → DE → EN → NL showed translated German headings but Dutch
 report paragraphs even after reload; English narrative did translate. The
@@ -29,8 +35,8 @@ command/proposal/setup tests and high-severity audit passed; the audit still
 reports one existing moderate Next.js advisory. A real Luna/Responses local
 probe translated **8/8** German report sections and preserved the typed score
 snapshot. Another real-provider probe translated a stored German FINN Today
-briefing to Dutch and English without changing its market score. Deployment
-and independent QA remain pending. The final isolated local API/Celery action matrix
+briefing to Dutch and English without changing its market score. Independent
+authenticated QA remains pending. The final isolated local API/Celery action matrix
 passed **16/16** with zero broker orders, live calls or production connections;
 artifact SHA-256 `401dce81eb4aed2aa921459762fb391d669f98b2b2f8ecf571355d71d856ff1e`.
 The real-provider selector development set passed **18/18** with zero provider,
@@ -39,6 +45,13 @@ schema, timeout, parse or validation failures; artifact SHA-256
 The complete real-provider regression passed **109/109** with zero provider,
 schema, timeout, parse or validation failures; artifact SHA-256
 `e725c24ad960756c4fb8176a9dee8d42681151e229b5f8f0750d33af47f3beaf`.
+The existing QA task should repeat the historical saved-report NL → DE → EN →
+NL browser sequence, check every visible narrative section after reload, and
+confirm the saved score values, setupmatch, names and source moment are
+unchanged. It should also inspect the saved German FINN Today briefing in NL
+and EN after language switches and refresh. A newer live source moment with
+unchanged score value does not prove a later score-value change. No new
+report, plan, bot or trade is needed.
 
 ## Report Language Request Parity Repair Candidate
 
