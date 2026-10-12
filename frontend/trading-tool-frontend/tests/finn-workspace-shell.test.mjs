@@ -24,10 +24,12 @@ test("shared workspace shows the persisted coach feed and opens chat on demand",
   assert.doesNotMatch(shellSource, /loadMissionControl|first_dashboard_context/);
 });
 
-test("feed discussion has independent request state and chat component identity", () => {
-  assert.match(shellSource, /setPendingFeedHandoff\(handoff\)/);
-  assert.match(shellSource, /key=\{pendingFeedHandoff\?\.nonce\s*\|\|\s*"general"\}/);
-  assert.match(shellSource, /commandRequest=\{currentFinnRequest\(pendingFeedHandoff, commandRequest\)\}/);
+test("feed discussion uses its own modal, draft and close lifecycle", () => {
+  assert.match(shellSource, /setFeedDiscussion\(\{ request: handoff, draft: nextQuery \}\)/);
+  assert.match(shellSource, /data-feed-handoff-id=\{feedDiscussion\.request\.context\.feed_item_id\}/);
+  assert.match(shellSource, /key=\{feedDiscussion\.request\.nonce\}/);
+  assert.match(shellSource, /commandRequest=\{feedDiscussion\.request\}/);
+  assert.match(shellSource, /\)\s*:\s*assistantOpen\s*\?\s*\(/);
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
   assert.match(assistantSource, /resolveFeedDraftQuery\(/);
 });
