@@ -6,16 +6,50 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `LIVE_QA_PARTIAL`, follow-up fixes under validation. The first release
+Phase: `LOCAL_GREEN_CANDIDATE_PENDING_CI`. Branch:
+`codex/finn-coach-feed-chat-handoff`. The first release
 merged in [PR #264](https://github.com/gvangalen/antigravity-trading-tool/pull/264)
 as `f039774b464cabb4375d679b9dd1cf9edfb6a22d`; backend and frontend
 reported that SHA with HTTP 200. Independent live QA confirmed the feed,
 history, language switching, handled status and read-only chat opening, but
 found three gaps: setup detail links lacked an exact setup ID, positive matches
 could hide a data blocker from the top three, and draft proposals were not
-visible before confirmation. The follow-up candidate addresses those gaps and
-rechecks owner-scoped proposal evidence in the FINN reasoning context. Its
-new live SHA and independent QA verdict are pending.
+visible before confirmation. [PR #265](https://github.com/gvangalen/antigravity-trading-tool/pull/265)
+merged as `2857415a5a4cdaeba2c08014575ebc9c2d8be684`; public backend and
+frontend reported that SHA with HTTP 200. The same independent QA Agent
+confirmed specific setup links, a pending proposal before confirmation,
+cancelled proposal history, historical AAPL discussion, and NL/EN/DE copy.
+The verdict remained partial because a second ETH-plan feed click sometimes
+left the chat query empty and a later generic question used the first plan's
+context. The current repair routes feed selections directly to an explicit
+chat draft and tells the selector that the selected owner-scoped feed subject
+supersedes older plan references. A new candidate and independent QA verdict
+are pending.
+The repair's full backend suite passed **3489** with **3 skips**. Web build,
+typecheck, i18n, command/proposal tests and high-severity audit passed; mobile
+typecheck, lint (warnings only) and web/iOS/Android bundle smokes passed. A
+new real Luna/Responses development case with prior plan A and selected feed
+plan B passed with the B identity and read-only plan contract; the full
+development lane passed **19/19**. Selector regression passed **109/109**.
+The first isolated action-matrix rerun passed **15/16**: the confirmed strategy
+follow-up read the correct owner-scoped strategy but the verifier rejected the
+old and new euro amounts because the typed read lacked the currency and the
+confirmed prior amount. The current repair supplies EUR on a saved strategy
+amount and bounds the previous amount to the same confirmed strategy ID.
+Its targeted regression passes. The restarted isolated API/Celery/Responses
+matrix passed **16/16** with adapter registry **19/19**; artifact SHA-256
+`357ce3a4f6f856141a19aa830b78b18dbf77c98db531b2912a5db38026b59758`.
+The final real Luna/Responses selector recheck passed development **19/19**
+(SHA-256 `70f34ceaaf7be4b31b124011c52e16fbdcef85bdbf2533d036d03546d059fd37`)
+and regression **109/109**
+(SHA-256 `ed4e2e7e5e0015e016e0f7c0e93cab974b1c44bab51e685fe60d8abbca41d539`),
+with zero provider, schema, timeout or validation failures. The candidate has
+not yet been deployed; independent live QA remains pending.
+Independent Architecture and Security code reviews found no blocker after
+both client and persisted prior-plan context were removed at the owner-scoped
+feed handoff. The local command test confirms that only an unchanged first
+feed question carries its event ID; code inspection confirms that starting a
+new chat consumes that ID and closing the modal clears the draft.
 Feed discussions now carry a transient owner-scoped event hint to the selector
 and re-read facts for the reasoning step. Recorded event facts retain their
 historical source time and are separated from a fresh Score 2.0 reread. The

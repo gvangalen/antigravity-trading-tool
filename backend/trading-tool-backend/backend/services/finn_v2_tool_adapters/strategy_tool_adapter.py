@@ -29,6 +29,7 @@ class StrategyToolAdapter:
             stop_loss=strategy.get("stop_loss"),
             targets=targets,
             base_amount=self._coerce_float(strategy.get("base_amount")),
+            currency="EUR" if strategy.get("base_amount") is not None else None,
             setup_name=strategy.get("setup_name"),
             setup_type=strategy.get("existing_setup_type") or strategy.get("setup_type"),
             **dca_rule,

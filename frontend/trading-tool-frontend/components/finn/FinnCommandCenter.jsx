@@ -28,6 +28,7 @@ import {
   FINN_INDICATOR_MODAL_COMPLETED_EVENT,
   FINN_INDICATOR_MODAL_OPEN_EVENT,
   getDefaultIndicatorCategory,
+  isDirectCommandSearchMode,
   matchesCommandQuery,
 } from "@/lib/finnCommandSearch";
 import { publishWorkspaceRefresh } from "@/lib/workspaceSync";
@@ -173,6 +174,8 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         ? { kind: "indicator", category: request.category || getDefaultIndicatorCategory(pathname) }
         : request.mode === "asset"
           ? { kind: "asset", category: null }
+          : request.mode === "chat"
+            ? { kind: "chat", category: null }
           : { kind: "all", category: null }
     );
     setActiveIndex(0);
@@ -207,7 +210,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   );
 
   const assetResults = useMemo(() => {
-    if (mode.kind === "indicator") return [];
+    if (mode.kind === "indicator" || !isDirectCommandSearchMode(mode.kind)) return [];
     if (!hasQuery && mode.kind !== "asset") return [];
     return FINN_ASSETS.filter((asset) => matchesCommandQuery(`${asset.symbol} ${asset.name}`, query)).map((asset) => ({
       id: `asset:${asset.symbol}`,
@@ -227,7 +230,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   }, [hasQuery, mode.kind, query, workflows]);
 
   const indicatorResults = useMemo(() => {
-    if (mode.kind === "asset") return [];
+    if (mode.kind === "asset" || !isDirectCommandSearchMode(mode.kind)) return [];
     if (!hasQuery && mode.kind !== "indicator") return [];
     const sources = [
       { key: "technical", label: copy.addTechnical, values: catalog.technical },

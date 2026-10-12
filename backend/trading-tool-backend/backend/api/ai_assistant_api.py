@@ -314,7 +314,7 @@ async def assistant_chat(
         # Keep the entry boundary limited to client state and transport
         # controls. The durable FINN V2 run selects its contract before it
         # reads personalized context in the lifecycle worker.
-        context_payload = dict(_assistant_context_payload(request.context))
+        context_payload = _feed_context_boundary(_assistant_context_payload(request.context))
         runtime_selection = _preflight_v2_runtime_selection(
             user_id=user_id,
             query=request.query,
@@ -505,6 +505,18 @@ def _assistant_context_payload(context) -> dict:
     return context or {}
 
 
+def _feed_context_boundary(payload: Optional[dict]) -> dict:
+    """A feed selection cannot inherit object IDs from an older chat/page."""
+    context = dict(payload or {})
+    if not context.get("feed_item_id"):
+        return context
+    return {
+        key: context[key]
+        for key in ("feed_item_id", "locale", "session_id")
+        if key in context
+    }
+
+
 def _safe_request_path(raw_request: Request, fallback: str) -> str:
     scope = getattr(raw_request, "scope", {}) or {}
     path = scope.get("path")
@@ -554,7 +566,7 @@ async def _try_v2_visible_delivery(
         )
         if item is None:
             raise LookupError("feed_item_not_owned")
-        context_payload = dict(context_payload)
+        context_payload = _feed_context_boundary(context_payload)
         # Feed metadata is server-owned. A caller may only supply the item ID;
         # the current proposal and its scope must be loaded again below.
         for key in ("feed_current_status", "feed_proposal_id", "feed_proposal_name",
@@ -700,7 +712,7 @@ async def assistant_chat_stream(
         try:
             # Match the non-streaming boundary exactly. Selection and any
             # contract-required context collection happen after run creation.
-            context_payload = dict(_assistant_context_payload(request.context))
+            context_payload = _feed_context_boundary(_assistant_context_payload(request.context))
             runtime_selection = _preflight_v2_runtime_selection(
                 user_id=user_id,
                 query=request.query,

@@ -8041,6 +8041,41 @@ def test_confirmed_action_result_is_grounding_for_saved_object_readback():
     assert "confirmed_action_result" in semantic.verify_async.await_args.kwargs["deterministic_summary"]["available_scopes"]
 
 
+def test_confirmed_strategy_update_supports_only_its_verified_previous_amount():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    evidence = ({
+        "name": "get_active_plan_and_strategy", "status": "completed",
+        "result": {"results": [{
+            "scope": "read_linked_strategy", "status": "completed",
+            "data": {"strategy_id": 42, "name": "BTC Plan", "base_amount": 120, "currency": "EUR"},
+        }]},
+    },)
+    action = {
+        "operation_id": "update_strategy", "result_status": "succeeded",
+        "entity_id": "42", "entity_type": "strategy", "canonical_name": "BTC Plan",
+        "canonical_entity": {"base_amount": "100"},
+    }
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message="Wat heb je zojuist veranderd?",
+        result=FinnResponsesResult("De basisinleg ging van €100 naar €120.", "resp-1", evidence),
+        recent_action_result=action,
+    ))
+    assert verified.status == "completed"
+    compact = semantic.verify_async.await_args.kwargs["compact_evidence"]
+    confirmed = next(item for item in compact if item["scope"] == "confirmed_action_result")
+    assert confirmed["data"]["previous_base_amount"] == "100"
+
+    wrong_entity = {**action, "entity_id": "43"}
+    rejected = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message="Wat heb je zojuist veranderd?",
+        result=FinnResponsesResult("De basisinleg ging van €100 naar €120.", "resp-2", evidence),
+        recent_action_result=wrong_entity,
+    ))
+    assert rejected.status == "unavailable"
+
+
 @pytest.mark.parametrize("tool_arguments", [
     {"reference": "previous_response"},
     {},

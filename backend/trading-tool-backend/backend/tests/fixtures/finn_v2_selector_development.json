@@ -237,5 +237,33 @@
     "expected_missing_inputs": [
       "requested_change"
     ]
+  },
+  {
+    "eval_id": "dev-feed-selected-plan-b",
+    "dataset": "development",
+    "input_query": "Wat betekent deze update voor mijn plan? Lees de actuele gegevens opnieuw. QA Plan B",
+    "conversation_context": {
+      "feed_event": {
+        "event_type": "plan_match",
+        "subject_type": "setup",
+        "subject_id": "222",
+        "symbol": "ETH",
+        "subject": "QA Plan B",
+        "read_only_context": true,
+        "action_authorized": false
+      }
+    },
+    "expected_operation_id": "read_active_plan",
+    "expected_domain": "plan",
+    "expected_supported": true,
+    "expected_entities": {
+      "setup_id": "222",
+      "name": "QA Plan B",
+      "asset": "ETH"
+    },
+    "expected_target_asset": "ETH",
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
   }
 ]

@@ -6,7 +6,7 @@ import { ArrowRight, Bell, Check, History } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
-import { FINN_COMMAND_OPEN_EVENT } from "@/lib/finnCommandSearch";
+import { openFinnContext } from "@/lib/finnCommandSearch";
 
 export default function FinnCoachFeed() {
   const { user, sessionChecked } = useAuth();
@@ -77,12 +77,11 @@ export default function FinnCoachFeed() {
 
   const discuss = (item) => {
     void setStatus(item.id, "read");
-    window.dispatchEvent(new CustomEvent(FINN_COMMAND_OPEN_EVENT, {
-      detail: {
-        mode: "all", query: `${copy.discussQuery} ${item.evidence?.subject || item.title}`,
-        context: { feed_item_id: item.id },
-      },
-    }));
+    openFinnContext({
+      query: `${copy.discussQuery} ${item.evidence?.subject || item.title}`,
+      context: { feed_item_id: item.id },
+      autoSubmit: false,
+    });
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLocale === locale ? items : [];
