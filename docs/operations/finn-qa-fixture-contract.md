@@ -32,6 +32,25 @@ Changing either binding is an operational change: update the server-side
 secret, verify the account, and record the change in the deployment handoff.
 Do not infer a replacement from the users table.
 
+### Inactive synthetic score probe owner
+
+The user-authorized `score2_stale_paper` protected QA profile may create one
+temporary **inactive** synthetic owner per run for data isolation. It is not
+an authenticated Build or QA fixture and receives no token or exchange key.
+The runner first verifies the bound `FINN_QA_USER_ID` and its protected marker;
+the synthetic owner is identified only by a random run namespace and its own
+`qa_fixture` marker. No ordinary user or shared market row may be changed.
+The normal bot dispatcher selects only active users, so it cannot schedule
+this inactive owner. The profile calls the canonical scorer and assesses only
+its manual Paper bot; it never calls an exchange or activates Live mode.
+
+Successful validation may remove only this run's synthetic rows through the
+exact owner-and-namespace-checked cleanup in the protected probe. On failure,
+the bot is disabled and data is retained for diagnosis. Removing a failed
+probe requires a separately authorized protected fixture reset, never an
+automatic retry that erases failing evidence. This exception does not permit
+a second login fixture or change either server binding.
+
 ## Token Handling
 
 The existing

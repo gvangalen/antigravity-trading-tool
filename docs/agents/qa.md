@@ -101,9 +101,11 @@ release marker, public backend health, and frontend build-info. The status
 document records phase and evidence; it is not the self-referential authority
 for the SHA of the commit that contains it.
 
-- QA is read-only: do not change code, configuration, datasets, deployment,
-  production records, or release markers, and do not start or direct another
-  agent.
+- QA is read-only by default: do not change code, deployment, or release
+  markers, and do not start or direct another agent. Production fixture writes
+  are allowed only when the active goal explicitly authorizes a protected
+  runner operation with the matching per-run permission flags. QA never edits
+  ordinary user records.
 - Accept an agreed test assignment and follow-up from Build in this existing
   QA task once the status file documents a complete live candidate. A direct
   message from the user in this QA task is not required for each test step.

@@ -28,8 +28,10 @@ release gate.
 QA owns independent test execution, QA test material, and the protected
 `FINN_QA_USER_ID` authenticated runtime route. Its active QA goal defines the
 concrete scope, dataset, environment, matrix, and acceptance criteria.
-Production QA is read-only and tests only the explicit live SHA in its active
-QA goal. QA preflight verifies that SHA against the production checkout,
+Production QA is read-only by default and tests only the explicit live SHA in
+its active QA goal. Explicitly authorized protected fixture operations follow
+the narrow runner and fixture contract; they do not grant access to normal
+users or Live trading. QA preflight verifies that SHA against the production checkout,
 release marker, public backend health, and frontend build-info. A
 committed status document cannot be the identity authority for its own
 deployment SHA because changing it creates a new SHA. The sealed holdout is QA-exclusive and QA uses it

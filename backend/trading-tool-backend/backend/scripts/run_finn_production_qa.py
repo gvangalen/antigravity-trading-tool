@@ -36,6 +36,7 @@ ALLOWED_PROFILES = {
     "full_release_acceptance",
     "safety",
     "latency",
+    "score2_stale_paper",
 }
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
@@ -1766,6 +1767,18 @@ def main() -> int:
                 report["error_category"] = report["auth_preflight"].get("error_category") or "auth"
             elif args.profile == "auth_preflight":
                 report["outcome"] = "passed"
+            elif args.profile == "score2_stale_paper":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("stale_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_STALE_SCORE_FIXTURE") != "1":
+                    raise ValueError("stale_fixture_not_authorized")
+                from backend.scripts.probe_protected_score2_stale_paper import run as run_stale_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 1
+                report["score2_stale_paper"] = run_stale_probe(fixture_namespace or "")
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
             else:
                 if args.manifest_id == "none":
                     raise ValueError("manifest_required")

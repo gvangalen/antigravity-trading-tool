@@ -21,7 +21,7 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, or `latency`. |
+| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, or `score2_stale_paper`. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
@@ -157,6 +157,46 @@ still fail the workflow.
 The report also separates case failures into `product`, `infrastructure`, and
 `runner` totals. Transport failures cannot be counted as selector or action
 contract failures.
+
+## Stale Score 2.0 Paper Probe
+
+`score2_stale_paper` is an explicit, one-shot protected QA profile. It requires
+`manifest_id=none` and both fixture authorization inputs set to `true`; it
+cannot run through a public endpoint or a scheduled job. The existing QA Agent
+starts it only when its active scope authorizes this synthetic production test.
+The runner first verifies the live SHA and the bound protected QA account.
+
+The probe creates a separate, inactive, random-password synthetic owner marked with
+the run namespace and no exchange keys. The regular bot dispatcher cannot
+select this inactive owner. It writes only rows scoped to that temporary
+owner: fresh DXY and RSI readings, plus a `change_24h` reading first proven
+scoreable while fresh and then aged to 30 days,
+one Smart-DCA setup and strategy, and one manual Paper bot with virtual cash.
+It never inserts global market history or changes a normal user's data. The
+canonical Score 2.0 builder and bot assessment are then called for exactly
+that owner and bot. The assessment uses the production code in the protected
+host process; the local Celery probe remains the separate worker-path proof.
+
+The profile passes only if Macro and Technical score, Market stays unknown,
+the persisted decision is Hold for EUR 0, the score-driven amount is
+unavailable, there are no bot orders or ledger entries, and virtual cash is
+unchanged. It checks that the old source still exists after assessment;
+if a refresh races the fixture, the run fails instead of claiming a pass. The
+Paper bot is deactivated before the temporary owner and its rows are removed
+after a passing check. A failed check quarantines the bot and retains the
+evidence for a separately authorized fixture reset. If cleanup fails, the run
+fails and the bot is deactivated. The artifact emits
+only these safe outcomes, with no owner or bot IDs, tokens, raw readings, or
+database rows.
+
+Example for the existing QA Agent after a user-approved scope and live Build
+candidate:
+
+```bash
+FINN_QA_ALLOW_FIXTURE_ACTIONS=true FINN_QA_ALLOW_FIXTURE_EXECUTION=true \
+  ./ops/qa/run_finn_production_qa.sh \
+  <FULL_LIVE_SHA> score2_stale_paper none qa-score2-stale-paper
+```
 
 For a proposal/action case, `expected_missing_inputs` may list the canonical
 required fields that are intentionally absent on that turn. A matching typed

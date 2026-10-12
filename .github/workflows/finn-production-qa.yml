@@ -23,6 +23,7 @@ name: FINN Production QA
           - full_release_acceptance
           - safety
           - latency
+          - score2_stale_paper
       manifest_id:
         description: Approved, non-secret manifest identifier; use none for auth_preflight
         required: true
@@ -93,7 +94,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -105,6 +106,10 @@ jobs:
           fi
           if [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key)$ ]] && { [ "$ALLOW_FIXTURE_ACTIONS" = "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" = "true" ]; }; then
             echo "Fixture actions are invalid for a non-case QA profile." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "score2_stale_paper" ] && { [ "$MANIFEST_ID" != "none" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+            echo "The stale Paper probe requires no manifest and explicit fixture and execution authorization." >&2
             exit 1
           fi
           git fetch origin main --quiet
@@ -215,11 +220,15 @@ jobs:
           # These are scoped to this QA subprocess, never the application processes.
           export FINN_QA_ALLOW_FIXTURE_ACTIONS=0
           export FINN_QA_ALLOW_FIXTURE_EXECUTION=0
+          export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=0
           if [ "$allow_fixture_actions" = "true" ]; then
             export FINN_QA_ALLOW_FIXTURE_ACTIONS=1
           fi
           if [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_FIXTURE_EXECUTION=1
+          fi
+          if [ "$qa_profile" = "score2_stale_paper" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
+            export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=1
           fi
           runner_args=(
               --release-sha "$release_sha" \
@@ -247,6 +256,7 @@ jobs:
           set +a
           export FINN_QA_ALLOW_FIXTURE_ACTIONS=$(printf '%q' "$FINN_QA_ALLOW_FIXTURE_ACTIONS")
           export FINN_QA_ALLOW_FIXTURE_EXECUTION=$(printf '%q' "$FINN_QA_ALLOW_FIXTURE_EXECUTION")
+          export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_STALE_SCORE_FIXTURE")
           # Preserve both a partial checkpoint and an exit code.  `set -e`
           # would otherwise skip runner.exit after a crash and make a later
           # SSH reconnect mistake a valid partial matrix for a fresh run.
