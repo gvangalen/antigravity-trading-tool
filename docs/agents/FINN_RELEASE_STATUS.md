@@ -6,8 +6,17 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `LOCAL_GREEN_CANDIDATE_PENDING_CI`. Branch:
-`codex/finn-coach-feed-chat-handoff`. The first release
+Phase: `LIVE_PENDING_INDEPENDENT_QA`. Product code merged in
+[PR #266](https://github.com/gvangalen/antigravity-trading-tool/pull/266)
+as `66c9fd3c4ce3dde8dae1537ff288f9cba8409c77`. Candidate
+[CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38299438438),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38299686087)
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38299892242)
+all succeeded. On 12 October 2026 the public backend health and frontend
+build-info both returned HTTP 200 and exactly that merge SHA. This status-only
+documentation commit may produce a later deployment SHA without changing the
+product code; public health and build-info remain the live identity authority.
+The first release
 merged in [PR #264](https://github.com/gvangalen/antigravity-trading-tool/pull/264)
 as `f039774b464cabb4375d679b9dd1cf9edfb6a22d`; backend and frontend
 reported that SHA with HTTP 200. Independent live QA confirmed the feed,
@@ -23,8 +32,7 @@ The verdict remained partial because a second ETH-plan feed click sometimes
 left the chat query empty and a later generic question used the first plan's
 context. The current repair routes feed selections directly to an explicit
 chat draft and tells the selector that the selected owner-scoped feed subject
-supersedes older plan references. A new candidate and independent QA verdict
-are pending.
+supersedes older plan references. Independent live QA is pending.
 The repair's full backend suite passed **3489** with **3 skips**. Web build,
 typecheck, i18n, command/proposal tests and high-severity audit passed; mobile
 typecheck, lint (warnings only) and web/iOS/Android bundle smokes passed. A
@@ -43,8 +51,8 @@ The final real Luna/Responses selector recheck passed development **19/19**
 (SHA-256 `70f34ceaaf7be4b31b124011c52e16fbdcef85bdbf2533d036d03546d059fd37`)
 and regression **109/109**
 (SHA-256 `ed4e2e7e5e0015e016e0f7c0e93cab974b1c44bab51e685fe60d8abbca41d539`),
-with zero provider, schema, timeout or validation failures. The candidate has
-not yet been deployed; independent live QA remains pending.
+with zero provider, schema, timeout or validation failures. The product code
+is deployed; independent live QA remains pending.
 Independent Architecture and Security code reviews found no blocker after
 both client and persisted prior-plan context were removed at the owner-scoped
 feed handoff. The local command test confirms that only an unchanged first
