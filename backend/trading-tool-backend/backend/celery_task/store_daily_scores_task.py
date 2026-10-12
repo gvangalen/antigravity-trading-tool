@@ -313,7 +313,8 @@ def retry_coach_feed_copy():
                   AND (expires_at IS NULL OR expires_at > NOW())
                   AND (copy_last_attempt_at IS NULL
                        OR copy_last_attempt_at < NOW() - INTERVAL '10 minutes')
-                ORDER BY created_at ASC LIMIT 6
+                ORDER BY CASE WHEN event_type='proposal_pending' THEN 0 ELSE 1 END,
+                         created_at ASC LIMIT 6
             """)
             items = cur.fetchall()
         conn.commit()

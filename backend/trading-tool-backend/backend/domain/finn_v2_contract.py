@@ -160,6 +160,8 @@ class InformationScope(str, Enum):
     PORTFOLIO = "portfolio"
     LATEST_REPORT = "latest_report"
     REVIEW_HISTORY = "review_history"
+    PENDING_PROPOSAL = "pending_proposal"
+    FEED_EVENT = "feed_event"
 
 
 INFORMATION_SCOPE_ORDER: Tuple[str, ...] = tuple(scope.value for scope in InformationScope)
@@ -202,6 +204,9 @@ TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
     "read_portfolio": InformationScope.PORTFOLIO,
     "read_latest_report": InformationScope.LATEST_REPORT,
     "read_review_history": InformationScope.REVIEW_HISTORY,
+    "read_feed_proposal": InformationScope.PENDING_PROPOSAL,
+    "read_feed_event": InformationScope.FEED_EVENT,
+    "read_feed_current_state": InformationScope.FEED_EVENT,
 }
 PRIMARY_TOOL_BY_INFORMATION_SCOPE: Mapping[InformationScope, str] = {
     InformationScope.PROFILE: "read_profile",

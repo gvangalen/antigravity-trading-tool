@@ -72,7 +72,7 @@ export function TodayWithFinnCard(_props: TodayWithFinnCardProps) {
   const handleDiscuss = (item: MobileCoachFeedItem) => {
     void coachFeedApi.mark(item.id, 'read').then(refresh).catch(() => {});
     openFinn({
-      prefill: translate(language, 'finn.feedDiscussQuery'),
+      prefill: `${translate(language, 'finn.feedDiscussQuery')} ${item.evidence?.subject || item.title}`,
       source: 'coach-feed',
       symbol: item.symbol || undefined,
       feedItemId: item.id,

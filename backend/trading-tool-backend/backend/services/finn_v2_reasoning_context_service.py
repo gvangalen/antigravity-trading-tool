@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any, Dict, Optional
 
@@ -198,6 +198,13 @@ class FinnV2ReasoningContextService:
             if len(evidence) >= self.max_evidence_items:
                 break
 
+        feed_evidence = await self._current_feed_evidence(run)
+        if feed_evidence:
+            # This is freshly owner-scoped database evidence, never client copy.
+            # Keep it ahead of older tool results if the context is trimmed.
+            evidence = [*feed_evidence, *evidence]
+            selected_domains.add("plan_context")
+            evidence = evidence[:self.max_evidence_items]
         evidence = self._trim_to_size(evidence)
         domain_statuses = []
         for item in validation_model.domains:
@@ -245,6 +252,124 @@ class FinnV2ReasoningContextService:
             uncertainty_codes=list(dict.fromkeys([*orchestrator_result.uncertainty_codes, *provenance_issues])),
             evidence_boundary=self._evidence_boundary(evidence),
         )
+
+    async def _current_feed_evidence(self, run) -> list[ReasoningEvidenceItem]:
+        context = getattr(run, "client_context_json", {}) or {}
+        item_id = str(context.get("feed_item_id") or "").strip()
+        if not item_id:
+            return []
+        from backend.services.finn_coach_feed_service import FinnCoachFeedService
+        item = await FinnCoachFeedService(self.session).detail(
+            user_id=run.user_id, item_id=item_id,
+        )
+        if not item:
+            return []
+        event_type = item.get("event_type")
+        if event_type != "proposal_pending":
+            recorded = item.get("evidence") or {}
+            historical = {}
+            for key in ("status", "match_status", "change_24h", "benchmark_score",
+                        "score_as_of", "conditions", "components",
+                        "component_source_status", "source_observed_at",
+                        "setup_ids", "action", "decision_id"):
+                value = recorded.get(key)
+                if value is not None and len(json.dumps(value, default=str)) <= 1500:
+                    historical[key] = value
+            historical_facts = {"feed_item_id": item_id, "event_type": event_type,
+                     "notification_status": item.get("status"),
+                     "historical_notification": True,
+                     "current_trade_signal_confirmed": False,
+                     "historical_event_facts": historical,
+                     "historical_source_observed_at": item.get("source_observed_at")}
+            subject = item.get("subject_type")
+            symbol = item.get("symbol")
+            current_facts = None
+            if symbol and event_type in {"plan_match", "data_blocked", "market_move"}:
+                from backend.services.setup_market_match_service import SetupMarketMatchService
+                assessment = await SetupMarketMatchService(self.session).for_asset(run.user_id, symbol)
+                current_facts = {"feed_item_id": item_id,
+                                 "current_source_status": assessment.get("source_status"),
+                                 "current_trade_signal_confirmed": False}
+                if subject == "setup" and item.get("subject_id"):
+                    current = next((match for match in assessment.get("matches", [])
+                                    if str(match.get("setup_id")) == str(item["subject_id"])), None)
+                    current_facts["current_setup"] = ({"id": current.get("setup_id"),
+                                                "name": current.get("name"),
+                                                "status": current.get("status")}
+                                               if current else None)
+                if event_type == "data_blocked":
+                    current_facts["current_component_source_status"] = assessment.get("component_source_status")
+            source_moment = self._parse_feed_moment(item.get("source_observed_at") or item.get("created_at"))
+            historical_item = ReasoningEvidenceItem(
+                evidence_id="E0", artifact_id=f"feed-item:{item_id}",
+                tool_name="read_feed_event", domain="plan_context",
+                entity_type=str(subject or "unknown"),
+                entity_id=str(item.get("subject_id") or "") or None,
+                asset=symbol, source="owner_scoped_historical_feed",
+                as_of=source_moment, freshness="historical",
+                availability="available", confidence="medium", facts=historical_facts,
+            )
+            if current_facts is None:
+                return [historical_item]
+            current_item = ReasoningEvidenceItem(
+                evidence_id="E00", artifact_id=f"feed-current:{item_id}",
+                tool_name="read_feed_current_state", domain="plan_context",
+                entity_type=str(subject or "unknown"),
+                entity_id=str(item.get("subject_id") or "") or None,
+                asset=symbol, source="owner_scoped_current_score",
+                as_of=datetime.now(timezone.utc),
+                freshness="fresh" if assessment.get("source_status") == "available" else "stale",
+                availability="available",
+                confidence="high" if assessment.get("source_status") == "available" else "medium",
+                facts=current_facts,
+            )
+            return [historical_item, current_item]
+        from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+        proposal = await FinnV2ProposalRepository(self.session).get_by_id_for_user(
+            proposal_id=str(item.get("subject_id") or ""), user_id=run.user_id,
+        )
+        expires_at = getattr(proposal, "expires_at", None)
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        active = bool(
+            proposal is not None
+            and proposal.status in {"draft", "pending_confirmation"}
+            and expires_at is not None and expires_at > datetime.now(timezone.utc)
+            and item.get("status") in {"unread", "read"}
+        )
+        facts = {"proposal_status": "awaiting_separate_confirmation" if active else "no_longer_active",
+                 "feed_item_id": item_id, "confirmation_authorized": False}
+        if active:
+            change = (proposal.payload_json or {}).get("change") or {}
+            fields = (change.get("setup_fields") or change.get("strategy_fields")
+                      or change.get("bot_fields") or change.get("changed_fields") or {})
+            facts.update({
+                "proposal_id": proposal.id,
+                "proposal_name": str(fields.get("name") or proposal.asset or proposal.operation_type)[:120],
+                "operation_type": proposal.operation_type,
+                "asset": proposal.asset,
+            })
+        return [ReasoningEvidenceItem(
+            evidence_id="E0", artifact_id=f"feed-proposal:{item_id}",
+            tool_name="read_feed_proposal", domain="plan_context",
+            entity_type="proposal", entity_id=str(item.get("subject_id") or ""),
+            asset=proposal.asset if active else item.get("symbol"),
+            source="owner_scoped_database", as_of=datetime.now(timezone.utc),
+            freshness="fresh", availability="available", confidence="high",
+            facts=facts,
+        )]
+
+    @staticmethod
+    def _parse_feed_moment(value) -> Optional[datetime]:
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, str):
+            try:
+                moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+        return None
 
     @staticmethod
     def _expected_asset(referenced: Dict[str, Any]) -> Optional[str]:

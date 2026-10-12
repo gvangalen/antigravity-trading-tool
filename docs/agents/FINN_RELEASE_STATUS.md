@@ -6,9 +6,33 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `CANDIDATE_READY`. Branch `codex/finn-coach-feed`, based on
-`287c7899052d5792feebbcce58e1a7aaf6983da2`. Production identity and
-independent QA verdict are not yet established.
+Phase: `LIVE_QA_PARTIAL`, follow-up fixes under validation. The first release
+merged in [PR #264](https://github.com/gvangalen/antigravity-trading-tool/pull/264)
+as `f039774b464cabb4375d679b9dd1cf9edfb6a22d`; backend and frontend
+reported that SHA with HTTP 200. Independent live QA confirmed the feed,
+history, language switching, handled status and read-only chat opening, but
+found three gaps: setup detail links lacked an exact setup ID, positive matches
+could hide a data blocker from the top three, and draft proposals were not
+visible before confirmation. The follow-up candidate addresses those gaps and
+rechecks owner-scoped proposal evidence in the FINN reasoning context. Its
+new live SHA and independent QA verdict are pending.
+Feed discussions now carry a transient owner-scoped event hint to the selector
+and re-read facts for the reasoning step. Recorded event facts retain their
+historical source time and are separated from a fresh Score 2.0 reread. The
+additional feed discussion evidence is not yet part of the persisted V2 tool
+artifact hash; replay/audit parity for that sidecar remains follow-up work.
+
+Follow-up local gates: backend **3486 passed, 3 skipped**; frontend build,
+typecheck, i18n/command/proposal checks and high-severity audit passed (one
+moderate Next.js advisory); mobile typecheck, lint (warnings only) and
+web/iOS/Android bundle smokes passed. The isolated API/Celery/Responses action
+matrix passed **16/16**, artifact SHA-256
+`ad9e7c88f647b8f345792f8bb8ef15a76e391c4f88f8382625a9804a21db98d1`.
+Real Luna/Responses selector development passed **18/18**, artifact SHA-256
+`c0fda9d44f7048326e103494f1f9757f897d9b312a7d07968946d94987f17eed`;
+regression passed **109/109**, artifact SHA-256
+`c6732ef783441742dc6b83005267f519325191cb0f9d267630104e5d3037a483`.
+Independent Security and Architecture review found no follow-up release blocker.
 
 The candidate replaces the page-triggered FINN Today block and mobile
 workspace cards with one owner-scoped event feed. Completed Score 2.0 runs,

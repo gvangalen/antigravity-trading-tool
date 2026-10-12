@@ -4,7 +4,7 @@ import logging
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
 from sqlalchemy import select
@@ -555,6 +555,11 @@ async def _try_v2_visible_delivery(
         if item is None:
             raise LookupError("feed_item_not_owned")
         context_payload = dict(context_payload)
+        # Feed metadata is server-owned. A caller may only supply the item ID;
+        # the current proposal and its scope must be loaded again below.
+        for key in ("feed_current_status", "feed_proposal_id", "feed_proposal_name",
+                    "feed_proposal_operation_type"):
+            context_payload.pop(key, None)
         if item.get("symbol"):
             context_payload["symbol"] = item["symbol"]
         if item.get("subject_type") == "setup" and item.get("subject_id"):
@@ -575,11 +580,32 @@ async def _try_v2_visible_delivery(
         elif item.get("event_type") == "proposal_pending":
             # Proposal lifecycle remains governed by its separate confirmation
             # contract. The feed does not grant a confirmation token.
+            from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+            proposal = await FinnV2ProposalRepository(db).get_by_id_for_user(
+                proposal_id=str(item.get("subject_id") or ""), user_id=user_id,
+            )
+            expires_at = getattr(proposal, "expires_at", None)
+            if expires_at is not None and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            active = bool(
+                proposal is not None
+                and proposal.status in {"draft", "pending_confirmation"}
+                and expires_at is not None and expires_at > datetime.now(timezone.utc)
+                and item.get("status") in {"unread", "read"}
+            )
             context_payload["feed_current_status"] = (
-                "proposal_requires_separate_confirmation"
-                if item.get("status") in {"unread", "read"}
+                "proposal_requires_separate_confirmation" if active
                 else "proposal_no_longer_active"
             )
+            if active:
+                change = (proposal.payload_json or {}).get("change") or {}
+                fields = (change.get("setup_fields") or change.get("strategy_fields")
+                          or change.get("bot_fields") or change.get("changed_fields") or {})
+                context_payload["feed_proposal_id"] = proposal.id
+                context_payload["feed_proposal_name"] = str(
+                    fields.get("name") or proposal.asset or proposal.operation_type
+                )[:120]
+                context_payload["feed_proposal_operation_type"] = proposal.operation_type
     selection = runtime_selection or _preflight_v2_runtime_selection(
         user_id=user_id,
         query=message,

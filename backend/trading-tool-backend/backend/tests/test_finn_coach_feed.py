@@ -1,12 +1,13 @@
 import asyncio
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
 from backend.services import finn_coach_feed_service as module
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
+from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 
 
 def test_fallback_preserves_subject_and_never_claims_an_entry_signal():
@@ -52,6 +53,100 @@ def test_proposal_feed_uses_typed_saved_name_and_amount(monkeypatch):
     assert captured["subject"] == "ETH DCA eigen plan"
     assert captured["evidence"]["amount_eur"] == 120.5
     assert captured["evidence"]["amount_kind"] == "base_amount"
+
+
+def test_discuss_proposal_uses_fresh_owner_scoped_evidence_not_client_claims(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000001"
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "proposal_pending", "subject_id": "p-1",
+                "symbol": "ETH", "status": "unread"}
+
+    async def get_by_id(_self, *, proposal_id, user_id):
+        assert (proposal_id, user_id) == ("p-1", 7)
+        return SimpleNamespace(id="p-1", status="draft", asset="ETH",
+            operation_type="create_strategy", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+            payload_json={"change": {"strategy_fields": {"name": "ETH Exact Plan"}}})
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.finn_v2_proposal_repository.FinnV2ProposalRepository.get_by_id_for_user",
+        get_by_id,
+    )
+    service = FinnV2ReasoningContextService(SimpleNamespace())
+    run = SimpleNamespace(user_id=7, client_context_json={
+        "feed_item_id": item_id, "feed_proposal_name": "Forged Name",
+        "feed_current_status": "confirmed"})
+    evidence = asyncio.run(service._current_feed_evidence(run))[0]
+    assert evidence.facts["proposal_name"] == "ETH Exact Plan"
+    assert evidence.facts["proposal_status"] == "awaiting_separate_confirmation"
+    assert evidence.facts["confirmation_authorized"] is False
+    assert "Forged Name" not in str(evidence.dict())
+
+
+def test_discuss_setup_rechecks_current_match_and_marks_old_notification_historical(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000002"
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "plan_match", "subject_type": "setup",
+                "subject_id": "11", "symbol": "ETH", "status": "read",
+                "source_observed_at": "2026-10-10T10:00:00Z",
+                "evidence": {"benchmark_score": 72, "status": "matches"}}
+
+    class MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, symbol):
+            assert (user_id, symbol) == (7, "ETH")
+            return {"source_status": "stale_sources", "matches": [
+                {"setup_id": 11, "name": "ETH Eigen Plan", "status": "insufficient_data"}]}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    service = FinnV2ReasoningContextService(SimpleNamespace())
+    historical, current = asyncio.run(service._current_feed_evidence(SimpleNamespace(
+        user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert current.facts["current_setup"]["name"] == "ETH Eigen Plan"
+    assert current.facts["current_setup"]["status"] == "insufficient_data"
+    assert historical.facts["historical_notification"] is True
+    assert historical.facts["current_trade_signal_confirmed"] is False
+    assert historical.facts["historical_event_facts"]["benchmark_score"] == 72
+    assert historical.facts["historical_source_observed_at"] == "2026-10-10T10:00:00Z"
+    assert historical.freshness == "historical"
+    assert historical.as_of.isoformat() == "2026-10-10T10:00:00+00:00"
+    assert current.freshness == "stale"
+
+
+def test_discuss_market_move_can_explain_recorded_change_without_calling_it_current(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000003"
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "market_move", "subject_type": "asset",
+                "subject_id": "BTC", "symbol": "BTC", "status": "read",
+                "source_observed_at": "2026-10-10T10:00:00Z",
+                "evidence": {"change_24h": 10.5, "status": "measured_move"}}
+
+    class MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, symbol):
+            assert (user_id, symbol) == (7, "BTC")
+            return {"source_status": "stale_sources", "matches": []}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    historical, current = asyncio.run(FinnV2ReasoningContextService(SimpleNamespace())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert historical.facts["historical_event_facts"]["change_24h"] == 10.5
+    assert historical.freshness == "historical"
+    assert current.facts["current_source_status"] == "stale_sources"
+    assert current.freshness == "stale"
+    assert current.facts["current_trade_signal_confirmed"] is False
 
 
 def test_missing_score_emits_one_owner_asset_blocker_without_false_match(monkeypatch):
@@ -111,6 +206,7 @@ def test_missing_score_emits_one_owner_asset_blocker_without_false_match(monkeyp
     assert asyncio.run(service.reconcile_score_asset(user_id=7, symbol="btc")) == ["item-one"]
     assert len(published) == 1
     assert published[0]["event_type"] == "data_blocked"
+    assert published[0]["priority"] > 3  # a blocker outranks positive plan matches
     assert published[0]["evidence"]["setup_ids"] == ["11", "12"]
     assert {row["event_key"] for row in resolved} == {"plan-match:11", "plan-match:12", "market-move:BTC"}
 

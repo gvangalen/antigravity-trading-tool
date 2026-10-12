@@ -178,6 +178,12 @@ class FinnV2ProposalService:
         )
         if prior_proposal is not None and prior_proposal.id != row.id:
             await self.proposals.update_status(prior_proposal, status="cancelled")
+        if callable(getattr(self.session, "execute", None)):
+            from backend.services.finn_coach_feed_service import FinnCoachFeedService
+            feed = FinnCoachFeedService(self.session)
+            if prior_proposal is not None and prior_proposal.id != row.id:
+                await feed.resolve(user_id=user_id, event_key=f"proposal:{prior_proposal.id}")
+            await feed.publish_pending_proposal(row, user_id=user_id)
         return self._row_to_record(row)
 
     async def _hydrate_domain_change(

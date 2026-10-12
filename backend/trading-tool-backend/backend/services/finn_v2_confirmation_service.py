@@ -166,24 +166,8 @@ class FinnV2ConfirmationService:
         if not callable(getattr(self.session, "execute", None)):
             return None
         from backend.services.finn_coach_feed_service import FinnCoachFeedService
-        payload = getattr(proposal, "payload_json", None) or {}
-        change = payload.get("change") or {}
-        fields = (change.get("setup_fields") or change.get("strategy_fields")
-                  or change.get("bot_fields") or change.get("changed_fields") or {})
-        subject = str(fields.get("name") or proposal.asset or proposal.operation_type)
-        amount_kind = next((key for key in ("base_amount", "budget_total_eur")
-                            if fields.get(key) is not None), None)
-        return await FinnCoachFeedService(self.session).publish(
-            user_id=user_id, event_key=f"proposal:{proposal.id}",
-            event_type="proposal_pending", subject_type="proposal",
-            subject_id=proposal.id, subject=subject, symbol=proposal.asset,
-            priority=4, expires_at=proposal.expires_at,
-            evidence={"status": "pending_confirmation", "operation_type": proposal.operation_type,
-                      "proposal_id": proposal.id, "payload_hash": proposal.payload_hash,
-                      "amount_kind": amount_kind,
-                      "amount_eur": fields.get(amount_kind) if amount_kind else None},
-            revision=proposal.payload_hash,
-        )
+        return await FinnCoachFeedService(self.session).publish_pending_proposal(
+            proposal, user_id=user_id)
 
     async def _resolve_feed_proposal(self, proposal, *, user_id: int) -> None:
         if not callable(getattr(self.session, "execute", None)):

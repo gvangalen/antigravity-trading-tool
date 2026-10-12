@@ -117,6 +117,7 @@ export type MobileCoachFeedItem = {
   symbol?: string | null;
   title: string;
   description: string;
+  evidence?: { subject?: string };
   status: 'unread' | 'read' | 'handled' | 'archived' | 'resolved';
   priority: number;
   updated_at: string;
