@@ -466,6 +466,7 @@ class FinnV2RunService:
         rejection_feedback: dict[str, Any] | None = None,
     ) -> tuple[FinnResponsesFrontDoorResult, str]:
         """Select through Responses without holding a DB connection at the provider."""
+        feed_prompt_facts: list[dict[str, Any]] = []
         async with async_session_factory() as session:
             orchestrator = FinnV2OrchestratorService(session)
             run = await orchestrator.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -479,6 +480,15 @@ class FinnV2RunService:
                 message=message,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
+            selected_feed = context.get("feed_event") or {}
+            if (run.client_context_json or {}).get("feed_item_id") or (
+                isinstance(selected_feed, dict) and selected_feed.get("item_id")
+            ):
+                from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
+                feed_prompt_facts = [
+                    {"source": item.source, "facts": item.facts}
+                    for item in await FinnV2ReasoningContextService(session)._current_feed_evidence(run)
+                ][:2]
             corrected_instrument = corrected_catalog_instrument(message)
             asset_corrected_operation_id = None
             unspecified_correction = False
@@ -1053,6 +1063,7 @@ class FinnV2RunService:
                 )
             ),
             conversation_context=context,
+            feed_evidence=feed_prompt_facts,
             verified_asset=verified_asset,
             previous_response_id=(
                 recovery_response_id

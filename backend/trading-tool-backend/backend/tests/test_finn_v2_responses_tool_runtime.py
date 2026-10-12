@@ -4008,6 +4008,26 @@ class FakeResponses:
         return result
 
 
+def test_model_led_feed_follow_up_receives_pending_change_in_provider_prompt():
+    fake = FakeResponses(response("feed-followup", text="De wijziging naar 4H is nog een voorstel."))
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="feed-followup", model_led_coach=True,
+    )
+    facts = [{"source": "owner_scoped_database", "facts": {
+        "proposal_status": "awaiting_separate_confirmation",
+        "target_name": "ETH Plan B", "proposed_changes": {"timeframe": "4H"},
+        "confirmation_authorized": False,
+    }}]
+    result = asyncio.run(front.run(
+        message="Is 4H al opgeslagen of nog een voorstel?", instructions="legacy prompt",
+        conversation_context={}, feed_evidence=facts, verified_asset="ETH",
+    ))
+    assert result.response.text == "De wijziging naar 4H is nog een voorstel."
+    assert '"timeframe": "4H"' in fake.requests[0]["instructions"]
+    assert "still pending, not saved" in fake.requests[0]["instructions"]
+
+
 def response(response_id, *, text="", calls=()):
     return SimpleNamespace(id=response_id, status="completed", output_text=text, output=list(calls))
 
