@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `EDITED_FEED_HANDOFF_LOCAL_VALIDATION`. The previous proposal-follow-up
+Phase: `EDITED_FEED_HANDOFF_RELEASE_CANDIDATE`. The previous proposal-follow-up
 candidate merged as product SHA `834437f16c805f29811aa4470e106dd20a17536d`.
 Candidate and main CI passed all five jobs, Auto Deploy succeeded, and public
 backend health and frontend build-info both returned HTTP 200 with that SHA.
@@ -22,8 +22,19 @@ nonempty question after explicit selection even when the trader rewrites the
 suggested wording. It remains read-only; the server checks item ownership and
 separate confirmation. Frontend command tests passed **15/15**, i18n tests
 **14/14**, i18n lint, typecheck and production build passed; targeted backend
-feed tests passed **23/23**. Candidate CI, deployment and independent QA are
-pending.
+feed tests passed **23/23**. Root backend tests passed **3497**, with **3
+skipped**. The isolated API/Celery/Responses action matrix passed **16/16**
+and adapter tests **19/19**, with no broker orders, live bots, live-trading
+calls or production connections (artifact SHA-256
+`c6426afabe278f7aa524789c0e01b7730f6431a0b4f50591893d1cf70609f488`).
+Real `gpt-6-luna`/Responses development passed **20/20** (artifact SHA-256
+`670428b667405fa32d538c571d8e1fa719064ec75e54a9ad9c285c798d0a2a9d`)
+and regression passed **109/109** (artifact SHA-256
+`7169a7c290324c63c3423d3a93c2811105a6c85d7c3ddd0a10fddfdecb467bdd`),
+with zero provider, schema, timeout, parse or validation failures. Candidate
+CI passed all five jobs on code/export SHA
+`8f044c40335ea3230817504586754203ddcaadf3`; CI for this status update,
+deployment identity and independent QA are pending.
 
 Independent live QA on product SHA
 `0979563fd12fa4da3609481103313411e4902738` accepted the targeted web
