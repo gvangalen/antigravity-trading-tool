@@ -6,16 +6,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Five-Flow Current Assessment
 
-The protected `score2_stale_paper` QA profile is a Build candidate for the
-remaining live synthetic stale-source case. It requires explicit per-run
+The protected `score2_stale_paper` QA profile for the remaining live synthetic
+stale-source case was merged in [PR #244](https://github.com/gvangalen/antigravity-trading-tool/pull/244) as product SHA `323075858973be4df8371102c31ad4cc691859b0`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38204217135),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38204367254),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38204483842)
+passed. Public backend health and frontend build-info both returned HTTP 200
+with exactly that SHA on 2026-10-12. The profile requires explicit per-run
 fixture and execution authorization, verifies the bound QA marker, creates an
 inactive isolated synthetic owner, proves `change_24h` scores while fresh,
 ages only that owner-scoped reading, and checks the saved Score 2.0 and Paper
 Hold result. Local PostgreSQL runs passed both the successful case and a
 forced validation failure that quarantined the bot while preserving evidence.
-The root backend suite passed 3452 tests with 3 skips. This is not yet a live
-QA verdict; the production SHA and protected run artifact must be recorded
-after deployment and independent execution.
+The root backend suite passed 3452 tests with 3 skips. Security and
+Architecture found no remaining concrete blocker after the isolation and
+failure-evidence repairs. Independent protected QA has not yet run this new
+profile; live stale-source acceptance remains open.
 
 Phase: `TARGETED_QA_PASSED_FULL_STALE_EVIDENCE_OPEN`. [PR #239](https://github.com/gvangalen/antigravity-trading-tool/pull/239) merged the scoped setup-origin explanation and tracked export as product SHA `bf54e502932aa673813c29f835ada1f927b6c6c7`. [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38189787773), [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38189942343), and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38190057057) passed. Public backend health and frontend build-info returned HTTP 200 and exactly that SHA on 2026-10-12. Status-only [PR #240](https://github.com/gvangalen/antigravity-trading-tool/pull/240) produced public QA SHA `7ad82f456d6a39c9992be71ee8a9e4a16b1862a8`; [candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38190151758), [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38190327383), and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38190441815) passed, and both public identity endpoints returned HTTP 200 with that SHA. Independent read-only QA on the exact public SHA passed the former failing case: after hard refresh the duplicated setup showed saved Macro 0–70 and explained that the values may have been carried over, with no asserted original provenance. A new unsaved setup still identified its defaults as product suggestions. QA also checked EN and DE and restored NL. No setup, bot, or order was changed during this rerun. The previous full matrix's report and Paper outcomes were not rerun on this UI-only release. The stale-but-present source remains unproven in live QA.
 
