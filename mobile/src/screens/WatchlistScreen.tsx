@@ -205,17 +205,11 @@ export function WatchlistScreen() {
     fetcher: fetchForwardReturnsMonth,
   });
 
-  const fetchInsight = useCallback(
-    () =>
-      assistantApi.insight({
-        page_type: 'WATCHLIST',
-        symbol: selectedSymbol,
-        timeframe: chartInterval,
-      }),
-    [chartInterval, selectedSymbol],
-  );
+  // Page navigation reads measured analysis only. Personal coach updates
+  // come from the shared FINN feed; an insight model run is never a page load.
+  const fetchInsight = useCallback(async () => undefined, []);
   const insightResource = useApiResource({
-    enabled: hasAnalysisBootstrap,
+    enabled: false,
     fallbackData: undefined,
     fetcher: fetchInsight,
   });

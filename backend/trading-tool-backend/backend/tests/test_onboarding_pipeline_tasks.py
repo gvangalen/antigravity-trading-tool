@@ -81,10 +81,9 @@ def test_run_onboarding_pipeline_queues_expected_workflow(monkeypatch):
     assert [step[0] for step in captured["steps"]] == [
         "bootstrap_indicator_histories",
         "store_daily_scores_task",
-        "enqueue_first_dashboard_briefing",
         "generate_daily_report",
     ]
     assert captured["steps"][0][2] == {"user_id": 315, "enqueue_score_refresh": False}
-    assert captured["steps"][2][2] == {"trigger": "onboarding_scores_ready"}
+    assert captured["steps"][2][1] == (315,)
     assert conn.commit_count >= 1
     assert conn.closed is True

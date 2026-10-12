@@ -207,7 +207,6 @@ class DashboardService:
         prices_data = {s: {"price": None, "change_24h": None} for s in symbols}
         bot_portfolios = []
         ai_insight = {}
-        raw_intel_events = []
         asset_catalog_map = {}
 
         # 3. Run DB-backed components sequentially. A single AsyncSession must
@@ -229,39 +228,8 @@ class DashboardService:
         except Exception as e:
             logger.error(f"❌ [MobileOverview] P2 Error: bot portfolios failed: {e}", exc_info=True)
 
-        try:
-            from backend.services.intelligence_event_service import IntelligenceEventService
-            from backend.infrastructure.repositories.bot_repository import BotRepository
-            from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
-            from backend.infrastructure.repositories.score_repository import ScoreRepository
-            
-            intel_service = IntelligenceEventService(
-                session=self.session,
-                bot_repo=BotRepository(self.session),
-                market_data_repo=MarketDataRepository(self.session),
-                score_repo=ScoreRepository(self.session)
-            )
-            raw_intel_events = await intel_service.evaluate_and_generate_events(user_id) or []
-        except Exception as e:
-            logger.error(f"❌ [MobileOverview] P3 Error: intelligence events failed: {e}", exc_info=True)
-
-        try:
-            from backend.services.finn_plan_service import FinnPlanService
-
-            finn = FinnPlanService(self.session)
-            daily = await finn.build_daily_coach_response(
-                user_id,
-                "Wat moet ik vandaag doen met mijn BTC setup?",
-                {"symbol": "BTC", "page": "mobile_overview"},
-            )
-            analysis = (daily.get("state") or {}).get("analysis") or {}
-            ai_insight = {
-                "daily_coach": analysis,
-                "briefing_text": daily.get("response"),
-                "suggested_actions": daily.get("suggested_actions") or analysis.get("suggested_actions") or [],
-            }
-        except Exception as e:
-            logger.error(f"⚠️ [MobileOverview] Deterministic Finn briefing failed: {e}", exc_info=True)
+        # Navigation and overview GETs are read-only. Coach updates are
+        # produced from saved events and read from /assistant/feed instead.
 
         # 5. PRIORITEIT 1: Process watchlist scores dynamically via standard score engine
         from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
@@ -409,19 +377,8 @@ class DashboardService:
             if isinstance(ai_suggested, list) and len(ai_suggested) > 0:
                 suggested_actions = ai_suggested
 
-        localized_briefing = await localize_finn_payload(
-            {
-                "greeting": greeting,
-                "summary": summary,
-                "suggested_actions": suggested_actions,
-            },
-            locale,
-        )
-
         finn_briefing = MobileFinnBriefingSchema(
-            greeting=localized_briefing.get("greeting", greeting),
-            summary=localized_briefing.get("summary", summary),
-            suggested_actions=localized_briefing.get("suggested_actions", suggested_actions),
+            greeting="", summary="", suggested_actions=[],
         )
 
         portfolio_overview = MobilePortfolioOverviewSchema(
@@ -431,29 +388,13 @@ class DashboardService:
             active_bots_count=active_bots_count
         )
 
-        # 8. Format and assemble intelligence events
-        formatted_events = []
-        for ev in raw_intel_events:
-            event_id = _safe_event_attr(ev, "id")
-            if event_id is None:
-                continue
-            formatted_events.append(MobileIntelligenceEventSchema(
-                id=event_id,
-                type=_safe_event_attr(ev, "type", "info"),
-                symbol=_safe_event_attr(ev, "symbol"),
-                title=_safe_event_attr(ev, "title", "FINN melding"),
-                description=_safe_event_attr(ev, "description", ""),
-                severity=_safe_event_attr(ev, "severity", "info"),
-                created_at=_safe_event_attr(ev, "created_at", datetime.now(timezone.utc))
-            ))
-
         response_payload = MobileOverviewResponse(
             user_id=user_id,
             portfolio=portfolio_overview,
             watchlist=watchlist_items,
             active_bots=active_bots,
             finn_briefing=finn_briefing,
-            intelligence_events=formatted_events
+            intelligence_events=[]
         )
 
         return response_payload

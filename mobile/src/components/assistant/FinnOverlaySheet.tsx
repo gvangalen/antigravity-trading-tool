@@ -22,13 +22,14 @@ import { triggerHaptic } from '../../utils/haptics';
 
 type FinnOverlaySheetProps = {
   contextMetric?: string;
+  feedItemId?: string;
   onClose: () => void;
   prefill?: string;
   source?: string;
   symbol?: string;
 };
 
-export function FinnOverlaySheet({ contextMetric, onClose, prefill, source, symbol }: FinnOverlaySheetProps) {
+export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, source, symbol }: FinnOverlaySheetProps) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const { context, updateContext } = useIntelligenceContext();
@@ -37,6 +38,11 @@ export function FinnOverlaySheet({ contextMetric, onClose, prefill, source, symb
   const [chatError, setChatError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantFeedItem[]>([]);
+  const [pendingFeedItemId, setPendingFeedItemId] = useState(feedItemId);
+
+  useEffect(() => {
+    setPendingFeedItemId(feedItemId);
+  }, [feedItemId]);
 
   const activeSymbol = symbol || context.asset;
   const activeTimeframe = String(context.timeframe || '1D').toUpperCase();
@@ -48,8 +54,9 @@ export function FinnOverlaySheet({ contextMetric, onClose, prefill, source, symb
       page_type: 'FINN',
       symbol: activeSymbol,
       timeframe: activeTimeframe,
+      ...(pendingFeedItemId ? { feed_item_id: pendingFeedItemId } : {}),
     }),
-    [activeSymbol, activeTimeframe],
+    [activeSymbol, activeTimeframe, pendingFeedItemId],
   );
 
   useEffect(() => {
@@ -93,6 +100,7 @@ export function FinnOverlaySheet({ contextMetric, onClose, prefill, source, symb
       const envelope = await assistantApi.chat(trimmed, apiContext);
       const mapped = mapAssistantEnvelopeToFeedItems(envelope).filter((item) => item.type === 'message');
       setMessages((current) => [...current, ...mapped]);
+      setPendingFeedItemId(undefined);
     } catch (error) {
       setChatError(error instanceof Error ? error.message : 'FINN chat request failed');
     } finally {

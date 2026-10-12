@@ -517,6 +517,7 @@ function AIAssistantContent({
   const commandCenterRef = useRef(null);
   const draftFormRef = useRef(null);
   const handledContextRequestRef = useRef(null);
+  const usedFeedRequestRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
@@ -617,7 +618,6 @@ function AIAssistantContent({
         },
       ]);
 
-      loadMissionControl();
       emitFinnRefreshSignals();
     };
 
@@ -3741,7 +3741,6 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (isOpen) {
-      loadMissionControl();
       if (!previewSectionsOnly) {
         loadFinnState();
       }
@@ -3752,21 +3751,6 @@ function AIAssistantContent({
       loadedFinnStateRef.current = false;
     }
   }, [isOpen, isAssetAnalysisPage, pathname, locale]);
-
-  useEffect(() => {
-    if (!isOpen || !isAssetAnalysisPage) return;
-    void loadMissionControl({ force: true });
-  }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const generationStatus = String(missionControl?.first_dashboard_context?.generation_status || "").toLowerCase();
-    if (!["pending", "queued", "generating", "retry_scheduled", "stale_while_revalidate"].includes(generationStatus)) return;
-    const timer = window.setInterval(() => {
-      void loadMissionControl();
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [isOpen, previewSectionsOnly, missionControl?.first_dashboard_context?.generation_status, currentConversationStorageKey]);
 
   useEffect(() => {
     if (!isOpen || previewSectionsOnly || sharedSessionRestoreRef.current) return;
@@ -4378,10 +4362,13 @@ function AIAssistantContent({
       const baseRequestContext = latestAssistantState?.current_flow
         ? { ...context, ...latestAssistantState }
         : context;
-      const requestContext = {
-        ...baseRequestContext,
-        ...(commandRequest?.context || {}),
-      };
+      const commandContext = { ...(commandRequest?.context || {}) };
+      if (commandContext.feed_item_id && usedFeedRequestRef.current === commandRequest?.nonce) {
+        delete commandContext.feed_item_id;
+      } else if (commandContext.feed_item_id) {
+        usedFeedRequestRef.current = commandRequest?.nonce;
+      }
+      const requestContext = { ...baseRequestContext, ...commandContext };
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"
@@ -4766,7 +4753,6 @@ function AIAssistantContent({
         if (typeof window !== "undefined" && missionControlCacheKeyRef.current) {
           window.sessionStorage.removeItem(missionControlCacheKeyRef.current);
         }
-        await loadMissionControl({ force: true });
         return;
       }
       const res = await executeAssistantAction(action);
@@ -4779,7 +4765,6 @@ function AIAssistantContent({
           text: res.message || "Daily scores ververst en geverifieerd.",
           intent: "daily_score_refresh_done",
         }]);
-        await loadMissionControl();
         emitFinnRefreshSignals();
         return;
       }
@@ -4793,7 +4778,6 @@ function AIAssistantContent({
           text: res.message || "Bot-decision gegenereerd. Review het voorstel voordat je iets uitvoert.",
           intent: "bot_decision_generated",
         }]);
-        await loadMissionControl();
         emitFinnRefreshSignals();
         return;
       }
@@ -4808,7 +4792,6 @@ function AIAssistantContent({
           intent: "bot_decision_skipped",
           operatorResolution: res.operator_resolution,
         }]);
-        await loadMissionControl();
         emitFinnRefreshSignals();
         return;
       }
@@ -4822,7 +4805,6 @@ function AIAssistantContent({
           text: res.message || uiText.botDecisionPaperExecuted,
           intent: "bot_decision_executed",
         }]);
-        await loadMissionControl();
         emitFinnRefreshSignals();
         return;
       }
@@ -4836,7 +4818,6 @@ function AIAssistantContent({
           isError: !res?.verified?.live_preflight,
           suggestedActions: executionConsoleAction ? [executionConsoleAction] : [],
         }]);
-        await loadMissionControl();
         emitFinnRefreshSignals();
         return;
       }
@@ -4851,7 +4832,6 @@ function AIAssistantContent({
           intent: "mission_item_resolved",
           operatorResolution: res.operator_resolution,
         }]);
-        await loadMissionControl();
         emitFinnRefreshSignals();
         return;
       }
@@ -4910,7 +4890,6 @@ function AIAssistantContent({
           intent: "indicator_configured",
         }]);
         setFinnDraft(null);
-        await loadMissionControl();
         emitFinnRefreshSignals();
         return;
       }
@@ -4947,7 +4926,6 @@ function AIAssistantContent({
         intent: isBotOnly ? "bot_created" : (isStrategyOnly ? "strategy_created" : "plan_created"),
       }]);
       setFinnDraft(null);
-      await loadMissionControl();
       emitFinnRefreshSignals();
     } catch (err) {
       console.error("Finn action failed", err);

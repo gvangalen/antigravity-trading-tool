@@ -254,7 +254,7 @@ def test_finish_onboarding_keeps_completed_flow_and_starts_pipeline(monkeypatch)
     assert status.onboarding_complete is True
 
 
-def test_completed_onboarding_queues_first_briefing_before_legacy_pipeline(monkeypatch):
+def test_completed_onboarding_queues_data_pipeline_without_briefing(monkeypatch):
     repo = FakeOnboardingRepository(steps=[
         SimpleNamespace(step_key=key, completed=True, pipeline_started=False)
         for key in ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")
@@ -267,13 +267,10 @@ def test_completed_onboarding_queues_first_briefing_before_legacy_pipeline(monke
     asyncio.run(service._kickstart_user_pipeline(42))
     asyncio.run(service._kickstart_user_pipeline(42))
 
-    assert calls == [
-        ("briefing", (42,), {"trigger": "onboarding_completed"}),
-        ("pipeline", (42,), {}),
-    ]
+    assert calls == [("pipeline", (42,), {})]
 
 
-def test_briefing_dispatch_failure_does_not_cancel_onboarding_pipeline(monkeypatch):
+def test_onboarding_does_not_dispatch_old_briefing(monkeypatch):
     repo = FakeOnboardingRepository(steps=[
         SimpleNamespace(step_key=key, completed=True, pipeline_started=False)
         for key in ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")
@@ -281,7 +278,7 @@ def test_briefing_dispatch_failure_does_not_cancel_onboarding_pipeline(monkeypat
     calls = []
 
     def fail_briefing(*args, **kwargs):
-        raise RuntimeError("broker retry")
+        raise AssertionError("Old briefing must not be dispatched")
 
     monkeypatch.setattr(onboarding_task.enqueue_first_dashboard_briefing, "delay", fail_briefing)
     monkeypatch.setattr(onboarding_task.run_onboarding_pipeline, "delay", lambda user_id: calls.append(user_id))

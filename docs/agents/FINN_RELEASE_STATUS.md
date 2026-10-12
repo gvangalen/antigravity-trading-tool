@@ -4,6 +4,58 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 2.0 Coach Feed Candidate
+
+Phase: `CANDIDATE_READY`. Branch `codex/finn-coach-feed`, based on
+`287c7899052d5792feebbcce58e1a7aaf6983da2`. Production identity and
+independent QA verdict are not yet established.
+
+The candidate replaces the page-triggered FINN Today block and mobile
+workspace cards with one owner-scoped event feed. Completed Score 2.0 runs,
+saved plan changes, pending FINN proposals and persisted Paper decisions can
+publish deduplicated items. The API reads stored NL/EN/DE copy without a
+provider call; a separate Luna/Responses worker writes a short neutral lead
+in NL/EN/DE and chooses the emphasis once from typed evidence. Only two
+subject-bound, neutral lead forms per language pass validation; the server
+renders exact verified facts and action boundaries, with factual fallback.
+Expired conditions and
+proposals leave the active list. Discussing an item re-reads its owner-scoped
+current facts and never authorizes a plan mutation or order. Onboarding no
+longer starts the automatic first-dashboard briefing.
+
+The final full backend suite passed **3483** with **3 skips**. Focused feed,
+confirmation, onboarding, Score 2.0/Paper and setup tests passed. Frontend
+build, typecheck, i18n lint/tests, command/proposal tests and high-severity
+audit passed; the audit still reports one existing moderate Next.js advisory.
+Mobile typecheck, lint (warnings only) and web/iOS/Android Expo bundle smokes
+passed. Local PostgreSQL accepted the new feed migration, including durable
+occurrence history. A local recurrence probe kept a handled item and opened a
+separate unread item for a changed revision. An authenticated
+local API probe confirmed owner isolation, deduplication, status/history,
+expiry, NL/DE projection and zero provider calls on GET. A real development
+Luna/Responses call via `/v1/responses` generated and passed bounded lead
+validation in all three languages; rendered copy preserves the exact saved
+subject and action boundary.
+Real-provider selector development passed
+**18/18**, and the full regression passed **109/109**, both with zero provider,
+schema or timeout errors. The final isolated local API/Celery action matrix
+passed **16/16**, adapter registry **19/19**, with no live trading calls,
+broker orders or production connections. Its artifact SHA-256 is
+`708a47e1f48c88b3c009b5f5fb34c84225ca7eff065fd0b0b1b93cd90602be18`.
+One earlier matrix run had **15/16** because a saved-strategy follow-up was
+reported `unavailable`; a full rerun passed. Independent QA must still cover
+that continuation in the live flow. Independent Architecture and Security
+rechecks found no remaining blocker after lifecycle, copy and account-scope
+repairs.
+
+Independent QA scope after deployment: same live SHA on web and mobile;
+duplicate score refresh, 20 assets and multiple plans per asset, current and
+stale data, pending and expired proposals, Paper decisions, owner isolation,
+NL/EN/DE switching, and navigation without feed mutation or OpenAI requests.
+No feed action may execute or suggest a live order. A historical item must
+not present an old score as a current entry signal. Mobile native installation
+is separate from the Expo bundle smoke and needs independent runtime evidence.
+
 ## Saved Report Object Names Release
 
 Phase: `ACCEPTED_IN_LIVE_QA`. [PR #261](https://github.com/gvangalen/antigravity-trading-tool/pull/261)

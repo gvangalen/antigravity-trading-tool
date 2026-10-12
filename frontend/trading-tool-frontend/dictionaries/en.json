@@ -32,6 +32,20 @@
     "afternoon": "Good afternoon",
     "evening": "Good evening"
   },
+  "coachFeed": {
+    "title": "Updates from FINN",
+    "subtitle": "What has changed for your plan",
+    "empty": "No updates. FINN will let you know when your plan needs attention.",
+    "all": "All updates",
+    "active": "Current updates",
+    "discuss": "Discuss with FINN",
+    "details": "View details",
+    "handled": "Mark handled",
+    "archive": "Archive",
+    "history": "History",
+    "error": "Updates are temporarily unavailable.",
+    "discussQuery": "What does this update mean for my plan? Read the current facts again."
+  },
   "finnWorkspace": {
     "onboardingHeader": {
       "eyebrow": "Guided onboarding",

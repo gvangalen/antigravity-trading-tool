@@ -5,6 +5,7 @@ import { FinnOverlaySheet } from '../components/assistant/FinnOverlaySheet';
 
 type FinnOverlayParams = {
   contextMetric?: string;
+  feedItemId?: string;
   prefill?: string;
   source?: string;
   symbol?: string;
@@ -53,6 +54,7 @@ export function FinnOverlayProvider({ children }: { children: ReactNode }) {
           prefill={params?.prefill}
           source={params?.source}
           contextMetric={params?.contextMetric}
+          feedItemId={params?.feedItemId}
           symbol={params?.symbol}
           onClose={closeFinn}
         />

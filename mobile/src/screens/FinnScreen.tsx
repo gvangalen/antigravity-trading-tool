@@ -29,8 +29,6 @@ import { useApiResource } from '../hooks/useApiResource';
 import { translate } from '../i18n';
 import { mapAssistantEnvelopeToFeedItems } from '../services/assistantEnvelopeMapper';
 import {
-  mapAssistantInsightCard,
-  mapAssistantInsightDetails,
   mapMobileOverviewBotDecision,
   mapMobileOverviewDecision,
   mapMobileOverviewMarket,
@@ -38,7 +36,7 @@ import {
   mapMobileOverviewPrompts,
 } from '../services/dataMappers';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
-import { AssistantInsightResponse, MobileOverviewAsset, MobileOverviewResponse, MobileIntelligenceEvent, assistantApi, mobileApi, intelligenceApi } from '../services/tradamindApi';
+import { MobileOverviewAsset, MobileOverviewResponse, MobileCoachFeedItem, assistantApi, mobileApi, intelligenceApi, coachFeedApi } from '../services/tradamindApi';
 import { apiClient } from '../services/apiClient';
 import { AssistantAction, AssistantFeedItem, AssistantDraft, AssistantEnvelope } from '../types/assistant';
 import { triggerHaptic } from '../utils/haptics';
@@ -124,7 +122,9 @@ export function FinnScreen({
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetType>(null);
-  const [localEvents, setLocalEvents] = useState<MobileIntelligenceEvent[]>([]);
+  const [localEvents, setLocalEvents] = useState<MobileCoachFeedItem[]>([]);
+  const [feedHistory, setFeedHistory] = useState(false);
+  const [discussFeedItemId, setDiscussFeedItemId] = useState<string | null>(null);
   const [feedItems, setFeedItems] = useState<AssistantFeedItem[]>([]);
   const [currentDraft, setCurrentDraft] = useState<AssistantDraft | null>(null);
   const [currentDraftAction, setCurrentDraftAction] = useState<PendingAction | null>(null);
@@ -140,7 +140,8 @@ export function FinnScreen({
     page_type: 'FINN',
     symbol: context.asset,
     timeframe: context.timeframe,
-  }), [context.asset, context.timeframe]);
+    feed_item_id: discussFeedItemId,
+  }), [context.asset, context.timeframe, discussFeedItemId]);
   const finnContextLabel = useMemo(
     () => formatFinnContextLabel(context.screen || context.page_type || context.page || 'FINN', context.asset, context.timeframe),
     [context.asset, context.page_type, context.screen, context.timeframe, context.page]
@@ -148,14 +149,9 @@ export function FinnScreen({
   const finnModeLabel = useMemo(() => deriveFinnModeLabel(source, activeState), [source, activeState]);
 
   const fetchOverview = useCallback(() => mobileApi.overview(), []);
-  const fetchInsight = useCallback(() => assistantApi.insight(apiContext), [apiContext]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
-  });
-  const insightResource = useApiResource<AssistantInsightResponse | undefined>({
-    fallbackData: undefined,
-    fetcher: fetchInsight,
   });
   useEffect(() => {
     trackAssistantEvent({
@@ -165,11 +161,16 @@ export function FinnScreen({
       asset: symbol || context.asset || null,
     });
   }, [context.asset, isOverlay, source, symbol]);
-  useEffect(() => {
-    if (overviewResource.data?.intelligence_events) {
-      setLocalEvents(overviewResource.data.intelligence_events);
+  const loadCoachFeed = useCallback(async () => {
+    try {
+      setLocalEvents(await coachFeedApi.list(feedHistory));
+    } catch (error) {
+      console.warn('FINN feed temporarily unavailable', error);
     }
-  }, [overviewResource.data?.intelligence_events]);
+  }, [feedHistory]);
+  useEffect(() => {
+    void loadCoachFeed();
+  }, [loadCoachFeed]);
 
   const persistActiveSessionId = useCallback(async (sessionId: string | null) => {
     if (!sessionId) return;
@@ -345,6 +346,7 @@ export function FinnScreen({
 
     try {
       const envelope = await assistantApi.chat(textToSend, apiContext, undefined, activeSessionId || 'new');
+      setDiscussFeedItemId(null);
       await persistActiveSessionId(normalizeAssistantSessionId(envelope?.session_id));
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
       if (envelope.draft) {
@@ -424,10 +426,8 @@ export function FinnScreen({
         throw new Error('Dit drafttype wordt nog niet ondersteund.');
       }
 
-      await Promise.allSettled([
-        overviewResource.refresh(),
-        insightResource.refresh(),
-      ]);
+      await overviewResource.refresh();
+      await loadCoachFeed();
       await triggerHaptic('success');
       setCurrentDraftAction(null);
       setCurrentDraft(null);
@@ -455,22 +455,20 @@ export function FinnScreen({
     setSheet('draft');
   }
 
-  const handleArchiveEvent = useCallback((eventId: number) => {
-    setLocalEvents((prev) => prev.filter((e) => e.id !== eventId));
-    apiClient.post(`/api/assistant/events/${eventId}/archive`).catch((err) => {
-      console.error(`[FinnScreen] Failed to archive event ${eventId}:`, err);
+  const handleArchiveEvent = useCallback((eventId: string) => {
+    void coachFeedApi.mark(eventId, 'handled').then(loadCoachFeed).catch((err) => {
+      console.error(`[FinnScreen] Failed to handle feed item ${eventId}:`, err);
     });
-  }, []);
+  }, [loadCoachFeed]);
 
-  const handleDiscussEvent = useCallback((event: MobileIntelligenceEvent) => {
-    setQuery(`Bespreek live melding: "${event.title}" - ${event.description}`);
-  }, []);
+  const handleDiscussEvent = useCallback((event: MobileCoachFeedItem) => {
+    setDiscussFeedItemId(event.id);
+    setQuery(translate(language, 'finn.feedDiscussQuery'));
+    void coachFeedApi.mark(event.id, 'read').then(loadCoachFeed).catch(() => {});
+  }, [language, loadCoachFeed]);
 
-  const insightMatchesActiveAsset = insightResource.data?.context_detected?.symbol === context.asset;
-  const activeInsight = insightMatchesActiveAsset ? insightResource.data : undefined;
   const activeBotDecision = mapMobileOverviewBotDecision(overviewResource.data);
   const activeAssetOverview = overviewResource.data?.watchlist.find((asset) => asset.symbol === context.asset);
-  const activeBriefingText = buildActiveBriefingText(context.asset, activeInsight);
   const starterPrompts = useMemo(
     () => [
       `Vat ${context.asset} vandaag samen`,
@@ -504,6 +502,7 @@ export function FinnScreen({
 
     try {
       const envelope = await assistantApi.chat(trimmed, apiContext, undefined, activeSessionId || 'new');
+      setDiscussFeedItemId(null);
       await persistActiveSessionId(normalizeAssistantSessionId(envelope?.session_id));
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
       if (envelope.draft) {
@@ -587,10 +586,10 @@ export function FinnScreen({
       >
         <ScreenContainer
           contentInsetBottom={120}
-          refreshing={overviewResource.refreshing || insightResource.refreshing}
+          refreshing={overviewResource.refreshing}
           onRefresh={() => {
             overviewResource.refresh();
-            insightResource.refresh();
+            void loadCoachFeed();
           }}
         >
           <View style={[styles.workspaceHero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -664,24 +663,13 @@ export function FinnScreen({
           ) : null}
 
           {!isActionFlow && (
-            <View style={[styles.postureBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.hudSectionHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[styles.hudSectionTitle, { color: colors.text }]}>{translate(language, 'finn.activeBriefing')}</Text>
-                </View>
-                <View style={styles.posturePill}>
-                  <Text style={styles.posturePillText}>{translate(language, 'finn.defensivePosture')}</Text>
-                </View>
-              </View>
-              <Text style={[styles.quoteText, { color: colors.text }]}>{`"${activeBriefingText}"`}</Text>
-            </View>
-          )}
-
-          {!isActionFlow && (
             <MobileFINNFeed
-              events={localEvents}
+              events={feedHistory ? localEvents : localEvents.slice(0, 3)}
               onArchive={handleArchiveEvent}
               onDiscuss={handleDiscussEvent}
+              history={feedHistory}
+              onToggleHistory={() => setFeedHistory((current) => !current)}
+              language={language}
             />
           )}
 
@@ -783,41 +771,6 @@ export function FinnScreen({
       </BottomSheet>
     </View>
   );
-}
-
-function buildActiveBriefingText(
-  symbol: string,
-  insight?: AssistantInsightResponse,
-) {
-  const greeting = withoutSurroundingQuotes(insight?.greeting ?? '');
-  const marketInsight = conciseInsightText(insight?.market_insight);
-  const botInsight = conciseInsightText(insight?.bot_insight);
-
-  if (greeting || marketInsight || botInsight) {
-    return [greeting, marketInsight || botInsight]
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-  }
-
-  return `Voor ${symbol} is nog geen opgeslagen FINN-briefing beschikbaar. Controleer Analyse voor actuele scores en bespreek je plan met FINN.`;
-}
-
-function conciseInsightText(value?: Record<string, string> | null) {
-  if (!value) return '';
-  return Object.values(value)
-    .filter(Boolean)
-    .join(' ')
-    .replace(/^Hello[^,.]*[,.]\s*/i, '')
-    .split(/[.!?]/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('. ');
-}
-
-function withoutSurroundingQuotes(value: string) {
-  return value.trim().replace(/^["“]+|["”]+$/g, '');
 }
 
 function normalizeAssistantSessionId(value: unknown): string | null {

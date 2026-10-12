@@ -282,6 +282,7 @@ safe_include("backend.api.notifications_api", "notifications_api")
 safe_include("backend.api.exchange_api", "exchange_api")
 safe_include("backend.api.watchlist_api", "watchlist_api")
 safe_include("backend.api.intelligence_event_api", "intelligence_event_api")
+safe_include("backend.api.finn_coach_feed_api", "finn_coach_feed_api")
 
 # ==================================================================
 # 🔧 Database Schema

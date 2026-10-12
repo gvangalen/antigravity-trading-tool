@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from fastapi import HTTPException
 from datetime import datetime
+import logging
 
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
@@ -31,6 +32,8 @@ WEEKDAY_TO_NUMBER = {
     "sunday": 7,
     "zondag": 7,
 }
+
+logger = logging.getLogger(__name__)
 
 class SetupService:
     # Suggested ranges for explicit forms only. They are never applied to an
@@ -315,6 +318,7 @@ class SetupService:
         if commit:
             await self.session.commit()
             await self._mark_setup_step_completed_best_effort(user_id)
+            self._notify_coach_feed(user_id, raw_payload["symbol"])
 
         created = await self.repository.get_setup_by_id(setup_id, user_id)
         return {
@@ -403,6 +407,9 @@ class SetupService:
             
         await self.session.commit()
         await self._mark_setup_step_completed_best_effort(user_id)
+        self._notify_coach_feed(user_id, str(row.get("symbol") or ""))
+        if raw_payload.get("symbol") and raw_payload["symbol"] != row.get("symbol"):
+            self._notify_coach_feed(user_id, raw_payload["symbol"])
         updated = await self.repository.get_setup_by_id(setup_id, user_id)
         return {"message": "Setup bijgewerkt", "setup": self._format_setup(updated)}
 
@@ -424,12 +431,27 @@ class SetupService:
                 f"Deze setup is nog gekoppeld aan strategie {names}. Verwijder eerst de gekoppelde strategie.",
             )
 
+        owned = await self.repository.get_setup_by_id(setup_id, user_id)
+        if owned is None:
+            raise HTTPException(404, "Niet gevonden of geen toegang")
+
         deleted = await self.repository.delete_setup(setup_id, user_id)
         if deleted == 0:
             raise HTTPException(404, "Niet gevonden of geen toegang")
         await self.session.commit()
         await self._mark_setup_step_completed_best_effort(user_id)
+        self._notify_coach_feed(user_id, str(owned.get("symbol") or ""))
         return {"message": "Setup verwijderd"}
+
+    @staticmethod
+    def _notify_coach_feed(user_id: int, symbol: str) -> None:
+        if not symbol:
+            return
+        try:
+            from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
+            reconcile_coach_feed_score.delay(user_id, symbol)
+        except Exception:
+            logger.warning("FINN feed plan dispatch failed", exc_info=True)
 
     async def check_name(self, name: str, user_id: int) -> dict:
         exists = await self.repository.simple_check_name(name, user_id)

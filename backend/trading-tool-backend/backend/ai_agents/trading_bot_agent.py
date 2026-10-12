@@ -1902,6 +1902,14 @@ def run_trading_bot_agent(
 
         conn.commit()
 
+        for recorded in results:
+            if recorded.get("decision_id") and str(recorded.get("action") or "").lower() not in {"hold", "houd_vast", "none"}:
+                try:
+                    from backend.celery_task.store_daily_scores_task import publish_coach_bot_decision
+                    publish_coach_bot_decision.delay(user_id, int(recorded["decision_id"]))
+                except Exception:
+                    logger.warning("FINN Paper feed dispatch failed", exc_info=True)
+
         return {
             "ok": True,
             "date": str(report_date),
