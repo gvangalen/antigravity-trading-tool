@@ -6,7 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Saved Report Language and Later Score Change Candidate
 
-Phase: `READY_FOR_CANDIDATE_CI`. This candidate addresses two limits from the
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #255](https://github.com/gvangalen/antigravity-trading-tool/pull/255)
+merged as product SHA `dcfb6cabe910580c0cd7034b81fc72d2ee247593`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38242758865),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38242990761),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38243188124)
+passed. Public backend health and frontend build-info returned HTTP 200 and
+exactly that product SHA on 2026-10-12. This candidate addresses two limits from the
 independent report readback QA: older report prose remains partly Dutch or
 English after a switch to German, and a later change in the live Score 2.0
 reading had not occurred during the authenticated browser test. Report prose
