@@ -217,7 +217,7 @@ def test_historical_report_german_translates_prose_without_rewriting_score_facts
         fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
         calls.append(fields)
         return json.dumps({key: value.replace("De markt", "Der Markt")
-                           .replace("is voorzichtig", "ist vorsichtig")
+                           .replace("is voorzichtig bij score", "ist bei Wert")
                            for key, value in fields.items()})
 
     monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
@@ -230,13 +230,71 @@ def test_historical_report_german_translates_prose_without_rewriting_score_facts
                                  "macro_score": 20}),
     }
     translated = asyncio.run(locale_service.localize_report_payload(original, "de"))
-    assert translated["executive_summary"] == "Der Markt ist vorsichtig bij score 50."
+    assert translated["executive_summary"] == "Der Markt ist bei Wert 50."
     assert json.loads(translated["meta_json"])["macro_context"].startswith("Der Markt")
     assert translated["score_source_snapshot"] == original["score_source_snapshot"]
     assert translated["market_score"] == 50
     assert len(calls) == 1
     assert asyncio.run(locale_service.localize_report_payload(original, "de")) == translated
     assert len(calls) == 1
+
+
+def test_historical_german_report_repairs_one_untranslated_section(monkeypatch):
+    calls = []
+
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        calls.append(fields)
+        if len(fields) > 1:
+            return json.dumps({"root.executive_summary": "Der Markt erreicht Wert 50.",
+                               "root.market_analysis": fields["root.market_analysis"]})
+        return json.dumps({"root.market_analysis": "AAPL: Keine Indikatoren eingerichtet; kein aktueller Wert."})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {
+        "executive_summary": "De markt bereikt score 50.",
+        "market_analysis": "AAPL: Geen indicatoren ingesteld; geen bruikbare actuele score.",
+        "market_score": 50,
+        "score_source_snapshot": {"content_locale": "de", "observed_at": "2026-10-12T07:20:00Z"},
+    }
+    localized = asyncio.run(locale_service.localize_report_payload(original, "de"))
+    assert localized["executive_summary"] == "Der Markt erreicht Wert 50."
+    assert localized["market_analysis"] == "AAPL: Keine Indikatoren eingerichtet; kein aktueller Wert."
+    assert localized["market_score"] == 50
+    assert localized["score_source_snapshot"] == original["score_source_snapshot"]
+    assert len(calls) == 2
+
+
+def test_saved_german_today_briefing_follows_requested_language_without_storage_change(monkeypatch):
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        replacements = {
+            "Guten Morgen ETH 50.": "Goedemorgen ETH 50.",
+            "Der Markt ist ruhig.": "De markt is rustig.",
+            "Warte auf Daten.": "Wacht op gegevens.",
+            "DXY fehlt.": "DXY ontbreekt.",
+        }
+        return json.dumps({key: replacements[value] for key, value in fields.items()})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {"first_dashboard_context": {
+        "content_locale": "de",
+        "asset": "ETH",
+        "market_snapshot": {"market_score": 50},
+        "coaching_briefing": {
+            "assessment": "Guten Morgen ETH 50.",
+            "reasoning": "Der Markt ist ruhig.",
+            "recommended_action": "Warte auf Daten.",
+            "data_limitation": "DXY fehlt.",
+        },
+        "briefing_text": "Guten Morgen ETH 50.\nDer Markt ist ruhig.\nWarte auf Daten.\nDXY fehlt.",
+    }}
+    localized = asyncio.run(locale_service.localize_first_dashboard_context(original, "nl"))
+    context = localized["first_dashboard_context"]
+    assert context["briefing_text"].startswith("Goedemorgen ETH 50.")
+    assert context["coaching_briefing"]["data_limitation"] == "DXY ontbreekt."
+    assert context["market_snapshot"] == original["first_dashboard_context"]["market_snapshot"]
+    assert original["first_dashboard_context"]["briefing_text"].startswith("Guten Morgen")
 
 
 def test_report_translation_keeps_original_if_model_changes_a_score(monkeypatch):

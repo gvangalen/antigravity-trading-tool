@@ -4,8 +4,11 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
+from backend.api import ai_assistant_api
 from backend.api.ai_assistant_api import assistant_chat, _audit_context_summary, get_finn_mission_control, router
 from backend.schemas.assistant_schema import AssistantChatRequest
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
@@ -151,6 +154,48 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
     db.rollback.assert_not_awaited()
     assert response["first_dashboard_context"]["generation_status"] == "ready"
     assert captured["context_payload"]["symbol"] == "AAPL"
+
+
+def test_mission_control_passes_active_request_locale_to_briefing_projection(monkeypatch):
+    captured = {}
+
+    class VisibleService:
+        async def deliver_mission_control(self, **kwargs):
+            return {"first_dashboard_context": {"content_locale": "de", "briefing_text": "Guten Morgen"}}
+
+    async def localize(payload, locale):
+        captured["locale"] = locale
+        return {"first_dashboard_context": {**payload["first_dashboard_context"], "briefing_text": "Good morning"}}
+
+    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda _: VisibleService())
+    monkeypatch.setattr("backend.api.ai_assistant_api.localize_first_dashboard_context", localize)
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+    response = asyncio.run(get_finn_mission_control(
+        current_user={"id": 30}, db=SimpleNamespace(), request=request,
+        request_locale="en",
+    ))
+    assert captured["locale"] == "en"
+    assert response["first_dashboard_context"]["briefing_text"] == "Good morning"
+
+
+def test_mission_control_http_locale_header_selects_saved_briefing_language(monkeypatch):
+    class VisibleService:
+        async def deliver_mission_control(self, **_kwargs):
+            return {"first_dashboard_context": {"content_locale": "de", "briefing_text": "Guten Morgen"}}
+
+    async def localize(payload, locale):
+        assert locale == "en"
+        return {"first_dashboard_context": {**payload["first_dashboard_context"], "briefing_text": "Good morning"}}
+
+    monkeypatch.setattr(ai_assistant_api, "FinnV2VisibleDeliveryService", lambda _: VisibleService())
+    monkeypatch.setattr(ai_assistant_api, "localize_first_dashboard_context", localize)
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.dependency_overrides[ai_assistant_api.get_current_user] = lambda: {"id": 30}
+    app.dependency_overrides[ai_assistant_api.get_db] = lambda: SimpleNamespace()
+    response = TestClient(app).get("/api/assistant/mission-control", headers={"X-Locale": "en"})
+    assert response.status_code == 200
+    assert response.json()["first_dashboard_context"]["briefing_text"] == "Good morning"
 
 def test_get_finn_mission_control_returns_owner_scoped_fallback_after_enrichment_failure(monkeypatch):
     db = SimpleNamespace(rollback=AsyncMock())

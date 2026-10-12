@@ -13187,6 +13187,16 @@ class FinnPlanService:
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
         display = self._resolve_first_dashboard_briefing_display(payload, stored_briefing)
         context = self._compose_first_dashboard_context(payload, display)
+        if stored_briefing.get("result") and display.get("response_source") in {
+            "cached_ai", "stale_while_revalidate", "deterministic_fallback",
+        }:
+            # A displayed cached briefing may predate a profile-language
+            # switch. Its language comes from the stored input snapshot, not
+            # from the newly prepared context that triggered revalidation.
+            context["content_locale"] = str(
+                ((stored_briefing.get("input_snapshot") or {}).get("locale"))
+                or context.get("content_locale") or "nl"
+            )
 
         mission["summary"] = {
             **(mission.get("summary") or {}),
@@ -13735,6 +13745,7 @@ class FinnPlanService:
         ]
         return {
             "is_first_dashboard": True,
+            "content_locale": str((payload.get("input_snapshot") or {}).get("locale") or "nl"),
             "name": payload.get("name") or "",
             "asset": payload.get("asset"),
             "timeframes": payload.get("timeframes") or [],

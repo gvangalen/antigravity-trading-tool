@@ -1690,6 +1690,38 @@ def test_build_first_dashboard_context_reuses_current_payload_after_user_activit
     assert result["headline"] == payload["fallback_result"]["assessment"]
 
 
+def test_cached_first_dashboard_briefing_retains_its_own_language_after_profile_switch(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    payload = _first_dashboard_payload("ctx-current")
+    payload["input_snapshot"] = {"locale": "nl"}
+    stored_result = {
+        "assessment": "Dein ETH-Plan bleibt vorsichtig.",
+        "reasoning": "Die Scores fehlen noch.",
+        "recommended_action": "Warte auf Daten.",
+        "data_limitation": "DXY fehlt.",
+        "evidence_refs": [],
+    }
+
+    async def stored(_user_id):
+        return {"first_dashboard_briefing": {
+            "status": "ready", "context_version": "ctx-old", "asset": payload["asset"],
+            "input_snapshot": {"locale": "de"}, "result": stored_result,
+        }}
+
+    async def no_enqueue(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", stored)
+    monkeypatch.setattr(service, "_queue_first_dashboard_briefing_if_needed", no_enqueue)
+    monkeypatch.setattr(service, "_recover_stale_first_dashboard_state_if_needed", no_enqueue)
+    result = asyncio.run(service._build_first_dashboard_context(
+        7, {"assets": []}, {"summary": {}, "workqueue": [], "workqueue_groups": []},
+        activity_feed=[], day_log={}, prepared_payload=payload,
+    ))
+    assert result["content_locale"] == "de"
+    assert result["coaching_briefing"]["assessment"] == stored_result["assessment"]
+
+
 def test_first_dashboard_projects_personal_fallback_while_background_generation_is_queued():
     service = FinnPlanService(db_session=object())
     payload = _first_dashboard_payload("ctx-v7")

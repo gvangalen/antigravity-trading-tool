@@ -36,7 +36,7 @@ from backend.schemas.assistant_schema import (
     ChatSessionDetailResponse,
 )
 from backend.services.finn_product_analytics_service import finn_product_analytics
-from backend.services.locale_service import resolve_locale
+from backend.services.locale_service import localize_first_dashboard_context, resolve_locale
 from backend.services.trader_profile_service import (
     build_trader_profile_context,
     build_trader_profile_summary,
@@ -839,6 +839,7 @@ async def get_finn_state(
 @router.get("/assistant/mission-control")
 async def get_finn_mission_control(
     symbol: Optional[str] = None,
+    request_locale: Optional[str] = Header(None, alias="X-Locale"),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
@@ -872,7 +873,7 @@ async def get_finn_mission_control(
     # Mission Control projects mutable owner-scoped state. A process-local
     # cache cannot be coherently invalidated across PM2 workers after an
     # execution, so every request reads the persisted projection directly.
-    return response
+    return await localize_first_dashboard_context(response, request_locale) if isinstance(request_locale, str) and request_locale else response
 
 
 @router.get("/assistant/v2/proposals/{proposal_id}")
