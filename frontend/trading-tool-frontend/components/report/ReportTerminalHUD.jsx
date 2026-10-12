@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatDateTime } from "@/lib/i18n";
+import { parseUtcMoment, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
 
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
@@ -25,6 +26,30 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
     setup_score,
     generated_at
   } = report;
+  const sourceSnapshot = scoreSourceSnapshot(report);
+  const sourceAssets = Array.isArray(sourceSnapshot?.assets) ? sourceSnapshot.assets : [];
+  const formatUtc = (value) => {
+    const moment = parseUtcMoment(value);
+    return moment ? `${formatDateTime(moment, locale, {
+      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      timeZone: 'UTC',
+    })} UTC` : null;
+  };
+  const categoryLabels = {
+    market: reportT.hudMarket,
+    macro: reportT.hudMacro,
+    technical: reportT.hudTechnical,
+  };
+  const indicatorLabels = reportT.hudIndicatorLabels || {};
+  const indicatorLabel = (name) => indicatorLabels[String(name).toLowerCase().replaceAll(/[-\s]+/g, '_')] || name;
+  const sourceStatusLabel = (status) => {
+    const kind = status === 'fresh' ? 'fresh'
+      : ['stale_source', 'stale_report'].includes(status) ? 'stale'
+      : ['missing_score', 'missing_indicator_reading'].includes(status) ? 'missing'
+      : status === 'score_rebuild_pending' ? 'pending'
+      : 'unknown';
+    return reportT.hudSourceStatus?.[kind] || reportT.hudSourceStatus?.unknown;
+  };
 
   const ScoreItem = ({ label, value, icon: Icon, colorClass }) => (
     <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-card border border-blue-600/5 shadow-sm min-w-[120px] transition-all hover:scale-105">
@@ -69,6 +94,40 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
 
       </div>
 
+      <div className="relative z-10 mt-7 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+        <p className="font-semibold text-slate-800 dark:text-slate-100">
+          {sourceSnapshot ? reportT.hudSnapshotTitle : reportT.hudGeneratedTitle}: {formatUtc(sourceSnapshot?.observed_at) || formatUtc(generated_at) || reportT.hudSourceUnknown}
+        </p>
+        <p className="mt-1">{sourceSnapshot ? reportT.hudSnapshotExplanation : reportT.hudLegacyExplanation}</p>
+        {sourceAssets.length > 0 ? (
+          <details className="mt-3">
+            <summary className="cursor-pointer font-semibold text-blue-700 dark:text-blue-300">{reportT.hudSourceDetails}</summary>
+            <div className="mt-3 space-y-3">
+              {sourceAssets.map((asset, index) => (
+                <div key={`${asset.symbol || 'asset'}-${index}`} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40">
+                  <p className="font-semibold">{asset.symbol || '—'} · {reportT.hudScoreDate}: {asset.score_report_date || reportT.hudSourceUnknown}</p>
+                  {Object.entries(categoryLabels).map(([category, label]) => {
+                    const sources = asset.component_source_observed_at?.[category] || {};
+                    const score = asset.reported_scores?.[`${category}_score`];
+                    const status = asset.component_source_status?.[`${category}_score`];
+                    return (
+                      <p key={category} className="mt-1">
+                        {label}: {score ?? '—'} ({sourceStatusLabel(status)}) · {Object.keys(sources).length ? Object.entries(sources).map(([name, moment]) => `${indicatorLabel(name)}: ${formatUtc(moment) || reportT.hudSourceUnknown}`).join('; ') : reportT.hudSourceUnknown}
+                      </p>
+                    );
+                  })}
+                </div>
+              ))}
+              <p className="text-xs">{reportT.hudSetupSource}</p>
+            </div>
+          </details>
+        ) : sourceSnapshot ? (
+          <p className="mt-2 text-xs">{reportT.hudNoAssets}</p>
+        ) : (
+          <p className="mt-2 text-xs">{reportT.hudLegacySources}</p>
+        )}
+      </div>
+
       <footer className="mt-10 pt-6 border-t-2 border-slate-50 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
          <div className="flex items-center gap-2">
             <Info size={12} className="text-blue-600" />
@@ -77,7 +136,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
          <div className="flex items-center gap-4">
             <span>{reportT.hudUser}: {user?.name || reportT.hudSystem}</span>
             <span className="w-1 h-1 rounded-full bg-slate-300" />
-            <span>{reportT.hudUpdated}: {generated_at ? formatDateTime(generated_at, locale, { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
+            <span>{reportT.hudGeneratedTitle}: {formatUtc(generated_at) || "—"}</span>
          </div>
       </footer>
     </div>

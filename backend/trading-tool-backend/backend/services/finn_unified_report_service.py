@@ -128,6 +128,9 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
         assets.append({
             "symbol": item.get("symbol"),
             "score_status": benchmark.get("source_status"),
+            "score_report_date": benchmark.get("as_of"),
+            "component_source_status": source_status,
+            "component_source_observed_at": benchmark.get("component_source_observed_at") or {},
             "scores": scores,
             "benchmark_score": benchmark.get("benchmark_score"),
             "market_snapshot": item.get("market_snapshot") or {},
@@ -338,6 +341,17 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "technical_score": single_scores.get("technical_score"),
         "market_score": single_scores.get("market_score"),
         "setup_score": best_setup.get("score") if best_setup else None,
+        "score_source_snapshot": {
+            "observed_at": context.get("observed_at"),
+            "assets": [{
+                "symbol": item["symbol"],
+                "score_report_date": item.get("score_report_date"),
+                "score_status": item["score_status"],
+                "component_source_status": item["component_source_status"],
+                "component_source_observed_at": item["component_source_observed_at"],
+                "reported_scores": item["scores"],
+            } for item in facts["assets"]],
+        },
         "meta": {"source": "finn_shared_context.v1", "report_facts_version": 2,
                  "observed_at": context.get("observed_at")},
     }

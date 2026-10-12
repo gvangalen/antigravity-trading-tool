@@ -16,6 +16,15 @@ def test_active_finn_reader_sources_have_an_additive_schema_migration():
         assert identifier in sql
 
 
+def test_daily_report_source_snapshot_migrates_before_report_writer_starts():
+    backend = Path(__file__).parents[1]
+    migration = (backend / "scripts/migrations/2026_10_12_daily_report_score_sources.py").read_text(encoding="utf-8")
+    deploy = (backend.parents[2] / "ops/deploy/deploy_env.sh").read_text(encoding="utf-8")
+
+    assert "ADD COLUMN IF NOT EXISTS score_source_snapshot JSONB" in migration
+    assert "run_migration backend/scripts/migrations/2026_10_12_daily_report_score_sources.py" in deploy
+
+
 def test_retired_reflection_table_is_not_recreated_and_is_removed_on_deploy():
     backend = Path(__file__).parents[1]
     old_migration = (backend / "scripts/migrations/2026_09_12_finn_v2_certification_source_schema.py").read_text(encoding="utf-8")

@@ -27,6 +27,7 @@ class DailyReportWriteRepository:
         "best_setup",
         "top_setups",
         "active_strategy",
+        "score_source_snapshot",
     )
 
     def __init__(self, db: Session):
@@ -56,7 +57,7 @@ class DailyReportWriteRepository:
                 price, change_24h, volume,
                 macro_score, technical_score, market_score, setup_score,
                 market_indicator_highlights, macro_indicator_highlights, technical_indicator_highlights,
-                best_setup, top_setups, active_strategy
+                best_setup, top_setups, active_strategy, score_source_snapshot
             )
             VALUES (
                 :report_date, :user_id,
@@ -66,7 +67,7 @@ class DailyReportWriteRepository:
                 :price, :change_24h, :volume,
                 :macro_score, :technical_score, :market_score, :setup_score,
                 :market_indicator_highlights, :macro_indicator_highlights, :technical_indicator_highlights,
-                :best_setup, :top_setups, :active_strategy
+                :best_setup, :top_setups, :active_strategy, :score_source_snapshot
             )
             ON CONFLICT (user_id, report_date)
             DO UPDATE SET
@@ -92,6 +93,7 @@ class DailyReportWriteRepository:
                 best_setup = EXCLUDED.best_setup,
                 top_setups = EXCLUDED.top_setups,
                 active_strategy = EXCLUDED.active_strategy,
+                score_source_snapshot = EXCLUDED.score_source_snapshot,
                 generated_at = NOW();
             """
         )

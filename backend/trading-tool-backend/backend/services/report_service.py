@@ -273,6 +273,7 @@ class ReportService:
             "period_start": p_start,
             "period_end": p_end,
             "generated_at": report.get("generated_at"),
+            "score_source_snapshot": safe_json_parse(report.get("score_source_snapshot")),
             "executive_summary_compact": exec_summary,
             "market_analysis_compact": market_analysis,
             "outlook_compact": outlook,
