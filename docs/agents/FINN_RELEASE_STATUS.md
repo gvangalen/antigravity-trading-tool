@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Saved Report Language and Later Score Change Candidate
+
+Phase: `READY_FOR_CANDIDATE_CI`. This candidate addresses two limits from the
+independent report readback QA: older report prose remains partly Dutch or
+English after a switch to German, and a later change in the live Score 2.0
+reading had not occurred during the authenticated browser test. Report prose
+now uses a single Luna/Responses translation of only the saved narrative
+fields when the requested NL, EN, or DE language differs from the report's
+saved content language. New daily reports record that language in their
+score-source snapshot. Older reports without a recorded language are
+translated on demand. The saved score numbers, source moments, plan identities,
+and other typed facts are never passed through the translation result. A
+malformed, partially Dutch German, or numerically changed translation is
+discarded without changing the saved report. A real development-provider
+probe returned idiomatic German while preserving the score snapshot; a first,
+weaker prompt had demonstrably left Dutch prose untranslated and was rejected
+before this candidate.
+
+The bounded local follow-up changes a current ETH Market score from 50 to 80
+after a report snapshot at 08:15 UTC and verifies that FINN's report read tool
+still returns the saved 50 while the current score tool returns 80. This is a
+deterministic local regression, not evidence that production scores changed
+during live QA. The full backend suite passed **3458** tests with **3 skips**;
+the frontend build, typecheck, i18n lint/tests, command/proposal/setup tests,
+and high-severity audit passed. The audit reports one existing moderate Next.js
+advisory. The final worker-driven local safe action matrix passed **16/16**,
+artifact SHA-256
+`06448b6eaa5beb657951810c802fe0ba8925e96aa5c90cc5f9d0320d1d66a6b8`.
+Real Luna/Responses development passed **18/18**, artifact SHA-256
+`5db6526cc1ed49563928aeea2dec5f1a46ab394b7710a61ba7c6e86d257d8c7a`.
+The unchanged full provider regression passed **109/109** with zero selector
+failures, artifact SHA-256
+`6f4d323c19ecd84e6f0b0cf127ed34ae3c3f016bc2de7716b171f6f19c1312cd`.
+Build has made no
+production report, score, plan, bot, or trade change.
+
+Independent QA scope after deployment: reuse the existing QA Agent task. On
+the exact public backend/frontend SHA, inspect an existing historical report
+after switching NL/EN/DE and verify the narrative language, unchanged score
+values and source times, and no browser errors. Compare a saved report score
+with a newer live Score 2.0 value if one is available; if the live score has
+not changed, record that limit rather than claiming the dynamic case passed.
+Only use a protected synthetic fixture update if the active QA goal explicitly
+permits it. No live order or bot activation.
+
 ## FINN Report Readback Follow-Up Candidate
 
 Phase: `TARGETED_QA_ACCEPTED_WITH_FRESHNESS_LIMIT`. Independent QA retested

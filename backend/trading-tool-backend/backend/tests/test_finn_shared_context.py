@@ -239,6 +239,7 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
     assert report["best_setup"]["name"] == "ETH Plan"
     source_snapshot = report["score_source_snapshot"]
     assert source_snapshot["observed_at"] == "2026-10-10T05:31:00+00:00"
+    assert source_snapshot["content_locale"] == "nl"
     assert source_snapshot["assets"][0]["reported_scores"] == assessment["reported_scores"]
     assert source_snapshot["assets"][0]["component_source_observed_at"]["market"]["Price"] == "2026-10-10T05:30:00+00:00"
     assert source_snapshot["assets"][0]["score_report_date"] == "2026-10-10"

@@ -1,6 +1,7 @@
 import hashlib
 import asyncio
 import json
+import logging
 import os
 import re
 from copy import deepcopy
@@ -16,6 +17,7 @@ from backend.utils.openai_client import ask_gpt_text_async
 
 
 _translation_cache: Dict[str, str] = {}
+logger = logging.getLogger(__name__)
 _payload_translation_cache: Dict[str, Dict[str, Any]] = {}
 _translation_inflight: Dict[str, "asyncio.Future[Any]"] = {}
 _LOCAL_RULE_BASED_LOCALES = {"nl", "en", "de"}
@@ -291,9 +293,16 @@ def _payload_translation_cache_key(payload: Dict[str, Any], target_locale: str) 
 
 
 async def _translate_payload_once_with_ai(payload: Dict[str, Any], target_locale: str) -> Dict[str, Any]:
+    is_report = any(key.startswith(("root.", "report.", "meta_json.")) for key in payload)
+    instruction = (
+        f"Translate EVERY sentence in the JSON values into idiomatic {response_language_name(target_locale)}. "
+        "The source may mix Dutch, English, and German. Do not retain grammar or words from other languages "
+        "unless they are an asset ticker, product name, or proper noun. "
+        if is_report else
+        f"Translate the following Tradamind/Finn JSON payload into natural {response_language_name(target_locale)}. "
+    )
     prompt = (
-        f"Translate the following Tradamind/Finn JSON payload into natural {response_language_name(target_locale)}.\n"
-        "Rules:\n"
+        instruction + "\nRules:\n"
         "- Preserve the exact JSON structure and keys.\n"
         "- Translate only user-facing string values.\n"
         "- Keep ids, tickers, numbers, percentages, and line breaks intact.\n"
@@ -314,10 +323,11 @@ async def _translate_payload_once_with_ai(payload: Dict[str, Any], target_locale
         translated = await ask_gpt_text_async(
             prompt=prompt,
             system_role=(
-                "You are a precise product copy translator for a trading app. "
-                f"Translate JSON string values into concise natural {response_language_name(target_locale)}."
+                "You are a professional product copy translator for a trading app. "
+                f"Every sentence must be idiomatic {response_language_name(target_locale)}. "
+                "Preserve all figures and factual meaning."
             ),
-            max_tokens=2400,
+            max_tokens=6000 if is_report else 2400,
             retries=1,
             client_max_retries=0,
             model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
@@ -351,7 +361,8 @@ async def _translate_payload_once_with_ai_singleflight(payload: Dict[str, Any], 
     _translation_inflight[cache_key] = future
     try:
         translated = await _translate_payload_once_with_ai(payload, target_locale)
-        _payload_translation_cache[cache_key] = deepcopy(translated)
+        if translated != payload:
+            _payload_translation_cache[cache_key] = deepcopy(translated)
         future.set_result(deepcopy(translated))
         return deepcopy(translated)
     except Exception as exc:
@@ -495,6 +506,72 @@ async def localize_report_payload(
     allow_ai_translation: bool = True,
 ) -> Dict[str, Any]:
     locale = _requested_locale_code(target_locale)
+
+    # Report prose is free-form text. The phrase replacement tables below are
+    # useful for short fixed copy, but cannot translate an older saved report.
+    # Keep the immutable score snapshot and all structured facts untouched.
+    if locale in _LOCAL_RULE_BASED_LOCALES and allow_ai_translation:
+        nested_report = payload.get("report") if isinstance(payload.get("report"), dict) else {}
+        source_snapshot = payload.get("score_source_snapshot") or nested_report.get("score_source_snapshot")
+        if isinstance(source_snapshot, str):
+            try:
+                source_snapshot = json.loads(source_snapshot)
+            except (TypeError, ValueError):
+                source_snapshot = None
+        source_locale = (source_snapshot or {}).get("content_locale") if isinstance(source_snapshot, dict) else None
+        if source_locale == locale:
+            return payload
+
+        localized = deepcopy(payload)
+        prose: Dict[str, str] = {}
+        containers: Dict[str, Dict[str, Any]] = {"root": localized}
+        if isinstance(localized.get("report"), dict):
+            containers["report"] = localized["report"]
+        meta_json = localized.get("meta_json")
+        if isinstance(meta_json, str):
+            try:
+                meta_json = json.loads(meta_json)
+            except (TypeError, ValueError):
+                meta_json = None
+        if isinstance(meta_json, dict):
+            containers["meta_json"] = deepcopy(meta_json)
+
+        for container_name, container in containers.items():
+            for key in _REPORT_TEXT_KEYS:
+                value = container.get(key)
+                if isinstance(value, str) and value.strip():
+                    prose[f"{container_name}.{key}"] = value
+        if prose:
+            try:
+                translated = await _translate_payload_once_with_ai_singleflight(prose, locale)
+            except Exception:
+                logger.exception("Report prose translation failed for locale %s", locale)
+                return payload
+            # A malformed or partial model response must never alter stored
+            # facts or mix translated and untranslated sections on the page.
+            number_pattern = re.compile(r"(?<![\w])\d+(?:[.,]\d+)?%?")
+            dutch_markers = re.compile(
+                r"\b(?:volgt|ingesteld|opgeslagen|ontbreekt|voorzichtig|vandaag|"
+                r"geen|betekent|onderliggende|bijbehorende)\b", re.I,
+            )
+            def numbers(value: str) -> list[str]:
+                return sorted(token.replace(",", ".") for token in number_pattern.findall(value))
+            if (set(translated) == set(prose) and all(
+                isinstance(translated[key], str) and numbers(translated[key]) == numbers(value)
+                and (locale != "de" or not dutch_markers.search(translated[key]))
+                for key, value in prose.items()
+            )):
+                for path, value in translated.items():
+                    container_name, key = path.split(".", 1)
+                    containers[container_name][key] = value
+                if "meta_json" in containers:
+                    localized["meta_json"] = (json.dumps(containers["meta_json"], ensure_ascii=False)
+                                              if isinstance(payload.get("meta_json"), str)
+                                              else containers["meta_json"])
+                return localized
+            _payload_translation_cache.pop(_payload_translation_cache_key(prose, locale), None)
+        return payload
+
     if locale == DEFAULT_LOCALE:
         return payload
 

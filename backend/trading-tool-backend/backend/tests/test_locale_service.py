@@ -208,3 +208,81 @@ def test_localize_report_payload_uses_single_bundled_ai_call_for_unsupported_loc
     assert localized["executive_summary"] == "FR: executive"
     assert json.loads(localized["meta_json"])["macro_context"] == "FR: macro"
     assert len(calls) == 1
+
+
+def test_historical_report_german_translates_prose_without_rewriting_score_facts(monkeypatch):
+    calls = []
+
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        calls.append(fields)
+        return json.dumps({key: value.replace("De markt", "Der Markt")
+                           .replace("is voorzichtig", "ist vorsichtig")
+                           for key, value in fields.items()})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {
+        "executive_summary": "De markt is voorzichtig bij score 50.",
+        "market_score": 50,
+        "score_source_snapshot": {"observed_at": "2026-10-12T08:15:00Z", "assets": [
+            {"symbol": "ETH", "reported_scores": {"market_score": 50}}]},
+        "meta_json": json.dumps({"macro_context": "De markt is voorzichtig bij score 20.",
+                                 "macro_score": 20}),
+    }
+    translated = asyncio.run(locale_service.localize_report_payload(original, "de"))
+    assert translated["executive_summary"] == "Der Markt ist vorsichtig bij score 50."
+    assert json.loads(translated["meta_json"])["macro_context"].startswith("Der Markt")
+    assert translated["score_source_snapshot"] == original["score_source_snapshot"]
+    assert translated["market_score"] == 50
+    assert len(calls) == 1
+    assert asyncio.run(locale_service.localize_report_payload(original, "de")) == translated
+    assert len(calls) == 1
+
+
+def test_report_translation_keeps_original_if_model_changes_a_score(monkeypatch):
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        return json.dumps({key: value.replace("50", "80") for key, value in fields.items()})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {"executive_summary": "Score 50/100", "market_score": 50}
+    assert asyncio.run(locale_service.localize_report_payload(original, "de")) == original
+
+
+def test_report_translation_rejects_dutch_prose_left_in_german_output(monkeypatch):
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        return json.dumps({key: value.replace("De markt", "Der Markt")
+                           for key, value in fields.items()})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {"executive_summary": "De markt is voorzichtig bij score 50."}
+    assert asyncio.run(locale_service.localize_report_payload(original, "de")) == original
+
+
+def test_new_report_in_requested_locale_needs_no_second_translation(monkeypatch):
+    async def fail(**_kwargs):
+        raise AssertionError("Report was generated in German")
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", fail)
+    original = {"executive_summary": "Der Markt ist vorsichtig.",
+                "score_source_snapshot": {"content_locale": "de", "assets": []}}
+    assert asyncio.run(locale_service.localize_report_payload(original, "de")) == original
+    nested = {"report": original}
+    assert asyncio.run(locale_service.localize_report_payload(nested, "de")) == nested
+
+
+def test_new_german_report_can_switch_back_to_dutch(monkeypatch):
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        return json.dumps({key: value.replace("Der Markt", "De markt")
+                           .replace("ist vorsichtig", "is voorzichtig")
+                           for key, value in fields.items()})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {"executive_summary": "Der Markt ist vorsichtig bij score 50.",
+                "market_score": 50,
+                "score_source_snapshot": {"content_locale": "de", "assets": []}}
+    localized = asyncio.run(locale_service.localize_report_payload(original, "nl"))
+    assert localized["executive_summary"] == "De markt is voorzichtig bij score 50."
+    assert localized["market_score"] == 50
