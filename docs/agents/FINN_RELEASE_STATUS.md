@@ -36,7 +36,11 @@ schema failures (SHA-256
 `1a31daa4abf73adad937e5f40e410ba791e911f174550944dc6e0cdf36f04ce8`).
 The feed-target eval expectation now leaves owner-resolved target identity to
 the feed context instead of expecting the selector to echo an internal plan ID.
-The full provider regression, CI and independent authenticated QA remain
+The complete real Luna/Responses regression passed **109/109** with zero
+provider, schema, timeout, parse or validation failures (artifact SHA-256
+`f663f0296c3a0d076f222c811a9bcb637fc1c411c0cb3f091f4171730cb81f25`).
+Candidate CI passed all five jobs on the initial product commit; the final
+documentation commit, Auto Deploy and independent authenticated QA remain
 pending.
 
 The prior sequential handoff repair merged in
