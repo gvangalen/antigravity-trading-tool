@@ -22,7 +22,18 @@ was unavailable in that session (report SHA-256
 The current candidate extracts the final Responses message text instead of
 the Python SDK's delimiter-free `output_text` concatenation, and removes only
 unrenderable citation tokens. That extraction repair has not yet been
-released or independently retested.
+released or independently retested. Its local validation passed: root backend
+**3495 passed, 3 skipped**; isolated API/Celery/Responses action matrix
+**16/16**, adapter tests **19/19**, with zero broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`cb0ab76cd62f9212e6562a8f6a8e622ca3457a9ba685bd1113a2a9d5aca4b983`).
+Real Luna/Responses development passed **20/20** (SHA-256
+`a51851379fed8ba88311e4c67ad809e3096ba24dd9f549dc886eb4af54dcf08f`),
+and regression passed **109/109** (SHA-256
+`70b9989ca4cb21cb3162ada2fb8dc945d8f5229f68f5968f17cf2bc000992b6c`),
+with no provider, schema, timeout, parse or validation failures. Candidate CI
+passed all five jobs on the product commit; final documentation CI, Auto
+Deploy and independent authenticated QA remain pending.
 
 The feed-modal isolation in
 [PR #272](https://github.com/gvangalen/antigravity-trading-tool/pull/272)
