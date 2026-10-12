@@ -8,6 +8,7 @@ import {
   matchesCommandQuery,
   normalizeCommandText,
   openFinnContext,
+  resolveFeedDraftQuery,
   shouldAttachFeedContext,
 } from "../lib/finnCommandSearch.js";
 
@@ -80,4 +81,15 @@ test("feed identity follows only its untouched first chat submission", () => {
   assert.equal(shouldAttachFeedContext(request, "Bespreek QA Plan B", 8), false);
   assert.equal(shouldAttachFeedContext(request, "Hoe gaat het met QA Plan A?", null), false);
   assert.equal(shouldAttachFeedContext(request, "", null), false);
+});
+
+test("a second feed selection keeps its own draft even if restored chat clears parent input", () => {
+  const first = { mode: "chat", nonce: 8, query: "Bespreek Plan A",
+    context: { feed_item_id: "feed-a" } };
+  const second = { mode: "chat", nonce: 9, query: "Bespreek Plan B",
+    context: { feed_item_id: "feed-b" } };
+  assert.equal(resolveFeedDraftQuery(first, "", null, null), "Bespreek Plan A");
+  assert.equal(resolveFeedDraftQuery(second, "", null, 8), "Bespreek Plan B");
+  assert.equal(resolveFeedDraftQuery(second, "", { nonce: 9, value: "Waarom B?" }, 8), "Waarom B?");
+  assert.equal(resolveFeedDraftQuery(second, "", null, 9), "");
 });

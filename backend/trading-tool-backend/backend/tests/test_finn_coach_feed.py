@@ -57,6 +57,61 @@ def test_proposal_feed_uses_typed_saved_name_and_amount(monkeypatch):
     assert captured["evidence"]["amount_kind"] == "base_amount"
 
 
+def test_pending_update_feed_names_the_exact_owned_setup(monkeypatch):
+    captured = {}
+    query = {}
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def one_or_none(self):
+            return {"name": "ETH Plan B"}
+
+    async def execute(_statement, params):
+        query.update(params)
+        return Result()
+
+    async def publish(_self, **kwargs):
+        captured.update(kwargs)
+        return "feed-id"
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "publish", publish)
+    proposal = SimpleNamespace(
+        id="proposal-b", asset="ETH", operation_type="update_setup",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5), payload_hash="hash-b",
+        payload_json={"target": {"target_type": "setup", "target_id": "22"},
+                      "change": {"changed_fields": {"timeframe": "4H"}}},
+    )
+    service = module.FinnCoachFeedService(SimpleNamespace(execute=execute))
+    assert asyncio.run(service.publish_pending_proposal(proposal, user_id=7)) == "feed-id"
+    assert query == {"target_id": 22, "user_id": 7}
+    assert captured["subject"] == "ETH Plan B"
+    assert captured["evidence"]["target_name"] == "ETH Plan B"
+    assert captured["evidence"]["target_id"] == 22
+
+
+def test_pending_update_does_not_expose_a_target_outside_the_owner_scope():
+    class Result:
+        def mappings(self):
+            return self
+
+        def one_or_none(self):
+            return None
+
+    async def execute(_statement, _params):
+        return Result()
+
+    proposal = SimpleNamespace(
+        operation_type="update_setup",
+        payload_json={"target": {"target_id": "22"}},
+    )
+    resolved = asyncio.run(module.FinnCoachFeedService(
+        SimpleNamespace(execute=execute),
+    )._proposal_target(proposal, user_id=7))
+    assert resolved == ("setup", None, None)
+
+
 def test_discuss_proposal_uses_fresh_owner_scoped_evidence_not_client_claims(monkeypatch):
     item_id = "00000000-0000-0000-0000-000000000001"
 
@@ -137,6 +192,22 @@ def test_feed_selection_replaces_prior_plan_referent_for_this_turn():
     }}
     assert "last_verified_context" not in selected
     assert "active_guided_operation" not in selected
+
+
+def test_proposal_feed_selection_carries_exact_plan_target_without_authorizing_action():
+    selected = FinnV2OrchestratorService._selected_feed_context({
+        "last_verified_context": {"resolved_entities": {"name": "ETH Plan A"}},
+    }, {
+        "event_type": "proposal_pending", "subject_type": "proposal",
+        "subject_id": "proposal-b", "symbol": "ETH",
+        "evidence": {"subject": "ETH Plan B", "target_type": "setup",
+                     "target_id": 22, "target_name": "ETH Plan B"},
+    })["feed_event"]
+    assert selected["subject_id"] == "proposal-b"
+    assert selected["target_id"] == 22
+    assert selected["target_name"] == "ETH Plan B"
+    assert selected["action_authorized"] is False
+    assert "Plan A" not in str(selected)
 
 
 def test_feed_boundary_discards_stale_client_plan_and_draft_before_selection():

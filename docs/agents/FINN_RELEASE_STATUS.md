@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `LIVE_PENDING_INDEPENDENT_QA`. Product code merged in
+Phase: `REPAIR_IN_PROGRESS_AFTER_NOT_ACCEPTED`. Product code merged in
 [PR #266](https://github.com/gvangalen/antigravity-trading-tool/pull/266)
 as `66c9fd3c4ce3dde8dae1537ff288f9cba8409c77`. Candidate
 [CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38299438438),
@@ -32,7 +32,32 @@ The verdict remained partial because a second ETH-plan feed click sometimes
 left the chat query empty and a later generic question used the first plan's
 context. The current repair routes feed selections directly to an explicit
 chat draft and tells the selector that the selected owner-scoped feed subject
-supersedes older plan references. Independent live QA is pending.
+supersedes older plan references. Independent live QA on the later
+documentation-only SHA `5fe0a31c24b9f963f1394cc042ea5690fb8dded9`
+returned **NOT_ACCEPTED** (sanitized report SHA-256
+`eede710d9859e80eca97e87a25afaa79cf44d4ac9edf42e6a91e21a3817e36d0`).
+The second feed click could leave the composer empty and reuse a previous ETH
+plan; simultaneous update proposals showed only the shared asset. A follow-up
+batch now binds a feed selection directly to a visible new-chat draft and
+resolves proposal target names through the owner-scoped database. Its local
+and live release gates remain open.
+This second repair also starts a separate conversation when a feed item is
+selected, keeps its question visible until the user sends or edits it, and
+binds an explicit reread of a proposal to the proposal's owner-scoped target
+instead of the proposal ID or a prior chat plan. The full backend suite passed
+**3493** with **3 skips**. The real Luna/Responses development lane passed
+**20/20** (SHA-256
+`c0f73898fd7f5b268c9d4e715a866a12f2b99c14484a7fee20511fd51e9ea9d5`),
+with zero provider, schema, timeout or validation failures. The isolated
+API/Celery/Responses action matrix passed **16/16** with adapter registry
+**19/19**; artifact SHA-256
+`f653d438f2a647d360855c72f412660397ebc2cc01d13e002be2246643da19a9`.
+Web build, typecheck, i18n, command/proposal tests and high-severity audit
+passed; mobile typecheck, lint (warnings only) and web/iOS/Android bundle
+smokes passed. The real Luna/Responses regression passed **109/109** (SHA-256
+`dbd0ec2b42d7c959cd35a0af756dd59099d884f68be725ff3a172968924b0a4a`),
+with zero provider, schema, timeout or validation failures. Candidate CI,
+deployment identity check, and independent live QA are still pending.
 The repair's full backend suite passed **3489** with **3 skips**. Web build,
 typecheck, i18n, command/proposal tests and high-severity audit passed; mobile
 typecheck, lint (warnings only) and web/iOS/Android bundle smokes passed. A
@@ -52,7 +77,8 @@ The final real Luna/Responses selector recheck passed development **19/19**
 and regression **109/109**
 (SHA-256 `ed4e2e7e5e0015e016e0f7c0e93cab974b1c44bab51e685fe60d8abbca41d539`),
 with zero provider, schema, timeout or validation failures. The product code
-is deployed; independent live QA remains pending.
+was deployed, but the independent live verdict above rejected the complete
+feed-to-chat flow.
 Independent Architecture and Security code reviews found no blocker after
 both client and persisted prior-plan context were removed at the owner-scoped
 feed handoff. The local command test confirms that only an unchanged first

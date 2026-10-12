@@ -4,6 +4,12 @@ export const FINN_INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:compl
 
 export const isDirectCommandSearchMode = (mode) => mode !== "chat";
 
+export function resolveFeedDraftQuery(request, query, edit, consumedNonce) {
+  if (request?.mode !== "chat" || !request?.context?.feed_item_id ||
+      consumedNonce === request.nonce) return query;
+  return edit?.nonce === request.nonce ? edit.value : String(request.query || "");
+}
+
 export function shouldAttachFeedContext(request, submittedQuery, usedNonce) {
   return Boolean(
     request?.context?.feed_item_id &&

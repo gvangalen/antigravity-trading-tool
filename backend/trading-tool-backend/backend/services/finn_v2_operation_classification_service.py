@@ -86,6 +86,29 @@ class FinnV2OperationClassificationService:
                 (guided_contract,),
                 conversation_context=conversation_context,
             )
+        feed_event = (conversation_context or {}).get("feed_event") or {}
+        if (
+            isinstance(feed_event, Mapping)
+            and feed_event.get("read_only_context") is True
+            and feed_event.get("action_authorized") is False
+            and feed_event.get("target_id") is not None
+            and facts.action_polarity in {"read", "evaluate"}
+            and re.search(r"\b(?:lees|read|lies|toon|show|zeige)\b", facts.normalized_text)
+        ):
+            # A feed proposal ID is not a plan ID. When the user explicitly
+            # asks to reread its owner-resolved target, select that read
+            # contract before a generic plan assessment can swallow it.
+            read_operation = {
+                "setup": "read_active_setup",
+                "strategy": "read_linked_strategy",
+                "bot": "read_linked_bot",
+            }.get(str(feed_event.get("target_type") or ""))
+            if read_operation:
+                contract = self.registry.require_supported(read_operation)
+                return self._result(
+                    contract.operation_id, facts, "high", "feed_target_read_constraint",
+                    (contract,), conversation_context=conversation_context,
+                )
         if self._is_explicit_setup_collection_read(message):
             contract = self.registry.require_supported("read_active_setup")
             return self._result(
@@ -356,7 +379,7 @@ class FinnV2OperationClassificationService:
         entities = set(facts.explicit_entities).intersection({"setup", "strategy", "bot"})
         polarity = str(facts.action_polarity or "")
         role_match = re.search(
-            r"\b(?:wijzig|verander|update|change|aktualisiere|ändere|verwijder|delete|remove|"
+            r"\b(?:wijzig(?!ing)|verander|update|change|aktualisiere|ändere|verwijder|delete|remove|"
             r"lösche|deactiveer|deactivate|deaktiviere)\w*\s+"
             r"(?:mijn|my|deze|dit|this|the|meine[nr]?|den|die|das|de)?\s*"
             r"(setup|strategie|strategy|bot)\b",
@@ -967,6 +990,7 @@ class FinnV2OperationClassificationValidator:
             "registry_capability_constraint",
             "registry_evaluation_constraint",
             "registry_read_constraint",
+            "feed_target_read_constraint",
             "registry_mutation_constraint",
             "workspace_setup_contract",
         }:

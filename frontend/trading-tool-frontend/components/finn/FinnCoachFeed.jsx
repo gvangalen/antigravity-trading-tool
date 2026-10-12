@@ -6,9 +6,8 @@ import { ArrowRight, Bell, Check, History } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
-import { openFinnContext } from "@/lib/finnCommandSearch";
 
-export default function FinnCoachFeed() {
+export default function FinnCoachFeed({ onDiscuss }) {
   const { user, sessionChecked } = useAuth();
   const { t, locale } = useTranslation();
   const copy = t.coachFeed;
@@ -77,11 +76,7 @@ export default function FinnCoachFeed() {
 
   const discuss = (item) => {
     void setStatus(item.id, "read");
-    openFinnContext({
-      query: `${copy.discussQuery} ${item.evidence?.subject || item.title}`,
-      context: { feed_item_id: item.id },
-      autoSubmit: false,
-    });
+    onDiscuss?.(item.id, `${copy.discussQuery} ${item.evidence?.subject || item.title}`);
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLocale === locale ? items : [];

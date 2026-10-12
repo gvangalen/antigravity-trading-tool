@@ -343,11 +343,18 @@ class FinnV2ReasoningContextService:
             change = (proposal.payload_json or {}).get("change") or {}
             fields = (change.get("setup_fields") or change.get("strategy_fields")
                       or change.get("bot_fields") or change.get("changed_fields") or {})
+            from backend.services.finn_coach_feed_service import FinnCoachFeedService
+            target_type, target_id, target_name = await FinnCoachFeedService(self.session)._proposal_target(
+                proposal, user_id=run.user_id,
+            )
             facts.update({
                 "proposal_id": proposal.id,
-                "proposal_name": str(fields.get("name") or proposal.asset or proposal.operation_type)[:120],
+                "proposal_name": str(fields.get("name") or target_name or proposal.asset or proposal.operation_type)[:120],
                 "operation_type": proposal.operation_type,
                 "asset": proposal.asset,
+                "target_type": target_type,
+                "target_id": target_id,
+                "target_name": target_name,
             })
         return [ReasoningEvidenceItem(
             evidence_id="E0", artifact_id=f"feed-proposal:{item_id}",
