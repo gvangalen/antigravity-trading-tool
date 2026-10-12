@@ -33,7 +33,7 @@ import AvatarMenu from "@/components/ui/AvatarMenu";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { FINN_COMMAND_OPEN_EVENT } from "@/lib/finnCommandSearch";
+import { FINN_COMMAND_OPEN_EVENT, currentFinnRequest } from "@/lib/finnCommandSearch";
 import { normalizeScopedAssetSymbol } from "@/lib/finnAssetIsolation";
 
 export default function FinnWorkspaceShell({ children }) {
@@ -46,6 +46,7 @@ export default function FinnWorkspaceShell({ children }) {
   const [composerQuery, setComposerQuery] = useState("");
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [commandRequest, setCommandRequest] = useState(null);
+  const [pendingFeedHandoff, setPendingFeedHandoff] = useState(null);
   const commandNonceRef = useRef(0);
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
   const isAdminRoute = pathname?.startsWith("/admin");
@@ -86,12 +87,14 @@ export default function FinnWorkspaceShell({ children }) {
     setAssistantOpen(false);
     setComposerQuery("");
     setCommandRequest(null);
+    setPendingFeedHandoff(null);
   };
 
   const openAssistantMode = (mode, category = null) => {
     commandNonceRef.current += 1;
     setComposerMenuOpen(false);
     setComposerQuery("");
+    setPendingFeedHandoff(null);
     setCommandRequest({ mode, category, nonce: commandNonceRef.current });
     setAssistantOpen(true);
   };
@@ -99,14 +102,17 @@ export default function FinnWorkspaceShell({ children }) {
   const discussFeedItem = (itemId, question) => {
     commandNonceRef.current += 1;
     const nextQuery = String(question || "").trim();
-    setComposerMenuOpen(false);
-    setComposerQuery(nextQuery);
-    setCommandRequest({
+    const handoff = {
       mode: "chat", query: nextQuery,
       context: { feed_item_id: itemId },
       autoSubmit: false, newConversation: true,
-      nonce: commandNonceRef.current,
-    });
+      nonce: `feed:${itemId}:${commandNonceRef.current}:${Date.now()}`,
+    };
+    setComposerMenuOpen(false);
+    setComposerQuery(nextQuery);
+    // Feed selections are independent of general command-search requests.
+    // A late generic request or restored chat must not replace this draft.
+    setPendingFeedHandoff(handoff);
     setAssistantOpen(true);
   };
 
@@ -352,6 +358,7 @@ export default function FinnWorkspaceShell({ children }) {
               onClick={closeAssistant}
             />
             <AIAssistant
+              key={pendingFeedHandoff?.nonce || "general"}
               isOpen={assistantOpen}
               setIsOpen={(open) => {
                 if (open) setAssistantOpen(true);
@@ -362,7 +369,7 @@ export default function FinnWorkspaceShell({ children }) {
               eventsEnabled={assistantOpen}
               queryValue={composerQuery}
               onQueryChange={setComposerQuery}
-              commandRequest={commandRequest}
+              commandRequest={currentFinnRequest(pendingFeedHandoff, commandRequest)}
               autoFocusComposer
             />
           </div>

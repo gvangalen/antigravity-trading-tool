@@ -2,6 +2,10 @@ export const FINN_COMMAND_OPEN_EVENT = "finn-command-search:open";
 export const FINN_INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 export const FINN_INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
 
+export function currentFinnRequest(feedHandoff, generalRequest) {
+  return feedHandoff || generalRequest;
+}
+
 export const isDirectCommandSearchMode = (mode) => mode !== "chat";
 
 export function resolveFeedDraftQuery(request, query, edit, consumedNonce) {

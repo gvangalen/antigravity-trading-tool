@@ -6,16 +6,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `LIVE_PENDING_INDEPENDENT_QA`. The second handoff repair merged in
+Phase: `REPAIR_IN_PROGRESS_AFTER_NOT_ACCEPTED`. Independent authenticated
+browser QA on public SHA `ed0a8d1dd6c7c74cf699e59fa5fc740b18759056`
+returned **NOT_ACCEPTED** (sanitized report SHA-256
+`c10687ab200c1c2f0aa07b490baf0e0ee2e47f2c7a8bbd66d801f784682b6717`).
+Two simultaneous ETH proposals now showed their exact setup names, but after
+discussing plan A, opening plan B in the same page session showed the A answer
+and an empty composer. A hard refresh made B work. The next repair isolates a
+selected feed handoff from the general command request and gives each
+selection a fresh chat component identity; its release gates are pending.
+The second handoff repair merged in
 [PR #268](https://github.com/gvangalen/antigravity-trading-tool/pull/268)
 as product SHA `22aaaceb0c39df810cc7b8a8a284072f93103084`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38303518922),
 [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38303742012),
 and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38303969388)
 all succeeded. On 12 October 2026 public backend health and frontend build-info
-each returned HTTP 200 and exactly that SHA. The next independent QA run must
-verify the two-proposal feed handoff, plan identity, and natural follow-up on
-the then-current public SHA. This status-only commit may later change the
+each returned HTTP 200 and exactly that SHA. This status-only commit may later change the
 deployment SHA without changing product code; the public endpoints remain the
 runtime identity authority.
 
