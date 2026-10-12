@@ -6,7 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Saved Report Object Names Candidate
 
-Phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #261](https://github.com/gvangalen/antigravity-trading-tool/pull/261)
+merged as product SHA `b3e7776df98c0960de70e30419fda0759cb36aa2`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38256060004),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38256273006),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38256511219)
+passed. Public backend health and frontend build-info each returned HTTP 200
+and exactly the product SHA on 2026-10-12. Independent QA on prior public SHA
 `370defe7edeb132b8a298f653848652becb33c4a` returned `NOT_ACCEPTED` for
 the targeted language scope. The historical report's headings and narrative
 now follow NL → DE → EN → NL after reload, and FINN Today follows the active
@@ -37,7 +43,7 @@ timeout, parse or validation failures; artifact SHA-256
 The complete real-provider regression passed **109/109** with zero provider,
 schema, timeout, parse or validation failures; artifact SHA-256
 `2883df45ec9f7704e133cbb9f038643969ca93e7a54ed625d675d75716c54fb2`.
-CI, deployment and independent QA remain pending.
+Independent QA of saved-name identity, language and score parity remains pending.
 
 ## Historical Report Section Repair and FINN Today Language Candidate
 
