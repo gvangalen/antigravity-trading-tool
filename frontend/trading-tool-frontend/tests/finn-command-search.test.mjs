@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  currentFinnRequest,
   getCommandTokens,
   getDefaultIndicatorCategory,
   isDirectCommandSearchMode,
@@ -92,4 +93,16 @@ test("a second feed selection keeps its own draft even if restored chat clears p
   assert.equal(resolveFeedDraftQuery(second, "", null, 8), "Bespreek Plan B");
   assert.equal(resolveFeedDraftQuery(second, "", { nonce: 9, value: "Waarom B?" }, 8), "Waarom B?");
   assert.equal(resolveFeedDraftQuery(second, "", null, 9), "");
+});
+
+test("a selected feed discussion survives a later generic command request", () => {
+  const planA = { mode: "chat", nonce: "feed:a:1", query: "Bespreek Plan A",
+    context: { feed_item_id: "feed-a" } };
+  const planB = { mode: "chat", nonce: "feed:b:2", query: "Bespreek Plan B",
+    context: { feed_item_id: "feed-b" } };
+  const generic = { mode: "all", nonce: 3, query: "" };
+  assert.equal(currentFinnRequest(planA, generic), planA);
+  assert.equal(currentFinnRequest(planB, generic), planB);
+  assert.equal(resolveFeedDraftQuery(currentFinnRequest(planB, generic), "", null, "feed:a:1"), "Bespreek Plan B");
+  assert.equal(currentFinnRequest(null, generic), generic);
 });

@@ -3,75 +3,49 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const shellSource = await readFile(
-  new URL("../components/finn/FinnWorkspaceShell.jsx", import.meta.url),
-  "utf8",
+  new URL("../components/finn/FinnWorkspaceShell.jsx", import.meta.url), "utf8",
+);
+const feedSource = await readFile(
+  new URL("../components/finn/FinnCoachFeed.jsx", import.meta.url), "utf8",
 );
 const assistantSource = await readFile(
-  new URL("../components/ui/AIAssistant.jsx", import.meta.url),
-  "utf8",
+  new URL("../components/ui/AIAssistant.jsx", import.meta.url), "utf8",
 );
 const planSource = await readFile(
-  new URL("../components/workflows/MyPlanWorkflow.jsx", import.meta.url),
-  "utf8",
+  new URL("../components/workflows/MyPlanWorkflow.jsx", import.meta.url), "utf8",
 );
 const analysisSource = await readFile(
-  new URL("../components/workspaces/asset/AssetWorkspaceV3.jsx", import.meta.url),
-  "utf8",
+  new URL("../components/workspaces/asset/AssetWorkspaceV3.jsx", import.meta.url), "utf8",
 );
 
-test("renders the shared FINN workspace on every protected workflow", () => {
-  assert.match(shellSource, /<FinnPanel\s+[\s\S]*?previewSectionsOnly/);
-  assert.doesNotMatch(shellSource, /isPlanWorkspace\s*\?/);
+test("shared workspace shows the persisted coach feed and opens chat on demand", () => {
+  assert.match(shellSource, /<FinnCoachFeed\s+key=/);
+  assert.match(shellSource, /<AIAssistant\s+[\s\S]*?commandRequest=/);
+  assert.doesNotMatch(shellSource, /loadMissionControl|first_dashboard_context/);
 });
 
-test("forwards contextual FINN requests into the regular chat", () => {
+test("feed discussion has independent request state and chat component identity", () => {
+  assert.match(shellSource, /setPendingFeedHandoff\(handoff\)/);
+  assert.match(shellSource, /key=\{pendingFeedHandoff\?\.nonce\s*\|\|\s*"general"\}/);
+  assert.match(shellSource, /commandRequest=\{currentFinnRequest\(pendingFeedHandoff, commandRequest\)\}/);
+  assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
+  assert.match(assistantSource, /resolveFeedDraftQuery\(/);
+});
+
+test("explicit contextual requests still reach ordinary FINN chat", () => {
   assert.match(shellSource, /context:\s*detail\.context\s*\|\|\s*null/);
   assert.match(shellSource, /autoSubmit:\s*Boolean\(detail\.autoSubmit\)/);
   assert.match(assistantSource, /\.\.\.\(commandRequest\?\.context\s*\|\|\s*\{\}\)/);
-  assert.match(assistantSource, /handleChat\(commandRequest\.query\)/);
 });
 
-test("opens indicator questions in FINN chat without calling the retired specialist", () => {
+test("indicator questions use FINN chat rather than the retired specialist", () => {
   assert.match(analysisSource, /query: ui\.indicatorQuestion\(row\.name, symbol, category, period\)/);
   assert.match(analysisSource, /openFinnContext\(\{/);
   assert.doesNotMatch(analysisSource, /requestIndicatorContext|finnResult/);
 });
 
-test("uses compact plan actions instead of inline specialist cards", () => {
+test("plan actions use FINN chat rather than inline specialist cards", () => {
   assert.doesNotMatch(planSource, /FinnSpecialistContext/);
   assert.match(planSource, /onFinnAction=\{\(\) => askFinnForPlan\(activePlan, "setup"\)\}/);
   assert.match(planSource, /onAskFinn=\{\(\) => askFinnForPlan\(plan\)\}/);
-});
-
-test("prefers central first-dashboard context over the generic briefing template", () => {
-  assert.match(assistantSource, /missionControl\?\.first_dashboard_context/);
-  assert.match(assistantSource, /firstDashboardBriefingText/);
-  assert.match(assistantSource, /firstDashboardContext\?\.review_label/);
-  assert.match(assistantSource, /generation_status/);
-  assert.match(assistantSource, /setInterval\(\(\) => \{\s*void loadMissionControl\(\)/);
-});
-
-test("scopes briefing fallbacks and mission-control cache per authenticated user", () => {
-  assert.doesNotMatch(assistantSource, /preferences\?\.first_name\s*\|\|\s*"Gerrit"/);
-  assert.doesNotMatch(assistantSource, /user\?\.first_name\s*\|\|\s*preferences\?\.first_name\s*\|\|\s*"Trader"/);
-  assert.match(assistantSource, /user\?\.first_name\s*\|\|\s*"Trader"/);
-  assert.match(assistantSource, /finn-mission-control:\$\{userScope\}:\$\{missionControlScope\}/);
-  assert.match(assistantSource, /useEffect\(\(\)\s*=>\s*\{\s*setPreferences\(\{\}\);[\s\S]*sharedSessionRestoreRef\.current = false;[\s\S]*\}, \[user\?\.id\]\)/);
-  assert.match(assistantSource, /scopedRecentConversationStorageKey/);
-  assert.match(assistantSource, /getAssistantSessionId\(user\?\.id \|\| "anonymous"\)/);
-});
-
-test("keeps the last proven Today briefing visible while a forced refresh runs", () => {
-  assert.match(assistantSource, /async function loadMissionControl\(\{ force = false \} = \{\}\)/);
-  assert.match(assistantSource, /missionControlRequestGenerationRef/);
-  assert.match(assistantSource, /requestGeneration !== missionControlRequestGenerationRef\.current/);
-  assert.match(assistantSource, /loadMissionControl\(\{ force: true \}\)/);
-  assert.doesNotMatch(assistantSource, /setMissionControl\(null\);\s*await Promise\.all\(\[loadInsight\(\), loadMissionControl/);
-});
-
-test("scopes FINN Today by asset on Analysis while retaining a shared plan cache", () => {
-  assert.match(assistantSource, /const missionControlScope = isAssetAnalysisPage/);
-  assert.match(assistantSource, /finn-mission-control:\$\{userScope\}:\$\{missionControlScope\}/);
-  assert.match(assistantSource, /fetchFinnMissionControl\(requestedSymbol\)/);
-  assert.match(assistantSource, /loadMissionControl\(\{ force: true \}\)/);
 });
