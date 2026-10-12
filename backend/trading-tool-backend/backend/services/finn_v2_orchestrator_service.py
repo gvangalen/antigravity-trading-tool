@@ -52,6 +52,8 @@ class FinnV2OrchestratorService:
             "read_only_context": True,
             "action_authorized": False,
         }
+        if feed_item.get("id"):
+            event["item_id"] = str(feed_item["id"])
         for key in ("target_type", "target_id", "target_name"):
             value = (feed_item.get("evidence") or {}).get(key)
             if value is not None:

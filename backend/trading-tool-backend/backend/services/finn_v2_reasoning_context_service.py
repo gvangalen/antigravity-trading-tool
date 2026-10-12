@@ -23,6 +23,17 @@ from backend.schemas.finn_v2_state_schema import FinancialStateSnapshot
 from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationResult
 
 
+_PUBLIC_PROPOSAL_FIELDS = frozenset({
+    "name", "symbol", "timeframe", "setup_type", "dca_frequency", "dca_day",
+    "dca_month_day", "min_investment", "market_score_min", "market_score_max",
+    "macro_score_min", "macro_score_max", "technical_score_min", "technical_score_max",
+    "execution_mode", "base_amount", "entry", "stop_loss", "targets",
+    "risk_profile", "budget_total_eur", "paper_initial_cash_eur",
+    "score_source", "low_threshold", "high_threshold", "low_score_percent",
+    "mid_score_percent", "high_score_percent",
+})
+
+
 class FinnV2ReasoningContextService:
     DOMAIN_BY_TOOL = {
         "read_profile": "identity_context",
@@ -256,6 +267,14 @@ class FinnV2ReasoningContextService:
     async def _current_feed_evidence(self, run) -> list[ReasoningEvidenceItem]:
         context = getattr(run, "client_context_json", {}) or {}
         item_id = str(context.get("feed_item_id") or "").strip()
+        if not item_id and getattr(run, "conversation_id", None):
+            from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
+            saved = await FinnV2ConversationRepository(self.session).get_context(
+                conversation_id=run.conversation_id, user_id=run.user_id,
+            )
+            selected = saved.get("feed_event") or {}
+            if isinstance(selected, dict) and selected.get("read_only_context") is True:
+                item_id = str(selected.get("item_id") or "").strip()
         if not item_id:
             return []
         from backend.services.finn_coach_feed_service import FinnCoachFeedService
@@ -343,6 +362,17 @@ class FinnV2ReasoningContextService:
             change = (proposal.payload_json or {}).get("change") or {}
             fields = (change.get("setup_fields") or change.get("strategy_fields")
                       or change.get("bot_fields") or change.get("changed_fields") or {})
+            if not isinstance(fields, dict):
+                fields = {}
+            proposed_changes = {
+                key: value for key, value in fields.items()
+                if key in _PUBLIC_PROPOSAL_FIELDS
+                and isinstance(value, (str, int, float, bool, list))
+                and (not isinstance(value, list) or (
+                    len(value) <= 8 and all(isinstance(part, (str, int, float, bool)) for part in value)
+                ))
+                and len(json.dumps(value, default=str)) <= 256
+            }
             from backend.services.finn_coach_feed_service import FinnCoachFeedService
             target_type, target_id, target_name = await FinnCoachFeedService(self.session)._proposal_target(
                 proposal, user_id=run.user_id,
@@ -355,6 +385,7 @@ class FinnV2ReasoningContextService:
                 "target_type": target_type,
                 "target_id": target_id,
                 "target_name": target_name,
+                "proposed_changes": proposed_changes,
             })
         return [ReasoningEvidenceItem(
             evidence_id="E0", artifact_id=f"feed-proposal:{item_id}",

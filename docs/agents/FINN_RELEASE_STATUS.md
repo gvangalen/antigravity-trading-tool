@@ -6,7 +6,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `ANSWER_EXTRACTION_LOCAL_VALIDATION`. The feed close and internal
+Phase: `PROPOSAL_FOLLOWUP_LOCAL_VALIDATION`. Independent live QA on product SHA
+`0979563fd12fa4da3609481103313411e4902738` accepted the targeted web
+answer and A→B handoff: one coherent AAPL answer without raw citation markup
+or internal planning, different A/B feed IDs and correct B setup lineage after
+the visible X, without refresh. It did not establish full product or native
+mobile acceptance. QA found one remaining feed-context gap: a follow-up about
+an open 4H proposal identified the right B setup and its saved 1D timeframe,
+but could not verify that 4H was still an unconfirmed proposal (report SHA-256
+`de513fa3c6397bc3571eec1c820bf5659258bbd416ab2f995539a86025e467b0`).
+The current local candidate carries only whitelisted, owner-scoped pending
+proposal fields into FINN's read-only context and rereads the selected feed
+item from the saved conversation on follow-up. It never treats a proposal as
+saved or authorizes confirmation. Root backend tests passed **3496**, with
+**3 skipped**; runtime/provider gates, CI, deployment and independent QA are
+pending.
+
+Earlier, the feed close and internal
 preamble repair in [PR #273](https://github.com/gvangalen/antigravity-trading-tool/pull/273)
 merged as product SHA `a494ee2117187359cbf85a78c3e59d3ea1968f31`.
 Candidate and main CI passed all five jobs; Auto Deploy succeeded; public

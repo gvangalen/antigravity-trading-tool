@@ -9,6 +9,7 @@ from backend.services import finn_coach_feed_service as module
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+from backend.services.finn_v2_run_service import _feed_evidence_instruction
 from backend.api.ai_assistant_api import _feed_context_boundary
 
 
@@ -138,8 +139,58 @@ def test_discuss_proposal_uses_fresh_owner_scoped_evidence_not_client_claims(mon
     evidence = asyncio.run(service._current_feed_evidence(run))[0]
     assert evidence.facts["proposal_name"] == "ETH Exact Plan"
     assert evidence.facts["proposal_status"] == "awaiting_separate_confirmation"
+    assert evidence.facts["proposed_changes"] == {"name": "ETH Exact Plan"}
     assert evidence.facts["confirmation_authorized"] is False
     assert "Forged Name" not in str(evidence.dict())
+
+
+def test_proposal_follow_up_rereads_owner_scoped_open_change(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000099"
+
+    async def saved_context(_self, *, conversation_id, user_id):
+        assert (conversation_id, user_id) == ("conversation-b", 7)
+        return {"feed_event": {"item_id": item_id, "read_only_context": True}}
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "proposal_pending", "subject_id": "p-b",
+                "symbol": "ETH", "status": "unread"}
+
+    async def get_by_id(_self, *, proposal_id, user_id):
+        assert (proposal_id, user_id) == ("p-b", 7)
+        return SimpleNamespace(id="p-b", status="draft", asset="ETH",
+            operation_type="update_setup", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+            payload_json={"change": {"changed_fields": {
+                "timeframe": "4H", "secret_internal_note": "never expose",
+            }}})
+
+    async def target(_self, proposal, *, user_id):
+        assert user_id == 7
+        return "setup", 22, "ETH Plan B"
+
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.finn_v2_conversation_repository.FinnV2ConversationRepository.get_context",
+        saved_context,
+    )
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr(module.FinnCoachFeedService, "_proposal_target", target)
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.finn_v2_proposal_repository.FinnV2ProposalRepository.get_by_id_for_user",
+        get_by_id,
+    )
+    evidence = asyncio.run(FinnV2ReasoningContextService(SimpleNamespace())._current_feed_evidence(
+        SimpleNamespace(user_id=7, conversation_id="conversation-b", client_context_json={}),
+    ))[0]
+    assert evidence.facts["proposal_status"] == "awaiting_separate_confirmation"
+    assert evidence.facts["target_name"] == "ETH Plan B"
+    assert evidence.facts["proposed_changes"] == {"timeframe": "4H"}
+    assert evidence.facts["confirmation_authorized"] is False
+    assert "secret_internal_note" not in str(evidence.dict())
+    instruction = _feed_evidence_instruction([{"source": evidence.source, "facts": evidence.facts}])
+    assert '"timeframe": "4H"' in instruction
+    assert "still pending, not saved" in instruction
+    assert "discussion never confirms a proposal" in instruction
+    assert "secret_internal_note" not in instruction
 
 
 def test_discuss_setup_rechecks_current_match_and_marks_old_notification_historical(monkeypatch):
@@ -198,12 +249,13 @@ def test_proposal_feed_selection_carries_exact_plan_target_without_authorizing_a
     selected = FinnV2OrchestratorService._selected_feed_context({
         "last_verified_context": {"resolved_entities": {"name": "ETH Plan A"}},
     }, {
-        "event_type": "proposal_pending", "subject_type": "proposal",
+        "id": "feed-b", "event_type": "proposal_pending", "subject_type": "proposal",
         "subject_id": "proposal-b", "symbol": "ETH",
         "evidence": {"subject": "ETH Plan B", "target_type": "setup",
                      "target_id": 22, "target_name": "ETH Plan B"},
     })["feed_event"]
     assert selected["subject_id"] == "proposal-b"
+    assert selected["item_id"] == "feed-b"
     assert selected["target_id"] == 22
     assert selected["target_name"] == "ETH Plan B"
     assert selected["action_authorized"] is False
