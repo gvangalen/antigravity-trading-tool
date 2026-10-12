@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Coach Consolidation Candidate
+
+Phase: `LOCAL_CANDIDATE_READY`. The current Build candidate removes the
+legacy agent-controller and agent-verdict layer from plan status, daily and
+portfolio coaching, Mission Control, reflection reports, and the web UI. FINN
+retains its existing read tools, score and risk facts, mission workqueue, and
+explicit confirmation boundary. Newly issued `agent_controller_handoff`
+actions are rejected; historical audit events remain readable. This change
+does not replace Score 2.0 calculations, bot execution, or reports.
+
+The backend suite passed 3450 tests with 3 skips. The frontend build,
+typecheck, i18n lint/tests, command/proposal tests, and high-severity audit
+passed; the audit reported one moderate Next.js advisory. The final rebuilt
+local runtime action matrix passed 16/16 with zero production connections or
+live orders,
+artifact SHA-256
+`0af65d74f554af5edcbd9dd83a5f44551681b22b687aec8aefee4eb08b6dc69e`.
+The real-provider Luna/Responses selector development set passed 18/18,
+artifact SHA-256
+`18c5851a93399894f88990f8fec55a9b8ee52dc3cc546535efff7d4ee2c34d3a`.
+The real-provider regression set passed 109/109 with zero provider, schema,
+timeout, parse, or validation failures, artifact SHA-256
+`b5ce71bc3e358a5bd7167c8de911738a7e30da90a3ecfd6757729cf370f90fde`.
+CI, deployment, and independent QA are pending. These local results do not
+establish live coach acceptance.
+
 ## Five-Flow Current Assessment
 
 Phase: `TARGETED_FIVE_FLOW_QA_ACCEPTED_WITH_RUNTIME_LIMITS`. Independent QA

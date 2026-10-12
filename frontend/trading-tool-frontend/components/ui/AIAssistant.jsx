@@ -1524,15 +1524,14 @@ function AIAssistantContent({
     ) {
       return [];
     }
-    const controllerAction = message?.state?.analysis?.agent_controller?.primary_action || message?.state?.agent_controller?.primary_action;
     const structured = message?.state?.analysis?.follow_up_actions;
     if (Array.isArray(structured) && structured.length > 0) {
-      return normalizeFollowUpActions([controllerAction, ...structured].filter(Boolean));
+      return normalizeFollowUpActions(structured);
     }
     if (Array.isArray(message?.suggestedActions) && message.suggestedActions.length > 0) {
-      return normalizeFollowUpActions([controllerAction, ...message.suggestedActions].filter(Boolean));
+      return normalizeFollowUpActions(message.suggestedActions);
     }
-    return normalizeFollowUpActions([controllerAction, ...parseSuggestedActions(message?.text)].filter(Boolean));
+    return normalizeFollowUpActions(parseSuggestedActions(message?.text));
   };
 
   const getMessageSummary = (message) => (
@@ -1585,7 +1584,6 @@ function AIAssistantContent({
 
   const getMissionOpenActions = () => {
     return normalizeFollowUpActions([
-      missionControl?.agent_controller?.primary_action,
       ...(missionControl?.open_actions || []),
     ].filter(Boolean));
   };
@@ -1778,41 +1776,6 @@ function AIAssistantContent({
     };
   };
 
-  const buildAgentHandoffAuditAction = (action, controller) => {
-    if (!action?.prompt || !controller?.dominant_agent) return null;
-    return {
-      id: `agent-handoff-${controller.dominant_agent}-${Date.now()}`,
-      type: "agent_controller_handoff",
-      label: `Volg ${controller.dominant_label || controller.dominant_agent}`,
-      payload: {
-        agent_controller: controller,
-        primary_action: action,
-        dominant_agent: controller.dominant_agent,
-        asset: action.asset,
-      },
-      risk_level: "low",
-      requires_confirmation: false,
-      autonomy_level: "user_initiated",
-      guardrails: {
-        requires_confirmation: false,
-        can_execute_without_user: false,
-        writes_trading_config: false,
-        executes_order: false,
-      },
-    };
-  };
-
-  const logAgentHandoff = async (action, controller) => {
-    // Security: client-built handoff audit payloads are not executable. The
-    // server must issue an action_id before any Finn action can be confirmed.
-    return;
-  };
-
-  const handleAgentControllerAction = async (action, controller) => {
-    await logAgentHandoff(action, controller);
-    await handleFollowUpAction(action);
-  };
-
   const renderFollowUpButtons = (actions, compact = false, sourceItem = null) => (
     <div className={`flex flex-wrap gap-2 ${compact ? "" : "mt-4 pt-3 border-t border-slate-100/50 dark:border-slate-800/50"}`}>
       {!compact && (
@@ -1863,43 +1826,6 @@ function AIAssistantContent({
     if (status === "attention") return "border-amber-100 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300";
     if (status === "not_enough_data") return "border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400";
     return "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300";
-  };
-
-  const agentVerdictTone = (verdict = {}) => {
-    const status = String(verdict.status || "").toLowerCase();
-    const priority = String(verdict.priority || "").toLowerCase();
-    if (priority === "high" || status.includes("block") || status.includes("attention") || status.includes("intervened")) {
-      return "border-rose-100 dark:border-rose-900/50 bg-rose-50/55 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300";
-    }
-    if (priority === "medium" || status.includes("need") || status.includes("missing") || status.includes("waiting") || status.includes("review")) {
-      return "border-amber-100 dark:border-amber-900/50 bg-amber-50/55 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300";
-    }
-    return "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/55 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300";
-  };
-
-  const agentVerdictIcon = (agent = "") => {
-    if (agent.includes("macro") || agent.includes("technical")) return <BarChart3 size={11} />;
-    if (agent.includes("risk") || agent.includes("execution")) return <Shield size={11} />;
-    if (agent.includes("strategy")) return <Target size={11} />;
-    if (agent.includes("memory")) return <Brain size={11} />;
-    return <Activity size={11} />;
-  };
-
-  const getMessageAgentVerdicts = (message) => {
-    const state = message?.state || {};
-    const analysis = state.analysis || message?.analysis || {};
-    return (
-      state.agent_verdicts ||
-      analysis.agent_verdicts ||
-      message?.agent_verdicts ||
-      []
-    );
-  };
-
-  const getMessageAgentController = (message) => {
-    const state = message?.state || {};
-    const analysis = state.analysis || message?.analysis || {};
-    return state.agent_controller || analysis.agent_controller || message?.agent_controller || null;
   };
 
   const getMessagePortfolioRisk = (message) => {
@@ -2005,52 +1931,6 @@ function AIAssistantContent({
       return analysis;
     }
     return null;
-  };
-
-  const renderAgentController = (controller, compact = false) => {
-    if (!controller?.dominant_agent) return null;
-    const score = Number(controller.dominant_score || 0);
-    const tone = score >= 90
-      ? "border-rose-100 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300"
-      : score >= 65
-        ? "border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"
-        : "border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/45 text-slate-600 dark:text-slate-300";
-    return (
-      <div className={`${compact ? "mt-2" : "mt-3"} rounded-xl border px-3 py-2 ${tone}`}>
-        <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
-            <Brain size={11} />
-            {at("cards.mainConclusion")}
-          </span>
-          <span className="rounded-full bg-white/75 dark:bg-slate-950/40 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
-            {controller.dominant_label || controller.dominant_agent}
-          </span>
-        </div>
-        <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">
-          {controller.reason || controller.next_action || at("cards.agentRankingFallback")}
-        </p>
-        {!compact && controller.next_action && (
-          <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-75">
-            {controller.next_action}
-          </p>
-        )}
-        {controller.primary_item_id && (
-          <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-65">
-            {at("cards.accountability")}: {controller.primary_item_id}
-          </p>
-        )}
-        {controller.primary_action?.prompt && (
-          <button
-            type="button"
-            onClick={() => handleAgentControllerAction(controller.primary_action, controller)}
-            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white/80 dark:bg-slate-950/45 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest shadow-sm transition hover:bg-white dark:hover:bg-slate-950"
-          >
-            {followUpIcon(controller.primary_action.handoff)}
-            {controller.primary_action.label || controller.primary_action.prompt}
-          </button>
-        )}
-      </div>
-    );
   };
 
   const renderBehavioralIntelligenceCard = (analysis) => {
@@ -2178,47 +2058,6 @@ function AIAssistantContent({
             </div>
           </div>
         )}
-      </div>
-    );
-  };
-
-  const renderAgentVerdicts = (verdicts, compact = false) => {
-    const items = Array.isArray(verdicts) ? verdicts.filter(Boolean).slice(0, compact ? 4 : 6) : [];
-    if (items.length === 0) return null;
-    return (
-      <div className={`${compact ? "mt-2" : "mt-4 pt-3 border-t border-slate-100/60 dark:border-slate-800/60"} space-y-2`}>
-        {!compact && (
-          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-            <Brain size={11} className="text-blue-500" />
-            Controlelagen
-          </div>
-        )}
-        <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
-          {items.map((verdict, index) => (
-            <div
-              key={`${verdict.agent || verdict.label || "agent"}-${index}`}
-              className={`rounded-xl border px-2.5 py-2 ${agentVerdictTone(verdict)}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 min-w-0 text-[9px] font-black uppercase tracking-widest">
-                  {agentVerdictIcon(verdict.agent || verdict.label || "")}
-                  <span className="truncate">{verdict.label || verdict.agent || "Agent"}</span>
-                </span>
-                <span className="shrink-0 rounded-full bg-white/75 dark:bg-slate-950/40 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest">
-                  {verdict.status || "unknown"}
-                </span>
-              </div>
-              <p className="mt-1 text-[10px] font-semibold leading-snug opacity-90">
-                {verdict.reason || verdict.next_action || "Geen toelichting beschikbaar."}
-              </p>
-              {!compact && verdict.next_action && (
-                <p className="mt-1 text-[8px] font-black uppercase tracking-widest opacity-75">
-                  {verdict.next_action}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
       </div>
     );
   };
@@ -3385,30 +3224,6 @@ function AIAssistantContent({
         reason: humanizePlanHealthReason(item),
       }));
 
-    const verdictRiskItems = (missionControl?.agent_verdicts || [])
-      .filter((verdict) => {
-        const status = String(verdict?.status || "").toLowerCase();
-        return !["clear", "quiet", "ready", "no_open_decision", "no_decision", "stable"].includes(status);
-      })
-      .slice(0, 3)
-      .map((verdict, index) => ({
-        id: `verdict:${verdict.agent || index}`,
-        type: "agent_verdict",
-        asset: verdict.asset || context.symbol || globalSymbol || null,
-        title: verdict.label || uiText.riskAgent,
-        reason: verdict.reason,
-        status: verdict.status,
-        next_best_action: verdict.next_action
-          ? {
-              type: "chat_prompt",
-              label: verdict.label ? `${uiText.whyLabelPrefix} ${verdict.label}?` : uiText.whyBlocked,
-              prompt: verdict.next_action,
-              handoff: "daily_coach",
-              requires_confirmation: false,
-            }
-          : null,
-      }));
-
     const portfolioRiskItems = [
       ...((missionControl?.portfolio_risk?.risk_stacks || []).slice(0, 3).map((stack, index) => {
         const asset = String(stack.asset || uiText.portfolioAssetFallback || "BTC").toUpperCase();
@@ -3440,7 +3255,7 @@ function AIAssistantContent({
       })) || []),
     ];
 
-    const riskCandidates = [...blockedPlans, ...portfolioRiskItems, ...verdictRiskItems]
+    const riskCandidates = [...blockedPlans, ...portfolioRiskItems]
       .filter(Boolean)
       .sort((a, b) => scoreMissionForProfile(b) - scoreMissionForProfile(a));
     const riskItems = buildRiskClusters(dedupeMissionItems(riskCandidates, seen, 8));
@@ -3657,11 +3472,6 @@ function AIAssistantContent({
           {item.asset && (
             <span className="rounded-full bg-white/80 dark:bg-slate-950/50 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
               {item.asset}
-            </span>
-          )}
-          {item.agent_accountability?.dominant_label && (
-            <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">
-              {item.agent_accountability.dominant_label}
             </span>
           )}
         </div>
@@ -5995,7 +5805,6 @@ function AIAssistantContent({
     missionControl?.coaching_loop?.suppressed_items?.[0] ||
     null;
   const compactMissionActions = normalizeFollowUpActions([
-    missionControl?.agent_controller?.primary_action,
     ...(missionControl?.coaching_loop?.operator_handoffs || []),
     ...(missionControl?.open_actions || []),
   ]).slice(0, 2);
@@ -6978,7 +6787,6 @@ function AIAssistantContent({
                     : m.text}
                 </p>
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOperatorReadoutCard(m)}
-                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderDecisionReviewV3Card(getMessageDecisionReview(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderPlanAdherenceCard(getMessagePlanAdherenceReview(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOutcomeTrackingCard(getMessageOutcomeTracking(m))}
@@ -6989,7 +6797,6 @@ function AIAssistantContent({
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderPortfolioRisk(getMessagePortfolioRisk(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderExecutionReviewCard(getMessageExecutionReview(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOperatorResolutionCard(getMessageOperatorResolution(m))}
-                {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderAgentVerdicts(getMessageAgentVerdicts(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && (() => {
                   const suggestions = getMessageFollowUpActions(m);
                   if (suggestions.length === 0) return null;

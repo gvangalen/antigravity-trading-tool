@@ -21,6 +21,13 @@ def _service():
     return FinnPlanService(db_session=None)
 
 
+def test_retired_agent_handoff_cannot_be_executed():
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(_service().execute_action(101, {"type": "agent_controller_handoff"}))
+
+    assert error.value.status_code == 400
+
+
 FIXTURE_USER_A_CHAIN = {
     "user_id": 101,
     "asset": "BTC",
@@ -3644,10 +3651,10 @@ def test_finn_reflection_report_summarizes_operator_activity():
     assert report["sections"]["activity_journal"]["entries"]
     assert report["sections"]["blocked_summary"]["entries"]
     assert report["sections"]["plan_adherence"]["status"] == "attention"
-    assert any(verdict["agent"] == "risk_agent" for verdict in report["agent_verdicts"])
-    assert report["agent_controller"]["dominant_agent"]
+    assert "agent_verdicts" not in report
+    assert "agent_controller" not in report
     assert "los van je dagelijkse trading report" in message
-    assert "Agent-verdicts:" in message
+    assert "Agent-verdicts:" not in message
     assert "Wat heb ik gedaan?" in message
     assert "Wat heeft Finn geblokkeerd?" in message
     assert "Waar week ik af?" in message
@@ -3707,7 +3714,7 @@ def test_finn_day_close_report_summarizes_closeout_and_tomorrow_focus():
     assert report["day_close"]["what_i_did_today"]["entries"]
     assert report["day_close"]["what_finn_blocked"]["entries"]
     assert report["day_close"]["where_i_deviated"]["status"] == "attention"
-    assert any(verdict["agent"] == "execution_agent" for verdict in report["agent_verdicts"])
+    assert "agent_verdicts" not in report
     assert any("live orders geblokkeerd" in item.lower() for item in report["day_close"]["tomorrow_focus"])
     assert "Dagafsluiting:" in message
     assert "Wat heb ik vandaag gedaan?" in message
@@ -5459,32 +5466,6 @@ def test_status_message_lists_blocking_scores_for_saved_setup():
     assert "Gebruik dit als plan-check" in message
 
 
-def test_plan_status_agent_verdicts_explain_blocking_layer():
-    service = _service()
-    analysis = service._evaluate_setup_row(
-        {
-            "id": 12,
-            "name": "BTC Plan",
-            "setup_type": "dca",
-            "timeframe": "1W",
-            "score": 55,
-            "is_active": False,
-            "min_macro_score": 30,
-            "max_macro_score": 70,
-            "min_technical_score": 40,
-            "max_technical_score": 60,
-            "min_market_score": 20,
-            "max_market_score": 80,
-        },
-        {"macro_score": 50, "technical_score": 90, "market_score": 40},
-    )
-    analysis["agent_verdicts"] = service._build_plan_status_agent_verdicts("BTC", analysis, source="saved_setup")
-
-    message = service._status_message("BTC", analysis, source="saved_setup")
-
-    assert any(verdict["agent"] == "technical_agent" and verdict["status"] == "blocks_plan" for verdict in analysis["agent_verdicts"])
-    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "blocked" for verdict in analysis["agent_verdicts"])
-    assert "Agent-verdicts:" in message
 
 
 def test_plan_status_execution_review_explains_blocker_and_next_steps():
@@ -5786,19 +5767,16 @@ def test_portfolio_daily_coach_prioritizes_active_blocked_and_scoreless_assets()
     assert analysis["data_readiness"]["status"] == "onboarding_incomplete"
     assert analysis["portfolio_risk"]["status"] == "needs_data"
     assert analysis["portfolio_risk"]["top_asset"] == "BTC"
-    assert any(verdict["agent"] == "macro_agent" for verdict in analysis["agent_verdicts"])
-    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "needs_data" for verdict in analysis["agent_verdicts"])
+    assert "agent_verdicts" not in analysis
+    assert "agent_controller" not in analysis
     assert analysis["top_priorities"][2]["data_readiness"]["status"] == "onboarding_incomplete"
     assert "Portfolio daily brief" in message
     assert "ETH: nu doen" in message
     assert "BTC: niet forceren" in message
     assert "Datakwaliteit" in message
     assert "Portfolio-risico" in message
-    assert "Agent-verdicts:" in message
-    assert analysis["agent_controller"]["dominant_agent"] in {"macro_agent", "risk_agent"}
-    assert analysis["agent_controller"]["primary_action"]["prompt"]
-    assert analysis["agent_controller"]["primary_action"]["source"] == "agent_controller"
-    assert "Finn Controller:" in message
+    assert "Agent-verdicts:" not in message
+    assert "Finn Controller:" not in message
     assert "advies-only" in message
 
 
@@ -5857,8 +5835,7 @@ def test_portfolio_risk_detects_concentration_and_bot_conflicts():
     assert risk["ranked_conflicts"][0]["live_bot_count"] == 1
     assert risk["live_bot_hotspots"][0]["asset"] == "BTC"
     assert risk["live_bot_hotspots"][0]["live_bot_count"] == 1
-    assert any(verdict["agent"] == "execution_agent" for verdict in analysis["agent_verdicts"])
-    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "high_attention" for verdict in analysis["agent_verdicts"])
+    assert "agent_verdicts" not in analysis
     assert any(warning["asset"] == "BTC" for warning in risk["concentration_warnings"])
     assert risk["asset_priority"][0]["asset"] == "BTC"
     assert risk["asset_priority"][0]["priority"] == "eerst oplossen"
@@ -5870,7 +5847,7 @@ def test_portfolio_risk_detects_concentration_and_bot_conflicts():
     assert "meerdere bots" in risk["risk_stacks"][0]["factors"]
     message = service._portfolio_daily_coach_message(analysis)
     assert "Risk stack: BTC stapelt risico" in message
-    assert "Risk Agent: high_attention" in message
+    assert "Risk Agent:" not in message
 
 
 def test_mission_control_adds_portfolio_risk_stack_to_workqueue():
@@ -6480,105 +6457,8 @@ def test_mission_control_builds_coaching_loop_from_workqueue_behavior_and_risk()
     assert coaching_loop["do_not_do"] == "Forceer geen nieuwe overrides buiten je topprioriteiten."
 
 
-def test_mission_agent_verdicts_add_memory_agent():
-    service = _service()
-    verdicts = service._merge_mission_agent_verdicts(
-        [{"agent": "risk_agent", "status": "high_attention"}],
-        {
-            "status": "attention",
-            "patterns": ["decision_churn"],
-            "metrics": {"decision_churn_events_today": 1},
-        },
-    )
-
-    assert verdicts[0]["agent"] == "risk_agent"
-    memory = verdicts[-1]
-    assert memory["agent"] == "memory_agent"
-    assert memory["status"] == "attention"
-    assert memory["priority"] == "medium"
 
 
-def test_agent_controller_ranks_verdicts_and_biases_mission_queue():
-    service = _service()
-    mission = {
-        "summary": {"workqueue_count": 2},
-        "workqueue": [
-            {
-                "id": "blocked_plan:BTC:1",
-                "type": "blocked_plan",
-                "priority_rank": 9,
-                "sort_rank": 9,
-                "status": "blocked",
-                "resolve_state": "monitor_today",
-                "asset": "BTC",
-                "title": "BTC plan aandacht",
-                "reason": "macro score blokkeert.",
-            },
-            {
-                "id": "bot_decision_request:BTC",
-                "type": "bot_decision_request",
-                "priority_rank": 40,
-                "sort_rank": 40,
-                "status": "needs_user_confirmation",
-                "resolve_state": "needs_user_confirmation",
-                "asset": "BTC",
-                "title": "Bot-decision maken",
-                "reason": "Aanbevolen volgende stap.",
-            },
-        ],
-        "workqueue_groups": [],
-    }
-    controller = service._build_agent_controller([
-        {
-            "agent": "risk_agent",
-            "label": "Risk Agent",
-            "status": "blocked",
-            "priority": "high",
-            "reason": "Risk Agent blokkeert eerst.",
-            "next_action": "Los de blocker op.",
-            "evidence": {"blocker_count": 3},
-        },
-        {
-            "agent": "execution_agent",
-            "label": "Execution Agent",
-            "status": "review_ready",
-            "priority": "medium",
-            "reason": "Execution kan wachten.",
-            "evidence": {"decision_count": 1},
-        },
-    ], context="mission_control")
-
-    activity_feed = [{
-        "type": "agent_controller_handoff",
-        "status": "executed",
-        "resolve_state": "resolved",
-        "agent_accountability": {
-            "dominant_agent": "risk_agent",
-            "dominant_label": "Risk Agent",
-        },
-    }]
-    updated = service._apply_agent_controller_to_mission(mission, controller, activity_feed=activity_feed)
-
-    assert controller["dominant_agent"] == "risk_agent"
-    assert controller.get("primary_action") is None
-    assert controller["ranked_verdicts"][0]["controller_rank"] == 1
-    assert updated["summary"]["dominant_agent"] == "risk_agent"
-    assert updated["agent_controller"]["primary_action"]["prompt"]
-    assert updated["agent_controller"]["primary_item_id"] == updated["workqueue"][0]["id"]
-    assert updated["agent_accountability"]["dominant_agent"] == "risk_agent"
-    assert updated["agent_accountability"]["followed_count"] == 1
-    assert updated["agent_learning"]["status"] == "ready"
-    assert updated["agent_learning"]["agents"][0]["agent"] == "risk_agent"
-    assert updated["operating_rules"]["status"] == "ready"
-    assert any(rule["id"] == "risk_agent_first" for rule in updated["operating_rules"]["rules"])
-    assert updated["agent_accountability"]["performance_light"]["agents"][0]["agent"] == "risk_agent"
-    assert updated["agent_accountability"]["performance_light"]["agents"][0]["followed"] == 1
-    assert updated["agent_accountability"]["performance_light"]["policy"]["uses_pnl"] is False
-    assert updated["agent_accountability"]["influenced_items"][0]["id"] == "blocked_plan:BTC:1"
-    assert updated["workqueue_groups"][0]["key"] == "first"
-    assert updated["workqueue"][0]["type"] == "blocked_plan"
-    assert updated["workqueue"][0]["controller_rank_boost"] > 0
-    assert updated["workqueue"][0]["dominant_agent"] == "risk_agent"
 
 
 def test_build_mission_control_response_exposes_coaching_loop(monkeypatch):
@@ -8800,8 +8680,6 @@ def test_build_mission_control_response_reorders_priority_stack_for_confirmed_pr
     monkeypatch.setattr(service, "_get_recent_finn_activity", AsyncMock(return_value=[]))
     monkeypatch.setattr(service, "_get_today_resolved_mission_item_ids", AsyncMock(return_value=[]))
     monkeypatch.setattr(service, "_fetch_recent_governance_events", AsyncMock(return_value=[]))
-    monkeypatch.setattr(service, "_build_agent_controller", lambda *args, **kwargs: {})
-    monkeypatch.setattr(service, "_apply_agent_controller_to_mission", lambda mission, agent_controller, activity_feed=None: mission)
     monkeypatch.setattr(service, "_profile_habit_alignment", lambda *args, **kwargs: {
         "active_flags": ["overtrades"],
         "alignments": [{
@@ -8832,6 +8710,8 @@ def test_build_mission_control_response_reorders_priority_stack_for_confirmed_pr
     }))
 
     assert result["coaching_loop"]["daily_priority_stack"][0]["title"] == "BTC live bots vragen review"
+    assert "agent_controller" not in result
+    assert "agent_verdicts" not in result
     assert result["priority_engine"]["top_priorities"][0]["title"] == "BTC live bots vragen review"
     assert result["portfolio_operating_system"]["do_now"][0] == "BTC live bots vragen review"
 
@@ -10647,9 +10527,8 @@ def test_daily_coach_analysis_waits_when_setup_has_blockers():
     assert analysis["stance"] == "wait_for_plan"
     assert analysis["setup_active"] is False
     assert analysis["blockers"][0]["category"] == "technical"
-    assert any(verdict["agent"] == "technical_agent" and verdict["status"] == "blocks_plan" for verdict in analysis["agent_verdicts"])
-    assert any(verdict["agent"] == "risk_agent" and verdict["status"] == "blocked" for verdict in analysis["agent_verdicts"])
-    assert any(verdict["agent"] == "execution_agent" and verdict["status"] == "no_decision" for verdict in analysis["agent_verdicts"])
+    assert "agent_verdicts" not in analysis
+    assert "agent_controller" not in analysis
     assert "Niet forceren" in analysis["suggested_actions"][0]
 
 
@@ -10668,9 +10547,6 @@ def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
             "decisions": [{"bot_id": 8, "action": "buy", "status": "pending"}],
         },
         "indicator_summary": {"warnings": []},
-        "agent_verdicts": [
-            {"label": "Risk Agent", "status": "ready", "reason": "Geen setup-blocker gevonden."}
-        ],
         "suggested_actions": ["Volg je plan."],
     }
 
@@ -10678,7 +10554,7 @@ def test_daily_coach_message_is_advice_only_and_mentions_bot_decisions():
 
     assert "je plan mag vandaag actief zijn" in message
     assert "Bot vandaag: 1 beslissing" in message
-    assert "Agent-verdicts:" in message
+    assert "Agent-verdicts:" not in message
     assert "Ik voer niets automatisch uit" in message
 
 
