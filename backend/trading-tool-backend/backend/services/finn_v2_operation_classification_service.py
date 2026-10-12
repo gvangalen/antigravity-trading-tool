@@ -692,6 +692,7 @@ class FinnV2OperationClassificationService:
                 "last_verified_context", "last_degraded_context", "active_guided_operation",
                 "operation_state", "last_safe_terminal_context", "last_turn_diagnostics",
                 "last_released_context",
+                "feed_event",
             )
             if key in context
         }

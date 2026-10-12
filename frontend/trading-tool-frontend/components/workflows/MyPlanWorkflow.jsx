@@ -413,6 +413,9 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const { locale } = useTranslation();
   const copy = getCopy(locale);
   const activeSymbol = String(searchParams.get("symbol") || symbol || "BTC").toUpperCase();
+  const requestedSetupId = String(searchParams.get("setup_id") || "").trim();
+  const feedSetupId = /^\d+$/.test(requestedSetupId) ? requestedSetupId : null;
+  const lastFocusedFeedSetup = useRef(null);
   const { activeSetup, setActiveSetup } = useActiveSetup();
   const { openConfirm, showSnackbar } = useModal();
   const [bots, setBots] = useState([]);
@@ -584,6 +587,20 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       return getPlanName(a, copy).localeCompare(getPlanName(b, copy));
     });
   }, [activeSetup, bots, copy, marketBestSetup, setupMatches, setups, strategies]);
+
+  useEffect(() => {
+    if (!feedSetupId || loading || !plans.some((plan) => String(getSetupId(plan.setup)) === feedSetupId)) return undefined;
+    const key = `${activeSymbol}:${feedSetupId}`;
+    if (lastFocusedFeedSetup.current === key) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const row = document.getElementById(`feed-setup-${feedSetupId}`);
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        lastFocusedFeedSetup.current = key;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSymbol, feedSetupId, loading, plans]);
 
   const marketBestPlan = useMemo(() => {
     return plans.find((plan) => plan.match?.is_active) || null;
@@ -835,10 +852,13 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
 
         {plans.length ? (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {plans.map((plan) => (
+            {plans.map((plan, index) => (
               <PlanRow
                 key={plan.key}
                 plan={plan}
+                feedAnchorId={feedSetupId === String(getSetupId(plan.setup)) &&
+                  plans.findIndex((candidate) => String(getSetupId(candidate.setup)) === feedSetupId) === index
+                  ? `feed-setup-${feedSetupId}` : undefined}
                 copy={copy}
                 matchesLoading={setupMatches === null}
                 onEditSetup={() => setDrawer({ type: "edit-setup", setup: plan.setup, strategy: plan.strategy })}
@@ -935,9 +955,9 @@ function PlanPart({
   );
 }
 
-function PlanRow({ plan, copy, matchesLoading, onEditSetup, onDuplicateSetup, onEditStrategy, onAskFinn, onDelete }) {
+function PlanRow({ plan, copy, matchesLoading, feedAnchorId, onEditSetup, onDuplicateSetup, onEditStrategy, onAskFinn, onDelete }) {
   return (
-    <div className="group grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-900/40 lg:grid-cols-[1.1fr_1fr_1fr_auto_auto] lg:items-center lg:px-6">
+    <div id={feedAnchorId} className={`group grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-900/40 lg:grid-cols-[1.1fr_1fr_1fr_auto_auto] lg:items-center lg:px-6 ${feedAnchorId ? "bg-blue-50/80 ring-2 ring-inset ring-blue-300 dark:bg-blue-950/20" : ""}`}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="truncate text-sm font-black text-slate-950 dark:text-white">{getPlanName(plan, copy)}</h4>

@@ -154,6 +154,27 @@ class FinnCoachFeedService:
     def __init__(self, session):
         self.session = session
 
+    async def publish_pending_proposal(self, proposal, *, user_id: int) -> str | None:
+        """A persisted draft already awaits a distinct user confirmation."""
+        payload = getattr(proposal, "payload_json", None) or {}
+        change = payload.get("change") or {}
+        fields = (change.get("setup_fields") or change.get("strategy_fields")
+                  or change.get("bot_fields") or change.get("changed_fields") or {})
+        subject = str(fields.get("name") or proposal.asset or proposal.operation_type)
+        amount_kind = next((key for key in ("base_amount", "budget_total_eur")
+                            if fields.get(key) is not None), None)
+        return await self.publish(
+            user_id=user_id, event_key=f"proposal:{proposal.id}",
+            event_type="proposal_pending", subject_type="proposal",
+            subject_id=proposal.id, subject=subject, symbol=proposal.asset,
+            priority=5, expires_at=proposal.expires_at,
+            evidence={"status": "pending_confirmation", "operation_type": proposal.operation_type,
+                      "proposal_id": proposal.id, "payload_hash": proposal.payload_hash,
+                      "amount_kind": amount_kind,
+                      "amount_eur": fields.get(amount_kind) if amount_kind else None},
+            revision=proposal.payload_hash,
+        )
+
     async def publish(self, *, user_id: int, event_key: str, event_type: str,
                       subject_type: str, subject_id: str | None, subject: str,
                       symbol: str | None, evidence: dict, priority: int = 1,
@@ -252,7 +273,7 @@ class FinnCoachFeedService:
             item = await self.publish(
                 user_id=user_id, event_key=f"score-blocked:{asset}",
                 event_type="data_blocked", subject_type="asset", subject_id=asset,
-                subject=asset, symbol=asset, priority=2,
+                subject=asset, symbol=asset, priority=4,
                 expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
                 evidence={"status": status,
                           "component_source_status": assessment.get("component_source_status"),

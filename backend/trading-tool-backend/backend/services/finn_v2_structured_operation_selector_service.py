@@ -406,6 +406,7 @@ class FinnV2StructuredOperationSelectorService:
             for key in (
                 "last_verified_context", "last_degraded_context", "last_released_context", "active_guided_operation",
                 "last_safe_terminal_context", "last_turn_diagnostics",
+                "feed_event",
             )
             if key in raw
         }

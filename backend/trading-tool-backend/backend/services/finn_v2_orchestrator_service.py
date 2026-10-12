@@ -450,6 +450,26 @@ class FinnV2OrchestratorService:
                 "_conversation_has_prior_run"
             ),
         )
+        feed_item_id = str((getattr(run, "client_context_json", {}) or {}).get("feed_item_id") or "")
+        if feed_item_id:
+            from backend.services.finn_coach_feed_service import FinnCoachFeedService
+            feed_item = await FinnCoachFeedService(self.session).detail(
+                user_id=user_id, item_id=feed_item_id,
+            )
+            if feed_item is not None:
+                # Transient, owner-scoped selector hint. This only identifies
+                # what the user chose to discuss; reasoning re-reads current
+                # facts and the separate confirmation contract still governs writes.
+                conversation_context = dict(conversation_context or {})
+                conversation_context["feed_event"] = {
+                    "event_type": feed_item.get("event_type"),
+                    "subject_type": feed_item.get("subject_type"),
+                    "subject_id": feed_item.get("subject_id"),
+                    "symbol": feed_item.get("symbol"),
+                    "subject": (feed_item.get("evidence") or {}).get("subject"),
+                    "read_only_context": True,
+                    "action_authorized": False,
+                }
         await self._record_phase_timestamp(run_id=run_id, phase="context_loaded")
         # Context is now an immutable plain mapping and ``run`` is loaded
         # with ``expire_on_commit=False``. Release this session's connection

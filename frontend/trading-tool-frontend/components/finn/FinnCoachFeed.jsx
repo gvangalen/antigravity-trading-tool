@@ -79,7 +79,7 @@ export default function FinnCoachFeed() {
     void setStatus(item.id, "read");
     window.dispatchEvent(new CustomEvent(FINN_COMMAND_OPEN_EVENT, {
       detail: {
-        mode: "all", query: copy.discussQuery,
+        mode: "all", query: `${copy.discussQuery} ${item.evidence?.subject || item.title}`,
         context: { feed_item_id: item.id },
       },
     }));
@@ -123,7 +123,7 @@ export default function FinnCoachFeed() {
                 </button>
                 {item.event_type !== "proposal_pending" ? (
                   <a href={item.subject_type === "setup"
-                    ? `/setup?symbol=${encodeURIComponent(item.symbol || "")}`
+                    ? `/setup?symbol=${encodeURIComponent(item.symbol || "")}&setup_id=${encodeURIComponent(item.subject_id || "")}`
                     : item.subject_type === "bot"
                       ? `/bot?symbol=${encodeURIComponent(item.symbol || "")}&bot_id=${encodeURIComponent(item.subject_id || "")}`
                       : `/asset?symbol=${encodeURIComponent(item.symbol || "")}`}
