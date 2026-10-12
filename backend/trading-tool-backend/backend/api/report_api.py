@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
@@ -11,9 +11,12 @@ from backend.services.report_service import ReportService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-async def get_report_service(db: AsyncSession = Depends(get_db)):
+async def get_report_service(
+    db: AsyncSession = Depends(get_db),
+    request_locale: Optional[str] = Header(None, alias="X-Locale"),
+):
     repo = ReportRepository(db)
-    return ReportService(repo)
+    return ReportService(repo, request_locale=request_locale)
 
 
 def _report_value_error(exc: ValueError) -> HTTPException:

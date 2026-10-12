@@ -48,6 +48,13 @@ const providerSource = fs.readFileSync(
 const canonicalPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 const timeframePattern = /^(?:\d+[mhdw]|1m)$/;
 
+test("German report copy is localized rather than inherited from English", () => {
+  assert.equal(de.reports.sections.market.dailyOverview, "Tagesübersicht");
+  assert.equal(de.reports.sections.market.marketIntro, "Der Markt zeigt sich heute wie folgt:");
+  assert.equal(de.pages.report.hudEyebrow, "Berichtsübersicht");
+  assert.notEqual(de.reports.sections.strategy.outlook, en.reports.sections.strategy.outlook);
+});
+
 function assertCanonicalArray(values, pattern = canonicalPattern) {
   for (const value of values) {
     assert.match(value, pattern);

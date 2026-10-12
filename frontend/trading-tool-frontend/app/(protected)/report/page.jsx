@@ -1776,6 +1776,8 @@ export default function ReportPage() {
   const [error, setError] = useState('');
 
   const pollTokenRef = useRef(0);
+  const loadTokenRef = useRef(0);
+  const loadedReportTypeRef = useRef(reportType);
   const lastSignatureRef = useRef('');
 
   const handleBoundaryRetry = () => {
@@ -1835,6 +1837,7 @@ LOAD
 ===================================================== */
 
   const loadData = async (date = 'latest') => {
+    const loadToken = ++loadTokenRef.current;
     setLoading(true);
     setError('');
     setSelectedDate(date);
@@ -1843,10 +1846,11 @@ LOAD
       const [rawDates, data] = await Promise.all([
         current.getDates(),
         date === 'latest'
-          ? current.getLatest()
-          : current.getByDate(date),
+          ? current.getLatest({ forceFresh: true })
+          : current.getByDate(date, { forceFresh: true }),
       ]);
 
+      if (loadToken !== loadTokenRef.current) return;
       setDates(sortDatesDesc(rawDates || []));
 
       if (!isReadyReport(data) && AUTO_GENERATE_IF_EMPTY) {
@@ -1858,15 +1862,19 @@ LOAD
       setReport(data || null);
       lastSignatureRef.current = getReportSignature(data);
     } catch {
-      setError('Rapport laden mislukt. De inhoud kan tijdelijk verouderd zijn.');
+      if (loadToken === loadTokenRef.current) {
+        setError('Rapport laden mislukt. De inhoud kan tijdelijk verouderd zijn.');
+      }
     } finally {
-      setLoading(false);
+      if (loadToken === loadTokenRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData('latest');
-  }, [reportType]);
+    const date = loadedReportTypeRef.current === reportType ? selectedDate : 'latest';
+    loadedReportTypeRef.current = reportType;
+    loadData(date);
+  }, [reportType, locale]);
 
   useEffect(() => {
     setTradingReportExpanded(false);
