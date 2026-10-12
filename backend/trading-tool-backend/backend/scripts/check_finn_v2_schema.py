@@ -36,6 +36,7 @@ class RequiredIndex:
 
 
 REQUIRED_FINN_V2_COLUMNS = (
+    RequiredColumn("daily_reports", "score_source_snapshot", "jsonb", True),
     RequiredColumn("daily_scores", "calculated_at", "timestamptz", True),
     RequiredColumn("daily_scores", "indicator_evidence", "jsonb", True),
     RequiredColumn("market_data", "source_observed_at", "timestamp", True),

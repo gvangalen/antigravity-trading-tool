@@ -134,6 +134,7 @@ def generate_daily_report(user_id: int):
                 "best_setup": best_setup,
                 "top_setups": top_setups,
                 "active_strategy": active_strategy,
+                "score_source_snapshot": jsonb(report.get("score_source_snapshot")),
             },
             price=price,
             change_24h=change_24h,

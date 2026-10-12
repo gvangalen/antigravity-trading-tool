@@ -1506,12 +1506,12 @@ function FinnReportsPanel({ report }) {
     month: 'short',
     year: 'numeric',
   });
-  const headerRangeLabel = activeOptionKey === 'today' ? 'Today' : activeOption?.label || digestCopy.metricsHint;
-  const emptyStateSupport = hasLimitedEvidence
-    ? 'FINN needs a few explicit decisions before it can identify a meaningful pattern.'
-    : 'FINN reviews how closely you followed your plan and what to improve next.';
-  const primaryActionLabel = reflectionSummary.primaryAction;
   const reflectionPanel = finnT?.reflectionPanel || {};
+  const headerRangeLabel = activeOptionKey === 'today' ? reflectionPanel.today : activeOption?.label || digestCopy.metricsHint;
+  const emptyStateSupport = hasLimitedEvidence
+    ? reflectionPanel.emptyLimited
+    : reflectionPanel.emptyDefault;
+  const primaryActionLabel = reflectionSummary.primaryAction;
   const openReflectionDetails = () => {
     setExpanded(true);
     if (typeof window !== 'undefined') {
@@ -1550,7 +1550,7 @@ function FinnReportsPanel({ report }) {
                   ? 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300'
                   : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
               }`}>
-                {hasLimitedEvidence ? 'Limited evidence' : 'Reflection active'}
+                {hasLimitedEvidence ? reflectionPanel.limitedEvidence : reflectionPanel.active}
               </span>
             </div>
           </div>
@@ -1594,7 +1594,7 @@ function FinnReportsPanel({ report }) {
                   <div className="inline-flex rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden min-w-max">
                     {primaryReflectionTabs.map((option, index) => {
                       const active = option.key === activeFinnReport;
-                      const label = option.key === 'behavior' ? '30 days' : option.label;
+                      const label = option.key === 'behavior' ? reflectionPanel.behaviorDays : option.label;
                       return (
                         <button
                           key={`${option.key}-${index}`}

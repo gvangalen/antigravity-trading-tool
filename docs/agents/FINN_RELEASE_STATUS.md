@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Daily Report Source Parity Candidate
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI_DEPLOY_QA`. Branch
+`codex/finn-report-source-parity` starts from product SHA
+`4bc75b0d73c63590fc9eecf6acc74342d2a45fd9`. The candidate stores the
+same owner-scoped Score 2.0 component status and indicator source moments used
+by Analyse and FINN alongside each newly generated daily report. The report
+page labels those scores as a saved snapshot, distinguishes their source and
+report creation times, and explains that later live scores can differ. Older
+reports explicitly say their separate source moments were not stored. The
+affected report labels and source details use the NL, EN, and DE dictionaries.
+The report still uses Luna/Responses to write coaching prose; verified scores
+and setup facts come from the shared context, not the generated prose.
+
+Measured local gates: backend **3451 passed, 3 skipped**; frontend build,
+typecheck, i18n lint/tests, command/proposal/setup tests, and high-severity
+audit passed (one moderate Next.js advisory). The local worker-driven safe
+action matrix passed **16/16**, artifact SHA-256
+`2a052f2a1c3a68b58025b32cb57f4a6d8b03ed70cabf3da741ba0ffb0263192f`.
+A real Luna/Responses daily-report probe returned HTTP 200 and preserved the
+typed source snapshot, artifact SHA-256
+`2125747c96eccaa34e9c2c72fc7cdc1c53795a051d528dfd64ef2d38e1ddde66`.
+Real-provider selector development passed **18/18** and regression **109/109**
+with zero provider, schema, timeout, parse, or validation failures; artifact
+SHA-256 values are
+`96908d262a4d11e283ff9435269193c8ef73623cd1411159a54c5782a7c35da2`
+and `fc3c993888c91eb3643c3ea2797e1ef8500cdcb8fa39d367a91eec1a6ac58d7c`.
+The local parity database intentionally has only a minimal `daily_reports`
+table; repository JSONB round-trip was therefore checked in an isolated full
+temporary table, and production schema/application remain to be verified by
+deployment and independent QA. No production report or trade was created by
+Build.
+
 ## FINN Coach Consolidation Candidate
 
 Phase: `TARGETED_QA_ACCEPTED_WITH_REPORT_LIMITS`. Independent QA tested

@@ -198,12 +198,17 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
         "component_source_status": {
             "market_score": "fresh", "macro_score": "fresh", "technical_score": "fresh",
         },
+        "component_source_observed_at": {
+            "market": {"Price": "2026-10-10T05:30:00+00:00"},
+            "macro": {"DXY": "2026-10-09T23:59:59+00:00"},
+            "technical": {"RSI": "2026-10-10T05:25:00+00:00"},
+        },
         "matches": [{"setup_id": 9, "name": "ETH Plan", "symbol": "ETH",
                      "status": "matches", "score": 80, "is_active": True,
                      "components": {}}],
     }
     context = {
-        "locale": "nl", "profile": {}, "assets": [{
+        "locale": "nl", "profile": {}, "observed_at": "2026-10-10T05:31:00+00:00", "assets": [{
             "symbol": "ETH", "benchmark": assessment,
             "setups": [{"id": 9, "name": "ETH Plan", "symbol": "ETH", "timeframe": "1D"}],
             "strategies": [{"id": 10, "setup_id": 9, "name": "ETH Strategy"}],
@@ -232,6 +237,11 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
     assert report["active_strategy"]["setup_name"] == "ETH Plan"
     assert "alle gevolgde assets" in report["setup_validation"]
     assert report["best_setup"]["name"] == "ETH Plan"
+    source_snapshot = report["score_source_snapshot"]
+    assert source_snapshot["observed_at"] == "2026-10-10T05:31:00+00:00"
+    assert source_snapshot["assets"][0]["reported_scores"] == assessment["reported_scores"]
+    assert source_snapshot["assets"][0]["component_source_observed_at"]["market"]["Price"] == "2026-10-10T05:30:00+00:00"
+    assert source_snapshot["assets"][0]["score_report_date"] == "2026-10-10"
     # The persisted report reader must retain this measured match. Without
     # provenance it treats the new report as an old AI-score snapshot and
     # clears the side card despite the matching setup in the prose.
@@ -467,6 +477,7 @@ def test_daily_report_task_persists_typed_report_facts(monkeypatch):
         "macro_indicator_highlights": [{"indicator": "DXY", "symbol": "ETH"}],
         "technical_indicator_highlights": [{"indicator": "RSI", "symbol": "ETH"}],
         "market_score": None, "macro_score": None, "technical_score": None,
+        "score_source_snapshot": {"observed_at": "2026-10-08T08:00:00+00:00", "assets": []},
     })
 
     daily_report_task.generate_daily_report.run(7)
@@ -474,6 +485,7 @@ def test_daily_report_task_persists_typed_report_facts(monkeypatch):
     saved = captured["write"]
     assert captured["committed"] is True
     assert saved["market_score"] is None
+    assert saved["sections"]["score_source_snapshot"]["observed_at"] == "2026-10-08T08:00:00+00:00"
     assert saved["sections"]["active_strategy"]["setup_name"] == "ETH maandelijkse DCA"
     assert saved["sections"]["macro_indicator_highlights"] == [
         {"indicator": "DXY", "symbol": "ETH"}]
