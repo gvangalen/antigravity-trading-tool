@@ -154,13 +154,36 @@ class FinnCoachFeedService:
     def __init__(self, session):
         self.session = session
 
+    async def _proposal_target(self, proposal, *, user_id: int) -> tuple[str | None, int | None, str | None]:
+        """Resolve an existing proposal target by owner, not by asset alone."""
+        operation = str(getattr(proposal, "operation_type", "") or "")
+        kind = next((part for part in ("setup", "strategy", "bot")
+                     if operation.endswith(f"_{part}")), None)
+        if kind is None or operation.startswith("create_"):
+            return None, None, None
+        payload = getattr(proposal, "payload_json", None) or {}
+        change = payload.get("change") or {}
+        target = payload.get("target") or {}
+        try:
+            target_id = int(target.get("target_id") or change.get(f"{kind}_id"))
+        except (TypeError, ValueError):
+            return kind, None, None
+        table = {"setup": "setups", "strategy": "strategies", "bot": "bot_configs"}[kind]
+        row = (await self.session.execute(text(
+            f"SELECT name FROM {table} WHERE id = :target_id AND user_id = :user_id"
+        ), {"target_id": target_id, "user_id": user_id})).mappings().one_or_none()
+        if not row:
+            return kind, None, None
+        return kind, target_id, str(row["name"]) if row.get("name") else None
+
     async def publish_pending_proposal(self, proposal, *, user_id: int) -> str | None:
         """A persisted draft already awaits a distinct user confirmation."""
         payload = getattr(proposal, "payload_json", None) or {}
         change = payload.get("change") or {}
         fields = (change.get("setup_fields") or change.get("strategy_fields")
                   or change.get("bot_fields") or change.get("changed_fields") or {})
-        subject = str(fields.get("name") or proposal.asset or proposal.operation_type)
+        target_type, target_id, target_name = await self._proposal_target(proposal, user_id=user_id)
+        subject = str(fields.get("name") or target_name or proposal.asset or proposal.operation_type)
         amount_kind = next((key for key in ("base_amount", "budget_total_eur")
                             if fields.get(key) is not None), None)
         return await self.publish(
@@ -170,6 +193,8 @@ class FinnCoachFeedService:
             priority=5, expires_at=proposal.expires_at,
             evidence={"status": "pending_confirmation", "operation_type": proposal.operation_type,
                       "proposal_id": proposal.id, "payload_hash": proposal.payload_hash,
+                      "target_type": target_type, "target_id": target_id,
+                      "target_name": target_name,
                       "amount_kind": amount_kind,
                       "amount_eur": fields.get(amount_kind) if amount_kind else None},
             revision=proposal.payload_hash,

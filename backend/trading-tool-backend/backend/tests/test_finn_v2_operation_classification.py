@@ -325,6 +325,34 @@ def test_explicit_mutation_object_role_outranks_entity_words_inside_its_name():
     assert result.selector_source == "registry_mutation_constraint"
 
 
+def test_discussing_a_pending_change_proposal_is_read_only():
+    message = (
+        "Wat betekent dit open wijzigingsvoorstel voor mijn opgeslagen ETH Plan B? "
+        "Lees de setup opnieuw en verander niets."
+    )
+    classifier = FinnV2OperationClassificationService()
+    facts = classifier.preprocessor.preprocess(message=message)
+
+    assert facts.action_polarity in {"read", "evaluate"}
+    assert classifier._explicit_mutation_operation(
+        message=message,
+        facts=facts,
+        workspace_hints=None,
+        client_context=None,
+    ) is None
+    selection = classifier.classify(message=message, conversation_context={
+        "feed_event": {
+            "event_type": "proposal_pending", "subject_type": "proposal",
+            "subject_id": "proposal-b", "target_type": "setup", "target_id": 222,
+            "target_name": "ETH Plan B", "symbol": "ETH",
+            "read_only_context": True, "action_authorized": False,
+        },
+    })
+    assert selection.operation_id == "read_active_setup"
+    assert selection.selector_source == "feed_target_read_constraint"
+    assert FinnV2OperationClassificationValidator().validation_error(selection) is None
+
+
 def test_natural_setup_update_keeps_the_setup_contract_and_typed_change():
     contract = FinnV2OperationRegistry().require_supported("update_setup")
     state = FinnV2OperationStateService().resolve(

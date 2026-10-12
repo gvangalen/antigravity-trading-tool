@@ -646,7 +646,9 @@ class FinnV2RequestPreprocessorService:
         # own verbs.
         if re.search(r"\b(?:verwijder\w*|entfern\w*|lösch\w*|loesch\w*|delet\w*|remov\w*)\b", text):
             return "remove"
-        if re.search(r"\b(?:wijzig\w*|aktualisier\w*|änder\w*|aender\w*|updat\w*)\b", text):
+        # A proposal *about* a change is not a command to change it. Keep
+        # inflected verbs, but exclude the Dutch noun "wijziging(s...)".
+        if re.search(r"\b(?:wijzig(?!ing)\w*|aktualisier\w*|änder\w*|aender\w*|updat\w*)\b", text):
             return "update"
         # Delegating autonomous buy/sell decisions is a financial execution
         # safety fact.  This remains independent from the eventual contract

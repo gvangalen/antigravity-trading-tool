@@ -30,7 +30,7 @@ import { normalizeScopedAssetSymbol, resolveFinnContextSymbol, shouldBlockFinnSu
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
-import { FINN_ASSETS, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
+import { FINN_ASSETS, resolveFeedDraftQuery, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
 import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
@@ -530,9 +530,17 @@ function AIAssistantContent({
   const forceNewFinnConversationRef = useRef(false);
   const activeFinnSessionIdRef = useRef(null);
   const [showReasoning, setShowReasoning] = useState(false);
+  const [feedDraftEdit, setFeedDraftEdit] = useState(null);
+  const [consumedFeedNonce, setConsumedFeedNonce] = useState(null);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   const at = createAssistantTranslator(t);
-  const activeQuery = queryValue !== undefined ? queryValue : query;
+  const isFeedHandoff = Boolean(
+    commandRequest?.mode === "chat" && commandRequest?.context?.feed_item_id,
+  );
+  const activeQuery = resolveFeedDraftQuery(
+    commandRequest, queryValue !== undefined ? queryValue : query,
+    feedDraftEdit, consumedFeedNonce,
+  );
   const updateQuery = onQueryChange || setQuery;
   const isSimpleFinnModal = modal;
   const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
@@ -3741,7 +3749,7 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (isOpen) {
-      if (!previewSectionsOnly) {
+      if (!previewSectionsOnly && !isFeedHandoff) {
         loadFinnState();
       }
       if (Object.keys(preferences).length === 0) {
@@ -3750,10 +3758,10 @@ function AIAssistantContent({
     } else {
       loadedFinnStateRef.current = false;
     }
-  }, [isOpen, isAssetAnalysisPage, pathname, locale]);
+  }, [isOpen, isAssetAnalysisPage, pathname, locale, isFeedHandoff]);
 
   useEffect(() => {
-    if (!isOpen || previewSectionsOnly || sharedSessionRestoreRef.current) return;
+    if (!isOpen || previewSectionsOnly || isFeedHandoff || sharedSessionRestoreRef.current) return;
     sharedSessionRestoreRef.current = true;
 
     (async () => {
@@ -3784,7 +3792,7 @@ function AIAssistantContent({
         console.warn("Kon gedeelde FINN-sessie niet laden:", error);
       }
     })();
-  }, [isOpen, previewSectionsOnly]);
+  }, [isOpen, previewSectionsOnly, isFeedHandoff]);
 
   const persistActiveFinnSessionId = async (sessionId) => {
     const normalized = normalizeFinnSessionId(sessionId);
@@ -3807,6 +3815,8 @@ function AIAssistantContent({
     // Starting a fresh conversation abandons an unsubmitted feed selection.
     // A later unrelated question must not inherit that item's identity.
     usedFeedRequestRef.current = commandRequest?.nonce;
+    setConsumedFeedNonce(commandRequest?.nonce);
+    setFeedDraftEdit(null);
     updateQuery("");
     // State updates are asynchronous; this marker prevents an immediate send
     // from reusing the previous conversation id from the current render.
@@ -4339,7 +4349,10 @@ function AIAssistantContent({
     }
 
     setLoading(true);
-    if (!isSilent) updateQuery("");
+    if (!isSilent) {
+      if (isFeedHandoff) setConsumedFeedNonce(commandRequest?.nonce);
+      updateQuery("");
+    }
     
     if (!isSilent) {
       setMessages(prev => [...prev, { role: "user", text: nextQuery }]);
@@ -6072,8 +6085,17 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (!isOpen || !commandRequest?.nonce || commandRequest.mode !== "chat") return;
-    // A feed selection is a chat draft, not a command-search query. Restore
-    // it when the modal remounts or an earlier conversation is still loaded.
+    // Selecting a feed item starts a separate discussion. It cannot inherit
+    // an older conversation's pending proposal or selected plan.
+    if (isFeedHandoff && commandRequest.newConversation) {
+      forceNewFinnConversationRef.current = true;
+      activeFinnSessionIdRef.current = null;
+      sharedSessionRestoreRef.current = true;
+      setActiveFinnSessionId(null);
+      setActiveState(null);
+      setFinnDraft(null);
+      setMessages([]);
+    }
     updateQuery(commandRequest.query || "");
   }, [commandRequest?.nonce, isOpen]);
 
@@ -7095,6 +7117,9 @@ function AIAssistantContent({
             value={activeQuery}
             onChange={(e) => {
               setShowComposerMenu(false);
+              if (isFeedHandoff) setFeedDraftEdit({
+                nonce: commandRequest?.nonce, value: e.target.value,
+              });
               updateQuery(e.target.value);
             }}
             onKeyDown={(event) => {

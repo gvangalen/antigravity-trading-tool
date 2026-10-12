@@ -96,6 +96,20 @@ export default function FinnWorkspaceShell({ children }) {
     setAssistantOpen(true);
   };
 
+  const discussFeedItem = (itemId, question) => {
+    commandNonceRef.current += 1;
+    const nextQuery = String(question || "").trim();
+    setComposerMenuOpen(false);
+    setComposerQuery(nextQuery);
+    setCommandRequest({
+      mode: "chat", query: nextQuery,
+      context: { feed_item_id: itemId },
+      autoSubmit: false, newConversation: true,
+      nonce: commandNonceRef.current,
+    });
+    setAssistantOpen(true);
+  };
+
   useEffect(() => {
     const openCommandCenter = (detail = {}) => {
       commandNonceRef.current += 1;
@@ -234,7 +248,7 @@ export default function FinnWorkspaceShell({ children }) {
               }`}
             >
               {!isOnboardingRoute ? (
-                <FinnCoachFeed key={user?.id || "anonymous"} />
+                <FinnCoachFeed key={user?.id || "anonymous"} onDiscuss={discussFeedItem} />
               ) : null}
 
               <section className={`border border-slate-200/80 bg-white shadow-[0_18px_50px_-40px_rgba(15,23,42,0.35)] dark:border-slate-800 dark:bg-[#06101f] ${isOnboardingRoute ? "rounded-[28px] p-5 lg:p-6" : "rounded-[32px] p-4 lg:p-6"}`}>

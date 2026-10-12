@@ -561,7 +561,8 @@ async def _try_v2_visible_delivery(
         # description as current evidence or as an action authorization.
         from backend.services.finn_coach_feed_service import FinnCoachFeedService
         from backend.services.setup_market_match_service import SetupMarketMatchService
-        item = await FinnCoachFeedService(db).detail(
+        feed_service = FinnCoachFeedService(db)
+        item = await feed_service.detail(
             user_id=user_id, item_id=str(context_payload["feed_item_id"]),
         )
         if item is None:
@@ -613,11 +614,17 @@ async def _try_v2_visible_delivery(
                 change = (proposal.payload_json or {}).get("change") or {}
                 fields = (change.get("setup_fields") or change.get("strategy_fields")
                           or change.get("bot_fields") or change.get("changed_fields") or {})
+                target_type, target_id, target_name = await feed_service._proposal_target(
+                    proposal, user_id=user_id,
+                )
                 context_payload["feed_proposal_id"] = proposal.id
                 context_payload["feed_proposal_name"] = str(
-                    fields.get("name") or proposal.asset or proposal.operation_type
+                    fields.get("name") or target_name or proposal.asset or proposal.operation_type
                 )[:120]
                 context_payload["feed_proposal_operation_type"] = proposal.operation_type
+                if target_type and target_id and target_name:
+                    context_payload[f"{target_type}_id"] = target_id
+                    context_payload[f"{target_type}_name"] = target_name
     selection = runtime_selection or _preflight_v2_runtime_selection(
         user_id=user_id,
         query=message,

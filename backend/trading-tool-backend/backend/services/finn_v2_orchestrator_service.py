@@ -43,7 +43,7 @@ class FinnV2OrchestratorService:
         """Discard prior plan lineage when a user selects a new feed item."""
         # The previous conversation remains in its own persisted record. Its
         # selected object is irrelevant to the new, explicit feed selection.
-        return {"feed_event": {
+        event = {
             "event_type": feed_item.get("event_type"),
             "subject_type": feed_item.get("subject_type"),
             "subject_id": feed_item.get("subject_id"),
@@ -51,7 +51,12 @@ class FinnV2OrchestratorService:
             "subject": (feed_item.get("evidence") or {}).get("subject"),
             "read_only_context": True,
             "action_authorized": False,
-        }}
+        }
+        for key in ("target_type", "target_id", "target_name"):
+            value = (feed_item.get("evidence") or {}).get(key)
+            if value is not None:
+                event[key] = value
+        return {"feed_event": event}
 
     def __init__(
         self,
