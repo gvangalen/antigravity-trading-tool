@@ -19,11 +19,13 @@ export function resolveFeedDraftQuery(request, query, edit, consumedNonce) {
 }
 
 export function shouldAttachFeedContext(request, submittedQuery, usedNonce) {
+  // Selecting a feed item is explicit context, even when the trader rewrites
+  // the suggested question. The server rechecks ownership and action bounds.
   return Boolean(
     request?.context?.feed_item_id &&
     request?.nonce &&
     request.nonce !== usedNonce &&
-    String(submittedQuery || "").trim() === String(request.query || "").trim()
+    String(submittedQuery || "").trim()
   );
 }
 
