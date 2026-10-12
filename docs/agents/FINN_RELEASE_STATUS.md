@@ -6,7 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report Language Request Parity Repair Candidate
 
-Phase: `READY_FOR_CANDIDATE_CI`. Independent QA on public backend/frontend SHA
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #257](https://github.com/gvangalen/antigravity-trading-tool/pull/257)
+merged as product SHA `ab491c895c10ae0e6c16b588a03fb6a6e913e1b9`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38246760188),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38246979604),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38247161073)
+passed. Public backend health and frontend build-info returned HTTP 200 and
+exactly that SHA on 2026-10-12. Independent QA on previous public backend/frontend SHA
 `fac5a6d7207205ed78a2f4991598c3ef62746bf4` returned `NOT_ACCEPTED` for
 the preceding report-language candidate. The NL → DE → EN → NL browser sequence
 left English headings and Dutch report prose visible in DE and EN, even after
@@ -38,9 +44,13 @@ Real Luna/Responses development passed **18/18**, artifact SHA-256
 The complete regression passed **109/109** with zero selector failures,
 artifact SHA-256
 `9aa6422e9ad5a62a3e3d41fa60cca65af49e85759ff263f99749f8ce8fda81c3`.
-Deployment still needs to finish before independent QA repeats the same
-browser sequence. Build did not change production reports, scores, plans,
-bots, or trades.
+Independent QA should now repeat the NL → DE → EN → NL historical saved-report
+browser sequence on the public SHA. It should check visible headings and prose
+against the chosen language, preserve saved score values, setup names and
+source moments across switches, and compare the saved snapshot with a newer
+Score 2.0 reading when available. A live score value change remains unproven
+until one actually occurs. Build did not change production reports, scores,
+plans, bots, or trades.
 
 ## Saved Report Language and Later Score Change Candidate
 
