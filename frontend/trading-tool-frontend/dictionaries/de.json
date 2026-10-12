@@ -1660,6 +1660,7 @@
       "hudLegacySources": "Dieser ältere Bericht enthält keine einzelnen Quellenzeitpunkte pro Wert.",
       "hudNoAssets": "Für diesen Bericht wurden keine Bewertungsquellen beobachteter Assets erfasst.",
       "hudSourceUnknown": "Quellenzeitpunkt nicht verfügbar",
+      "hudScoresByAsset": "Gespeicherte Bewertungen je Asset",
       "hudIndicatorLabels": {"price": "Preis", "volume": "Volumen", "change_24h": "Kursänderung 24 Stunden", "inflation_rate": "Inflationsrate", "cpi": "Verbraucherpreisindex"},
       "hudSourceStatus": {"fresh": "zum Berichtszeitpunkt aktuell", "stale": "zum Berichtszeitpunkt veraltet", "missing": "zum Berichtszeitpunkt fehlend", "pending": "Neuberechnung nötig", "unknown": "Status unbekannt"},
       "types": {

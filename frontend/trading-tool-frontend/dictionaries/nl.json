@@ -1660,6 +1660,7 @@
       "hudLegacySources": "Dit oudere rapport bewaart geen afzonderlijke bronmomenten per score.",
       "hudNoAssets": "Voor dit rapport zijn geen scorebronnen van gevolgde assets vastgelegd.",
       "hudSourceUnknown": "Bronmoment niet beschikbaar",
+      "hudScoresByAsset": "Opgeslagen scores per asset",
       "hudIndicatorLabels": {"price": "Prijs", "change_24h": "Koerswijziging 24 uur", "inflation_rate": "Inflatie", "cpi": "Consumentenprijsindex"},
       "hudSourceStatus": {"fresh": "actueel op rapportmoment", "stale": "verouderd op rapportmoment", "missing": "ontbrekend op rapportmoment", "pending": "herberekening nodig", "unknown": "status onbekend"},
       "types": {

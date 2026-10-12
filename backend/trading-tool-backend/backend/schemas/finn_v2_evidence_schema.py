@@ -284,6 +284,14 @@ class LatestReportData(BaseModel):
     symbol: Optional[str] = None
     status: Optional[str] = None
     id: Optional[int] = None
+    generated_at: Optional[datetime] = None
+    market_score: Optional[float] = None
+    macro_score: Optional[float] = None
+    technical_score: Optional[float] = None
+    setup_score: Optional[float] = None
+    score_source_snapshot: Optional[Dict[str, Any]] = None
+    best_setup: Optional[Dict[str, Any]] = None
+    top_setups: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ReviewHistoryData(BaseModel):

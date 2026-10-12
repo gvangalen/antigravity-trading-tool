@@ -969,7 +969,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("bot",),
     },
     "read_latest_report": {
-        "semantic_description": "Read the authenticated user's latest stored report metadata. It does not create or regenerate a report.",
+        "semantic_description": "Read the authenticated user's latest stored report and its dated score facts when available. It does not create or regenerate a report.",
         "any_entities": ("report",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),

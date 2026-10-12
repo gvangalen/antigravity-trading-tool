@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Report Readback Follow-Up Candidate
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI_DEPLOY_QA`. The prior independent QA accepted the
+daily-report source parity scope on live SHA
+`072756dab3010e7b405f4644ca6d4312669477cc`: a newly generated ETH
+report kept its 08:15 UTC snapshot after reload, and Analyse, report, and
+FINN showed Market 50, Macro 20, Technical 40, and three setup matches at 74.
+The report stored distinct Price, DXY, and RSI source moments; AAPL's missing
+scores stayed unknown, and an older report disclosed its absent source
+moments. NL/EN/DE source labels worked. QA found two follow-ups: FINN's
+`read_latest_report` tool returned only metadata, so it could not itself
+compare the saved report with current scores, and the global score tiles were
+ambiguous for a multi-asset report. German historical report prose also
+contains older mixed-language text. QA made one report, no plan/bot/trade
+change, and saw no browser console errors.
+
+This follow-up candidate passes the saved report's bounded owner-scoped score
+snapshot, source times, top setups, and generation time through the existing
+FINN read tool. It presents score tiles per asset when a report covers more
+than one asset. It does not change the score calculation, report storage, or
+bot execution. Its deployed identity remains pending. Local backend tests
+passed **3452** with **3 skips**. The frontend
+build, typecheck, i18n lint/tests, command/proposal/setup tests, and
+high-severity audit passed; the audit still reports one moderate Next.js
+advisory. The rebuilt local safe action matrix passed **16/16**, artifact
+SHA-256 `fba5279e1d5e3f9b5a9d81ca8fde593cd42ebd096e8c457d1d58bae63bbec0ec`.
+Real Luna/Responses development passed **18/18**, artifact SHA-256
+`abf5ae89995a6494f76fab00728576988c7e3a994ec2c9599dd40d71a434a9a5`.
+The first full regression was **108/109** solely because the provider rejected
+an innocuous active-asset question with HTTP 400 `invalid_prompt`; artifact
+SHA-256 `58c180bccd401e15d0dfa2486d3abe70b2acb84ef5f06d40330e48df6dde942a`.
+The unchanged complete rerun passed **109/109** with zero provider, schema,
+timeout, parse, or validation failures; artifact SHA-256
+`5660221ac0dba724082100ad14f31a1f980181951e01e438d169a0a40eb89ef8`.
+The isolated provider rejection remains an operational risk; the red run is
+not counted as a passed gate. No production report or trade was created by
+Build for this follow-up.
+
 ## Daily Report Source Parity Candidate
 
 Phase: `READY_FOR_INDEPENDENT_QA`. [PR #250](https://github.com/gvangalen/antigravity-trading-tool/pull/250)

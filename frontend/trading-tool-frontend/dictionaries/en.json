@@ -1659,6 +1659,7 @@
       "hudLegacySources": "This older report does not retain separate source times for each score.",
       "hudNoAssets": "No score sources for followed assets were recorded for this report.",
       "hudSourceUnknown": "Source time unavailable",
+      "hudScoresByAsset": "Saved scores by asset",
       "hudIndicatorLabels": {"change_24h": "24-hour price change", "inflation_rate": "Inflation rate"},
       "hudSourceStatus": {"fresh": "current when reported", "stale": "stale when reported", "missing": "missing when reported", "pending": "recalculation needed", "unknown": "status unknown"},
       "types": {
