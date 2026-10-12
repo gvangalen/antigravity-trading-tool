@@ -6,7 +6,25 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `LOCAL_VALIDATION`. The feed-modal isolation in
+Phase: `ANSWER_EXTRACTION_LOCAL_VALIDATION`. The feed close and internal
+preamble repair in [PR #273](https://github.com/gvangalen/antigravity-trading-tool/pull/273)
+merged as product SHA `a494ee2117187359cbf85a78c3e59d3ea1968f31`.
+Candidate and main CI passed all five jobs; Auto Deploy succeeded; public
+backend and frontend returned HTTP 200 with that SHA. Independent live QA did
+not accept the answer boundary: one AAPL feed discussion displayed two
+concatenated answer versions and raw `citeturn0` markup in one bubble.
+It saw no internal English planning in that turn, verified that the visible X
+removes the modal and handoff ID, and saw translated historical feed text in
+EN and DE. The exact A→B sequence could not be replayed because its two
+existing ETH proposal items had expired into history; native mobile live QA
+was unavailable in that session (report SHA-256
+`8c6bd648609034a88d76181c3d50e0ec3cc93e8ac8dc13289eb22a6a41c0c2b7`).
+The current candidate extracts the final Responses message text instead of
+the Python SDK's delimiter-free `output_text` concatenation, and removes only
+unrenderable citation tokens. That extraction repair has not yet been
+released or independently retested.
+
+The feed-modal isolation in
 [PR #272](https://github.com/gvangalen/antigravity-trading-tool/pull/272)
 merged as product SHA `6d370c318dc659538c6b9f3cbdc24032ac9113c1`.
 Candidate CI, main CI and Auto Deploy passed; public backend and frontend
@@ -39,9 +57,8 @@ the feed context instead of expecting the selector to echo an internal plan ID.
 The complete real Luna/Responses regression passed **109/109** with zero
 provider, schema, timeout, parse or validation failures (artifact SHA-256
 `f663f0296c3a0d076f222c811a9bcb637fc1c411c0cb3f091f4171730cb81f25`).
-Candidate CI passed all five jobs on the initial product commit; the final
-documentation commit, Auto Deploy and independent authenticated QA remain
-pending.
+Candidate CI and the real provider regressions for PR #273 passed before the
+live answer-corruption finding above.
 
 The prior sequential handoff repair merged in
 [PR #270](https://github.com/gvangalen/antigravity-trading-tool/pull/270)

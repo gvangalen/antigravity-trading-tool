@@ -30,6 +30,29 @@ _INTERNAL_PLANNING_PREFIX = re.compile(
     r"user says\b|need (?:a )?concise (?:paragraph|answer)\b|"
     r"(?:internal )?analysis\s*:)", re.I,
 )
+_UNRENDERABLE_CITATION = re.compile(r"cite[^]*")
+
+
+def _final_message_text(response: Any) -> str:
+    """Read the final assistant text, not the SDK's concatenation of drafts."""
+    messages = [
+        item for item in (getattr(response, "output", None) or [])
+        if getattr(item, "type", None) == "message"
+    ]
+    for item in reversed(messages):
+        texts = [
+            str(getattr(part, "text", "") or "").strip()
+            for part in (getattr(item, "content", None) or [])
+            if getattr(part, "type", None) == "output_text"
+            and str(getattr(part, "text", "") or "").strip()
+        ]
+        if texts:
+            if len(messages) > 1:
+                logger.warning("FINN Responses returned multiple assistant messages; using the final one")
+            if len(texts) > 1:
+                logger.warning("FINN Responses returned multiple final-message text parts; using the last")
+            return texts[-1]
+    return str(getattr(response, "output_text", "") or "").strip()
 
 
 def _public_answer_only(answer: str) -> str:
@@ -38,7 +61,8 @@ def _public_answer_only(answer: str) -> str:
     This only recognizes an internal prelude at the beginning of a response;
     it does not rewrite normal coaching or claim to verify its semantics.
     """
-    paragraphs = re.split(r"\n\s*\n", answer.strip())
+    answer = _UNRENDERABLE_CITATION.sub("", answer).strip()
+    paragraphs = re.split(r"\n\s*\n", answer)
     if not paragraphs or not _INTERNAL_PLANNING_PREFIX.match(paragraphs[0].strip()):
         return answer
     while paragraphs and _INTERNAL_PLANNING_PREFIX.match(paragraphs[0].strip()):
@@ -1020,16 +1044,8 @@ class FinnResponsesLoop:
                 raise FinnResponsesError("responses_tool_round_limit")
             if not calls:
                 logger.info("FINN Responses answer extraction starting")
-                answer = str(getattr(response, "output_text", "") or "").strip()
+                answer = _final_message_text(response)
                 logger.info("FINN Responses answer extraction completed chars=%d", len(answer))
-                if not answer:
-                    answer = "\n".join(
-                        str(getattr(part, "text", "") or "")
-                        for item in (getattr(response, "output", None) or [])
-                        if getattr(item, "type", None) == "message"
-                        for part in (getattr(item, "content", None) or [])
-                        if getattr(part, "type", None) == "output_text"
-                    ).strip()
                 if not answer:
                     raise FinnResponsesError("responses_empty_answer")
                 if next_decision_from_previous:

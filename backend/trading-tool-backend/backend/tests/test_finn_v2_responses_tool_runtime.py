@@ -3189,6 +3189,37 @@ def test_model_led_answer_never_delivers_a_separate_internal_preamble():
         _public_answer_only("We need comply with the question.")
 
 
+def test_model_led_answer_uses_final_response_text_instead_of_sdk_aggregation():
+    draft = "Voor je AAPL-plan verandert dit niets. citeturn0?"
+    final = "Voor je AAPL-plan levert dit nog geen onderbouwde koopbeslissing op."
+    message = lambda value: SimpleNamespace(
+        type="message", content=[SimpleNamespace(type="output_text", text=value)],
+    )
+    fake = FakeResponses(SimpleNamespace(
+        id="coach-final", status="completed", output_text=draft + final,
+        output=[message(draft), message(final)],
+    ))
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=AsyncMock(),
+    ).run(message="Wat betekent dit voor mijn plan?", instructions="Beantwoord de vraag.",
+          model_led_coach=True, locale="nl"))
+    assert result.text == final
+    split_message = SimpleNamespace(type="message", content=[
+        SimpleNamespace(type="output_text", text=draft),
+        SimpleNamespace(type="output_text", text=final),
+    ])
+    split_fake = FakeResponses(SimpleNamespace(
+        id="coach-split", status="completed", output_text=draft + final,
+        output=[split_message],
+    ))
+    split_result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=split_fake), executor=AsyncMock(),
+    ).run(message="Wat betekent dit voor mijn plan?", instructions="Beantwoord de vraag.",
+          model_led_coach=True, locale="nl"))
+    assert split_result.text == final
+    assert _public_answer_only("Voorzichtig blijven. citeturn0") == "Voorzichtig blijven."
+
+
 def test_invalid_sibling_operation_field_returns_registry_driven_repair_hint():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "create_or_update_trade_plan_proposal", {
