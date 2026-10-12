@@ -6,7 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Coach Consolidation Candidate
 
-Phase: `LOCAL_CANDIDATE_READY`. The current Build candidate removes the
+Phase: `LIVE_CANDIDATE_PENDING_INDEPENDENT_QA`. [PR #247](https://github.com/gvangalen/antigravity-trading-tool/pull/247)
+merged as product SHA `2905cea6391d6ca86b58227bcfff5994ebc44ef8`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38210021290),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38210182356),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38210326802)
+passed. Public backend health and frontend build-info returned HTTP 200 with
+exactly that SHA on 2026-10-12. The Build candidate removes the
 legacy agent-controller and agent-verdict layer from plan status, daily and
 portfolio coaching, Mission Control, reflection reports, and the web UI. FINN
 retains its existing read tools, score and risk facts, mission workqueue, and
@@ -27,8 +33,8 @@ artifact SHA-256
 The real-provider regression set passed 109/109 with zero provider, schema,
 timeout, parse, or validation failures, artifact SHA-256
 `b5ce71bc3e358a5bd7167c8de911738a7e30da90a3ecfd6757729cf370f90fde`.
-CI, deployment, and independent QA are pending. These local results do not
-establish live coach acceptance.
+Independent authenticated live QA is pending. The local and deployment
+results do not establish live coach acceptance.
 
 ## Five-Flow Current Assessment
 
