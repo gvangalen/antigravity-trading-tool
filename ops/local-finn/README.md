@@ -29,3 +29,12 @@ telemetry cannot fall back to another database.
 PM2 parity is verified by `pytest -q backend/trading-tool-backend/backend/tests/test_finn_local_integration.py`:
 the production ecosystem worker commands, work directories, queue names and
 environment names are compared with this local harness.
+
+To check a dated but stale Score 2.0 source through the actual Smart-DCA Paper
+task, run `bash ops/local-finn/score2-stale-paper.sh` after `start`. This creates
+one disposable local fixture, builds its scores, dispatches through a dedicated
+local Redis/Celery queue, and verifies Hold, zero amount, no order or ledger
+entry, unchanged virtual cash, and both portfolio snapshots. The probe refuses
+any environment other than the exact local PostgreSQL and Redis endpoints.
+It uses synthetic indicator history, so it does not establish a production
+provider's behavior or replace authenticated live QA.
