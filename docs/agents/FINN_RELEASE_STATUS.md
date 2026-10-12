@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `PROPOSAL_FOLLOWUP_LOCAL_VALIDATION`. Independent live QA on product SHA
+Phase: `PROPOSAL_FOLLOWUP_RELEASE_CANDIDATE`. Independent live QA on product SHA
 `0979563fd12fa4da3609481103313411e4902738` accepted the targeted web
 answer and A→B handoff: one coherent AAPL answer without raw citation markup
 or internal planning, different A/B feed IDs and correct B setup lineage after
@@ -15,12 +15,23 @@ mobile acceptance. QA found one remaining feed-context gap: a follow-up about
 an open 4H proposal identified the right B setup and its saved 1D timeframe,
 but could not verify that 4H was still an unconfirmed proposal (report SHA-256
 `de513fa3c6397bc3571eec1c820bf5659258bbd416ab2f995539a86025e467b0`).
-The current local candidate carries only whitelisted, owner-scoped pending
-proposal fields into FINN's read-only context and rereads the selected feed
-item from the saved conversation on follow-up. It never treats a proposal as
-saved or authorizes confirmation. Root backend tests passed **3496**, with
-**3 skipped**; runtime/provider gates, CI, deployment and independent QA are
-pending.
+The current candidate carries only whitelisted, owner-scoped pending proposal
+fields into FINN's read-only context and rereads the selected feed item from
+the saved conversation on follow-up. Those facts reach the actual model-led
+Responses prompt; a direct request-level regression proves the pending 4H
+change is included. It never treats a proposal as saved or authorizes
+confirmation. Root backend tests passed **3497**, with **3 skipped**. The
+isolated API/Celery/Responses action matrix passed **16/16** and adapter tests
+**19/19**, with no broker orders, live bots, live-trading calls or production
+connections (artifact SHA-256
+`fd3083d9068472ecc6d84102e8773fdd1859e97d43f68492f156073047c3bbe9`).
+Real Luna/Responses development passed **20/20** (artifact SHA-256
+`73186dcd81f1452f83f1628b0a5d33175fc62fa7adf2155479e4ee5a23c8b16a`)
+and regression passed **109/109** (artifact SHA-256
+`ff0ccdefdf93255dd4e36d8f4104ca528a02e2b61cf9da3a4cbd087bcae18fd2`),
+with zero provider, schema, timeout, parse or validation failures. Candidate
+CI passed all five jobs on code SHA `bd781b73829e1d0a8c76b733c885b6db55f19221`;
+CI for this status update, deployment identity and independent QA are pending.
 
 Earlier, the feed close and internal
 preamble repair in [PR #273](https://github.com/gvangalen/antigravity-trading-tool/pull/273)
