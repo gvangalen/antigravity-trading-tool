@@ -306,6 +306,7 @@ async def _translate_payload_once_with_ai(payload: Dict[str, Any], target_locale
         "- Preserve the exact JSON structure and keys.\n"
         "- Translate only user-facing string values.\n"
         "- Keep ids, tickers, numbers, percentages, and line breaks intact.\n"
+        "- Keep __SAVED_OBJECT_X__ tokens byte-for-byte unchanged.\n"
         "- Return only valid JSON.\n\n"
         f"{json.dumps(payload, ensure_ascii=False, sort_keys=True)}"
     )
@@ -539,6 +540,56 @@ async def localize_report_payload(
                 if isinstance(value, str) and value.strip():
                     prose[f"{container_name}.{key}"] = value
         if prose:
+            # Names are saved object identities, even when they contain words
+            # that look translatable. Mask them before asking the model, then
+            # restore the exact stored spelling in every narrative section.
+            saved_names: set[str] = set()
+
+            def collect_names(value: Any) -> None:
+                if isinstance(value, str):
+                    try:
+                        value = json.loads(value)
+                    except (TypeError, ValueError):
+                        return
+                if isinstance(value, list):
+                    for item in value:
+                        collect_names(item)
+                elif isinstance(value, dict):
+                    for key, item in value.items():
+                        if key in {"name", "setup_name", "strategy_name", "bot_name"} and isinstance(item, str):
+                            name = item.strip()
+                            if len(name) >= 3:
+                                saved_names.add(name)
+                        elif isinstance(item, (dict, list)):
+                            collect_names(item)
+
+            for container in containers.values():
+                for key in ("best_setup", "top_setups", "active_strategy", "bot_snapshot", "watchlist"):
+                    collect_names(container.get(key))
+
+            def token_suffix(index: int) -> str:
+                result = ""
+                while True:
+                    index, digit = divmod(index, 26)
+                    result = chr(65 + digit) + result
+                    if index == 0:
+                        return result
+                    index -= 1
+
+            name_tokens = {
+                f"__SAVED_OBJECT_{token_suffix(index)}__": name
+                for index, name in enumerate(sorted(saved_names, key=lambda item: (-len(item), item)))
+            }
+            name_to_token = {name: token for token, name in name_tokens.items()}
+            name_pattern = (
+                re.compile("|".join(re.escape(name) for name in name_to_token))
+                if name_to_token else None
+            )
+
+            def mask_names(value: str) -> str:
+                return name_pattern.sub(lambda match: name_to_token[match.group()], value) if name_pattern else value
+
+            protected_prose = {path: mask_names(value) for path, value in prose.items()}
             number_pattern = re.compile(r"(?<![\w])\d+(?:[.,]\d+)?%?")
             foreign_markers = {
                 "de": re.compile(
@@ -561,20 +612,21 @@ async def localize_report_payload(
                 return sorted(token.replace(",", ".") for token in number_pattern.findall(value))
 
             def valid_field(path: str, value: Any) -> bool:
-                source = prose[path]
+                source = protected_prose[path]
                 return (
                     isinstance(value, str)
                     and numbers(value) == numbers(source)
+                    and all(value.count(token) == source.count(token) for token in name_tokens)
                     and not foreign_markers.get(locale, re.compile(r"(?!)")).search(value)
                 )
 
             # Some older rows claim a content locale even though their prose
             # was generated in another language. Trust the text as well as the
             # metadata before skipping translation.
-            if source_locale == locale and all(valid_field(path, value) for path, value in prose.items()):
+            if source_locale == locale and all(valid_field(path, value) for path, value in protected_prose.items()):
                 return payload
             try:
-                translated = await _translate_payload_once_with_ai_singleflight(prose, locale)
+                translated = await _translate_payload_once_with_ai_singleflight(protected_prose, locale)
             except Exception:
                 logger.exception("Report prose translation failed for locale %s", locale)
                 return payload
@@ -583,21 +635,23 @@ async def localize_report_payload(
             # translation and returning the entire Dutch report in German.
             if not isinstance(translated, dict):
                 translated = {}
-            translated = {path: value for path, value in translated.items() if path in prose}
-            invalid = [path for path in prose if not valid_field(path, translated.get(path))]
+            translated = {path: value for path, value in translated.items() if path in protected_prose}
+            invalid = [path for path in protected_prose if not valid_field(path, translated.get(path))]
             for path in invalid:
                 for _ in range(2):
                     try:
-                        repaired = await _translate_payload_once_with_ai({path: prose[path]}, locale)
+                        repaired = await _translate_payload_once_with_ai({path: protected_prose[path]}, locale)
                     except Exception:
                         logger.exception("Report prose section translation failed for locale %s", locale)
                         continue
                     if isinstance(repaired, dict) and valid_field(path, repaired.get(path)):
                         translated[path] = repaired[path]
                         break
-            if set(translated) == set(prose) and all(valid_field(path, translated[path]) for path in prose):
+            if set(translated) == set(protected_prose) and all(valid_field(path, translated[path]) for path in protected_prose):
                 for path, value in translated.items():
                     container_name, key = path.split(".", 1)
+                    for token, name in name_tokens.items():
+                        value = value.replace(token, name)
                     containers[container_name][key] = value
                 if "meta_json" in containers:
                     localized["meta_json"] = (json.dumps(containers["meta_json"], ensure_ascii=False)
@@ -607,9 +661,9 @@ async def localize_report_payload(
             logger.warning(
                 "Report prose localization incomplete locale=%s fields=%s",
                 locale,
-                [path for path in prose if not valid_field(path, translated.get(path))],
+                [path for path in protected_prose if not valid_field(path, translated.get(path))],
             )
-            _payload_translation_cache.pop(_payload_translation_cache_key(prose, locale), None)
+            _payload_translation_cache.pop(_payload_translation_cache_key(protected_prose, locale), None)
         return payload
 
     if locale == DEFAULT_LOCALE:
@@ -684,6 +738,14 @@ async def localize_first_dashboard_context(
     if not source:
         return payload
     source["score_source_snapshot"] = {"content_locale": source_locale}
+    for source_key, context_key, name_key in (
+        ("best_setup", "setup", "name"),
+        ("active_strategy", "strategy", "strategy_name"),
+        ("bot_snapshot", "bot", "name"),
+    ):
+        object_value = context.get(context_key)
+        if isinstance(object_value, dict):
+            source[source_key] = {name_key: object_value.get("name")}
     localized = await localize_report_payload(source, locale)
     if localized == source:
         return payload

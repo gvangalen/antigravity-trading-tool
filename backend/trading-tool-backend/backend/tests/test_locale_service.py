@@ -265,6 +265,71 @@ def test_historical_german_report_repairs_one_untranslated_section(monkeypatch):
     assert len(calls) == 2
 
 
+def test_report_translation_preserves_saved_setup_and_strategy_names(monkeypatch):
+    calls = []
+
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        calls.append(fields)
+        assert all("QA Geen Score AAPL" not in value and "Mijn Vast Plan" not in value
+                   for value in fields.values())
+        return json.dumps({key: value.replace("De setup", "The setup")
+                           .replace("De strategie", "The strategy")
+                           .replace("is opgeslagen", "is saved")
+                           for key, value in fields.items()})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {
+        "executive_summary": "De setup QA Geen Score AAPL 403ee 1210 is opgeslagen.",
+        "strategy_implication": "De strategie Mijn Vast Plan is opgeslagen.",
+        "top_setups": [{"name": "QA Geen Score AAPL 403ee 1210", "score": 74}],
+        "active_strategy": {"strategy_name": "Mijn Vast Plan"},
+        "score_source_snapshot": {"content_locale": "nl", "market_score": 50},
+    }
+    localized = asyncio.run(locale_service.localize_report_payload(original, "en"))
+    assert localized["executive_summary"] == "The setup QA Geen Score AAPL 403ee 1210 is saved."
+    assert localized["strategy_implication"] == "The strategy Mijn Vast Plan is saved."
+    assert localized["top_setups"] == original["top_setups"]
+    assert localized["active_strategy"] == original["active_strategy"]
+    assert localized["score_source_snapshot"] == original["score_source_snapshot"]
+    assert len(calls) == 1
+
+
+def test_report_translation_rejects_a_missing_saved_name_token(monkeypatch):
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        return json.dumps({key: "The setup was saved." for key in fields})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {
+        "executive_summary": "De setup Mijn DCA Plan is opgeslagen.",
+        "best_setup": {"name": "Mijn DCA Plan"},
+        "score_source_snapshot": {"content_locale": "nl"},
+    }
+    assert asyncio.run(locale_service.localize_report_payload(original, "en")) == original
+
+
+def test_report_translation_uses_watchlist_match_names_beyond_top_setups(monkeypatch):
+    async def translate(**kwargs):
+        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
+        assert "Plan Geen Actuele Score" not in next(iter(fields.values()))
+        return json.dumps({key: value.replace("De setup", "Das Setup")
+                           .replace("heeft geen score", "hat keinen Wert")
+                           for key, value in fields.items()})
+
+    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
+    original = {
+        "market_analysis": "De setup Plan Geen Actuele Score heeft geen score.",
+        "top_setups": [{"name": "Andere setup"}],
+        "watchlist": [{"symbol": "AAPL", "benchmark": {"matches": [
+            {"name": "Plan Geen Actuele Score", "status": "insufficient_data"}
+        ]}}],
+    }
+    localized = asyncio.run(locale_service.localize_report_payload(original, "de"))
+    assert localized["market_analysis"] == "Das Setup Plan Geen Actuele Score hat keinen Wert."
+    assert localized["watchlist"] == original["watchlist"]
+
+
 def test_saved_german_today_briefing_follows_requested_language_without_storage_change(monkeypatch):
     async def translate(**kwargs):
         fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])

@@ -4,9 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Saved Report Object Names Candidate
+
+Phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+`370defe7edeb132b8a298f653848652becb33c4a` returned `NOT_ACCEPTED` for
+the targeted language scope. The historical report's headings and narrative
+now follow NL → DE → EN → NL after reload, and FINN Today follows the active
+language. The remaining defect is identity drift: the translation changed
+saved setup and strategy names inside narrative prose while the typed lists
+kept the exact stored names. For example a setup containing the Dutch word
+`Geen` was rendered with its English equivalent in the introduction. The
+saved ETH 50/20/40, setupmatch 74 and 07:20 UTC Price source moment stayed
+unchanged. Analyse now showed a genuinely different current Market score 40
+from a newer 12:40 source moment; the report correctly kept historical 50.
+FINN Today kept the non-live bot status. QA saw no console errors and made no
+new report or trading action.
+
+This repair masks owner-scoped setup, strategy and bot names taken from the
+typed saved report objects before translating narrative text. It validates
+that every name token survives translation and restores the exact stored
+spelling afterward. The same rule protects saved names in a localized FINN
+Today briefing. Typed lists, score snapshots and persistence are unchanged.
+The full backend suite passed **3468** with **3 skips**. A real Luna/Responses
+probe translated English and German narrative around two saved names while
+preserving both names exactly and leaving the typed score snapshot unchanged.
+The final isolated API/Celery safe action matrix passed **16/16** with zero
+broker orders, live calls or production connections; artifact SHA-256
+`40f965de11563d629769c6f4970592676e6d3c475d856f575436f8e06072efa7`.
+Real-provider selector development passed **18/18** with zero provider, schema,
+timeout, parse or validation failures; artifact SHA-256
+`0eac61d5a26ac0b9f5ffc8e031b9d0126cb736db3b0eccac94712885f0506a7e`.
+The complete real-provider regression passed **109/109** with zero provider,
+schema, timeout, parse or validation failures; artifact SHA-256
+`2883df45ec9f7704e133cbb9f038643969ca93e7a54ed625d675d75716c54fb2`.
+CI, deployment and independent QA remain pending.
+
 ## Historical Report Section Repair and FINN Today Language Candidate
 
-Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #259](https://github.com/gvangalen/antigravity-trading-tool/pull/259)
+Phase: `NOT_ACCEPTED_IN_LIVE_QA`. [PR #259](https://github.com/gvangalen/antigravity-trading-tool/pull/259)
 merged as product SHA `090fd29e8a99c4545df2b9cccaa5dd9cef3cea28`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38252359202),
 [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38252586479),
@@ -36,7 +71,8 @@ reports one existing moderate Next.js advisory. A real Luna/Responses local
 probe translated **8/8** German report sections and preserved the typed score
 snapshot. Another real-provider probe translated a stored German FINN Today
 briefing to Dutch and English without changing its market score. Independent
-authenticated QA remains pending. The final isolated local API/Celery action matrix
+QA later rejected translated saved object names, as recorded above. The final
+isolated local API/Celery action matrix
 passed **16/16** with zero broker orders, live calls or production connections;
 artifact SHA-256 `401dce81eb4aed2aa921459762fb391d669f98b2b2f8ecf571355d71d856ff1e`.
 The real-provider selector development set passed **18/18** with zero provider,
@@ -45,13 +81,9 @@ schema, timeout, parse or validation failures; artifact SHA-256
 The complete real-provider regression passed **109/109** with zero provider,
 schema, timeout, parse or validation failures; artifact SHA-256
 `e725c24ad960756c4fb8176a9dee8d42681151e229b5f8f0750d33af47f3beaf`.
-The existing QA task should repeat the historical saved-report NL → DE → EN →
-NL browser sequence, check every visible narrative section after reload, and
-confirm the saved score values, setupmatch, names and source moment are
-unchanged. It should also inspect the saved German FINN Today briefing in NL
-and EN after language switches and refresh. A newer live source moment with
-unchanged score value does not prove a later score-value change. No new
-report, plan, bot or trade is needed.
+The existing QA task repeated the historical saved-report NL → DE → EN → NL
+browser sequence and FINN Today language switches on the status SHA. Language
+and typed score facts passed; translated saved object names failed.
 
 ## Report Language Request Parity Repair Candidate
 
