@@ -2585,9 +2585,9 @@
       }
     },
     "guardrailsPanel": {
-      "safetyCheck": "Veiligheidscheck",
-      "goClear": "GROEN / VRIJ",
-      "systemBlocked": "BOTBESLISSING HOUDT VAST",
+      "safetyCheck": "Risicolimieten",
+      "goClear": "RISICOLIMIETEN IN ORDE",
+      "systemBlocked": "RISICOLIMIET BLOKKEERT",
       "maxRiskPerTrade": "Max risico / trade",
       "exposureRatio": "Blootstellingsratio",
       "adjustedPositionSize": "Aangepaste inzet",
@@ -2596,7 +2596,7 @@
       "requestedPrefix": "Gevraagd",
       "interlockReason": "Reden van interlock",
       "withinRiskLimits": "binnen risicolimieten",
-      "allSafetyParametersNormal": "✓ Alle veiligheidsparameters zijn normaal",
+      "allSafetyParametersNormal": "✓ Deze risicolimieten zijn niet overschreden",
       "behavioralBrake": "Gedragsrem",
       "behaviorLabels": {
         "fomo": "FOMO",

@@ -2584,9 +2584,9 @@
       }
     },
     "guardrailsPanel": {
-      "safetyCheck": "Safety check",
-      "goClear": "GO / CLEAR",
-      "systemBlocked": "BOT DECISION ON HOLD",
+      "safetyCheck": "Risk limits",
+      "goClear": "RISK LIMITS CLEAR",
+      "systemBlocked": "RISK LIMIT BLOCKED",
       "maxRiskPerTrade": "Max risk / trade",
       "exposureRatio": "Exposure ratio",
       "adjustedPositionSize": "Adjusted position size",
@@ -2595,7 +2595,7 @@
       "requestedPrefix": "Req",
       "interlockReason": "Reason for interlock",
       "withinRiskLimits": "within risk limits",
-      "allSafetyParametersNormal": "✓ All safety parameters are normal",
+      "allSafetyParametersNormal": "✓ These risk limits have not been exceeded",
       "behavioralBrake": "Behavioral brake",
       "behaviorLabels": {
         "fomo": "FOMO",
