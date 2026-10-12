@@ -4,8 +4,11 @@ import test from "node:test";
 import {
   getCommandTokens,
   getDefaultIndicatorCategory,
+  isDirectCommandSearchMode,
   matchesCommandQuery,
   normalizeCommandText,
+  openFinnContext,
+  shouldAttachFeedContext,
 } from "../lib/finnCommandSearch.js";
 
 test("normalizes accents and punctuation in natural commands", () => {
@@ -32,4 +35,49 @@ test("chooses the indicator category from the active workspace", () => {
   assert.equal(getDefaultIndicatorCategory("/macro"), "macro");
   assert.equal(getDefaultIndicatorCategory("/market"), "market");
   assert.equal(getDefaultIndicatorCategory("/asset"), "technical");
+});
+
+test("opens a feed item as an explicit chat draft with its exact event identity", () => {
+  const previousWindow = globalThis.window;
+  const previousCustomEvent = globalThis.CustomEvent;
+  let dispatched;
+  globalThis.window = { dispatchEvent: (event) => { dispatched = event; } };
+  globalThis.CustomEvent = class {
+    constructor(type, options) {
+      this.type = type;
+      this.detail = options.detail;
+    }
+  };
+  try {
+    openFinnContext({
+      query: " Bespreek BTC Full Base ",
+      context: { feed_item_id: "feed-plan-b" },
+      autoSubmit: false,
+    });
+    assert.equal(dispatched.type, "finn-command-search:open");
+    assert.deepEqual(dispatched.detail, {
+      mode: "chat",
+      query: "Bespreek BTC Full Base",
+      context: { feed_item_id: "feed-plan-b" },
+      autoSubmit: false,
+    });
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.CustomEvent = previousCustomEvent;
+  }
+});
+
+test("a chat handoff does not search assets, pages or indicators", () => {
+  assert.equal(isDirectCommandSearchMode("chat"), false);
+  assert.equal(isDirectCommandSearchMode("all"), true);
+  assert.equal(isDirectCommandSearchMode("asset"), true);
+  assert.equal(isDirectCommandSearchMode("indicator"), true);
+});
+
+test("feed identity follows only its untouched first chat submission", () => {
+  const request = { nonce: 8, query: "Bespreek QA Plan B", context: { feed_item_id: "feed-b" } };
+  assert.equal(shouldAttachFeedContext(request, "Bespreek QA Plan B", null), true);
+  assert.equal(shouldAttachFeedContext(request, "Bespreek QA Plan B", 8), false);
+  assert.equal(shouldAttachFeedContext(request, "Hoe gaat het met QA Plan A?", null), false);
+  assert.equal(shouldAttachFeedContext(request, "", null), false);
 });

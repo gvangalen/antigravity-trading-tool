@@ -30,7 +30,7 @@ import { normalizeScopedAssetSymbol, resolveFinnContextSymbol, shouldBlockFinnSu
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
-import { FINN_ASSETS } from "@/lib/finnCommandSearch";
+import { FINN_ASSETS, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
 import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
@@ -3804,6 +3804,10 @@ function AIAssistantContent({
   };
 
   const startNewFinnConversation = async () => {
+    // Starting a fresh conversation abandons an unsubmitted feed selection.
+    // A later unrelated question must not inherit that item's identity.
+    usedFeedRequestRef.current = commandRequest?.nonce;
+    updateQuery("");
     // State updates are asynchronous; this marker prevents an immediate send
     // from reusing the previous conversation id from the current render.
     forceNewFinnConversationRef.current = true;
@@ -4363,10 +4367,12 @@ function AIAssistantContent({
         ? { ...context, ...latestAssistantState }
         : context;
       const commandContext = { ...(commandRequest?.context || {}) };
-      if (commandContext.feed_item_id && usedFeedRequestRef.current === commandRequest?.nonce) {
-        delete commandContext.feed_item_id;
-      } else if (commandContext.feed_item_id) {
+      if (commandContext.feed_item_id) {
+        const attachFeed = shouldAttachFeedContext(
+          commandRequest, nextQuery, usedFeedRequestRef.current,
+        );
         usedFeedRequestRef.current = commandRequest?.nonce;
+        if (!attachFeed) delete commandContext.feed_item_id;
       }
       const requestContext = { ...baseRequestContext, ...commandContext };
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
@@ -6065,6 +6071,13 @@ function AIAssistantContent({
   }, [isOpen, hasTraderProfile, pathname, globalSymbol, context.symbol, profileSummaryLabel]);
 
   useEffect(() => {
+    if (!isOpen || !commandRequest?.nonce || commandRequest.mode !== "chat") return;
+    // A feed selection is a chat draft, not a command-search query. Restore
+    // it when the modal remounts or an earlier conversation is still loaded.
+    updateQuery(commandRequest.query || "");
+  }, [commandRequest?.nonce, isOpen]);
+
+  useEffect(() => {
     if (!isOpen || !commandRequest?.autoSubmit || !commandRequest?.query) return;
     if (handledContextRequestRef.current === commandRequest.nonce) return;
     handledContextRequestRef.current = commandRequest.nonce;
@@ -7086,7 +7099,7 @@ function AIAssistantContent({
             }}
             onKeyDown={(event) => {
               if (loading || activeStreamIdRef.current) return;
-              if (!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
+              if (commandRequest?.mode !== "chat" && !hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
               if (event.key === "Enter") handleChat();
             }}
             placeholder={isSimpleFinnModal ? composerMenuCopy.placeholder : uiText.inputPlaceholder}
@@ -7094,7 +7107,7 @@ function AIAssistantContent({
           />
           <button 
             onClick={() => {
-              if (!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.submitPrimary()) return;
+              if (commandRequest?.mode !== "chat" && !hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.submitPrimary()) return;
               handleChat();
             }}
             disabled={loading || !activeQuery.trim()}

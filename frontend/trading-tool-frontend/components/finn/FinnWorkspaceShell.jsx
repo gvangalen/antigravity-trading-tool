@@ -74,9 +74,18 @@ export default function FinnWorkspaceShell({ children }) {
   }, [requestedAsset, selectedAsset, setSelectedAsset]);
 
   const openAssistant = () => {
+    // Focus can return to the dock while the modal opens. Keep a feed handoff
+    // until its explicit chat submission instead of replacing its request.
+    if (assistantOpen) return;
     commandNonceRef.current += 1;
     setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
     setAssistantOpen(true);
+  };
+
+  const closeAssistant = () => {
+    setAssistantOpen(false);
+    setComposerQuery("");
+    setCommandRequest(null);
   };
 
   const openAssistantMode = (mode, category = null) => {
@@ -326,11 +335,14 @@ export default function FinnWorkspaceShell({ children }) {
               type="button"
               aria-label={workspaceCopy.closeBackdrop}
               className="absolute inset-0 cursor-default"
-              onClick={() => setAssistantOpen(false)}
+              onClick={closeAssistant}
             />
             <AIAssistant
               isOpen={assistantOpen}
-              setIsOpen={setAssistantOpen}
+              setIsOpen={(open) => {
+                if (open) setAssistantOpen(true);
+                else closeAssistant();
+              }}
               modal
               className="z-10"
               eventsEnabled={assistantOpen}

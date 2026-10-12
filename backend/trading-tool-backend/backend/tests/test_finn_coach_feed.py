@@ -8,6 +8,8 @@ import pytest
 from backend.services import finn_coach_feed_service as module
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
+from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+from backend.api.ai_assistant_api import _feed_context_boundary
 
 
 def test_fallback_preserves_subject_and_never_claims_an_entry_signal():
@@ -118,6 +120,36 @@ def test_discuss_setup_rechecks_current_match_and_marks_old_notification_histori
     assert historical.freshness == "historical"
     assert historical.as_of.isoformat() == "2026-10-10T10:00:00+00:00"
     assert current.freshness == "stale"
+
+
+def test_feed_selection_replaces_prior_plan_referent_for_this_turn():
+    selected = FinnV2OrchestratorService._selected_feed_context({
+        "last_verified_context": {"resolved_entities": {"name": "QA Plan A"}},
+        "active_guided_operation": {"name": "QA Plan A"},
+    }, {
+        "event_type": "plan_match", "subject_type": "setup", "subject_id": "222",
+        "symbol": "ETH", "evidence": {"subject": "QA Plan B"},
+    })
+    assert selected == {"feed_event": {
+        "event_type": "plan_match", "subject_type": "setup", "subject_id": "222",
+        "symbol": "ETH", "subject": "QA Plan B", "read_only_context": True,
+        "action_authorized": False,
+    }}
+    assert "last_verified_context" not in selected
+    assert "active_guided_operation" not in selected
+
+
+def test_feed_boundary_discards_stale_client_plan_and_draft_before_selection():
+    incoming = {
+        "feed_item_id": "feed-b", "locale": "nl", "session_id": "conversation-1",
+        "symbol": "BTC", "setup_id": 111, "setup_name": "QA Plan A",
+        "strategy_id": 8, "bot_id": 9, "current_flow": "update_setup",
+        "finn_draft": {"name": "QA Plan A"}, "page": "/setup",
+    }
+    assert _feed_context_boundary(incoming) == {
+        "feed_item_id": "feed-b", "locale": "nl", "session_id": "conversation-1",
+    }
+    assert _feed_context_boundary({"setup_id": 111}) == {"setup_id": 111}
 
 
 def test_discuss_market_move_can_explain_recorded_change_without_calling_it_current(monkeypatch):

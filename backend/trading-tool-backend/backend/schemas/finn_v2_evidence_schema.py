@@ -178,6 +178,7 @@ class LinkedStrategyData(BaseModel):
     stop_loss: Optional[str] = None
     targets: List[str] = Field(default_factory=list)
     base_amount: Optional[float] = None
+    currency: Optional[str] = None
     setup_name: Optional[str] = None
     setup_type: Optional[str] = None
     dca_amount_mode: Optional[str] = None

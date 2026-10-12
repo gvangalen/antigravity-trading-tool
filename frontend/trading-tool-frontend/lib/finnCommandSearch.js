@@ -2,6 +2,17 @@ export const FINN_COMMAND_OPEN_EVENT = "finn-command-search:open";
 export const FINN_INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 export const FINN_INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
 
+export const isDirectCommandSearchMode = (mode) => mode !== "chat";
+
+export function shouldAttachFeedContext(request, submittedQuery, usedNonce) {
+  return Boolean(
+    request?.context?.feed_item_id &&
+    request?.nonce &&
+    request.nonce !== usedNonce &&
+    String(submittedQuery || "").trim() === String(request.query || "").trim()
+  );
+}
+
 export function openFinnContext({ query, context = {}, autoSubmit = true } = {}) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(

@@ -38,6 +38,21 @@ logger = logging.getLogger(__name__)
 
 
 class FinnV2OrchestratorService:
+    @staticmethod
+    def _selected_feed_context(_prior_context: dict, feed_item: dict) -> dict:
+        """Discard prior plan lineage when a user selects a new feed item."""
+        # The previous conversation remains in its own persisted record. Its
+        # selected object is irrelevant to the new, explicit feed selection.
+        return {"feed_event": {
+            "event_type": feed_item.get("event_type"),
+            "subject_type": feed_item.get("subject_type"),
+            "subject_id": feed_item.get("subject_id"),
+            "symbol": feed_item.get("symbol"),
+            "subject": (feed_item.get("evidence") or {}).get("subject"),
+            "read_only_context": True,
+            "action_authorized": False,
+        }}
+
     def __init__(
         self,
         session: AsyncSession,
@@ -457,19 +472,12 @@ class FinnV2OrchestratorService:
                 user_id=user_id, item_id=feed_item_id,
             )
             if feed_item is not None:
-                # Transient, owner-scoped selector hint. This only identifies
-                # what the user chose to discuss; reasoning re-reads current
-                # facts and the separate confirmation contract still governs writes.
-                conversation_context = dict(conversation_context or {})
-                conversation_context["feed_event"] = {
-                    "event_type": feed_item.get("event_type"),
-                    "subject_type": feed_item.get("subject_type"),
-                    "subject_id": feed_item.get("subject_id"),
-                    "symbol": feed_item.get("symbol"),
-                    "subject": (feed_item.get("evidence") or {}).get("subject"),
-                    "read_only_context": True,
-                    "action_authorized": False,
-                }
+                # A feed click is an explicit new referent. Earlier plan
+                # lineage must not compete with it in the selector; the chat
+                # transcript remains intact and reasoning re-reads facts.
+                conversation_context = self._selected_feed_context(
+                    dict(conversation_context or {}), feed_item,
+                )
         await self._record_phase_timestamp(run_id=run_id, phase="context_loaded")
         # Context is now an immutable plain mapping and ``run`` is loaded
         # with ``expire_on_commit=False``. Release this session's connection

@@ -2736,6 +2736,25 @@ class FinnResponsesAnswerVerifier:
         )):
             previous_response = None
         previous_answer = str((previous_response or {}).get("answer") or "").strip()
+        prior_strategy_amount = None
+        if (
+            isinstance(recent_action_result, dict)
+            and recent_action_result.get("operation_id") == "update_strategy"
+            and recent_action_result.get("result_status") == "succeeded"
+        ):
+            prior_entity = recent_action_result.get("canonical_entity") or {}
+            if isinstance(prior_entity, dict):
+                prior_strategy_amount = prior_entity.get("base_amount")
+                if prior_strategy_amount is None and isinstance(prior_entity.get("data"), dict):
+                    prior_strategy_amount = prior_entity["data"].get("base_amount")
+            if not any(
+                item.get("scope") == "read_linked_strategy"
+                and item.get("status") == "completed"
+                and str((item.get("data") or {}).get("strategy_id"))
+                == str(recent_action_result.get("entity_id"))
+                for item in evidence
+            ):
+                prior_strategy_amount = None
         def quantities_supported(
             text: str, *,
             source_evidence: tuple[dict[str, Any], ...] | None = None,
@@ -2750,10 +2769,22 @@ class FinnResponsesAnswerVerifier:
                 " ".join(part for part in (previous_answer, antecedent_answer) if part)
                 if reusing_previous_read else previous_answer
             )
+            amount_evidence = checked_evidence
+            if prior_strategy_amount is not None:
+                try:
+                    previous_amount = float(Decimal(str(prior_strategy_amount)))
+                except (InvalidOperation, TypeError, ValueError):
+                    previous_amount = None
+                if previous_amount is not None:
+                    amount_evidence = (*checked_evidence, {
+                        "scope": "confirmed_action_previous_strategy_amount",
+                        "status": "completed",
+                        "data": {"base_amount_before": previous_amount},
+                    })
             return (
                 self._amounts_supported(
                     answer=text, message=user_question_context, previous_answer=prior_quantity_context,
-                    evidence=checked_evidence,
+                    evidence=amount_evidence,
                 )
                 and self._percentage_claims_supported(
                     answer=text, message=user_question_context, previous_answer=previous_answer,
@@ -2773,7 +2804,7 @@ class FinnResponsesAnswerVerifier:
                 )
                 and self._currency_units_supported(
                     answer=text, message=user_question_context, previous_answer=prior_quantity_context,
-                    evidence=checked_evidence,
+                    evidence=amount_evidence,
                 )
                 and self._static_geometry_complete(text, checked_evidence, result.response_focus)
                 and not self._contains_internal_identifier(
@@ -2815,6 +2846,8 @@ class FinnResponsesAnswerVerifier:
             for key in ("operation_id", "entity_type", "canonical_name", "previous_name", "result_status")
             if recent_action_result and recent_action_result.get(key) is not None
         }
+        if prior_strategy_amount is not None:
+            confirmed_action["previous_base_amount"] = prior_strategy_amount
         general_education = (
             not result.tool_trace and not result.uses_previous_response
         ) or (bool(result.tool_trace) and all(
