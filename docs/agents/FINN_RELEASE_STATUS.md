@@ -4,9 +4,9 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
-## Saved Report Object Names Candidate
+## Saved Report Object Names Release
 
-Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #261](https://github.com/gvangalen/antigravity-trading-tool/pull/261)
+Phase: `ACCEPTED_IN_LIVE_QA`. [PR #261](https://github.com/gvangalen/antigravity-trading-tool/pull/261)
 merged as product SHA `b3e7776df98c0960de70e30419fda0759cb36aa2`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38256060004),
 [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38256273006),
@@ -43,7 +43,22 @@ timeout, parse or validation failures; artifact SHA-256
 The complete real-provider regression passed **109/109** with zero provider,
 schema, timeout, parse or validation failures; artifact SHA-256
 `2883df45ec9f7704e133cbb9f038643969ca93e7a54ed625d675d75716c54fb2`.
-Independent QA of saved-name identity, language and score parity remains pending.
+The status-only [PR #262](https://github.com/gvangalen/antigravity-trading-tool/pull/262)
+merged as public SHA `554bf3b4d3516e2873d711365442785d481ee35a`.
+Its [candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38256672367),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38256955952)
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38257189455)
+passed; public backend and frontend each returned HTTP 200 and that exact SHA.
+Independent authenticated QA accepted the targeted historical-report and FINN
+Today language scope on that SHA. The saved report passed NL → DE → EN → NL
+with hard refresh: headings and prose followed the active language, while
+saved setup names stayed byte-for-byte identical in prose and typed lists.
+The saved ETH 50/20/40, setupmatch 74 and Price 07:20 UTC stayed fixed;
+current Analyse separately showed Market 40 from 12:40 UTC and setupscore 81.
+FINN Today used the current 81, kept the bot non-live and gave no buy advice.
+The browser console had no errors or warnings and QA made no writes. A brief
+flash of the previous briefing language just after switching locale remains
+a minor UI polish item.
 
 ## Historical Report Section Repair and FINN Today Language Candidate
 
