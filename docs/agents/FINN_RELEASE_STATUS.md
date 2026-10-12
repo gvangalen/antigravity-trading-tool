@@ -6,7 +6,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Coach Consolidation Candidate
 
-Phase: `LIVE_CANDIDATE_PENDING_INDEPENDENT_QA`. [PR #247](https://github.com/gvangalen/antigravity-trading-tool/pull/247)
+Phase: `TARGETED_QA_ACCEPTED_WITH_REPORT_LIMITS`. Independent QA tested
+public backend and frontend SHA `b17f41d9268bb43d6c00a951e993e96e7cb2a6ed`
+in the existing QA Agent task and accepted the limited retirement scope.
+Authenticated FINN chat, FINN Today, Mission Control, and the existing report
+remained usable; no agent-controller or agent-verdict cards and no browser
+console errors or warnings were seen. FINN kept score and plan facts in a
+read-only conversation, and a watchlist request remained an unconfirmed
+proposal. QA did not confirm writes, create a report, or establish that all
+historical backend paths are absent. QA separately found that an existing
+report showed an earlier ETH setup match and price score than the later live
+chat without a clear source-time distinction, and that some Dutch report
+labels remain in English. Those report presentation issues remain open; this
+verdict is not full FINN acceptance.
+
+[PR #247](https://github.com/gvangalen/antigravity-trading-tool/pull/247)
 merged as product SHA `2905cea6391d6ca86b58227bcfff5994ebc44ef8`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38210021290),
 [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38210182356),
@@ -33,8 +47,12 @@ artifact SHA-256
 The real-provider regression set passed 109/109 with zero provider, schema,
 timeout, parse, or validation failures, artifact SHA-256
 `b5ce71bc3e358a5bd7167c8de911738a7e30da90a3ecfd6757729cf370f90fde`.
-Independent authenticated live QA is pending. The local and deployment
-results do not establish live coach acceptance.
+The status-only [PR #248](https://github.com/gvangalen/antigravity-trading-tool/pull/248)
+deployed as SHA `b17f41d9268bb43d6c00a951e993e96e7cb2a6ed` after passing
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38210651149)
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38210807675).
+Public backend health and frontend build-info both returned HTTP 200 with
+that SHA. The independent QA result above applies to that exact live SHA.
 
 ## Five-Flow Current Assessment
 
