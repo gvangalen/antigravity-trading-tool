@@ -4,9 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Historical Report Section Repair and FINN Today Language Candidate
+
+Phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+`146fd87e63ca8bb0a62e2b9da4fd7a094ee4662f` returned `NOT_ACCEPTED` for
+report language. NL → DE → EN → NL showed translated German headings but Dutch
+report paragraphs even after reload; English narrative did translate. The
+stored ETH 50/20/40 scores, setupmatch 74 and 07:20 UTC Price source moment
+remained intact. Analyse had a newer 10:55 UTC Price source moment but the same
+Market score 50, so a live score-value change remains unproven. QA also saw a
+stored German FINN Today briefing in the Dutch and English interface. The
+browser console had no errors or warnings and QA made no report, plan, bot or
+trade change.
+
+The report read path could discard an entire translated report when one
+paragraph failed its language or number check. This batch retries only the
+invalid paragraphs, preserves numeric facts, and checks older report text even
+if its saved `content_locale` claims the target language. FINN Today now
+projects its stored briefing in the active request language without changing
+the stored briefing; the frontend cache and refresh follow the active locale.
+Focused backend tests passed **29/29** and the final full backend suite passed
+**3465** with **3 skips**. Frontend build, typecheck, i18n lint/tests,
+command/proposal/setup tests and high-severity audit passed; the audit still
+reports one existing moderate Next.js advisory. A real Luna/Responses local
+probe translated **8/8** German report sections and preserved the typed score
+snapshot. Another real-provider probe translated a stored German FINN Today
+briefing to Dutch and English without changing its market score. Deployment
+and independent QA remain pending. The final isolated local API/Celery action matrix
+passed **16/16** with zero broker orders, live calls or production connections;
+artifact SHA-256 `401dce81eb4aed2aa921459762fb391d669f98b2b2f8ecf571355d71d856ff1e`.
+The real-provider selector development set passed **18/18** with zero provider,
+schema, timeout, parse or validation failures; artifact SHA-256
+`52fc93b6812f06a96ea52d490afae8cc930eee5beeb53f3ebf0624d223a6e7f5`.
+The complete real-provider regression passed **109/109** with zero provider,
+schema, timeout, parse or validation failures; artifact SHA-256
+`e725c24ad960756c4fb8176a9dee8d42681151e229b5f8f0750d33af47f3beaf`.
+
 ## Report Language Request Parity Repair Candidate
 
-Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #257](https://github.com/gvangalen/antigravity-trading-tool/pull/257)
+Phase: `NOT_ACCEPTED_IN_LIVE_QA`. [PR #257](https://github.com/gvangalen/antigravity-trading-tool/pull/257)
 merged as product SHA `ab491c895c10ae0e6c16b588a03fb6a6e913e1b9`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38246760188),
 [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38246979604),
@@ -44,13 +80,11 @@ Real Luna/Responses development passed **18/18**, artifact SHA-256
 The complete regression passed **109/109** with zero selector failures,
 artifact SHA-256
 `9aa6422e9ad5a62a3e3d41fa60cca65af49e85759ff263f99749f8ce8fda81c3`.
-Independent QA should now repeat the NL → DE → EN → NL historical saved-report
-browser sequence on the public SHA. It should check visible headings and prose
-against the chosen language, preserve saved score values, setup names and
-source moments across switches, and compare the saved snapshot with a newer
-Score 2.0 reading when available. A live score value change remains unproven
-until one actually occurs. Build did not change production reports, scores,
-plans, bots, or trades.
+Independent QA repeated the historical saved-report browser sequence on
+status SHA `146fd87e63ca8bb0a62e2b9da4fd7a094ee4662f` and rejected the
+German narrative as described above. A live score value change remains
+unproven until one actually occurs. Build did not change production reports,
+scores, plans, bots, or trades.
 
 ## Saved Report Language and Later Score Change Candidate
 

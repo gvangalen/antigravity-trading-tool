@@ -519,9 +519,6 @@ async def localize_report_payload(
             except (TypeError, ValueError):
                 source_snapshot = None
         source_locale = (source_snapshot or {}).get("content_locale") if isinstance(source_snapshot, dict) else None
-        if source_locale == locale:
-            return payload
-
         localized = deepcopy(payload)
         prose: Dict[str, str] = {}
         containers: Dict[str, Dict[str, Any]] = {"root": localized}
@@ -542,25 +539,63 @@ async def localize_report_payload(
                 if isinstance(value, str) and value.strip():
                     prose[f"{container_name}.{key}"] = value
         if prose:
+            number_pattern = re.compile(r"(?<![\w])\d+(?:[.,]\d+)?%?")
+            foreign_markers = {
+                "de": re.compile(
+                    r"\b(?:volgt|ingesteld|opgeslagen|ontbreekt|voorzichtig|vandaag|"
+                    r"geen|betekent|onderliggende|bijbehorende|bruikbare|actuele|"
+                    r"the market|is not|are not|no usable|daily overview)\b", re.I,
+                ),
+                "en": re.compile(
+                    r"\b(?:ingesteld|opgeslagen|ontbreekt|voorzichtig|vandaag|"
+                    r"geen|betekent|bijbehorende|bruikbare|actuele|"
+                    r"der markt|kein brauchbarer|keine indikatoren)\b", re.I,
+                ),
+                "nl": re.compile(
+                    r"\b(?:der markt|kein brauchbarer|keine indikatoren|"
+                    r"the market|is not|are not|no usable|daily overview)\b", re.I,
+                ),
+            }
+
+            def numbers(value: str) -> list[str]:
+                return sorted(token.replace(",", ".") for token in number_pattern.findall(value))
+
+            def valid_field(path: str, value: Any) -> bool:
+                source = prose[path]
+                return (
+                    isinstance(value, str)
+                    and numbers(value) == numbers(source)
+                    and not foreign_markers.get(locale, re.compile(r"(?!)")).search(value)
+                )
+
+            # Some older rows claim a content locale even though their prose
+            # was generated in another language. Trust the text as well as the
+            # metadata before skipping translation.
+            if source_locale == locale and all(valid_field(path, value) for path, value in prose.items()):
+                return payload
             try:
                 translated = await _translate_payload_once_with_ai_singleflight(prose, locale)
             except Exception:
                 logger.exception("Report prose translation failed for locale %s", locale)
                 return payload
-            # A malformed or partial model response must never alter stored
-            # facts or mix translated and untranslated sections on the page.
-            number_pattern = re.compile(r"(?<![\w])\d+(?:[.,]\d+)?%?")
-            dutch_markers = re.compile(
-                r"\b(?:volgt|ingesteld|opgeslagen|ontbreekt|voorzichtig|vandaag|"
-                r"geen|betekent|onderliggende|bijbehorende)\b", re.I,
-            )
-            def numbers(value: str) -> list[str]:
-                return sorted(token.replace(",", ".") for token in number_pattern.findall(value))
-            if (set(translated) == set(prose) and all(
-                isinstance(translated[key], str) and numbers(translated[key]) == numbers(value)
-                and (locale != "de" or not dutch_markers.search(translated[key]))
-                for key, value in prose.items()
-            )):
+            # A long historical report can produce one imperfect paragraph.
+            # Repair only those paragraphs instead of discarding every good
+            # translation and returning the entire Dutch report in German.
+            if not isinstance(translated, dict):
+                translated = {}
+            translated = {path: value for path, value in translated.items() if path in prose}
+            invalid = [path for path in prose if not valid_field(path, translated.get(path))]
+            for path in invalid:
+                for _ in range(2):
+                    try:
+                        repaired = await _translate_payload_once_with_ai({path: prose[path]}, locale)
+                    except Exception:
+                        logger.exception("Report prose section translation failed for locale %s", locale)
+                        continue
+                    if isinstance(repaired, dict) and valid_field(path, repaired.get(path)):
+                        translated[path] = repaired[path]
+                        break
+            if set(translated) == set(prose) and all(valid_field(path, translated[path]) for path in prose):
                 for path, value in translated.items():
                     container_name, key = path.split(".", 1)
                     containers[container_name][key] = value
@@ -569,6 +604,11 @@ async def localize_report_payload(
                                               if isinstance(payload.get("meta_json"), str)
                                               else containers["meta_json"])
                 return localized
+            logger.warning(
+                "Report prose localization incomplete locale=%s fields=%s",
+                locale,
+                [path for path in prose if not valid_field(path, translated.get(path))],
+            )
             _payload_translation_cache.pop(_payload_translation_cache_key(prose, locale), None)
         return payload
 
@@ -614,3 +654,57 @@ async def localize_report_payload(
             localized["meta_json"] = json.dumps(parsed, ensure_ascii=False)
 
     return localized
+
+
+async def localize_first_dashboard_context(
+    payload: Dict[str, Any], target_locale: str,
+) -> Dict[str, Any]:
+    """Translate only displayed FINN Today prose, never the stored briefing."""
+    context = payload.get("first_dashboard_context")
+    if not isinstance(context, dict):
+        return payload
+    locale = _requested_locale_code(target_locale)
+    source_locale = _requested_locale_code(context.get("content_locale"))
+    if locale == source_locale:
+        return payload
+    briefing = context.get("coaching_briefing")
+    if not isinstance(briefing, dict):
+        return payload
+    field_map = {
+        "assessment": "executive_summary",
+        "reasoning": "market_analysis",
+        "recommended_action": "strategy_implication",
+        "data_limitation": "outlook",
+    }
+    source = {
+        report_key: briefing.get(key)
+        for key, report_key in field_map.items()
+        if isinstance(briefing.get(key), str) and briefing.get(key).strip()
+    }
+    if not source:
+        return payload
+    source["score_source_snapshot"] = {"content_locale": source_locale}
+    localized = await localize_report_payload(source, locale)
+    if localized == source:
+        return payload
+    result = deepcopy(payload)
+    updated = result["first_dashboard_context"]
+    updated_briefing = updated["coaching_briefing"]
+    for key, report_key in field_map.items():
+        if report_key in source:
+            updated_briefing[key] = localized[report_key]
+    lines = [updated_briefing.get(key) for key in field_map if updated_briefing.get(key)]
+    updated["briefing_lines"] = lines
+    updated["briefing_text"] = "\n".join(lines)
+    updated["headline"] = updated_briefing.get("assessment")
+    updated["observation"] = updated_briefing.get("assessment")
+    updated["reasoning"] = updated_briefing.get("reasoning")
+    updated["support"] = " ".join(filter(None, [updated_briefing.get("reasoning"), updated_briefing.get("data_limitation")]))
+    updated["action_hint"] = updated_briefing.get("recommended_action")
+    updated["next_action"] = {
+        **(updated.get("next_action") or {}),
+        "label": updated_briefing.get("recommended_action"),
+        "question": updated_briefing.get("recommended_action"),
+    }
+    updated["content_locale"] = locale
+    return result

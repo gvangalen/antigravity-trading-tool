@@ -993,8 +993,8 @@ function AIAssistantContent({
     const missionControlScope = isAssetAnalysisPage
       ? normalizeScopedAssetSymbol(context.symbol || globalSymbol) || "UNKNOWN"
       : "shared";
-    missionControlCacheKeyRef.current = `finn-mission-control:${userScope}:${missionControlScope}`;
-  }, [currentConversationStorageKey, user?.id, globalSymbol, context.symbol]);
+    missionControlCacheKeyRef.current = `finn-mission-control:${userScope}:${missionControlScope}:${locale}`;
+  }, [currentConversationStorageKey, user?.id, globalSymbol, context.symbol, locale]);
 
   const getLatestAssistantState = () => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -3751,7 +3751,7 @@ function AIAssistantContent({
     } else {
       loadedFinnStateRef.current = false;
     }
-  }, [isOpen, isAssetAnalysisPage, pathname]);
+  }, [isOpen, isAssetAnalysisPage, pathname, locale]);
 
   useEffect(() => {
     if (!isOpen || !isAssetAnalysisPage) return;
