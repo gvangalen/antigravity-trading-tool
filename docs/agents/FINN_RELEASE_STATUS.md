@@ -4,9 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report Language Request Parity Repair Candidate
+
+Phase: `READY_FOR_CANDIDATE_CI`. Independent QA on public backend/frontend SHA
+`fac5a6d7207205ed78a2f4991598c3ef62746bf4` returned `NOT_ACCEPTED` for
+the preceding report-language candidate. The NL → DE → EN → NL browser sequence
+left English headings and Dutch report prose visible in DE and EN, even after
+waiting and reloading. Saved ETH 50/20/40, setupmatch 74, plan names, and the
+07:20 UTC saved Price source moment stayed intact. Analyse later had a 10:55
+UTC Price source moment but the same Market score 50; FINN correctly separated
+the newer measurement from the saved report. A later different score value
+therefore remains unproven. QA saw no console errors and made no report, plan,
+bot, or trade change.
+
+The root cause is now visible in the request path: the web client sends the
+active `X-Locale`, but the report API ignored it and used only the stored
+account locale; the report page did not refetch content when locale changed.
+The German report and report-page dictionaries also contained many literal
+English values. This repair makes the API use the request locale, reloads the
+selected report on a language switch without allowing an older response to
+overwrite a newer one, and localizes those German report strings. The saved
+report, Score 2.0 facts, and bot execution are unchanged. A local request-
+versus-account-locale regression, including the actual HTTP header, and a real
+Luna/Responses multi-section report probe passed; the latter translated all
+eight prose sections and kept the typed snapshot unchanged. Local backend
+tests passed **3460** with **3 skips**. The frontend build, typecheck, i18n
+lint/tests, command/proposal/setup tests, and high-severity audit passed; the
+audit still reports one existing moderate Next.js advisory. The final local
+worker-driven safe action matrix passed **16/16**, artifact SHA-256
+`f4415ab247006be8e3e3648364bce4c4220202909d823d2aad7f0b80447f996b`.
+Real Luna/Responses development passed **18/18**, artifact SHA-256
+`68686aa4ef3875f24819e680001dd40d463215be55257152e002b3980972df2c`.
+The complete regression passed **109/109** with zero selector failures,
+artifact SHA-256
+`9aa6422e9ad5a62a3e3d41fa60cca65af49e85759ff263f99749f8ce8fda81c3`.
+Deployment still needs to finish before independent QA repeats the same
+browser sequence. Build did not change production reports, scores, plans,
+bots, or trades.
+
 ## Saved Report Language and Later Score Change Candidate
 
-Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. [PR #255](https://github.com/gvangalen/antigravity-trading-tool/pull/255)
+Phase: `NOT_ACCEPTED_IN_LIVE_QA`. [PR #255](https://github.com/gvangalen/antigravity-trading-tool/pull/255)
 merged as product SHA `dcfb6cabe910580c0cd7034b81fc72d2ee247593`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38242758865),
 [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38242990761),

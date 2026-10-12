@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.infrastructure.repositories.report_repository import ReportRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
-from backend.services.locale_service import localize_report_payload, resolve_locale
+from backend.services.locale_service import localize_report_payload, resolve_request_locale
 from backend.utils.pdf_playwright import render_report_pdf_via_playwright
 from backend.services.finn_unified_report_service import generate_unified_daily_report_sections as generate_daily_report_sections
 from backend.celery_task.daily_report_task import generate_daily_report
@@ -46,8 +46,9 @@ def _get_structure_label(score: Optional[float], category: str) -> str:
         return f"Sub-optimal Alignment · Conviction {int(val)}%"
 
 class ReportService:
-    def __init__(self, repository: ReportRepository):
+    def __init__(self, repository: ReportRepository, request_locale: Optional[str] = None):
         self.repository = repository
+        self.request_locale = request_locale
 
     @staticmethod
     def _mark_daily_setup_semantics(row: Dict[str, Any], locale: str = "nl") -> Dict[str, Any]:
@@ -122,10 +123,10 @@ class ReportService:
     async def _get_user_locale(self, user_id: int) -> str:
         repository_db = getattr(self.repository, "db", None)
         if repository_db is None:
-            return resolve_locale({})
+            return resolve_request_locale(self.request_locale)
         user = await UserRepository(repository_db).get_by_id(user_id)
         preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
-        return resolve_locale(preferences)
+        return resolve_request_locale(self.request_locale, preferences)
 
     # =================
     # FETCH REPORTS
