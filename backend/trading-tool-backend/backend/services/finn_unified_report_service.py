@@ -343,6 +343,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "setup_score": best_setup.get("score") if best_setup else None,
         "score_source_snapshot": {
             "observed_at": context.get("observed_at"),
+            "content_locale": locale,
             "assets": [{
                 "symbol": item["symbol"],
                 "score_report_date": item.get("score_report_date"),

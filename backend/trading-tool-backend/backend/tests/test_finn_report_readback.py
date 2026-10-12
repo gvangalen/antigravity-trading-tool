@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_tool_adapters.report_tool_adapter import ReportToolAdapter
+from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 
 
 def test_latest_report_read_exposes_saved_scores_and_source_moments():
@@ -52,3 +53,44 @@ def test_latest_report_read_exposes_saved_scores_and_source_moments():
     assert facts["score_source_snapshot"]["assets"][0]["reported_scores"]["market_score"] == 50
     assert facts["score_source_snapshot"]["assets"][1]["reported_scores"]["market_score"] is None
     assert facts["generated_at"] == row["generated_at"]
+
+
+def test_later_live_score_change_does_not_rewrite_saved_report_snapshot():
+    stored = {
+        "report_date": date(2026, 10, 12),
+        "generated_at": datetime(2026, 10, 12, 8, 16, tzinfo=timezone.utc),
+        "score_source_snapshot": {"observed_at": "2026-10-12T08:15:00+00:00", "assets": [
+            {"symbol": "ETH", "reported_scores": {"market_score": 50,
+             "macro_score": 20, "technical_score": 40}}]},
+    }
+    live = {"symbol": "ETH", "as_of": "2026-10-12", "source_status": "available",
+            "benchmark_score": 50, "benchmark_weights": {},
+            "reported_scores": {"market_score": 50, "macro_score": 20,
+                                "technical_score": 40},
+            "component_source_status": {"market_score": "fresh",
+                                        "macro_score": "fresh", "technical_score": "fresh"}}
+
+    class Reports:
+        async def get_latest_report(self, user_id, table_name):
+            assert (user_id, table_name) == (7, "daily_reports")
+            return stored
+
+    class LiveContext:
+        async def benchmark_for_asset(self, user_id, asset, setups):
+            assert (user_id, asset, setups) == (7, "ETH", [])
+            return live
+
+    report_adapter = ReportToolAdapter(session=None)
+    report_adapter.repository = Reports()
+    score_adapter = ScoreToolAdapter(session=None)
+    score_adapter.context = LiveContext()
+
+    first = asyncio.run(report_adapter.execute(user_id=7, asset="ETH", selector={}))
+    assert first["data"].score_source_snapshot["assets"][0]["reported_scores"]["market_score"] == 50
+    live["reported_scores"] = {**live["reported_scores"], "market_score": 80}
+    live["benchmark_score"] = 60
+    current = asyncio.run(score_adapter.execute(user_id=7, asset="ETH"))
+    second = asyncio.run(report_adapter.execute(user_id=7, asset="ETH", selector={}))
+    assert current["data"].reported_scores["market_score"] == 80
+    assert second["data"].score_source_snapshot["assets"][0]["reported_scores"]["market_score"] == 50
+    assert second["data"].score_source_snapshot["observed_at"] == "2026-10-12T08:15:00+00:00"
