@@ -6,7 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Report Readback Follow-Up Candidate
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI_DEPLOY_QA`. The prior independent QA accepted the
+Phase: `READY_FOR_INDEPENDENT_QA`. [PR #252](https://github.com/gvangalen/antigravity-trading-tool/pull/252)
+merged as product SHA `c9335e071312367b3cf96bb9dedf678038af5659`.
+[Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38225207688),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38225422029),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38225600912)
+passed. Public backend health and frontend build-info returned HTTP 200 with
+exactly that SHA on 2026-10-12. The prior independent QA accepted the
 daily-report source parity scope on live SHA
 `072756dab3010e7b405f4644ca6d4312669477cc`: a newly generated ETH
 report kept its 08:15 UTC snapshot after reload, and Analyse, report, and
@@ -24,7 +30,7 @@ This follow-up candidate passes the saved report's bounded owner-scoped score
 snapshot, source times, top setups, and generation time through the existing
 FINN read tool. It presents score tiles per asset when a report covers more
 than one asset. It does not change the score calculation, report storage, or
-bot execution. Its deployed identity remains pending. Local backend tests
+bot execution. Local backend tests
 passed **3452** with **3 skips**. The frontend
 build, typecheck, i18n lint/tests, command/proposal/setup tests, and
 high-severity audit passed; the audit still reports one moderate Next.js
@@ -41,6 +47,13 @@ timeout, parse, or validation failures; artifact SHA-256
 The isolated provider rejection remains an operational risk; the red run is
 not counted as a passed gate. No production report or trade was created by
 Build for this follow-up.
+Build verified only the deployment identity and availability. Independent QA
+should reuse the existing QA Agent task and the already saved report: repeat
+the exact report-versus-current-score question, confirm FINN now names the
+stored ETH score snapshot and source moments separately from newer live data,
+and inspect the multi-asset report header for ETH and AAPL. Check no bot or
+trade action and record the exact public QA SHA. No new report is required
+for this readback-only follow-up.
 
 ## Daily Report Source Parity Candidate
 
