@@ -6,20 +6,38 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `LOCAL_VALIDATION`. Independent authenticated browser QA on public
-SHA `22da58a043ff2cfdae6a7b03482f76b4293066b9` again returned
-**NOT_ACCEPTED** (sanitized report SHA-256
-`796ebc91cde46eb9fa76194869934424ba6ff3a37171dcdba65429b01c3558eb`).
-After discussing pending setup proposal A, opening proposal B in the same
-page session could show A's conversation and an empty composer. QA reproduced
-this in a fresh Chrome tab, although another operator observed two successful
-sequences on the same SHA. The behavior is intermittent. B's owner-scoped
-answer and follow-up worked when its name was entered manually. No proposal
-was confirmed or order executed. The current repair gives feed discussions a
-separate modal, draft and close lifecycle from the general FINN command
-search; a late close or draft update from A cannot replace B. Its targeted
-command suite, web typecheck, build, i18n lint and high-severity audit pass.
-Independent authenticated QA of this repair remains pending.
+Phase: `LOCAL_VALIDATION`. The feed-modal isolation in
+[PR #272](https://github.com/gvangalen/antigravity-trading-tool/pull/272)
+merged as product SHA `6d370c318dc659538c6b9f3cbdc24032ac9113c1`.
+Candidate CI, main CI and Auto Deploy passed; public backend and frontend
+both returned HTTP 200 with exactly that SHA on 12 October 2026.
+The independent browser report initially marked the A→B handoff red (report
+SHA-256 `920cb66169b341a84b1b1688ede719a8f1d92e35a6dc14501b2608d536e48c88`).
+A focused QA diagnosis then found its “FINN-chat sluiten” locator clicked
+the background layer, leaving A's modal open. Clicking the visible X really
+removed it. The A→B failure is therefore unproven; QA corrected that verdict
+(diagnosis SHA-256 `c5b015fc35c065d0c4a31a9aed69ea95913bd745e114e9bccdf0c209b7206e5`).
+The same QA run separately observed internal English model-planning text in
+a completed user-facing answer. The current repair gives the visible X the
+accessible localized close label, removes the backdrop from button selection,
+instructs Luna to output only public answer text, and discards only a clearly
+separated internal preamble before delivery. It preserves normal coaching
+content and the existing action boundaries. Root backend tests passed **3494**
+with **3 skipped**; web build, typecheck, i18n lint/tests, command tests and
+the high-severity audit passed (one moderate Next.js advisory). Mobile
+typecheck, lint (warnings only), and web/iOS/Android bundle smokes passed.
+The first local API/Celery/Responses action matrix selected a setup deletion
+for an explicit indicator deletion and finished **15/16**; the complete rerun
+passed **16/16** with adapters **19/19**, no broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`e0a0a92d4ec173d7ed7e49ce52f79a3c9d125b44c176063a2f640e15747dfd54`).
+The real Luna/Responses development lane passed **20/20** with no provider or
+schema failures (SHA-256
+`1a31daa4abf73adad937e5f40e410ba791e911f174550944dc6e0cdf36f04ce8`).
+The feed-target eval expectation now leaves owner-resolved target identity to
+the feed context instead of expecting the selector to echo an internal plan ID.
+The full provider regression, CI and independent authenticated QA remain
+pending.
 
 The prior sequential handoff repair merged in
 [PR #270](https://github.com/gvangalen/antigravity-trading-tool/pull/270)

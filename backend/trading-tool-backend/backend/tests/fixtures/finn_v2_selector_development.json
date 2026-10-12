@@ -288,8 +288,6 @@
     "expected_domain": "setup",
     "expected_supported": true,
     "expected_entities": {
-      "setup_id": "222",
-      "name": "ETH Plan B",
       "asset": "ETH"
     },
     "expected_target_asset": "ETH",

@@ -9,7 +9,7 @@ import pytest
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_loop import (
     FinnResponsesError, FinnResponsesLoop, _read_only_stop_loss_coaching,
-    _saved_confirmation_readback, _hypothetical_trade_reflection,
+    _saved_confirmation_readback, _hypothetical_trade_reflection, _public_answer_only,
 )
 from backend.services.finn_v2_responses_tool_catalog import (
     FinnResponsesToolCatalog,
@@ -3170,6 +3170,23 @@ def test_responses_provider_call_disables_sdk_retries_and_sets_timeout():
     ))
     assert client.with_options.call_args.kwargs["max_retries"] == 0
     assert 0 < client.with_options.call_args.kwargs["timeout"] <= 20
+
+
+def test_model_led_answer_never_delivers_a_separate_internal_preamble():
+    raw = (
+        "We need comply with the question. User says update positive. "
+        "Need concise paragraph no headings per evidence.\n\n"
+        "De opgeslagen voorwaarden zijn nog geen koopsignaal."
+    )
+    fake = FakeResponses(response("coach-answer", text=raw))
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=AsyncMock(),
+    ).run(message="Wat betekent dit voor mijn plan?", instructions="Beantwoord de vraag.",
+          model_led_coach=True, locale="nl"))
+    assert result.text == "De opgeslagen voorwaarden zijn nog geen koopsignaal."
+    assert _public_answer_only("Een normale uitleg over mijn plan.") == "Een normale uitleg over mijn plan."
+    with pytest.raises(FinnResponsesError, match="responses_internal_preamble_without_answer"):
+        _public_answer_only("We need comply with the question.")
 
 
 def test_invalid_sibling_operation_field_returns_registry_driven_repair_hint():

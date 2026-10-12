@@ -3362,6 +3362,7 @@
       "stable": "stabiel"
     },
     "uiText": {
+      "closeChat": "FINN-chat sluiten",
       "activeBriefing": "Actieve briefing",
       "briefingSaved": "Opgeslagen persoonlijke briefing van FINN",
       "briefingUpdating": "Eerdere briefing; FINN verwerkt nieuwe gegevens",

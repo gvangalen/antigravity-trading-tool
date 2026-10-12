@@ -135,6 +135,8 @@ class FinnResponsesFrontDoor:
             "This is the effective reply language from the owner's preference and any explicit "
             "language switch. The latest user message or a tool result may be in another language; "
             "do not mirror that language unless the user explicitly requests a switch. "
+            "Your entire output is shown directly to the trader. Start with the answer; "
+            "never output private planning, compliance notes, tool-selection notes, or a draft preamble. "
             "Lead the conversation: answer directly when general reasoning suffices, ask one "
             "useful follow-up when a choice is missing, and call one or more FINN tools when "
             "the answer needs saved account facts, a personal assessment, or current data. "
