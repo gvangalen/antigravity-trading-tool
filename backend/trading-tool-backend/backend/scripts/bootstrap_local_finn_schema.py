@@ -145,6 +145,34 @@ CREATE TABLE IF NOT EXISTS bot_orders (id SERIAL PRIMARY KEY, user_id INTEGER RE
 CREATE TABLE IF NOT EXISTS bot_executions (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), bot_order_id INTEGER REFERENCES bot_orders(id));
 CREATE TABLE IF NOT EXISTS bot_ledger (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), order_id INTEGER REFERENCES bot_orders(id), entry_type TEXT);
 CREATE TABLE IF NOT EXISTS bot_portfolios (id SERIAL PRIMARY KEY, bot_id INTEGER REFERENCES bot_configs(id), user_id INTEGER REFERENCES users(id), symbol TEXT);
+-- The real Paper Celery task snapshots both bot and aggregate balances after
+-- its decision. Include these historical tables so local worker tests cannot
+-- report success while silently logging a missing-snapshot-table error.
+CREATE TABLE IF NOT EXISTS bot_portfolio_snapshots (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    bot_id INTEGER NOT NULL REFERENCES bot_configs(id),
+    bucket TEXT NOT NULL,
+    ts TIMESTAMP NOT NULL,
+    symbol TEXT,
+    net_qty NUMERIC,
+    cash_eur NUMERIC,
+    price_eur NUMERIC,
+    equity_eur NUMERIC,
+    invested_eur NUMERIC,
+    PRIMARY KEY (user_id, bot_id, bucket, ts)
+);
+CREATE TABLE IF NOT EXISTS portfolio_balance_snapshots (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    bucket TEXT NOT NULL,
+    ts TIMESTAMP NOT NULL,
+    equity_eur NUMERIC,
+    cash_eur NUMERIC,
+    btc_qty NUMERIC,
+    btc_value_eur NUMERIC,
+    invested_eur NUMERIC,
+    unrealized_pnl_eur NUMERIC,
+    PRIMARY KEY (user_id, bucket, ts)
+);
 CREATE TABLE IF NOT EXISTS global_market_insights (id SERIAL PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS regime_memory (
     id SERIAL PRIMARY KEY,
