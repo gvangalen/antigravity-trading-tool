@@ -6,7 +6,20 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Report Readback Follow-Up Candidate
 
-Phase: `READY_FOR_INDEPENDENT_QA`. [PR #252](https://github.com/gvangalen/antigravity-trading-tool/pull/252)
+Phase: `TARGETED_QA_ACCEPTED_WITH_FRESHNESS_LIMIT`. Independent QA retested
+the exact saved-report comparison question on public backend/frontend SHA
+`6ae71af76b8165363781b87cc2e47eb937fa4ee6` and accepted both P2 fixes.
+FINN read the saved ETH 50/20/40 scores, Price/DXY/RSI source moments and
+three setup matches at 74, identified report generation at 08:16:04 UTC,
+and distinguished the current Score 2.0 reading. The report header showed
+AAPL's missing scores separately from ETH's 50/20/40 after refresh; no
+misleading global score tiles remained. The browser console had no errors or
+warnings, and QA created no second report or plan/bot/trade action. During
+this run the underlying scores did not change, so a later live score change
+versus the saved snapshot remains unproven. FINN did not separately state the
+08:15 UTC snapshot capture time in that answer. Older mixed-language German
+report prose remains a separate localization issue; this targeted verdict
+does not accept that prose. [PR #252](https://github.com/gvangalen/antigravity-trading-tool/pull/252)
 merged as product SHA `c9335e071312367b3cf96bb9dedf678038af5659`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38225207688),
 [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38225422029),
