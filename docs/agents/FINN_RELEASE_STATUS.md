@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `FEED_CONVERSATION_CONTINUITY_LOCAL_VALIDATION`. The edited-handoff
+Phase: `FEED_CONVERSATION_CONTINUITY_CANDIDATE`. The edited-handoff
 candidate merged as product SHA `6a31d1c67f069da2149dd6bb0a8d459a1e7d0bab`.
 Candidate and main CI passed all five jobs; Auto Deploy succeeded and public
 backend and frontend both returned HTTP 200 with that SHA. Independent browser
@@ -22,8 +22,20 @@ did not persist the selected feed item in the conversation. The current local
 candidate stores that owner-scoped selection atomically for the current run,
 preserves the composer session, and discards older plan lineage. The next
 turn rereads the proposal through its owner-scoped ID. Focused regressions
-for the direct completion and continuation repository passed **3/3**; full
-release gates, CI, deployment and independent QA are pending.
+for the direct completion and continuation repository passed **3/3**. Root
+backend tests passed **3499**, with **3 skipped**. The isolated
+API/Celery/Responses action matrix passed **16/16** and adapter tests
+**19/19**, with no broker orders, live bots, live-trading calls or production
+connections (artifact SHA-256
+`c147999be0d25812bf9ae582ea2b76a7641773ca032b9afdff21a12e4c65e0d4`).
+Real `gpt-6-luna`/Responses development passed **20/20** (artifact SHA-256
+`3a1c0ee904a402cfe13f6ee78f423b4a3adde4b3f62dad050040e6f8b7d80938`)
+and regression passed **109/109** (artifact SHA-256
+`c541ed91293c5b5d6e68fc8ca0181ac1d327271a06b054dbf7ea1c4b4c034af4`),
+with zero provider, schema, timeout, parse or validation failures. Candidate
+CI passed all five jobs on code SHA
+`f23ca4b80a9af303791efd6ef34b0c8a197e5ed8`. The status update,
+deployment and independent QA are pending.
 
 The previous proposal-follow-up
 candidate merged as product SHA `834437f16c805f29811aa4470e106dd20a17536d`.
