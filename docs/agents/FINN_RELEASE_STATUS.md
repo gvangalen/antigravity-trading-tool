@@ -4,6 +4,10 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper Hold Amount Presentation
+
+Phase: `LOCAL_READY`. Independent QA on public backend/frontend SHA `01fb393bc5723b3f750fc83a236b823dafc53edf` passed the risk-limit wording check: the AAPL Paper bot remained `HOUD VAST` for incomplete benchmark data with EUR 20 virtual cash, zero position and zero day spend; the diagnostic now says `Risicolimieten / RISICOLIMIETEN IN ORDE`. QA also found that the same Hold detail still showed `OPTIMALE GROOTTE €3`, although no order was proposed or executed. The scoped frontend repair shows the adjusted-size card only when the persisted decision action is `buy`; it does not change guardrail, Score 2.0, or execution logic. Frontend build, typecheck, i18n lint/tests, command/proposal/setup tests, and high-severity audit passed (one moderate Next.js advisory), and the tracked export was regenerated. Backend action contracts, model/provider selection, score logic, and execution are unchanged from the preceding release. CI, deployment, and independent live QA of this presentation repair are pending.
+
 ## Paper Risk Label Scope
 
 Phase: `READY_FOR_INDEPENDENT_QA`. [PR #234](https://github.com/gvangalen/antigravity-trading-tool/pull/234) merged the scoped Paper risk-limit copy and tracked export as product SHA `ac8a1a71aeae157d389dadc55362accb5b1b3c4a`. [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38187142427), [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38187309121), and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38187439500) passed. Public backend health and frontend build-info returned HTTP 200 and exactly that SHA on 2026-10-12. This status-only update will have a later SHA; QA must bind to both public surfaces. Independent live verification of the diagnostic wording is pending.

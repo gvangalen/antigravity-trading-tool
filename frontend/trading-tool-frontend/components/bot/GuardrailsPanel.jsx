@@ -147,6 +147,7 @@ export default function GuardrailsPanel({
 
   const tradeAdjusted =
     originalAmount !== adjustedAmount;
+  const isBuyDecision = String(decision?.action || "").toLowerCase() === "buy";
 
   /* ============================
      UI
@@ -188,7 +189,7 @@ export default function GuardrailsPanel({
         </div>
       </div>
 
-      <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 space-y-2">
+      {isBuyDecision && <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 space-y-2">
          <div className="flex justify-between items-center">
             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.adjustedPositionSize}</div>
             <div className={`text-[10px] font-black px-1.5 py-0.5 rounded ${tradeAdjusted ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
@@ -203,7 +204,7 @@ export default function GuardrailsPanel({
                </span>
             )}
          </div>
-      </div>
+      </div>}
 
       {/* SYSTEM FEEDBACK SECTION */}
       <div className="pt-2">
