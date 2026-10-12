@@ -3299,6 +3299,7 @@
       "stable": "stable"
     },
     "uiText": {
+      "closeChat": "Close FINN chat",
       "activeBriefing": "Active briefing",
       "briefingSaved": "Saved personal briefing from FINN",
       "briefingUpdating": "Earlier briefing; FINN is processing new information",

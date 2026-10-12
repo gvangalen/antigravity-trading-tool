@@ -3403,6 +3403,7 @@
       "stable": "stable"
     },
     "uiText": {
+      "closeChat": "FINN-Chat schließen",
       "activeBriefing": "Active briefing",
       "briefingSaved": "Gespeichertes persönliches Briefing von FINN",
       "briefingUpdating": "Früheres Briefing; FINN verarbeitet neue Daten",

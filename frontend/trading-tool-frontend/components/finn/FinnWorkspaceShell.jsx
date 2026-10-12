@@ -367,9 +367,8 @@ export default function FinnWorkspaceShell({ children }) {
             className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm"
             data-feed-handoff-id={feedDiscussion.request.context.feed_item_id}
           >
-            <button
-              type="button"
-              aria-label={workspaceCopy.closeBackdrop}
+            <div
+              aria-hidden="true"
               className="absolute inset-0 cursor-default"
               onClick={() => closeFeedDiscussion(feedDiscussion.request.nonce)}
             />
@@ -388,13 +387,13 @@ export default function FinnWorkspaceShell({ children }) {
               )}
               commandRequest={feedDiscussion.request}
               autoFocusComposer
+              closeLabel={workspaceCopy.closeBackdrop}
             />
           </div>
         ) : assistantOpen ? (
           <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
-            <button
-              type="button"
-              aria-label={workspaceCopy.closeBackdrop}
+            <div
+              aria-hidden="true"
               className="absolute inset-0 cursor-default"
               onClick={closeAssistant}
             />
@@ -412,6 +411,7 @@ export default function FinnWorkspaceShell({ children }) {
               onQueryChange={setComposerQuery}
               commandRequest={commandRequest}
               autoFocusComposer
+              closeLabel={workspaceCopy.closeBackdrop}
             />
           </div>
         ) : null}

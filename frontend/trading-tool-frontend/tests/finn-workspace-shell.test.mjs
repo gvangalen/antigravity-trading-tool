@@ -30,8 +30,11 @@ test("feed discussion uses its own modal, draft and close lifecycle", () => {
   assert.match(shellSource, /key=\{feedDiscussion\.request\.nonce\}/);
   assert.match(shellSource, /commandRequest=\{feedDiscussion\.request\}/);
   assert.match(shellSource, /\)\s*:\s*assistantOpen\s*\?\s*\(/);
+  assert.match(shellSource, /<div\s+aria-hidden="true"[\s\S]*?onClick=\{\(\) => closeFeedDiscussion/);
+  assert.match(shellSource, /closeLabel=\{workspaceCopy\.closeBackdrop\}/);
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
   assert.match(assistantSource, /resolveFeedDraftQuery\(/);
+  assert.match(assistantSource, /aria-label=\{closeLabel \|\| at\("uiText\.closeChat"\)\}/);
 });
 
 test("explicit contextual requests still reach ordinary FINN chat", () => {

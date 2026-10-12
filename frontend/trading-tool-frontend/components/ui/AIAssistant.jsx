@@ -476,6 +476,7 @@ function AIAssistantContent({
   autoFocusComposer = false,
   eventsEnabled = true,
   commandRequest = null,
+  closeLabel = null,
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -6159,6 +6160,7 @@ function AIAssistantContent({
         {!persistent ? (
           <button
             onClick={() => setIsOpen(false)}
+            aria-label={closeLabel || at("uiText.closeChat")}
             className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg transition-colors text-secondary hover:text-slate-900 dark:hover:text-slate-100"
           >
             <X size={18} />

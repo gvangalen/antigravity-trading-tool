@@ -25,6 +25,31 @@ class FinnResponsesError(RuntimeError):
     """A typed provider or tool-loop failure, never a legacy-chat fallback."""
 
 
+_INTERNAL_PLANNING_PREFIX = re.compile(
+    r"^(?:we need comply\b|we need to (?:answer|check|use|ensure)\b|"
+    r"user says\b|need (?:a )?concise (?:paragraph|answer)\b|"
+    r"(?:internal )?analysis\s*:)", re.I,
+)
+
+
+def _public_answer_only(answer: str) -> str:
+    """Discard a clearly separated internal preamble, never expose it to chat.
+
+    This only recognizes an internal prelude at the beginning of a response;
+    it does not rewrite normal coaching or claim to verify its semantics.
+    """
+    paragraphs = re.split(r"\n\s*\n", answer.strip())
+    if not paragraphs or not _INTERNAL_PLANNING_PREFIX.match(paragraphs[0].strip()):
+        return answer
+    while paragraphs and _INTERNAL_PLANNING_PREFIX.match(paragraphs[0].strip()):
+        paragraphs.pop(0)
+    cleaned = "\n\n".join(paragraphs).strip()
+    if not cleaned:
+        raise FinnResponsesError("responses_internal_preamble_without_answer")
+    logger.warning("FINN Responses internal preamble removed before user delivery")
+    return cleaned
+
+
 def _saved_confirmation_readback(message: str) -> bool:
     """A direct question about a stored rule requires an owner-scoped plan read."""
     return bool(
@@ -1037,6 +1062,8 @@ class FinnResponsesLoop:
                     answer = conditional_process_answer(answer)
                 elif kwargs.get("text") == priority_process_format():
                     answer = priority_process_answer(answer)
+                if model_led_coach:
+                    answer = _public_answer_only(answer)
                 logger.info("FINN Responses final answer prepared round=%d", tool_rounds + 1)
                 return FinnResponsesResult(
                     answer, response_id, tuple(trace),
