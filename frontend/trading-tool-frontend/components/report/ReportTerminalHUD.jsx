@@ -28,6 +28,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
   } = report;
   const sourceSnapshot = scoreSourceSnapshot(report);
   const sourceAssets = Array.isArray(sourceSnapshot?.assets) ? sourceSnapshot.assets : [];
+  const multipleAssets = sourceAssets.length > 1;
   const formatUtc = (value) => {
     const moment = parseUtcMoment(value);
     return moment ? `${formatDateTime(moment, locale, {
@@ -85,12 +86,25 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
            </div>
         </div>
 
-        <div className="bg-blue-50/20 border-2 border-blue-600/5 rounded-[2rem] p-6 flex flex-wrap items-center gap-4">
-          <ScoreItem label={reportT.hudMacro} value={macro_score} icon={Globe} colorClass="bg-blue-600" />
-          <ScoreItem label={reportT.hudTechnical} value={technical_score} icon={Zap} colorClass="bg-amber-500" />
-          <ScoreItem label={reportT.hudMarket} value={market_score} icon={Activity} colorClass="bg-indigo-600" />
-          <ScoreItem label={reportT.hudSetup} value={setup_score} icon={Target} colorClass="bg-emerald-600" />
-        </div>
+        {multipleAssets ? (
+          <div className="rounded-[2rem] border-2 border-blue-600/5 bg-blue-50/20 p-6 text-sm">
+            <p className="font-semibold text-foreground">{reportT.hudScoresByAsset}</p>
+            <div className="mt-2 space-y-1">
+              {sourceAssets.map((asset, index) => (
+                <p key={`${asset.symbol || 'asset'}-${index}`}>
+                  <strong>{asset.symbol || '—'}</strong> · {reportT.hudMarket}: {asset.reported_scores?.market_score ?? '—'} · {reportT.hudMacro}: {asset.reported_scores?.macro_score ?? '—'} · {reportT.hudTechnical}: {asset.reported_scores?.technical_score ?? '—'}
+                </p>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-blue-50/20 border-2 border-blue-600/5 rounded-[2rem] p-6 flex flex-wrap items-center gap-4">
+            <ScoreItem label={reportT.hudMacro} value={macro_score} icon={Globe} colorClass="bg-blue-600" />
+            <ScoreItem label={reportT.hudTechnical} value={technical_score} icon={Zap} colorClass="bg-amber-500" />
+            <ScoreItem label={reportT.hudMarket} value={market_score} icon={Activity} colorClass="bg-indigo-600" />
+            <ScoreItem label={reportT.hudSetup} value={setup_score} icon={Target} colorClass="bg-emerald-600" />
+          </div>
+        )}
 
       </div>
 
@@ -100,7 +114,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
         </p>
         <p className="mt-1">{sourceSnapshot ? reportT.hudSnapshotExplanation : reportT.hudLegacyExplanation}</p>
         {sourceAssets.length > 0 ? (
-          <details className="mt-3">
+          <details className="mt-3" open={multipleAssets}>
             <summary className="cursor-pointer font-semibold text-blue-700 dark:text-blue-300">{reportT.hudSourceDetails}</summary>
             <div className="mt-3 space-y-3">
               {sourceAssets.map((asset, index) => (

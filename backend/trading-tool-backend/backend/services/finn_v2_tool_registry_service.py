@@ -30,7 +30,7 @@ class FinnV2ToolRegistryService:
                     "This source does not contain trade transaction history, tax records or tax calculations."
                 ),
             ),
-            ToolDefinition(name="read_latest_report", description="Read compact metadata for the latest report.", depends_on=["read_active_asset"]),
+            ToolDefinition(name="read_latest_report", description="Read the latest saved report, including its dated Score 2.0 facts and source moments when available. Do not replace historical report facts with current scores.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_review_history", description="Read historical reviews and decisions when available, not recently saved setup or strategy details.", depends_on=["read_active_asset"]),
         ]
 
