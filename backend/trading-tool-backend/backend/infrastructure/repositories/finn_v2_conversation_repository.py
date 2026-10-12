@@ -83,6 +83,28 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
             run_id=row.last_run_id,
         )
 
+    async def set_selected_feed_event(
+        self, *, conversation_id: str, user_id: int, run_id: str,
+        feed_event: Dict[str, Any],
+    ) -> None:
+        """Persist an explicit feed selection across direct Responses reads."""
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
+        if row is None or row.last_run_id != run_id:
+            raise RuntimeContractConflictError("feed_selection_stale_or_unowned")
+        previous = dict(row.context_json or {})
+        # A new feed selection replaces prior plan lineage. Keep only the
+        # composer identity; the next successful read writes its own cursor.
+        row.context_json = {
+            **({"session_id": previous["session_id"]} if previous.get("session_id") else {}),
+            "feed_event": dict(feed_event),
+        }
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="set_selected_feed_event",
+            entity_type="FinnV2Conversation",
+            run_id=run_id,
+        )
+
     async def set_responses_cursor(
         self, *, conversation_id: str, user_id: int, run_id: str, response_id: str,
         locale: str | None = None,

@@ -7831,6 +7831,31 @@ def test_responses_cursor_rejects_stale_conversation_turn():
     }
 
 
+def test_selected_feed_event_survives_read_cursor_without_prior_plan_lineage():
+    row = SimpleNamespace(last_run_id="run-b", context_json={
+        "session_id": "composer-b", "last_verified_context": {"name": "Plan A"},
+        "responses_cursor": {"run_id": "run-a", "response_id": "resp-a"},
+    })
+    repo = object.__new__(FinnV2ConversationRepository)
+    repo.get_by_id_for_user = AsyncMock(return_value=row)
+    repo._flush_with_rollback = AsyncMock()
+    event = {"item_id": "feed-b", "subject": "Plan B", "read_only_context": True,
+             "action_authorized": False}
+    with pytest.raises(RuntimeContractConflictError, match="feed_selection_stale_or_unowned"):
+        asyncio.run(repo.set_selected_feed_event(
+            conversation_id="conv-b", user_id=7, run_id="run-a", feed_event=event,
+        ))
+    asyncio.run(repo.set_selected_feed_event(
+        conversation_id="conv-b", user_id=7, run_id="run-b", feed_event=event,
+    ))
+    assert row.context_json == {"session_id": "composer-b", "feed_event": event}
+    asyncio.run(repo.set_responses_cursor(
+        conversation_id="conv-b", user_id=7, run_id="run-b", response_id="resp-b",
+    ))
+    assert row.context_json["feed_event"] == event
+    assert row.context_json["responses_cursor"]["response_id"] == "resp-b"
+
+
 def test_read_answer_requires_independent_evidence_verification():
     semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
         available=False, passes=True, reason_codes=[],

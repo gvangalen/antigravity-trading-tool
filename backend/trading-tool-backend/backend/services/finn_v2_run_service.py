@@ -449,6 +449,18 @@ class FinnV2RunService:
             event_type=TRACE_EVENT_BY_STATUS[status],
             payload_json=self._trace_payload(run, status=status, response_source="v2_runtime"),
         )
+        feed_item_id = str((run.client_context_json or {}).get("feed_item_id") or "").strip()
+        if feed_item_id and run.conversation_id:
+            from backend.services.finn_coach_feed_service import FinnCoachFeedService
+            item = await FinnCoachFeedService(self.session).detail(
+                user_id=user_id, item_id=feed_item_id,
+            )
+            if item is not None:
+                selected = FinnV2OrchestratorService._selected_feed_context({}, item)
+                await self.conversations.set_selected_feed_event(
+                    conversation_id=run.conversation_id, user_id=user_id,
+                    run_id=run_id, feed_event=selected["feed_event"],
+                )
         if status in {"completed", "clarification_required"} and run.conversation_id:
             await self.conversations.set_responses_cursor(
                 conversation_id=run.conversation_id, user_id=user_id,

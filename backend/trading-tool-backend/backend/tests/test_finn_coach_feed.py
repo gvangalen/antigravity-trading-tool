@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +11,8 @@ from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationServ
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, _feed_evidence_instruction
+from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
+from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.api.ai_assistant_api import _feed_context_boundary
 
 
@@ -194,6 +197,51 @@ def test_proposal_follow_up_rereads_owner_scoped_open_change(monkeypatch):
     assert instruction in FinnResponsesFrontDoor._model_led_instructions(
         "nl", feed_evidence=[{"source": evidence.source, "facts": evidence.facts}],
     )
+
+
+def test_direct_responses_read_persists_selected_feed_for_next_turn(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000099"
+    run = SimpleNamespace(
+        id="run-b", user_id=7, conversation_id="conversation-b", status="planned",
+        message="Wat betekent deze update?", trace_id="trace-b",
+        client_context_json={"feed_item_id": item_id},
+    )
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "proposal_pending",
+                "subject_type": "proposal", "subject_id": "proposal-b",
+                "symbol": "ETH", "evidence": {"target_name": "ETH Plan B"}}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    service = FinnV2RunService.__new__(FinnV2RunService)
+    service.session = SimpleNamespace()
+    service.runs = SimpleNamespace(
+        get_by_id_for_user=AsyncMock(return_value=run), update_status=AsyncMock(),
+    )
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=AsyncMock(return_value=SimpleNamespace(state_json={"responses_exchange": {}})),
+        record_verified_setup_subject=AsyncMock(),
+        materialize_terminal=AsyncMock(return_value=SimpleNamespace(terminal_projection_json={})),
+    )
+    service.traces = SimpleNamespace(append_event=AsyncMock())
+    service.conversations = SimpleNamespace(
+        set_selected_feed_event=AsyncMock(), set_responses_cursor=AsyncMock(),
+    )
+    service._trace_payload = lambda *_args, **_kwargs: {}
+    service._commit_session_if_possible = AsyncMock()
+    asyncio.run(service.complete_responses_read(
+        run_id="run-b", user_id=7, response_id="response-b",
+        answer=FinnResponsesVerifiedAnswer("completed", "Dit voorstel wacht op bevestiging.", None, ()),
+        locale="nl",
+    ))
+    selected = service.conversations.set_selected_feed_event.call_args.kwargs
+    assert selected["conversation_id"] == "conversation-b"
+    assert selected["user_id"] == 7
+    assert selected["run_id"] == "run-b"
+    assert selected["feed_event"]["item_id"] == item_id
+    assert selected["feed_event"]["action_authorized"] is False
+    service.conversations.set_responses_cursor.assert_awaited_once()
 
 
 def test_discuss_setup_rechecks_current_match_and_marks_old_notification_historical(monkeypatch):

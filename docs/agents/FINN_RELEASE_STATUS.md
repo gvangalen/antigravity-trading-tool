@@ -6,7 +6,38 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `EDITED_FEED_HANDOFF_RELEASE_CANDIDATE`. The previous proposal-follow-up
+Phase: `FEED_CONVERSATION_CONTINUITY_CANDIDATE`. The edited-handoff
+candidate merged as product SHA `6a31d1c67f069da2149dd6bb0a8d459a1e7d0bab`.
+Candidate and main CI passed all five jobs; Auto Deploy succeeded and public
+backend and frontend both returned HTTP 200 with that SHA. Independent browser
+QA accepted the A→X→B handoff and the direct rewritten first B-question:
+FINN named B and distinguished saved 1D from pending 4H. The full conversation
+was **not accepted**: after FINN answered the prefilled B-question, the next
+turn denied evidence of that still-visible pending 4H proposal. No proposal
+was confirmed or order executed. Native mobile remained unavailable on the
+locked QA host (report SHA-256
+`162151b2451b838fa392c49978a08801c3cff93d0c8ffc430ad682654551ed79`).
+The direct read-only Responses completion path advances the answer cursor but
+did not persist the selected feed item in the conversation. The current local
+candidate stores that owner-scoped selection atomically for the current run,
+preserves the composer session, and discards older plan lineage. The next
+turn rereads the proposal through its owner-scoped ID. Focused regressions
+for the direct completion and continuation repository passed **3/3**. Root
+backend tests passed **3499**, with **3 skipped**. The isolated
+API/Celery/Responses action matrix passed **16/16** and adapter tests
+**19/19**, with no broker orders, live bots, live-trading calls or production
+connections (artifact SHA-256
+`c147999be0d25812bf9ae582ea2b76a7641773ca032b9afdff21a12e4c65e0d4`).
+Real `gpt-6-luna`/Responses development passed **20/20** (artifact SHA-256
+`3a1c0ee904a402cfe13f6ee78f423b4a3adde4b3f62dad050040e6f8b7d80938`)
+and regression passed **109/109** (artifact SHA-256
+`c541ed91293c5b5d6e68fc8ca0181ac1d327271a06b054dbf7ea1c4b4c034af4`),
+with zero provider, schema, timeout, parse or validation failures. Candidate
+CI passed all five jobs on code SHA
+`f23ca4b80a9af303791efd6ef34b0c8a197e5ed8`. The status update,
+deployment and independent QA are pending.
+
+The previous proposal-follow-up
 candidate merged as product SHA `834437f16c805f29811aa4470e106dd20a17536d`.
 Candidate and main CI passed all five jobs, Auto Deploy succeeded, and public
 backend health and frontend build-info both returned HTTP 200 with that SHA.
@@ -33,8 +64,8 @@ and regression passed **109/109** (artifact SHA-256
 `7169a7c290324c63c3423d3a93c2811105a6c85d7c3ddd0a10fddfdecb467bdd`),
 with zero provider, schema, timeout, parse or validation failures. Candidate
 CI passed all five jobs on code/export SHA
-`8f044c40335ea3230817504586754203ddcaadf3`; CI for this status update,
-deployment identity and independent QA are pending.
+`8f044c40335ea3230817504586754203ddcaadf3`; its status update, main CI
+and Auto Deploy also passed. The independent QA finding is recorded above.
 
 Independent live QA on product SHA
 `0979563fd12fa4da3609481103313411e4902738` accepted the targeted web
