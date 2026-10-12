@@ -206,6 +206,10 @@ def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
 @pytest.mark.parametrize("unavailable", [None, "missing", "stale", "outside"])
 @pytest.mark.parametrize("mode", ["manual", "semi-auto", "auto"])
 def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailable, mode):
+    monkeypatch.setattr(store_daily_scores_task.reconcile_coach_feed_score, "delay", lambda *_: None)
+    feed_decisions = []
+    monkeypatch.setattr(store_daily_scores_task.publish_coach_bot_decision, "delay",
+                        lambda *args: feed_decisions.append(args))
     store = _SourceStore(
         missing="technical" if unavailable == "missing" else None,
         stale="technical" if unavailable == "stale" else None,
@@ -313,3 +317,4 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     assert len(saved_orders) == (0 if unavailable else 1)
     assert len(auto_calls) == (1 if not unavailable and mode == "auto" else 0)
     assert persisted["scores"]["_setup_match"]["status"] == expected_match_status
+    assert feed_decisions == ([] if unavailable else [(7, 13)])

@@ -191,6 +191,14 @@ celery_app.conf.beat_schedule = {
         crontab(minute="*/15"),
         queue_override=DEFAULT_QUEUE,
     ),
+    "retry_coach_feed_copy": build_task_schedule_entry(
+        "backend.celery_task.store_daily_scores_task.retry_coach_feed_copy",
+        crontab(minute="*/10"),
+    ),
+    "recover_coach_feed_events": build_task_schedule_entry(
+        "backend.celery_task.store_daily_scores_task.recover_coach_feed_events",
+        crontab(minute="*/10"),
+    ),
 
     # =====================================================
     # 4️⃣ PORTFOLIO + SETUP + BOT (STAGGERED)

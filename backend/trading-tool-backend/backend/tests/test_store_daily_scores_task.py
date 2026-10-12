@@ -55,6 +55,8 @@ def test_run_rule_based_daily_scores_releases_lease_after_success(monkeypatch):
 def test_daily_score_storage_keeps_missing_macro_as_null(monkeypatch):
     import backend.celery_task.store_daily_scores_task as task_module
     events = []
+    monkeypatch.setattr(task_module.reconcile_coach_feed_score, "delay",
+                        lambda user_id, symbol: events.append(("feed_dispatch", (user_id, symbol))))
 
     class Cursor:
         def __init__(self, conn):
@@ -104,13 +106,56 @@ def test_daily_score_storage_keeps_missing_macro_as_null(monkeypatch):
     assert conn.saved[:5] == (7, "AAPL", None, 70, 70)
     assert conn.saved[5] is None  # The retired AI setup score is never stored.
     assert events[0] == ("lock", (task_module.SCORE_OWNER_LOCK_NAMESPACE, 7))
-    assert [event[0] for event in events][-2:] == ["upsert", "commit"]
+    assert [event[0] for event in events][-3:] == ["upsert", "commit", "feed_dispatch"]
+    assert events[-1][1] == (7, "AAPL")
+
+
+def test_feed_recovery_only_dispatches_new_persisted_paper_decisions(monkeypatch):
+    import backend.celery_task.store_daily_scores_task as task_module
+
+    statements = []
+    sent = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql):
+            statements.append(sql)
+
+        def fetchall(self):
+            return [(7, 91)]
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    monkeypatch.setattr(task_module.publish_coach_bot_decision, "delay",
+                        lambda user_id, decision_id: sent.append((user_id, decision_id)))
+    assert task_module.recover_coach_feed_events() == 1
+    assert sent == [(7, 91)]
+    assert len(statements) == 1
+    assert "initial_decision_id" in statements[0]
+    assert "f.user_id=d.user_id" in statements[0]
+    assert "setups" not in statements[0]
     assert task_module._confirmed_component_score({
         "total_score": 10, "scores": {"unused": {"weight": 0}},
     }) is None
 
 
 def test_overlapping_owner_rebuilds_write_newest_source_evidence_last(monkeypatch):
+    import backend.celery_task.store_daily_scores_task as task_module
+    monkeypatch.setattr(task_module.reconcile_coach_feed_score, "delay", lambda *_: None)
     import backend.celery_task.store_daily_scores_task as task_module
 
     owner_lock = threading.Lock()

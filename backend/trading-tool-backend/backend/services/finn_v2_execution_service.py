@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -20,6 +21,8 @@ from backend.services.finn_v2_execution_gate_service import FinnV2ExecutionGateS
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
+
+logger = logging.getLogger(__name__)
 
 
 class FinnV2ExecutionService:
@@ -185,6 +188,17 @@ class FinnV2ExecutionService:
             # terminal lifecycle together here so an immediate replay observes
             # ``already_executed`` rather than a transient ``started`` row.
             await self._commit_terminal_execution()
+            if proposal.operation_type in {"create_setup", "update_setup", "delete_setup"}:
+                change = (proposal.payload_json or {}).get("change") or {}
+                fields = change.get("setup_fields") or change.get("changed_fields") or {}
+                symbol = str(getattr(proposal, "asset", None) or fields.get("symbol")
+                             or (prior_entity or {}).get("symbol") or "").strip().upper()
+                if symbol:
+                    try:
+                        from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
+                        reconcile_coach_feed_score.delay(user_id, symbol)
+                    except Exception:
+                        logger.warning("FINN feed setup dispatch failed", exc_info=True)
             # ``record_action_result`` normally returns the locked runtime
             # contract, but that is a persistence convenience rather than an
             # API guarantee. Resolve the run binding independently so the

@@ -62,7 +62,15 @@ class FinnV2ConfirmationService:
             await self.confirmations.update(existing, token_hash=token_hash, payload_hash=proposal.payload_hash, confirmed=False, already_confirmed=False)
         await self.proposals.update_status(proposal, status="pending_confirmation")
         await self._record_workflow_event(proposal, event="confirmation_issued")
+        feed_id = await self._publish_feed_proposal(proposal, user_id=user_id)
         await self._commit_before_success_response()
+        if feed_id:
+            try:
+                from backend.celery_task.store_daily_scores_task import generate_coach_feed_copy
+                generate_coach_feed_copy.delay(user_id, feed_id)
+            except Exception:
+                # The persisted factual text is a complete fallback.
+                pass
         return raw_token, expires_at
 
     async def cancel(self, *, proposal_id: str, user_id: int) -> dict:
@@ -75,6 +83,7 @@ class FinnV2ConfirmationService:
             raise ValueError("proposal_cannot_be_cancelled")
         await self.proposals.update_status(proposal, status="cancelled")
         await self._record_workflow_event(proposal, event="cancelled")
+        await self._resolve_feed_proposal(proposal, user_id=user_id)
         await self._commit_before_success_response()
         return {"proposal_id": proposal.id, "status": "cancelled", "already_cancelled": False}
 
@@ -126,6 +135,7 @@ class FinnV2ConfirmationService:
         await self.confirmations.update(confirmation, confirmed=True, already_confirmed=False)
         await self.proposals.update_status(proposal, status="confirmed")
         await self._record_workflow_event(proposal, event="confirmed")
+        await self._resolve_feed_proposal(proposal, user_id=user_id)
         # A client may execute immediately after receiving this response. Do
         # not expose ``confirmed`` until a fresh execution session can read
         # both the confirmation and the proposal status atomically.
@@ -150,6 +160,37 @@ class FinnV2ConfirmationService:
             operation_id=proposal.operation_type,
             payload_hash=proposal.payload_hash,
             event=event,
+        )
+
+    async def _publish_feed_proposal(self, proposal, *, user_id: int) -> str | None:
+        if not callable(getattr(self.session, "execute", None)):
+            return None
+        from backend.services.finn_coach_feed_service import FinnCoachFeedService
+        payload = getattr(proposal, "payload_json", None) or {}
+        change = payload.get("change") or {}
+        fields = (change.get("setup_fields") or change.get("strategy_fields")
+                  or change.get("bot_fields") or change.get("changed_fields") or {})
+        subject = str(fields.get("name") or proposal.asset or proposal.operation_type)
+        amount_kind = next((key for key in ("base_amount", "budget_total_eur")
+                            if fields.get(key) is not None), None)
+        return await FinnCoachFeedService(self.session).publish(
+            user_id=user_id, event_key=f"proposal:{proposal.id}",
+            event_type="proposal_pending", subject_type="proposal",
+            subject_id=proposal.id, subject=subject, symbol=proposal.asset,
+            priority=4, expires_at=proposal.expires_at,
+            evidence={"status": "pending_confirmation", "operation_type": proposal.operation_type,
+                      "proposal_id": proposal.id, "payload_hash": proposal.payload_hash,
+                      "amount_kind": amount_kind,
+                      "amount_eur": fields.get(amount_kind) if amount_kind else None},
+            revision=proposal.payload_hash,
+        )
+
+    async def _resolve_feed_proposal(self, proposal, *, user_id: int) -> None:
+        if not callable(getattr(self.session, "execute", None)):
+            return
+        from backend.services.finn_coach_feed_service import FinnCoachFeedService
+        await FinnCoachFeedService(self.session).resolve(
+            user_id=user_id, event_key=f"proposal:{proposal.id}",
         )
 
     async def _commit_before_success_response(self) -> None:

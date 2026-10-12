@@ -27,7 +27,8 @@ import {
 import NavBar from "@/components/ui/NavBar";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import WorkspaceCanvas from "@/components/workspaces/WorkspaceCanvas";
-import AIAssistant, { FinnPanel } from "@/components/ui/AIAssistant";
+import AIAssistant from "@/components/ui/AIAssistant";
+import FinnCoachFeed from "@/components/finn/FinnCoachFeed";
 import AvatarMenu from "@/components/ui/AvatarMenu";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -224,13 +225,7 @@ export default function FinnWorkspaceShell({ children }) {
               }`}
             >
               {!isOnboardingRoute ? (
-                <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_60px_-35px_rgba(37,99,235,0.32)] dark:border-slate-800 dark:bg-[#0f172a]">
-                  <FinnPanel
-                    previewSectionsOnly
-                    eventsEnabled={false}
-                    className="h-auto min-h-0"
-                  />
-                </section>
+                <FinnCoachFeed key={user?.id || "anonymous"} />
               ) : null}
 
               <section className={`border border-slate-200/80 bg-white shadow-[0_18px_50px_-40px_rgba(15,23,42,0.35)] dark:border-slate-800 dark:bg-[#06101f] ${isOnboardingRoute ? "rounded-[28px] p-5 lg:p-6" : "rounded-[32px] p-4 lg:p-6"}`}>

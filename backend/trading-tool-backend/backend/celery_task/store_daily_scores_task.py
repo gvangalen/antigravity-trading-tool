@@ -2,6 +2,7 @@ import logging
 import json
 import math
 import os
+import asyncio
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
@@ -93,6 +94,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
         logger.error("❌ Geen DB-verbinding")
         return
 
+    saved_symbols = []
     try:
         # The periodic sweep, onboarding, history repair and market-refresh
         # handoff all write the same daily score row. Serialize them per owner
@@ -181,6 +183,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
                 )
         
         conn.commit()
+        saved_symbols = watchlist
         logger.info(f"💾 Daily scores voor watchlist opgeslagen (user_id={user_id})")
 
     except Exception:
@@ -188,6 +191,171 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
         logger.error(f"❌ Fout bij build_daily_scores_for_user ({user_id})", exc_info=True)
     finally:
         conn.close()
+
+    # The feed is a downstream observer. A broker failure must never roll
+    # back a correctly persisted score or create an item from a partial run.
+    for symbol in saved_symbols:
+        try:
+            reconcile_coach_feed_score.delay(user_id, symbol)
+        except Exception:
+            logger.warning("FINN feed dispatch failed for %s", symbol, exc_info=True)
+
+
+@shared_task(name="backend.celery_task.store_daily_scores_task.reconcile_coach_feed_score")
+def reconcile_coach_feed_score(user_id: int, symbol: str):
+    """Observe completed Score 2.0 output, never generate on a feed GET."""
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    async def run():
+        async with async_session_factory() as session:
+            item_ids = await FinnCoachFeedService(session).reconcile_score_asset(
+                user_id=user_id, symbol=symbol,
+            )
+            await session.commit()
+            return item_ids
+
+    try:
+        for item_id in asyncio.run(run()):
+            generate_coach_feed_copy.delay(user_id, item_id)
+    except Exception:
+        logger.warning("FINN feed reconciliation failed for %s", symbol, exc_info=True)
+
+
+@shared_task(name="backend.celery_task.store_daily_scores_task.generate_coach_feed_copy")
+def generate_coach_feed_copy(user_id: int, item_id: str):
+    """One bounded Luna/Responses attempt with a stored factual fallback."""
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    async def run():
+        async with async_session_factory() as session:
+            result = await FinnCoachFeedService(session).generate_copy(
+                user_id=user_id, item_id=item_id,
+            )
+            await session.commit()
+            return result
+
+    try:
+        return asyncio.run(run())
+    except Exception:
+        logger.warning("FINN feed copy failed", exc_info=True)
+        return False
+
+
+@shared_task(name="backend.celery_task.store_daily_scores_task.publish_coach_bot_decision")
+def publish_coach_bot_decision(user_id: int, decision_id: int):
+    """Only a persisted owner-owned Paper decision can enter the feed."""
+    from sqlalchemy import text
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    async def run():
+        async with async_session_factory() as session:
+            result = await session.execute(text("""
+                SELECT d.id, d.bot_id, d.symbol, d.action, d.status, d.decision_ts,
+                       b.name AS bot_name, b.is_live
+                FROM bot_decisions d JOIN bot_configs b
+                  ON b.id=d.bot_id AND b.user_id=d.user_id
+                WHERE d.id=:decision_id AND d.user_id=:user_id
+            """), {"decision_id": decision_id, "user_id": user_id})
+            row = result.mappings().first()
+            if not row or row["is_live"] or str(row["action"] or "").lower() in {"hold", "houd_vast", "none"}:
+                return None
+            item_id = await FinnCoachFeedService(session).publish(
+                user_id=user_id, event_key=f"bot-decision:{decision_id}",
+                event_type="bot_decision", subject_type="bot",
+                subject_id=str(row["bot_id"]), subject=row["bot_name"],
+                symbol=row["symbol"], priority=2,
+                source_observed_at=row["decision_ts"],
+                evidence={"status": row["status"], "action": row["action"],
+                          "decision_id": row["id"], "bot_id": row["bot_id"],
+                          "source_observed_at": row["decision_ts"]},
+                revision=f"{row['action']}:{row['status']}",
+            )
+            await session.commit()
+            return item_id
+
+    try:
+        item_id = asyncio.run(run())
+        if item_id:
+            generate_coach_feed_copy.delay(user_id, item_id)
+    except Exception:
+        logger.warning("FINN Paper decision feed dispatch failed", exc_info=True)
+
+
+@shared_task(name="backend.celery_task.store_daily_scores_task.retry_coach_feed_copy")
+def retry_coach_feed_copy():
+    """Recover bounded text generation without opening the UI or replaying events."""
+    from backend.utils.db import get_db_connection
+
+    conn = get_db_connection()
+    if conn is None:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE finn_coach_feed_items f SET status='resolved',
+                    updated_at=NOW()
+                WHERE f.status IN ('unread','read') AND (
+                  (f.expires_at IS NOT NULL AND f.expires_at <= NOW())
+                  OR (f.event_type='proposal_pending' AND NOT EXISTS (
+                      SELECT 1 FROM finn_v2_proposals p
+                      WHERE p.id=f.subject_id AND p.user_id=f.user_id
+                        AND p.status IN ('draft','pending_confirmation')
+                        AND p.expires_at > NOW()))
+                )
+            """)
+            cur.execute("""
+                SELECT user_id, id FROM finn_coach_feed_items
+                WHERE copy_source='fact_fallback' AND copy_attempts < 3
+                  AND status IN ('unread','read')
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                  AND (copy_last_attempt_at IS NULL
+                       OR copy_last_attempt_at < NOW() - INTERVAL '10 minutes')
+                ORDER BY created_at ASC LIMIT 6
+            """)
+            items = cur.fetchall()
+        conn.commit()
+        for user_id, item_id in items:
+            generate_coach_feed_copy.delay(user_id, str(item_id))
+        return len(items)
+    finally:
+        conn.close()
+
+
+@shared_task(name="backend.celery_task.store_daily_scores_task.recover_coach_feed_events")
+def recover_coach_feed_events():
+    """Recover new persisted Paper events; the score sweep rechecks plans."""
+    conn = get_db_connection()
+    if conn is None:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT d.user_id, d.id FROM bot_decisions d
+                JOIN bot_configs b ON b.id=d.bot_id AND b.user_id=d.user_id
+                CROSS JOIN finn_coach_feed_runtime r
+                WHERE r.singleton=TRUE AND d.id > r.initial_decision_id
+                  AND COALESCE(b.is_live, FALSE)=FALSE
+                  AND LOWER(COALESCE(d.action, '')) NOT IN ('hold', 'houd_vast', 'none', '')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM finn_coach_feed_items f
+                    WHERE f.user_id=d.user_id AND f.event_key='bot-decision:' || d.id::TEXT)
+                ORDER BY d.id LIMIT 12
+            """)
+            decisions = cur.fetchall()
+        conn.commit()
+    finally:
+        conn.close()
+    dispatched = 0
+    for user_id, decision_id in decisions:
+        try:
+            publish_coach_bot_decision.delay(user_id, decision_id)
+            dispatched += 1
+        except Exception:
+            logger.warning("FINN feed Paper recovery dispatch failed", exc_info=True)
+    return dispatched
 
 
 # =========================================================

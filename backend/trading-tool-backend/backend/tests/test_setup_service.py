@@ -10,6 +10,12 @@ from backend.services.setup_market_match_service import SetupMarketMatchService
 from backend.services.strategy_service import normalize_weekday
 
 
+@pytest.fixture(autouse=True)
+def _capture_coach_feed_dispatch(monkeypatch):
+    from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
+    monkeypatch.setattr(reconcile_coach_feed_score, "delay", lambda *_: None)
+
+
 def _weekly_payload(day):
     return {
         "name": "BTC weekly DCA",

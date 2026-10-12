@@ -33,6 +33,20 @@
     "afternoon": "Goedemiddag",
     "evening": "Goedenavond"
   },
+  "coachFeed": {
+    "title": "Updates van FINN",
+    "subtitle": "Wat er verandert voor jouw plan",
+    "empty": "Geen updates. FINN meldt het wanneer jouw plan aandacht vraagt.",
+    "all": "Alle updates",
+    "active": "Actuele updates",
+    "discuss": "Bespreek met FINN",
+    "details": "Bekijk details",
+    "handled": "Afhandelen",
+    "archive": "Archiveren",
+    "history": "Historie",
+    "error": "Updates zijn tijdelijk niet beschikbaar.",
+    "discussQuery": "Wat betekent deze update voor mijn plan? Lees de actuele gegevens opnieuw."
+  },
   "finnWorkspace": {
     "onboardingHeader": {
       "eyebrow": "Begeleide start",

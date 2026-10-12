@@ -109,6 +109,28 @@ export type MobileIntelligenceEvent = {
   created_at: string;
 };
 
+export type MobileCoachFeedItem = {
+  id: string;
+  event_type: string;
+  subject_type: string;
+  subject_id?: string | null;
+  symbol?: string | null;
+  title: string;
+  description: string;
+  status: 'unread' | 'read' | 'handled' | 'archived' | 'resolved';
+  priority: number;
+  updated_at: string;
+};
+
+export const coachFeedApi = {
+  list(history = false) {
+    return apiClient.get<MobileCoachFeedItem[]>(`/api/assistant/feed?history=${history}`);
+  },
+  mark(id: string, action: 'read' | 'handled' | 'archived') {
+    return apiClient.post(`/api/assistant/feed/${encodeURIComponent(id)}/${action}`, {});
+  },
+};
+
 export type WatchlistResponse = string[];
 export type WatchlistMutationResponse = {
   message: string;

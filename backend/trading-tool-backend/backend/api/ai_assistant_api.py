@@ -544,6 +544,42 @@ async def _try_v2_visible_delivery(
     trace_id: str,
     runtime_selection=None,
 ):
+    if context_payload and context_payload.get("feed_item_id"):
+        # The client supplies only an opaque ID. Never trust a copied feed
+        # description as current evidence or as an action authorization.
+        from backend.services.finn_coach_feed_service import FinnCoachFeedService
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+        item = await FinnCoachFeedService(db).detail(
+            user_id=user_id, item_id=str(context_payload["feed_item_id"]),
+        )
+        if item is None:
+            raise LookupError("feed_item_not_owned")
+        context_payload = dict(context_payload)
+        if item.get("symbol"):
+            context_payload["symbol"] = item["symbol"]
+        if item.get("subject_type") == "setup" and item.get("subject_id"):
+            assessment = await SetupMarketMatchService(db).for_asset(
+                user_id, item["symbol"],
+            )
+            current = next((match for match in assessment.get("matches", [])
+                            if str(match.get("setup_id")) == str(item["subject_id"])), None)
+            if current is not None:
+                context_payload["setup_id"] = int(current["setup_id"])
+                context_payload["setup_name"] = current.get("name")
+                context_payload["feed_current_status"] = current.get("status")
+            else:
+                context_payload["feed_current_status"] = "subject_no_longer_available"
+        elif item.get("event_type") == "data_blocked" and item.get("symbol"):
+            assessment = await SetupMarketMatchService(db).for_asset(user_id, item["symbol"])
+            context_payload["feed_current_status"] = assessment.get("source_status")
+        elif item.get("event_type") == "proposal_pending":
+            # Proposal lifecycle remains governed by its separate confirmation
+            # contract. The feed does not grant a confirmation token.
+            context_payload["feed_current_status"] = (
+                "proposal_requires_separate_confirmation"
+                if item.get("status") in {"unread", "read"}
+                else "proposal_no_longer_active"
+            )
     selection = runtime_selection or _preflight_v2_runtime_selection(
         user_id=user_id,
         query=message,
