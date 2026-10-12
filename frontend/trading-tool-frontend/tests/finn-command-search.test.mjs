@@ -77,11 +77,12 @@ test("a chat handoff does not search assets, pages or indicators", () => {
   assert.equal(isDirectCommandSearchMode("indicator"), true);
 });
 
-test("feed identity follows only its untouched first chat submission", () => {
+test("feed identity follows the first explicit question even when its draft is rewritten", () => {
   const request = { nonce: 8, query: "Bespreek QA Plan B", context: { feed_item_id: "feed-b" } };
   assert.equal(shouldAttachFeedContext(request, "Bespreek QA Plan B", null), true);
   assert.equal(shouldAttachFeedContext(request, "Bespreek QA Plan B", 8), false);
-  assert.equal(shouldAttachFeedContext(request, "Hoe gaat het met QA Plan A?", null), false);
+  assert.equal(shouldAttachFeedContext(request, "Is 4H opgeslagen of nog een voorstel?", null), true);
+  assert.equal(shouldAttachFeedContext(request, "Is 4H opgeslagen of nog een voorstel?", 8), false);
   assert.equal(shouldAttachFeedContext(request, "", null), false);
 });
 

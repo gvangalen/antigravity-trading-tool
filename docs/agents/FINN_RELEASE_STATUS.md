@@ -6,7 +6,37 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `PROPOSAL_FOLLOWUP_RELEASE_CANDIDATE`. Independent live QA on product SHA
+Phase: `EDITED_FEED_HANDOFF_RELEASE_CANDIDATE`. The previous proposal-follow-up
+candidate merged as product SHA `834437f16c805f29811aa4470e106dd20a17536d`.
+Candidate and main CI passed all five jobs, Auto Deploy succeeded, and public
+backend health and frontend build-info both returned HTTP 200 with that SHA.
+Independent authenticated browser QA did **not** accept the 1D/4H follow-up:
+A→visible X→B and navigation stability passed, but editing B's prefilled chat
+question removed the selected feed ID from the request. FINN therefore denied
+the visible pending 4H proposal, including in a later same-conversation turn.
+No proposal was confirmed or order executed. Native mobile could not be
+tested on the locked QA host (report SHA-256
+`db26e151f73d0ed5c54fe41ab8c1e543a6a4a64e62a9ed35fab4b0b0bbf0d42e`).
+The current local candidate attaches the owner-scoped feed ID to the first
+nonempty question after explicit selection even when the trader rewrites the
+suggested wording. It remains read-only; the server checks item ownership and
+separate confirmation. Frontend command tests passed **15/15**, i18n tests
+**14/14**, i18n lint, typecheck and production build passed; targeted backend
+feed tests passed **23/23**. Root backend tests passed **3497**, with **3
+skipped**. The isolated API/Celery/Responses action matrix passed **16/16**
+and adapter tests **19/19**, with no broker orders, live bots, live-trading
+calls or production connections (artifact SHA-256
+`c6426afabe278f7aa524789c0e01b7730f6431a0b4f50591893d1cf70609f488`).
+Real `gpt-6-luna`/Responses development passed **20/20** (artifact SHA-256
+`670428b667405fa32d538c571d8e1fa719064ec75e54a9ad9c285c798d0a2a9d`)
+and regression passed **109/109** (artifact SHA-256
+`7169a7c290324c63c3423d3a93c2811105a6c85d7c3ddd0a10fddfdecb467bdd`),
+with zero provider, schema, timeout, parse or validation failures. Candidate
+CI passed all five jobs on code/export SHA
+`8f044c40335ea3230817504586754203ddcaadf3`; CI for this status update,
+deployment identity and independent QA are pending.
+
+Independent live QA on product SHA
 `0979563fd12fa4da3609481103313411e4902738` accepted the targeted web
 answer and A→B handoff: one coherent AAPL answer without raw citation markup
 or internal planning, different A/B feed IDs and correct B setup lineage after
@@ -15,7 +45,7 @@ mobile acceptance. QA found one remaining feed-context gap: a follow-up about
 an open 4H proposal identified the right B setup and its saved 1D timeframe,
 but could not verify that 4H was still an unconfirmed proposal (report SHA-256
 `de513fa3c6397bc3571eec1c820bf5659258bbd416ab2f995539a86025e467b0`).
-The current candidate carries only whitelisted, owner-scoped pending proposal
+That released candidate carries only whitelisted, owner-scoped pending proposal
 fields into FINN's read-only context and rereads the selected feed item from
 the saved conversation on follow-up. Those facts reach the actual model-led
 Responses prompt; a direct request-level regression proves the pending 4H
@@ -31,7 +61,8 @@ and regression passed **109/109** (artifact SHA-256
 `ff0ccdefdf93255dd4e36d8f4104ca528a02e2b61cf9da3a4cbd087bcae18fd2`),
 with zero provider, schema, timeout, parse or validation failures. Candidate
 CI passed all five jobs on code SHA `bd781b73829e1d0a8c76b733c885b6db55f19221`;
-CI for this status update, deployment identity and independent QA are pending.
+its status update, main CI and Auto Deploy also passed. The independent QA
+finding on its deployed SHA is recorded above.
 
 Earlier, the feed close and internal
 preamble repair in [PR #273](https://github.com/gvangalen/antigravity-trading-tool/pull/273)
