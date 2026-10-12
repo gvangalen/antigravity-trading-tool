@@ -9,7 +9,7 @@ from backend.services import finn_coach_feed_service as module
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
-from backend.services.finn_v2_run_service import _feed_evidence_instruction
+from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, _feed_evidence_instruction
 from backend.api.ai_assistant_api import _feed_context_boundary
 
 
@@ -191,6 +191,9 @@ def test_proposal_follow_up_rereads_owner_scoped_open_change(monkeypatch):
     assert "still pending, not saved" in instruction
     assert "discussion never confirms a proposal" in instruction
     assert "secret_internal_note" not in instruction
+    assert instruction in FinnResponsesFrontDoor._model_led_instructions(
+        "nl", feed_evidence=[{"source": evidence.source, "facts": evidence.facts}],
+    )
 
 
 def test_discuss_setup_rechecks_current_match_and_marks_old_notification_historical(monkeypatch):
