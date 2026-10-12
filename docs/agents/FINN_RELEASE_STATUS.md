@@ -6,7 +6,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 Coach Feed Candidate
 
-Phase: `LIVE_PENDING_INDEPENDENT_QA`. The sequential handoff repair merged in
+Phase: `LOCAL_VALIDATION`. Independent authenticated browser QA on public
+SHA `22da58a043ff2cfdae6a7b03482f76b4293066b9` again returned
+**NOT_ACCEPTED** (sanitized report SHA-256
+`796ebc91cde46eb9fa76194869934424ba6ff3a37171dcdba65429b01c3558eb`).
+After discussing pending setup proposal A, opening proposal B in the same
+page session could show A's conversation and an empty composer. QA reproduced
+this in a fresh Chrome tab, although another operator observed two successful
+sequences on the same SHA. The behavior is intermittent. B's owner-scoped
+answer and follow-up worked when its name was entered manually. No proposal
+was confirmed or order executed. The current repair gives feed discussions a
+separate modal, draft and close lifecycle from the general FINN command
+search; a late close or draft update from A cannot replace B. Its targeted
+command suite, web typecheck, build, i18n lint and high-severity audit pass.
+Independent authenticated QA of this repair remains pending.
+
+The prior sequential handoff repair merged in
 [PR #270](https://github.com/gvangalen/antigravity-trading-tool/pull/270)
 as product SHA `e771ab03668fa54940cf227f84b2861e257d0852`.
 [Candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38305679512),

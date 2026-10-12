@@ -75,8 +75,8 @@ export default function FinnCoachFeed({ onDiscuss }) {
   };
 
   const discuss = (item) => {
-    void setStatus(item.id, "read");
     onDiscuss?.(item.id, `${copy.discussQuery} ${item.evidence?.subject || item.title}`);
+    void setStatus(item.id, "read");
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLocale === locale ? items : [];

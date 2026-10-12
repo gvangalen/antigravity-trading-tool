@@ -33,7 +33,11 @@ import AvatarMenu from "@/components/ui/AvatarMenu";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { FINN_COMMAND_OPEN_EVENT, currentFinnRequest } from "@/lib/finnCommandSearch";
+import {
+  FINN_COMMAND_OPEN_EVENT,
+  closeFeedDiscussionIfCurrent,
+  updateFeedDiscussionDraftIfCurrent,
+} from "@/lib/finnCommandSearch";
 import { normalizeScopedAssetSymbol } from "@/lib/finnAssetIsolation";
 
 export default function FinnWorkspaceShell({ children }) {
@@ -46,7 +50,7 @@ export default function FinnWorkspaceShell({ children }) {
   const [composerQuery, setComposerQuery] = useState("");
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [commandRequest, setCommandRequest] = useState(null);
-  const [pendingFeedHandoff, setPendingFeedHandoff] = useState(null);
+  const [feedDiscussion, setFeedDiscussion] = useState(null);
   const commandNonceRef = useRef(0);
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
   const isAdminRoute = pathname?.startsWith("/admin");
@@ -74,10 +78,13 @@ export default function FinnWorkspaceShell({ children }) {
     }
   }, [requestedAsset, selectedAsset, setSelectedAsset]);
 
+  useEffect(() => {
+    // A discussion belongs to the account that selected its feed item.
+    setFeedDiscussion(null);
+  }, [user?.id]);
+
   const openAssistant = () => {
-    // Focus can return to the dock while the modal opens. Keep a feed handoff
-    // until its explicit chat submission instead of replacing its request.
-    if (assistantOpen) return;
+    if (assistantOpen || feedDiscussion) return;
     commandNonceRef.current += 1;
     setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
     setAssistantOpen(true);
@@ -87,14 +94,18 @@ export default function FinnWorkspaceShell({ children }) {
     setAssistantOpen(false);
     setComposerQuery("");
     setCommandRequest(null);
-    setPendingFeedHandoff(null);
+  };
+
+  const closeFeedDiscussion = (nonce) => {
+    // A late close from a previous discussion must not dismiss a newer item.
+    setFeedDiscussion((current) => closeFeedDiscussionIfCurrent(current, nonce));
   };
 
   const openAssistantMode = (mode, category = null) => {
     commandNonceRef.current += 1;
     setComposerMenuOpen(false);
     setComposerQuery("");
-    setPendingFeedHandoff(null);
+    setFeedDiscussion(null);
     setCommandRequest({ mode, category, nonce: commandNonceRef.current });
     setAssistantOpen(true);
   };
@@ -109,17 +120,19 @@ export default function FinnWorkspaceShell({ children }) {
       nonce: `feed:${itemId}:${commandNonceRef.current}:${Date.now()}`,
     };
     setComposerMenuOpen(false);
-    setComposerQuery(nextQuery);
-    // Feed selections are independent of general command-search requests.
-    // A late generic request or restored chat must not replace this draft.
-    setPendingFeedHandoff(handoff);
-    setAssistantOpen(true);
+    // A feed discussion owns its modal, draft, and close lifecycle. General
+    // command-search state cannot restore an older chat over this selection.
+    setAssistantOpen(false);
+    setCommandRequest(null);
+    setComposerQuery("");
+    setFeedDiscussion({ request: handoff, draft: nextQuery });
   };
 
   useEffect(() => {
     const openCommandCenter = (detail = {}) => {
       commandNonceRef.current += 1;
       const nextQuery = typeof detail.query === "string" ? detail.query : "";
+      setFeedDiscussion(null);
       setComposerQuery(nextQuery);
       setCommandRequest({
         mode: detail.mode || "all",
@@ -250,7 +263,7 @@ export default function FinnWorkspaceShell({ children }) {
           <WorkspaceCanvas>
             <div
               className={`mx-auto flex w-full ${isOnboardingRoute ? "max-w-6xl" : "max-w-[1500px]"} flex-col ${isOnboardingRoute ? "gap-5 pt-5 lg:gap-6 lg:pt-6" : "gap-6 pt-6 lg:gap-8 lg:pt-8"} ${
-                assistantOpen ? "pb-8" : "pb-10 lg:pb-12"
+                assistantOpen || feedDiscussion ? "pb-8" : "pb-10 lg:pb-12"
               }`}
             >
               {!isOnboardingRoute ? (
@@ -349,7 +362,35 @@ export default function FinnWorkspaceShell({ children }) {
             </form>
           </div>
         ) : null}
-        {assistantOpen ? (
+        {feedDiscussion ? (
+          <div
+            className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm"
+            data-feed-handoff-id={feedDiscussion.request.context.feed_item_id}
+          >
+            <button
+              type="button"
+              aria-label={workspaceCopy.closeBackdrop}
+              className="absolute inset-0 cursor-default"
+              onClick={() => closeFeedDiscussion(feedDiscussion.request.nonce)}
+            />
+            <AIAssistant
+              key={feedDiscussion.request.nonce}
+              isOpen
+              setIsOpen={(open) => {
+                if (!open) closeFeedDiscussion(feedDiscussion.request.nonce);
+              }}
+              modal
+              className="z-10"
+              eventsEnabled
+              queryValue={feedDiscussion.draft}
+              onQueryChange={(draft) => setFeedDiscussion((current) =>
+                updateFeedDiscussionDraftIfCurrent(current, feedDiscussion.request.nonce, draft)
+              )}
+              commandRequest={feedDiscussion.request}
+              autoFocusComposer
+            />
+          </div>
+        ) : assistantOpen ? (
           <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
             <button
               type="button"
@@ -358,7 +399,7 @@ export default function FinnWorkspaceShell({ children }) {
               onClick={closeAssistant}
             />
             <AIAssistant
-              key={pendingFeedHandoff?.nonce || "general"}
+              key="general"
               isOpen={assistantOpen}
               setIsOpen={(open) => {
                 if (open) setAssistantOpen(true);
@@ -369,7 +410,7 @@ export default function FinnWorkspaceShell({ children }) {
               eventsEnabled={assistantOpen}
               queryValue={composerQuery}
               onQueryChange={setComposerQuery}
-              commandRequest={currentFinnRequest(pendingFeedHandoff, commandRequest)}
+              commandRequest={commandRequest}
               autoFocusComposer
             />
           </div>
