@@ -12,6 +12,14 @@ export function hasPartialSetupScoreConditions(setup) {
   return hasSetupScoreConditions(setup) && SCORE_FIELDS.some((field) => setup?.[field] == null);
 }
 
+export function setupScoreOriginKey(isEdit, setup, touched) {
+  if (!isEdit) return "scoreDefaultOrigin";
+  if (touched) return "scoreEditedOrigin";
+  return hasPartialSetupScoreConditions(setup)
+    ? "scorePartialOrigin"
+    : "scoreSavedOrigin";
+}
+
 export function setupScorePayload(enabled, macro, technical, market, untouchedExistingSetup = null) {
   if (!enabled) {
     return Object.fromEntries(SCORE_FIELDS.map((field) => [field, null]));

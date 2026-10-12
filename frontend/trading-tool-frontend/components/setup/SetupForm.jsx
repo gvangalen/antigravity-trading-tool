@@ -19,7 +19,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 import { initialSetupFormState } from "@/lib/setup/setupFormState.mjs";
-import { hasPartialSetupScoreConditions, hasSetupScoreConditions, setupScorePayload } from "@/lib/setup/scoreConditions.mjs";
+import { hasSetupScoreConditions, setupScoreOriginKey, setupScorePayload } from "@/lib/setup/scoreConditions.mjs";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
@@ -51,9 +51,18 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   const [formData, setFormData] = useState(() =>
     initialSetupFormState(isEdit ? initialData : null)
   );
-  const [macroScore, setMacroScore] = useState([30, 70]);
-  const [technicalScore, setTechnicalScore] = useState([40, 80]);
-  const [marketScore, setMarketScore] = useState([20, 60]);
+  const [macroScore, setMacroScore] = useState(() => [
+    isEdit ? initialData?.min_macro_score ?? 30 : 30,
+    isEdit ? initialData?.max_macro_score ?? 70 : 70,
+  ]);
+  const [technicalScore, setTechnicalScore] = useState(() => [
+    isEdit ? initialData?.min_technical_score ?? 40 : 40,
+    isEdit ? initialData?.max_technical_score ?? 80 : 80,
+  ]);
+  const [marketScore, setMarketScore] = useState(() => [
+    isEdit ? initialData?.min_market_score ?? 20 : 20,
+    isEdit ? initialData?.max_market_score ?? 60 : 60,
+  ]);
   const [useScoreConditions, setUseScoreConditions] = useState(() =>
     isEdit ? hasSetupScoreConditions(initialData) : false
   );
@@ -482,9 +491,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
               </p>
             </div>
             <p className="text-xs text-[var(--text-soft)]">
-              {isEdit && !scoreConditionsTouched && hasPartialSetupScoreConditions(initialData)
-                ? copy.scorePartialOrigin
-                : copy.scoreDefaultOrigin}
+              {copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}
             </p>
 
             {scoreBlock(copy.macroTitle, macroScore, setMacroScore, copy.macroDescription)}
