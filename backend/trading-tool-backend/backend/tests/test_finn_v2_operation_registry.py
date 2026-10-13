@@ -312,6 +312,44 @@ def test_create_dca_setup_binds_weekday_before_proposal_execution():
     assert state.next_missing_input == "dca_amount_mode"
 
 
+def test_complete_german_weekly_dca_request_keeps_inflected_day_and_fixed_amount():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=(
+            "Erstelle ein wöchentliches BTC-DCA-Setup im 1D-Zeitrahmen, "
+            "Name QA BTC Deutsch Lokal 13 Oktober, fester Betrag 10 Euro "
+            "pro Ausführung, immer freitags. Zeige nur den Entwurf; bestätige nichts."
+        ),
+        explicit_asset="BTC",
+    )
+
+    assert supplied["symbol"] == "BTC"
+    assert supplied["setup_type"] == "dca"
+    assert supplied["timeframe"] == "1D"
+    assert supplied["name"] == "QA BTC Deutsch Lokal 13 Oktober"
+    assert supplied["dca_frequency"] == "weekly"
+    assert supplied["dca_day"] == "friday"
+    assert supplied["dca_amount_mode"] == "fixed"
+    assert supplied["base_amount"] == 10
+
+
+def test_german_weekday_reply_with_punctuation_binds_the_pending_draft():
+    from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
+
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    for reply in ("Freitag", "Freitag.", "freitags"):
+        assert FinnResponsesFrontDoor.binds_guided_slot(
+            message=reply, contract=contract, registry=registry, requested_slot="dca_day",
+        )
+
+
+def test_indicator_create_contract_shows_model_multilingual_action_examples():
+    contract = FinnV2OperationRegistry().require_supported("create_indicator_configuration")
+    assert "Füge RSI als technischen Indikator für BTC hinzu." in contract.positive_examples
+
+
 def test_create_dca_setup_extracts_compound_weekly_schedule_without_polluting_name():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
 

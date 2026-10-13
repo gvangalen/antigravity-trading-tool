@@ -1127,11 +1127,69 @@ class FinnV2ReasoningFallbackService:
         evidence_refs = [item.evidence_id for item in context.evidence]
         display_target = requested_asset or target_id or contract.domain
         timeframe = str(proposed_fields.get("timeframe") or "").strip().upper()
-        target_detail = f" voor {display_target}" if display_target else ""
-        if timeframe:
-            target_detail = f"{target_detail} met {timeframe} als primair timeframe"
-        direct_answer = f"Ik kan een voorstel{target_detail} voorbereiden."
-        impact_summary = f"Er wordt een {contract.action_polarity.value}-voorstel voor {display_target} voorbereid."
+        language = str(context.locale or "nl").split("-", 1)[0].lower()
+        if language not in {"nl", "en", "de"}:
+            language = "nl"
+        proposal_copy = {
+            "nl": {
+                "general": "Ik kan een voorstel voor {target}{timeframe} voorbereiden.",
+                "timeframe": " met {timeframe} als primair timeframe",
+                "impact": "Er wordt een {action}-voorstel voor {target} voorbereid.",
+                "observation": "Er is nog niets gewijzigd; het voorstel vereist eerst expliciete bevestiging.",
+                "uncertainty": "Controleer de setupvelden eerst inhoudelijk voordat je bevestigt.",
+                "next_title": "Bevestig het voorstel",
+                "next_instruction": "Controleer de contractvelden en bevestig alleen als de voorgestelde wijziging klopt.",
+                "risk": "Er wordt niets uitgevoerd zonder expliciete bevestiging.",
+                "indicator_direct": "Ik kan {indicator} {verb} {category} voor {target}.",
+                "indicator_impact": "{indicator} wordt na bevestiging {verb} {category} voor {target}.",
+                "watchlist_direct": "Ik kan {target} {verb} je watchlist.",
+                "watchlist_impact": "{target} wordt na bevestiging {verb} je watchlist.",
+                "category": {"technical": "Technisch bewijs", "macro": "Macro", "market": "Marktindicatoren"},
+                "indicator_verbs": {"create_indicator_configuration": "toevoegen aan", "update_indicator_configuration": "bijwerken in", "delete_indicator_configuration": "verwijderen uit"},
+                "watchlist_verbs": {"watchlist_add": "toevoegen aan", "watchlist_remove": "verwijderen uit"},
+                "actions": {"create": "aanmaak", "update": "wijzig", "delete": "verwijder", "remove": "verwijder"},
+            },
+            "en": {
+                "general": "I can prepare a proposal for {target}{timeframe}.",
+                "timeframe": " with {timeframe} as the primary timeframe",
+                "impact": "A {action} proposal is being prepared for {target}.",
+                "observation": "Nothing has changed yet; the proposal requires your explicit confirmation.",
+                "uncertainty": "Review the setup fields before confirming.",
+                "next_title": "Confirm the proposal",
+                "next_instruction": "Review the contract fields and confirm only if the proposed change is correct.",
+                "risk": "Nothing is executed without explicit confirmation.",
+                "indicator_direct": "I can {verb} {indicator} {category} for {target}.",
+                "indicator_impact": "After confirmation, FINN will {verb} {indicator} {category} for {target}.",
+                "watchlist_direct": "I can {verb} {target} your watchlist.",
+                "watchlist_impact": "After confirmation, FINN will {verb} {target} your watchlist.",
+                "category": {"technical": "to technical analysis", "macro": "to macro analysis", "market": "to market indicators"},
+                "indicator_verbs": {"create_indicator_configuration": "add", "update_indicator_configuration": "update", "delete_indicator_configuration": "remove"},
+                "watchlist_verbs": {"watchlist_add": "add to", "watchlist_remove": "remove from"},
+                "actions": {"create": "creation", "update": "update", "delete": "deletion", "remove": "removal"},
+            },
+            "de": {
+                "general": "Ich kann einen Vorschlag für {target}{timeframe} vorbereiten.",
+                "timeframe": " mit {timeframe} als primärem Zeitrahmen",
+                "impact": "Ein Vorschlag zur {action} für {target} wird vorbereitet.",
+                "observation": "Es wurde noch nichts geändert; der Vorschlag erfordert deine ausdrückliche Bestätigung.",
+                "uncertainty": "Prüfe die Setup-Felder sorgfältig, bevor du bestätigst.",
+                "next_title": "Vorschlag bestätigen",
+                "next_instruction": "Prüfe die Vertragsfelder und bestätige nur, wenn die vorgeschlagene Änderung stimmt.",
+                "risk": "Ohne ausdrückliche Bestätigung wird nichts ausgeführt.",
+                "indicator_direct": "Ich kann {indicator} für {target} {category} {verb}.",
+                "indicator_impact": "Nach der Bestätigung wird {indicator} für {target} {category} {verb}.",
+                "watchlist_direct": "Ich kann {target} {verb}.",
+                "watchlist_impact": "Nach der Bestätigung wird {target} {verb}.",
+                "category": {"technical": "in der technischen Analyse", "macro": "in der Makroanalyse", "market": "bei den Marktindikatoren"},
+                "indicator_verbs": {"create_indicator_configuration": "hinzufügen", "update_indicator_configuration": "aktualisieren", "delete_indicator_configuration": "entfernen"},
+                "watchlist_verbs": {"watchlist_add": "zur Watchlist hinzufügen", "watchlist_remove": "aus der Watchlist entfernen"},
+                "actions": {"create": "Erstellung", "update": "Änderung", "delete": "Löschung", "remove": "Entfernung"},
+            },
+        }[language]
+        timeframe_detail = proposal_copy["timeframe"].format(timeframe=timeframe) if timeframe else ""
+        direct_answer = proposal_copy["general"].format(target=display_target, timeframe=timeframe_detail)
+        action_name = proposal_copy["actions"].get(contract.action_polarity.value, contract.action_polarity.value)
+        impact_summary = proposal_copy["impact"].format(action=action_name, target=display_target)
         if contract.operation_id in {
             "create_indicator_configuration",
             "update_indicator_configuration",
@@ -1139,36 +1197,28 @@ class FinnV2ReasoningFallbackService:
         }:
             indicator = indicator_display_name(proposed_fields.get("indicator") or "indicator")
             category = str(proposed_fields.get("category") or "technical").strip().lower()
-            category_label = {
-                "technical": "Technisch bewijs",
-                "macro": "Macro",
-                "market": "Marktindicatoren",
-            }.get(category, category.capitalize())
-            verb = {
-                "create_indicator_configuration": "toevoegen aan",
-                "update_indicator_configuration": "bijwerken in",
-                "delete_indicator_configuration": "verwijderen uit",
-            }[contract.operation_id]
-            direct_answer = f"Ik kan {indicator} {verb} {category_label} voor {display_target}."
-            impact_summary = f"{indicator} wordt na bevestiging {verb} {category_label} voor {display_target}."
+            category_label = proposal_copy["category"].get(category, category)
+            verb = proposal_copy["indicator_verbs"][contract.operation_id]
+            direct_answer = proposal_copy["indicator_direct"].format(indicator=indicator, verb=verb, category=category_label, target=display_target)
+            impact_summary = proposal_copy["indicator_impact"].format(indicator=indicator, verb=verb, category=category_label, target=display_target)
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"}:
-            verb = "toevoegen aan" if contract.operation_id == "watchlist_add" else "verwijderen uit"
-            direct_answer = f"Ik kan {display_target} {verb} je watchlist."
-            impact_summary = f"{display_target} wordt na bevestiging {verb} je watchlist."
+            verb = proposal_copy["watchlist_verbs"][contract.operation_id]
+            direct_answer = proposal_copy["watchlist_direct"].format(target=display_target, verb=verb)
+            impact_summary = proposal_copy["watchlist_impact"].format(target=display_target, verb=verb)
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
             user_id=user_id,
             mode=contract.mode,
             direct_answer=direct_answer,
-            main_observation="Er is nog niets gewijzigd; het voorstel vereist eerst expliciete bevestiging.",
+            main_observation=proposal_copy["observation"],
             supporting_points=[],
             claims=[],
-            uncertainty_summary="Controleer de setupvelden eerst inhoudelijk voordat je bevestigt.",
+            uncertainty_summary=proposal_copy["uncertainty"],
             uncertainty_codes=list(error_codes),
             next_step=ReasoningNextStep(
-                title="Bevestig het voorstel",
-                instruction="Controleer de contractvelden en bevestig alleen als de voorgestelde wijziging klopt.",
+                title=proposal_copy["next_title"],
+                instruction=proposal_copy["next_instruction"],
                 operation_type=contract.operation_id,
                 target_entity_type=target_type,
                 target_entity_id=target_id,
@@ -1183,7 +1233,7 @@ class FinnV2ReasoningFallbackService:
                 proposed_changes=changes,
                 evidence_refs=evidence_refs,
                 impact_summary=impact_summary,
-                risk_summary="Er wordt niets uitgevoerd zonder expliciete confirmation.",
+                risk_summary=proposal_copy["risk"],
                 confirmation_required=True,
             ),
             evidence_refs_used=evidence_refs,

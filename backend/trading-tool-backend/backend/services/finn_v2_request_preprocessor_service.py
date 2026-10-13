@@ -51,7 +51,7 @@ class FinnV2RequestPreprocessorService:
         # an unambiguous execution act once the registry resolves its domain.
         ("execute", ("uitvoeren", "execute", "voer", "verplaats", "transfer", "stort", "kaufe", "verkaufe")),
         ("remove", ("verwijder", "remove", "haal", "halen", "stop met")),
-        ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
+        ("add", ("voeg", "add", "toevoeg", "zet op", "volg", "füge", "fuege", "hinzufüg", "hinzufueg")),
         # Starting a new bot configuration is a create request. Live
         # activation needs an explicit activation verb or live-order context.
         ("activate", ("activeer", "activate", "schakel", "inschakel", "zet live", "go live")),

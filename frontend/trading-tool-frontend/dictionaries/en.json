@@ -3276,6 +3276,9 @@
   },
   "assistant": {
     "draftCards": {
+      "cancelledResponse": "Proposal cancelled. Nothing was changed.",
+      "cancelledToast": "Proposal cancelled",
+      "cancelFailed": "This proposal could not be cancelled.",
     "continue": "Continue",
     "confirm": "Confirm",
     "adjust": "Edit",

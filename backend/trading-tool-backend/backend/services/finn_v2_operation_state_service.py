@@ -792,7 +792,7 @@ class FinnV2OperationStateService:
                 weekday_match = re.search(
                     r"\b(monday|maandag|montag|tuesday|dinsdag|dienstag|wednesday|woensdag|mittwoch|"
                     r"thursday|donderdag|donnerstag|friday|vrijdag|freitag|saturday|zaterdag|samstag|"
-                    r"sunday|zondag|sonntag)\b",
+                    r"sunday|zondag|sonntag)(?:s)?\b",
                     lowered,
                 )
                 if weekday_match and "dca_day" in accepted_inputs:
@@ -817,7 +817,7 @@ class FinnV2OperationStateService:
                     values.setdefault("dca_frequency", "monthly")
             if values.get("setup_type") == "dca" or dca_context:
                 smart_amount = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", lowered))
-                fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact)\b", lowered))
+                fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b", lowered))
                 if smart_amount and not fixed_amount:
                     values["dca_amount_mode"] = "score_bands"
                 elif fixed_amount and not smart_amount:
@@ -1704,7 +1704,7 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _canonical_dca_day(value: str) -> Optional[str]:
-        lowered = FinnV2SetupInputCatalog._comparison_text(value)
+        lowered = FinnV2SetupInputCatalog._comparison_text(value).strip(" .!?;:,\"'“”")
         weekdays = {
             "monday": "monday", "maandag": "monday", "montag": "monday",
             "tuesday": "tuesday", "dinsdag": "tuesday", "dienstag": "tuesday",
@@ -1714,7 +1714,7 @@ class FinnV2OperationStateService:
             "saturday": "saturday", "zaterdag": "saturday", "samstag": "saturday",
             "sunday": "sunday", "zondag": "sunday", "sonntag": "sunday",
         }
-        return weekdays.get(lowered)
+        return weekdays.get(lowered) or (weekdays.get(lowered[:-1]) if lowered.endswith("s") else None)
 
     @staticmethod
     def _canonical_execution_mode(value: str) -> Optional[str]:
