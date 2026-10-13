@@ -6,9 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `GUIDED_ASSET_AND_LOCALE_REPAIR_LOCAL_VALIDATION`. The prior live
-candidate was rejected by independent QA. The active branch is
-`codex/finn-guided-asset-and-locale`; it is not yet live or QA-accepted.
+Phase: `GUIDED_ASSET_AND_LOCALE_REPAIR_LIVE_PENDING_QA`. The prior live
+candidate was rejected by independent QA. The repair branch
+`codex/finn-guided-asset-and-locale` merged through
+[PR #306](https://github.com/gvangalen/antigravity-trading-tool/pull/306)
+as product SHA `703c845c4e9b313a5b37d2cafaa66fe71a866ab4`.
+Candidate CI run `38458370144` and main CI run `38458644705` each passed
+all five jobs. Auto Deploy run `38458901575` succeeded. On 2026-10-13,
+public backend health and frontend build-info each returned HTTP 200 and
+the exact product SHA. This is deployed but not yet independently QA-accepted.
 This repair keeps a pending target choice inside the original owner-scoped
 asset, supplies up to three clickable names even on the fast clarification
 path, and derives visible clarification language from the request locale.
@@ -23,7 +29,7 @@ production connections (artifact SHA-256
 Real Luna/Responses selector development
 passed **20/20** (artifact SHA-256 `fbc97bb23ac2a8534e53c359f5d01e1c71ed659907655bec193d1d6de6ff833c`)
 and regression **109/109** (artifact SHA-256 `4ad06f851a059f2ceab5b5fb4fd9c9a633cd1e14cc9fe5f84f79a04b9703c861`),
-with zero provider, schema, parse, validation or timeout failures. CI and deployment are in progress. These local
+with zero provider, schema, parse, validation or timeout failures. These local
 results do not constitute a deployed or independent QA verdict.
 
 The first implementation merged through
