@@ -137,6 +137,22 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
             raise AssertionError({"cross_asset_status": cross_choice.get("status"),
                                   "cross_asset_choices": cross_choices,
                                   "cross_asset_response": cross_choice.get("response")})
+        _, cross_followup = _turn(
+            base_url.rstrip("/"), token, cross_session, names[1], locale="en",
+        )
+        cross_inputs = (
+            ((cross_followup.get("runtime_trace") or {}).get("action_draft") or {})
+            .get("supplied_inputs") or {}
+        )
+        if (
+            cross_followup.get("status") != "completed"
+            or not (cross_followup.get("response") or {}).get("proposal_id")
+            or cross_inputs.get("setup_id") != setup_ids[1]
+            or cross_inputs.get("changed_fields") != {"timeframe": "4H"}
+        ):
+            raise AssertionError({"cross_followup_status": cross_followup.get("status"),
+                                  "cross_followup_response": cross_followup.get("response"),
+                                  "cross_followup_inputs": cross_inputs})
     return {"status": terminal["status"], "choices": choices,
             "proposal_created": False, "followup_status": followup["status"],
             "followup_target_matches_choice": True, "followup_proposal": True,
