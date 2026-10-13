@@ -1012,6 +1012,28 @@ class FinnV2OperationStateService:
         ))
 
     @classmethod
+    def explicit_open_dca_strategy_amount_correction(cls, message: str) -> Optional[float]:
+        """A single currency amount revises the only amount on an open DCA strategy.
+
+        The caller must verify that the owner has an open DCA strategy proposal.
+        Trade strategies may have several price fields and must not use this
+        shorthand without naming the field.
+        """
+        if not cls._is_explicit_correction(message) or "?" in message:
+            return None
+        if re.search(r"\b(?:entry|instap|einstieg|stop|target|doel|ziel|minim\w*)\b", message, re.I):
+            return None
+        amounts = re.findall(
+            r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+            r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+            message.casefold(),
+        )
+        if len(amounts) != 1:
+            return None
+        value = cls._numeric_value(amounts[0][0] or amounts[0][1])
+        return value if value is not None and value > 0 else None
+
+    @classmethod
     def _explicit_correction_inputs(
         cls, *, contract: OperationContract, message: str, accepted_inputs: set[str]
     ) -> dict[str, object]:

@@ -241,6 +241,16 @@ def test_strategy_amount_correction_is_typed_before_old_proposal_is_reused():
     assert parsed["risk_profile"] == "balanced"
 
 
+def test_open_dca_strategy_corrects_single_currency_amount_without_field_label():
+    parse = FinnV2OperationStateService.explicit_open_dca_strategy_amount_correction
+    assert parse(
+        "Corrigeer dit strategieconcept naar €75 per uitvoering; "
+        "behoud dezelfde ETH-setup. Bevestig niets."
+    ) == 75
+    assert parse("Corrigeer dit strategieconcept naar €75 en stop €65.") is None
+    assert parse("Wat zou €75 betekenen?") is None
+
+
 @pytest.mark.parametrize("locale, expected", [
     ("nl-NL", "Welk primair timeframe"),
     ("en-US", "What is the primary analysis timeframe"),

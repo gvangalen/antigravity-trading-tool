@@ -69,6 +69,18 @@ def _explicit_create_operation_request(message: str) -> str | None:
     )
 
 
+def _explicit_fresh_create_operation_request(message: str) -> str | None:
+    """An indefinite/new object starts a new draft, even in the same domain."""
+    operation = _explicit_create_operation_request(message)
+    if operation and re.match(
+        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\s+"
+        r"(?:een|an?|ein(?:e|en|er|es)?|neu(?:e|en|er|es)?|new)\b",
+        message, re.I,
+    ):
+        return operation
+    return None
+
+
 def _explicit_strategy_proposal_request(message: str) -> bool:
     return _explicit_create_operation_request(message) == "create_strategy"
 
@@ -256,7 +268,10 @@ class FinnResponsesFrontDoor:
         if not normalized or "?" in message or states.is_cancel_intent(message):
             return False
         requested_operation = _explicit_create_operation_request(message)
-        if requested_operation and requested_operation != contract.operation_id:
+        if requested_operation and (
+            requested_operation != contract.operation_id
+            or _explicit_fresh_create_operation_request(message)
+        ):
             return False
         if any(
             normalized.startswith(alias.casefold())

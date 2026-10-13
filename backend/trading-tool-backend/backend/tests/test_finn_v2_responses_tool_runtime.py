@@ -22,6 +22,7 @@ from backend.services.finn_v2_responses_proposal_selection import FinnResponsesP
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
     _explicit_strategy_proposal_request, _explicit_create_operation_request,
+    _explicit_fresh_create_operation_request,
 )
 from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
@@ -3901,6 +3902,18 @@ def test_new_strategy_request_does_not_fill_an_older_setup_question():
 ])
 def test_new_draft_operation_boundary_is_shared_across_domains(message, expected):
     assert _explicit_create_operation_request(message) == expected
+
+
+def test_new_setup_request_in_same_conversation_does_not_fill_amount_slot():
+    registry = FinnV2OperationRegistry()
+    setup = registry.require_supported("create_setup")
+    message = "Erstelle ein wöchentliches BTC-DCA-Setup im 1D-Zeitrahmen."
+    assert _explicit_fresh_create_operation_request(message) == "create_setup"
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message=message, contract=setup, registry=registry,
+        requested_slot="base_amount",
+    )
+    assert _explicit_fresh_create_operation_request("Maak de setup toch maandelijks.") is None
 
 
 def test_paper_bot_budget_limit_correction_preserves_owner_scoped_draft_target():
