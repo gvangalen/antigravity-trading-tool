@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+
+test("a direct amount correction suspends an old proposal while a hypothetical question does not", () => {
+  assert.equal(isFinnProposalCorrection("Corrigeer het bedrag naar €75. Bevestig niets."), true);
+  assert.equal(isFinnProposalCorrection("De naam is alleen Apple DCA Nieuwe QA."), true);
+  assert.equal(isFinnProposalCorrection("Kan ik het bedrag veranderen?"), false);
+  const card = { actions: [{ type: "v2_proposal", proposal_id: "old" }], canConfirm: true };
+  assert.equal(suspendFinnProposalCards([card], new Set(["old"]))[0].confirmationSuspended, true);
+});
 
 test("a Paper-bot card is confirmable only for its owner-scoped proposal strategy", () => {
   const strategies = [{ id: 81, name: "ETH DCA" }, { id: 82, name: "Other" }];

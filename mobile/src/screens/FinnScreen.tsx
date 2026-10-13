@@ -28,7 +28,7 @@ import { theme } from '../constants/theme';
 import { useApiResource } from '../hooks/useApiResource';
 import { translate } from '../i18n';
 import { mapAssistantEnvelopeToFeedItems } from '../services/assistantEnvelopeMapper';
-import { canReviewDraft, draftOtherLabel } from '../services/finnDraftConversation';
+import { canReviewDraft, draftOtherLabel, isDraftCorrectionIntent } from '../services/finnDraftConversation';
 import {
   mapMobileOverviewBotDecision,
   mapMobileOverviewDecision,
@@ -140,10 +140,11 @@ export function FinnScreen({
   const { context, updateContext } = useIntelligenceContext();
   const apiContext = useMemo(() => ({
     page_type: 'FINN',
+    locale: language,
     symbol: context.asset,
     timeframe: context.timeframe,
     feed_item_id: discussFeedItemId,
-  }), [context.asset, context.timeframe, discussFeedItemId]);
+  }), [context.asset, context.timeframe, discussFeedItemId, language]);
   const finnContextLabel = useMemo(
     () => formatFinnContextLabel(context.screen || context.page_type || context.page || 'FINN', context.asset, context.timeframe),
     [context.asset, context.page_type, context.screen, context.timeframe, context.page]
@@ -493,6 +494,13 @@ export function FinnScreen({
 
     await triggerHaptic('selection');
     setSending(true);
+    if (isDraftCorrectionIntent(trimmed)) {
+      // A superseded proposal must not remain available if the replacement
+      // turn fails before a new review card arrives.
+      setCurrentDraft(null);
+      setCurrentDraftAction(null);
+      setSheet(null);
+    }
     setChatError(null);
     setFeedItems((current) => [
       ...current,

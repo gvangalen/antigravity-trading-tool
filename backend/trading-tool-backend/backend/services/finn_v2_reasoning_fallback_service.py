@@ -1063,6 +1063,7 @@ class FinnV2ReasoningFallbackService:
                 next_field,
                 contract=contract,
                 collected_inputs=operation_state.get("collected_inputs") or {},
+                locale=context.locale,
             )
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",

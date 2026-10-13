@@ -1336,7 +1336,24 @@ class FinnResponsesAnswerVerifier:
         cls, *, answer: str, message: str, previous_answer: str,
         evidence: tuple[dict[str, Any], ...],
     ) -> bool:
-        claims = cls._currency_amounts(answer)
+        # Saved entry, stop and target prices are not an investment amount.
+        # Their values are checked against the linked strategy separately by
+        # _saved_strategy_levels_supported. Do not reject an otherwise grounded
+        # readback just because the model formats a saved price with "€".
+        amount_answer = answer
+        if any(item.get("scope") == "read_linked_strategy" and item.get("status") == "completed"
+               for item in evidence):
+            level_amount = re.compile(
+                r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?|stop(?:[- ]?loss)?|"
+                r"targets?|doelen?|koersdoelen?|ziele?)\b"
+                r"(?:(?!\b(?:budget|cash|saldo|bedrag|inleg|amount)\b)[^.!?;\n]){0,24}?"
+                r"(?P<price>[€$]\s*\d[\d.,]*|\d[\d.,]*\s*(?:[€$]|\beuros?\b|\beur\b|\busd\b))",
+                re.IGNORECASE,
+            )
+            amount_answer = level_amount.sub(
+                lambda match: match.group(0).replace(match.group("price"), "", 1), answer,
+            )
+        claims = cls._currency_amounts(amount_answer)
         if not claims:
             return True
         saved_setup_amount_unknown = any(
@@ -1518,9 +1535,10 @@ class FinnResponsesAnswerVerifier:
             return True
         plain_answer = re.sub(r"[*_`]", "", answer)
         labelled = list(re.finditer(
-            r"\b(?:entry|instap|stop(?:-loss)?|targets?|doelen?|niveaus?|levels?)\b"
+            r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?|stop(?:[- ]?loss)?|"
+            r"targets?|doelen?|koersdoelen?|ziele?|niveaus?|levels?)\b"
             r"(?![-\w])\s*(?:(?:staat|ligt|staan|is|was|zijn|were)\s+)?"
-            r"(?:op|van|bij|rond|at|of|:|=)?\s*"
+            r"(?:op|van|bij|rond|at|of|:|=)?\s*\(?\s*[€$]?\s*"
             r"(\d[\d.,]*)(?:\s*[/–-]\s*(\d[\d.,]*))?",
             plain_answer, re.I,
         ))

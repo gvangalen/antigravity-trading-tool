@@ -2,12 +2,114 @@ import pytest
 
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 
 
 def test_setup_name_drops_trailing_non_persistence_safety_instruction():
     assert FinnV2OperationStateService._trim_setup_name_clause(
         "Measured Accumulation without persisting it"
     ) == "Measured Accumulation"
+
+
+def test_guided_dca_reply_keeps_cadence_and_weekday_from_one_sentence():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract, message="Ik wil een BTC DCA-setup op 1D.",
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "QA concept BTC"}, model_tool_inputs=True,
+    )
+    assert pending.next_missing_input == "dca_frequency"
+    continued = service.resolve(
+        contract=contract, message="Wekelijks op vrijdag",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert continued.collected_inputs["dca_frequency"] == "weekly"
+    assert continued.collected_inputs["dca_day"] == "friday"
+    assert continued.next_missing_input == "dca_amount_mode"
+
+
+def test_fixed_amount_choice_binds_pending_dca_mode_without_provider_guess():
+    registry = FinnV2OperationRegistry()
+    for answer in ("Vast bedrag", "Fixed amount", "Fester Betrag"):
+        assert FinnResponsesFrontDoor.binds_guided_slot(
+            message=answer,
+            contract=registry.require_supported("create_setup"),
+            registry=registry,
+            requested_slot="dca_amount_mode",
+        )
+
+
+@pytest.mark.parametrize("answer", ["Wekelijks", "Weekly", "Wöchentlich", "Monatlich"])
+def test_localized_frequency_choice_binds_pending_dca_slot(answer):
+    registry = FinnV2OperationRegistry()
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=answer,
+        contract=registry.require_supported("create_setup"),
+        registry=registry,
+        requested_slot="dca_frequency",
+    )
+
+
+@pytest.mark.parametrize("answer", ["Markt", "Market", "Makro", "Macro", "Technisch", "Technical"])
+def test_localized_indicator_category_choice_binds_pending_slot(answer):
+    registry = FinnV2OperationRegistry()
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=answer,
+        contract=registry.require_supported("create_indicator_configuration"),
+        registry=registry,
+        requested_slot="category",
+    )
+
+
+def test_strategy_name_answer_can_include_amount_in_following_sentence():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract, message="Maak een strategie voor mijn setup",
+        explicit_asset="ETH", conversation_context={},
+        supplied_inputs={"setup_id": 7},
+        derived_inputs={"setup_type": "dca", "symbol": "ETH"},
+        model_tool_inputs=True,
+    )
+    assert pending.next_missing_input == "name"
+    continued = service.resolve(
+        contract=contract,
+        message="QA concept ETH dinsdag. Gebruik €50 per uitvoering, handmatig en gebalanceerd risico.",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, derived_inputs={"setup_type": "dca", "symbol": "ETH"},
+        model_tool_inputs=True,
+    )
+    assert continued.collected_inputs["name"] == "QA concept ETH dinsdag"
+    assert continued.collected_inputs["base_amount"] == 50
+
+
+def test_strategy_amount_correction_is_typed_before_old_proposal_is_reused():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    parsed = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Corrigeer het bedrag naar €75 per uitvoering. Houd de uitvoering "
+                 "handmatig en het risico gebalanceerd. Bevestig niets."),
+        explicit_asset=None,
+    )
+    assert parsed["base_amount"] == 75
+    assert parsed["execution_mode"] == "fixed"
+    assert parsed["risk_profile"] == "balanced"
+
+
+@pytest.mark.parametrize("locale, expected", [
+    ("nl-NL", "Welk primair timeframe"),
+    ("en-US", "What is the primary analysis timeframe"),
+    ("de-DE", "Welcher Analysezeitraum"),
+])
+def test_guided_draft_question_uses_requested_language(locale, expected):
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    assert FinnV2OperationStateService.clarification_question(
+        "timeframe", contract=contract, locale=locale,
+    ).startswith(expected)
 
 
 def test_create_setup_recovers_explicit_timeframe_when_model_tool_omits_it():
