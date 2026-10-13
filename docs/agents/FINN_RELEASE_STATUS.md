@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Guided Draft Operation Switch
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Independent authenticated browser QA returned
+`NOT_ACCEPTED` on live SHA `d329b5c86f44328b141ae885cc29594a11e091d8`.
+When a BTC DCA setup was awaiting an answer, an explicit request to create a
+strategy for a saved ETH setup was consumed as the missing BTC setup field.
+The next amount and name reply then produced a confirmable BTC setup card.
+QA cancelled that card; no plan or bot was confirmed or executed. The
+Paper-bot correction, ordinary strategy request, coaching, indicator, and
+language checks passed in that run. Native mobile remained unproven.
+
+The current local repair recognizes an explicit new create operation across
+setup, strategy, and bot contracts. When its operation differs from the
+pending guided draft, the unanswered slot and its associated conversation
+state are cleared before selecting the new contract. A local authenticated
+web-facade regression reproduced the pending BTC setup and then reached the
+correct owner-bound ETH strategy proposal in the same conversation. It also
+verified that a corrected Paper-bot proposal cancels the old card without
+confirming either. The root backend suite passed **3549** tests with **3
+existing skips**; frontend and mobile gates passed. The local API/Celery/
+Responses action matrix passed **16/16** and adapters **19/19**; it made no
+broker orders, live bots, live-trading calls or production connections
+(matrix SHA-256
+`03e8b7c7fa482cb1de13dbf3989a4e1e151a1d24b21d9b165dd3f5b5133d856d`).
+Real Luna/Responses development passed **20/20** with no provider, schema,
+timeout, parse or validation failures (artifact SHA-256
+`23d47cb44e685931f413b88cb4384ac364fbf8f5fc2df08970d77a936687ece1`).
+The full real-provider regression passed **109/109**, with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`91b5273b1c54f264826c8d7deab90488f3172c40e82acd279fe58e5f532cd9f9`).
+No new candidate has been deployed.
+
 ## FINN Draft Target Correction Candidate
 
 Phase: `DRAFT_TARGET_CORRECTION_LIVE_PENDING_QA`. Build candidate

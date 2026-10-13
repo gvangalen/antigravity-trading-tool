@@ -43,7 +43,10 @@ from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecisio
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
-from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, FinnResponsesFrontDoorResult
+from backend.services.finn_v2_responses_front_door import (
+    FinnResponsesFrontDoor, FinnResponsesFrontDoorResult,
+    _explicit_create_operation_request,
+)
 from backend.services.finn_v2_responses_loop import FinnResponsesError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
@@ -753,6 +756,21 @@ class FinnV2RunService:
         client = openai_client.async_client
         if client is None:
             raise FinnResponsesError("responses_provider_unconfigured")
+        pending_guided = FinnV2OperationStateService.pending_operation_id(context)
+        requested_create = _explicit_create_operation_request(message)
+        if pending_guided and requested_create and requested_create != pending_guided:
+            # A fresh action for another object supersedes the unanswered
+            # field question. Do not let a BTC setup slot consume the words
+            # "DCA-strategie" and carry its old asset into a new proposal.
+            context.pop("active_guided_operation", None)
+            context.pop("proposal_revision", None)
+            context.pop("responses_clarification", None)
+            pending_clarification = {}
+            guided = {}
+            guided_inputs = {}
+            pending_guided = None
+            previous_response = None
+            verified_asset = None
         if pending_clarification:
             relevance = FinnResponsesToolRelevanceGuard(client)
             if not await relevance.continues_clarification(
@@ -771,7 +789,6 @@ class FinnV2RunService:
                 if prior_relation != "explain_previous":
                     # A fresh request must not inherit an unrelated choice as its answer.
                     previous_response = None
-        pending_guided = FinnV2OperationStateService.pending_operation_id(context)
         corrected_guided_operation_id: str | None = asset_corrected_operation_id
         if pending_guided:
             contract = FinnV2OperationRegistry().require_supported(pending_guided)
