@@ -141,7 +141,9 @@ class FinnV2OperationStateService:
             newly_required = set(contract.required_inputs_for({**collected, **explicit, **labelled}))
             missing_fields.update(newly_required.difference(collected))
             for key, value in labelled.items():
-                if key in accepted_inputs and key not in collected and not self._is_missing(value):
+                if key in accepted_inputs and (key not in collected or (
+                    key == "name" and self._name_input_from_text(message) is not None
+                )) and not self._is_missing(value):
                     explicit.setdefault(key, value)
             for key, value in score_percentages.items():
                 if key in missing_fields:
@@ -1580,6 +1582,13 @@ class FinnV2OperationStateService:
     @staticmethod
     def _trim_setup_name_clause(value: str) -> str:
         """Exclude trailing non-persistence instructions from a display name."""
+        value = re.split(
+            r"\s+(?:en|and|und)\s+(?:elke|iedere|every|jede[nrsm]?|"
+            r"wekelijks|weekly|maandelijks|monthly)\b.*",
+            value,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0]
         return re.split(
             r"\s+(?:(?:en|and|aber|but)\s+)?(?:sla\s+(?:niets|het)?\s*op|"
             r"(?:en|and|und)\s+(?:het\s+|the\s+|dem\s+)?(?:timeframe|tijdframe|time\s*frame)\b.*|"

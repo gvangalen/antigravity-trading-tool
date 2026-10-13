@@ -5073,7 +5073,7 @@ function AIAssistantContent({
     const rows = isStrategy
       ? supplied.setup_type === "dca"
         ? [["Bedragregel", supplied.dca_amount_mode === "score_bands" ? "Smart DCA" : supplied.dca_amount_mode === "fixed" ? "Vast bedrag" : null],
-          [({ en: "Execution", de: "Ausführung" }[locale] || "Uitvoering"), formatExecutionMode(supplied.execution_mode, locale)],
+          [at("draftCards.dcaAmountCalculation", ({ en: "Amount calculation", de: "Betragsberechnung" }[locale] || "Bedragberekening")), formatExecutionMode(supplied.execution_mode, locale)],
           ["Basisbedrag (100%)", supplied.base_amount != null ? euro(supplied.base_amount) : null],
           [({ en: "Risk style", de: "Risikostil" }[locale] || "Risicostijl"),
             at("draftCards.dcaRiskNotApplicable", ({ en: "Not a setting on a DCA strategy", de: "Keine Einstellung einer DCA-Strategie" }[locale] || "Geen instelling van een DCA-strategie"))],
@@ -5112,7 +5112,7 @@ function AIAssistantContent({
             <div key={label} className="flex min-w-0 items-start justify-between gap-4 py-2 first:pt-0 last:pb-0"><dt className="shrink-0 text-slate-500 dark:text-slate-400">{label}</dt><dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{formatValue(value)}</dd></div>
           ))}
         </dl>
-        {isStrategy && supplied.setup_type === "dca" && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.dcaStrategyOnly", "Bevestigen slaat alleen deze extra strategie op onder de bestaande DCA-setup. Er wordt geen bot gestart en geen aankoop gedaan.")}</p>}
+        {isStrategy && supplied.setup_type === "dca" && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.dcaStrategyOnly", "Bevestigen slaat alleen deze extra strategie op onder de bestaande DCA-setup. Er wordt geen bot gestart en geen aankoop gedaan.")} {at("draftCards.dcaBotModeSeparate", ({ en: "Manual or automatic operation is set on a bot, not on this strategy.", de: "Manueller oder automatischer Betrieb wird am Bot eingestellt, nicht an dieser Strategie." }[locale] || "Handmatige of automatische uitvoering stel je bij een bot in, niet bij deze strategie."))}</p>}
         {isBot && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, isStrategy ? "strategie" : isBot ? "paper-bot" : isIndicator ? "indicator" : "watchlist")}</div>

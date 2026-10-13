@@ -4384,6 +4384,8 @@ def test_guided_turn_boundary_separates_slot_answers_from_new_requests(
     ("Wat vind je van mijn plan?", "base_amount", False),
     ("Verwijder mijn bot.", "name", False),
     ("Noem de nieuwe strategie ETH Extra Variant. Toon de kaart, bevestig niets.", "name", True),
+    ("€50 per uitvoering, noem de strategie ETH Rustig en gebruik een vast bedrag.", "base_amount", True),
+    ("€50 per uitvoering. Maak ook een nieuwe bot.", "base_amount", False),
 ])
 def test_persisted_guided_slot_answer_is_bound_before_model_context_switch(
     message, requested_slot, expected,
