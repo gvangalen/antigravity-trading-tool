@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Conversation Design Candidate
 
-Phase: `CANDIDATE_READY`. The current candidate changes every collecting
+Phase: `CANDIDATE_CI`. Candidate code/export SHA:
+`073f69decad27f6e48771138a1a0c9b770da239c` on branch
+`codex/finn-draft-conversation-design` ([PR #278](https://github.com/gvangalen/antigravity-trading-tool/pull/278)).
+The current candidate changes every collecting
 draft flow into a question in the FINN conversation. Where a small set of
 choices is meaningful, web and mobile show tappable answers; choosing one
 sends it as a normal user turn. Free text remains available. A review card
