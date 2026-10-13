@@ -240,9 +240,50 @@ class FinnResponsesFrontDoor:
         ):
             return False
         slot_value = states._requested_slot_value(field=requested_slot, text=message, contract=contract)
-        return slot_value is not None and (
-            requested_slot == "name" and states._name_input_from_text(message) is not None
-            or states._is_short_slot_answer(message, requested_slot=requested_slot)
+        if slot_value is None:
+            return False
+        # Even a short answer can contain a separate action after a sentence
+        # boundary. Do not consume that new request as only a slot value.
+        for action in re.finditer(
+            r"(?:^|[.;!?]\s*)\s*(maak|create|erstelle|verwijder|delete|lösche|"
+            r"start|activeer|activate)\s+"
+            r"((?:(?:ook|een|de|het|mijn|the|a|an|my|neue?|nieuw(?:e)?|andere)\s+){0,4})"
+            r"(setup|strategie|strategy|bot|indicator)\b",
+            message,
+            re.IGNORECASE,
+        ):
+            verb, modifiers, target = (part.casefold() for part in action.groups())
+            target_domain = {
+                "setup": "setup", "strategie": "strategy", "strategy": "strategy",
+                "bot": "bot", "indicator": "indicator",
+            }[target]
+            if verb in {"verwijder", "delete", "lösche", "start", "activeer", "activate"}:
+                return False
+            if target_domain != contract.domain or re.search(
+                r"\b(?:ook|nieuw(?:e)?|neue?|andere)\b", modifiers,
+            ):
+                return False
+        if requested_slot == "name" and states._name_input_from_text(message) is not None:
+            return True
+        if states._is_short_slot_answer(message, requested_slot=requested_slot):
+            return True
+        # A user can answer the active question and supply other fields of the
+        # same draft in one message. The length of that answer must not send it
+        # through the model's topic-switch guess and discard the saved draft.
+        explicit = states.explicit_inputs(
+            contract=contract,
+            message=message,
+            explicit_asset=None,
+            known_setup_type=(
+                "dca" if contract.operation_id == "create_setup"
+                and requested_slot in {
+                    "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                    "base_amount", "low_score_percent", "mid_score_percent", "high_score_percent",
+                } else None
+            ),
+        )
+        return bool(explicit) and (
+            requested_slot not in explicit or explicit[requested_slot] == slot_value
         )
 
     async def _verified_strategy_parent(

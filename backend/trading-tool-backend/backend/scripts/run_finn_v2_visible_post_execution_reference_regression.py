@@ -24,13 +24,13 @@ from backend.scripts.run_finn_v2_persisted_runtime_gate import _request_json, _t
 from backend.utils.auth_utils import create_access_token
 
 
-def _stream_envelope(*, base_url: str, token: str, query: str, session_id: str | None) -> dict:
+def _stream_envelope(*, base_url: str, token: str, query: str, session_id: str | None, context: dict | None = None) -> dict:
     """Read the single assistant SSE envelope without retaining the stream."""
     import urllib.request
 
     request = urllib.request.Request(
         f"{base_url}/api/assistant/chat/stream",
-        data=json.dumps({"query": query, "context": {}, "history": [], "session_id": session_id or "new"}).encode("utf-8"),
+        data=json.dumps({"query": query, "context": context or {}, "history": [], "session_id": session_id or "new"}).encode("utf-8"),
         method="POST",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "text/event-stream"},
     )

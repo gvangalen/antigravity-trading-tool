@@ -73,6 +73,63 @@ def test_fixed_amount_choice_binds_pending_dca_mode_without_provider_guess():
         )
 
 
+def test_compound_answer_keeps_pending_dca_draft_and_its_other_slots():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    answer = (
+        "Vast bedrag. Gebruik 1D, noem de setup QA concept BTC 13 oktober "
+        "en zet de frequentie op wekelijks op vrijdag."
+    )
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=answer, contract=contract, registry=registry,
+        requested_slot="dca_amount_mode",
+    )
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract, message="Ik wil een BTC DCA-setup maken.",
+        explicit_asset="BTC", conversation_context={}, supplied_inputs={},
+        model_tool_inputs=True,
+    )
+    # Force the same outstanding question seen in the browser; the next turn
+    # must keep all fields in one owner-scoped draft rather than restart it.
+    state = pending.dict()
+    state["next_missing_input"] = "dca_amount_mode"
+    continued = service.resolve(
+        contract=contract, message=answer, explicit_asset=None,
+        conversation_context={"active_guided_operation": state},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert continued.collected_inputs["dca_amount_mode"] == "fixed"
+    assert continued.collected_inputs["timeframe"] == "1D"
+    assert continued.collected_inputs["name"] == "QA concept BTC 13 oktober"
+    assert continued.collected_inputs["dca_frequency"] == "weekly"
+    assert continued.collected_inputs["dca_day"] == "friday"
+
+
+def test_dca_name_does_not_absorb_unlabelled_weekday_and_can_be_restated():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    pending = service.resolve(
+        contract=contract,
+        message=("Maak een BTC DCA-setup met primair timeframe 1D, "
+                 "naam QA concept BTC 13 oktober en elke vrijdag."),
+        explicit_asset="BTC", conversation_context={}, supplied_inputs={},
+        model_tool_inputs=True,
+    )
+    assert pending.collected_inputs["name"] == "QA concept BTC 13 oktober"
+    state = pending.dict()
+    state["next_missing_input"] = "dca_amount_mode"
+    continued = service.resolve(
+        contract=contract,
+        message=("Vast bedrag. Gebruik 1D, noem de setup Definitieve naam "
+                 "en zet de frequentie op wekelijks op vrijdag."),
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": state},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert continued.collected_inputs["name"] == "Definitieve naam"
+
+
 @pytest.mark.parametrize("answer", ["Wekelijks", "Weekly", "Wöchentlich", "Monatlich"])
 def test_localized_frequency_choice_binds_pending_dca_slot(answer):
     registry = FinnV2OperationRegistry()
