@@ -121,7 +121,11 @@ class FinnV2EntityResolutionService:
         if declared_type and declared_type != entity_type:
             return self._resolution_failure(user_id, entity_type, "invalid_type", source="explicit_selector")
 
-        message_matches = self._explicit_message_matches(message, candidates)
+        positive_correction = self._positive_correction_clause(message)
+        message_matches = self._explicit_message_matches(
+            positive_correction if positive_correction is not None else message,
+            candidates,
+        )
         if len(message_matches) == 1:
             return self._canonical_target(user_id, entity_type, message_matches[0], "explicit_name")
         if len(message_matches) > 1:
@@ -131,6 +135,15 @@ class FinnV2EntityResolutionService:
                 "ambiguous",
                 source="explicit_name",
                 candidate_names=self._candidate_names(message_matches),
+            )
+        if positive_correction is not None:
+            # A negated old name is never a replacement target. If the named
+            # positive choice is absent, leave the target open rather than
+            # accepting a model-supplied ID or the superseded proposal.
+            return self._resolution_failure(
+                user_id, entity_type, "ambiguous" if candidates else "not_found",
+                source="explicit_target_correction",
+                candidate_names=self._candidate_names(candidates),
             )
 
         explicit_name = self._normalized_name(selector.get(f"{entity_type}_name"))
@@ -496,6 +509,25 @@ class FinnV2EntityResolutionService:
                 unique.append(row)
         return unique
 
+    @staticmethod
+    def _positive_correction_clause(message: str) -> Optional[str]:
+        text = str(message or "")
+        positive_first = re.search(
+            r"\b(?:ik\s+bedoel|i\s+mean|ich\s+meine)\b\s*"
+            r"(?P<positive>.+?)\s*,?\s+\b(?:niet|not|nicht)\b",
+            text, re.IGNORECASE,
+        )
+        if positive_first:
+            return positive_first.group("positive").strip(" ,.:;\"'“”‘’")
+        positive_last = re.search(
+            r"\b(?:niet|not|nicht)\b.+?\b(?:maar|but|sondern)\b\s*"
+            r"(?P<positive>[^.;!?]+)",
+            text, re.IGNORECASE,
+        )
+        if positive_last:
+            return positive_last.group("positive").strip(" ,.:;\"'“”‘’")
+        return None
+
     def _explicit_strategy_matches(
         self, message: str, strategies: list[Dict[str, Any]], *, setup_name: str = "",
     ) -> list[Dict[str, Any]]:
@@ -731,7 +763,11 @@ class FinnV2EntityResolutionService:
                 # for a second strategy before that relationship is checked.
                 continue
             rows = await loader(user_id)
-            matches = self._explicit_message_matches(message, [dict(row) for row in rows])
+            positive_correction = self._positive_correction_clause(message)
+            matches = self._explicit_message_matches(
+                positive_correction if positive_correction is not None else message,
+                [dict(row) for row in rows],
+            )
             if len(matches) == 1:
                 enriched[name_field] = matches[0].get("name")
                 # An owner-scoped name in the current turn outranks an ID from
