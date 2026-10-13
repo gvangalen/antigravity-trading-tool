@@ -6,16 +6,30 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Card Localization
 
-Phase: `DEPLOYED_QA_PENDING`. Build candidate
+Phase: `DRAFT_LOCALE_ACCEPTED`. Build candidate
 `c07970b5e5f91af60800ec9c1425a14e3acfd565` merged through
 [PR #295](https://github.com/gvangalen/antigravity-trading-tool/pull/295)
 as product SHA `6db6216cef9db117c543310d7806e49c90e97b6f`.
 The five candidate and five main CI jobs passed. Auto Deploy completed
 successfully for the product SHA. Public backend health and frontend
 build-info both returned HTTP 200 and that exact SHA on 2026-10-13.
-This status-only commit needs its own public SHA check before independent
-QA starts. Independent QA has not yet tested the repair live. The preceding
-authenticated browser QA
+The preceding status-only SHA `a9060ee97ba184ade56db7b3637bde433be8e975`
+passed all five main CI jobs and Auto Deploy; public backend health and
+frontend build-info each returned HTTP 200 with that SHA. Independent
+authenticated browser QA returned `ACCEPTED` for the targeted draft
+localization repair on that exact live SHA. The German ADX create request
+showed a confirmable German indicator card; a fully specified German BTC
+DCA request showed the stated name, 1D, Friday and EUR 10 immediately;
+an incomplete version asked only for the weekday and completed correctly
+after `Freitag.`. EN/DE/NL draft and cancellation copy used the selected
+language; cancelled cards no longer had active confirmation buttons. No
+proposal was saved or confirmed and no bot or order was executed. The
+browser console had no errors or warnings. QA observed two minor limits:
+`Woechentlich` is displayed without an umlaut, and the UI opens an empty
+chat pane on language switch, so the same visible conversation across that
+switch was not proven. No run ID was visible and native mobile was not
+tested. This verdict-only documentation commit requires its own public SHA
+check; it does not change product code. The preceding browser QA had
 returned `NOT_ACCEPTED` on live SHA
 `6d2cfd878652f881eda87ec2a7dbc923ea760f62`. German ADX creation
 returned a read answer without a proposal; a German weekly DCA request
@@ -36,8 +50,8 @@ The real Luna/Responses development set passed **20/20** (SHA-256
 and the full regression passed **109/109** (SHA-256
 `adf742dee1beed33d33938100ffb7cc99cd9cfcaa460ab3940c2dd7c060cf0a7`),
 both with zero provider, schema, timeout, parse or validation failures.
-This evidence is Build validation; independent live QA remains the final
-acceptance gate.
+The local evidence above was Build validation; the independent targeted
+live verdict is recorded above.
 
 The preceding Build candidate
 `cf293330cf1a8ed49f9932d74834046bcd4c0e5a` merged through
