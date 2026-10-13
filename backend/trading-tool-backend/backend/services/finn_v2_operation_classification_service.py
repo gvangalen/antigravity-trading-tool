@@ -378,6 +378,28 @@ class FinnV2OperationClassificationService:
         """Resolve one explicit registry mutation without a provider round-trip."""
         entities = set(facts.explicit_entities).intersection({"setup", "strategy", "bot"})
         polarity = str(facts.action_polarity or "")
+        # A direct change request remains an action even when its second
+        # sentence asks FINN to clarify the target. The choice is still
+        # owner-scoped and no write happens before proposal confirmation.
+        imperative_update = bool(re.match(
+            r"\s*(?:(?:please|bitte)\s+)?(?:wijzig|verander|change|update|modify|"
+            r"ändere|aendere|aktualisiere)\b",
+            str(message or ""), re.IGNORECASE,
+        )) and not bool(re.match(
+            r"\s*(?:(?:please|bitte)\s+)?(?:wijzig|verander|change|update|modify|"
+            r"ändere|aendere|aktualisiere)\s+(?:niets|nothing|nichts)\b",
+            str(message or ""), re.IGNORECASE,
+        ))
+        setup_mentioned = bool(re.search(r"\bsetups?\b", str(message or ""), re.I))
+        strategy_mentioned = bool(re.search(
+            r"\b(?:strategies|strategy|strategieën|strategie|strategien)\b",
+            str(message or ""), re.I,
+        ))
+        bot_mentioned = bool(re.search(r"\bbots?\b", str(message or ""), re.I))
+        if imperative_update and setup_mentioned and not (strategy_mentioned or bot_mentioned):
+            return "update_setup"
+        if imperative_update and strategy_mentioned and not (setup_mentioned or bot_mentioned):
+            return "update_strategy"
         role_match = re.search(
             r"\b(?:wijzig(?!ing)|verander|update|change|aktualisiere|ändere|verwijder|delete|remove|"
             r"lösche|deactiveer|deactivate|deaktiviere)\w*\s+"

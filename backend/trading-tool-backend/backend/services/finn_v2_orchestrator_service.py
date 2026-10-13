@@ -709,6 +709,8 @@ class FinnV2OrchestratorService:
                 ),
                 entity_type=str(target_resolution.get("entity_type") or "object"),
                 candidate_names=list(target_resolution.get("candidate_names") or []),
+                locale=(getattr(run, "workspace_hints_json", None) or {}).get("locale")
+                or (getattr(run, "client_context_json", None) or {}).get("locale"),
             )
             candidate_names = list(target_resolution.get("candidate_names") or [])
             await self.runtime_contracts.record_responses_clarification(
@@ -717,7 +719,7 @@ class FinnV2OrchestratorService:
                 original_message=run.message,
                 question=result.selected_clarification.question,
                 reason="choice_required" if candidate_names else "user_detail_required",
-                choices=candidate_names if 2 <= len(candidate_names) <= 3 else [],
+                choices=candidate_names[:3] if len(candidate_names) >= 2 else [],
             )
             await self._persist_result(result)
             await self._append_trace(

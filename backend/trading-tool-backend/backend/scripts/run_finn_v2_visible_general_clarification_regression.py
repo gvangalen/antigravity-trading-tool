@@ -16,10 +16,10 @@ from backend.scripts.run_finn_v2_visible_draft_correction_regression import _tur
 from backend.utils.auth_utils import create_access_token
 
 
-def run(base_url: str) -> dict:
+def run(base_url: str, *, candidate_count: int = 2) -> dict:
     owner = _create_local_user()
     suffix = uuid4().hex[:8]
-    names = [f"BTC Keuze Alpha {suffix}", f"BTC Keuze Beta {suffix}"]
+    names = [f"BTC Keuze {index + 1} {suffix}" for index in range(candidate_count)]
     with sync_engine.begin() as connection:
         setup_ids = [_insert_setup(connection, owner["id"], name, "BTC") for name in names]
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
@@ -32,7 +32,7 @@ def run(base_url: str) -> dict:
     projection = trace.get("terminal_projection") or trace
     clarification = projection.get("clarification") or {}
     choices = clarification.get("choices") or []
-    if terminal.get("status") != "clarification_required" or set(choices) != set(names):
+    if terminal.get("status") != "clarification_required" or choices != names[:3]:
         raise AssertionError({
             "status": terminal.get("status"),
             "choices": choices,
@@ -40,14 +40,15 @@ def run(base_url: str) -> dict:
         })
     if (terminal.get("response") or {}).get("proposal_id"):
         raise AssertionError("ambiguous_setup_created_proposal")
-    _, followup = _turn(base_url.rstrip("/"), token, session, names[0], locale="nl")
+    chosen_index = 3 if candidate_count > 3 else 0
+    _, followup = _turn(base_url.rstrip("/"), token, session, names[chosen_index], locale="nl")
     followup_trace = followup.get("runtime_trace") or {}
     followup_projection = followup_trace.get("terminal_projection") or followup_trace
     proposal_id = str((followup.get("response") or {}).get("proposal_id") or "")
     supplied = followup_projection.get("supplied_inputs") or {}
     if (
         followup.get("status") != "completed" or not proposal_id
-        or supplied.get("setup_id") != setup_ids[0]
+        or supplied.get("setup_id") != setup_ids[chosen_index]
         or supplied.get("changed_fields") != {"timeframe": "1D"}
     ):
         raise AssertionError({"status": followup.get("status"), "supplied": supplied})
@@ -66,8 +67,9 @@ def run(base_url: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
+    parser.add_argument("--candidate-count", type=int, choices=(2, 7), default=2)
     args = parser.parse_args()
-    print(json.dumps(run(args.base_url), ensure_ascii=False))
+    print(json.dumps(run(args.base_url, candidate_count=args.candidate_count), ensure_ascii=False))
 
 
 if __name__ == "__main__":

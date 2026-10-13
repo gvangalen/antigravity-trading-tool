@@ -511,6 +511,7 @@ class FinnV2RunService:
             unspecified_correction = False
             corrected_name = None
             corrected_fields: dict[str, object] = {}
+            explicit_proposal_correction = False
             if conversation_id:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
@@ -549,11 +550,17 @@ class FinnV2RunService:
                     latest_open is not None
                     and requests_unspecified_asset_correction(message, latest_open[0].asset or "")
                 )
+                explicit_proposal_correction = bool(
+                    latest_open is not None
+                    and "?" not in message
+                    and FinnV2OperationStateService._is_explicit_correction(message)
+                )
                 if latest_open is not None and (
                     (corrected_instrument and latest_open[0].asset != corrected_instrument)
                     or unspecified_correction
                     or corrected_name
                     or corrected_fields
+                    or explicit_proposal_correction
                 ):
                     # A correction supersedes the actionable card before the
                     # provider is called. A rejected or failed replacement
@@ -564,12 +571,16 @@ class FinnV2RunService:
                     origin_state = dict((latest_open[1].state_json or {}).get("guided_state") or {})
                     retain_parent_ids = bool(corrected_fields or corrected_name) and not (
                         corrected_instrument or unspecified_correction
-                    )
+                    ) and not (explicit_proposal_correction and not (corrected_fields or corrected_name))
                     prior_inputs = {
                         key: value for key, value in dict(origin_state.get("collected_inputs") or {}).items()
                         if (retain_parent_ids or not key.endswith("_id"))
                         and key not in {"asset", "symbol"}
                     }
+                    if explicit_proposal_correction and not (corrected_fields or corrected_name):
+                        # The user may be correcting the target itself. Do not
+                        # carry the old target or its fields into the new draft.
+                        prior_inputs = {}
                     correction_inputs = FinnV2OperationStateService().explicit_inputs(
                         contract=FinnV2OperationRegistry().require_supported(latest_open[0].operation_type),
                         message=message if corrected_instrument else "", explicit_asset=corrected_instrument,

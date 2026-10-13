@@ -4,6 +4,7 @@ import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards,
 
 test("a direct amount correction suspends an old proposal while a hypothetical question does not", () => {
   assert.equal(isFinnProposalCorrection("Corrigeer het bedrag naar €75. Bevestig niets."), true);
+  assert.equal(isFinnProposalCorrection("Correctie: ik bedoel een andere ETH-setup. Bevestig niets."), true);
   assert.equal(isFinnProposalCorrection("De naam is alleen Apple DCA Nieuwe QA."), true);
   assert.equal(isFinnProposalCorrection("Kan ik het bedrag veranderen?"), false);
   const card = { actions: [{ type: "v2_proposal", proposal_id: "old" }], canConfirm: true };

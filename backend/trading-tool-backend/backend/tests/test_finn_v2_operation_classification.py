@@ -325,6 +325,26 @@ def test_explicit_mutation_object_role_outranks_entity_words_inside_its_name():
     assert result.selector_source == "registry_mutation_constraint"
 
 
+def test_imperative_update_keeps_action_contract_when_followed_by_clarification_request():
+    classifier = FinnV2OperationClassificationService()
+    for message in (
+        "Please change my ETH setup to 1D. I have several ETH setups, so ask me which one.",
+        "Ändere eines meiner ETH-Setups auf 1D. Lass mich zuerst das richtige Setup auswählen.",
+    ):
+        facts = classifier.preprocessor.preprocess(message=message)
+        assert classifier._explicit_mutation_operation(
+            message=message, facts=facts, workspace_hints=None, client_context=None,
+        ) == "update_setup"
+    for message in (
+        "Change nothing; explain my ETH setup.",
+        "Change my ETH setup and strategy together.",
+    ):
+        facts = classifier.preprocessor.preprocess(message=message)
+        assert classifier._explicit_mutation_operation(
+            message=message, facts=facts, workspace_hints=None, client_context=None,
+        ) != "update_setup"
+
+
 def test_discussing_a_pending_change_proposal_is_read_only():
     message = (
         "Wat betekent dit open wijzigingsvoorstel voor mijn opgeslagen ETH Plan B? "

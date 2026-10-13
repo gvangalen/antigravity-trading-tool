@@ -6,43 +6,48 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `LIVE_PENDING_INDEPENDENT_QA`. Branch
-`codex/finn-general-clarification-choices`; implementation commits
-`b929bc8a77e16be1294aa6cd76bcf2cd89722539` and
-`5fe663cb0e166a857242efbe35a6c9ec5bb1edd1` merged through
-[PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298)
-as product SHA `98d303b584bf58f31402a3463452745cd00dbe69`.
-The [candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38431808637)
-and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38432133017)
-each passed all five jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38432360558)
-completed successfully. Public backend health and frontend build-info each
-returned HTTP 200 and exactly that product SHA on 2026-10-13. This status-only
-commit will have its own later SHA; independent QA must bind to the current
-public backend/frontend SHA. Authenticated live acceptance is pending.
+Phase: `QA_REJECTED_REPAIR_CANDIDATE_READY`. The first implementation merged through
+[PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298),
+passed candidate and main CI, and deployed successfully. Its status-only
+follow-up [PR #299](https://github.com/gvangalen/antigravity-trading-tool/pull/299)
+also passed CI and deployed. Public backend and frontend each returned HTTP
+200 with SHA `a6e0f265af4905fcf519be5be4e8b8ab0afa7c8a` on 2026-10-13.
+The existing independent QA Agent tested that exact SHA and returned
+**NOT ACCEPTED**: seven ETH setups produced no clickable choices, a typed
+setup name once failed terminally, an explicit target correction left two
+cards confirmable, and EN/DE variants did not consistently show options.
+No proposal was confirmed or order placed. The active repair branch is
+`codex/finn-clarification-live-repair`; it is not yet live or QA-accepted.
 
-FINN can attach two or three owner-scoped choices to a typed general
-clarification. The web chat presents them as reply buttons while preserving
-free text. A button sends a user message and never confirms a proposal. The
-local browser facade exposed a previously missed ambiguous-target failure;
-the repair persists the original run message, resolves the selected name
-again under the same owner, and binds its verified ID to the pending proposal.
-The two-turn local Responses probe then produced a draft for exactly the
-chosen BTC setup and the requested 1D change, without confirmation or write.
-
-Measured Build evidence: full backend suite **3562 passed, 3 existing skips**;
-frontend typecheck, i18n lint/tests, command/proposal tests, production build,
-and high-severity audit passed. The final local FastAPI/Celery/Responses
-action matrix passed **16/16**, adapters **19/19**, with zero broker orders,
-live-trading calls, or production connections (artifact SHA-256
-`fd04850232943400828e7312ab76e5017d37f901d21261274ce973565a0e804d`).
-The real Luna/Responses selector development set passed **20/20** (SHA-256
-`3293c2bfc3218c22bfeca2b79825003f5bfa2eea51aabfe0b1a57b39f541c970`);
-the full regression passed **109/109** (SHA-256
-`f6a6a32f9ec8e725880fd5e1a480bf3cd946de1f444974612cb6d51d540292d3`),
-with no provider, schema, parse, timeout, or validation failures. The selector
-boundary was unchanged after these runs. The targeted two-turn web-facade
-probe used the real provider after the final repair and did not execute the
-proposal. These are local Build results, not authenticated live acceptance.
+The repair presents up to three owner-scoped names when more than three
+records match, while exact free text can still identify another record.
+An imperative change followed by a request to clarify the target remains
+an action proposal contract in NL, EN and DE. A target correction cancels
+the previous proposal server-side before the replacement runs. Model field
+aliases are filtered against the domain allowlist, with explicitly stated
+canonical changes taking priority. Local real-provider probes produced the
+chosen owner-scoped proposal in NL/EN/DE, including a typed fourth name among
+seven; a separate correction probe found the old proposal `cancelled` and the
+new one `draft`. A same-code API probe with seven candidates exposed three
+clickable names, accepted a typed fourth exact name, and created only a draft
+proposal for that owner-scoped target. The final full backend run passed
+**3564 tests, 3 existing skips**; frontend typecheck, i18n,
+command/proposal tests, build and
+high-severity audit passed. One earlier action matrix run was **15/16** due
+to an invalid model field alias; after the contract-boundary fix, the complete
+matrix passed **16/16** and adapter tests **19/19**, with no broker order,
+live-trading call or production connection (artifact SHA-256
+`4cf1dddeed55d1ee5bc17b157b0773874ed980134485ba362e8d91e49af15e7d`).
+The final real Luna/Responses selector development set passed **20/20**
+(artifact SHA-256 `68c1967cd811dcbbe9b3a1b3639f0b5985f1704b07cd1f21ad3e0e4b746b1ff8`)
+and full regression passed **109/109** (artifact SHA-256
+`cafea4ee804c0f2a8e4e8291a7bad40c9e1b69558dc264faf58caa2e289f163c`),
+with zero provider, schema, timeout, parse or validation failures. The
+same-code API/Celery action matrix rerun passed **16/16**, adapter tests
+**19/19**, and produced no broker order, live-trading call or production
+connection (artifact SHA-256
+`99734e0f5e0cd804929f011bb8892bb85423f486072e90b43e2e02306d7f5589`).
+These local results do not replace a new independent live verdict.
 
 ## FINN Draft Card Localization
 

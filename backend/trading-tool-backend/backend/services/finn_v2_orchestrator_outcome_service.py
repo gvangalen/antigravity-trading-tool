@@ -26,15 +26,34 @@ class FinnV2OrchestratorOutcomeService:
         tool_plan: ToolPlan,
         entity_type: str,
         candidate_names: list[str],
+        locale: str | None = None,
     ) -> OrchestratorResult:
-        labels = {"setup": "setup", "strategy": "strategie", "bot": "paper-bot"}
+        language = str(locale or "nl").split("-")[0].lower()
+        labels = {
+            "nl": {"setup": "setup", "strategy": "strategie", "bot": "paper-bot"},
+            "en": {"setup": "setup", "strategy": "strategy", "bot": "paper bot"},
+            "de": {"setup": "Setup", "strategy": "Strategie", "bot": "Paper-Bot"},
+        }.get(language, {"setup": "setup", "strategy": "strategie", "bot": "paper-bot"})
         label = labels.get(entity_type, "onderdeel")
         if candidate_names:
-            choices = " of ".join(f"‘{name}’" for name in candidate_names)
-            question = f"Welke {label} bedoel je: {choices}?"
+            if len(candidate_names) > 3:
+                question = {
+                    "en": f"Which {label} do you mean? Choose one below or type another name.",
+                    "de": f"Welches {label} meinst du? Wähle unten oder tippe einen anderen Namen.",
+                }.get(language, f"Welke {label} bedoel je? Kies hieronder of typ een andere naam.")
+            else:
+                conjunction = {"en": " or ", "de": " oder "}.get(language, " of ")
+                choices = conjunction.join(f"‘{name}’" for name in candidate_names)
+                question = {
+                    "en": f"Which {label} do you mean: {choices}?",
+                    "de": f"Welches {label} meinst du: {choices}?",
+                }.get(language, f"Welke {label} bedoel je: {choices}?")
             code = f"ambiguous_{entity_type}"
         else:
-            question = f"Ik zie nog geen {label} die hierbij past. Wil je er eerst een aanmaken?"
+            question = {
+                "en": f"I cannot find a matching {label}. Would you like to create one first?",
+                "de": f"Ich finde kein passendes {label}. Möchtest du zuerst eines erstellen?",
+            }.get(language, f"Ik zie nog geen {label} die hierbij past. Wil je er eerst een aanmaken?")
             code = f"missing_{entity_type}"
         return OrchestratorResult(
             orchestrator_result_id=f"finn-v2-orchestrator-{uuid.uuid4().hex}",

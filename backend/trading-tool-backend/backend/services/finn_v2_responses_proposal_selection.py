@@ -37,6 +37,25 @@ class FinnResponsesProposalSelection:
         if contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             raise ValueError("proposal_operation_not_write_contract")
         inputs = dict(call.inputs)
+        if contract.operation_id in {"update_setup", "update_strategy", "update_bot"}:
+            from backend.services.setup_service import SetupService
+            from backend.services.strategy_service import StrategyService
+            from backend.schemas.bot_schema import BotConfigUpdateSchema
+
+            allowed_fields = {
+                "update_setup": SetupService.UPDATE_ALLOWED_FIELDS,
+                "update_strategy": StrategyService.UPDATE_ALLOWED_FIELDS,
+                "update_bot": frozenset(BotConfigUpdateSchema.__fields__) | {"budget"},
+            }[contract.operation_id]
+            model_changes = inputs.get("changed_fields")
+            if isinstance(model_changes, dict):
+                typed_changes = self.states.explicit_inputs(
+                    contract=contract, message=message, explicit_asset=None,
+                ).get("changed_fields") or {}
+                inputs["changed_fields"] = {
+                    **{key: value for key, value in model_changes.items() if key in allowed_fields},
+                    **{key: value for key, value in typed_changes.items() if key in allowed_fields},
+                }
         semantic_target_candidate = bool(
             contract.operation_id == "create_bot"
             and conversation_context.get("immediate_bot_pair_semantic_candidate") is True
