@@ -64,6 +64,7 @@ class FinnV2OperationStateService:
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
+        accepted_inputs = set(contract.input_fields)
         if contract.operation_id == "create_bot" and existing is not None and existing.target_choice_required:
             collected.pop("strategy_id", None)
         dca_strategy = (
@@ -96,6 +97,15 @@ class FinnV2OperationStateService:
             explicit = {"name": self._requested_slot_value(
                 field="name", text=message, contract=contract,
             )}
+            # A named answer can also specify optional fields. They are still
+            # part of this turn, even when the name was the requested slot.
+            labelled = self.explicit_inputs(
+                contract=contract, message=message, explicit_asset=contract_asset,
+                known_setup_type=str(collected.get("setup_type") or "") or None,
+            )
+            for key, value in labelled.items():
+                if key in contract.input_fields and key not in collected and not self._is_missing(value):
+                    explicit.setdefault(key, value)
         elif is_slot_turn and is_correction:
             explicit = self._explicit_correction_inputs(
                 contract=contract, message=message, accepted_inputs=set(contract.input_fields)
@@ -116,9 +126,8 @@ class FinnV2OperationStateService:
             )
             explicit = {str(requested_slot): slot_value} if slot_value is not None else {}
             # A guided reply can explicitly answer more than the requested
-            # slot (for example "Trade setup, naam Momentum"). Keep the
-            # active contract authoritative and accept only its still-missing
-            # fields; already collected values remain immutable here.
+            # slot. Keep the active contract authoritative while retaining
+            # both required and optional fields the user actually supplied.
             labelled = self.explicit_inputs(
                 contract=contract,
                 message=message,
@@ -132,7 +141,7 @@ class FinnV2OperationStateService:
             newly_required = set(contract.required_inputs_for({**collected, **explicit, **labelled}))
             missing_fields.update(newly_required.difference(collected))
             for key, value in labelled.items():
-                if key in missing_fields and not self._is_missing(value):
+                if key in accepted_inputs and key not in collected and not self._is_missing(value):
                     explicit.setdefault(key, value)
             for key, value in score_percentages.items():
                 if key in missing_fields:
@@ -201,7 +210,6 @@ class FinnV2OperationStateService:
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
-        accepted_inputs = set(contract.input_fields)
         permits_existing_field_changes = bool((conversation_context or {}).get("proposal_revision")) or self._is_explicit_correction(message)
         if contract.operation_id == "create_strategy":
             explicit = {
@@ -284,6 +292,18 @@ class FinnV2OperationStateService:
                     sources["category"] = "default"
                     provenance["category"] = {"source": "default", "state_revision": next_revision}
         for key, value in (derived_inputs or {}).items():
+            if (
+                contract.operation_id == "create_strategy"
+                and (derived_inputs or {}).get("setup_id")
+                and key in {"setup_id", "setup_type", "symbol", "timeframe"}
+                and key in accepted_inputs and not self._is_missing(value)
+            ):
+                # The owner-scoped parent setup is the source of these fields.
+                # A model must not turn a date in its name into a timeframe.
+                collected[key] = self._canonical_input(key, value)
+                sources[key] = "verified_parent_setup"
+                provenance[key] = {"source": "verified_parent_setup", "state_revision": next_revision}
+                continue
             if key in accepted_inputs and key not in collected and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
                 sources[key] = "default"
@@ -1259,7 +1279,9 @@ class FinnV2OperationStateService:
             r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
             r"\s*(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
             r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|"
-            r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|[\"'”’]?[,;.!?\n]|[\"'”’]?$)",
+            r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
+            r"\s+(?:en|and|und)\s+(?:zet|set|gebruik|use|verwende|nutze|stel|setze)\b|"
+            r"[\"'”’]?[,;.!?\n]|[\"'”’]?$)",
             text,
             re.IGNORECASE,
         )

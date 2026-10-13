@@ -31,6 +31,37 @@ def test_guided_dca_reply_keeps_cadence_and_weekday_from_one_sentence():
     assert continued.next_missing_input == "dca_amount_mode"
 
 
+def test_guided_dca_compound_answer_keeps_every_typed_field_and_clean_name():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract, message="Ik wil een BTC DCA-setup maken.",
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    continued = service.resolve(
+        contract=contract,
+        message=("Vast bedrag. Gebruik 1D, noem de setup QA concept BTC 13 oktober "
+                 "en zet de frequentie op wekelijks op vrijdag."),
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert continued.collected_inputs == {
+        "symbol": "BTC", "setup_type": "dca", "timeframe": "1D",
+        "name": "QA concept BTC 13 oktober", "dca_frequency": "weekly",
+        "dca_day": "friday", "dca_amount_mode": "fixed",
+    }
+    assert continued.missing_required_inputs == ["base_amount"]
+    completed = service.resolve(
+        contract=contract, message="€50 per uitvoering.", explicit_asset=None,
+        conversation_context={"active_guided_operation": continued.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert completed.status == "complete"
+    assert completed.collected_inputs["base_amount"] == 50
+
+
 def test_fixed_amount_choice_binds_pending_dca_mode_without_provider_guess():
     registry = FinnV2OperationRegistry()
     for answer in ("Vast bedrag", "Fixed amount", "Fester Betrag"):
@@ -85,6 +116,59 @@ def test_strategy_name_answer_can_include_amount_in_following_sentence():
     )
     assert continued.collected_inputs["name"] == "QA concept ETH dinsdag"
     assert continued.collected_inputs["base_amount"] == 50
+
+
+def test_optional_strategy_and_bot_fields_survive_name_clarification():
+    registry = FinnV2OperationRegistry()
+    service = FinnV2OperationStateService()
+    strategy = registry.require_supported("create_strategy")
+    pending_strategy = service.resolve(
+        contract=strategy, message="Maak een strategie voor setup 7.",
+        explicit_asset="ETH", conversation_context={}, supplied_inputs={"setup_id": 7},
+        derived_inputs={"setup_type": "dca", "symbol": "ETH"}, model_tool_inputs=True,
+    )
+    named_strategy = service.resolve(
+        contract=strategy,
+        message="Noem hem QA ETH plan 13 oktober; gebruik €50 per uitvoering, handmatig en gebalanceerd risico.",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending_strategy.dict()},
+        supplied_inputs={}, derived_inputs={"setup_type": "dca", "symbol": "ETH"},
+        model_tool_inputs=True,
+    )
+    assert named_strategy.collected_inputs["name"] == "QA ETH plan 13 oktober"
+    assert named_strategy.collected_inputs["base_amount"] == 50
+    assert named_strategy.collected_inputs["execution_mode"] == "fixed"
+    assert "risk_profile" not in named_strategy.collected_inputs  # DCA has no risk-style field.
+
+    bot = registry.require_supported("create_bot")
+    pending_bot = service.resolve(
+        contract=bot, message="Maak een Paper-bot voor strategie 7.",
+        explicit_asset="ETH", conversation_context={},
+        supplied_inputs={"strategy_id": 7}, model_tool_inputs=True,
+    )
+    named_bot = service.resolve(
+        contract=bot,
+        message="Noem hem QA Paper Bot 13 oktober; budget €500, alleen Paper en nooit live.",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending_bot.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert named_bot.collected_inputs["name"] == "QA Paper Bot 13 oktober"
+    assert named_bot.collected_inputs["budget_total_eur"] == 500
+
+
+def test_verified_parent_setup_outweighs_date_mistaken_for_timeframe():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Maak een strategie voor QA vaste ETH vrijdag 2026-10-11.",
+        explicit_asset="ETH", conversation_context={},
+        supplied_inputs={"setup_id": 7, "timeframe": "2026-10-11"},
+        derived_inputs={"setup_id": 7, "setup_type": "dca", "symbol": "ETH", "timeframe": "1D"},
+        model_tool_inputs=True,
+    )
+    assert state.collected_inputs["timeframe"] == "1D"
+    assert state.input_sources["timeframe"] == "verified_parent_setup"
 
 
 def test_strategy_amount_correction_is_typed_before_old_proposal_is_reused():

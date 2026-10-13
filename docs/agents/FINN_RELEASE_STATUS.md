@@ -6,7 +6,40 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Conversation Design Candidate
 
-Phase: `DRAFT_CONVERSATION_REPAIR_LIVE_PENDING_QA`. The deployed design
+Phase: `DRAFT_CONVERSATION_FOLLOWUP_LOCAL_VALIDATED`. Independent authenticated
+browser QA rejected the live draft flow on product SHA
+`861b046a967fb1f7571976dec02cd7c8f1c8d141`: the BTC DCA conversation
+reasked supplied amount mode and weekday, then failed after the short Friday
+answer; DCA strategy review omitted execution and the inapplicable risk style;
+Paper-bot review omitted the supplied EUR 500 budget. The web indicator,
+read-only coach, amount correction, and EN/DE question-chip checks passed.
+No proposal was confirmed or executed. Native mobile was unavailable on QA's
+locked host. The current local follow-up keeps explicit optional fields in a
+compound clarification, aligns every guided question with its persisted slot,
+separates a setup name from a following cadence instruction, and displays the
+DCA strategy's execution and risk applicability. Local API/Celery and final
+release gates for this follow-up are in progress; no new follow-up candidate
+is deployed yet. Root backend validation passed **3530** tests with **3
+existing skips**. The isolated local API/Celery/Responses action matrix passed
+**16/16** and action adapters **19/19**, with no broker orders, live bots,
+live-trading calls or production connections (matrix SHA-256
+`94d2a2dd74d84d9ea36d6817ec1289afd8a2348189d79b544da434ff4c2f8128`).
+A synthetic owner-scoped API/Celery probe followed the exact compound BTC DCA
+reply through to a complete but unconfirmed EUR 50 proposal; separate DCA
+strategy and Paper-bot probes retained their optional amount and EUR 500
+budget. Frontend typecheck, i18n lint/tests, command/proposal tests, build and
+high-severity audit passed; mobile typecheck, lint without errors and Expo
+web/iOS/Android exports passed. Real `gpt-6-luna`/Responses development
+passed **20/20**, with no provider/schema/timeout/parse/validation failures
+(artifact SHA-256
+`17363f6e6a2233e7141b324ca6fa5240489441cb642d209f430b871c22cf1ab5`).
+The complete real-provider regression passed **109/109**, with zero
+provider/schema/timeout/parse/validation failures (artifact SHA-256
+`a29741b32d24bcc6afe25d7c0825d52abeae7587a5f5d1e23a04ee04a0b69f73`).
+Candidate CI, merge, Auto Deploy, public SHA and independent live QA for this
+follow-up remain pending.
+
+The deployed design
 candidate code/export SHA:
 `073f69decad27f6e48771138a1a0c9b770da239c` on branch
 `codex/finn-draft-conversation-design` ([PR #278](https://github.com/gvangalen/antigravity-trading-tool/pull/278)).
