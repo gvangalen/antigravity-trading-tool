@@ -88,11 +88,29 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
                 "new_proposal": (correction.get("response") or {}).get("proposal_id"),
                 "old_status": old.get("status"),
             })
+        _, continued = _turn(
+            base_url.rstrip("/"), token, session, names[1], locale="nl",
+        )
+        continued_trace = continued.get("runtime_trace") or {}
+        continued_inputs = (
+            (continued_trace.get("action_draft") or {}).get("supplied_inputs") or {}
+        )
+        if (
+            continued.get("status") != "completed"
+            or not (continued.get("response") or {}).get("proposal_id")
+            or continued_inputs.get("setup_id") != setup_ids[1]
+            or continued_inputs.get("changed_fields") != {"timeframe": "4H"}
+        ):
+            raise AssertionError({
+                "continuation_status": continued.get("status"),
+                "continuation_inputs": continued_inputs,
+            })
     return {"status": terminal["status"], "choices": choices,
             "proposal_created": False, "followup_status": followup["status"],
             "followup_target_matches_choice": True, "followup_proposal": True,
             "confirmed": False, "browser_facade": True,
-            "unknown_target_rejected": mixed_assets}
+            "unknown_target_rejected": mixed_assets,
+            "correction_choice_kept_change": mixed_assets}
 
 
 def main() -> None:

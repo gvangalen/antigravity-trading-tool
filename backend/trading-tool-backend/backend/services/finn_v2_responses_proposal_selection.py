@@ -250,7 +250,9 @@ class FinnResponsesProposalSelection:
         if (
             correction.get("status") == "cancelled"
             and correction.get("operation_id") == contract.operation_id
-            and (correction_target in mentioned_assets or awaiting_instrument or correction.get("corrected_name") or correction.get("corrected_fields"))
+            and (correction_target in mentioned_assets or awaiting_instrument
+                 or correction.get("corrected_name") or correction.get("corrected_fields")
+                 or correction.get("target_change_requested"))
         ):
             # The old proposal is irrevocably cancelled. Its owner-scoped,
             # user-supplied non-asset fields may seed a replacement after an

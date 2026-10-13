@@ -955,6 +955,18 @@ def test_update_setup_extracts_only_the_new_timeframe(message):
     assert state.missing_required_inputs == []
 
 
+def test_target_correction_keeps_an_explicit_timeframe_for_the_next_choice():
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+    message = (
+        "Correctie: ik bedoel een andere ETH-setup met naam "
+        "QA niet bestaande ETH setup 999. Verander alleen die naar 4H, "
+        "bevestig niets."
+    )
+    assert FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    ) == {"changed_fields": {"timeframe": "4H"}}
+
+
 def test_complete_dutch_strategy_prompt_extracts_execution_and_risk_synonyms():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
