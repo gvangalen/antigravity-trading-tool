@@ -6,13 +6,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Card Localization
 
-Phase: `QA_NOT_ACCEPTED_LOCAL_REPAIR`. Independent authenticated browser QA
+Phase: `DEPLOYED_QA_PENDING`. Build candidate
+`c07970b5e5f91af60800ec9c1425a14e3acfd565` merged through
+[PR #295](https://github.com/gvangalen/antigravity-trading-tool/pull/295)
+as product SHA `6db6216cef9db117c543310d7806e49c90e97b6f`.
+The five candidate and five main CI jobs passed. Auto Deploy completed
+successfully for the product SHA. Public backend health and frontend
+build-info both returned HTTP 200 and that exact SHA on 2026-10-13.
+This status-only commit needs its own public SHA check before independent
+QA starts. Independent QA has not yet tested the repair live. The preceding
+authenticated browser QA
 returned `NOT_ACCEPTED` on live SHA
 `6d2cfd878652f881eda87ec2a7dbc923ea760f62`. German ADX creation
 returned a read answer without a proposal; a German weekly DCA request
 reasked Friday and its reply failed; deterministic proposal text and web
 cancel copy remained Dutch in EN/DE. No proposal was confirmed or executed.
-The active repair branch is `codex/finn-draft-i18n-qa-repair`. The local
+The repair branch was `codex/finn-draft-i18n-qa-repair`. The local
 Responses-backed web facade reproduced and passed German indicator creation,
 the complete German DCA request, and a two-turn German Friday clarification;
 none was confirmed. The full backend suite passed **3560** tests with **3
@@ -27,8 +36,8 @@ The real Luna/Responses development set passed **20/20** (SHA-256
 and the full regression passed **109/109** (SHA-256
 `adf742dee1beed33d33938100ffb7cc99cd9cfcaa460ab3940c2dd7c060cf0a7`),
 both with zero provider, schema, timeout, parse or validation failures.
-Candidate CI and deployment are pending; independent live QA has not yet
-reviewed this repair.
+This evidence is Build validation; independent live QA remains the final
+acceptance gate.
 
 The preceding Build candidate
 `cf293330cf1a8ed49f9932d74834046bcd4c0e5a` merged through
