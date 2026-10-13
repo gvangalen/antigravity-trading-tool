@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Guided Draft Revision And Conversation Isolation
 
-Phase: `GUIDED_FOLLOWUP_LIVE_PENDING_QA`. Build candidate
+Phase: `GUIDED_FOLLOWUP_ACCEPTED`. Build candidate
 `26f68f90bf54774c67a3ad2b8863cb2bec57a98b` merged through
 [PR #290](https://github.com/gvangalen/antigravity-trading-tool/pull/290)
 as product SHA `05ab912c05e47a019dfe11cf37240bb6e11b736d`. Candidate and main
@@ -49,12 +49,22 @@ failures (artifact SHA-256
 The full real-provider regression passed **109/109**, with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
 `154ed1c61f7325e2791d7cf0246080ee4e56c37dd863744456a67819ef579c4d`).
-The product candidate is deployed; independent authenticated live QA is
-pending.
+The product candidate is deployed. Independent authenticated browser QA
+returned `ACCEPTED` for the targeted draft-flow repair on status-only live
+SHA `9df6e5240c44b89e4e8bbdb85599de282bc97441`; backend and frontend
+matched that SHA. QA verified the open EUR 50 ETH DCA strategy card was
+cancelled and replaced by a distinct EUR 75 card for the same setup. The
+English-to-German same-conversation request no longer inherited the old
+English name or invented EUR 1. A genuinely new German conversation used
+only its stated name, EUR 10 and Friday. Normal strategy, Paper-bot revision
+and read-only coaching checks also passed; no proposal was confirmed or
+executed and the browser console was clean. Native mobile remained
+unproven. German draft cards and loading copy still show some Dutch text;
+this is a localization follow-up outside the accepted behavioral repair.
 
 ## FINN Guided Draft Operation Switch
 
-Phase: `GUIDED_OPERATION_SWITCH_LIVE_PENDING_QA`. Build candidate
+Phase: `GUIDED_OPERATION_SWITCH_NOT_ACCEPTED`. Build candidate
 `58356dbc372f394355b43bde639aa37d537b03fd` merged through
 [PR #288](https://github.com/gvangalen/antigravity-trading-tool/pull/288)
 as product SHA `aa75e2e543cbd14ac05f1bdb965d34f723bc0e07`. Candidate and
@@ -90,8 +100,10 @@ timeout, parse or validation failures (artifact SHA-256
 The full real-provider regression passed **109/109**, with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
 `91b5273b1c54f264826c8d7deab90488f3172c40e82acd279fe58e5f532cd9f9`).
-The product candidate is deployed; independent authenticated live QA is
-pending.
+The product candidate was deployed, but independent authenticated live QA
+returned `NOT_ACCEPTED` on the later status-only SHA
+`9a7d8751edfad6743677b5d48fefacd5f7cfc045`. The two follow-up faults
+and their accepted repair are recorded above.
 
 ## FINN Draft Target Correction Candidate
 
