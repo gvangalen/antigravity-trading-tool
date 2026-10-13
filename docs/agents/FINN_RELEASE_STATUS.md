@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `QA_REJECTED_GUIDED_CORRECTION_CANDIDATE_READY`. The first implementation merged through
+Phase: `LIVE_GUIDED_CORRECTION_QA_PENDING`. The first implementation merged through
 [PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298),
 passed candidate and main CI, and deployed successfully. Its status-only
 follow-up [PR #299](https://github.com/gvangalen/antigravity-trading-tool/pull/299)
@@ -66,7 +66,7 @@ old card. The remaining failure was a three-turn continuation: after a
 nonexistent replacement name, selecting another ETH setup lost the already
 stated 4H change, then asked for the setup again and even showed AAPL. No
 proposal was confirmed or order placed. The active repair branch is
-`codex/finn-correction-guided-state`; it is not live or QA-accepted.
+`codex/finn-correction-guided-state`; its predecessor was not QA-accepted.
 
 This repair preserves explicitly stated non-target changes while FINN asks
 which saved object the user means. A local API/Celery reproduction of the
@@ -84,7 +84,14 @@ same-code API/Celery action matrix passed **16/16**, adapters **19/19**,
 with zero broker orders, live-trading calls, or production connections
 (artifact SHA-256
 `2cdf6cdaced785236637f5b26c93bb5eddb21182cb2c26e8600f4464189c10ec`).
-No live or independent QA verdict exists for this repair yet.
+Candidate `439b45963` merged through
+[PR #304](https://github.com/gvangalen/antigravity-trading-tool/pull/304)
+as product SHA `d7ddf6ef229088672835f865fbac40c2a7ebe12d`.
+Candidate CI run `38451653806` and main CI run `38452051183` each passed all
+five jobs. Auto Deploy run `38452309564` succeeded. Public backend health and
+frontend build-info each returned HTTP 200 and that exact product SHA on
+2026-10-13. Independent live QA is pending; no acceptance verdict exists for
+this repair yet.
 
 The repair presents up to three owner-scoped names when more than three
 records match, while exact free text can still identify another record.
