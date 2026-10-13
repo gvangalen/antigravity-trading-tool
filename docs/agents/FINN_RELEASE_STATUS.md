@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `QA_REJECTED_TARGET_RESOLUTION_CANDIDATE_READY`. The first implementation merged through
+Phase: `TARGET_RESOLUTION_LIVE_QA_PENDING`. The first implementation merged through
 [PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298),
 passed candidate and main CI, and deployed successfully. Its status-only
 follow-up [PR #299](https://github.com/gvangalen/antigravity-trading-tool/pull/299)
@@ -31,7 +31,7 @@ a correction to a nonexistent ETH setup cancelled the old card but made a
 new confirmable card for the old setup. A selected ETH chip and a valid
 target correction did work, with no proposal confirmed or order placed.
 The active follow-up branch is `codex/finn-clarification-target-resolution`;
-it is not yet live or QA-accepted.
+its repair is deployed but not yet QA-accepted.
 
 The follow-up gives the asset named in the current turn priority during
 owner-scoped target resolution and requires a visibly named replacement
@@ -53,6 +53,13 @@ with zero broker orders, live-trading calls or production connections
 (artifact SHA-256
 `4bfeccc356c8d593bf22b3565c8ff77ccce2b2bace9601cb4a9ddfa519686f56`).
 These local results are not an independent live QA verdict.
+The repair candidate `c345739f1` merged through
+[PR #302](https://github.com/gvangalen/antigravity-trading-tool/pull/302)
+as product SHA `56a1d8a2f30edbbced4822b0e64333304d90f398`.
+Candidate CI run `38446296810` and main CI run `38446636643` each passed all
+five jobs. Auto Deploy run `38446944945` succeeded. Public backend health
+and frontend build-info each returned HTTP 200 and that exact SHA on
+2026-10-13. Independent authenticated live QA of this repair is pending.
 
 The repair presents up to three owner-scoped names when more than three
 records match, while exact free text can still identify another record.
