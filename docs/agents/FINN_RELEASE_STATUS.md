@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `QA_REJECTED_CROSS_ASSET_CONTINUATION_REPAIR_IN_VALIDATION`. The prior live
+Phase: `CROSS_ASSET_CONTINUATION_LIVE_PENDING_QA`. The prior live
 candidate was rejected by independent QA. The repair branch
 `codex/finn-guided-asset-and-locale` merged through
 [PR #306](https://github.com/gvangalen/antigravity-trading-tool/pull/306)
@@ -23,8 +23,14 @@ typing an exact AAPL setup name correctly produced no AAPL proposal and
 repeated three ETH choices, but clicking an ETH choice then lost the original
 4H update and answered about a bot. The ordinary ETH choice, proposal
 correction, and NL/EN/DE choice rendering passed. No proposal was confirmed
-or order placed. The active repair branch is
-`codex/finn-cross-asset-choice-continuation`; it is local, not yet live.
+or order placed. The repair branch
+`codex/finn-cross-asset-choice-continuation` merged through
+[PR #308](https://github.com/gvangalen/antigravity-trading-tool/pull/308)
+as product SHA `c87be7db44470f19bd19054443e1b84a8863baa1`.
+Candidate CI run `38462991392` and main CI run `38463292648` each passed
+all five jobs. Auto Deploy run `38463539289` succeeded. On 2026-10-13,
+public backend health and frontend build-info each returned HTTP 200 and
+the exact product SHA. This candidate is live, pending independent QA.
 
 The local reproduction added the previously missing third turn to the
 seven-candidate API/Celery regression. It first failed with a READ answer or
@@ -42,8 +48,8 @@ Real Luna/Responses selector development passed **20/20** (artifact SHA-256
 `cf4abd9b9caa5e7e757ded85afe1668c744a7036e23b844fc4dcb84ae6be8229`)
 and regression **109/109** (artifact SHA-256
 `74e8d5e6ca18d83e228351ccdf1fbf3b7bf5dc4113fd728553234b75f1c4c84c`),
-with zero provider, schema, parse, validation or timeout failures. CI and
-deployment are pending; this is not an independent live QA verdict.
+with zero provider, schema, parse, validation or timeout failures. This is
+not an independent live QA verdict.
 This repair keeps a pending target choice inside the original owner-scoped
 asset, supplies up to three clickable names even on the fast clarification
 path, and derives visible clarification language from the request locale.
