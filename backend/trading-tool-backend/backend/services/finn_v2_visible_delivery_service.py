@@ -70,6 +70,7 @@ class FinnV2VisibleDeliveryService:
                         run_id=run_id,
                         status=status,
                         conversation_id=envelope.get("conversation_id"),
+                        locale=(context_payload or {}).get("locale"),
                     )
                 logger.error(
                     "FINN V2 visible delivery missing verified response",
@@ -262,10 +263,13 @@ class FinnV2VisibleDeliveryService:
             }]
         return payload
 
-    def _pending_contract(self, *, trace_id: str, run_id: str, status: str, conversation_id: Optional[str]) -> dict[str, Any]:
+    def _pending_contract(self, *, trace_id: str, run_id: str, status: str, conversation_id: Optional[str], locale: Optional[str] = None) -> dict[str, Any]:
+        pending_copy = {"nl": "Even controleren…", "en": "Checking…", "de": "Einen Moment, ich prüfe das…"}
+        language = str(locale or "nl").lower().replace("_", "-").split("-", 1)[0]
+        pending_text = pending_copy.get(language, pending_copy["nl"])
         return {
             "session_id": conversation_id,
-            "response": "Even controleren…",
+            "response": pending_text,
             "intent": "processing",
             "action": None,
             "draft": None,
@@ -278,7 +282,7 @@ class FinnV2VisibleDeliveryService:
             "reasoning": None,
             "trace_id": trace_id,
             "suggested_actions": [],
-            "summary": "Even controleren…",
+            "summary": pending_text,
             "risk_summary": None,
             "next_best_action": None,
             "review_reason": None,
