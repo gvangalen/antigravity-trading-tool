@@ -765,6 +765,21 @@ def test_strategy_guided_questions_use_human_slot_copy(slot, question):
     assert FinnV2OperationStateService.clarification_question(slot, contract=contract) == question
 
 
+@pytest.mark.parametrize(
+    ("slot", "expected"),
+    (
+        ("dca_amount_mode", "vast bedrag of Smart DCA"),
+        ("low_score_percent", "percentage van het basisbedrag"),
+        ("budget_total_eur", "totale budgetlimiet"),
+        ("paper_initial_cash_eur", "virtueel Paper-startkapitaal"),
+    ),
+)
+def test_guided_draft_questions_name_the_next_missing_field(slot, expected):
+    question = FinnV2OperationStateService.clarification_question(slot)
+    assert expected in question
+    assert "ontbrekend detail" not in question
+
+
 def test_strategy_guided_slot_reply_preserves_prior_contract_inputs():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")

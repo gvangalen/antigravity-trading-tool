@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ActionCard } from '../cards/ActionCard';
 import { DraftReviewCard } from '../cards/DraftReviewCard';
@@ -14,6 +14,9 @@ type AssistantFeedRendererProps = {
   onActionPress?: () => void;
   onDraftPress?: () => void;
   onRiskPress?: () => void;
+  onChoicePress?: (reply: string) => void;
+  onOtherPress?: () => void;
+  otherLabel?: string;
 };
 
 export function AssistantFeedRenderer({
@@ -21,10 +24,13 @@ export function AssistantFeedRenderer({
   onActionPress,
   onDraftPress,
   onRiskPress,
+  onChoicePress,
+  onOtherPress,
+  otherLabel = 'Anders · typ in de chat',
 }: AssistantFeedRendererProps) {
   return (
     <View style={styles.container}>
-      {items.map((item) => {
+      {items.map((item, index) => {
         if (item.type === 'message') {
           return (
             <AssistantMessage
@@ -44,6 +50,17 @@ export function AssistantFeedRenderer({
 
         if (item.type === 'state') {
           return <ActiveFlowStateCard key={item.id} state={item.state} />;
+        }
+
+        if (item.type === 'choices') {
+          if (items.slice(index + 1).some((later) => later.type === 'message' && later.role === 'user')) return null;
+          return <View key={item.id} style={styles.choices}>{item.choices.map((choice) => (
+            <Pressable key={choice.reply} accessibilityRole="button" onPress={() => onChoicePress?.(choice.reply)} style={styles.choice}>
+              <Text style={styles.choiceLabel}>{choice.label}</Text>
+            </Pressable>
+          ))}<Pressable accessibilityRole="button" onPress={onOtherPress} style={styles.otherChoice}>
+            <Text style={styles.otherLabel}>{otherLabel}</Text>
+          </Pressable></View>;
         }
 
         if (item.type === 'action') {
@@ -86,6 +103,11 @@ export function AssistantFeedRenderer({
 }
 
 const styles = StyleSheet.create({
+  choices: { gap: theme.spacing.sm },
+  choice: { minHeight: 48, justifyContent: 'center', paddingHorizontal: theme.spacing.md, backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: 1, borderRadius: theme.radius.md },
+  choiceLabel: { color: theme.colors.text, fontSize: theme.typography.body, fontWeight: '700' },
+  otherChoice: { minHeight: 48, justifyContent: 'center', paddingHorizontal: theme.spacing.md, borderColor: theme.colors.border, borderWidth: 1, borderRadius: theme.radius.md },
+  otherLabel: { color: theme.colors.textMuted, fontSize: theme.typography.body, fontWeight: '600' },
   container: {
     gap: theme.spacing.md,
   },

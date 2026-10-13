@@ -39,6 +39,7 @@ import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFin
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
+import { draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft } from "@/lib/finnDraftConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -4991,6 +4992,7 @@ function AIAssistantContent({
     if (message?.draftCanceled || message?.draftExecuted) return null;
     const draft = message.setupDraft || message.state?.setup_draft;
     if (!draft || draft.operation_id !== "create_setup") return null;
+    if (!hasConfirmableDraft(message)) return null;
     const supplied = draft.supplied_inputs || {};
     const valueLabels = { dca: "DCA", trade: "Trade", daily: "Dagelijks", weekly: "Wekelijks", monthly: "Maandelijks", monday: "maandag", tuesday: "dinsdag", wednesday: "woensdag", thursday: "donderdag", friday: "vrijdag", saturday: "zaterdag", sunday: "zondag" };
     const humanValue = (value) => valueLabels[String(value || "").toLowerCase()] || value;
@@ -5039,6 +5041,7 @@ function AIAssistantContent({
     const indicatorOperations = ["create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"];
     const watchlistOperations = ["watchlist_add", "watchlist_remove"];
     if (!draft || !["create_strategy", "create_bot", ...indicatorOperations, ...watchlistOperations].includes(operationId)) return null;
+    if (!hasConfirmableDraft(message)) return null;
     const isStrategy = operationId === "create_strategy";
     const isBot = operationId === "create_bot";
     const isIndicator = indicatorOperations.includes(operationId);
@@ -5129,6 +5132,7 @@ function AIAssistantContent({
     const changes = draft.changes || message.state?.changes || [];
     const planDeviation = message.state?.plan_deviation || draft.plan_deviation || null;
     const planDeviationRequiresAck = Boolean(planDeviation?.requires_ack && !planDeviation?.acknowledged);
+    if (!hasConfirmableDraft(message) && !planDeviationRequiresAck) return null;
     const visibleMissingFields = (message.missingFields || []).filter((field) => field !== "plan_deviation_ack");
     const visibleNextQuestion = message.nextQuestion === "plan_deviation_ack" ? null : message.nextQuestion;
     const yesLabel = at("draftRows.yes");
@@ -5484,6 +5488,34 @@ function AIAssistantContent({
     );
   };
 
+  const renderDraftQuestionChoices = (message, messageIndex) => {
+    if (message.isComplete === false || !isCollectingDraft(message) || message.draftCanceled || message.draftExecuted) return null;
+    if (messages.slice(messageIndex + 1).some((later) => later.role === "user")) return null;
+    const choices = draftQuestionChoices(message, locale);
+    const copy = draftConversationCopy(locale);
+    return (
+      <div className="mt-3 space-y-2" aria-label={choices.length ? copy.hint : copy.freeTextHint}>
+        {choices.map((choice) => (
+          <button
+            key={`${messageIndex}-${choice.reply}`}
+            type="button"
+            onClick={() => void handleChat(choice.reply, false, message.state)}
+            disabled={loading || executingAction}
+            className="flex w-full min-w-0 items-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 transition-colors hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-600 dark:hover:bg-blue-950/30"
+          >
+            {choice.label}
+          </button>
+        ))}
+        {choices.length > 0 && <button
+          type="button"
+          onClick={() => commandCenterRef.current?.focus?.()}
+          className="flex w-full items-center rounded-xl border border-dashed border-slate-300 px-4 py-3 text-left text-sm font-medium text-slate-600 hover:border-blue-400 hover:text-blue-700 dark:border-slate-700 dark:text-slate-300"
+        >{copy.other}</button>}
+        <p className="text-xs text-slate-500 dark:text-slate-400">{choices.length ? copy.hint : copy.freeTextHint}</p>
+      </div>
+    );
+  };
+
   const renderBehavioralMemoryAckCard = (message) => {
     const friction = message.state?.pending_behavioral_memory_friction || message.state?.memory_friction || null;
     const requiresAck = Boolean(
@@ -5568,6 +5600,7 @@ function AIAssistantContent({
   };
 
   const renderInlineActionCard = (message) => {
+    if (isCollectingDraft(message)) return null;
     const actions = Array.isArray(message.actions) ? message.actions : [];
     const actionOnly = actions.filter((action) => (
       action?.requires_confirmation &&
@@ -6821,7 +6854,7 @@ function AIAssistantContent({
                   <ReasoningWidget reasoning={m.reasoning} />
                 )}
                 {/* Universal Action Card Renderer */}
-                {m.isComplete !== false && (() => {
+                {m.isComplete !== false && !isCollectingDraft(m) && (() => {
                   const card = (m.draft?.type === "action_card" ? m.draft : null) || (m.action?.type === "action_card" ? m.action : null);
                   if (card) {
                     return (
@@ -6835,10 +6868,10 @@ function AIAssistantContent({
                   }
                   return null;
                 })()}
-                {m.action && m.action.type !== "action_card" && !m.draft?.plan_type && m.isComplete !== false && (
+                {m.action && m.action.type !== "action_card" && !m.draft?.plan_type && !isCollectingDraft(m) && m.isComplete !== false && (
                   <ActionCard action={m.action} onAction={handleActionClick} />
                 )}
-                {m.draft && m.intent !== "plan_creation" && m.flow !== "plan_creation" && m.intent !== "strategy_creation" && m.flow !== "strategy_creation" && !m.draft?.plan_type && m.draft?.draft_kind !== "strategy" && m.draft?.draft_kind !== "indicator_config" && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
+                {m.draft && hasConfirmableDraft(m) && m.intent !== "plan_creation" && m.flow !== "plan_creation" && m.intent !== "strategy_creation" && m.flow !== "strategy_creation" && !m.draft?.plan_type && m.draft?.draft_kind !== "strategy" && m.draft?.draft_kind !== "indicator_config" && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
                   <DraftCard 
                     draft={m.draft} 
                     onCancel={() => handleCancelDraft(i)} 
@@ -6867,6 +6900,7 @@ function AIAssistantContent({
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
+                {renderDraftQuestionChoices(m, i)}
                 {renderV2SetupDraftCard(m, i)}
                 {renderV2ActionDraftCard(m, i)}
                 {!isSimpleFinnModal && renderDraftCard(m)}
