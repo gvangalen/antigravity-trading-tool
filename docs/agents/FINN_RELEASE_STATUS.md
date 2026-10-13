@@ -6,17 +6,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Conversation Design Candidate
 
-Phase: `CANDIDATE_CI`. Candidate code/export SHA:
+Phase: `LIVE_QA_PENDING`. Candidate code/export SHA:
 `073f69decad27f6e48771138a1a0c9b770da239c` on branch
 `codex/finn-draft-conversation-design` ([PR #278](https://github.com/gvangalen/antigravity-trading-tool/pull/278)).
+Candidate and main CI passed all five jobs. Auto Deploy succeeded and public
+backend health and frontend build-info both returned HTTP 200 with deployed
+main SHA `5c4e0b32f3b293da01d7a1f9226dcbd12f3a61e7`. A later
+status-only commit does not change the product code; public health and build
+info remain the runtime identity authority.
 The current candidate changes every collecting
 draft flow into a question in the FINN conversation. Where a small set of
 choices is meaningful, web and mobile show tappable answers; choosing one
 sends it as a normal user turn. Free text remains available. A review card
 appears only for a complete proposal, and the existing explicit confirmation
 still governs writes. Backend clarification prompts now name the missing
-field rather than asking a generic question. This candidate has not been
-deployed or independently accepted.
+field rather than asking a generic question. Independent authenticated live
+QA has not yet accepted this draft conversation design.
 
 Root backend tests passed **3503**, with **3 skipped**. Focused web draft
 conversation tests passed **6/6**. The isolated local API/Celery/Responses
