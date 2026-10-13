@@ -6,7 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Conversation Design Candidate
 
-Phase: `DRAFT_CONVERSATION_FOLLOWUP_LOCAL_VALIDATED`. Independent authenticated
+Phase: `DRAFT_CONVERSATION_FOLLOWUP_LIVE_PENDING_QA`. The follow-up code/export
+candidate `76e21ac472d90bb6c645ac36232ddddc56b50e94` on branch
+`codex/finn-draft-qa-followup` merged via
+[PR #282](https://github.com/gvangalen/antigravity-trading-tool/pull/282).
+Candidate CI and main CI each passed all five jobs. Auto Deploy succeeded for
+main SHA `6086ecec34b96b2be8c6ddd26df89cb2f9859ac1`; public backend health
+and frontend build-info each returned HTTP 200 with that exact SHA on
+2026-10-13. Independent live QA for this follow-up remains pending.
+
+Independent authenticated
 browser QA rejected the live draft flow on product SHA
 `861b046a967fb1f7571976dec02cd7c8f1c8d141`: the BTC DCA conversation
 reasked supplied amount mode and weekday, then failed after the short Friday
@@ -17,9 +26,7 @@ No proposal was confirmed or executed. Native mobile was unavailable on QA's
 locked host. The current local follow-up keeps explicit optional fields in a
 compound clarification, aligns every guided question with its persisted slot,
 separates a setup name from a following cadence instruction, and displays the
-DCA strategy's execution and risk applicability. Local API/Celery and final
-release gates for this follow-up are in progress; no new follow-up candidate
-is deployed yet. Root backend validation passed **3530** tests with **3
+DCA strategy's execution and risk applicability. Root backend validation passed **3530** tests with **3
 existing skips**. The isolated local API/Celery/Responses action matrix passed
 **16/16** and action adapters **19/19**, with no broker orders, live bots,
 live-trading calls or production connections (matrix SHA-256
@@ -36,8 +43,8 @@ passed **20/20**, with no provider/schema/timeout/parse/validation failures
 The complete real-provider regression passed **109/109**, with zero
 provider/schema/timeout/parse/validation failures (artifact SHA-256
 `a29741b32d24bcc6afe25d7c0825d52abeae7587a5f5d1e23a04ee04a0b69f73`).
-Candidate CI, merge, Auto Deploy, public SHA and independent live QA for this
-follow-up remain pending.
+The code candidate's local, CI, and deployment identity gates are complete;
+authenticated QA owns the acceptance verdict.
 
 The deployed design
 candidate code/export SHA:
