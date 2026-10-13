@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `QA_REJECTED_REPAIR_CANDIDATE_READY`. The first implementation merged through
+Phase: `LIVE_REPAIR_QA_PENDING`. The first implementation merged through
 [PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298),
 passed candidate and main CI, and deployed successfully. Its status-only
 follow-up [PR #299](https://github.com/gvangalen/antigravity-trading-tool/pull/299)
@@ -17,7 +17,14 @@ The existing independent QA Agent tested that exact SHA and returned
 setup name once failed terminally, an explicit target correction left two
 cards confirmable, and EN/DE variants did not consistently show options.
 No proposal was confirmed or order placed. The active repair branch is
-`codex/finn-clarification-live-repair`; it is not yet live or QA-accepted.
+`codex/finn-clarification-live-repair`. The repair candidate
+`515212bbb` merged through
+[PR #300](https://github.com/gvangalen/antigravity-trading-tool/pull/300)
+as product SHA `93391cdfe4bfd1e3c888401ee93b4f3fd1a0c1d3`.
+Candidate CI run `38440237282` and main CI run `38440549107` each passed
+all five jobs. Auto Deploy run `38440801348` succeeded. Public backend health
+and frontend build-info each returned HTTP 200 and that exact SHA on
+2026-10-13. Independent authenticated live QA of the repair is pending.
 
 The repair presents up to three owner-scoped names when more than three
 records match, while exact free text can still identify another record.
