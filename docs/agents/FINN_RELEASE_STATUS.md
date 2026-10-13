@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `OPEN_CARD_TARGET_CORRECTION_LIVE_PENDING_QA`. The prior live
+Phase: `OPEN_CARD_TARGET_CORRECTION_QA_ACCEPTED`. The prior live
 candidate was rejected by independent QA. The repair branch
 `codex/finn-guided-asset-and-locale` merged through
 [PR #306](https://github.com/gvangalen/antigravity-trading-tool/pull/306)
@@ -45,7 +45,20 @@ as product SHA `c7438eb2a021c886c1b4df5772d2b820f05b0510`.
 Candidate CI run `38466790681` and main CI run `38467078660` each passed
 all five jobs. Auto Deploy run `38467350122` succeeded. On 2026-10-13,
 public backend health and frontend build-info each returned HTTP 200 and
-the exact product SHA. This candidate is live, pending independent QA.
+the exact product SHA. The status-only
+[PR #311](https://github.com/gvangalen/antigravity-trading-tool/pull/311)
+passed candidate and main CI, Auto Deploy, and public backend/frontend
+identity checks on SHA `eb2d92a565f859c63841fc36cd26bccb2b9f9507`.
+The existing independent QA Agent returned **ACCEPTED** for the agreed
+authenticated browser scope on that exact SHA. The ETH update showed three
+clickable ETH names; an exact AAPL name did not create an AAPL proposal; a
+clicked ETH setup produced an unconfirmed 1D → 4H card. The exact correction
+to the other saved Friday ETH setup visibly retired the old card and produced
+an unconfirmed 1W → 4H card without another target question. Short NL/EN/DE
+checks showed translated questions and ETH-only choices. QA confirmed no
+proposal or order, unchanged saved timeframes after refresh, and no browser
+console errors or warnings. Server-side rejection of an old confirmation
+token was not separately exercised in this read-only browser scope.
 
 The local API/Celery regression now covers the exact Dutch correction shape,
 including the positive saved name, negated old name, and 4H field. It failed
