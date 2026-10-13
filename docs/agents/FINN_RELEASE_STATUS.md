@@ -4,16 +4,57 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Draft Conversation Browser Runtime Candidate
+
+Phase: `DRAFT_CONVERSATION_BROWSER_RUNTIME_LIVE_PENDING_QA`. Build candidate
+`84d1f28bb0ae570a2365670ba19276b7f697212f` merged through
+[PR #284](https://github.com/gvangalen/antigravity-trading-tool/pull/284)
+as product SHA `cb97746106d634e918f5fbb24983e09c6e4c1435`.
+Candidate and main CI each passed all five jobs. Auto Deploy succeeded. Public
+backend health and frontend build-info returned HTTP 200 and that exact SHA
+on 2026-10-13. The independent browser verdict on the preceding live SHA
+`e2efec85c05bdea77c6d2343c849397378dd424a` was `NOT_ACCEPTED`:
+the BTC DCA dialogue reasked an answered amount mode and Friday, then failed
+without a review card. The preceding strategy, Paper-bot, indicator, coach,
+and EN/DE targeted checks improved or passed; native mobile could not be
+proven on QA's locked host. No proposal was confirmed or executed.
+
+The current repair binds a compound reply to the outstanding typed draft
+question when that field is explicitly supplied, retains the other supplied
+fields, keeps a following weekday out of the setup name, and distinguishes
+DCA amount calculation from bot operation on the review card. A new local
+regression follows the same authenticated `/api/assistant/chat/stream` facade
+used by web, with browser page, locale, symbol, and timeframe context. It
+reached an unconfirmed EUR 50 Friday DCA proposal in three turns. The final
+root backend run passed **3534**, with **3 existing skips**. The final local
+API/Celery/Responses action matrix passed **16/16** and adapters **19/19**;
+no broker orders, live bots, live-trading calls, or production connections
+were used (matrix SHA-256
+`a00bbadf3960677d3131aa2d07f5f45fe7da3d47c519a2e5ceb039422e5852a2`).
+Frontend typecheck, i18n lint/tests, command/proposal/setup tests, build,
+and high-severity audit passed. Mobile typecheck, lint without errors, and
+Expo web/iOS/Android exports passed. The first real Luna/Responses development
+measurement classified one feed plan read as a setup read (19/20); the full
+unchanged rerun passed **20/20**, with zero provider/schema/timeout/parse/
+validation failures (artifact SHA-256
+`da695daef860887c92c799fc5bd4fc4fad0ef368e619eeaf186fe16638dd19e2`).
+The complete real-provider regression passed **109/109** with zero such
+failures (artifact SHA-256
+`7d1fd9d41e7ef2917d2e7a4b93a93d043e39648232752f8bc127c001eb546ac6`).
+Build's local and deployment identity gates are complete; independent
+authenticated QA owns the acceptance verdict.
+
 ## FINN Draft Conversation Design Candidate
 
-Phase: `DRAFT_CONVERSATION_FOLLOWUP_LIVE_PENDING_QA`. The follow-up code/export
+Phase: `DRAFT_CONVERSATION_FOLLOWUP_NOT_ACCEPTED`. The follow-up code/export
 candidate `76e21ac472d90bb6c645ac36232ddddc56b50e94` on branch
 `codex/finn-draft-qa-followup` merged via
 [PR #282](https://github.com/gvangalen/antigravity-trading-tool/pull/282).
 Candidate CI and main CI each passed all five jobs. Auto Deploy succeeded for
 main SHA `6086ecec34b96b2be8c6ddd26df89cb2f9859ac1`; public backend health
 and frontend build-info each returned HTTP 200 with that exact SHA on
-2026-10-13. Independent live QA for this follow-up remains pending.
+2026-10-13. Independent live QA did not accept this follow-up; the failure
+and subsequent repair are recorded above.
 
 Independent authenticated
 browser QA rejected the live draft flow on product SHA
