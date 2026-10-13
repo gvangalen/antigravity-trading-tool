@@ -10,6 +10,11 @@ Phase: `DRAFT_CONVERSATION_REPAIR_CANDIDATE`. The deployed design
 candidate code/export SHA:
 `073f69decad27f6e48771138a1a0c9b770da239c` on branch
 `codex/finn-draft-conversation-design` ([PR #278](https://github.com/gvangalen/antigravity-trading-tool/pull/278)).
+The complete local repair is code/export SHA
+`bbccdbbc49f279d3cdc04a3b227595df72b791f6` on branch
+`codex/finn-draft-conversation-repair` ([PR #280](https://github.com/gvangalen/antigravity-trading-tool/pull/280));
+candidate CI is pending. A later release-status-only commit may carry this
+evidence without changing product code.
 Candidate and main CI passed all five jobs. Auto Deploy succeeded and public
 backend health and frontend build-info both returned HTTP 200 with deployed
 main SHA `5c4e0b32f3b293da01d7a1f9226dcbd12f3a61e7`. A later
