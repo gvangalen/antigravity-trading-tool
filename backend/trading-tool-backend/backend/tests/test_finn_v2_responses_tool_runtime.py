@@ -3426,6 +3426,24 @@ def test_proposal_candidate_uses_registry_contract_and_existing_guided_state():
     assert plan.missing_information == ["timeframe", "name", "dca_frequency", "dca_amount_mode", "base_amount"]
 
 
+def test_strategy_update_rejects_model_field_alias_and_uses_explicit_canonical_change():
+    call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "update_strategy", "inputs": {
+            "strategy_id": 81,
+            "changed_fields": {"basisinleg": 120, "valuta": "EUR"},
+        }},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Werk Matrix Update Strategie bij en zet de basisinleg naar 120 euro.",
+        conversation_context={}, verified_asset="BTC",
+    )
+    assert analysis.request_plan.operation_state["collected_inputs"]["changed_fields"] == {
+        "base_amount": 120,
+    }
+
+
 def test_responses_bot_candidate_uses_immediate_confirmed_dca_pair():
     call = FinnResponsesToolCatalog().validate(
         "manage_paper_bot_proposal",

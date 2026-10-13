@@ -22,9 +22,9 @@ export function draftQuestionChoices(message, locale = 'nl') {
   const copy = draftConversationCopy(locale);
   const optionField = { setup_id: 'setup_options', strategy_id: 'strategy_options', indicator: 'indicator_options' }[field];
   const options = optionField ? message?.state?.[optionField] : null;
-  if (Array.isArray(options) && options.length > 0 && options.length <= 3) {
+  if (Array.isArray(options) && options.length > 0) {
     const kind = field === 'setup_id' ? 'setup' : field === 'strategy_id' ? 'strategy' : null;
-    return options.map((option) => ({
+    return options.slice(0, 3).map((option) => ({
       label: option.name || option.display_name || String(option.id || ''),
       reply: kind && option.id ? `${kind} ${option.id}` : String(option.name || ''),
     })).filter((option) => option.label && option.reply);

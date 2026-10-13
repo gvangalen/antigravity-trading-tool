@@ -471,13 +471,10 @@ class FinnResponsesFrontDoor:
         guided_state = dict(conversation_context.get("active_guided_operation") or {})
         requested_slot = str(guided_state.get("next_missing_input") or "")
         pending_clarification = dict(conversation_context.get("responses_clarification") or {})
-        choice_names = pending_clarification.get("choices") or []
         choice_entity = {"setup_id": "setup", "strategy_id": "strategy", "bot_id": "bot"}.get(requested_slot)
         if (
             pending_operation and pending_operation != "create_bot" and choice_entity
-            and isinstance(choice_names, list)
-            and any(isinstance(name, str) and message.strip().casefold() == name.casefold()
-                    for name in choice_names)
+            and pending_clarification
         ):
             session_factory = getattr(getattr(self, "reads", None), "session_factory", None)
             if session_factory is not None:
@@ -577,7 +574,11 @@ class FinnResponsesFrontDoor:
         guard = getattr(self, "relevance_guard", None)
         previous_kind = str((previous_response or {}).get("terminal_kind") or "")
         request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
-        is_read_request = request_facts.action_polarity == "read"
+        imperative_operation = FinnV2OperationClassificationService._explicit_mutation_operation(
+            message=message, facts=request_facts,
+            workspace_hints=None, client_context=None,
+        )
+        is_read_request = request_facts.action_polarity == "read" and not imperative_operation
         # An explicit strategy creation request already identifies its action
         # contract. Route the proposal through the same owner-scoped parent
         # resolver as guided continuation, so an adjective such as "DCA" does
@@ -2138,7 +2139,7 @@ class FinnResponsesFrontDoor:
                 str(previous_response.get("antecedent_verified_answer") or "")[:1600]
                 if previous_response and use_verified_turn else None
             ),
-            guided_operation_id=None if unsupported_pair else pending_operation,
+            guided_operation_id=None if unsupported_pair else pending_operation or imperative_operation,
             resuming_clarification=resuming_clarification,
             resumed_clarification_reason=(
                 str(pending_clarification.get("reason") or "") or None
