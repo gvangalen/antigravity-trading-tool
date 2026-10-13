@@ -6,8 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Guided Draft Operation Switch
 
-Phase: `LOCAL_REPAIR_VALIDATION`. Independent authenticated browser QA returned
-`NOT_ACCEPTED` on live SHA `d329b5c86f44328b141ae885cc29594a11e091d8`.
+Phase: `GUIDED_OPERATION_SWITCH_LIVE_PENDING_QA`. Build candidate
+`58356dbc372f394355b43bde639aa37d537b03fd` merged through
+[PR #288](https://github.com/gvangalen/antigravity-trading-tool/pull/288)
+as product SHA `aa75e2e543cbd14ac05f1bdb965d34f723bc0e07`. Candidate and
+main CI each passed all five jobs. Auto Deploy succeeded for that product
+SHA. Public backend health and frontend build-info each returned HTTP 200
+and the same SHA on 2026-10-13. This status-only commit needs its own public
+SHA check before independent QA starts. Independent authenticated browser QA
+returned `NOT_ACCEPTED` on the preceding live SHA
+`d329b5c86f44328b141ae885cc29594a11e091d8`.
 When a BTC DCA setup was awaiting an answer, an explicit request to create a
 strategy for a saved ETH setup was consumed as the missing BTC setup field.
 The next amount and name reply then produced a confirmable BTC setup card.
@@ -15,7 +23,7 @@ QA cancelled that card; no plan or bot was confirmed or executed. The
 Paper-bot correction, ordinary strategy request, coaching, indicator, and
 language checks passed in that run. Native mobile remained unproven.
 
-The current local repair recognizes an explicit new create operation across
+The deployed repair recognizes an explicit new create operation across
 setup, strategy, and bot contracts. When its operation differs from the
 pending guided draft, the unanswered slot and its associated conversation
 state are cleared before selecting the new contract. A local authenticated
@@ -34,7 +42,8 @@ timeout, parse or validation failures (artifact SHA-256
 The full real-provider regression passed **109/109**, with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
 `91b5273b1c54f264826c8d7deab90488f3172c40e82acd279fe58e5f532cd9f9`).
-No new candidate has been deployed.
+The product candidate is deployed; independent authenticated live QA is
+pending.
 
 ## FINN Draft Target Correction Candidate
 
@@ -80,7 +89,9 @@ validation failures (artifact SHA-256
 The complete real-provider regression passed **109/109**, with zero
 provider/schema/timeout/parse/validation failures (artifact SHA-256
 `daf27f352ab3b532ec5df5262ee173b51d13904bae66f672f4fbce46546d4d0c`).
-Independent authenticated QA is still pending for this candidate.
+Independent authenticated QA returned `NOT_ACCEPTED` on the later
+status-only SHA `d329b5c86f44328b141ae885cc29594a11e091d8`, as recorded
+above.
 
 ## FINN Draft Conversation Browser Runtime Candidate
 
