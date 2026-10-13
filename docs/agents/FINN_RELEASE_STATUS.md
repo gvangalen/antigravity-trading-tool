@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Card Localization
 
-Phase: `LOCAL_GATES_PASSED`. Branch: `codex/finn-draft-i18n`. The active
+Phase: `DEPLOYED_QA_PENDING`. Build candidate
+`cf293330cf1a8ed49f9932d74834046bcd4c0e5a` merged through
+[PR #293](https://github.com/gvangalen/antigravity-trading-tool/pull/293)
+as product SHA `34e1819901a90756ad589420043d26edbfe758b1`. The active
 follow-up addresses Dutch text that independent QA found in German FINN
 draft cards and the pending response after the accepted guided-draft repair.
 The web draft cards now read button labels, statuses, detail rows, missing
@@ -28,8 +31,11 @@ SHA-256 `8eea5a0b04669996185fd0dd935e2f6b0571237f94a8c24d719b30a542ef3ae0`).
 The full real-provider regression passed **109/109** with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
 `9bd753313786b2c458d3a8a8f819763d899c50a4530c88ac9fa58e9e62e68f40`).
-No candidate has been deployed or independently rechecked for this
-localization batch yet.
+Candidate and main CI each passed all five jobs. Auto Deploy succeeded for
+the product SHA. Public backend health and frontend build-info both returned
+HTTP 200 and the same product SHA on 2026-10-13. This status-only commit
+needs its own public SHA check before independent QA starts. Independent
+authenticated browser QA has not yet rechecked this localization batch.
 
 ## FINN Guided Draft Revision And Conversation Isolation
 
