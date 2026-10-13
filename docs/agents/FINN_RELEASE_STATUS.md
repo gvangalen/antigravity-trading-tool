@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `CROSS_ASSET_CONTINUATION_LIVE_PENDING_QA`. The prior live
+Phase: `QA_REJECTED_OPEN_CARD_CORRECTION_REPAIR_IN_VALIDATION`. The prior live
 candidate was rejected by independent QA. The repair branch
 `codex/finn-guided-asset-and-locale` merged through
 [PR #306](https://github.com/gvangalen/antigravity-trading-tool/pull/306)
@@ -30,7 +30,36 @@ as product SHA `c87be7db44470f19bd19054443e1b84a8863baa1`.
 Candidate CI run `38462991392` and main CI run `38463292648` each passed
 all five jobs. Auto Deploy run `38463539289` succeeded. On 2026-10-13,
 public backend health and frontend build-info each returned HTTP 200 and
-the exact product SHA. This candidate is live, pending independent QA.
+the exact product SHA. Its status-only
+[PR #309](https://github.com/gvangalen/antigravity-trading-tool/pull/309)
+passed candidate and main CI, Auto Deploy, and public identity checks on
+SHA `1673e817a40724c74e4c8daf827fd8163acba891`. Independent QA returned
+**NOT ACCEPTED** on that exact SHA. The prior ETH → wrong AAPL name → ETH
+choice now produced the right unconfirmed 4H card; however, correcting that
+open card to another exact saved ETH name while explicitly negating the old
+name cancelled the old card but failed to create the new one. NL/EN/DE
+clarification and card rendering passed. No proposal was confirmed or order
+placed. The active repair branch is `codex/finn-open-card-target-correction`;
+it is local, not yet live.
+
+The local API/Celery regression now covers the exact Dutch correction shape,
+including the positive saved name, negated old name, and 4H field. It failed
+before repair because one owner-scoped resolver selected the positive name
+while a second reference resolver treated both names as equal targets. Both
+now read the positive correction clause; the three-turn follow-up and old
+card cancellation passed locally. Complete release gates remain pending.
+The final backend suite passed **3569**, with **3 existing skips**. Frontend
+build, typecheck, proposal tests, i18n lint/tests, command tests and the
+high-severity audit passed (one moderate Next.js advisory). The final
+API/Celery action matrix passed **16/16**, adapters **19/19**, with zero
+broker orders, live-trading calls or production connections (artifact SHA-256
+`9fb56aca6a973a2ed3495beb75a3649e8cacacb057eaf2f49efd9f4e56226450`).
+Real Luna/Responses selector development passed **20/20** (artifact SHA-256
+`cbcd51ea607eaefab518d3858a5d98db5a61ef5d903cd1fee82d281fe7bd9ee5`)
+and regression **109/109** (artifact SHA-256
+`b0bbf2d9806a353f3e221ef03eb20b91ce363584fca53d5d93d432d39dbe6495`),
+with zero provider, schema, parse, validation or timeout failures. CI and
+deployment remain pending; these local results are not a live QA verdict.
 
 The local reproduction added the previously missing third turn to the
 seven-candidate API/Celery regression. It first failed with a READ answer or

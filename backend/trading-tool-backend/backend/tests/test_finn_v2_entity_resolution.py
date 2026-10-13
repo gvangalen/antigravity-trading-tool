@@ -642,6 +642,30 @@ def test_pending_eth_target_choice_rejects_an_explicit_aapl_name():
     assert target.candidate_names == ["ETH Friday", "ETH Monday"]
 
 
+def test_correction_chooses_positive_saved_name_not_negated_old_name():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 12, "name": "QA Paper herstel ETH", "symbol": "ETH"},
+        {"id": 13, "name": "QA vaste ETH vrijdag 2026-10-11", "symbol": "ETH"},
+    ])
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"asset_constraint": "ETH", "require_explicit_name": True, "setup_id": 12},
+        message=("Correctie: ik bedoel QA vaste ETH vrijdag 2026-10-11, "
+                 "niet QA Paper herstel ETH. Zet alleen die op 4H; bevestig niets."),
+    ))
+    assert target.entity_id == 13
+    assert target.resolution_source == "explicit_name"
+
+    missing = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"asset_constraint": "ETH", "require_explicit_name": True, "setup_id": 12},
+        message="Correctie: ik bedoel Niet Bestaand, niet QA Paper herstel ETH.",
+    ))
+    assert missing.resolution_status == "ambiguous"
+
+
 
 def test_setup_collection_read_returns_every_owner_asset_match():
     service = FinnV2EntityResolutionService(session=object())

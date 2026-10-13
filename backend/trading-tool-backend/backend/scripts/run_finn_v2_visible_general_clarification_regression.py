@@ -115,6 +115,33 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
                 "continuation_status": continued.get("status"),
                 "continuation_inputs": continued_inputs,
             })
+        _, dutch_correction = _turn(
+            base_url.rstrip("/"), token, session,
+            f"Correctie: ik bedoel {names[3]}, niet {names[1]}. "
+            "Zet alleen die op 4H; bevestig niets.",
+            locale="nl",
+        )
+        dutch_inputs = (
+            ((dutch_correction.get("runtime_trace") or {}).get("action_draft") or {})
+            .get("supplied_inputs") or {}
+        )
+        if (
+            dutch_correction.get("status") != "completed"
+            or not (dutch_correction.get("response") or {}).get("proposal_id")
+            or dutch_inputs.get("setup_id") != setup_ids[3]
+            or dutch_inputs.get("changed_fields") != {"timeframe": "4H"}
+        ):
+            raise AssertionError({"dutch_correction_status": dutch_correction.get("status"),
+                                  "dutch_correction_response": dutch_correction.get("response"),
+                                  "dutch_correction_inputs": dutch_inputs})
+        old_after_correction, old_after_status = _request_json(
+            url=(f"{base_url.rstrip('/')}/api/assistant/v2/proposals/"
+                 f"{(continued.get('response') or {})['proposal_id']}"),
+            method="GET", headers={"Authorization": f"Bearer {token}"},
+            body=None, timeout=20,
+        )
+        if old_after_status != 200 or old_after_correction.get("status") != "cancelled":
+            raise AssertionError({"old_proposal_after_correction": old_after_correction})
         cross_session, cross_first = _turn(
             base_url.rstrip("/"), token, "new",
             "Change my ETH setup to 4H.", locale="en",
@@ -153,6 +180,24 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
             raise AssertionError({"cross_followup_status": cross_followup.get("status"),
                                   "cross_followup_response": cross_followup.get("response"),
                                   "cross_followup_inputs": cross_inputs})
+        _, cross_corrected = _turn(
+            base_url.rstrip("/"), token, cross_session,
+            f"No, I meant the saved setup {names[3]}. Change only that to 4H. Confirm nothing.",
+            locale="en",
+        )
+        corrected_inputs = (
+            ((cross_corrected.get("runtime_trace") or {}).get("action_draft") or {})
+            .get("supplied_inputs") or {}
+        )
+        if (
+            cross_corrected.get("status") != "completed"
+            or not (cross_corrected.get("response") or {}).get("proposal_id")
+            or corrected_inputs.get("setup_id") != setup_ids[3]
+            or corrected_inputs.get("changed_fields") != {"timeframe": "4H"}
+        ):
+            raise AssertionError({"correction_status": cross_corrected.get("status"),
+                                  "correction_response": cross_corrected.get("response"),
+                                  "correction_inputs": corrected_inputs})
     return {"status": terminal["status"], "choices": choices,
             "proposal_created": False, "followup_status": followup["status"],
             "followup_target_matches_choice": True, "followup_proposal": True,
