@@ -4398,7 +4398,7 @@ function AIAssistantContent({
         usedFeedRequestRef.current = commandRequest?.nonce;
         if (!attachFeed) delete commandContext.feed_item_id;
       }
-      const requestContext = { ...baseRequestContext, ...commandContext };
+      const requestContext = { ...baseRequestContext, ...commandContext, locale };
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"
@@ -4434,7 +4434,7 @@ function AIAssistantContent({
               message.streamId === streamId
                 ? {
                     ...message,
-                    text: envelope.response || "FINN verwerkt je verzoek nog.",
+                    text: at("draftCards.checking", "Even controleren…"),
                     intent: envelope.intent,
                     flow: envelope.flow,
                     state: envelope.state,
@@ -4989,10 +4989,10 @@ function AIAssistantContent({
     return (
       <>
         <button type="button" onClick={() => void handleExecuteAction(proposal)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
-          {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Bevestigen
+          {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {at("draftCards.confirm", "Bevestigen")}
         </button>
-        <button type="button" onClick={() => handleChat(`Ik wil dit ${noun}voorstel aanpassen.`, false, message.state)} disabled={loading || executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Aanpassen</button>
-        <button type="button" onClick={() => void handleCancelDraft(messageIndex)} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Annuleren</button>
+        <button type="button" onClick={() => handleChat(at("draftCards.adjustRequest", "Ik wil dit {object}voorstel aanpassen.", { object: noun }), false, message.state)} disabled={loading || executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">{at("draftCards.adjust", "Aanpassen")}</button>
+        <button type="button" onClick={() => void handleCancelDraft(messageIndex)} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">{at("draftCards.cancel", "Annuleren")}</button>
       </>
     );
   };
@@ -5003,13 +5003,12 @@ function AIAssistantContent({
     if (!draft || draft.operation_id !== "create_setup") return null;
     if (!hasConfirmableDraft(message)) return null;
     const supplied = draft.supplied_inputs || {};
-    const valueLabels = { dca: "DCA", trade: "Trade", daily: "Dagelijks", weekly: "Wekelijks", monthly: "Maandelijks", monday: "maandag", tuesday: "dinsdag", wednesday: "woensdag", thursday: "donderdag", friday: "vrijdag", saturday: "zaterdag", sunday: "zondag" };
-    const humanValue = (value) => valueLabels[String(value || "").toLowerCase()] || value;
+    const humanValue = (value) => at(`valueLabels.${String(value || "").toLowerCase()}`, value);
     const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = [humanValue(supplied.dca_frequency), humanValue(supplied.dca_day || supplied.dca_month_day)].filter(Boolean).join(" · ");
     const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
-    const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
-    const euro = (value) => new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
+    const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
+    const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const scoreLabels = {
       benchmark_score: at("dcaDraft.benchmarkSource", "eigen benchmark (markt + macro + technisch)"),
     };
@@ -5019,11 +5018,11 @@ function AIAssistantContent({
         <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{at("draftCards.setupTitle", "Concept setup")}</div>
         <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{at("draftCards.unsaved", "Nog niet opgeslagen")}</div>
         <div className="mt-4 min-w-0">
-          <h3 className="truncate text-base font-bold text-slate-950 dark:text-white">{supplied.name || "Nieuwe setup"}</h3>
+          <h3 className="truncate text-base font-bold text-slate-950 dark:text-white">{supplied.name || at("draftCards.newSetup", "Nieuwe setup")}</h3>
           {contextLine && <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>}
         </div>
-        {frequency && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">Frequentie: <span className="font-semibold">{frequency}</span></p>}
-        {supplied.min_investment != null && supplied.min_investment !== "" && <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">Minimuminvestering: <span className="font-semibold">{euro(supplied.min_investment)}</span></p>}
+        {frequency && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">{at("draftCards.frequency", "Frequentie")}: <span className="font-semibold">{frequency}</span></p>}
+        {supplied.min_investment != null && supplied.min_investment !== "" && <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{at("draftCards.minimumInvestment", "Minimuminvestering")}: <span className="font-semibold">{euro(supplied.min_investment)}</span></p>}
         {supplied.setup_type === "dca" && supplied.base_amount != null && <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{at("dcaDraft.baseAmount", "Basisbedrag (100%): {amount}", { amount: euro(supplied.base_amount) })}</p>}
         {isSmartDca && <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-200">
           <p className="font-semibold">{at("dcaDraft.smartTitle", "Smart DCA · scoregestuurde bedragen")}</p>
@@ -5057,48 +5056,48 @@ function AIAssistantContent({
     const isWatchlist = watchlistOperations.includes(operationId);
     const supplied = draft.supplied_inputs || {};
     const context = (message.actions || []).find((action) => action?.type === "v2_proposal")?.display_context || {};
-    const linkedName = isStrategy ? supplied.setup_name || context.setup_name || "je setup" : supplied.strategy_name || context.strategy_name || "je strategie";
+    const linkedName = isStrategy ? supplied.setup_name || context.setup_name || at("draftCards.objectSetup", "Setup") : supplied.strategy_name || context.strategy_name || at("draftCards.objectStrategy", "Strategie");
     const contextLine = isStrategy
-      ? [supplied.symbol || context.symbol, supplied.timeframe || context.timeframe, `gekoppeld aan ${linkedName}`].filter(Boolean).join(" · ")
+      ? [supplied.symbol || context.symbol, supplied.timeframe || context.timeframe, at("draftCards.linkedToName", "gekoppeld aan {name}", { name: linkedName })].filter(Boolean).join(" · ")
       : isBot
-        ? `Paper · gekoppeld aan ${linkedName}`
-        : [supplied.asset || context.symbol, isIndicator ? ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
+        ? `Paper · ${at("draftCards.linkedToName", "gekoppeld aan {name}", { name: linkedName })}`
+        : [supplied.asset || context.symbol, isIndicator ? ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
     const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
-    const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
+    const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const formatValue = (value) => formatDraftCardValue(value, locale);
-    const euro = (value) => new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
+    const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const dcaBand = (percent) => supplied.base_amount != null && percent != null
       ? `${percent}% · ${euro(supplied.base_amount * percent / 100)}`
       : null;
     const rows = isStrategy
       ? supplied.setup_type === "dca"
-        ? [["Bedragregel", supplied.dca_amount_mode === "score_bands" ? "Smart DCA" : supplied.dca_amount_mode === "fixed" ? "Vast bedrag" : null],
+        ? [[at("draftCards.fieldAmountRule", "Bedragregel"), supplied.dca_amount_mode === "score_bands" ? "Smart DCA" : supplied.dca_amount_mode === "fixed" ? at("draftCards.fixedAmount", "Vast bedrag") : null],
           [at("draftCards.dcaAmountCalculation", ({ en: "Amount calculation", de: "Betragsberechnung" }[locale] || "Bedragberekening")), formatExecutionMode(supplied.execution_mode, locale)],
-          ["Basisbedrag (100%)", supplied.base_amount != null ? euro(supplied.base_amount) : null],
-          [({ en: "Risk style", de: "Risikostil" }[locale] || "Risicostijl"),
+          [at("draftCards.fieldBaseAmount", "Basisbedrag (100%)"), supplied.base_amount != null ? euro(supplied.base_amount) : null],
+          [at("draftCards.fieldRiskStyle", "Risicostijl"),
             at("draftCards.dcaRiskNotApplicable", ({ en: "Not a setting on a DCA strategy", de: "Keine Einstellung einer DCA-Strategie" }[locale] || "Geen instelling van een DCA-strategie"))],
-          ["Scorebron", supplied.score_source === "benchmark_score" ? "Totale benchmark (markt, macro en technisch)" : null],
-          [supplied.low_threshold != null ? `Score onder ${supplied.low_threshold}` : "Lage score", dcaBand(supplied.low_score_percent)],
-          [supplied.low_threshold != null && supplied.high_threshold != null ? `Score ${supplied.low_threshold} tot onder ${supplied.high_threshold}` : "Middenscore", dcaBand(supplied.mid_score_percent)],
-          [supplied.high_threshold != null ? `Score vanaf ${supplied.high_threshold}` : "Hoge score", dcaBand(supplied.high_score_percent)]]
-        : [["Uitvoering", [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
+          [at("draftCards.fieldScoreSource", "Scorebron"), supplied.score_source === "benchmark_score" ? at("draftCards.benchmarkSource", "Totale benchmark (markt, macro en technisch)") : null],
+          [supplied.low_threshold != null ? at("draftCards.fieldScoreBelow", "Score onder {threshold}", { threshold: supplied.low_threshold }) : at("draftCards.fieldLowScore", "Lage score"), dcaBand(supplied.low_score_percent)],
+          [supplied.low_threshold != null && supplied.high_threshold != null ? at("draftCards.fieldScoreBetween", "Score {low} tot onder {high}", { low: supplied.low_threshold, high: supplied.high_threshold }) : at("draftCards.fieldMidScore", "Middenscore"), dcaBand(supplied.mid_score_percent)],
+          [supplied.high_threshold != null ? at("draftCards.fieldScoreFrom", "Score vanaf {threshold}", { threshold: supplied.high_threshold }) : at("draftCards.fieldHighScore", "Hoge score"), dcaBand(supplied.high_score_percent)]]
+        : [[at("draftCards.fieldExecution", "Uitvoering"), [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? euro(supplied.base_amount) : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], [at("draftCards.fieldRisk", "Risico"), supplied.risk_profile]]
       : isBot
         ? [[({ en: "Bot budget limit", de: "Bot-Budgetlimit" }[locale] || "Botbudgetlimiet"), supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null],
           [({ en: "Virtual Paper starting capital", de: "Virtuelles Paper-Startkapital" }[locale] || "Virtueel Paper-startkapitaal"), supplied.paper_initial_cash_eur ? `€${supplied.paper_initial_cash_eur}` : null]]
         : isIndicator
-          ? [["Indicator", supplied.indicator ? indicatorDisplayName(supplied.indicator) : null], ["Categorie", ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category)], ["Weging", supplied.weight]]
+          ? [[at("draftCards.fieldIndicator", "Indicator"), supplied.indicator ? indicatorDisplayName(supplied.indicator) : null], [at("draftCards.fieldCategory", "Categorie"), ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category)], [at("draftCards.fieldWeight", "Weging"), supplied.weight]]
           : [];
     const title = isStrategy
-      ? "Concept strategie"
+      ? at("draftCards.strategyTitle", "Concept strategie")
       : isBot
-        ? "Concept paper-bot"
+        ? at("draftCards.botTitle", "Concept paper-bot")
         : isIndicator
-          ? operationId === "delete_indicator_configuration" ? "Indicator verwijderen" : "Concept indicator"
-          : operationId === "watchlist_remove" ? "Uit watchlist verwijderen" : "Aan watchlist toevoegen";
+          ? operationId === "delete_indicator_configuration" ? at("draftCards.indicatorDelete", "Indicator verwijderen") : at("draftCards.indicatorTitle", "Concept indicator")
+          : operationId === "watchlist_remove" ? at("draftCards.watchlistRemove", "Uit watchlist verwijderen") : at("draftCards.watchlistAdd", "Aan watchlist toevoegen");
     const objectName = supplied.name
       || (isIndicator ? indicatorDisplayName(supplied.indicator) : null)
       || (isWatchlist ? supplied.asset || context.symbol : null)
-      || (isStrategy ? "Nieuwe strategie" : "Nieuwe paper-bot");
+      || (isStrategy ? at("draftCards.newStrategy", "Nieuwe strategie") : at("draftCards.newBot", "Nieuwe paper-bot"));
     return (
       <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
         <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{title}</div>
@@ -5642,14 +5641,14 @@ function AIAssistantContent({
     const isWatchlistAction = ["watchlist_add", "watchlist_remove"].includes(operationId);
     const isIndicatorAction = ["create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"].includes(operationId);
     const suppliedInputs = displayContext.supplied_inputs || {};
-    const objectType = operationId.includes("strategy") ? "Strategie" : operationId.includes("bot") ? "Paper-bot" : operationId.includes("setup") ? "Setup" : "Voorstel";
+    const objectType = operationId.includes("strategy") ? at("draftCards.objectStrategy", "Strategie") : operationId.includes("bot") ? at("draftCards.objectBot", "Paper-bot") : operationId.includes("setup") ? at("draftCards.objectSetup", "Setup") : at("draftCards.objectProposal", "Voorstel");
     const objectName = displayContext.name
-      || (objectType === "Setup" ? activeSetup?.name : null)
-      || (objectType === "Strategie" ? displayContext.strategy_name || activeSetup?.strategy_name : null)
-      || (objectType === "Paper-bot" ? displayContext.bot_name || activeBot?.name : null)
-      || `deze ${objectType.toLowerCase()}`;
-    const linkedName = objectType === "Strategie" ? displayContext.setup_name || activeSetup?.name : objectType === "Paper-bot" ? displayContext.strategy_name || activeBot?.strategy_name : null;
-    const fieldLabels = { name: "Naam", timeframe: "Timeframe", base_amount: "Bedrag", stop_loss: "Stop-loss", entry: "Entry", targets: "Targets", risk_profile: "Risico", budget_total_eur: "Budget", cadence: "Frequentie" };
+      || (operationId.includes("setup") ? activeSetup?.name : null)
+      || (operationId.includes("strategy") ? displayContext.strategy_name || activeSetup?.strategy_name : null)
+      || (operationId.includes("bot") ? displayContext.bot_name || activeBot?.name : null)
+      || at("draftCards.thisObject", "deze {object}", { object: objectType.toLowerCase() });
+    const linkedName = operationId.includes("strategy") ? displayContext.setup_name || activeSetup?.name : operationId.includes("bot") ? displayContext.strategy_name || activeBot?.strategy_name : null;
+    const fieldLabels = { name: at("draftCards.fieldName", "Naam"), timeframe: at("draftCards.fieldTimeframe", "Timeframe"), base_amount: at("draftCards.fieldAmount", "Bedrag"), stop_loss: "Stop-loss", entry: "Entry", targets: "Targets", risk_profile: at("draftCards.fieldRisk", "Risico"), budget_total_eur: at("draftCards.fieldBudget", "Budget"), cadence: at("draftCards.fieldCadence", "Frequentie") };
     const changedRows = Object.entries(displayContext.requested_state || displayContext.changed_fields || {}).filter(([, value]) => value !== null && value !== undefined).map(([field, value]) => {
       const previous = displayContext.before_state?.[field];
       return { label: fieldLabels[field] || field.replace(/_/g, " "), previous, value: Array.isArray(value) ? value.join(", ") : value };
@@ -5665,13 +5664,17 @@ function AIAssistantContent({
     if (isWatchlistAction || isIndicatorAction) {
       const asset = suppliedInputs.asset || displayContext.symbol;
       const indicator = indicatorDisplayName(suppliedInputs.indicator);
-      const category = ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" })[suppliedInputs.category] || suppliedInputs.category;
+      const category = ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") })[suppliedInputs.category] || suppliedInputs.category;
       const title = isWatchlistAction
-        ? operationId === "watchlist_remove" ? "Uit watchlist verwijderen" : "Aan watchlist toevoegen"
-        : operationId === "delete_indicator_configuration" ? "Indicator verwijderen" : operationId === "update_indicator_configuration" ? "Indicator wijzigen" : "Indicator toevoegen";
+        ? operationId === "watchlist_remove" ? at("draftCards.watchlistRemove", "Uit watchlist verwijderen") : at("draftCards.watchlistAdd", "Aan watchlist toevoegen")
+        : operationId === "delete_indicator_configuration" ? at("draftCards.indicatorDelete", "Indicator verwijderen") : operationId === "update_indicator_configuration" ? at("draftCards.indicatorUpdate", "Indicator wijzigen") : at("draftCards.indicatorAdd", "Indicator toevoegen");
       const summary = isWatchlistAction
-        ? `${asset || "Asset"} ${operationId === "watchlist_remove" ? "uit je watchlist verwijderen" : "aan je watchlist toevoegen"}`
-        : `${indicator || "Indicator"} ${operationId === "delete_indicator_configuration" ? "verwijderen uit" : operationId === "update_indicator_configuration" ? "wijzigen in" : "toevoegen aan"} ${category || "je analyse"}${asset ? ` voor ${asset}` : ""}`;
+        ? at(operationId === "watchlist_remove" ? "draftCards.watchlistRemoveSummary" : "draftCards.watchlistAddSummary", "{asset} aan je watchlist toevoegen", { asset: asset || "Asset" })
+        : at(operationId === "delete_indicator_configuration" ? "draftCards.indicatorDeleteSummary" : operationId === "update_indicator_configuration" ? "draftCards.indicatorUpdateSummary" : "draftCards.indicatorAddSummary", "{indicator} toevoegen aan {category}{assetSuffix}", {
+            indicator: indicator || at("draftCards.fieldIndicator", "Indicator"),
+            category: category || at("draftCards.analysis", "je analyse"),
+            assetSuffix: asset ? at("draftCards.assetSuffix", " voor {asset}", { asset }) : "",
+          });
       return (
         <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
           <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{title}</div>
@@ -5681,10 +5684,10 @@ function AIAssistantContent({
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
               <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
-                {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {operationId.startsWith("delete_") ? "Verwijderen" : "Bevestigen"}
+                {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {operationId.startsWith("delete_") ? at("draftCards.delete", "Verwijderen") : at("draftCards.confirm", "Bevestigen")}
               </button>
             ))}
-            <button type="button" onClick={() => void handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
+            <button type="button" onClick={() => void handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">{at("draftCards.cancel", "Annuleren")}</button>
           </div>
         </div>
       );
@@ -5693,9 +5696,9 @@ function AIAssistantContent({
     if (isDomainProposal) {
       return (
         <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
-          <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{isDelete ? `${objectType} verwijderen` : `${objectType} wijzigen`}</div>
+          <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{isDelete ? at("draftCards.deleteObject", "{object} verwijderen", { object: objectType }) : at("draftCards.changeObject", "{object} wijzigen", { object: objectType })}</div>
           <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{at("draftCards.notExecuted", "Nog niet uitgevoerd")}</div>
-          <h3 className="mt-4 break-words text-base font-bold text-slate-950 dark:text-white">{isDelete ? `${objectType} “${objectName}” verwijderen?` : objectName}</h3>
+          <h3 className="mt-4 break-words text-base font-bold text-slate-950 dark:text-white">{isDelete ? at("draftCards.deleteObjectQuestion", "{object} “{name}” verwijderen?", { object: objectType, name: objectName }) : objectName}</h3>
           {linkedName && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.linkedTo", "Gekoppeld aan")} {linkedName}</p>}
           {isUpdate && changedRows.length > 0 && (
             <dl className="mt-4 divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -5710,10 +5713,10 @@ function AIAssistantContent({
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
               <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
-                {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? "Verwijderen" : "Bevestigen"}
+                {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? at("draftCards.delete", "Verwijderen") : at("draftCards.confirm", "Bevestigen")}
               </button>
             ))}
-            <button type="button" onClick={() => void handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
+            <button type="button" onClick={() => void handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">{at("draftCards.cancel", "Annuleren")}</button>
           </div>
         </div>
       );

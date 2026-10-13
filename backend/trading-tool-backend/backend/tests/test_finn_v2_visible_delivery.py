@@ -97,6 +97,23 @@ def test_visible_delivery_returns_pending_contract_with_same_run_id():
     assert envelope["session_id"] == "finn-v2-conv-pending"
 
 
+def test_visible_delivery_pending_text_uses_request_locale():
+    service = FinnV2VisibleDeliveryService(session=object())
+    service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-pending-de")
+    service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(
+        0,
+        result={"delivery_envelope": {"conversation_id": "finn-v2-conv-de", "status": "planned"}, "verified_response": None},
+    )
+
+    envelope = asyncio.run(service.deliver_assistant_envelope(
+        user_id=1, message="Erstelle einen DCA-Plan", context_payload={"locale": "de-DE"},
+        transport="chat", request_path="/assistant/chat", request_id="req-de", trace_id="trace-de",
+    ))
+
+    assert envelope["response"] == "Einen Moment, ich prüfe das…"
+    assert envelope["summary"] == envelope["response"]
+
+
 def test_visible_delivery_returns_terminal_failure_contract_with_same_run_id():
     service = FinnV2VisibleDeliveryService(session=object())
     service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-failed")

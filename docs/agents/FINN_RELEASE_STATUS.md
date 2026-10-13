@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Draft Card Localization
+
+Phase: `LOCAL_GATES_PASSED`. Branch: `codex/finn-draft-i18n`. The active
+follow-up addresses Dutch text that independent QA found in German FINN
+draft cards and the pending response after the accepted guided-draft repair.
+The web draft cards now read button labels, statuses, detail rows, missing
+fields and action summaries from NL/EN/DE dictionaries. The current locale
+overrides stale conversation context on each chat request. The pending
+backend envelope also uses that locale; changing language does not change
+the selected proposal or confirmation boundary.
+
+Measured local evidence: root backend suite **3552 passed, 3 existing
+skips**; focused visible-delivery suite **6 passed**; frontend typecheck,
+i18n lint/tests, command/proposal/setup tests, production build and
+high-severity audit passed; mobile typecheck, lint without errors, and
+web/iOS/Android Expo exports passed. The local API/Celery action matrix
+passed **16/16**, adapters **19/19**, with zero broker orders, live-trading
+calls or production connections (matrix SHA-256
+`33fdfd127bc8a1101fccacc4ef98a26f8bb6cceab4fbd717372bb6534b757277`).
+The real Luna/Responses development dataset passed **20/20** (artifact
+SHA-256 `8eea5a0b04669996185fd0dd935e2f6b0571237f94a8c24d719b30a542ef3ae0`).
+The full real-provider regression passed **109/109** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`9bd753313786b2c458d3a8a8f819763d899c50a4530c88ac9fa58e9e62e68f40`).
+No candidate has been deployed or independently rechecked for this
+localization batch yet.
+
 ## FINN Guided Draft Revision And Conversation Isolation
 
 Phase: `GUIDED_FOLLOWUP_ACCEPTED`. Build candidate

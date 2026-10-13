@@ -55,6 +55,23 @@ test("German report copy is localized rather than inherited from English", () =>
   assert.notEqual(de.reports.sections.strategy.outlook, en.reports.sections.strategy.outlook);
 });
 
+test("FINN draft actions and pending state have NL, EN and DE copy", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "components/ui/AIAssistant.jsx"), "utf8");
+  for (const dictionary of [nl, en, de]) {
+    const card = dictionary.assistant.draftCards;
+    for (const key of ["checking", "confirm", "adjust", "cancel", "unsaved", "setupTitle", "strategyTitle", "botTitle", "linkedToName", "missingFields"]) {
+      assert.ok(card[key], `${key} is missing`);
+      assert.match(source, new RegExp(`draftCards\\.${key}`));
+    }
+  }
+  assert.equal(de.assistant.draftCards.confirm, "Bestätigen");
+  assert.equal(de.assistant.draftCards.checking, "Einen Moment, ich prüfe das…");
+  assert.notEqual(de.assistant.draftCards.unsaved, nl.assistant.draftCards.unsaved);
+  assert.equal(de.assistant.draftStatus.saved, "✓ Entwurf erfolgreich gespeichert!");
+  assert.match(source, /const requestContext = \{ \.\.\.baseRequestContext, \.\.\.commandContext, locale \}/);
+  assert.match(source, /operationId\.includes\("strategy"\).*linkedName/s);
+});
+
 function assertCanonicalArray(values, pattern = canonicalPattern) {
   for (const value of values) {
     assert.match(value, pattern);
