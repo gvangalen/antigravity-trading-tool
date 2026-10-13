@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `LIVE_REPAIR_QA_PENDING`. The first implementation merged through
+Phase: `QA_REJECTED_TARGET_RESOLUTION_CANDIDATE_READY`. The first implementation merged through
 [PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298),
 passed candidate and main CI, and deployed successfully. Its status-only
 follow-up [PR #299](https://github.com/gvangalen/antigravity-trading-tool/pull/299)
@@ -24,7 +24,35 @@ as product SHA `93391cdfe4bfd1e3c888401ee93b4f3fd1a0c1d3`.
 Candidate CI run `38440237282` and main CI run `38440549107` each passed
 all five jobs. Auto Deploy run `38440801348` succeeded. Public backend health
 and frontend build-info each returned HTTP 200 and that exact SHA on
-2026-10-13. Independent authenticated live QA of the repair is pending.
+2026-10-13. The existing independent QA Agent returned **NOT ACCEPTED** on
+that exact SHA: an AAPL name appeared among ETH clarification choices in
+NL/EN/DE; a free exact fourth ETH name failed terminally in NL and DE; and
+a correction to a nonexistent ETH setup cancelled the old card but made a
+new confirmable card for the old setup. A selected ETH chip and a valid
+target correction did work, with no proposal confirmed or order placed.
+The active follow-up branch is `codex/finn-clarification-target-resolution`;
+it is not yet live or QA-accepted.
+
+The follow-up gives the asset named in the current turn priority during
+owner-scoped target resolution and requires a visibly named replacement
+target after an explicit target correction. An exact typed name is resolved
+locally against that owner's records even if the persisted choice list is
+missing; an unknown name cannot reuse the old proposal's ID. Local API/worker
+probes with mixed AAPL/ETH records showed only ETH choices in NL and DE,
+resolved the exact fourth name to the correct ETH setup, and cancelled an old
+proposal without creating a new one for an unknown replacement. The full
+backend suite passed **3566 tests, 3 existing skips**. Frontend typecheck and
+proposal-card tests passed; no frontend source changed in this follow-up.
+The real Luna/Responses selector development set passed **20/20** (artifact
+SHA-256 `3968ef671f367148c07bf2b0c9ef89f90b93177821e3dc2b00f40f1061d1ca92`)
+and regression passed **109/109** (artifact SHA-256
+`8992ab1310b5f75ae841d50290dd04ee30e0928e7e9320ed8a675c88d0dbe3ae`),
+with zero provider, schema, timeout or validation failures. The final
+same-code API/Celery action matrix passed **16/16**, adapters **19/19**,
+with zero broker orders, live-trading calls or production connections
+(artifact SHA-256
+`4bfeccc356c8d593bf22b3565c8ff77ccce2b2bace9601cb4a9ddfa519686f56`).
+These local results are not an independent live QA verdict.
 
 The repair presents up to three owner-scoped names when more than three
 records match, while exact free text can still identify another record.

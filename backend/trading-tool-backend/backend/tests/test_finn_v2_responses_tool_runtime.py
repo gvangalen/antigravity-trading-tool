@@ -6494,7 +6494,10 @@ def test_guided_strategy_slot_binds_without_provider_call():
     assert state["collected_inputs"]["stop_loss"] == 72000.0
 
 
-def test_owner_scoped_clarification_choice_binds_the_pending_setup_target(monkeypatch):
+@pytest.mark.parametrize("persisted_choices", [True, False])
+def test_owner_scoped_clarification_choice_binds_the_pending_setup_target(
+    monkeypatch, persisted_choices,
+):
     fake = FakeResponses()
     front = object.__new__(FinnResponsesFrontDoor)
     front.client = SimpleNamespace(responses=fake)
@@ -6513,7 +6516,9 @@ def test_owner_scoped_clarification_choice_binds_the_pending_setup_target(monkey
             pass
 
         async def resolve_canonical_target(self, *, user_id, entity_type, message, **_kwargs):
-            assert (user_id, entity_type, message) == (21, "setup", "BTC Keuze Alpha")
+            assert (user_id, entity_type, message) == (
+                21, "setup", "QA vaste BTC vrijdag 2026-10-11",
+            )
             return CanonicalEntityTarget(
                 entity_type="setup", entity_id=42, display_name=message,
                 owner_id=user_id, source="explicit_name", resolution_status="resolved",
@@ -6528,13 +6533,14 @@ def test_owner_scoped_clarification_choice_binds_the_pending_setup_target(monkey
     )
     front.reads = SimpleNamespace(session_factory=session_factory)
     result = asyncio.run(front.run(
-        message="BTC Keuze Alpha", instructions="unused", verified_asset="BTC",
+        message="QA vaste BTC vrijdag 2026-10-11",
+        instructions="unused", verified_asset="BTC",
         conversation_context={
             "active_guided_operation": initial.dict(),
-            "responses_clarification": {
+            **({"responses_clarification": {
                 "reason": "choice_required", "choices": ["BTC Keuze Alpha", "BTC Keuze Beta"],
                 "original_message": "Wijzig mijn BTC-setup naar 1D.",
-            },
+            }} if persisted_choices else {}),
         },
     ))
     state = result.proposal_analysis.request_plan.operation_state

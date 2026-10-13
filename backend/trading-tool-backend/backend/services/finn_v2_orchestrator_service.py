@@ -32,6 +32,7 @@ from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
+from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 
 
 logger = logging.getLogger(__name__)
@@ -284,6 +285,21 @@ class FinnV2OrchestratorService:
             "delete_bot": "bot",
         }
         entity_type = operation_targets.get(operation_id)
+        correction = dict(conversation_context.get("proposal_correction_result") or {})
+        if entity_type and correction.get("target_change_requested"):
+            # A corrected target cannot inherit an ID or name from the
+            # superseded card or a model guess. Only a name visible in this
+            # turn may resolve; otherwise the owner chooses again.
+            collected_inputs.pop(f"{entity_type}_id", None)
+            selectors.pop(f"{entity_type}_id", None)
+            selectors.pop(f"{entity_type}_name", None)
+            selectors["require_explicit_name"] = True
+        message_asset = FinnV2RequestPreprocessorService._asset_from_text(message)
+        if message_asset and entity_type:
+            # This turn's catalog asset outranks a prior page or plan.
+            current_asset = message_asset
+            selectors["asset"] = message_asset
+            selectors["asset_source"] = "explicit_message"
         canonical_target = None
         # A few historical unit doubles intentionally replace the entire tool
         # pipeline and pass ``object()`` instead of an AsyncSession. Production

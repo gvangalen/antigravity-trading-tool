@@ -139,6 +139,21 @@ class FinnV2EntityResolutionService:
                 )
             return self._resolution_failure(user_id, entity_type, "not_found", source="explicit_name")
 
+        if selector.get("require_explicit_name"):
+            # A replacement target must be named in this turn. An old
+            # conversation ID, page hint or model-selected ID cannot become
+            # the new confirmable object when the typed name is unknown.
+            asset = self._normalize_symbol(selector.get("asset"))
+            scoped = [
+                row for row in candidates
+                if not asset or self._candidate_asset(row) == asset
+            ]
+            return self._resolution_failure(
+                user_id, entity_type, "ambiguous" if scoped else "not_found",
+                source="explicit_target_correction",
+                candidate_names=self._candidate_names(scoped),
+            )
+
         # Only an asset named in the current turn outranks persisted lineage.
         # A contextual/workspace asset is a fallback and must not displace the
         # object produced by the preceding confirmed action ("deze setup").

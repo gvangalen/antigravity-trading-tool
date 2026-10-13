@@ -474,7 +474,6 @@ class FinnResponsesFrontDoor:
         choice_entity = {"setup_id": "setup", "strategy_id": "strategy", "bot_id": "bot"}.get(requested_slot)
         if (
             pending_operation and pending_operation != "create_bot" and choice_entity
-            and pending_clarification
         ):
             session_factory = getattr(getattr(self, "reads", None), "session_factory", None)
             if session_factory is not None:
