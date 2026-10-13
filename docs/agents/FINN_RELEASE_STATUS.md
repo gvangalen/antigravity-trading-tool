@@ -6,8 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Guided Draft Revision And Conversation Isolation
 
-Phase: `LOCAL_REPAIR_VALIDATION`. Independent authenticated browser QA returned
-`NOT_ACCEPTED` on live SHA `9a7d8751edfad6743677b5d48fefacd5f7cfc045`.
+Phase: `GUIDED_FOLLOWUP_LIVE_PENDING_QA`. Build candidate
+`26f68f90bf54774c67a3ad2b8863cb2bec57a98b` merged through
+[PR #290](https://github.com/gvangalen/antigravity-trading-tool/pull/290)
+as product SHA `05ab912c05e47a019dfe11cf37240bb6e11b736d`. Candidate and main
+CI each passed all five jobs. Auto Deploy succeeded for that product SHA.
+Public backend health and frontend build-info each returned HTTP 200 and
+the same SHA on 2026-10-13. This status-only commit needs its own public
+SHA check before independent QA starts. Independent authenticated browser
+QA returned `NOT_ACCEPTED` on the preceding live SHA
+`9a7d8751edfad6743677b5d48fefacd5f7cfc045`.
 The intended BTC-setup to ETH-strategy contract switch passed. QA then found
 two remaining draft faults: an explicit correction of the open ETH DCA
 strategy card from EUR 50 to EUR 75 cancelled the old card but failed to
@@ -41,7 +49,8 @@ failures (artifact SHA-256
 The full real-provider regression passed **109/109**, with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
 `154ed1c61f7325e2791d7cf0246080ee4e56c37dd863744456a67819ef579c4d`).
-Deployment is pending.
+The product candidate is deployed; independent authenticated live QA is
+pending.
 
 ## FINN Guided Draft Operation Switch
 
