@@ -39,7 +39,7 @@ import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFin
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
-import { draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft } from "@/lib/finnDraftConversation.mjs";
+import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -1522,6 +1522,7 @@ function AIAssistantContent({
   };
 
   const getMessageFollowUpActions = (message) => {
+    if (message?.state?.run_status === "clarification_required") return [];
     if (Array.isArray(message?.actions) && message.actions.some((action) => action?.requires_confirmation)) {
       return [];
     }
@@ -4249,6 +4250,7 @@ function AIAssistantContent({
                 current_flow: run?.status === "completed" ? "finn_v2_visible" : "finn_v2_visible_terminal_failed",
                 run_id: runId,
                 run_status: run?.status,
+                clarification: projection?.clarification || null,
                 setup_draft: setupDraft,
                 action_draft: visibleActionDraft,
               },
@@ -5500,9 +5502,11 @@ function AIAssistantContent({
   };
 
   const renderDraftQuestionChoices = (message, messageIndex) => {
-    if (message.isComplete === false || !isCollectingDraft(message) || message.draftCanceled || message.draftExecuted) return null;
+    if (message.isComplete === false || (!isCollectingDraft(message) && !isOpenClarification(message)) || message.draftCanceled || message.draftExecuted) return null;
     if (messages.slice(messageIndex + 1).some((later) => later.role === "user")) return null;
-    const choices = draftQuestionChoices(message, locale);
+    const choices = isOpenClarification(message)
+      ? clarificationQuestionChoices(message)
+      : draftQuestionChoices(message, locale);
     const copy = draftConversationCopy(locale);
     return (
       <div className="mt-3 space-y-2" aria-label={choices.length ? copy.hint : copy.freeTextHint}>

@@ -3096,6 +3096,16 @@ def test_clarification_tool_accepts_one_natural_question_not_internal_fields():
         catalog.validate("ask_for_clarification", {
             "question": "Wat is je setup_id?", "reason": "choice_required",
         })
+    selected = catalog.validate("ask_for_clarification", {
+        "question": "Bedoel je je setup of je strategie?", "reason": "choice_required",
+        "choices": ["setup", "strategie"],
+    })
+    assert selected.inputs["choices"] == ["setup", "strategie"]
+    unsupported = catalog.validate("ask_for_clarification", {
+        "question": "Bedoel je je setup of je strategie?", "reason": "choice_required",
+        "choices": ["setup", "koop nu"],
+    })
+    assert "choices" not in unsupported.inputs
 
 
 def test_read_timeframe_cannot_be_a_selected_object_name():
@@ -6781,6 +6791,7 @@ def test_duplicate_read_is_not_executed_and_model_can_clarify():
         response("r3", calls=(tool_call("c3", "ask_for_clarification", {
             "question": "Wil je eerst je risicostijl of je DCA-frequentie beoordelen?",
             "reason": "choice_required",
+            "choices": ["risicostijl", "DCA-frequentie"],
         }),)),
         response("r4", text="Wil je eerst je risicostijl of je DCA-frequentie beoordelen?"),
     )
@@ -6809,6 +6820,7 @@ def test_duplicate_read_is_not_executed_and_model_can_clarify():
     assert result.response.tool_trace[1]["result"]["reason"] == "read_already_completed_this_turn"
     assert fake.requests[2]["tool_choice"] == "required"
     assert result.response.tool_trace[2]["status"] == "needs_input"
+    assert result.response.tool_trace[2]["result"]["choices"] == ["risicostijl", "DCA-frequentie"]
 
 
 def test_unbound_reference_can_clarify_without_irrelevant_read():
@@ -6920,9 +6932,10 @@ def test_clarification_tool_stops_at_one_choice_and_returns_typed_terminal_quest
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "get_my_profile_and_risk_style", {}),)),
         response("r2", calls=(tool_call("c2", "ask_for_clarification", {
-            "question": "Welke risicostijl past bij jou?", "reason": "choice_required",
+            "question": "Bedoel je voorzichtig of gebalanceerd?", "reason": "choice_required",
+            "choices": ["voorzichtig", "gebalanceerd"],
         }),)),
-        response("r3", text="Welke risicostijl past bij jou?"),
+        response("r3", text="Bedoel je voorzichtig of gebalanceerd?"),
     )
 
     async def execute(call):
@@ -6941,7 +6954,8 @@ def test_clarification_tool_stops_at_one_choice_and_returns_typed_terminal_quest
     ))
     assert answer.status == "clarification_required"
     assert answer.clarification == {
-        "question": "Welke risicostijl past bij jou?", "reason": "choice_required",
+        "question": "Bedoel je voorzichtig of gebalanceerd?", "reason": "choice_required",
+        "choices": ["voorzichtig", "gebalanceerd"],
     }
 
 
@@ -7982,11 +7996,13 @@ def test_pending_clarification_is_persisted_on_the_owner_conversation_contract()
     result = asyncio.run(repo.record_responses_clarification(
         run_id="run-7", user_id=7, original_message="Beoordeel mijn plan",
         question="Welke setup bedoel je?", reason="choice_required",
+        choices=["BTC Full Base", "BTC Breakout Full"],
     ))
     assert result.state_json["responses_clarification"] == {
         "original_message": "Beoordeel mijn plan",
         "question": "Welke setup bedoel je?",
         "reason": "choice_required",
+        "choices": ["BTC Full Base", "BTC Breakout Full"],
         "conversation_id": "conv-7",
         "run_id": "run-7",
     }

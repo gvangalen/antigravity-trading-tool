@@ -45,7 +45,7 @@ class FinnResponsesVerifiedAnswer:
     reason: str | None
     evidence: tuple[dict[str, Any], ...]
     used_previous_response: bool = False
-    clarification: dict[str, str] | None = None
+    clarification: dict[str, Any] | None = None
     rejection_details: dict[str, Any] | None = None
 
 
@@ -2612,6 +2612,7 @@ class FinnResponsesAnswerVerifier:
                 clarification={
                     "question": str(clarification["question"]),
                     "reason": str(clarification["reason"]),
+                    "choices": list(clarification.get("choices") or []),
                 },
             )
         if result.model_led_coach:

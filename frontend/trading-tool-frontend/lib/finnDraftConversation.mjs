@@ -42,6 +42,22 @@ export function draftQuestionChoices(message, locale = 'nl') {
   return choices.map((choice) => ({ label: copy[choice], reply: reply[choice] }));
 }
 
+export function isOpenClarification(message) {
+  if (message?.state?.run_status !== 'clarification_required') return false;
+  return Boolean(message.state.clarification || !isCollectingDraft(message));
+}
+
+export function clarificationQuestionChoices(message) {
+  if (!isOpenClarification(message)) return [];
+  const clarification = message?.state?.clarification;
+  const names = clarification?.choices;
+  if (!Array.isArray(names) || names.length < 2 || names.length > 3) return [];
+  const choices = names.map((name) => typeof name === 'string' ? name.trim() : '');
+  if (choices.some((name) => !name || name.length > 80)) return [];
+  if (new Set(choices.map((name) => name.toLocaleLowerCase())).size !== choices.length) return [];
+  return choices.map((name) => ({ label: name, reply: name }));
+}
+
 export function hasConfirmableDraft(message) {
   const proposal = (message?.actions || []).some((action) => action?.type === 'v2_proposal' && action?.proposal_id);
   const draft = message?.setupDraft || message?.actionDraft || message?.state?.setup_draft || message?.state?.action_draft;

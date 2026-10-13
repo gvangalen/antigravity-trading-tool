@@ -1113,6 +1113,7 @@ class FinnResponsesFrontDoor:
                     "status": "needs_input",
                     "reason": call.inputs["reason"],
                     "question": call.inputs["question"],
+                    "choices": call.inputs.get("choices", []),
                 }
             if call.name == "get_open_dca_draft":
                 return read_open_dca_draft()
