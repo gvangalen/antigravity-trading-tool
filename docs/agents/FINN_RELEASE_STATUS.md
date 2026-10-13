@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `QA_REJECTED_OPEN_CARD_CORRECTION_REPAIR_IN_VALIDATION`. The prior live
+Phase: `OPEN_CARD_TARGET_CORRECTION_LIVE_PENDING_QA`. The prior live
 candidate was rejected by independent QA. The repair branch
 `codex/finn-guided-asset-and-locale` merged through
 [PR #306](https://github.com/gvangalen/antigravity-trading-tool/pull/306)
@@ -39,8 +39,13 @@ choice now produced the right unconfirmed 4H card; however, correcting that
 open card to another exact saved ETH name while explicitly negating the old
 name cancelled the old card but failed to create the new one. NL/EN/DE
 clarification and card rendering passed. No proposal was confirmed or order
-placed. The active repair branch is `codex/finn-open-card-target-correction`;
-it is local, not yet live.
+placed. The repair branch `codex/finn-open-card-target-correction` merged
+through [PR #310](https://github.com/gvangalen/antigravity-trading-tool/pull/310)
+as product SHA `c7438eb2a021c886c1b4df5772d2b820f05b0510`.
+Candidate CI run `38466790681` and main CI run `38467078660` each passed
+all five jobs. Auto Deploy run `38467350122` succeeded. On 2026-10-13,
+public backend health and frontend build-info each returned HTTP 200 and
+the exact product SHA. This candidate is live, pending independent QA.
 
 The local API/Celery regression now covers the exact Dutch correction shape,
 including the positive saved name, negated old name, and 4H field. It failed
@@ -58,8 +63,8 @@ Real Luna/Responses selector development passed **20/20** (artifact SHA-256
 `cbcd51ea607eaefab518d3858a5d98db5a61ef5d903cd1fee82d281fe7bd9ee5`)
 and regression **109/109** (artifact SHA-256
 `b0bbf2d9806a353f3e221ef03eb20b91ce363584fca53d5d93d432d39dbe6495`),
-with zero provider, schema, parse, validation or timeout failures. CI and
-deployment remain pending; these local results are not a live QA verdict.
+with zero provider, schema, parse, validation or timeout failures. These
+local results are not a live QA verdict.
 
 The local reproduction added the previously missing third turn to the
 seven-candidate API/Celery regression. It first failed with a READ answer or
