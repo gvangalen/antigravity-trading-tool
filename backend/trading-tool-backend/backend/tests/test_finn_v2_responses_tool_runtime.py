@@ -21,6 +21,7 @@ from backend.services.finn_v2_responses_read_executor import FinnResponsesReadEx
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
+    _explicit_strategy_proposal_request,
 )
 from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
@@ -3858,6 +3859,65 @@ def test_same_asset_dca_strategy_correction_preserves_owner_parent_and_name():
     assert state["collected_inputs"]["setup_id"] == 27644
     assert state["collected_inputs"]["name"] == "QA concept ETH dinsdag"
     assert state["collected_inputs"]["base_amount"] == 75
+
+
+@pytest.mark.parametrize("message", [
+    "Maak een DCA-strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
+    "Maak een strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
+    "Create a fixed strategy for my ETH setup.",
+    "Erstelle eine DCA-Strategie für mein ETH-Setup.",
+])
+def test_explicit_strategy_draft_request_accepts_domain_modifiers(message):
+    assert _explicit_strategy_proposal_request(message)
+
+
+@pytest.mark.parametrize("message", [
+    "Hoe maak ik een DCA-strategie?",
+    "Maak een DCA-strategie voor mijn setup?",
+    "Wat als ik een DCA-strategie maak?",
+    "Maak geen strategie voor mijn ETH-setup.",
+    "Vergelijk mijn DCA-strategie met mijn tradeplan.",
+])
+def test_strategy_draft_request_does_not_capture_coaching(message):
+    assert not _explicit_strategy_proposal_request(message)
+
+
+def test_paper_bot_budget_limit_correction_preserves_owner_scoped_draft_target():
+    message = (
+        "Corrigeer dit Paper-botconcept naar een botbudgetlimiet van €750; "
+        "houd dezelfde strategie en blijf niet-live. Bevestig niets."
+    )
+    contract = FinnV2OperationRegistry().require_supported("create_bot")
+    assert FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )["budget_total_eur"] == 750
+    call = FinnResponsesToolCatalog().validate(
+        "manage_paper_bot_proposal",
+        {"operation_id": "create_bot", "draft_intent": "new", "inputs": {}},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call, message=message,
+        conversation_context={
+            "immediate_bot_pair_guard_reason": "no_confirmed_parent",
+            "proposal_correction_result": {
+                "proposal_id": "old-paper-proposal", "status": "cancelled",
+                "operation_id": "create_bot", "previous_asset": "ETH",
+                "requested_instrument": "ETH",
+                "corrected_fields": {"budget_total_eur": 750},
+                "prior_inputs": {
+                    "strategy_id": 20549, "name": "QA Paper Bot 13 oktober",
+                    "budget_total_eur": 750,
+                },
+            },
+        },
+        verified_asset=None,
+    )
+    state = analysis.request_plan.operation_state
+    assert state["collected_inputs"] == {
+        "name": "QA Paper Bot 13 oktober", "strategy_id": 20549,
+        "budget_total_eur": 750,
+    }
+    assert state["open_proposal_id"] is None
     assert state["missing_required_inputs"] == []
 
 

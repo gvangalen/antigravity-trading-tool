@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Draft Target Correction Candidate
+
+Phase: `DRAFT_TARGET_CORRECTION_LOCAL_GATES_GREEN_PENDING_CI`.
+Independent authenticated browser QA returned `NOT_ACCEPTED` on live SHA
+`5d058701b9d31705d3217ebf1b9b5ce7c58d9a66`. The exact BTC DCA
+three-turn flow and its review card passed. Two further flows failed: “Maak
+een DCA-strategie” for an existing setup produced no proposal, while a
+similarly worded “Maak een strategie” worked; and changing an open Paper-bot
+card from EUR 500 to a EUR 750 botbudgetlimiet withdrew the old card but did
+not create a replacement for the same strategy. QA did not confirm a proposal
+or execute a bot. Native mobile remained unproven on QA's locked host.
+
+The current repair routes an explicit imperative strategy creation request
+through the existing owner-scoped strategy proposal contract; questions and
+hypotheticals remain coach turns. The typed Paper-bot input parser recognizes
+botbudgetlimiet, and a same-target field correction may reuse only the
+owner-scoped prior card's name and strategy after that card is cancelled.
+Rejected immediate-plan references still cannot inherit an older target. An
+authenticated local web-facade regression created an unconfirmed DCA strategy
+proposal, cancelled the EUR 500 Paper-bot card, and created a new EUR 750 card
+for the same strategy. The local root backend suite passed **3544**, with
+**3 existing skips**. The API/Celery/Responses action matrix passed **16/16**
+and adapters **19/19**, with no broker orders, live bots, live-trading calls
+or production connections (matrix SHA-256
+`8e2d3eea6641059736c8ac8df7d00819146aefdd33cebb4a5c1f00d1c8abe67f`).
+Frontend typecheck, i18n lint/tests, command/proposal/setup tests, build and
+high-severity audit passed. Mobile typecheck, lint without errors, and Expo
+web/iOS/Android exports passed. Real Luna/Responses development first passed
+19/20 due to the previously observed selected-feed-plan classification
+variance (artifact SHA-256
+`b4df8fcd255db28a728352954eeba7e9df2268e500f14ae2b5297ee06ad96bba`);
+the unchanged rerun passed **20/20** with zero provider/schema/timeout/parse/
+validation failures (artifact SHA-256
+`d95ca20ec35800895d789c81a6591f5b05ea743a92860bbc52e12f8f789bb992`).
+The complete real-provider regression passed **109/109**, with zero
+provider/schema/timeout/parse/validation failures (artifact SHA-256
+`daf27f352ab3b532ec5df5262ee173b51d13904bae66f672f4fbce46546d4d0c`).
+CI, Auto Deploy, public SHA checks and independent QA are still pending for
+this candidate.
+
 ## FINN Draft Conversation Browser Runtime Candidate
 
 Phase: `DRAFT_CONVERSATION_BROWSER_RUNTIME_LIVE_PENDING_QA`. Build candidate
