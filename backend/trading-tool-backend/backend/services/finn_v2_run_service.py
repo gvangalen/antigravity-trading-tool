@@ -374,6 +374,7 @@ class FinnV2RunService:
                 run_id=run_id, user_id=user_id, original_message=run.message,
                 question=str(clarification.get("question") or answer.text),
                 reason=str(clarification.get("reason") or answer.reason or "choice_required"),
+                choices=list(clarification.get("choices") or []),
             )
         response_json = {
             "mode": "CLARIFICATION" if status == "clarification_required" else "READ" if status == "completed" else "UNAVAILABLE",

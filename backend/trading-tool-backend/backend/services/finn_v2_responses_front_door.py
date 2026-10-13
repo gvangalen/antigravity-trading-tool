@@ -470,6 +470,55 @@ class FinnResponsesFrontDoor:
         pending_operation = FinnV2OperationStateService.pending_operation_id(conversation_context)
         guided_state = dict(conversation_context.get("active_guided_operation") or {})
         requested_slot = str(guided_state.get("next_missing_input") or "")
+        pending_clarification = dict(conversation_context.get("responses_clarification") or {})
+        choice_names = pending_clarification.get("choices") or []
+        choice_entity = {"setup_id": "setup", "strategy_id": "strategy", "bot_id": "bot"}.get(requested_slot)
+        if (
+            pending_operation and pending_operation != "create_bot" and choice_entity
+            and isinstance(choice_names, list)
+            and any(isinstance(name, str) and message.strip().casefold() == name.casefold()
+                    for name in choice_names)
+        ):
+            session_factory = getattr(getattr(self, "reads", None), "session_factory", None)
+            if session_factory is not None:
+                async with session_factory() as session:
+                    target = await FinnV2EntityResolutionService(session).resolve_canonical_target(
+                        user_id=self.user_id, entity_type=choice_entity, message=message,
+                        conversation_context=dict(conversation_context),
+                    )
+                if (
+                    target.resolution_status == "resolved" and target.entity_id is not None
+                    and target.owner_id == self.user_id
+                    and str(target.display_name or "").casefold() == message.strip().casefold()
+                ):
+                    contract = self.proposals.registry.require_supported(pending_operation)
+                    selected = self.proposals.from_call(
+                        call=FinnResponsesToolCall(
+                            name=catalog.proposal_tool_for_operation(pending_operation),
+                            operation_id=pending_operation,
+                            inputs={requested_slot: target.entity_id},
+                            read_tools=(), required_inputs=contract.required_inputs,
+                            missing_inputs=tuple(guided_state.get("missing_required_inputs") or ()),
+                            draft_intent="new",
+                        ),
+                        message=message, conversation_context=conversation_context,
+                        verified_asset=verified_asset,
+                        verified_target_inputs={requested_slot: target.entity_id},
+                    )
+                    return FinnResponsesFrontDoorResult(
+                        FinnResponsesResult(
+                            text={"en": "I have applied your choice to the draft.",
+                                  "de": "Ich habe deine Auswahl für den Entwurf übernommen."}.get(
+                                      str(locale or "nl").split("-")[0].lower(),
+                                      "Ik heb je keuze in het concept verwerkt.",
+                                  ),
+                            response_id=f"guided-choice-{self.run_id}",
+                            tool_trace=({"name": "verified_clarification_choice", "status": "completed",
+                                         "result": {"operation_id": pending_operation}},),
+                            response_id_reusable=False,
+                        ),
+                        selected, previous_response, locale=locale,
+                    )
         if (pending_operation and requested_slot
                 and not FinnV2OperationStateService.is_cancel_intent(message)
                 and not unsupported_catalog_pair_mention(message)):
@@ -1113,6 +1162,7 @@ class FinnResponsesFrontDoor:
                     "status": "needs_input",
                     "reason": call.inputs["reason"],
                     "question": call.inputs["question"],
+                    "choices": call.inputs.get("choices", []),
                 }
             if call.name == "get_open_dca_draft":
                 return read_open_dca_draft()

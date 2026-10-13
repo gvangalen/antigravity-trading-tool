@@ -95,6 +95,26 @@ def test_terminal_projection_exposes_safe_phase_timings_when_persisted():
     assert projection["timings_ms"] == {"total": 1000, "until_queued": 100, "until_collecting": 200, "terminal_persist": 700}
 
 
+def test_terminal_projection_exposes_only_current_clarification_choices():
+    state = {
+        "identity": {"run_id": "run-1"},
+        "responses_clarification": {
+            "original_message": "Doe hetzelfde",
+            "question": "Bedoel je je setup of je strategie?",
+            "reason": "choice_required",
+            "choices": ["setup", "strategie"],
+        },
+    }
+    projection = terminal_projection(state, status="clarification_required", mode="CLARIFICATION", response={})
+    assert projection["clarification"] == {
+        "question": "Bedoel je je setup of je strategie?",
+        "reason": "choice_required",
+        "choices": ["setup", "strategie"],
+    }
+    assert "original_message" not in projection["clarification"]
+    assert terminal_projection(state, status="completed", mode="READ", response={})["clarification"] is None
+
+
 def test_terminal_projection_keeps_dispatch_selector_and_fast_path_boundaries():
     projection = terminal_projection(
         {

@@ -134,7 +134,10 @@ class FinnResponsesToolCatalog:
             "description": (
                 "Use only when a specific choice or user-provided detail is necessary to answer the "
                 "current question and cannot be obtained from FINN read tools. Ask one short natural "
-                "question. If a general yes/no boundary can be answered without that detail, "
+                "question. For a genuine choice, you may include two or three short answer choices "
+                "that are explicitly named in the question and grounded in owner-scoped reads or "
+                "neutral interpretations of the user's request. Omit choices when unsure. "
+                "If a general yes/no boundary can be answered without that detail, "
                 "answer it directly and ask the detail only if needed afterward. Do not use "
                 "this for unavailable market data; state that limitation instead."
             ),
@@ -144,6 +147,7 @@ class FinnResponsesToolCatalog:
                 "properties": {
                     "question": {"type": "string", "description": "One user-facing question without internal fields or IDs."},
                     "reason": {"type": "string", "enum": ["choice_required", "user_detail_required"]},
+                    "choices": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3},
                 },
                 "required": ["question", "reason"],
                 "additionalProperties": False,
@@ -486,7 +490,7 @@ class FinnResponsesToolCatalog:
                 raise FinnResponsesToolError("direct_answer_arguments_invalid")
             return FinnResponsesToolCall(name, None, arguments, (), (), ())
         if name == "ask_for_clarification":
-            if set(arguments) != {"question", "reason"}:
+            if set(arguments).difference({"question", "reason", "choices"}) or not {"question", "reason"}.issubset(arguments):
                 raise FinnResponsesToolError("clarification_arguments_invalid")
             question = arguments["question"]
             if (
@@ -496,9 +500,18 @@ class FinnResponsesToolCatalog:
                 or arguments["reason"] not in {"choice_required", "user_detail_required"}
             ):
                 raise FinnResponsesToolError("clarification_question_invalid")
-            return FinnResponsesToolCall(name, None, {
-                "question": question.strip(), "reason": arguments["reason"],
-            }, (), (), ())
+            inputs = {"question": question.strip(), "reason": arguments["reason"]}
+            choices = arguments.get("choices")
+            if arguments["reason"] == "choice_required" and isinstance(choices, list) and 2 <= len(choices) <= 3:
+                normalized = [item.strip() for item in choices if isinstance(item, str)]
+                if (
+                    len(normalized) == len(choices)
+                    and all(1 <= len(item) <= 80 and "\n" not in item and "?" not in item for item in normalized)
+                    and len({item.casefold() for item in normalized}) == len(normalized)
+                    and all(item.casefold() in question.casefold() for item in normalized)
+                ):
+                    inputs["choices"] = normalized
+            return FinnResponsesToolCall(name, None, inputs, (), (), ())
         if name == "get_open_dca_draft":
             if arguments:
                 raise FinnResponsesToolError("draft_read_arguments_invalid")

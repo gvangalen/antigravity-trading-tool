@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { draftQuestionChoices, hasConfirmableDraft, isCollectingDraft } from '../lib/finnDraftConversation.mjs';
+import { clarificationQuestionChoices, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from '../lib/finnDraftConversation.mjs';
 
 test('incomplete setup uses a question instead of a confirmable card', () => {
   const message = { setupDraft: { missing_inputs: ['dca_frequency'], supplied_inputs: { symbol: 'BTC' } }, state: {} };
@@ -46,4 +46,32 @@ test('other structured questions offer a small set of relevant choices', () => {
     const choices = draftQuestionChoices({ actionDraft: { missing_inputs: [field] } });
     assert.equal(choices.length, expected);
   }
+});
+
+test('general clarification offers only verified choices and preserves free text when none exist', () => {
+  const message = { state: { run_status: 'clarification_required', clarification: {
+    question: 'Bedoel je je setup of je strategie?',
+    choices: ['setup', 'strategie'],
+  } } };
+  assert.equal(isOpenClarification(message), true);
+  assert.deepEqual(clarificationQuestionChoices(message), [
+    { label: 'setup', reply: 'setup' },
+    { label: 'strategie', reply: 'strategie' },
+  ]);
+  assert.deepEqual(clarificationQuestionChoices({ state: { run_status: 'clarification_required' } }), []);
+  assert.equal(isOpenClarification({ ...message, state: { ...message.state, run_status: 'completed' } }), false);
+});
+
+test('ambiguous owner-scoped saved objects can be selected by name', () => {
+  const message = { actionDraft: { missing_inputs: ['setup_id'] }, state: { run_status: 'clarification_required', clarification: {
+    question: 'Welke setup bedoel je: BTC Full Base of BTC Breakout Full?',
+    choices: ['BTC Full Base', 'BTC Breakout Full'],
+  } } };
+  assert.equal(isOpenClarification(message), true);
+  assert.deepEqual(clarificationQuestionChoices(message).map((choice) => choice.reply), [
+    'BTC Full Base', 'BTC Breakout Full',
+  ]);
+  assert.deepEqual(clarificationQuestionChoices({ state: {
+    ...message.state, clarification: { question: 'Welke setup bedoel je?', choices: [] },
+  } }), []);
 });

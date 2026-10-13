@@ -927,6 +927,11 @@ def terminal_projection(
         "conversation_reference_kind": state.get("conversation_reference_kind"),
         "supplied_inputs": dict(state.get("supplied_inputs") or {}),
         "missing_inputs": list(state.get("missing_inputs") or []),
+        "clarification": {
+            "question": (state.get("responses_clarification") or {}).get("question"),
+            "reason": (state.get("responses_clarification") or {}).get("reason"),
+            "choices": list((state.get("responses_clarification") or {}).get("choices") or []),
+        } if status == "clarification_required" and state.get("responses_clarification") else None,
         "setup_draft": dict(state.get("setup_draft") or {}),
         "action_draft": dict(state.get("action_draft") or {}),
         "terminal_status": status,

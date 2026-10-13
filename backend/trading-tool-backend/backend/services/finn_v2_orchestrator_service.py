@@ -710,6 +710,15 @@ class FinnV2OrchestratorService:
                 entity_type=str(target_resolution.get("entity_type") or "object"),
                 candidate_names=list(target_resolution.get("candidate_names") or []),
             )
+            candidate_names = list(target_resolution.get("candidate_names") or [])
+            await self.runtime_contracts.record_responses_clarification(
+                run_id=run_id,
+                user_id=user_id,
+                original_message=run.message,
+                question=result.selected_clarification.question,
+                reason="choice_required" if candidate_names else "user_detail_required",
+                choices=candidate_names if 2 <= len(candidate_names) <= 3 else [],
+            )
             await self._persist_result(result)
             await self._append_trace(
                 run_id=run_id,

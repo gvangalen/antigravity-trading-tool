@@ -575,7 +575,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
 
     async def record_responses_clarification(
         self, *, run_id: str, user_id: int, original_message: str,
-        question: str, reason: str,
+        question: str, reason: str, choices: Optional[list[str]] = None,
     ) -> FinnV2RuntimeContract:
         """Persist one open conversational choice on the owning run contract."""
         row = await self._required_for_update(run_id)
@@ -586,6 +586,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "original_message": original_message,
             "question": question,
             "reason": reason,
+            "choices": list(choices or []),
             "conversation_id": row.conversation_id,
             "run_id": run_id,
         }
