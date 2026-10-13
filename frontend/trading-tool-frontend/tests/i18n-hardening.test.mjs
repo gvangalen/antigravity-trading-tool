@@ -59,7 +59,7 @@ test("FINN draft actions and pending state have NL, EN and DE copy", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "components/ui/AIAssistant.jsx"), "utf8");
   for (const dictionary of [nl, en, de]) {
     const card = dictionary.assistant.draftCards;
-    for (const key of ["checking", "confirm", "adjust", "cancel", "unsaved", "setupTitle", "strategyTitle", "botTitle", "linkedToName", "missingFields"]) {
+    for (const key of ["checking", "confirm", "adjust", "cancel", "cancelledResponse", "cancelledToast", "cancelFailed", "unsaved", "setupTitle", "strategyTitle", "botTitle", "linkedToName", "missingFields"]) {
       assert.ok(card[key], `${key} is missing`);
       assert.match(source, new RegExp(`draftCards\\.${key}`));
     }
@@ -67,6 +67,7 @@ test("FINN draft actions and pending state have NL, EN and DE copy", () => {
   assert.equal(de.assistant.draftCards.confirm, "Bestätigen");
   assert.equal(de.assistant.draftCards.checking, "Einen Moment, ich prüfe das…");
   assert.notEqual(de.assistant.draftCards.unsaved, nl.assistant.draftCards.unsaved);
+  assert.notEqual(de.assistant.draftCards.cancelledResponse, nl.assistant.draftCards.cancelledResponse);
   assert.equal(de.assistant.draftStatus.saved, "✓ Entwurf erfolgreich gespeichert!");
   assert.match(source, /const requestContext = \{ \.\.\.baseRequestContext, \.\.\.commandContext, locale \}/);
   assert.match(source, /operationId\.includes\("strategy"\).*linkedName/s);

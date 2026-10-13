@@ -4612,7 +4612,7 @@ function AIAssistantContent({
         if (idx !== index && (!proposalId || messageProposalId !== proposalId)) return m;
         return {
         ...m,
-        text: "Voorstel geannuleerd. Er is niets gewijzigd.",
+        text: at("draftCards.cancelledResponse", "Voorstel geannuleerd. Er is niets gewijzigd."),
         actions: [],
         setupDraft: null,
         actionDraft: null,
@@ -4620,9 +4620,9 @@ function AIAssistantContent({
         draftCanceled: true,
         };
       }));
-      showSnackbar("Voorstel geannuleerd", "info");
+      showSnackbar(at("draftCards.cancelledToast", "Voorstel geannuleerd"), "info");
     } catch (error) {
-      showSnackbar("Dit voorstel kon niet worden geannuleerd.", "error");
+      showSnackbar(at("draftCards.cancelFailed", "Dit voorstel kon niet worden geannuleerd."), "error");
     } finally {
       setExecutingAction(false);
     }

@@ -6,7 +6,31 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Card Localization
 
-Phase: `DEPLOYED_QA_PENDING`. Build candidate
+Phase: `QA_NOT_ACCEPTED_LOCAL_REPAIR`. Independent authenticated browser QA
+returned `NOT_ACCEPTED` on live SHA
+`6d2cfd878652f881eda87ec2a7dbc923ea760f62`. German ADX creation
+returned a read answer without a proposal; a German weekly DCA request
+reasked Friday and its reply failed; deterministic proposal text and web
+cancel copy remained Dutch in EN/DE. No proposal was confirmed or executed.
+The active repair branch is `codex/finn-draft-i18n-qa-repair`. The local
+Responses-backed web facade reproduced and passed German indicator creation,
+the complete German DCA request, and a two-turn German Friday clarification;
+none was confirmed. The full backend suite passed **3560** tests with **3
+existing skips**. Frontend typecheck, i18n lint/tests, command/proposal/setup
+tests, production build and high-severity audit passed; mobile typecheck,
+lint without errors, and web/iOS/Android Expo exports passed. The final
+API/Celery action matrix passed **16/16** with **19/19** adapters and zero
+broker orders, live-trading calls or production connections (matrix SHA-256
+`38119d773cf83f9f89a29e8b30a144b18cec03f21e8cb1cebda8a21f2ae30e05`).
+The real Luna/Responses development set passed **20/20** (SHA-256
+`43570aa8e976a1ca293262822ac702dace0b99f14336bee2fcadb09c28797ddd`)
+and the full regression passed **109/109** (SHA-256
+`adf742dee1beed33d33938100ffb7cc99cd9cfcaa460ab3940c2dd7c060cf0a7`),
+both with zero provider, schema, timeout, parse or validation failures.
+Candidate CI and deployment are pending; independent live QA has not yet
+reviewed this repair.
+
+The preceding Build candidate
 `cf293330cf1a8ed49f9932d74834046bcd4c0e5a` merged through
 [PR #293](https://github.com/gvangalen/antigravity-trading-tool/pull/293)
 as product SHA `34e1819901a90756ad589420043d26edbfe758b1`. The active
@@ -33,9 +57,8 @@ schema, timeout, parse or validation failures (artifact SHA-256
 `9bd753313786b2c458d3a8a8f819763d899c50a4530c88ac9fa58e9e62e68f40`).
 Candidate and main CI each passed all five jobs. Auto Deploy succeeded for
 the product SHA. Public backend health and frontend build-info both returned
-HTTP 200 and the same product SHA on 2026-10-13. This status-only commit
-needs its own public SHA check before independent QA starts. Independent
-authenticated browser QA has not yet rechecked this localization batch.
+HTTP 200 and the same product SHA on 2026-10-13. The status-only commit
+was deployed and checked before the independent localization run above.
 
 ## FINN Guided Draft Revision And Conversation Isolation
 

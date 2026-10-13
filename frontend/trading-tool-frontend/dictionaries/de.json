@@ -3380,6 +3380,9 @@
   },
   "assistant": {
     "draftCards": {
+      "cancelledResponse": "Vorschlag abgebrochen. Es wurde nichts geändert.",
+      "cancelledToast": "Vorschlag abgebrochen",
+      "cancelFailed": "Dieser Vorschlag konnte nicht abgebrochen werden.",
     "continue": "Weiter ausfüllen",
     "confirm": "Bestätigen",
     "adjust": "Anpassen",

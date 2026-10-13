@@ -3339,6 +3339,9 @@
   },
   "assistant": {
     "draftCards": {
+      "cancelledResponse": "Voorstel geannuleerd. Er is niets gewijzigd.",
+      "cancelledToast": "Voorstel geannuleerd",
+      "cancelFailed": "Dit voorstel kon niet worden geannuleerd.",
     "continue": "Verder invullen",
     "confirm": "Bevestigen",
     "adjust": "Aanpassen",

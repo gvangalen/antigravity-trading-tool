@@ -826,6 +826,11 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     },
     "create_indicator_configuration": {
         "semantic_description": "Prepare a confirmed saved indicator configuration for an asset, category and indicator. It changes configuration only and never generates market evidence or a trade.",
+        "positive_examples": (
+            "Voeg ADX toe als technische indicator voor ETH.",
+            "Add ADX as a technical indicator for ETH.",
+            "Füge RSI als technischen Indikator für BTC hinzu.",
+        ),
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("create", "add"),

@@ -15,6 +15,17 @@ def test_bot_proposal_desire_and_negation_have_distinct_polarity(message, expect
     assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == expected
 
 
+@pytest.mark.parametrize("message", [
+    "Füge ADX als technischen Indikator für ETH hinzu.",
+    "Fuege ADX als technischen Indikator fuer ETH hinzu.",
+])
+def test_german_indicator_add_imperative_is_an_operation_request(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == "add"
+    assert facts.discourse_act == "operation_request"
+    assert facts.primary_entity == "indicator_configuration"
+
+
 @pytest.mark.parametrize("message, expected", [
     ("Ik heb drie ETH-setups. Noem ze alle drie en hun bots. Wijzig niets.", "read"),
     ("Lees mijn setup en gekoppelde strategie. Wijzig niets.", "read"),

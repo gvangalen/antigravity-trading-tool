@@ -12,6 +12,44 @@ from backend.schemas.finn_v2_proposal_schema import (
 )
 from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningResult
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
+from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
+
+
+@pytest.mark.parametrize(
+    ("locale", "operation_id", "inputs", "expected"),
+    [
+        ("de-DE", "create_indicator_configuration", {"asset": "ETH", "category": "technical", "indicator": "ADX"}, "Ich kann ADX für ETH"),
+        ("en-US", "create_indicator_configuration", {"asset": "ETH", "category": "technical", "indicator": "ADX"}, "I can add ADX"),
+        ("de-DE", "create_setup", {"symbol": "BTC", "setup_type": "dca", "timeframe": "1D", "name": "BTC Aufbau", "dca_frequency": "weekly", "dca_day": "friday", "dca_amount_mode": "fixed", "base_amount": 10}, "Ich kann einen Vorschlag für BTC"),
+    ],
+)
+def test_deterministic_proposal_copy_respects_full_request_locale(locale, operation_id, inputs, expected):
+    context = ReasoningContextPackage(
+        run_id="localized-proposal",
+        user_id=7,
+        user_message="Show the draft",
+        locale=locale,
+        interaction_mode="CREATE_PROPOSAL",
+        orchestrator_result_id="o1",
+        snapshot_id="s1",
+        validation_id="v1",
+        policy_decision_id="p1",
+        evidence_set_hash="hash",
+        policy=ReasoningPolicyContext(
+            policy_class="proposal", allowed=True, proposal_allowed=True,
+            confirmation_required=True, step_up_required=False,
+            execution_allowed=False, operation_type=operation_id,
+        ),
+        request_plan={"operation_id": operation_id, "operation_state": {"collected_inputs": inputs}},
+    )
+    result = FinnV2ReasoningFallbackService().grounded_proposal_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context,
+        model="deterministic", error_codes=[],
+    )
+    assert result.proposal_candidate is not None
+    assert result.direct_answer.startswith(expected)
+    assert "Ik kan" not in result.direct_answer
+    assert "Er is nog niets" not in result.main_observation
 
 
 def test_reasoning_proposal_candidate_must_match_allowed_operation():
