@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Draft Conversation Design Candidate
+
+Phase: `CANDIDATE_CI`. Candidate code/export SHA:
+`073f69decad27f6e48771138a1a0c9b770da239c` on branch
+`codex/finn-draft-conversation-design` ([PR #278](https://github.com/gvangalen/antigravity-trading-tool/pull/278)).
+The current candidate changes every collecting
+draft flow into a question in the FINN conversation. Where a small set of
+choices is meaningful, web and mobile show tappable answers; choosing one
+sends it as a normal user turn. Free text remains available. A review card
+appears only for a complete proposal, and the existing explicit confirmation
+still governs writes. Backend clarification prompts now name the missing
+field rather than asking a generic question. This candidate has not been
+deployed or independently accepted.
+
+Root backend tests passed **3503**, with **3 skipped**. Focused web draft
+conversation tests passed **6/6**. The isolated local API/Celery/Responses
+action matrix passed **16/16** and adapter tests **19/19**, with no broker
+orders, live bots, live trading calls or production connections (artifact
+SHA-256 `6a093602474e488878c3d44fbe94d80f18b43d848d1c0dae36a37e6659467eca`).
+Real `gpt-6-luna`/Responses development passed **20/20**, with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`93f63cc8c72036c61f257b5379596dd8e6e4002056bd72e07001d1c060fb2726`).
+The full real-provider regression passed **109/109**, with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`defdde8ed9cca03afbadb55ddf589abfa3d247e185b960f53b0548a23d267493`).
+Frontend typecheck, i18n lint,
+i18n, command and proposal tests, and production build passed. Mobile
+typecheck, lint with no errors, and Expo web/iOS/Android exports passed.
+
 ## FINN 2.0 Coach Feed Candidate
 
 Phase: `FEED_CONVERSATION_CONTINUITY_CANDIDATE`. The edited-handoff

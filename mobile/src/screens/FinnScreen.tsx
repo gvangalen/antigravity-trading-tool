@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import {
@@ -28,6 +28,7 @@ import { theme } from '../constants/theme';
 import { useApiResource } from '../hooks/useApiResource';
 import { translate } from '../i18n';
 import { mapAssistantEnvelopeToFeedItems } from '../services/assistantEnvelopeMapper';
+import { canReviewDraft, draftOtherLabel } from '../services/finnDraftConversation';
 import {
   mapMobileOverviewBotDecision,
   mapMobileOverviewDecision,
@@ -119,6 +120,7 @@ export function FinnScreen({
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const [query, setQuery] = useState('');
+  const composerRef = useRef<TextInput>(null);
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetType>(null);
@@ -348,10 +350,13 @@ export function FinnScreen({
       const envelope = await assistantApi.chat(textToSend, apiContext, undefined, activeSessionId || 'new');
       setDiscussFeedItemId(null);
       await persistActiveSessionId(normalizeAssistantSessionId(envelope?.session_id));
-      setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
-      if (envelope.draft) {
+      setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope, language)]);
+      if (canReviewDraft(envelope) && envelope.draft) {
         setCurrentDraft(envelope.draft);
         setCurrentDraftAction(getPendingActionFromEnvelope(envelope));
+      } else {
+        setCurrentDraft(null);
+        setCurrentDraftAction(null);
       }
       if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
         setActiveState(envelope.state);
@@ -482,8 +487,8 @@ export function FinnScreen({
   const activeSetup = { macro: 80, market: 75, tech: 60, setup: 70 };
   const mapDecisionState = (data: any, decision: any, colors: any) => ({ color: colors.accent, label: 'BULLISH' });
 
-  async function handleSend() {
-    const trimmed = query.trim();
+  async function handleSend(directText?: string) {
+    const trimmed = (directText ?? query).trim();
     if (!trimmed || sending) return;
 
     await triggerHaptic('selection');
@@ -504,10 +509,13 @@ export function FinnScreen({
       const envelope = await assistantApi.chat(trimmed, apiContext, undefined, activeSessionId || 'new');
       setDiscussFeedItemId(null);
       await persistActiveSessionId(normalizeAssistantSessionId(envelope?.session_id));
-      setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
-      if (envelope.draft) {
+      setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope, language)]);
+      if (canReviewDraft(envelope) && envelope.draft) {
         setCurrentDraft(envelope.draft);
         setCurrentDraftAction(getPendingActionFromEnvelope(envelope));
+      } else {
+        setCurrentDraft(null);
+        setCurrentDraftAction(null);
       }
       if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
         setActiveState(envelope.state);
@@ -529,36 +537,6 @@ export function FinnScreen({
       setSending(false);
     }
   }
-
-  const getFlowProgress = (state: any) => {
-    if (!state || !state.current_flow || state.current_flow === "none") return null;
-    
-    const flowSlots: Record<string, string[]> = {
-      user_onboarding: ["experience_level", "risk_profile", "investment_goals"],
-      setup_creation: ["symbol", "setup_type", "market_condition", "name"],
-      strategy_creation: ["symbol", "setup_type", "base_amount", "risk_profile"],
-      bot_creation: ["name", "budget_total_eur", "budget_daily_limit_eur"],
-    };
-
-    const slots = flowSlots[state.current_flow] || [];
-    if (slots.length === 0) return null;
-
-    const filledSlots = slots.filter(k => state.slots && state.slots[k] !== undefined && state.slots[k] !== null && state.slots[k] !== "");
-    
-    let totalSlots = slots.length;
-    const setupType = state.slots?.setup_type;
-    if (state.current_flow === "strategy_creation" && setupType === "dca") {
-      totalSlots = 3; // symbol, setup_type, base_amount
-    }
-
-    const percentage = Math.min(Math.round((filledSlots.length / totalSlots) * 100), 100);
-    return {
-      filled: filledSlots.length,
-      total: totalSlots,
-      percentage,
-      flowLabel: state.current_flow.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
-    };
-  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -678,6 +656,9 @@ export function FinnScreen({
             onActionPress={() => setSheet('confirm')}
             onDraftPress={openDraftSheet}
             onRiskPress={() => setSheet('risk')}
+            onChoicePress={(reply) => { if (!sending) void handleSend(reply); }}
+            onOtherPress={() => composerRef.current?.focus()}
+            otherLabel={draftOtherLabel(language)}
           />
 
           {!sending && feedItems.length === 0 ? (
@@ -686,25 +667,6 @@ export function FinnScreen({
               <SuggestedPromptChips prompts={starterPrompts} onSelect={setQuery} />
             </View>
           ) : null}
-
-          {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
-            const progress = getFlowProgress(activeState);
-            if (!progress) return null;
-            return (
-              <View style={{ marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: '#F8FAFC', borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#2563EB' }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#0F172A' }}>{progress.flowLabel.toUpperCase()}</Text>
-                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#2563EB' }}>{progress.percentage}%</Text>
-                </View>
-                <View style={{ height: 4, backgroundColor: '#E2E8F0', borderRadius: 2, overflow: 'hidden' }}>
-                  <View style={{ height: 4, backgroundColor: '#2563EB', width: `${progress.percentage}%` }} />
-                </View>
-                <Text style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
-                  {translate(language, 'finn.flowCompletedSteps', { filled: progress.filled, total: progress.total })}
-                </Text>
-              </View>
-            );
-          })()}
 
           {sending ? <LoadingSkeletonCard /> : null}
 
@@ -723,6 +685,7 @@ export function FinnScreen({
         <View style={[styles.composerWrap, { backgroundColor: appearance === 'light' ? '#FFFFFF' : '#020617F2', borderTopColor: colors.border }]}>
           <View style={[styles.composer, { backgroundColor: appearance === 'light' ? '#F1F5F9' : '#1E293B', borderColor: 'transparent' }]}>
             <TextInput
+              ref={composerRef}
               multiline
               maxLength={240}
               onChangeText={setQuery}
@@ -733,7 +696,7 @@ export function FinnScreen({
             />
             <Pressable
               disabled={!query.trim() || sending}
-              onPress={handleSend}
+              onPress={() => void handleSend()}
               style={({ pressed }) => [
                 styles.sendButton,
                 (!query.trim() || sending) && styles.sendDisabled,

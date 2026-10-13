@@ -75,6 +75,10 @@ export type AssistantConversationState = {
   asset?: string;
   slots: Record<string, unknown>;
   missing_slots?: string[];
+  next_missing_input?: string | null;
+  setup_options?: { id: number | string; name?: string; display_name?: string }[];
+  strategy_options?: { id: number | string; name?: string; display_name?: string }[];
+  indicator_options?: { id: number | string; name?: string; display_name?: string }[];
   status: 'collecting' | 'complete' | 'none';
 };
 
@@ -94,6 +98,7 @@ export type AssistantEnvelope = {
   next_best_action?: string | null;
   review_reason?: string | null;
   can_confirm?: boolean;
+  next_question?: string | null;
 };
 
 export type AssistantFeedItem =
@@ -121,6 +126,11 @@ export type AssistantFeedItem =
       id: string;
       type: 'draft';
       draft: AssistantDraft;
+    }
+  | {
+      id: string;
+      type: 'choices';
+      choices: { label: string; reply: string }[];
     }
   | {
       id: string;

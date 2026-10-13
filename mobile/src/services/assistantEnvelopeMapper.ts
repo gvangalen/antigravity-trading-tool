@@ -4,8 +4,9 @@ import {
   AssistantEnvelope,
   AssistantFeedItem,
 } from '../types/assistant';
+import { canReviewDraft, draftChoices } from './finnDraftConversation';
 
-export function mapAssistantEnvelopeToFeedItems(envelope: AssistantEnvelope): AssistantFeedItem[] {
+export function mapAssistantEnvelopeToFeedItems(envelope: AssistantEnvelope, language = 'nl'): AssistantFeedItem[] {
   const suffix = envelope.trace_id || Date.now().toString();
   const items: AssistantFeedItem[] = [
     {
@@ -22,15 +23,16 @@ export function mapAssistantEnvelopeToFeedItems(envelope: AssistantEnvelope): As
     },
   ];
 
-  if (envelope.state && envelope.state.status === 'collecting') {
+  const choices = draftChoices(envelope, language);
+  if (choices.length > 0) {
     items.push({
-      id: `state-${suffix}`,
-      type: 'state',
-      state: envelope.state,
+      id: `choices-${suffix}`,
+      type: 'choices',
+      choices,
     });
   }
 
-  if (envelope.action) {
+  if (envelope.action && envelope.state?.status !== 'collecting') {
     items.push({
       id: `action-${suffix}`,
       type: 'action',
@@ -38,7 +40,7 @@ export function mapAssistantEnvelopeToFeedItems(envelope: AssistantEnvelope): As
     });
   }
 
-  if (envelope.draft) {
+  if (canReviewDraft(envelope) && envelope.draft) {
     items.push({
       id: `draft-${suffix}`,
       type: 'draft',
