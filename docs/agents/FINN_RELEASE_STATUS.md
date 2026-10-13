@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `GUIDED_ASSET_AND_LOCALE_REPAIR_LIVE_PENDING_QA`. The prior live
+Phase: `QA_REJECTED_CROSS_ASSET_CONTINUATION_REPAIR_IN_VALIDATION`. The prior live
 candidate was rejected by independent QA. The repair branch
 `codex/finn-guided-asset-and-locale` merged through
 [PR #306](https://github.com/gvangalen/antigravity-trading-tool/pull/306)
@@ -14,7 +14,36 @@ as product SHA `703c845c4e9b313a5b37d2cafaa66fe71a866ab4`.
 Candidate CI run `38458370144` and main CI run `38458644705` each passed
 all five jobs. Auto Deploy run `38458901575` succeeded. On 2026-10-13,
 public backend health and frontend build-info each returned HTTP 200 and
-the exact product SHA. This is deployed but not yet independently QA-accepted.
+the exact product SHA. Its status-only
+[PR #307](https://github.com/gvangalen/antigravity-trading-tool/pull/307)
+passed candidate and main CI, Auto Deploy, and public backend/frontend identity
+checks on SHA `2e61ab3e595c30ddcb7aa3f9f4a38052cd212308`. Independent QA
+returned **NOT ACCEPTED** on that exact SHA: after an ETH update question,
+typing an exact AAPL setup name correctly produced no AAPL proposal and
+repeated three ETH choices, but clicking an ETH choice then lost the original
+4H update and answered about a bot. The ordinary ETH choice, proposal
+correction, and NL/EN/DE choice rendering passed. No proposal was confirmed
+or order placed. The active repair branch is
+`codex/finn-cross-asset-choice-continuation`; it is local, not yet live.
+
+The local reproduction added the previously missing third turn to the
+seven-candidate API/Celery regression. It first failed with a READ answer or
+another target question, then passed when the unresolved target ID remained
+missing in the guided contract and the canonical clarification retained the
+original ETH update request across the wrong-asset reply. The exact ETH
+choice now produces an unconfirmed owner-scoped 4H update proposal. Complete
+backend tests passed **3568**, with **3 existing skips**. Frontend build,
+typecheck, proposal tests, i18n lint/tests, command tests, and the high
+severity dependency gate passed (one moderate Next.js advisory). The final
+API/Celery action matrix passed **16/16**, adapters **19/19**, with zero
+broker orders, live-trading calls or production connections (artifact SHA-256
+`5e7d87b7ae133272001b53fb96fee400e17512a9dbc282f31245e1edd5c7992e`).
+Real Luna/Responses selector development passed **20/20** (artifact SHA-256
+`cf4abd9b9caa5e7e757ded85afe1668c744a7036e23b844fc4dcb84ae6be8229`)
+and regression **109/109** (artifact SHA-256
+`74e8d5e6ca18d83e228351ccdf1fbf3b7bf5dc4113fd728553234b75f1c4c84c`),
+with zero provider, schema, parse, validation or timeout failures. CI and
+deployment are pending; this is not an independent live QA verdict.
 This repair keeps a pending target choice inside the original owner-scoped
 asset, supplies up to three clickable names even on the fast clarification
 path, and derives visible clarification language from the request locale.

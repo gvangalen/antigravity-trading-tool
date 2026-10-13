@@ -402,6 +402,18 @@ class FinnV2OrchestratorService:
             resolved = {}
         if explicit_bot_strategy_choice is not None:
             resolved["strategy_id"] = explicit_bot_strategy_choice
+        unresolved_guided_target = bool(
+            guided_asset and entity_type and canonical_target is not None
+            and canonical_target.resolution_status != "resolved"
+        )
+        if unresolved_guided_target:
+            # A wrong-asset answer can contain an otherwise valid model or
+            # conversation ID. The clarification must keep its target slot
+            # open, including for the next clicked/free-text answer.
+            target_slot = f"{entity_type}_id"
+            collected_inputs.pop(target_slot, None)
+            selectors.pop(target_slot, None)
+            resolved.pop(target_slot, None)
         if (
             not resolved
             and canonical_target is None
@@ -437,6 +449,24 @@ class FinnV2OrchestratorService:
             ),
         )
         resolved_operation_state = state.dict()
+        if unresolved_guided_target:
+            target_slot = f"{entity_type}_id"
+            collected = dict(resolved_operation_state.get("collected_inputs") or {})
+            collected.pop(target_slot, None)
+            sources = dict(resolved_operation_state.get("input_sources") or {})
+            sources.pop(target_slot, None)
+            provenance = dict(resolved_operation_state.get("input_provenance") or {})
+            provenance.pop(target_slot, None)
+            resolved_operation_state.update({
+                "collected_inputs": collected,
+                "input_sources": sources,
+                "input_provenance": provenance,
+                "missing_required_inputs": list(dict.fromkeys([
+                    target_slot, *resolved_operation_state.get("missing_required_inputs", []),
+                ])),
+                "next_missing_input": target_slot,
+                "status": "collecting",
+            })
         if explicit_bot_strategy_choice is not None:
             resolved_operation_state["target_choice_required"] = False
         if model_selected and isinstance(operation_state.get("selection_diagnostic"), dict):
@@ -743,10 +773,24 @@ class FinnV2OrchestratorService:
                 or (getattr(run, "client_context_json", None) or {}).get("locale"),
             )
             candidate_names = list(target_resolution.get("candidate_names") or [])
+            original_message = run.message
+            previous_contract = await self.runtime_contracts.get_latest_for_conversation(
+                conversation_id=run.conversation_id, user_id=user_id,
+                exclude_run_id=run_id,
+            )
+            previous_state = dict(getattr(previous_contract, "state_json", None) or {})
+            previous_guided = dict(previous_state.get("guided_state") or {})
+            previous_question = dict(previous_state.get("responses_clarification") or {})
+            if (
+                previous_guided.get("next_missing_input") == f"{target_resolution.get('entity_type')}_id"
+                and previous_guided.get("operation_id") == getattr(request_plan, "operation_id", None)
+                and previous_question.get("original_message")
+            ):
+                original_message = str(previous_question["original_message"])
             await self.runtime_contracts.record_responses_clarification(
                 run_id=run_id,
                 user_id=user_id,
-                original_message=run.message,
+                original_message=original_message,
                 question=result.selected_clarification.question,
                 reason="choice_required" if candidate_names else "user_detail_required",
                 choices=candidate_names[:3] if len(candidate_names) >= 2 else [],
