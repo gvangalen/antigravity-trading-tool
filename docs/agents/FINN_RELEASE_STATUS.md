@@ -6,11 +6,19 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `BUILD_VALIDATED_CANDIDATE`. Branch
+Phase: `LIVE_PENDING_INDEPENDENT_QA`. Branch
 `codex/finn-general-clarification-choices`; implementation commits
 `b929bc8a77e16be1294aa6cd76bcf2cd89722539` and
-`5fe663cb0e166a857242efbe35a6c9ec5bb1edd1`. CI, Auto Deploy,
-public SHA checks, and independent authenticated QA are pending.
+`5fe663cb0e166a857242efbe35a6c9ec5bb1edd1` merged through
+[PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298)
+as product SHA `98d303b584bf58f31402a3463452745cd00dbe69`.
+The [candidate CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38431808637)
+and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38432133017)
+each passed all five jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38432360558)
+completed successfully. Public backend health and frontend build-info each
+returned HTTP 200 and exactly that product SHA on 2026-10-13. This status-only
+commit will have its own later SHA; independent QA must bind to the current
+public backend/frontend SHA. Authenticated live acceptance is pending.
 
 FINN can attach two or three owner-scoped choices to a typed general
 clarification. The web chat presents them as reply buttons while preserving
