@@ -512,6 +512,7 @@ class FinnV2RunService:
             corrected_name = None
             corrected_fields: dict[str, object] = {}
             explicit_proposal_correction = False
+            target_change_requested = False
             if conversation_id:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
@@ -555,6 +556,14 @@ class FinnV2RunService:
                     and "?" not in message
                     and FinnV2OperationStateService._is_explicit_correction(message)
                 )
+                target_change_requested = bool(
+                    explicit_proposal_correction
+                    and re.search(
+                        r"\b(?:andere|ander|other|another|different|anderen|anderes)\b"
+                        r".{0,100}\b(?:setup|strategy|strategie|bot)\b",
+                        message, re.IGNORECASE,
+                    )
+                )
                 if latest_open is not None and (
                     (corrected_instrument and latest_open[0].asset != corrected_instrument)
                     or unspecified_correction
@@ -570,14 +579,16 @@ class FinnV2RunService:
                     )
                     origin_state = dict((latest_open[1].state_json or {}).get("guided_state") or {})
                     retain_parent_ids = bool(corrected_fields or corrected_name) and not (
-                        corrected_instrument or unspecified_correction
+                        corrected_instrument or unspecified_correction or target_change_requested
                     ) and not (explicit_proposal_correction and not (corrected_fields or corrected_name))
                     prior_inputs = {
                         key: value for key, value in dict(origin_state.get("collected_inputs") or {}).items()
                         if (retain_parent_ids or not key.endswith("_id"))
                         and key not in {"asset", "symbol"}
                     }
-                    if explicit_proposal_correction and not (corrected_fields or corrected_name):
+                    if target_change_requested or (
+                        explicit_proposal_correction and not (corrected_fields or corrected_name)
+                    ):
                         # The user may be correcting the target itself. Do not
                         # carry the old target or its fields into the new draft.
                         prior_inputs = {}
@@ -600,17 +611,23 @@ class FinnV2RunService:
                         "corrected_fields": corrected_fields,
                         "awaiting_instrument": unspecified_correction,
                         "status": "cancelled",
+                        "target_change_requested": target_change_requested,
                         "operation_id": latest_open[0].operation_type,
                         "prior_inputs": prior_inputs,
                     }
                     context["proposal_correction_result"] = correction_result
-                    if unspecified_correction or corrected_name or corrected_fields or resolve_catalog_symbol(corrected_instrument):
+                    if (unspecified_correction or corrected_name or corrected_fields
+                            or target_change_requested or resolve_catalog_symbol(corrected_instrument)):
                         # The owner changed the instrument of this open
                         # proposal, not the active workspace asset. Reuse its
                         # operation contract for the replacement candidate.
                         asset_corrected_operation_id = latest_open[0].operation_type
                     context.pop("proposal_revision", None)
                     context.pop("active_guided_operation", None)
+                    if target_change_requested:
+                        for key in ("canonical_entity_target", "recent_action_results",
+                                    "recent_owner_action_results", "previous_action_result"):
+                            context.pop(key, None)
                     stored_context = await orchestrator.conversations.get_context(
                         conversation_id=conversation_id, user_id=user_id,
                     )
@@ -618,6 +635,10 @@ class FinnV2RunService:
                     if active_guided.get("open_proposal_id") == latest_open[0].id:
                         stored_context.pop("active_guided_operation", None)
                         stored_context.pop("operation_state", None)
+                    if target_change_requested:
+                        for key in ("canonical_entity_target", "recent_action_results",
+                                    "recent_owner_action_results", "previous_action_result"):
+                            stored_context.pop(key, None)
                     stored_context["proposal_correction_result"] = correction_result
                     await orchestrator.conversations.update_context(
                         conversation_id=conversation_id, user_id=user_id,

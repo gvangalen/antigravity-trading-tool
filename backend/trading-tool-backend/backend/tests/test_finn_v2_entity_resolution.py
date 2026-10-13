@@ -593,6 +593,36 @@ def test_canonical_target_current_asset_requires_choice_before_stale_context():
     assert target.candidate_names == ["BTC DCA", "BTC Swing"]
 
 
+def test_corrected_target_requires_a_visible_exact_name_not_an_old_id():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 11, "name": "AAPL Full", "symbol": "AAPL"},
+        {"id": 12, "name": "ETH Friday", "symbol": "ETH"},
+        {"id": 13, "name": "ETH Monday", "symbol": "ETH"},
+    ])
+    selector = {
+        "asset": "ETH", "asset_source": "explicit_message",
+        "setup_id": 12, "require_explicit_name": True,
+    }
+    unknown = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup", selector=selector,
+        message="Correctie: ik bedoel een andere ETH-setup met naam ETH Unknown.",
+        conversation_context={"canonical_entity_target": {
+            "entity_type": "setup", "entity_id": 12,
+        }},
+    ))
+    assert unknown.resolution_status == "ambiguous"
+    assert unknown.candidate_names == ["ETH Friday", "ETH Monday"]
+
+    named = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup", selector=selector,
+        message="Correctie: ik bedoel ETH Monday.",
+    ))
+    assert named.entity_id == 13
+    assert named.resolution_source == "explicit_name"
+
+
 def test_setup_collection_read_returns_every_owner_asset_match():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

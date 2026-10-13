@@ -16,16 +16,25 @@ from backend.scripts.run_finn_v2_visible_draft_correction_regression import _tur
 from backend.utils.auth_utils import create_access_token
 
 
-def run(base_url: str, *, candidate_count: int = 2) -> dict:
+def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) -> dict:
     owner = _create_local_user()
     suffix = uuid4().hex[:8]
-    names = [f"BTC Keuze {index + 1} {suffix}" for index in range(candidate_count)]
+    asset = "ETH" if mixed_assets else "BTC"
+    names = (
+        [f"ETH Alpha {suffix}", f"ETH Beta {suffix}", f"ETH Gamma {suffix}",
+         "QA vaste ETH vrijdag 2026-10-11"]
+        + [f"ETH Keuze {index + 5} {suffix}" for index in range(candidate_count - 4)]
+        if mixed_assets else
+        [f"BTC Keuze {index + 1} {suffix}" for index in range(candidate_count)]
+    )
     with sync_engine.begin() as connection:
-        setup_ids = [_insert_setup(connection, owner["id"], name, "BTC") for name in names]
+        if mixed_assets:
+            _insert_setup(connection, owner["id"], f"AAPL First {suffix}", "AAPL")
+        setup_ids = [_insert_setup(connection, owner["id"], name, asset) for name in names]
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
     session, terminal = _turn(
         base_url.rstrip("/"), token, "new",
-        "Wijzig mijn BTC-setup naar 1D.",
+        f"Wijzig mijn {asset}-setup naar 1D.",
         locale="nl",
     )
     trace = terminal.get("runtime_trace") or {}
@@ -58,18 +67,45 @@ def run(base_url: str, *, candidate_count: int = 2) -> dict:
     )
     if http_status != 200 or proposal.get("status") != "draft" or proposal.get("can_confirm") is False:
         raise AssertionError({"http_status": http_status, "proposal_status": proposal.get("status")})
+    if mixed_assets:
+        _, correction = _turn(
+            base_url.rstrip("/"), token, session,
+            "Correctie: ik bedoel een andere ETH-setup met naam "
+            "QA niet bestaande ETH setup 999. Verander alleen die naar 4H, bevestig niets.",
+            locale="nl",
+        )
+        old, old_status = _request_json(
+            url=f"{base_url.rstrip('/')}/api/assistant/v2/proposals/{proposal_id}",
+            method="GET", headers={"Authorization": f"Bearer {token}"}, body=None, timeout=20,
+        )
+        if (
+            correction.get("status") != "clarification_required"
+            or (correction.get("response") or {}).get("proposal_id")
+            or old_status != 200 or old.get("status") != "cancelled"
+        ):
+            raise AssertionError({
+                "correction_status": correction.get("status"),
+                "new_proposal": (correction.get("response") or {}).get("proposal_id"),
+                "old_status": old.get("status"),
+            })
     return {"status": terminal["status"], "choices": choices,
             "proposal_created": False, "followup_status": followup["status"],
             "followup_target_matches_choice": True, "followup_proposal": True,
-            "confirmed": False, "browser_facade": True}
+            "confirmed": False, "browser_facade": True,
+            "unknown_target_rejected": mixed_assets}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--candidate-count", type=int, choices=(2, 7), default=2)
+    parser.add_argument("--mixed-assets", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(run(args.base_url, candidate_count=args.candidate_count), ensure_ascii=False))
+    if args.mixed_assets and args.candidate_count != 7:
+        parser.error("--mixed-assets requires --candidate-count 7")
+    print(json.dumps(run(
+        args.base_url, candidate_count=args.candidate_count, mixed_assets=args.mixed_assets,
+    ), ensure_ascii=False))
 
 
 if __name__ == "__main__":
