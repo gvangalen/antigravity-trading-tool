@@ -21,7 +21,7 @@ from backend.services.finn_v2_responses_read_executor import FinnResponsesReadEx
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
-    _explicit_strategy_proposal_request,
+    _explicit_strategy_proposal_request, _explicit_create_operation_request,
 )
 from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
@@ -3880,6 +3880,27 @@ def test_explicit_strategy_draft_request_accepts_domain_modifiers(message):
 ])
 def test_strategy_draft_request_does_not_capture_coaching(message):
     assert not _explicit_strategy_proposal_request(message)
+
+
+def test_new_strategy_request_does_not_fill_an_older_setup_question():
+    registry = FinnV2OperationRegistry()
+    setup = registry.require_supported("create_setup")
+    message = "Maak een DCA-strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11."
+    assert _explicit_create_operation_request(message) == "create_strategy"
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message=message, contract=setup, registry=registry,
+        requested_slot="dca_amount_mode",
+    )
+
+
+@pytest.mark.parametrize("message,expected", [
+    ("Maak een DCA-setup voor BTC.", "create_setup"),
+    ("Maak een Paper-bot voor mijn strategie.", "create_bot"),
+    ("Hoe maak ik een DCA-strategie?", None),
+    ("Maak geen strategie voor ETH.", None),
+])
+def test_new_draft_operation_boundary_is_shared_across_domains(message, expected):
+    assert _explicit_create_operation_request(message) == expected
 
 
 def test_paper_bot_budget_limit_correction_preserves_owner_scoped_draft_target():

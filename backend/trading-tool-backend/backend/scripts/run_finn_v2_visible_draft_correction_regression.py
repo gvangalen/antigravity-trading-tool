@@ -54,8 +54,15 @@ def run(base_url: str) -> dict:
             connection, owner["id"], trade_setup_id,
             "QA vaste ETH vrijdag strategie 2026-10-11",
         )
-    session, first = _turn(
+    session, pending_setup = _turn(
         base_url, token, "new",
+        "Maak een BTC DCA-setup met primair timeframe 1D, naam QA concept BTC 13 oktober "
+        "en elke vrijdag. Bedragtype en bedrag volgen.",
+    )
+    if pending_setup["status"] != "clarification_required":
+        raise AssertionError("setup_fixture_not_collecting")
+    session, first = _turn(
+        base_url, token, session,
         "Maak een DCA-strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
     )
     if first["status"] != "clarification_required" or _fields(first).get("setup_id") != dca_setup_id:
@@ -106,7 +113,8 @@ def run(base_url: str) -> dict:
         raise AssertionError("superseded_paper_draft_still_confirmable")
     if new_status != 200 or new.get("status") not in {"draft", "pending_confirmation"}:
         raise AssertionError("replacement_paper_draft_not_confirmable")
-    return {"checks": 5, "strategy_proposal": True, "paper_revision": True,
+    return {"checks": 6, "prior_setup_question_abandoned": True,
+            "strategy_proposal": True, "paper_revision": True,
             "old_card_revoked": True, "confirmed": False, "browser_facade": True}
 
 

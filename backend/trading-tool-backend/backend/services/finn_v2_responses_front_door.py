@@ -50,16 +50,27 @@ def _listed_setup_ordinal(message: str) -> int | None:
     return listed_setup_ordinal(message)
 
 
+def _explicit_create_operation_request(message: str) -> str | None:
+    """Recognize a fresh registry creation request across draft domains.
+
+    The pending draft may ask for a slot, but a new imperative for another
+    object is not that slot's answer. Questions and negated requests stay in
+    the ordinary conversation path.
+    """
+    if "?" in message or not re.match(
+        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b", message, re.I,
+    ) or re.match(r"^\s*maak\s+geen\b", message, re.I):
+        return None
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    if facts.action_polarity != "create" or facts.discourse_act != "operation_request":
+        return None
+    return FinnV2OperationClassificationService._explicit_guided_create_operation(
+        message=message, facts=facts,
+    )
+
+
 def _explicit_strategy_proposal_request(message: str) -> bool:
-    """Recognize only an imperative strategy draft request, never coaching."""
-    return "?" not in message and bool(re.match(
-        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\s+"
-        r"(?:(?:een|de|het|a|the|eine?|die|das)\s+)?"
-        r"(?:(?:nieuwe?|new|neue?)\s+)?"
-        r"(?:(?:dca|smart\s*dca|vaste|fixed|trade|trading)\s*[- ]\s*)?"
-        r"(?:strategie|strategy)\b",
-        message, re.I,
-    ))
+    return _explicit_create_operation_request(message) == "create_strategy"
 
 
 def _explicit_rule_transfer_assets(message: str) -> tuple[str, str] | None:
@@ -243,6 +254,9 @@ class FinnResponsesFrontDoor:
         states = FinnV2OperationStateService()
         normalized = message.strip().casefold()
         if not normalized or "?" in message or states.is_cancel_intent(message):
+            return False
+        requested_operation = _explicit_create_operation_request(message)
+        if requested_operation and requested_operation != contract.operation_id:
             return False
         if any(
             normalized.startswith(alias.casefold())
