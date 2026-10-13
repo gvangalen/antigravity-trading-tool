@@ -917,13 +917,15 @@ class FinnV2OperationStateService:
                 if natural_name:
                     values["name"] = natural_name.group(1).strip(" .\"'")
             budget = re.search(
-                r"\b(?:budget|totaalbudget|total\s+budget|gesamtbudget)\s*"
-                r"(?:is|:|=|van|of|von)?\s*(?:€|eur|euros?|euro)?\s*(\d+(?:[.,]\d+)?)",
+                r"\b(?:(?:paper[- ]?)?bot\s*)?(?:totaal\s*)?budget(?:\s*limiet)?\s*"
+                r"(?:is|:|=|van|of|von|naar|to|auf)?\s*(?:€|eur|euros?|euro)?\s*(\d+(?:[.,]\d+)?)"
+                r"|\b(?:total\s+budget|gesamtbudget)\s*"
+                r"(?:is|:|=|van|of|von|naar|to|auf)?\s*(?:€|eur|euros?|euro)?\s*(\d+(?:[.,]\d+)?)",
                 text,
                 re.IGNORECASE,
             )
             if budget:
-                values["budget_total_eur"] = float(budget.group(1).replace(",", "."))
+                values["budget_total_eur"] = float(next(group for group in budget.groups() if group).replace(",", "."))
         elif contract.operation_id in {"update_setup", "update_strategy"}:
             entity = "setup" if contract.operation_id == "update_setup" else "strategy"
             identifier = re.search(

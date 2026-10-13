@@ -50,6 +50,18 @@ def _listed_setup_ordinal(message: str) -> int | None:
     return listed_setup_ordinal(message)
 
 
+def _explicit_strategy_proposal_request(message: str) -> bool:
+    """Recognize only an imperative strategy draft request, never coaching."""
+    return "?" not in message and bool(re.match(
+        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\s+"
+        r"(?:(?:een|de|het|a|the|eine?|die|das)\s+)?"
+        r"(?:(?:nieuwe?|new|neue?)\s+)?"
+        r"(?:(?:dca|smart\s*dca|vaste|fixed|trade|trading)\s*[- ]\s*)?"
+        r"(?:strategie|strategy)\b",
+        message, re.I,
+    ))
+
+
 def _explicit_rule_transfer_assets(message: str) -> tuple[str, str] | None:
     """Extract the source of a named rule and the other named target asset."""
     assets = mentioned_catalog_symbols(message)
@@ -488,6 +500,49 @@ class FinnResponsesFrontDoor:
         previous_kind = str((previous_response or {}).get("terminal_kind") or "")
         request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
         is_read_request = request_facts.action_polarity == "read"
+        # An explicit strategy creation request already identifies its action
+        # contract. Route the proposal through the same owner-scoped parent
+        # resolver as guided continuation, so an adjective such as "DCA" does
+        # not make the model skip the proposal tool. Questions about how to
+        # create a strategy are still ordinary coach turns.
+        if (
+            request_facts.action_polarity == "create"
+            and request_facts.discourse_act == "operation_request"
+            and not pending_operation
+            and not conversation_context.get("proposal_correction_result")
+            and _explicit_strategy_proposal_request(message)
+            and not unsupported_catalog_pair_mention(message)
+        ):
+            contract = self.proposals.registry.require_supported("create_strategy")
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(contract.operation_id),
+                    operation_id=contract.operation_id, inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+                verified_parent_setup=await self._verified_strategy_parent(
+                    message=message, conversation_context=conversation_context,
+                ),
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={
+                        "en": "I am preparing a strategy draft for the selected setup.",
+                        "de": "Ich bereite einen Strategieentwurf für das gewählte Setup vor.",
+                    }.get(locale.split("-")[0].lower(),
+                          "Ik bereid een strategieconcept voor de gekozen setup voor."),
+                    response_id=f"verified-strategy-{self.run_id}",
+                    tool_trace=({
+                        "name": "verified_strategy_proposal", "status": "completed",
+                        "result": {"operation_id": contract.operation_id},
+                    },),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
         unsupported_pair = unsupported_catalog_pair_mention(message)
         mentioned_assets = mentioned_catalog_symbols(message)
         mentioned_timeframes = {

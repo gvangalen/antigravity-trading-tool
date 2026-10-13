@@ -64,6 +64,16 @@ class FinnResponsesProposalSelection:
                 message, re.IGNORECASE,
             )
         )
+        correction_context = dict(conversation_context.get("proposal_correction_result") or {})
+        same_target_field_revision = bool(
+            correction_context.get("status") == "cancelled"
+            and correction_context.get("operation_id") == contract.operation_id
+            and correction_context.get("proposal_id")
+            and correction_context.get("previous_asset") == correction_context.get("requested_instrument")
+            and (correction_context.get("corrected_fields") or correction_context.get("corrected_name"))
+            and call.target_reference != "other_saved_plan"
+            and not mentions_recent_plan
+        )
         if (contract.operation_id == "create_bot"
                 and call.target_reference == "other_saved_plan"
                 and not pending_target_choice):
@@ -123,7 +133,7 @@ class FinnResponsesProposalSelection:
                 # An invalid immediate reference must not borrow any older
                 # guided state, correction draft or conversation target.
                 conversation_context = {}
-        elif not pending_target_choice and (
+        elif not pending_target_choice and not same_target_field_revision and (
             immediate_guard_reason not in {"not_evaluated", "accepted", "no_direct_reference"}
             or mentions_recent_plan or (
                 contract.operation_id == "create_bot"
