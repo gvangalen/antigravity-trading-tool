@@ -6476,6 +6476,56 @@ def test_guided_strategy_slot_binds_without_provider_call():
     assert state["collected_inputs"]["stop_loss"] == 72000.0
 
 
+def test_owner_scoped_clarification_choice_binds_the_pending_setup_target(monkeypatch):
+    fake = FakeResponses()
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-guided-choice"
+    front.proposals = FinnResponsesProposalSelection()
+    contract = front.proposals.registry.require_supported("update_setup")
+    initial = front.proposals.states.resolve(
+        contract=contract, message="", explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"changed_fields": {"timeframe": "1D"}},
+    )
+    assert initial.next_missing_input == "setup_id"
+
+    class Resolver:
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, *, user_id, entity_type, message, **_kwargs):
+            assert (user_id, entity_type, message) == (21, "setup", "BTC Keuze Alpha")
+            return CanonicalEntityTarget(
+                entity_type="setup", entity_id=42, display_name=message,
+                owner_id=user_id, source="explicit_name", resolution_status="resolved",
+            )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    front.reads = SimpleNamespace(session_factory=session_factory)
+    result = asyncio.run(front.run(
+        message="BTC Keuze Alpha", instructions="unused", verified_asset="BTC",
+        conversation_context={
+            "active_guided_operation": initial.dict(),
+            "responses_clarification": {
+                "reason": "choice_required", "choices": ["BTC Keuze Alpha", "BTC Keuze Beta"],
+                "original_message": "Wijzig mijn BTC-setup naar 1D.",
+            },
+        },
+    ))
+    state = result.proposal_analysis.request_plan.operation_state
+    assert not fake.requests
+    assert result.proposal_analysis.request_plan.operation_id == "update_setup"
+    assert state["collected_inputs"]["setup_id"] == 42
+    assert state["collected_inputs"]["changed_fields"] == {"timeframe": "1D"}
+
+
 def test_irrelevant_proposal_is_retried_without_creating_draft():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "create_dca_plan_proposal", {

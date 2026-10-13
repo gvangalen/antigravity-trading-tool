@@ -714,7 +714,7 @@ class FinnV2OrchestratorService:
             await self.runtime_contracts.record_responses_clarification(
                 run_id=run_id,
                 user_id=user_id,
-                original_message=message,
+                original_message=run.message,
                 question=result.selected_clarification.question,
                 reason="choice_required" if candidate_names else "user_detail_required",
                 choices=candidate_names if 2 <= len(candidate_names) <= 3 else [],

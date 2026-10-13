@@ -60,6 +60,7 @@ class FinnV2OperationStateService:
         supplied_inputs: Optional[Mapping[str, object]] = None,
         derived_inputs: Optional[Mapping[str, object]] = None,
         verified_action_inputs: Optional[Mapping[str, object]] = None,
+        verified_target_inputs: Optional[Mapping[str, object]] = None,
         model_tool_inputs: bool = False,
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
@@ -310,6 +311,11 @@ class FinnV2OperationStateService:
                 collected[key] = self._canonical_input(key, value)
                 sources[key] = "default"
                 provenance[key] = {"source": "default", "state_revision": next_revision}
+        for key, value in (verified_target_inputs or {}).items():
+            if key in {"setup_id", "strategy_id", "bot_id"} and key in accepted_inputs and not self._is_missing(value):
+                collected[key] = self._canonical_input(key, value)
+                sources[key] = "verified_owner_target"
+                provenance[key] = {"source": "verified_owner_target", "state_revision": next_revision}
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_context = dict(verified_context.get("resolved_entities") or {})
