@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## General FINN Clarification Choices
+
+Phase: `BUILD_VALIDATED_CANDIDATE`. Branch
+`codex/finn-general-clarification-choices`; implementation commits
+`b929bc8a77e16be1294aa6cd76bcf2cd89722539` and
+`5fe663cb0e166a857242efbe35a6c9ec5bb1edd1`. CI, Auto Deploy,
+public SHA checks, and independent authenticated QA are pending.
+
+FINN can attach two or three owner-scoped choices to a typed general
+clarification. The web chat presents them as reply buttons while preserving
+free text. A button sends a user message and never confirms a proposal. The
+local browser facade exposed a previously missed ambiguous-target failure;
+the repair persists the original run message, resolves the selected name
+again under the same owner, and binds its verified ID to the pending proposal.
+The two-turn local Responses probe then produced a draft for exactly the
+chosen BTC setup and the requested 1D change, without confirmation or write.
+
+Measured Build evidence: full backend suite **3562 passed, 3 existing skips**;
+frontend typecheck, i18n lint/tests, command/proposal tests, production build,
+and high-severity audit passed. The final local FastAPI/Celery/Responses
+action matrix passed **16/16**, adapters **19/19**, with zero broker orders,
+live-trading calls, or production connections (artifact SHA-256
+`fd04850232943400828e7312ab76e5017d37f901d21261274ce973565a0e804d`).
+The real Luna/Responses selector development set passed **20/20** (SHA-256
+`3293c2bfc3218c22bfeca2b79825003f5bfa2eea51aabfe0b1a57b39f541c970`);
+the full regression passed **109/109** (SHA-256
+`f6a6a32f9ec8e725880fd5e1a480bf3cd946de1f444974612cb6d51d540292d3`),
+with no provider, schema, parse, timeout, or validation failures. The selector
+boundary was unchanged after these runs. The targeted two-turn web-facade
+probe used the real provider after the final repair and did not execute the
+proposal. These are local Build results, not authenticated live acceptance.
+
 ## FINN Draft Card Localization
 
 Phase: `DRAFT_LOCALE_ACCEPTED`. Build candidate
