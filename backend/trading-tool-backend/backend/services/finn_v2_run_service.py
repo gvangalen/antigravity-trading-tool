@@ -1346,6 +1346,15 @@ class FinnV2RunService:
                 "next_step": verified.get("next_step"),
                 "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
+        # During a guided proposal the persisted slot is the question the UI
+        # renders choices for. A free-form model clarification can refer to a
+        # different slot or even invent earlier answers, so keep the visible
+        # question aligned with that typed state. This does not affect coach
+        # answers or the model's completed proposal.
+        response_json = self._align_guided_clarification(
+            response_json, terminal_status=next_status,
+            guided_draft=guided_draft, locale=responses_locale,
+        )
         terminal_reason = self._terminal_reason(
             terminal_status=next_status,
             orchestrator=orchestrator,
@@ -1439,6 +1448,32 @@ class FinnV2RunService:
                     if isinstance(code, str) and code:
                         return code
         return f"terminal_{terminal_status}"
+
+    @staticmethod
+    def _align_guided_clarification(
+        response: Dict[str, Any], *, terminal_status: str,
+        guided_draft: Dict[str, Any], locale: Optional[str],
+    ) -> Dict[str, Any]:
+        if terminal_status != "clarification_required" or guided_draft.get("draft_status") != "collecting":
+            return response
+        operation_id = str(guided_draft.get("operation_id") or "")
+        requested_slot = str(guided_draft.get("requested_slot") or "")
+        if not operation_id or not requested_slot:
+            return response
+        from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+        from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+        aligned = dict(response)
+        aligned["content"] = FinnV2OperationStateService.clarification_question(
+            requested_slot,
+            contract=FinnV2OperationRegistry().require_supported(operation_id),
+            collected_inputs=dict(guided_draft.get("supplied_inputs") or {}),
+            locale=locale,
+        )
+        aligned["mode"] = "CLARIFICATION"
+        aligned["proposal_id"] = None
+        aligned["confirmation_required"] = False
+        return aligned
 
     def _terminal_placeholder_response(
         self,

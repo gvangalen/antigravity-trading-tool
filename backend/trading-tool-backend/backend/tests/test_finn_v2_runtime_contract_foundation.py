@@ -1317,6 +1317,27 @@ def test_collecting_setup_draft_uses_product_copy_in_its_terminal_placeholder():
     assert "dca_frequency" not in response["content"]
 
 
+def test_guided_question_overrides_mismatched_model_copy_for_the_actual_slot():
+    run_service = FinnV2RunService(session=object())
+    response = run_service._align_guided_clarification(
+        {"mode": "CLARIFICATION", "content": "Je zei eerder wekelijks. Vast of Smart DCA?",
+         "proposal_id": "wrong", "confirmation_required": True},
+        terminal_status="clarification_required",
+        guided_draft={
+            "operation_id": "create_setup", "draft_status": "collecting",
+            "requested_slot": "timeframe", "supplied_inputs": {"setup_type": "dca"},
+        },
+        locale="nl",
+    )
+    assert response["content"] == "Welk primair timeframe wil je voor deze setup gebruiken?"
+    assert response["proposal_id"] is None
+    assert response["confirmation_required"] is False
+    coach = {"mode": "COACH", "content": "Je plan vraagt om geduld."}
+    assert run_service._align_guided_clarification(
+        coach, terminal_status="completed", guided_draft={}, locale="nl",
+    ) is coach
+
+
 def test_cancelled_guided_draft_uses_natural_terminal_copy():
     run_service = FinnV2RunService(session=object())
 

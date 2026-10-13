@@ -5073,7 +5073,10 @@ function AIAssistantContent({
     const rows = isStrategy
       ? supplied.setup_type === "dca"
         ? [["Bedragregel", supplied.dca_amount_mode === "score_bands" ? "Smart DCA" : supplied.dca_amount_mode === "fixed" ? "Vast bedrag" : null],
+          [({ en: "Execution", de: "Ausführung" }[locale] || "Uitvoering"), formatExecutionMode(supplied.execution_mode, locale)],
           ["Basisbedrag (100%)", supplied.base_amount != null ? euro(supplied.base_amount) : null],
+          [({ en: "Risk style", de: "Risikostil" }[locale] || "Risicostijl"),
+            at("draftCards.dcaRiskNotApplicable", ({ en: "Not a setting on a DCA strategy", de: "Keine Einstellung einer DCA-Strategie" }[locale] || "Geen instelling van een DCA-strategie"))],
           ["Scorebron", supplied.score_source === "benchmark_score" ? "Totale benchmark (markt, macro en technisch)" : null],
           [supplied.low_threshold != null ? `Score onder ${supplied.low_threshold}` : "Lage score", dcaBand(supplied.low_score_percent)],
           [supplied.low_threshold != null && supplied.high_threshold != null ? `Score ${supplied.low_threshold} tot onder ${supplied.high_threshold}` : "Middenscore", dcaBand(supplied.mid_score_percent)],
