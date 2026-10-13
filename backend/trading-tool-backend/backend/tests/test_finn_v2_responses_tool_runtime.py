@@ -2463,6 +2463,40 @@ def test_terminal_runtime_failure_uses_owner_preference_not_default_dutch():
     assert content == "FINN couldn't complete this answer. Please try again."
 
 
+def test_terminal_runtime_failure_follows_current_ui_language_switch():
+    service = object.__new__(FinnV2RunService)
+    service.runs = SimpleNamespace(get_by_id_for_user=AsyncMock(
+        return_value=SimpleNamespace(
+            message="Kannst du meinen Plan prüfen?",
+            workspace_hints_json={"locale": "de-DE"},
+        ),
+    ))
+    service.session = SimpleNamespace(get=AsyncMock(
+        return_value=SimpleNamespace(ai_preferences={"locale": "en"}),
+    ))
+    content = asyncio.run(service._localized_runtime_failure_content(run_id="run-de", user_id=1))
+    assert content == "FINN konnte diese Antwort nicht abschließen. Versuche es bitte erneut."
+
+
+@pytest.mark.parametrize("locale, expected", [
+    ("en", "What is the primary analysis timeframe"),
+    ("de", "Welcher Analysezeitraum"),
+])
+def test_guided_terminal_question_uses_request_locale_over_stale_dutch_choice(locale, expected):
+    service = object.__new__(FinnV2RunService)
+    response = service._terminal_placeholder_response(
+        interaction_mode="CREATE_PROPOSAL", terminal_status="clarification_required",
+        orchestrator={"selected_clarification": {"question": "Welk primair timeframe wil je?"}},
+        verifier={}, reasoning={}, delivery_envelope={},
+        setup_draft={
+            "operation_id": "create_setup", "requested_slot": "timeframe",
+            "supplied_inputs": {"setup_type": "dca", "symbol": "BTC"},
+        },
+        locale=locale,
+    )
+    assert response["content"].startswith(expected)
+
+
 def test_provider_quota_failure_has_honest_localized_copy_without_internal_code():
     service = object.__new__(FinnV2RunService)
     service.runs = SimpleNamespace(get_by_id_for_user=AsyncMock(
@@ -3772,6 +3806,59 @@ def test_asset_correction_clarification_keeps_explicit_replacement_name():
         }}, verified_asset=None,
     )
     assert direct.request_plan.operation_state["collected_inputs"]["symbol"] == "AAPL"
+
+
+def test_same_asset_amount_correction_seeds_replacement_without_old_proposal():
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {}},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Corrigeer het bedrag naar €75 per uitvoering. Bevestig niets.",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-eth-proposal", "status": "cancelled",
+            "operation_id": "create_setup", "previous_asset": "ETH",
+            "requested_instrument": "ETH", "corrected_fields": {"base_amount": 75},
+            "prior_inputs": {
+                "name": "ETH DCA", "setup_type": "dca", "timeframe": "1D",
+                "dca_frequency": "weekly", "dca_day": "friday",
+                "dca_amount_mode": "fixed", "base_amount": 75,
+            },
+        }},
+        verified_asset=None,
+    )
+    state = analysis.request_plan.operation_state
+    assert state["collected_inputs"]["symbol"] == "ETH"
+    assert state["collected_inputs"]["base_amount"] == 75
+    assert state["open_proposal_id"] is None
+
+
+def test_same_asset_dca_strategy_correction_preserves_owner_parent_and_name():
+    call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_strategy", "draft_intent": "new", "inputs": {}},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Corrigeer het bedrag naar €75 per uitvoering. Bevestig niets.",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-strategy-proposal", "status": "cancelled",
+            "operation_id": "create_strategy", "previous_asset": "ETH",
+            "requested_instrument": "ETH", "corrected_fields": {"base_amount": 75},
+            "prior_inputs": {
+                "setup_id": 27644, "name": "QA concept ETH dinsdag",
+                "setup_type": "dca", "symbol": "ETH", "timeframe": "1D",
+                "execution_mode": "fixed", "dca_amount_mode": "fixed", "base_amount": 75,
+            },
+        }},
+        verified_asset=None,
+    )
+    state = analysis.request_plan.operation_state
+    assert state["collected_inputs"]["setup_id"] == 27644
+    assert state["collected_inputs"]["name"] == "QA concept ETH dinsdag"
+    assert state["collected_inputs"]["base_amount"] == 75
+    assert state["missing_required_inputs"] == []
 
 
 def test_asset_correction_name_slot_accepts_name_containing_correction_word():
@@ -10195,6 +10282,31 @@ def test_responses_money_claims_require_current_or_immediate_verified_evidence()
         answer="Je vermogen is €1.500.",
         message="Toon mijn portfolio.", previous_answer="", evidence=portfolio,
     )
+
+
+def test_saved_price_labels_do_not_turn_into_unverified_budget_claims():
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = ({
+        "scope": "read_linked_strategy", "status": "completed", "data": {
+            "strategy_id": 42, "setup_id": 7, "base_amount": 120,
+            "entry": "100", "stop_loss": "90", "targets": ["120"],
+        },
+    },)
+    message = "Wat heb je veranderd? Controleer de opgeslagen strategie."
+    saved_answer = "De basisinleg is €120. De instap (**€100**), stop-loss (**€90**) en het doel (**€120**) zijn opgeslagen."
+    assert verifier._amounts_supported(
+        answer=saved_answer, message=message, previous_answer="", evidence=evidence,
+    )
+    assert verifier._saved_strategy_levels_supported(saved_answer, evidence, message)
+    invented_price = "De instap is €999."
+    assert not verifier._saved_strategy_levels_supported(invented_price, evidence, message)
+    assert not verifier._saved_strategy_levels_supported(
+        "De instapprijs van €999 is opgeslagen.", evidence, message,
+    )
+    for invented_budget in ("Het budget is €100.", "De cash is €100."):
+        assert not verifier._amounts_supported(
+            answer=invented_budget, message=message, previous_answer="", evidence=evidence,
+        )
 
 
 def test_portfolio_terminal_verifier_accepts_nested_allocation_but_not_invented_amount():

@@ -29,7 +29,7 @@ from backend.infrastructure.repositories.finn_v2_runtime_contract_repository imp
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.models import User
-from backend.services.locale_config import resolve_chat_locale, response_language_name
+from backend.services.locale_config import normalize_locale, resolve_chat_locale, response_language_name
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
@@ -505,6 +505,7 @@ class FinnV2RunService:
             asset_corrected_operation_id = None
             unspecified_correction = False
             corrected_name = None
+            corrected_fields: dict[str, object] = {}
             if conversation_id:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
@@ -521,6 +522,16 @@ class FinnV2RunService:
                             and mentioned_catalog_symbols(message) <= {str(latest_open[0].asset or "").upper()}
                         ):
                             corrected_name = named
+                    if FinnV2OperationStateService._is_explicit_correction(message) and "?" not in message:
+                        typed_changes = FinnV2OperationStateService().explicit_inputs(
+                            contract=contract, message=message, explicit_asset=None,
+                        )
+                        corrected_fields = {
+                            key: value for key, value in typed_changes.items()
+                            if key not in {"name", "asset", "symbol", "setup_id", "strategy_id", "bot_id"}
+                            and not key.endswith("_id")
+                            and origin_inputs.get(key) != value
+                        }
                 unspecified_correction = bool(
                     latest_open is not None
                     and requests_unspecified_asset_correction(message, latest_open[0].asset or "")
@@ -529,6 +540,7 @@ class FinnV2RunService:
                     (corrected_instrument and latest_open[0].asset != corrected_instrument)
                     or unspecified_correction
                     or corrected_name
+                    or corrected_fields
                 ):
                     # A correction supersedes the actionable card before the
                     # provider is called. A rejected or failed replacement
@@ -537,9 +549,13 @@ class FinnV2RunService:
                         proposal_id=latest_open[0].id, user_id=user_id,
                     )
                     origin_state = dict((latest_open[1].state_json or {}).get("guided_state") or {})
+                    retain_parent_ids = bool(corrected_fields or corrected_name) and not (
+                        corrected_instrument or unspecified_correction
+                    )
                     prior_inputs = {
                         key: value for key, value in dict(origin_state.get("collected_inputs") or {}).items()
-                        if not key.endswith("_id") and key not in {"asset", "symbol"}
+                        if (retain_parent_ids or not key.endswith("_id"))
+                        and key not in {"asset", "symbol"}
                     }
                     correction_inputs = FinnV2OperationStateService().explicit_inputs(
                         contract=FinnV2OperationRegistry().require_supported(latest_open[0].operation_type),
@@ -549,20 +565,22 @@ class FinnV2RunService:
                         key: value for key, value in correction_inputs.items()
                         if not key.endswith("_id") and key not in {"asset", "symbol"}
                     })
+                    prior_inputs.update(corrected_fields)
                     if corrected_name:
                         prior_inputs["name"] = corrected_name
                     correction_result = {
                         "proposal_id": latest_open[0].id,
                         "previous_asset": latest_open[0].asset,
-                        "requested_instrument": latest_open[0].asset if corrected_name else corrected_instrument,
+                        "requested_instrument": latest_open[0].asset if corrected_name or corrected_fields else corrected_instrument,
                         "corrected_name": corrected_name,
+                        "corrected_fields": corrected_fields,
                         "awaiting_instrument": unspecified_correction,
                         "status": "cancelled",
                         "operation_id": latest_open[0].operation_type,
                         "prior_inputs": prior_inputs,
                     }
                     context["proposal_correction_result"] = correction_result
-                    if unspecified_correction or corrected_name or resolve_catalog_symbol(corrected_instrument):
+                    if unspecified_correction or corrected_name or corrected_fields or resolve_catalog_symbol(corrected_instrument):
                         # The owner changed the instrument of this open
                         # proposal, not the active workspace asset. Reuse its
                         # operation contract for the replacement candidate.
@@ -583,11 +601,16 @@ class FinnV2RunService:
                     )
                     await session.commit()
             cursor = dict(context.get("responses_cursor") or {})
+            client_locale = normalize_locale(
+                (getattr(run, "workspace_hints_json", None) or {}).get("locale")
+                or (getattr(run, "client_context_json", None) or {}).get("locale")
+            )
             locale = resolve_chat_locale(
                 (user.ai_preferences or {}).get("locale") if user else None,
                 message,
-                conversation_locale=cursor.get("locale"),
+                conversation_locale=client_locale or cursor.get("locale"),
             )
+            context["locale"] = locale
             previous_response = None
             if cursor.get("run_id") and cursor.get("response_id"):
                 prior_contract = await orchestrator.runtime_contracts.get_for_run(
@@ -694,7 +717,7 @@ class FinnV2RunService:
                     ancestor_run_id = ancestor_state.get("conversation_reference")
             guided = dict(context.get("active_guided_operation") or {})
             pending_clarification = dict(context.get("responses_clarification") or {})
-            if not pending_clarification and not corrected_instrument and not unspecified_correction and not corrected_name and not (
+            if not pending_clarification and not corrected_instrument and not unspecified_correction and not corrected_name and not corrected_fields and not (
                 guided.get("missing_required_inputs")
                 and dict(context.get("proposal_correction_result") or {}).get("awaiting_instrument")
             ):
@@ -1308,6 +1331,7 @@ class FinnV2RunService:
                 reasoning=reasoning,
                 delivery_envelope=artifacts.get("delivery_envelope") or {},
                 setup_draft=guided_draft,
+                locale=responses_locale,
             )
         else:
             response_json = {
@@ -1426,6 +1450,7 @@ class FinnV2RunService:
         reasoning: Dict[str, Any],
         delivery_envelope: Dict[str, Any],
         setup_draft: Optional[Dict[str, Any]] = None,
+        locale: Optional[str] = None,
     ) -> Dict[str, Any]:
         placeholder = build_placeholder_response()
         reasoning_result = reasoning.get("result") or {}
@@ -1450,7 +1475,7 @@ class FinnV2RunService:
             clarification = orchestrator.get("selected_clarification") or {}
             content = str(clarification.get("question") or "").strip()
             draft = dict(setup_draft or {})
-            if not content and draft.get("operation_id") in {
+            if (not content or normalize_locale(locale) in {"en", "de"}) and draft.get("operation_id") in {
                 "create_setup", "create_strategy", "create_bot"
             }:
                 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
@@ -1460,6 +1485,7 @@ class FinnV2RunService:
                     draft.get("requested_slot"),
                     contract=FinnV2OperationRegistry().require_supported(draft["operation_id"]),
                     collected_inputs=dict(draft.get("supplied_inputs") or {}),
+                    locale=locale,
                 )
             content = content or "FINN heeft eerst een verduidelijking nodig."
             mode = "CLARIFICATION"
@@ -1569,7 +1595,13 @@ class FinnV2RunService:
             run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
             user = await self.session.get(User, user_id)
             if run is not None and user is not None:
-                locale = resolve_chat_locale((user.ai_preferences or {}).get("locale"), run.message)
+                locale = resolve_chat_locale(
+                    (user.ai_preferences or {}).get("locale"), run.message,
+                    conversation_locale=normalize_locale(
+                        (getattr(run, "workspace_hints_json", None) or {}).get("locale")
+                        or (getattr(run, "client_context_json", None) or {}).get("locale")
+                    ),
+                )
         except Exception:
             logger.warning("FINN failure locale lookup unavailable", extra={"run_id": run_id})
         if error_code == "financial_execution_not_available":

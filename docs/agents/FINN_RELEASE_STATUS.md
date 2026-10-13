@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Conversation Design Candidate
 
-Phase: `LIVE_QA_PENDING`. Candidate code/export SHA:
+Phase: `DRAFT_CONVERSATION_REPAIR_CANDIDATE`. The deployed design
+candidate code/export SHA:
 `073f69decad27f6e48771138a1a0c9b770da239c` on branch
 `codex/finn-draft-conversation-design` ([PR #278](https://github.com/gvangalen/antigravity-trading-tool/pull/278)).
 Candidate and main CI passed all five jobs. Auto Deploy succeeded and public
@@ -21,22 +22,42 @@ sends it as a normal user turn. Free text remains available. A review card
 appears only for a complete proposal, and the existing explicit confirmation
 still governs writes. Backend clarification prompts now name the missing
 field rather than asking a generic question. Independent authenticated live
-QA has not yet accepted this draft conversation design.
+QA has not accepted this draft conversation design. In the authenticated live
+flow, a DCA follow-up repeated a supplied weekly cadence, the clickable
+"Vast bedrag" answer ended in a terminal failure and lost draft context,
+and a strategy amount correction left the old EUR 50 card confirmable while
+the conversation denied an open proposal. An EN/DE run also received a Dutch
+missing-field question. No card was confirmed and no data was changed.
+The local repair parses conditional DCA fields across turns, binds short mode
+answers to the pending slot, preserves compound strategy answers, cancels
+superseded proposals before provider work, suspends their web and mobile
+confirmation controls immediately, and uses the requested locale for
+missing-field prompts. A local API/Celery/Responses continuation created a
+complete EUR 75 replacement strategy and verified that its earlier EUR 50
+proposal was cancelled (probe artifact SHA-256
+`266aea79274624f37b89011b2f6b8357a6c13a15f6648bb23f5dd7496166f9b4`).
+The first local matrix found that the answer verifier misclassified saved
+entry/stop/target prices written with a euro sign as unsupported budget
+amounts. The repair checks these prices against the linked strategy while
+still rejecting invented prices, cash, and budgets. Its full rerun passed.
+The repair is not deployed; candidate CI, release identity and independent QA
+remain open.
 
-Root backend tests passed **3503**, with **3 skipped**. Focused web draft
-conversation tests passed **6/6**. The isolated local API/Celery/Responses
-action matrix passed **16/16** and adapter tests **19/19**, with no broker
-orders, live bots, live trading calls or production connections (artifact
-SHA-256 `6a093602474e488878c3d44fbe94d80f18b43d848d1c0dae36a37e6659467eca`).
+On the final local repair, root backend tests passed **3526**, with **3
+skipped**. The isolated local API/Celery/Responses action matrix passed
+**16/16** and adapter tests **19/19**, with zero broker orders, live bots,
+live trading calls or production connections (artifact SHA-256
+`efc6e74aaf0d27a76f01a4dbd747daad5de8adab69852e62573896c66cd7e56d`).
 Real `gpt-6-luna`/Responses development passed **20/20**, with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
-`93f63cc8c72036c61f257b5379596dd8e6e4002056bd72e07001d1c060fb2726`).
-The full real-provider regression passed **109/109**, with zero provider,
-schema, timeout, parse or validation failures (artifact SHA-256
-`defdde8ed9cca03afbadb55ddf589abfa3d247e185b960f53b0548a23d267493`).
-Frontend typecheck, i18n lint,
-i18n, command and proposal tests, and production build passed. Mobile
-typecheck, lint with no errors, and Expo web/iOS/Android exports passed.
+`88c3b85126c71083c9e054f011776e15761c48fc308a040d6c84cad4866203bb`).
+Frontend typecheck, i18n lint, i18n, command and proposal tests, and
+production build passed. Mobile typecheck, lint with no errors, and Expo
+web/iOS/Android exports passed. A local EN/DE worker probe returned the
+requested language for missing-field questions. The full real-provider
+regression passed **109/109**, with zero provider, schema, timeout, parse or
+validation failures (artifact SHA-256
+`4f58bf2194d72992a74b91ef6c39d7d26fdf5d31ac32c3176f93c7f824176da1`).
 
 ## FINN 2.0 Coach Feed Candidate
 

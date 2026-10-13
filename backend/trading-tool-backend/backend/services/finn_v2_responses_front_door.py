@@ -427,7 +427,13 @@ class FinnResponsesFrontDoor:
                 )
                 return FinnResponsesFrontDoorResult(
                     FinnResponsesResult(
-                        text="Het concept is bijgewerkt.",
+                        text={
+                            "en": "The draft has been updated.",
+                            "de": "Der Entwurf wurde aktualisiert.",
+                        }.get(
+                            str(conversation_context.get("locale") or "nl").split("-")[0].lower(),
+                            "Het concept is bijgewerkt.",
+                        ),
                         response_id=previous_response_id or f"guided-{self.run_id}",
                         tool_trace=({
                             "name": "guided_slot_binding", "status": "completed",

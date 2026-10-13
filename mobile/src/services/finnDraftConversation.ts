@@ -2,6 +2,11 @@ import type { AssistantEnvelope } from '../types/assistant';
 
 export type DraftChoice = { label: string; reply: string };
 
+export function isDraftCorrectionIntent(message: string): boolean {
+  const text = String(message || '').trim();
+  return !text.includes('?') && /^(?:(?:corrigeer|wijzig|verander|pas\s+(?:het|de|dit|deze|mijn)\b|maak\s+(?:er|het|de)\b|noem\s+(?:de|het)\b|correct|change|update|modify|ändere|korrigiere)\b|(?:de|the)\s+(?:naam|name)\s+(?:is|moet|should)\b)/i.test(text);
+}
+
 export function draftOtherLabel(language = 'nl'): string {
   return ({ nl: 'Anders · typ in de chat', en: 'Other · type in chat', de: 'Anders · im Chat schreiben' } as Record<string, string>)[language] || 'Anders · typ in de chat';
 }

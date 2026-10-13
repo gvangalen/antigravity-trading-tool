@@ -13,6 +13,13 @@ export function suspendedProposalIds(proposalIds, settledResults, clarificationR
   ));
 }
 
+export function isFinnProposalCorrection(message) {
+  const text = String(message || "").trim();
+  // Only a direct revision command can suspend a confirmable proposal. A
+  // question about a possible change is still a read-only coach turn.
+  return !text.includes("?") && /^(?:(?:corrigeer|wijzig|verander|pas\s+(?:het|de|dit|deze|mijn)\b|maak\s+(?:er|het|de)\b|noem\s+(?:de|het)\b|correct|change|update|modify|ändere|korrigiere)\b|(?:de|the)\s+(?:naam|name)\s+(?:is|moet|should)\b)/i.test(text);
+}
+
 export function suspendFinnProposalCards(messages, proposalIds) {
   if (!proposalIds.size) return messages;
   return messages.map((message) => {

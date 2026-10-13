@@ -37,7 +37,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
-import { inactiveProposalIds, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
 import { draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft } from "@/lib/finnDraftConversation.mjs";
 
@@ -968,6 +968,7 @@ function AIAssistantContent({
 
     return {
       page: pathname,
+      locale,
       page_type: pageMap[pathname] || t?.common?.unknown || "Unknown",
       symbol: resolvedWorkspaceSymbol,
       asset_resolution_status: assetStatus,
@@ -4351,6 +4352,14 @@ function AIAssistantContent({
     }
 
     setLoading(true);
+    if (isFinnProposalCorrection(nextQuery)) {
+      const openIds = new Set(messagesRef.current.flatMap((message) =>
+        (message.actions || [])
+          .filter((action) => action?.type === "v2_proposal" && action.proposal_id)
+          .map((action) => action.proposal_id)
+      ));
+      if (openIds.size) setMessages((prev) => suspendFinnProposalCards(prev, openIds));
+    }
     if (!isSilent) {
       if (isFeedHandoff) setConsumedFeedNonce(commandRequest?.nonce);
       updateQuery("");

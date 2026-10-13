@@ -123,8 +123,14 @@ class FinnV2OperationStateService:
                 contract=contract,
                 message=message,
                 explicit_asset=contract_asset,
+                known_setup_type=str(collected.get("setup_type") or "") or None,
             )
             missing_fields = set(existing.missing_required_inputs)
+            # A cadence answer can make its weekday/month-day required in the
+            # same sentence. Accept that newly required, explicitly typed
+            # value now instead of asking for it again on the next turn.
+            newly_required = set(contract.required_inputs_for({**collected, **explicit, **labelled}))
+            missing_fields.update(newly_required.difference(collected))
             for key, value in labelled.items():
                 if key in missing_fields and not self._is_missing(value):
                     explicit.setdefault(key, value)
@@ -401,10 +407,87 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def clarification_question(
-        field: Optional[str], *, contract: Optional[OperationContract] = None, collected_inputs: Optional[Mapping[str, object]] = None
+        field: Optional[str], *, contract: Optional[OperationContract] = None,
+        collected_inputs: Optional[Mapping[str, object]] = None, locale: Optional[str] = None,
     ) -> str:
         collected = collected_inputs or {}
         operation_id = contract.operation_id if contract is not None else None
+        language = str(locale or "nl").split("-")[0].lower()
+        if language in {"en", "de"}:
+            localized = {
+                "en": {
+                    "name": "What short name would you like to give this proposal?",
+                    "symbol": "Which asset is this setup for?",
+                    "setup_type": "Would you like a trade setup or a DCA setup?",
+                    "timeframe": "What is the primary analysis timeframe for this setup?",
+                    "dca_frequency": "How often would you like to buy: daily, weekly or monthly?",
+                    "dca_day": "On which weekday would you like to buy?",
+                    "dca_month_day": "On which day of the month would you like to buy?",
+                    "dca_amount_mode": "Would you like a fixed amount or Smart DCA based on your total benchmark score?",
+                    "min_investment": "What minimum amount would you like to set for this setup?",
+                    "score_source": "Should Smart DCA use your total market, macro and technical benchmark score?",
+                    "low_threshold": "Below which total score does the low Smart DCA band apply?",
+                    "high_threshold": "From which total score does the high Smart DCA band apply?",
+                    "low_score_percent": "What percentage of the base amount applies at a low score?",
+                    "mid_score_percent": "What percentage of the base amount applies at a middle score?",
+                    "high_score_percent": "What percentage of the base amount applies at a high score?",
+                    "setup_id": "Which existing setup do you mean?",
+                    "strategy_id": "Which existing strategy do you mean?",
+                    "bot_id": "Which existing Paper bot do you mean?",
+                    "execution_mode": "Would you like a fixed amount or a custom curve?",
+                    "base_amount": "What amount would you like to use per execution?",
+                    "entry": "At what price would you enter?",
+                    "stop_loss": "Where would you place the stop-loss?",
+                    "targets": "Which price targets would you use?",
+                    "risk_profile": "Which risk style would you use: cautious, balanced or aggressive?",
+                    "budget_total_eur": "What total budget limit would you set for this Paper bot?",
+                    "paper_initial_cash_eur": "How much separate virtual Paper starting capital would you set?",
+                    "category": "Which category is this indicator in: market, macro or technical?",
+                    "indicator": "Which indicator would you like to configure?",
+                    "proposal_id": "Which exact proposal would you like to confirm or execute?",
+                    "asset": "Which asset would you like to add to your watchlist?",
+                    "requested_change": "What would you like to improve about your trading approach?",
+                    "changed_fields": "What would you like to change in this saved item?",
+                },
+                "de": {
+                    "name": "Welchen kurzen Namen soll dieser Vorschlag bekommen?",
+                    "symbol": "Für welchen Vermögenswert ist dieses Setup gedacht?",
+                    "setup_type": "Möchtest du ein Trade- oder DCA-Setup erstellen?",
+                    "timeframe": "Welcher Analysezeitraum gilt für dieses Setup?",
+                    "dca_frequency": "Wie oft möchtest du kaufen: täglich, wöchentlich oder monatlich?",
+                    "dca_day": "An welchem Wochentag möchtest du kaufen?",
+                    "dca_month_day": "An welchem Tag im Monat möchtest du kaufen?",
+                    "dca_amount_mode": "Möchtest du einen festen Betrag oder Smart DCA anhand deines gesamten Benchmark-Scores?",
+                    "min_investment": "Welchen Mindestbetrag möchtest du für dieses Setup festlegen?",
+                    "score_source": "Soll Smart DCA deinen gesamten Markt-, Makro- und Technik-Score verwenden?",
+                    "low_threshold": "Unter welchem Gesamtscore gilt die niedrige Smart-DCA-Stufe?",
+                    "high_threshold": "Ab welchem Gesamtscore gilt die hohe Smart-DCA-Stufe?",
+                    "low_score_percent": "Welcher Prozentsatz des Basisbetrags gilt bei niedrigem Score?",
+                    "mid_score_percent": "Welcher Prozentsatz des Basisbetrags gilt bei mittlerem Score?",
+                    "high_score_percent": "Welcher Prozentsatz des Basisbetrags gilt bei hohem Score?",
+                    "setup_id": "Welches bestehende Setup meinst du?",
+                    "strategy_id": "Welche bestehende Strategie meinst du?",
+                    "bot_id": "Welchen bestehenden Paper-Bot meinst du?",
+                    "execution_mode": "Möchtest du einen festen Betrag oder eine eigene Kurve?",
+                    "base_amount": "Welchen Betrag möchtest du pro Ausführung einsetzen?",
+                    "entry": "Bei welchem Kurs möchtest du einsteigen?",
+                    "stop_loss": "Wo möchtest du den Stop-Loss setzen?",
+                    "targets": "Welche Kursziele möchtest du verwenden?",
+                    "risk_profile": "Welchen Risikostil möchtest du: vorsichtig, ausgewogen oder offensiv?",
+                    "budget_total_eur": "Welche gesamte Budgetgrenze soll dieser Paper-Bot haben?",
+                    "paper_initial_cash_eur": "Wie hoch soll das separate virtuelle Paper-Startkapital sein?",
+                    "category": "Zu welcher Kategorie gehört dieser Indikator: Markt, Makro oder Technik?",
+                    "indicator": "Welchen Indikator möchtest du einrichten?",
+                    "proposal_id": "Welchen Vorschlag möchtest du genau bestätigen oder ausführen?",
+                    "asset": "Welchen Vermögenswert möchtest du zur Watchlist hinzufügen?",
+                    "requested_change": "Was möchtest du an deiner Handelsweise verbessern?",
+                    "changed_fields": "Was möchtest du an diesem gespeicherten Eintrag ändern?",
+                },
+            }
+            return localized[language].get(field or "", {
+                "en": "Which detail would you like to set for this proposal?",
+                "de": "Welches Detail möchtest du für diesen Vorschlag festlegen?",
+            }[language])
         if field == "changed_fields":
             return {
                 "update_setup": "Wat wil je aan deze setup wijzigen?",
@@ -535,6 +618,7 @@ class FinnV2OperationStateService:
         explicit_asset: Optional[str],
         continuation: bool = False,
         requested_slot: Optional[str] = None,
+        known_setup_type: Optional[str] = None,
     ) -> dict[str, object]:
         text = str(message or "").strip()
         lowered = text.casefold()
@@ -614,10 +698,11 @@ class FinnV2OperationStateService:
             if changes:
                 values.setdefault("changed_fields", changes)
         if contract.operation_id == "create_setup":
+            dca_context = str(known_setup_type or "").casefold() == "dca"
             recurring_schedule = re.search(
-                r"\b(?:daily|dagelijks|iedere dag|elke dag|every day|jeden tag|taeglich|"
-                r"weekly|wekelijks|iedere week|elke week|every week|jede woche|"
-                r"monthly|maandelijks|iedere maand|elke maand|every month|jeden monat)\b",
+                r"\b(?:daily|dagelijks|iedere dag|elke dag|every day|jeden tag|taeglich|täglich|"
+                r"weekly|wekelijks|iedere week|elke week|every week|jede woche|wöchentlich|woechentlich|"
+                r"monthly|maandelijks|iedere maand|elke maand|every month|jeden monat|monatlich)\b",
                 lowered,
             )
             recurring_investment = bool(recurring_schedule) and bool(re.search(
@@ -645,7 +730,7 @@ class FinnV2OperationStateService:
                 )
             )
             if (
-                values.get("setup_type") == "dca"
+                (values.get("setup_type") == "dca" or dca_context)
                 and recurring_schedule
                 and not explicit_chart_timeframe
             ):
@@ -657,7 +742,7 @@ class FinnV2OperationStateService:
             # The registry exposes this conditional slot for create_setup, but
             # cadence words are inputs only after the user selected a DCA
             # setup. A market's daily trend must not become a DCA schedule.
-            if values.get("setup_type") == "dca" and "dca_frequency" in accepted_inputs:
+            if (values.get("setup_type") == "dca" or dca_context) and "dca_frequency" in accepted_inputs:
                 frequency = next(
                     (
                         canonical
@@ -666,12 +751,15 @@ class FinnV2OperationStateService:
                             ("every day", "daily"), ("iedere dag", "daily"), ("elke dag", "daily"),
                             ("jeden tag", "daily"),
                             ("taeglich", "daily"), ("taegliche", "daily"), ("taegliches", "daily"),
+                            ("täglich", "daily"),
                             ("weekly", "weekly"), ("wekelijks", "weekly"), ("wekelijkse", "weekly"),
                             ("every week", "weekly"), ("iedere week", "weekly"), ("elke week", "weekly"),
                             ("jede woche", "weekly"),
+                            ("wöchentlich", "weekly"), ("woechentlich", "weekly"),
                             ("monthly", "monthly"), ("maandelijks", "monthly"),
                             ("every month", "monthly"), ("iedere maand", "monthly"), ("elke maand", "monthly"),
                             ("jeden monat", "monthly"),
+                            ("monatlich", "monthly"),
                         )
                         if re.search(rf"\b{token}\b", lowered)
                     ),
@@ -705,7 +793,7 @@ class FinnV2OperationStateService:
                         field="dca_month_day", text=month_day_match.group(1), contract=contract
                     )
                     values.setdefault("dca_frequency", "monthly")
-            if values.get("setup_type") == "dca":
+            if values.get("setup_type") == "dca" or dca_context:
                 smart_amount = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", lowered))
                 fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact)\b", lowered))
                 if smart_amount and not fixed_amount:
@@ -768,7 +856,7 @@ class FinnV2OperationStateService:
                     "benutzerdefiniert": "custom",
                 }.get(mode, mode)
             amount_match = re.search(
-                r"(?:\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of)?\s*(?:€|eur|euros?|euro|\$)?\s*(\d+(?:[.,]\d+)?))|(?:\b(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)\b)",
+                r"(?:\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of|naar|to|auf)?\s*(?:€|eur|euros?|euro|\$)?\s*(\d+(?:[.,]\d+)?))|(?:\b(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)\b)",
                 lowered,
             )
             if amount_match is None:
@@ -887,6 +975,8 @@ class FinnV2OperationStateService:
             for field, markers in field_markers.items()
             if any(marker in lowered for marker in markers)
         }
+        if requested_slot in {"dca_amount_mode", "execution_mode"} and not re.search(r"\d", lowered):
+            mentioned.discard("base_amount")
         return not mentioned or mentioned == {requested_slot}
 
     @staticmethod
@@ -931,6 +1021,18 @@ class FinnV2OperationStateService:
         if field == "name":
             named = self._name_input_from_text(value)
             if named is None:
+                # The pending question asks for a name. A reply may start
+                # with that name and then give other fields in a new sentence.
+                first_clause = re.match(
+                    r"^([^.!?\n]{2,80})[.]\s+(?:gebruik|use|verwende|nutze|zet|set)\b",
+                    value, re.IGNORECASE,
+                )
+                if first_clause and not re.search(
+                    r"\b(?:maak|create|erstelle|wijzig|change|corrigeer|correct)\b",
+                    first_clause.group(1), re.IGNORECASE,
+                ):
+                    named = first_clause.group(1).strip(" .\"'“”‘’")
+            if named is None:
                 # A bare reply can fill a requested name. A second command
                 # such as "toon de kaart, bevestig niets" cannot be a name.
                 if (
@@ -968,7 +1070,7 @@ class FinnV2OperationStateService:
             lowered = value.casefold()
             if re.search(r"\b(?:smart|score|staffel|variab|custom)\w*\b", lowered):
                 return "score_bands"
-            if re.search(r"\b(?:fixed|vast|vaste|exact)\b", lowered):
+            if re.search(r"\b(?:fixed|vast|vaste|exact|fest(?:e|er|es)?)\b", lowered):
                 return "fixed"
             return None
         if field == "score_source":
@@ -982,6 +1084,8 @@ class FinnV2OperationStateService:
                 if any(alias in lowered for alias in aliases):
                     return source
             return None
+        if field == "category":
+            return self._canonical_category(value)
         if field in {"base_amount", "low_score_percent", "mid_score_percent", "high_score_percent", "low_threshold", "high_threshold"}:
             number = re.search(r"\d+(?:[.,]\d+)?", value)
             return self._numeric_value(number.group(0)) if number else None
@@ -1058,7 +1162,7 @@ class FinnV2OperationStateService:
         patterns = {
             "entry": r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei|rond|around|ongeveer|ungefähr|ca\.?)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
             "stop_loss": r"\b(?:stop[- ]?loss|stop|invalidatie|invalidation|invalidierung)\s*(?:is|:|=|op|at|bei)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
-            "base_amount": r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag)\s*(?:is|:|=|van|of|von)?\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)",
+            "base_amount": r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag)\s*(?:is|:|=|van|of|von|naar|to|auf)?\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)",
         }
         for field, pattern in patterns.items():
             match = re.search(pattern, text, re.IGNORECASE)
@@ -1515,6 +1619,8 @@ class FinnV2OperationStateService:
             }
         if field == "execution_mode":
             return FinnV2OperationStateService._canonical_execution_mode(str(value))
+        if field == "category":
+            return FinnV2OperationStateService._canonical_category(str(value))
         if field == "dca_frequency":
             return FinnV2OperationStateService._canonical_dca_frequency(str(value))
         if field == "dca_day":
@@ -1525,13 +1631,21 @@ class FinnV2OperationStateService:
     def _canonical_dca_frequency(value: str) -> Optional[str]:
         lowered = value.casefold()
         for token, canonical in (
-            ("daily", "daily"), ("dagelijks", "daily"), ("taeglich", "daily"),
-            ("weekly", "weekly"), ("wekelijks", "weekly"),
-            ("monthly", "monthly"), ("maandelijks", "monthly"),
+            ("daily", "daily"), ("dagelijks", "daily"), ("taeglich", "daily"), ("täglich", "daily"),
+            ("weekly", "weekly"), ("wekelijks", "weekly"), ("woechentlich", "weekly"), ("wöchentlich", "weekly"),
+            ("monthly", "monthly"), ("maandelijks", "monthly"), ("monatlich", "monthly"),
         ):
             if re.search(rf"\b{token}\b", lowered):
                 return canonical
         return None
+
+    @staticmethod
+    def _canonical_category(value: str) -> Optional[str]:
+        return {
+            "market": "market", "markt": "market",
+            "macro": "macro", "makro": "macro",
+            "technical": "technical", "technisch": "technical", "technik": "technical",
+        }.get(FinnV2SetupInputCatalog._comparison_text(value))
 
     @staticmethod
     def _canonical_dca_day(value: str) -> Optional[str]:
