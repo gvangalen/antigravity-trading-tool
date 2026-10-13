@@ -17,10 +17,10 @@ from backend.scripts.run_finn_v2_visible_post_execution_reference_regression imp
 from backend.utils.auth_utils import create_access_token
 
 
-def _turn(base_url: str, token: str, session_id: str, query: str) -> tuple[str, dict]:
+def _turn(base_url: str, token: str, session_id: str, query: str, *, locale: str = "nl") -> tuple[str, dict]:
     visible = _stream_envelope(
         base_url=base_url, token=token, query=query, session_id=session_id,
-        context={"page": "/setup", "locale": "nl", "symbol": "ETH", "timeframe": "Day"},
+        context={"page": "/setup", "locale": locale, "symbol": "ETH", "timeframe": "Day"},
     )
     run_id = str((visible.get("state") or {}).get("run_id") or
                  (visible.get("response_trace") or {}).get("run_id") or "")
@@ -76,6 +76,42 @@ def run(base_url: str) -> dict:
         raise AssertionError("dca_strategy_proposal_missing")
     if _fields(second).get("base_amount") != 50 or _fields(second).get("setup_id") != dca_setup_id:
         raise AssertionError("dca_strategy_proposal_fields_mismatch")
+    old_strategy_proposal_id = (second.get("response") or {}).get("proposal_id")
+    session, strategy_revision = _turn(
+        base_url, token, session,
+        "Corrigeer dit strategieconcept naar €75 per uitvoering; "
+        "behoud dezelfde ETH-setup. Bevestig niets.",
+    )
+    revised_strategy_proposal_id = (strategy_revision.get("response") or {}).get("proposal_id")
+    if (
+        strategy_revision["status"] != "completed"
+        or not revised_strategy_proposal_id
+        or revised_strategy_proposal_id == old_strategy_proposal_id
+        or _fields(strategy_revision).get("base_amount") != 75
+        or _fields(strategy_revision).get("setup_id") != dca_setup_id
+    ):
+        raise AssertionError("open_dca_strategy_correction_not_replaced")
+    old_strategy, old_strategy_status = _request_json(
+        url=f"{base_url}/api/assistant/v2/proposals/{old_strategy_proposal_id}", method="GET",
+        headers={"Authorization": f"Bearer {token}"}, body=None, timeout=20,
+    )
+    if old_strategy_status != 200 or old_strategy.get("status") != "cancelled":
+        raise AssertionError("superseded_strategy_draft_still_confirmable")
+
+    english_session, _ = _turn(
+        base_url, token, "new", "Create a weekly BTC DCA setup on the 1D timeframe.", locale="en",
+    )
+    english_session, _ = _turn(base_url, token, english_session, "QA BTC October EN", locale="en")
+    english_session, _ = _turn(base_url, token, english_session, "Fixed amount", locale="en")
+    english_session, german_restart = _turn(
+        base_url, token, english_session,
+        "Erstelle ein wöchentliches BTC-DCA-Setup im 1D-Zeitrahmen.", locale="de",
+    )
+    english_session, german_day = _turn(base_url, token, english_session, "Freitag", locale="de")
+    if (german_restart.get("response") or {}).get("proposal_id") or (german_day.get("response") or {}).get("proposal_id"):
+        raise AssertionError("language_switch_accepted_inherited_dca_card")
+    if _fields(german_day).get("base_amount") == 1 or _fields(german_day).get("name") == "QA BTC October EN":
+        raise AssertionError("language_switch_inherited_old_draft_fields")
 
     session, third = _turn(
         base_url, token, "new",
@@ -113,8 +149,9 @@ def run(base_url: str) -> dict:
         raise AssertionError("superseded_paper_draft_still_confirmable")
     if new_status != 200 or new.get("status") not in {"draft", "pending_confirmation"}:
         raise AssertionError("replacement_paper_draft_not_confirmable")
-    return {"checks": 6, "prior_setup_question_abandoned": True,
-            "strategy_proposal": True, "paper_revision": True,
+    return {"checks": 10, "prior_setup_question_abandoned": True,
+            "strategy_proposal": True, "strategy_revision": True,
+            "language_switch_draft_isolated": True, "paper_revision": True,
             "old_card_revoked": True, "confirmed": False, "browser_facade": True}
 
 

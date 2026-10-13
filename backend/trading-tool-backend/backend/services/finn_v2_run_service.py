@@ -46,6 +46,7 @@ from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnsw
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, FinnResponsesFrontDoorResult,
     _explicit_create_operation_request,
+    _explicit_fresh_create_operation_request,
 )
 from backend.services.finn_v2_responses_loop import FinnResponsesError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
@@ -529,6 +530,14 @@ class FinnV2RunService:
                         typed_changes = FinnV2OperationStateService().explicit_inputs(
                             contract=contract, message=message, explicit_asset=None,
                         )
+                        if (
+                            contract.operation_id == "create_strategy"
+                            and str(origin_inputs.get("setup_type") or "").lower() == "dca"
+                            and "base_amount" not in typed_changes
+                        ):
+                            amount = FinnV2OperationStateService.explicit_open_dca_strategy_amount_correction(message)
+                            if amount is not None:
+                                typed_changes["base_amount"] = amount
                         corrected_fields = {
                             key: value for key, value in typed_changes.items()
                             if key not in {"name", "asset", "symbol", "setup_id", "strategy_id", "bot_id"}
@@ -758,7 +767,10 @@ class FinnV2RunService:
             raise FinnResponsesError("responses_provider_unconfigured")
         pending_guided = FinnV2OperationStateService.pending_operation_id(context)
         requested_create = _explicit_create_operation_request(message)
-        if pending_guided and requested_create and requested_create != pending_guided:
+        if pending_guided and requested_create and (
+            requested_create != pending_guided
+            or _explicit_fresh_create_operation_request(message)
+        ):
             # A fresh action for another object supersedes the unanswered
             # field question. Do not let a BTC setup slot consume the words
             # "DCA-strategie" and carry its old asset into a new proposal.

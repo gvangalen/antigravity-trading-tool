@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Guided Draft Revision And Conversation Isolation
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Independent authenticated browser QA returned
+`NOT_ACCEPTED` on live SHA `9a7d8751edfad6743677b5d48fefacd5f7cfc045`.
+The intended BTC-setup to ETH-strategy contract switch passed. QA then found
+two remaining draft faults: an explicit correction of the open ETH DCA
+strategy card from EUR 50 to EUR 75 cancelled the old card but failed to
+produce a replacement; and after switching the same conversation from
+English to German, a fresh BTC DCA request followed by “Freitag” produced
+a confirmable card with the earlier English name and an unsupplied EUR 1
+amount. The latter was within one conversation after a language switch,
+not a verified leak between separate conversation IDs. QA cancelled the
+incorrect card and confirmed no proposal or order. Ordinary strategy,
+Paper-bot correction, indicator, read-only coach, and English choice checks
+passed; native mobile remained unproven.
+
+The local repair treats an explicit request for a new draft as a fresh
+operation even when the pending draft uses the same contract. This prevents
+the old amount slot from treating `1D` as EUR 1. For an owner-scoped open DCA
+strategy card, a correction with exactly one euro amount now replaces its
+base amount; trade strategies with several price fields still require a
+named field. The authenticated local web-facade regression passed ten
+checks, including both formerly failing conversations and cancelled old
+cards, without confirmation or execution. The focused backend suite passed
+**768** tests and the root backend suite passed **3551** with **3 existing
+skips**. Frontend typecheck, i18n lint/tests, command/proposal/setup tests,
+build and high-severity audit passed. Mobile typecheck, lint without errors,
+and Expo web/iOS/Android exports passed. The local API/Celery/Responses
+action matrix passed **16/16** and adapters **19/19** without broker orders,
+live bots, live-trading calls or production connections (matrix SHA-256
+`86dc81099a2279c8ad5b4442c1da12811682f90be0fd9146f8115982293b16b9`).
+Real Luna/Responses development passed **20/20** with no provider or schema
+failures (artifact SHA-256
+`78e782011202d8d70dbed929e6dbdf45ef4b5eac6aa906d344b89051fe1a005a`).
+The full real-provider regression passed **109/109**, with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`154ed1c61f7325e2791d7cf0246080ee4e56c37dd863744456a67819ef579c4d`).
+Deployment is pending.
+
 ## FINN Guided Draft Operation Switch
 
 Phase: `GUIDED_OPERATION_SWITCH_LIVE_PENDING_QA`. Build candidate
