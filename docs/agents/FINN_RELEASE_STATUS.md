@@ -6,15 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Conversation Design Candidate
 
-Phase: `DRAFT_CONVERSATION_REPAIR_CANDIDATE`. The deployed design
+Phase: `DRAFT_CONVERSATION_REPAIR_LIVE_PENDING_QA`. The deployed design
 candidate code/export SHA:
 `073f69decad27f6e48771138a1a0c9b770da239c` on branch
 `codex/finn-draft-conversation-design` ([PR #278](https://github.com/gvangalen/antigravity-trading-tool/pull/278)).
 The complete local repair is code/export SHA
 `bbccdbbc49f279d3cdc04a3b227595df72b791f6` on branch
 `codex/finn-draft-conversation-repair` ([PR #280](https://github.com/gvangalen/antigravity-trading-tool/pull/280));
-candidate CI is pending. A later release-status-only commit may carry this
-evidence without changing product code.
+candidate and main CI passed all five jobs. Auto Deploy succeeded for merged
+main SHA `0b579c1e632c8b773d5f8bce08ec45508f0417d2`. Public backend
+health and frontend build-info both returned HTTP 200 and that SHA at
+2026-10-13 06:30 UTC. This release-status-only update does not change product
+code; its own eventual deployment SHA must be checked again before QA.
 Candidate and main CI passed all five jobs. Auto Deploy succeeded and public
 backend health and frontend build-info both returned HTTP 200 with deployed
 main SHA `5c4e0b32f3b293da01d7a1f9226dcbd12f3a61e7`. A later
@@ -45,8 +48,7 @@ The first local matrix found that the answer verifier misclassified saved
 entry/stop/target prices written with a euro sign as unsupported budget
 amounts. The repair checks these prices against the linked strategy while
 still rejecting invented prices, cash, and budgets. Its full rerun passed.
-The repair is not deployed; candidate CI, release identity and independent QA
-remain open.
+The repair is deployed. Independent authenticated QA has not yet accepted it.
 
 On the final local repair, root backend tests passed **3526**, with **3
 skipped**. The isolated local API/Celery/Responses action matrix passed
