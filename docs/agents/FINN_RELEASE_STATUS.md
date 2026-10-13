@@ -6,7 +6,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Draft Target Correction Candidate
 
-Phase: `DRAFT_TARGET_CORRECTION_LOCAL_GATES_GREEN_PENDING_CI`.
+Phase: `DRAFT_TARGET_CORRECTION_LIVE_PENDING_QA`. Build candidate
+`82168d4afa91b571a610309f21410b3e2f1cf387` merged through
+[PR #286](https://github.com/gvangalen/antigravity-trading-tool/pull/286)
+as product SHA `adfba2ec111cd097c2f4588800e4cca77fa8d1cd`.
+Candidate and main CI each passed all five jobs. Auto Deploy succeeded for
+that product SHA. Public backend health and frontend build-info each returned
+HTTP 200 and that same SHA on 2026-10-13. The status-only commit containing
+this record requires its own public SHA check before independent QA starts.
 Independent authenticated browser QA returned `NOT_ACCEPTED` on live SHA
 `5d058701b9d31705d3217ebf1b9b5ce7c58d9a66`. The exact BTC DCA
 three-turn flow and its review card passed. Two further flows failed: “Maak
@@ -41,8 +48,7 @@ validation failures (artifact SHA-256
 The complete real-provider regression passed **109/109**, with zero
 provider/schema/timeout/parse/validation failures (artifact SHA-256
 `daf27f352ab3b532ec5df5262ee173b51d13904bae66f672f4fbce46546d4d0c`).
-CI, Auto Deploy, public SHA checks and independent QA are still pending for
-this candidate.
+Independent authenticated QA is still pending for this candidate.
 
 ## FINN Draft Conversation Browser Runtime Candidate
 
