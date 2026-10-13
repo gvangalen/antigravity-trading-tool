@@ -817,6 +817,8 @@ class FinnV2RunService:
         if client is None:
             raise FinnResponsesError("responses_provider_unconfigured")
         pending_guided = FinnV2OperationStateService.pending_operation_id(context)
+        if not pending_guided:
+            context.pop("guided_target_asset_constraint", None)
         requested_create = _explicit_create_operation_request(message)
         if pending_guided and requested_create and (
             requested_create != pending_guided
@@ -828,6 +830,7 @@ class FinnV2RunService:
             context.pop("active_guided_operation", None)
             context.pop("proposal_revision", None)
             context.pop("responses_clarification", None)
+            context.pop("guided_target_asset_constraint", None)
             pending_clarification = {}
             guided = {}
             guided_inputs = {}
@@ -843,6 +846,7 @@ class FinnV2RunService:
             ):
                 pending_clarification = {}
                 context.pop("responses_clarification", None)
+                context.pop("guided_target_asset_constraint", None)
                 prior_relation = (
                     await relevance.previous_answer_suffices(
                         message=message,
@@ -856,6 +860,12 @@ class FinnV2RunService:
         if pending_guided:
             contract = FinnV2OperationRegistry().require_supported(pending_guided)
             requested_slot = str(guided.get("next_missing_input") or "")
+            if requested_slot in {"setup_id", "strategy_id", "bot_id"}:
+                original_target_asset = FinnV2RequestPreprocessorService._asset_from_text(
+                    str(pending_clarification.get("original_message") or "")
+                )
+                if original_target_asset:
+                    context["guided_target_asset_constraint"] = original_target_asset
             explicit_targets = []
             if contract.domain in {"setup", "strategy", "bot"}:
                 async with async_session_factory() as session:
@@ -951,6 +961,7 @@ class FinnV2RunService:
             if not continuation:
                 context.pop("active_guided_operation", None)
                 context.pop("proposal_revision", None)
+                context.pop("guided_target_asset_constraint", None)
                 previous_response = None
                 verified_asset = None
         selector_started.set()
@@ -1398,6 +1409,22 @@ class FinnV2RunService:
             "missing_inputs": list(guided_state.get("missing_required_inputs") or []),
             "requested_slot": guided_state.get("next_missing_input"),
         }
+        # The request locale is authoritative for a visible turn. Some fast
+        # clarification paths do not have a prepared Responses exchange, so
+        # they cannot rely on its locale alone.
+        current_run = (
+            await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+            if hasattr(self.session, "execute") else None
+        )
+        if current_run is not None:
+            request_locale = normalize_locale(
+                (getattr(current_run, "workspace_hints_json", None) or {}).get("locale")
+                or (getattr(current_run, "client_context_json", None) or {}).get("locale")
+            )
+            responses_locale = resolve_chat_locale(
+                None, current_run.message,
+                conversation_locale=request_locale or responses_locale,
+            )
         direct_answer = str(verified.get("direct_answer") or "").strip()
         main_observation = str(verified.get("main_observation") or "").strip()
         content = "\n\n".join([part for part in [direct_answer, main_observation] if part]).strip()
@@ -1413,6 +1440,59 @@ class FinnV2RunService:
         )
         if action_needs_input:
             next_status = "clarification_required"
+        requested_target_slot = str(guided_draft.get("requested_slot") or "")
+        if (
+            next_status == "clarification_required"
+            and requested_target_slot in {"setup_id", "strategy_id", "bot_id"}
+            and current_run is not None
+            and runtime_contract is not None
+            and runtime_contract.conversation_id
+            and hasattr(self.session, "execute")
+        ):
+            clarification_state = dict(contract_state.get("responses_clarification") or {})
+            if len(list(clarification_state.get("choices") or [])) < 2:
+                from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
+                from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+                from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+                conversation_context = await self.conversations.get_context(
+                    conversation_id=runtime_contract.conversation_id, user_id=user_id,
+                )
+                pending_question = dict(conversation_context.get("responses_clarification") or {})
+                scoped_asset = (
+                    FinnV2RequestPreprocessorService._asset_from_text(
+                        str(conversation_context.get("guided_target_asset_constraint") or "")
+                    )
+                    or FinnV2RequestPreprocessorService._asset_from_text(
+                        str(pending_question.get("original_message") or "")
+                    )
+                    or FinnV2RequestPreprocessorService._asset_from_text(
+                        str(dict(guided_state.get("resolved_entities") or {}).get("asset") or "")
+                    )
+                    or FinnV2RequestPreprocessorService._asset_from_text(current_run.message)
+                )
+                if scoped_asset:
+                    collection = await FinnV2EntityResolutionService(self.session).resolve_target_collection(
+                        user_id=user_id,
+                        entity_type=requested_target_slot.removesuffix("_id"),
+                        asset=scoped_asset,
+                    )
+                    names = [item.display_name for item in collection.items if item.display_name]
+                    if len(names) >= 2:
+                        question = FinnV2OperationStateService.clarification_question(
+                            requested_target_slot,
+                            contract=FinnV2OperationRegistry().require_supported(
+                                str(guided_draft.get("operation_id") or guided_operation)
+                            ),
+                            collected_inputs=dict(guided_draft.get("supplied_inputs") or {}),
+                            locale=responses_locale,
+                        )
+                        await self.runtime_contracts.record_responses_clarification(
+                            run_id=run_id, user_id=user_id,
+                            original_message=current_run.message,
+                            question=question, reason="choice_required",
+                            choices=names[:3],
+                        )
         if not content:
             response_json = self._terminal_placeholder_response(
                 interaction_mode=phase_outcome.interaction_mode,

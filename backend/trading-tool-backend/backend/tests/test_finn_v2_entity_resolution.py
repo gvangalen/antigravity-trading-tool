@@ -623,6 +623,26 @@ def test_corrected_target_requires_a_visible_exact_name_not_an_old_id():
     assert named.resolution_source == "explicit_name"
 
 
+def test_pending_eth_target_choice_rejects_an_explicit_aapl_name():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 11, "name": "AAPL Full", "symbol": "AAPL"},
+        {"id": 12, "name": "ETH Friday", "symbol": "ETH"},
+        {"id": 13, "name": "ETH Monday", "symbol": "ETH"},
+    ])
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"asset_constraint": "ETH", "require_explicit_name": True},
+        message="AAPL Full",
+    ))
+
+    assert target.resolution_status == "ambiguous"
+    assert target.candidate_names == ["ETH Friday", "ETH Monday"]
+
+
+
 def test_setup_collection_read_returns_every_owner_asset_match():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

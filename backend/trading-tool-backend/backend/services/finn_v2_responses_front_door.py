@@ -578,6 +578,48 @@ class FinnResponsesFrontDoor:
             workspace_hints=None, client_context=None,
         )
         is_read_request = request_facts.action_polarity == "read" and not imperative_operation
+        if (
+            imperative_operation == "update_setup"
+            and request_facts.discourse_act == "operation_request"
+            and not pending_operation
+            and not conversation_context.get("proposal_correction_result")
+            and re.search(r"\b(?:mijn|my|mein(?:e|en)?)\s+[A-Z]{2,8}[-\s]+setups?\b", message, re.I)
+            and not re.search(r"\b(?:strateg\w*|bot\w*)\b", message, re.I)
+        ):
+            # A generic asset-scoped setup update has no named target to
+            # resolve yet. Enter its proposal contract before asking which
+            # setup; named strategy/bot requests retain their own domain
+            # guard below.
+            contract = self.proposals.registry.require_supported(imperative_operation)
+            explicit_inputs = FinnV2OperationStateService().explicit_inputs(
+                contract=contract, message=message, explicit_asset=None,
+            )
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(contract.operation_id),
+                    operation_id=contract.operation_id, inputs=explicit_inputs, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={
+                        "en": "I am checking which saved item you mean.",
+                        "de": "Ich prüfe, welchen gespeicherten Eintrag du meinst.",
+                    }.get(locale.split("-")[0].lower(),
+                          "Ik controleer welk opgeslagen onderdeel je bedoelt."),
+                    response_id=f"verified-update-{self.run_id}",
+                    tool_trace=({
+                        "name": "verified_update_proposal", "status": "completed",
+                        "result": {"operation_id": contract.operation_id},
+                    },),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
         # An explicit strategy creation request already identifies its action
         # contract. Route the proposal through the same owner-scoped parent
         # resolver as guided continuation, so an adjective such as "DCA" does

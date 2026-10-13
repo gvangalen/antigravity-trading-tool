@@ -46,6 +46,9 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
             "status": terminal.get("status"),
             "choices": choices,
             "expected": names,
+            "response": terminal.get("response"),
+            "operation": projection.get("final_operation_id"),
+            "supplied_inputs": projection.get("supplied_inputs"),
         })
     if (terminal.get("response") or {}).get("proposal_id"):
         raise AssertionError("ambiguous_setup_created_proposal")
@@ -60,7 +63,9 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
         or supplied.get("setup_id") != setup_ids[chosen_index]
         or supplied.get("changed_fields") != {"timeframe": "1D"}
     ):
-        raise AssertionError({"status": followup.get("status"), "supplied": supplied})
+        raise AssertionError({"status": followup.get("status"), "supplied": supplied,
+                              "initial_supplied": projection.get("supplied_inputs"),
+                              "followup_response": followup.get("response")})
     proposal, http_status = _request_json(
         url=f"{base_url.rstrip('/')}/api/assistant/v2/proposals/{proposal_id}",
         method="GET", headers={"Authorization": f"Bearer {token}"}, body=None, timeout=20,
@@ -88,6 +93,11 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
                 "new_proposal": (correction.get("response") or {}).get("proposal_id"),
                 "old_status": old.get("status"),
             })
+        correction_choices = (
+            (correction.get("runtime_trace") or {}).get("clarification") or {}
+        ).get("choices") or []
+        if len(correction_choices) < 2 or any("AAPL" in name for name in correction_choices):
+            raise AssertionError({"correction_choices": correction_choices})
         _, continued = _turn(
             base_url.rstrip("/"), token, session, names[1], locale="nl",
         )
@@ -105,6 +115,28 @@ def run(base_url: str, *, candidate_count: int = 2, mixed_assets: bool = False) 
                 "continuation_status": continued.get("status"),
                 "continuation_inputs": continued_inputs,
             })
+        cross_session, cross_first = _turn(
+            base_url.rstrip("/"), token, "new",
+            "Change my ETH setup to 4H.", locale="en",
+        )
+        _, cross_choice = _turn(
+            base_url.rstrip("/"), token, cross_session,
+            f"AAPL First {suffix}", locale="en",
+        )
+        cross_choices = (
+            (cross_choice.get("runtime_trace") or {}).get("clarification") or {}
+        ).get("choices") or []
+        if (
+            cross_first.get("status") != "clarification_required"
+            or cross_choice.get("status") != "clarification_required"
+            or (cross_choice.get("response") or {}).get("proposal_id")
+            or len(cross_choices) < 2
+            or any("AAPL" in name for name in cross_choices)
+            or not str((cross_choice.get("response") or {}).get("content") or "").startswith("Which")
+        ):
+            raise AssertionError({"cross_asset_status": cross_choice.get("status"),
+                                  "cross_asset_choices": cross_choices,
+                                  "cross_asset_response": cross_choice.get("response")})
     return {"status": terminal["status"], "choices": choices,
             "proposal_created": False, "followup_status": followup["status"],
             "followup_target_matches_choice": True, "followup_proposal": True,

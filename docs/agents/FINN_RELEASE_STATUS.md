@@ -6,7 +6,27 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `LIVE_GUIDED_CORRECTION_QA_PENDING`. The first implementation merged through
+Phase: `GUIDED_ASSET_AND_LOCALE_REPAIR_LOCAL_VALIDATION`. The prior live
+candidate was rejected by independent QA. The active branch is
+`codex/finn-guided-asset-and-locale`; it is not yet live or QA-accepted.
+This repair keeps a pending target choice inside the original owner-scoped
+asset, supplies up to three clickable names even on the fast clarification
+path, and derives visible clarification language from the request locale.
+The seven-candidate local API/Celery regression passed, including a free
+cross-asset name and preserved 4H correction, with no confirmation. The final
+backend suite passed **3568**, with **3 existing skips**; frontend build,
+typecheck, proposal tests, i18n lint/tests, command tests, and the high
+severity dependency gate passed. The final-code worker action matrix passed
+**16/16**, adapters **19/19**, with zero broker orders, live-trading calls or
+production connections (artifact SHA-256
+`6660f5111c7ad18f3a2940f0420d759683cf69117bd3730ab4956e7b1f3c115a`).
+Real Luna/Responses selector development
+passed **20/20** (artifact SHA-256 `fbc97bb23ac2a8534e53c359f5d01e1c71ed659907655bec193d1d6de6ff833c`)
+and regression **109/109** (artifact SHA-256 `4ad06f851a059f2ceab5b5fb4fd9c9a633cd1e14cc9fe5f84f79a04b9703c861`),
+with zero provider, schema, parse, validation or timeout failures. CI and deployment are in progress. These local
+results do not constitute a deployed or independent QA verdict.
+
+The first implementation merged through
 [PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298),
 passed candidate and main CI, and deployed successfully. Its status-only
 follow-up [PR #299](https://github.com/gvangalen/antigravity-trading-tool/pull/299)
@@ -90,8 +110,16 @@ as product SHA `d7ddf6ef229088672835f865fbac40c2a7ebe12d`.
 Candidate CI run `38451653806` and main CI run `38452051183` each passed all
 five jobs. Auto Deploy run `38452309564` succeeded. Public backend health and
 frontend build-info each returned HTTP 200 and that exact product SHA on
-2026-10-13. Independent live QA is pending; no acceptance verdict exists for
-this repair yet.
+2026-10-13. The status-only [PR #305](https://github.com/gvangalen/antigravity-trading-tool/pull/305)
+passed candidate and main CI, Auto Deploy, and public identity checks on
+`7f0aa7828e85e1065407ed9ee8f868da94750114`. Independent QA returned
+**NOT ACCEPTED** on that exact SHA: a free AAPL setup name could create an
+AAPL proposal while answering an ETH target question; clickable choices were
+absent in the tested NL/EN/DE clarifications; EN/DE clarification and card
+copy appeared in Dutch. The previous proposal was safely cancelled, and a
+free exact ETH name preserved the 4H change. No proposal was confirmed or
+order placed. The active repair branch is
+`codex/finn-guided-asset-and-locale`; it is not live or QA-accepted.
 
 The repair presents up to three owner-scoped names when more than three
 records match, while exact free text can still identify another record.

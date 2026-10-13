@@ -295,7 +295,21 @@ class FinnV2OrchestratorService:
             selectors.pop(f"{entity_type}_name", None)
             selectors["require_explicit_name"] = True
         message_asset = FinnV2RequestPreprocessorService._asset_from_text(message)
-        if message_asset and entity_type:
+        pending_choice = dict(conversation_context.get("responses_clarification") or {})
+        guided_asset = FinnV2RequestPreprocessorService._asset_from_text(
+            str(conversation_context.get("guided_target_asset_constraint") or "")
+        )
+        if not guided_asset and pending_choice:
+            guided_asset = FinnV2RequestPreprocessorService._asset_from_text(
+                str(pending_choice.get("original_message") or "")
+            )
+        if guided_asset and entity_type:
+            selectors["asset_constraint"] = guided_asset
+            selectors["asset"] = guided_asset
+            selectors["asset_source"] = "guided_target_scope"
+            selectors["require_explicit_name"] = True
+            current_asset = guided_asset
+        if message_asset and entity_type and not guided_asset:
             # This turn's catalog asset outranks a prior page or plan.
             current_asset = message_asset
             selectors["asset"] = message_asset

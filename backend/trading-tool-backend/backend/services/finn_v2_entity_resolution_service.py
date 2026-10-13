@@ -107,6 +107,15 @@ class FinnV2EntityResolutionService:
         workspace_hints = dict(workspace_hints or {})
         client_context = dict(client_context or {})
         candidates = await self._entity_candidates(user_id=user_id, entity_type=entity_type)
+        # An unanswered, asset-scoped target question remains inside that
+        # asset. A name typed as the answer cannot silently turn an ETH
+        # proposal into an AAPL proposal, even when both belong to the owner.
+        constrained_asset = self._normalize_symbol(selector.get("asset_constraint"))
+        if constrained_asset:
+            candidates = [
+                row for row in candidates
+                if self._candidate_asset(row) == constrained_asset
+            ]
 
         declared_type = selector.get("entity_type")
         if declared_type and declared_type != entity_type:
