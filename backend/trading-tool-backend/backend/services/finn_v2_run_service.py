@@ -511,6 +511,7 @@ class FinnV2RunService:
             unspecified_correction = False
             corrected_name = None
             corrected_fields: dict[str, object] = {}
+            correction_typed_inputs: dict[str, object] = {}
             explicit_proposal_correction = False
             target_change_requested = False
             if conversation_id:
@@ -533,6 +534,7 @@ class FinnV2RunService:
                         typed_changes = FinnV2OperationStateService().explicit_inputs(
                             contract=contract, message=message, explicit_asset=None,
                         )
+                        correction_typed_inputs = dict(typed_changes)
                         if (
                             contract.operation_id == "create_strategy"
                             and str(origin_inputs.get("setup_type") or "").lower() == "dca"
@@ -563,6 +565,10 @@ class FinnV2RunService:
                         r".{0,100}\b(?:setup|strategy|strategie|bot)\b",
                         message, re.IGNORECASE,
                     )
+                )
+                corrected_target_asset = (
+                    FinnV2RequestPreprocessorService().preprocess(message=message).referenced_asset
+                    if target_change_requested else None
                 )
                 if latest_open is not None and (
                     (corrected_instrument and latest_open[0].asset != corrected_instrument)
@@ -601,12 +607,24 @@ class FinnV2RunService:
                         if not key.endswith("_id") and key not in {"asset", "symbol"}
                     })
                     prior_inputs.update(corrected_fields)
+                    if target_change_requested:
+                        prior_inputs.update({
+                            key: value for key, value in correction_typed_inputs.items()
+                            if key not in {"name", "asset", "symbol", "setup_id",
+                                           "strategy_id", "bot_id"}
+                            and not key.endswith("_id")
+                        })
                     if corrected_name:
                         prior_inputs["name"] = corrected_name
                     correction_result = {
                         "proposal_id": latest_open[0].id,
                         "previous_asset": latest_open[0].asset,
-                        "requested_instrument": latest_open[0].asset if corrected_name or corrected_fields else corrected_instrument,
+                        "requested_instrument": (
+                            corrected_target_asset or corrected_instrument
+                            if target_change_requested else
+                            latest_open[0].asset if corrected_name or corrected_fields
+                            else corrected_instrument
+                        ),
                         "corrected_name": corrected_name,
                         "corrected_fields": corrected_fields,
                         "awaiting_instrument": unspecified_correction,
@@ -762,7 +780,7 @@ class FinnV2RunService:
                     ancestor_run_id = ancestor_state.get("conversation_reference")
             guided = dict(context.get("active_guided_operation") or {})
             pending_clarification = dict(context.get("responses_clarification") or {})
-            if not pending_clarification and not corrected_instrument and not unspecified_correction and not corrected_name and not corrected_fields and not (
+            if not pending_clarification and not corrected_instrument and not unspecified_correction and not corrected_name and not corrected_fields and not target_change_requested and not (
                 guided.get("missing_required_inputs")
                 and dict(context.get("proposal_correction_result") or {}).get("awaiting_instrument")
             ):
@@ -857,6 +875,15 @@ class FinnV2RunService:
                 target for target in explicit_targets
                 if len(target.display_name or "") == longest_name
             ]
+            exact_owner_slot_choice = bool(
+                requested_slot in {"setup_id", "strategy_id", "bot_id"}
+                and any(
+                    target.entity_type == contract.domain
+                    and str(target.display_name or "").strip().casefold()
+                    == message.strip(" \t\r\n\"'“”‘’.").casefold()
+                    for target in explicit_targets
+                )
+            )
             if pending_guided == "create_bot" and guided.get("target_choice_required") is True:
                 # A strategy name answers this bot draft's target slot. It is
                 # not an instruction to start creating a new strategy, even
@@ -884,6 +911,8 @@ class FinnV2RunService:
                             requested_slot, contract=contract, collected_inputs=guided_inputs,
                         ),
                     )
+            elif exact_owner_slot_choice:
+                continuation = True
             elif len(longest_targets) == 1 and longest_targets[0].entity_type != contract.domain:
                 corrected_domain = longest_targets[0].entity_type
                 if contract.action_polarity and await FinnResponsesToolRelevanceGuard(client).corrects_guided_target(

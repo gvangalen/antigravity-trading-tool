@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## General FINN Clarification Choices
 
-Phase: `TARGET_RESOLUTION_LIVE_QA_PENDING`. The first implementation merged through
+Phase: `QA_REJECTED_GUIDED_CORRECTION_CANDIDATE_READY`. The first implementation merged through
 [PR #298](https://github.com/gvangalen/antigravity-trading-tool/pull/298),
 passed candidate and main CI, and deployed successfully. Its status-only
 follow-up [PR #299](https://github.com/gvangalen/antigravity-trading-tool/pull/299)
@@ -59,7 +59,32 @@ as product SHA `56a1d8a2f30edbbced4822b0e64333304d90f398`.
 Candidate CI run `38446296810` and main CI run `38446636643` each passed all
 five jobs. Auto Deploy run `38446944945` succeeded. Public backend health
 and frontend build-info each returned HTTP 200 and that exact SHA on
-2026-10-13. Independent authenticated live QA of this repair is pending.
+2026-10-13. The existing independent QA Agent returned **NOT ACCEPTED** on
+that exact SHA. The original wrong-asset choices and exact free-name terminal
+failure were fixed in NL/EN/DE, and a nonexistent correction cancelled the
+old card. The remaining failure was a three-turn continuation: after a
+nonexistent replacement name, selecting another ETH setup lost the already
+stated 4H change, then asked for the setup again and even showed AAPL. No
+proposal was confirmed or order placed. The active repair branch is
+`codex/finn-correction-guided-state`; it is not live or QA-accepted.
+
+This repair preserves explicitly stated non-target changes while FINN asks
+which saved object the user means. A local API/Celery reproduction of the
+previously failed three-turn conversation now cancels the old Friday proposal,
+offers only owner-scoped ETH setups, and turns the exact Monday choice into a
+new unconfirmed proposal with the original 4H change. The checked-in
+mixed-asset, seven-candidate regression also passed. The full backend suite
+passed **3567 tests, 3 existing skips**; frontend typecheck and proposal tests
+passed. The real Luna/Responses selector development set passed **20/20**
+(artifact SHA-256 `6cbb58002e504c14c657ff106cef3891d2cfb5ecf1c65c6b320baf0bc3d0fc9e`)
+and regression **109/109** (artifact SHA-256
+`8cc5e899cf291c7a3be5c2960350123ea8b104d64921f4071e362393ee7d9849`),
+with zero provider, schema, timeout, or validation failures. The final
+same-code API/Celery action matrix passed **16/16**, adapters **19/19**,
+with zero broker orders, live-trading calls, or production connections
+(artifact SHA-256
+`2cdf6cdaced785236637f5b26c93bb5eddb21182cb2c26e8600f4464189c10ec`).
+No live or independent QA verdict exists for this repair yet.
 
 The repair presents up to three owner-scoped names when more than three
 records match, while exact free text can still identify another record.

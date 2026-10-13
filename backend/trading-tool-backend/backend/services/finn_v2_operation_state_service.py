@@ -1427,6 +1427,18 @@ class FinnV2OperationStateService:
                 changes["timeframe"] = FinnV2SetupInputCatalog.canonical_input(
                     "timeframe", timeframe_transition.group(1)
                 )
+            if "timeframe" not in changes:
+                # A correction may refer to the selected object as "die" or
+                # "that one". The explicit new timeframe still belongs to
+                # changed_fields even when the noun "timeframe" is omitted.
+                short_transition = re.search(
+                    r"\b(?:naar|to|auf)\s+([0-9]+\s*(?:m|min|h|d|w|mo))\b",
+                    text, re.IGNORECASE,
+                )
+                if short_transition:
+                    changes["timeframe"] = FinnV2SetupInputCatalog.canonical_input(
+                        "timeframe", short_transition.group(1)
+                    )
         canonical_clauses = (
             ("timeframe", r"(?:its\s+)?(?:timeframe|time\s*frame|tijdframe|zeitrahmen)"),
             ("base_amount", r"(?:the\s+)?(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag)"),
