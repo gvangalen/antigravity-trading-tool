@@ -6,7 +6,54 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_RELATIONSHIP_COMPARISON_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_PROPOSAL_RESUME_AND_COUNT_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the
+preceding live SHA `14052b67a49f584eca677e55deab7b4fed345533`:
+the seven-setup comparison now kept bot links, strategy links, DCA rhythm,
+and score context aligned, but a still-active proposal card vanished after
+hard refresh while its feed item remained pending; a second answer listed
+five Paper bots and then summarized them as four. Stop, free and guided
+drafts, cancellation, navigation without refresh, draft-text persistence,
+DE-to-NL context, feed-to-chat handoff, and mobile NL/EN display passed.
+This was an independent browser retest, not a protected official runner
+matrix; the QA fixture showed one strategy per setup.
+[PR #334](https://github.com/gvangalen/antigravity-trading-tool/pull/334)
+restores only the latest owner-scoped, unexpired proposal card from the
+persisted run contract and gives Luna exact collection bot totals. The
+confirmation token is never returned by conversation history; a click
+rereads the proposal and uses the existing server confirmation boundary.
+Product SHA: `a34f5166fb102b33e8bfa1cf3d938f41cc47e216`.
+
+Build evidence on 2026-10-14: backend **3595 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal and
+setup tests, and high-severity audit passed. The local worker action matrix
+passed **16/16** and adapters **19/19** with zero broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`d645e43b7f5538e1e66e5e521a2d08f9f2660e914a084cd5a175f9f38d6145fb`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`e1f418f96b4500b8b542a01251f170d6b522ca908fb487b1e0deef824c7c1917`)
+and regression **109/109** (SHA-256
+`a7e2964cb4bd3fefef631337e0eb9198c1244059d69200a71fda98986fa386c4`),
+with zero provider, schema, timeout, parse or validation failures. A local
+FastAPI/Celery/PostgreSQL/Responses seven-setup comparison with five
+separately linked Paper bots passed three times; the final artifact SHA-256
+is `ee383e0702f955afa4009daba43983bc2cb51c19970f88a4f281ef982b404a46`.
+An authenticated synthetic local API run restored one active SOL proposal
+after a conversation GET without exposing a confirmation token; after
+cancellation, the same history returned no active proposal card. No
+production account or protected QA fixture was used.
+Candidate [CI run 38571556115](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38571556115)
+and main [CI run 38572580266](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38572580266)
+each passed all five jobs. [Auto Deploy run 38572862655](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38572862655)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA. This status-only commit will have a later SHA;
+independent QA must bind its authenticated browser run to both public
+surfaces. The new independent QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_RELATIONSHIP_COMPARISON_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the later
+status-only live SHA `14052b67a49f584eca677e55deab7b4fed345533` for the
+proposal-resume and count issues described above.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
 preceding live SHA `264b3cb1416db8332016aefe26937afd212ab9ab`: FINN
 completed the seven-setup comparison but assigned Paper-bot links to the
@@ -40,7 +87,8 @@ each passed all five jobs. [Auto Deploy run 38567898347](https://github.com/gvan
 succeeded. Public backend health and frontend build-info both returned HTTP
 200 and the exact product SHA. This status-only commit will have a later SHA;
 independent QA must bind its authenticated browser run to both public
-surfaces. The new independent QA verdict is pending.
+surfaces. Independent QA bound to the later status-only SHA and returned the
+verdict recorded above.
 
 Prior phase: `CHAT_SIDE_PANEL_MULTI_SETUP_COMPARISON_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the later
