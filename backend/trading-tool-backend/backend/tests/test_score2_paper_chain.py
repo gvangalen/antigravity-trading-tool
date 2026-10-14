@@ -184,11 +184,19 @@ def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
             return False
 
         def execute(self, statement, params):
-            assert "FOR UPDATE" in statement
-            assert params == (11, 7)
+            if "pg_advisory_xact_lock" in statement:
+                assert params == (7, 0)
+                self.row = None
+            elif "FROM bot_orders" in statement:
+                assert params == (7, 11, 13)
+                self.row = None
+            else:
+                assert "FOR UPDATE" in statement
+                assert params == (11, 7)
+                self.row = saved_bot
 
         def fetchone(self):
-            return saved_bot
+            return self.row
 
     class BotConnection:
         def cursor(self):
