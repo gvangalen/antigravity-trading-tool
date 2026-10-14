@@ -479,6 +479,18 @@ class FinnResponsesAnswerVerifier:
     def _language_matches(text: str, locale: str | None) -> bool:
         if locale not in {"nl", "en", "de"}:
             return True
+        if locale == "de":
+            # A short German lead-in can make language detection miss a Dutch
+            # continuation. Ignore quoted values and emphasized plan names;
+            # two distinct Dutch prose markers are enough to request the
+            # existing bounded language-only rewrite.
+            prose = re.sub(r"\*\*[^*]+\*\*|`[^`]+`|\"[^\"]+\"|'[^']+'", " ", text)
+            dutch_markers = set(re.findall(
+                r"\b(?:ik|mijn|jouw|geen|niet|wijzig|bedoelde|daarom|deze|het|een)\b",
+                prose, re.I,
+            ))
+            if len(dutch_markers) >= 2:
+                return False
         if locale != "en" and re.search(
             r"\b(?:unassessed|unverified|unavailable)\b", text, re.IGNORECASE,
         ):
