@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_EXPLICIT_DRAFT_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_EXPLICIT_DRAFT_ACCEPTED_BY_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
 preceding live SHA `cd640c00c17bab0851d72d5c4dd577c24bf0d5ac`. The
 seven-setup score count and German follow-up passed, as did Paper-bot totals,
@@ -40,9 +40,18 @@ production account was used. Candidate CI and main
 [CI run 38586237904](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38586237904)
 passed all five jobs. [Auto Deploy run 38586570138](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38586570138)
 succeeded. Public backend health and frontend build-info both returned HTTP
-200 and the exact product SHA. This status-only commit will have a later SHA;
-independent QA must bind its authenticated browser run to both public
-surfaces. The new independent QA verdict is pending.
+200 and the exact product SHA. The independent authenticated browser QA bound
+its test to backend and frontend SHA
+`43d3f4f7e37084b2a547441d132e30e0d18dd6ce` and returned **ACCEPTED**
+for the targeted FINN Chat Side Panel flow. Both exact free ETH concept
+requests produced the correct unsaved ETH/4H/Trade card. Navigation and
+refresh preserved it; cancellation disabled confirmation and cleared the
+pending feed update. Guided creation, read-only and hypothetical no-card
+controls, German follow-up, Stop, mobile viewport, and browser console checks
+passed. QA did not confirm or save a proposal, start a bot, or place an order;
+this verdict does not cover complete CRUD or trading execution. The proposal
+wording remains somewhat procedural. A later documentation-only SHA does not
+change the tested product code.
 
 Prior phase: `CHAT_SIDE_PANEL_SCORE_COUNT_AND_LOCALE_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
