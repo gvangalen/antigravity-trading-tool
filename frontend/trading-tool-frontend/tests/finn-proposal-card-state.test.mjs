@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+
+test("trade drafts have no DCA frequency and DCA labels cannot stringify objects", () => {
+  const translate = (value) => value;
+  assert.equal(setupDraftFrequencyLabel({ setup_type: "trade" }, translate), "");
+  assert.equal(setupDraftFrequencyLabel({ setup_type: "dca", dca_frequency: "weekly", dca_day: "monday" }, translate), "weekly · monday");
+  assert.equal(setupDraftFrequencyLabel({ setup_type: "dca", dca_frequency: {} }, translate), "");
+});
 
 test("a direct amount correction suspends an old proposal while a hypothetical question does not", () => {
   assert.equal(isFinnProposalCorrection("Corrigeer het bedrag naar €75. Bevestig niets."), true);

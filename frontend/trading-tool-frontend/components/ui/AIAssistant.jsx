@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { assistantChat, cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -36,7 +36,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
-import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
 import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 
@@ -529,6 +529,7 @@ function AIAssistantContent({
   const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
+  const pendingRunRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
   const missionControlRequestRef = useRef(null);
   const missionControlRequestKeyRef = useRef("");
@@ -4182,6 +4183,7 @@ function AIAssistantContent({
       })
       .finally(() => { sseFinished = true; });
     const completeTerminal = async (run) => {
+      if (activeStreamIdRef.current !== streamId) return;
       if (["failed", "unavailable"].includes(String(run?.status || "").toLowerCase())) {
         // Keep diagnostics out of FINN's answer. A failed run can otherwise
         // look identical to client polling exhaustion in the visible chat.
@@ -4256,6 +4258,7 @@ function AIAssistantContent({
       } catch (error) {
         console.warn("FINN kon gekoppelde conceptnamen niet verversen:", error);
       }
+      if (activeStreamIdRef.current !== streamId) return;
       const visibleActionDraft = actionDraft
         ? {
             ...actionDraft,
@@ -4330,8 +4333,11 @@ function AIAssistantContent({
           : message
       )));
       await refreshProposalCards({ clarificationRequired: run?.status === "clarification_required" });
-      activeStreamIdRef.current = null;
-      setLoading(false);
+      if (activeStreamIdRef.current === streamId) {
+        activeStreamIdRef.current = null;
+        if (pendingRunRef.current?.streamId === streamId) pendingRunRef.current = null;
+        setLoading(false);
+      }
     };
     for (let attempt = 0; attempt < 60; attempt += 1) {
       if (activeStreamIdRef.current !== streamId) {
@@ -4344,6 +4350,10 @@ function AIAssistantContent({
       }
       try {
         const run = await fetchFinnV2Run(runId);
+        if (activeStreamIdRef.current !== streamId) {
+          sseController.abort();
+          return;
+        }
         if (!terminalStatuses.has(String(run?.status || "").toLowerCase())) {
           const delayMs = Math.min(1000 + attempt * 250, 3000);
           await new Promise((resolve) => window.setTimeout(resolve, delayMs));
@@ -4373,19 +4383,32 @@ function AIAssistantContent({
         ? { ...message, text: "FINN kon dit antwoord niet afronden. Probeer het opnieuw.", isError: true, isComplete: true }
         : message));
       activeStreamIdRef.current = null;
+      if (pendingRunRef.current?.streamId === streamId) pendingRunRef.current = null;
       setLoading(false);
     }
   }
 
-  const stopCurrentResponse = () => {
+  const stopCurrentResponse = async () => {
     const streamId = activeStreamIdRef.current;
-    if (!streamId) return;
+    const pendingRunId = (!streamId || pendingRunRef.current?.streamId === streamId)
+      ? pendingRunRef.current?.runId : null;
     activeStreamIdRef.current = null;
     abortAssistantChatStream();
-    setMessages((current) => current.map((message) => message.streamId === streamId
-      ? { ...message, text: at("uiText.responseStopped"), isComplete: true, isStopped: true, actions: [], draft: null }
-      : message));
-    setLoading(false);
+    if (streamId) {
+      setMessages((current) => current.map((message) => message.streamId === streamId
+        ? { ...message, text: at("uiText.responseStopped"), isComplete: true, isStopped: true, actions: [], draft: null }
+        : message));
+    }
+    if (pendingRunId) {
+      try {
+        await cancelFinnV2Run(pendingRunId);
+      } catch {
+        // A completed run can win the race and return 409. Its late terminal
+        // response still cannot overwrite a stopped bubble or a newer turn.
+      }
+    }
+    if (!streamId || pendingRunRef.current?.streamId === streamId) pendingRunRef.current = null;
+    if (!activeStreamIdRef.current) setLoading(false);
   };
 
   async function handleChat(directQuery, isSilent = false, overrideContext = null, retryMessageIndex = null) {
@@ -4482,6 +4505,7 @@ function AIAssistantContent({
           if (activeStreamIdRef.current !== streamId) return;
           const pendingRunId = envelope?.state?.run_id || envelope?.response_trace?.run_id;
           if (envelope?.state?.current_flow === "finn_v2_visible_pending" && pendingRunId) {
+            pendingRunRef.current = { streamId, runId: pendingRunId };
             setMessages(prev => prev.map((message) => (
               message.streamId === streamId
                 ? {
@@ -4533,13 +4557,20 @@ function AIAssistantContent({
                 riskSummary: envelope.risk_summary || null,
                 nextBestAction: envelope.next_best_action || null,
                 reviewReason: envelope.review_reason || null,
+                isError: envelope?.state?.current_flow === "finn_v2_visible_failed" || envelope?.intent === "unavailable",
                 isComplete: true,
               };
             }
             return copy;
           });
-          await refreshProposalCards();
-          activeStreamIdRef.current = null;
+          try {
+            await refreshProposalCards();
+          } finally {
+            if (activeStreamIdRef.current === streamId) {
+              activeStreamIdRef.current = null;
+              setLoading(false);
+            }
+          }
 
           if (indicatorModalRequest && typeof window !== "undefined") {
             window.dispatchEvent(
@@ -5055,9 +5086,13 @@ function AIAssistantContent({
     if (!draft || draft.operation_id !== "create_setup") return null;
     if (!hasConfirmableDraft(message)) return null;
     const supplied = draft.supplied_inputs || {};
-    const humanValue = (value) => at(`valueLabels.${String(value || "").toLowerCase()}`, value);
+    const humanValue = (value) => {
+      if (typeof value !== "string" && typeof value !== "number") return null;
+      const normalized = String(value).trim();
+      return normalized ? at(`valueLabels.${normalized.toLowerCase()}`, normalized) : null;
+    };
     const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
-    const frequency = [humanValue(supplied.dca_frequency), humanValue(supplied.dca_day || supplied.dca_month_day)].filter(Boolean).join(" · ");
+    const frequency = setupDraftFrequencyLabel(supplied, humanValue);
     const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));

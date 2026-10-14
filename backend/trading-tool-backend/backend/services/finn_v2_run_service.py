@@ -675,7 +675,11 @@ class FinnV2RunService:
             )
             context["locale"] = locale
             previous_response = None
-            if cursor.get("run_id") and cursor.get("response_id"):
+            # A Responses cursor includes the previous language's model
+            # continuation. Keep the owner conversation and saved references,
+            # but start a fresh model turn when the UI language changes.
+            if (cursor.get("run_id") and cursor.get("response_id")
+                    and normalize_locale(cursor.get("locale")) == locale):
                 prior_contract = await orchestrator.runtime_contracts.get_for_run(
                     run_id=str(cursor["run_id"]),
                 )

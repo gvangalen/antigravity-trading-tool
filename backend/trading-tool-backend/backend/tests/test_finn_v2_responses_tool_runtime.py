@@ -4140,6 +4140,39 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
         )
 
 
+def test_open_trade_proposal_survives_model_new_label_on_followup():
+    catalog = FinnResponsesToolCatalog()
+    contract = catalog.registry.require_supported("create_setup")
+    prior_state = {
+        "operation_id": "create_setup", "contract_version": contract.version,
+        "status": "proposed", "open_proposal_id": "owner-proposal",
+        "collected_inputs": {"symbol": "ETH", "setup_type": "trade",
+                             "timeframe": "4H", "name": "QA Paneel ETH 1410"},
+        "missing_required_inputs": [],
+    }
+    context = {"proposal_revision": {
+        "proposal_id": "owner-proposal", "operation_id": "create_setup",
+        "guided_state": prior_state,
+    }}
+    call = catalog.validate("create_or_update_trade_plan_proposal", {
+        "operation_id": "create_setup", "draft_intent": "new",
+        "inputs": {"symbol": "ETH", "setup_type": "trade",
+                   "timeframe": "4H", "name": "QA Paneel ETH 1410"},
+    })
+    state = FinnResponsesProposalSelection().from_call(
+        call=call, message="Laat scoregrenzen voorlopig weg. Toon alleen het voorstel; bevestig niets.",
+        conversation_context=context, verified_asset="ETH",
+    ).request_plan.operation_state
+    assert state["open_proposal_id"] == "owner-proposal"
+    assert state["collected_inputs"]["name"] == "QA Paneel ETH 1410"
+    assert state["missing_required_inputs"] == []
+    new_state = FinnResponsesProposalSelection().from_call(
+        call=call, message="Maak daarnaast een tweede setup voor ETH.",
+        conversation_context=context, verified_asset="ETH",
+    ).request_plan.operation_state
+    assert new_state["open_proposal_id"] is None
+
+
 def test_model_tool_call_fills_only_pending_guided_slot():
     catalog = FinnResponsesToolCatalog()
     selection = FinnResponsesProposalSelection()

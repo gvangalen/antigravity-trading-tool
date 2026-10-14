@@ -44,6 +44,11 @@ export const fetchFinnV2Run = (runId) => {
   });
 };
 
+export const cancelFinnV2Run = (runId) => fetchAuth(
+  `/api/assistant/v2/runs/${encodeURIComponent(runId)}/cancel`,
+  { method: 'POST', body: JSON.stringify({}), signal: AbortSignal.timeout(8000) },
+);
+
 export const fetchFinnV2Proposal = (proposalId) => {
   const normalizedProposalId = String(proposalId || '').trim();
   if (!normalizedProposalId) {
@@ -51,6 +56,7 @@ export const fetchFinnV2Proposal = (proposalId) => {
   }
   return fetchAuth(`/api/assistant/v2/proposals/${encodeURIComponent(normalizedProposalId)}`, {
     method: 'GET',
+    signal: AbortSignal.timeout(8000),
   });
 };
 

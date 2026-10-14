@@ -289,15 +289,22 @@ class FinnResponsesProposalSelection:
                 correction_inputs.pop("name", None)
         context = dict(conversation_context)
         revision = dict(context.get("proposal_revision") or {})
+        # A model can label a follow-up as a new draft even when it is clearly
+        # continuing the owner's open proposal. The persisted proposal is the
+        # source of continuity; only an explicit request for a separate object
+        # starts over. This guard does not choose an answer for the model.
+        separate_object_requested = bool(re.search(
+            r"\b(?:maak|create|erstelle)\b.{0,75}\b(?:nieuwe|nieuw|new|neue|weiteres|another|tweede|second|aparte|separate|nog een)\b"
+            r".{0,55}\b(?:setup|plan|strategie|strategy|bot)\b|"
+            r"\b(?:nog een|another|weitere|tweede|second|aparte|separate)\s+(?:setup|plan|strategie|strategy|bot)\b",
+            message, re.IGNORECASE,
+        ))
         revising_current_draft = (
             revision.get("operation_id") == contract.operation_id
             and bool(revision.get("proposal_id"))
-            and (
-                call.draft_intent == "revise"
-                or (call.draft_intent is None and not self.states._name_input_from_text(message))
-            )
+            and not separate_object_requested
         )
-        if call.draft_intent == "revise" or revising_current_draft:
+        if revising_current_draft or (call.draft_intent == "revise" and not separate_object_requested):
             if revision.get("operation_id") != contract.operation_id or not revision.get("proposal_id"):
                 if not contract.operation_id.startswith(("update_", "delete_", "deactivate_")):
                     raise ValueError("revisable_proposal_not_found_in_conversation")

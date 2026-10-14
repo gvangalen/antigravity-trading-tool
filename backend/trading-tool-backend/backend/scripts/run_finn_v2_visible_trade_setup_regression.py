@@ -21,6 +21,8 @@ from backend.utils.auth_utils import create_access_token
 
 def run(base_url: str) -> dict:
     owner = _create_local_user()
+    with sync_engine.begin() as connection:
+        selected_setup_id = _insert_setup(connection, owner["id"], "Existing ETH Plan", symbol="ETH")
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
     session_id = "new"
     turns = (
@@ -33,7 +35,8 @@ def run(base_url: str) -> dict:
         visible = _stream_envelope(
             base_url=base_url.rstrip("/"), token=token, query=query, session_id=session_id,
             context={"page": "/setup", "locale": "nl", "page_type": "Mijn Plan",
-                     "symbol": "ETH", "timeframe": "4H"},
+                     "symbol": "ETH", "timeframe": "4H", "setup_id": selected_setup_id,
+                     "setup_name": "Existing ETH Plan"},
         )
         session_id = str(visible.get("session_id") or session_id)
         run_id = str((visible.get("state") or {}).get("run_id") or
