@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Guided Name Prompt Intent
+
+Phase: `GUIDED_NAME_PROMPT_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA on SHA
+`78163f86188b6fde7472ded37cbfd407192f17d1` confirmed the exact
+“wat stel je voor” flow, acceptance after refresh, a different user-chosen
+name, and an explicitly quoted literal name. QA returned **NOT ACCEPTED** for
+the wider name flow: “Maak een ETH trade-setup op 4H. Vraag mij om de naam en
+sla niets op.” produced a confirmable draft named `en` rather than asking for
+the name. No proposal was confirmed; the plan count remained unchanged.
+
+[PR #343](https://github.com/gvangalen/antigravity-trading-tool/pull/343)
+recognizes the instruction to ask for a name and prevents a model-proposed
+name from overriding it. The exact local FastAPI/Celery/PostgreSQL/Responses
+prompt now asks for the name with no proposal; only the user's next name
+creates a draft. Product SHA:
+`6eb5cc182a7e227f80d1990dd607ff635e5ec267`.
+
+Build evidence on 2026-10-14: backend **3607 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command and proposal
+tests, and high-severity audit passed. Mobile typecheck, lint, and web/iOS/Android
+bundle smokes passed; existing lint warnings are non-blocking. The final
+local worker action matrix passed **16/16** and adapters **19/19**, with zero
+broker orders, live bots, live-trading calls, or production connections
+(SHA-256 `ff2b3521f642b157447be305944b5187dbbb0c8bc2b620f4d0f1fb29098e9340`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`5f76a949a42ae327633a6cb09d3c17997b3c3518deca48997024a57ecb0f6130`)
+and regression **109/109** (SHA-256
+`bef2cf0b00660c89e2521954a08a2c8f01c9327c8855fd51b47d2a426ed1b83e`).
+The combined five-turn local guided-name regression passed (SHA-256
+`cf0af878d5f91536c0027e3f2e3446c3f76f89f2c85b5946f81e6157ebeb18e9`).
+Candidate [CI run 38624403495](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38624403495)
+and main [CI run 38626307261](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38626307261)
+passed all five jobs. [Auto Deploy run 38626579154](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38626579154)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA on 2026-10-14. Independent QA for both name
+routes remains pending; this is not yet an accepted release.
+
 ## FINN Guided Name Suggestion
 
 Phase: `GUIDED_NAME_SUGGESTION_READY_FOR_INDEPENDENT_QA`.
