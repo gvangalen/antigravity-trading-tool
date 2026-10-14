@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Guided Name Prompt Intent
 
-Phase: `GUIDED_NAME_PROMPT_READY_FOR_INDEPENDENT_QA`.
+Phase: `GUIDED_NAME_PROMPT_ACCEPTED_BY_INDEPENDENT_QA`.
 Independent authenticated browser QA on SHA
 `78163f86188b6fde7472ded37cbfd407192f17d1` confirmed the exact
 “wat stel je voor” flow, acceptance after refresh, a different user-chosen
@@ -39,8 +39,17 @@ Candidate [CI run 38624403495](https://github.com/gvangalen/antigravity-trading-
 and main [CI run 38626307261](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38626307261)
 passed all five jobs. [Auto Deploy run 38626579154](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38626579154)
 succeeded. Public backend health and frontend build-info both returned HTTP
-200 and the exact product SHA on 2026-10-14. Independent QA for both name
-routes remains pending; this is not yet an accepted release.
+200 and the exact product SHA on 2026-10-14. A later documentation-only SHA
+`f4dfaa93cb73675e38beee2682f3381e8e1e44ea` passed main CI and Auto
+Deploy and showed that same SHA on both public build surfaces. Independent
+authenticated QA returned **PASS** for the targeted guided-name flow on that
+SHA at mobile browser width 390×844. The previously failing request to ask
+for a name produced a name question without a card; entering `ETH Rustig 4H`
+then produced the correct unsaved card. “wat stel je voor” gave only a name
+suggestion, and acceptance after refresh produced the correctly named draft.
+QA cancelled both drafts without confirmation; the plan count stayed eight,
+and the browser console had no errors or warnings. Native mobile runtime was
+not available, so this verdict covers the mobile browser, not the native app.
 
 ## FINN Guided Name Suggestion
 
