@@ -4215,6 +4215,10 @@ def test_new_strategy_request_does_not_fill_an_older_setup_question():
     ("Maak een Paper-bot voor mijn strategie.", "create_bot"),
     ("Hoe maak ik een DCA-strategie?", None),
     ("Maak geen strategie voor ETH.", None),
+    ("Maak alleen een concept voor een ETH trade-setup op 4H met de naam QA ETH cd64 kaart. Laat de kaart zien en sla niets op.", "create_setup"),
+    ("Maak een concept voor een ETH trade-setup op 4H met de naam QA ETH cd64 kaart. Toon de conceptkaart; bevestig of sla niets op.", "create_setup"),
+    ("Maak een ETH trade-setup, maar geen voorstel.", None),
+    ("Maak hypothetisch een ETH trade-setup als denkoefening.", None),
 ])
 def test_new_draft_operation_boundary_is_shared_across_domains(message, expected):
     assert _explicit_create_operation_request(message) == expected
@@ -6904,6 +6908,63 @@ def test_irrelevant_proposal_is_retried_without_creating_draft():
     assert result.response.tool_trace[0]["status"] == "retry"
     front.relevance_guard.is_relevant.assert_awaited()
     assert front.relevance_guard.is_relevant.await_args_list[0].kwargs["tool_name"] == "create_setup"
+
+
+@pytest.mark.parametrize("message", [
+    "Maak alleen een concept voor een ETH trade-setup op 4H met de naam QA ETH cd64 kaart. Laat de kaart zien en sla niets op.",
+    "Maak een concept voor een ETH trade-setup op 4H met de naam QA ETH cd64 kaart. Toon de conceptkaart; bevestig of sla niets op.",
+])
+def test_explicit_setup_draft_is_not_vetoed_by_second_model_relevance_check(message):
+    fake = FakeResponses(response("r1", calls=(tool_call("c1", "create_or_update_trade_plan_proposal", {
+        "operation_id": "create_setup", "inputs": {
+            "setup_type": "trade", "symbol": "ETH", "timeframe": "4H",
+            "name": "QA ETH cd64 kaart",
+        },
+    }),)), response("r2", text="Dit is je concept; er is niets opgeslagen."))
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-explicit-setup-draft"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=False))
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message=message, instructions="Use FINN tools", conversation_context={},
+        verified_asset="ETH",
+    ))
+    assert result.proposal_analysis is not None
+    assert result.proposal_analysis.request_plan.operation_id == "create_setup"
+    assert result.response.tool_trace[0]["status"] != "retry"
+    front.relevance_guard.is_relevant.assert_not_awaited()
+
+
+@pytest.mark.parametrize("message", [
+    "Maak een ETH trade-setup op 4H, maar geen voorstel.",
+    "Maak hypothetisch een ETH trade-setup als denkoefening.",
+])
+def test_explicit_no_proposal_boundary_rejects_model_selected_action(message):
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "create_or_update_trade_plan_proposal", {
+            "operation_id": "create_setup", "inputs": {
+                "setup_type": "trade", "symbol": "ETH", "timeframe": "4H",
+            },
+        }),)),
+        response("r2", text="Ik kan dit zonder voorstel met je bespreken."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-no-proposal"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message=message, instructions="Use FINN tools", conversation_context={},
+        verified_asset="ETH",
+    ))
+    assert result.proposal_analysis is None
+    assert result.response.tool_trace[0]["result"]["reason"] == "proposal_excluded_by_user"
+    front.relevance_guard.is_relevant.assert_not_awaited()
 
 
 def test_inconclusive_relevance_does_not_veto_confirmation_gated_draft():
