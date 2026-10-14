@@ -6,15 +6,20 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_CANDIDATE_CI`. The prior clarification candidate was
+Phase: `CHAT_SIDE_PANEL_LIVE_PENDING_QA`. The prior clarification candidate was
 accepted by independent QA. [PR #313](https://github.com/gvangalen/antigravity-trading-tool/pull/313)
 contains the persistent web right panel, direct ordinary chat submission,
 single visible composer, conversation/draft persistence, header history and
 context controls, and responsive mobile chat layout. Source and the tracked
-web export were built together on product commit
-`75a28ed2b33e108c58ea9dc2cf9e0554eb73807c`. The PR is draft until the
-final candidate CI passes; nothing in this section claims deployment or live
-QA acceptance.
+web export were built together on candidate source commit
+`75a28ed2b33e108c58ea9dc2cf9e0554eb73807c`. Candidate CI run
+`38516086986` and main CI run `38516310695` each passed all five jobs.
+The PR merged as product SHA `906462e2f1dc2fd00bba260e9a00b563d71601b1`.
+Auto Deploy run `38516477656` succeeded. On 2026-10-14, public backend
+health and frontend build-info each returned HTTP 200 with exactly that
+product SHA. This is deployment identity only; the authenticated chat UX
+still awaits independent QA. The mobile source passed Expo bundle exports,
+but this repository has no configured mobile OTA/store release path.
 
 Measured local gates on this source: backend `pytest -q` **3569 passed, 3
 existing skips**. Web production build, typecheck, i18n lint and tests,
