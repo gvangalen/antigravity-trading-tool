@@ -6,7 +6,45 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_SCORE_COUNT_AND_LOCALE_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_EXPLICIT_DRAFT_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the
+preceding live SHA `cd640c00c17bab0851d72d5c4dd577c24bf0d5ac`. The
+seven-setup score count and German follow-up passed, as did Paper-bot totals,
+DCA cadence, proposal restoration, navigation, Stop, mobile display, and the
+feed handoff. Two direct requests to show an ETH trade-setup concept without
+saving returned a tool-relevance error instead of a proposal card. The guided
+creation route did produce the card. No proposal was confirmed or executed.
+
+[PR #338](https://github.com/gvangalen/antigravity-trading-tool/pull/338)
+removes the redundant second model relevance veto when the user's explicit
+create imperative and the model-selected proposal operation match. It keeps
+the typed owner-scoped proposal contract and separate confirmation. An
+explicitly excluded proposal or hypothetical exercise cannot create a
+confirmable card. Product SHA:
+`903bdb5661ded3a0edef387f256bb9e2ddc6d8a8`.
+
+Build evidence on 2026-10-14: backend **3605 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal and
+setup tests, and high-severity audit passed. The final local worker action
+matrix passed **16/16** and adapters **19/19** with zero broker orders, live
+bots, live-trading calls or production connections (artifact SHA-256
+`b7eba1604edb529980de5b1eb844e667d26fa06c468e2cb0786f8168f0e36077`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`e9b3514caf14e4302ee9dc0cfad50de869490a783e8b77729eec2e18276252c3`)
+and regression **109/109** (SHA-256
+`32223a1046496a55122ceaae15b8d19887ee5b60337555fc8f4801e125fd0326`).
+The exact two failed free-draft prompts through local
+FastAPI/Celery/PostgreSQL/Responses both yielded a proposal card; read-only
+and hypothetical controls yielded none (**4/4**). No protected QA material or
+production account was used. Candidate CI and main
+[CI run 38586237904](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38586237904)
+passed all five jobs. [Auto Deploy run 38586570138](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38586570138)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA. This status-only commit will have a later SHA;
+independent QA must bind its authenticated browser run to both public
+surfaces. The new independent QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_SCORE_COUNT_AND_LOCALE_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
 preceding live SHA `2a1d4fe50970f7c06e1b5381d6535434af2d92f5`:
 the proposal card now survived navigation and refresh, cancellation removed
@@ -48,7 +86,9 @@ each passed all five jobs. [Auto Deploy run 38581681364](https://github.com/gvan
 succeeded. Public backend health and frontend build-info both returned HTTP
 200 and the exact product SHA. This status-only commit will have a later SHA;
 independent QA must bind its authenticated browser run to both public
-surfaces. The new independent QA verdict is pending.
+surfaces. Independent QA later returned **NOT ACCEPTED** on the status-only
+SHA `cd640c00c17bab0851d72d5c4dd577c24bf0d5ac` for the direct-draft
+failure recorded in the current phase.
 
 Prior phase: `CHAT_SIDE_PANEL_PROPOSAL_RESUME_AND_COUNT_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
