@@ -422,6 +422,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
           router.push(withVariant(`/asset?${params.toString()}`, activeVariant), { scroll: false });
           setPendingIndicator(null);
           onQueryChange("");
+          onClose();
           showSnackbar(
             partial ? error : pendingSource
               ? `${String(indicator).toUpperCase()} is ingesteld. De meetwaarde wacht op de databron; er is nog geen score.`

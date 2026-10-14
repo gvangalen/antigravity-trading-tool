@@ -1,7 +1,9 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-native';
 
 import { FinnOverlaySheet } from '../components/assistant/FinnOverlaySheet';
+import { useAuth } from '../auth/AuthProvider';
+import type { AssistantFeedItem } from '../types/assistant';
 
 type FinnOverlayParams = {
   contextMetric?: string;
@@ -21,11 +23,32 @@ type FinnOverlayValue = {
 const FinnOverlayContext = createContext<FinnOverlayValue | null>(null);
 
 export function FinnOverlayProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  return <ScopedFinnOverlayProvider accountKey={String(user?.id ?? 'signed-out')}>{children}</ScopedFinnOverlayProvider>;
+}
+
+function ScopedFinnOverlayProvider({ children, accountKey }: { children: ReactNode; accountKey: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [params, setParams] = useState<FinnOverlayParams | null>(null);
+  const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState<AssistantFeedItem[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    setIsOpen(false);
+    setParams(null);
+    setDraft('');
+    setMessages([]);
+    setSessionId(null);
+  }, [accountKey]);
+  const newConversation = useCallback(() => {
+    setMessages([]);
+    setSessionId(null);
+    setDraft('');
+  }, []);
 
   const openFinn = useCallback((next?: FinnOverlayParams) => {
     setParams(next ?? null);
+    if (next?.prefill) setDraft(next.prefill);
     setIsOpen(true);
   }, []);
 
@@ -57,6 +80,13 @@ export function FinnOverlayProvider({ children }: { children: ReactNode }) {
           feedItemId={params?.feedItemId}
           symbol={params?.symbol}
           onClose={closeFinn}
+          query={draft}
+          onQueryChange={setDraft}
+          messages={messages}
+          onMessagesChange={setMessages}
+          sessionId={sessionId}
+          onSessionIdChange={setSessionId}
+          onNewConversation={newConversation}
         />
       </Modal>
     </FinnOverlayContext.Provider>

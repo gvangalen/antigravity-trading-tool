@@ -47,6 +47,7 @@ export default function FinnWorkspaceShell({ children }) {
   const { user } = useAuth();
   const { t } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [commandRequest, setCommandRequest] = useState(null);
@@ -71,6 +72,7 @@ export default function FinnWorkspaceShell({ children }) {
       : selectedAsset || "No asset";
   const composerCopy = workspaceCopy.composer || {};
   const onboardingHeaderCopy = workspaceCopy.onboardingHeader || {};
+  const chatOpen = assistantOpen || Boolean(feedDiscussion);
 
   useEffect(() => {
     if (requestedAsset && requestedAsset !== selectedAsset) {
@@ -86,14 +88,13 @@ export default function FinnWorkspaceShell({ children }) {
   const openAssistant = () => {
     if (assistantOpen || feedDiscussion) return;
     commandNonceRef.current += 1;
-    setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
+    setCommandRequest({ mode: "chat", nonce: commandNonceRef.current });
     setAssistantOpen(true);
   };
 
   const closeAssistant = () => {
     setAssistantOpen(false);
-    setComposerQuery("");
-    setCommandRequest(null);
+    setComposerMenuOpen(false);
   };
 
   const closeFeedDiscussion = (nonce) => {
@@ -104,7 +105,6 @@ export default function FinnWorkspaceShell({ children }) {
   const openAssistantMode = (mode, category = null) => {
     commandNonceRef.current += 1;
     setComposerMenuOpen(false);
-    setComposerQuery("");
     setFeedDiscussion(null);
     setCommandRequest({ mode, category, nonce: commandNonceRef.current });
     setAssistantOpen(true);
@@ -135,7 +135,7 @@ export default function FinnWorkspaceShell({ children }) {
       setFeedDiscussion(null);
       setComposerQuery(nextQuery);
       setCommandRequest({
-        mode: detail.mode || "all",
+        mode: detail.mode || "chat",
         category: detail.category || null,
         context: detail.context || null,
         query: nextQuery,
@@ -149,7 +149,7 @@ export default function FinnWorkspaceShell({ children }) {
     const handleShortcut = (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        openCommandCenter();
+        openCommandCenter({ mode: "all" });
       }
     };
 
@@ -162,7 +162,13 @@ export default function FinnWorkspaceShell({ children }) {
   }, []);
   const handleComposerSubmit = (event) => {
     event.preventDefault();
-    openAssistant();
+    if (!composerQuery.trim()) return;
+    commandNonceRef.current += 1;
+    setCommandRequest({
+      mode: "chat", query: composerQuery.trim(), autoSubmit: true,
+      nonce: commandNonceRef.current,
+    });
+    setAssistantOpen(true);
   };
 
   if (isAdminRoute) {
@@ -187,7 +193,7 @@ export default function FinnWorkspaceShell({ children }) {
     <>
       {!isOnboardingRoute ? <NavBar /> : null}
 
-      <div className={`min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f7f9fc_100%)] transition-all duration-200 dark:bg-[#020617] ${isOnboardingRoute ? "" : "lg:pl-64"}`}>
+      <div className={`min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f7f9fc_100%)] transition-[padding] duration-200 dark:bg-[#020617] ${isOnboardingRoute ? "" : "lg:pl-64"} ${chatOpen ? assistantExpanded ? "xl:pr-[560px]" : "xl:pr-[440px]" : ""}`}>
         <div className={isOnboardingRoute ? "pt-0" : "pt-16 lg:pt-0"}>
           <header className={`${isOnboardingRoute ? "border-b border-slate-200/80 bg-white/90" : "sticky top-16 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl lg:top-0"} dark:border-slate-800 dark:bg-[#020617]/90`}>
             <div className="px-4 py-4 lg:px-8 lg:py-5">
@@ -230,7 +236,7 @@ export default function FinnWorkspaceShell({ children }) {
                   <div className="min-w-0">
                     <button type="button" onClick={() => {
                       commandNonceRef.current += 1;
-                      setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
+                      setCommandRequest({ mode: "chat", nonce: commandNonceRef.current });
                       setAssistantOpen(true);
                     }} className="flex items-center gap-3 text-left">
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
@@ -263,7 +269,7 @@ export default function FinnWorkspaceShell({ children }) {
           <WorkspaceCanvas>
             <div
               className={`mx-auto flex w-full ${isOnboardingRoute ? "max-w-6xl" : "max-w-[1500px]"} flex-col ${isOnboardingRoute ? "gap-5 pt-5 lg:gap-6 lg:pt-6" : "gap-6 pt-6 lg:gap-8 lg:pt-8"} ${
-                assistantOpen || feedDiscussion ? "pb-8" : "pb-10 lg:pb-12"
+                chatOpen ? "pb-8" : "pb-10 lg:pb-12"
               }`}
             >
               {!isOnboardingRoute ? (
@@ -298,12 +304,12 @@ export default function FinnWorkspaceShell({ children }) {
                 <div>{children}</div>
               </section>
 
-              {!assistantOpen ? <div aria-hidden className={`${isOnboardingRoute ? "h-32 lg:h-40" : "h-40 lg:h-48"} shrink-0`} /> : null}
+              {!chatOpen ? <div aria-hidden className={`${isOnboardingRoute ? "h-32 lg:h-40" : "h-40 lg:h-48"} shrink-0`} /> : null}
             </div>
           </WorkspaceCanvas>
         </div>
 
-        {!assistantOpen ? (
+        {!chatOpen ? (
           <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[70] flex justify-center px-4 pb-4">
             <form
               onSubmit={handleComposerSubmit}
@@ -362,59 +368,36 @@ export default function FinnWorkspaceShell({ children }) {
             </form>
           </div>
         ) : null}
-        {feedDiscussion ? (
-          <div
-            className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm"
-            data-feed-handoff-id={feedDiscussion.request.context.feed_item_id}
-          >
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 cursor-default"
-              onClick={() => closeFeedDiscussion(feedDiscussion.request.nonce)}
-            />
-            <AIAssistant
-              key={feedDiscussion.request.nonce}
-              isOpen
-              setIsOpen={(open) => {
-                if (!open) closeFeedDiscussion(feedDiscussion.request.nonce);
-              }}
-              modal
-              className="z-10"
-              eventsEnabled
-              queryValue={feedDiscussion.draft}
-              onQueryChange={(draft) => setFeedDiscussion((current) =>
-                updateFeedDiscussionDraftIfCurrent(current, feedDiscussion.request.nonce, draft)
-              )}
-              commandRequest={feedDiscussion.request}
-              autoFocusComposer
-              closeLabel={workspaceCopy.closeBackdrop}
-            />
-          </div>
-        ) : assistantOpen ? (
-          <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 cursor-default"
-              onClick={closeAssistant}
-            />
-            <AIAssistant
-              key="general"
-              isOpen={assistantOpen}
-              setIsOpen={(open) => {
-                if (open) setAssistantOpen(true);
-                else closeAssistant();
-              }}
-              modal
-              className="z-10"
-              eventsEnabled={assistantOpen}
-              queryValue={composerQuery}
-              onQueryChange={setComposerQuery}
-              commandRequest={commandRequest}
-              autoFocusComposer
-              closeLabel={workspaceCopy.closeBackdrop}
-            />
-          </div>
-        ) : null}
+        <div
+          className={`${chatOpen ? "fixed" : "hidden"} inset-0 z-[75] bg-white dark:bg-slate-950 xl:inset-y-0 xl:left-auto xl:right-0 ${assistantExpanded ? "xl:w-[560px]" : "xl:w-[440px]"} xl:border-l xl:border-slate-200 xl:shadow-xl xl:dark:border-slate-800`}
+          data-feed-handoff-id={feedDiscussion?.request.context.feed_item_id || undefined}
+          data-testid="finn-chat-panel"
+        >
+          <AIAssistant
+            isOpen={chatOpen}
+            setIsOpen={(open) => {
+              if (open) {
+                if (!feedDiscussion) setAssistantOpen(true);
+              } else if (feedDiscussion) closeFeedDiscussion(feedDiscussion.request.nonce);
+              else closeAssistant();
+            }}
+            dock
+            expanded={assistantExpanded}
+            onToggleExpanded={() => setAssistantExpanded((current) => !current)}
+            onCommandComplete={() => {
+              commandNonceRef.current += 1;
+              setCommandRequest({ mode: "chat", nonce: commandNonceRef.current });
+            }}
+            eventsEnabled={chatOpen}
+            queryValue={feedDiscussion ? feedDiscussion.draft : composerQuery}
+            onQueryChange={feedDiscussion
+              ? (draft) => setFeedDiscussion((current) => updateFeedDiscussionDraftIfCurrent(current, feedDiscussion.request.nonce, draft))
+              : setComposerQuery}
+            commandRequest={feedDiscussion ? feedDiscussion.request : commandRequest}
+            autoFocusComposer
+            closeLabel={workspaceCopy.closeBackdrop}
+          />
+        </div>
       </div>
 
       <ScrollToTop />

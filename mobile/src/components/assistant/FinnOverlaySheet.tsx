@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -27,18 +27,30 @@ type FinnOverlaySheetProps = {
   prefill?: string;
   source?: string;
   symbol?: string;
+  query: string;
+  onQueryChange: Dispatch<SetStateAction<string>>;
+  messages: AssistantFeedItem[];
+  onMessagesChange: Dispatch<SetStateAction<AssistantFeedItem[]>>;
+  sessionId: string | null;
+  onSessionIdChange: Dispatch<SetStateAction<string | null>>;
+  onNewConversation: () => void;
 };
 
-export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, source, symbol }: FinnOverlaySheetProps) {
-  const { appearance } = useAppPreferences();
+export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, source, symbol, query, onQueryChange: setQuery, messages, onMessagesChange: setMessages, sessionId, onSessionIdChange: setSessionId, onNewConversation }: FinnOverlaySheetProps) {
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const { context, updateContext } = useIntelligenceContext();
-  const [query, setQuery] = useState(prefill ?? '');
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [messages, setMessages] = useState<AssistantFeedItem[]>([]);
   const [pendingFeedItemId, setPendingFeedItemId] = useState(feedItemId);
+  const requestSequence = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
+  const copy = language === 'nl'
+    ? { placeholder: 'Vraag FINN wat dit betekent voor jouw plan...', addAsset: 'Asset toevoegen', addIndicator: 'Indicator toevoegen', addAssetPrompt: 'Help me een asset toe te voegen.', addIndicatorPrompt: 'Help me een indicator toe te voegen.', newConversation: 'Nieuw gesprek', error: 'FINN kon je vraag niet beantwoorden', retry: 'Opnieuw', working: 'FINN verwerkt je vraag...', stopped: 'Antwoord gestopt.', starters: ['Controleer mijn plan', 'Wat vraagt mijn aandacht?', 'Leg mijn score uit'], prompts: ['Controleer mijn huidige plan.', 'Wat vraagt nu mijn aandacht op basis van mijn plannen?', 'Leg de huidige score voor deze asset uit.'] }
+    : language === 'de'
+      ? { placeholder: 'Frag FINN, was das für deinen Plan bedeutet...', addAsset: 'Asset hinzufügen', addIndicator: 'Indikator hinzufügen', addAssetPrompt: 'Hilf mir, ein Asset hinzuzufügen.', addIndicatorPrompt: 'Hilf mir, einen Indikator hinzuzufügen.', newConversation: 'Neues Gespräch', error: 'FINN konnte deine Frage nicht beantworten', retry: 'Erneut versuchen', working: 'FINN verarbeitet deine Frage...', stopped: 'Antwort gestoppt.', starters: ['Meinen Plan prüfen', 'Was braucht Aufmerksamkeit?', 'Meinen Score erklären'], prompts: ['Prüfe meinen aktuellen Plan.', 'Was braucht jetzt meine Aufmerksamkeit in meinen Plänen?', 'Erkläre den aktuellen Score für dieses Asset.'] }
+      : { placeholder: 'Ask FINN what this means for your plan...', addAsset: 'Add asset', addIndicator: 'Add indicator', addAssetPrompt: 'Help me add an asset.', addIndicatorPrompt: 'Help me add an indicator.', newConversation: 'New conversation', error: 'FINN could not answer your question', retry: 'Retry', working: 'FINN is working on your question...', stopped: 'Response stopped.', starters: ['Review my plan', 'What needs my attention?', 'Explain my score'], prompts: ['Review my current plan.', 'What needs my attention in my plans now?', 'Explain the current score for this asset.'] };
 
   useEffect(() => {
     setPendingFeedItemId(feedItemId);
@@ -73,20 +85,23 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
     if (contextMetric) {
       setQuery(`Explain ${contextMetric} for ${activeSymbol}.`);
     }
-  }, [activeSymbol, contextMetric, prefill]);
+  }, [activeSymbol, contextMetric, prefill, setQuery]);
 
   const visibleMessages = messages.filter((item) => item.type === 'message');
 
-  async function handleSend() {
-    const trimmed = query.trim();
+  async function handleSend(prompt?: string, retry = false) {
+    const trimmed = (prompt ?? query).trim();
     if (!trimmed || sending) return;
+    const requestId = ++requestSequence.current;
+    const controller = new AbortController();
+    activeRequest.current = controller;
 
     await triggerHaptic('selection');
     setSending(true);
     setChatError(null);
     setMenuOpen(false);
     setMessages((current) => [
-      ...current,
+      ...(retry ? current.slice(0, -1) : current),
       {
         id: `user-${Date.now()}`,
         role: 'user',
@@ -97,34 +112,44 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
     setQuery('');
 
     try {
-      const envelope = await assistantApi.chat(trimmed, apiContext);
+      const history = (retry ? messages.slice(0, -1) : messages)
+        .filter((item): item is Extract<AssistantFeedItem, { type: 'message' }> => item.type === 'message')
+        .map((item) => ({ role: item.role, text: item.text }));
+      const envelope = await assistantApi.chat(trimmed, apiContext, history, sessionId, controller.signal);
+      if (requestId !== requestSequence.current) return;
       const mapped = mapAssistantEnvelopeToFeedItems(envelope).filter((item) => item.type === 'message');
       setMessages((current) => [...current, ...mapped]);
+      if (envelope.session_id) setSessionId(envelope.session_id);
       setPendingFeedItemId(undefined);
     } catch (error) {
+      if (requestId !== requestSequence.current) return;
       setChatError(error instanceof Error ? error.message : 'FINN chat request failed');
     } finally {
-      setSending(false);
+      if (activeRequest.current === controller) activeRequest.current = null;
+      if (requestId === requestSequence.current) setSending(false);
     }
+  }
+
+  function stopResponse() {
+    requestSequence.current += 1;
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    setSending(false);
+    setChatError(null);
+    setMessages((current) => [...current, { id: `stopped-${Date.now()}`, role: 'assistant', text: copy.stopped, type: 'message' }]);
   }
 
   function applyQuickAction(kind: 'asset' | 'indicator') {
     setMenuOpen(false);
-    setQuery(
-      kind === 'asset'
-        ? `Add an asset to my ${activeWorkspace.toLowerCase()} workspace.`
-        : `Add an indicator to my ${activeWorkspace.toLowerCase()} workspace.`,
-    );
+    setQuery(kind === 'asset' ? copy.addAssetPrompt : copy.addIndicatorPrompt);
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: 'rgba(15, 23, 42, 0.22)' }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
-        <Pressable onPress={onClose} style={styles.backdrop} />
-
         <View style={styles.sheetWrap} pointerEvents="box-none">
           <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.header, { borderBottomColor: colors.borderSubtle }]}>
@@ -137,9 +162,22 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                   <Text style={[styles.headerContext, { color: colors.textMuted }]}>{contextLine}</Text>
                 </View>
               </View>
-              <Pressable onPress={onClose} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}>
-                <Feather color={colors.text} name="x" size={28} />
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable accessibilityLabel={copy.newConversation} onPress={() => {
+                  requestSequence.current += 1;
+                  activeRequest.current?.abort();
+                  activeRequest.current = null;
+                  setSending(false);
+                  setChatError(null);
+                  setPendingFeedItemId(undefined);
+                  onNewConversation();
+                }} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}>
+                  <Feather color={colors.text} name="plus" size={22} />
+                </Pressable>
+                <Pressable onPress={onClose} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}>
+                  <Feather color={colors.text} name="x" size={26} />
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.body}>
@@ -150,54 +188,30 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                     style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
                   >
                     <Feather color={colors.textDim} name="search" size={20} />
-                    <Text style={[styles.menuText, { color: colors.text }]}>Add asset</Text>
+                    <Text style={[styles.menuText, { color: colors.text }]}>{copy.addAsset}</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => applyQuickAction('indicator')}
                     style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
                   >
                     <Feather color={colors.textDim} name="sliders" size={20} />
-                    <Text style={[styles.menuText, { color: colors.text }]}>Add indicator</Text>
+                    <Text style={[styles.menuText, { color: colors.text }]}>{copy.addIndicator}</Text>
                   </Pressable>
                 </View>
               ) : null}
 
-              <View style={[styles.composer, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-                <Pressable
-                  onPress={() => setMenuOpen((current) => !current)}
-                  style={({ pressed }) => [styles.leadingAction, pressed && styles.pressed]}
-                >
-                  <Feather color={colors.textDim} name={menuOpen ? 'x' : 'plus'} size={22} />
-                </Pressable>
-                <TextInput
-                  multiline
-                  onChangeText={setQuery}
-                  placeholder="Ask FINN or give an instruction..."
-                  placeholderTextColor={colors.textDim}
-                  style={[styles.input, { color: colors.text }]}
-                  value={query}
-                />
-                <Pressable
-                  disabled={!query.trim() || sending}
-                  onPress={handleSend}
-                  style={({ pressed }) => [
-                    styles.sendBtn,
-                    {
-                      backgroundColor: query.trim() && !sending ? colors.textDim : colors.border,
-                    },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Feather color="#ffffff" name="send" size={18} />
-                </Pressable>
-              </View>
-
-              {visibleMessages.length > 0 ? (
-                <ScrollView
+              <ScrollView
+                  style={styles.messages}
                   contentContainerStyle={styles.feed}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
+                  {visibleMessages.length === 0 ? copy.starters.map((label, index) => (
+                    <Pressable key={label} onPress={() => void handleSend(copy.prompts[index])}
+                      style={[styles.starter, { borderColor: colors.border }]}>
+                      <Text style={[styles.messageText, { color: colors.text }]}>{label}</Text>
+                    </Pressable>
+                  )) : null}
                   {visibleMessages.map((item) => {
                     const isUser = item.role === 'user';
                     return (
@@ -207,8 +221,8 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                           styles.message,
                           {
                             alignSelf: isUser ? 'flex-end' : 'stretch',
-                            backgroundColor: isUser ? colors.backgroundSoft : colors.surfaceElevated,
-                            borderColor: colors.border,
+                            backgroundColor: isUser ? colors.backgroundSoft : colors.surface,
+                            borderColor: isUser ? colors.border : 'transparent',
                           },
                         ]}
                       >
@@ -217,13 +231,33 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                     );
                   })}
                 </ScrollView>
-              ) : null}
+
+              {sending ? <Text style={[styles.progress, { color: colors.textMuted }]}>{copy.working}</Text> : null}
 
               {chatError ? (
-                <Text style={[styles.errorText, { color: theme.colors.danger }]}>
-                  FINN kon je vraag niet beantwoorden: {chatError}
-                </Text>
+                <Pressable onPress={() => {
+                  const lastUser = [...visibleMessages].reverse().find((item) => item.role === 'user');
+                  if (lastUser) void handleSend(lastUser.text, true);
+                }}>
+                  <Text style={[styles.errorText, { color: theme.colors.danger }]}>{copy.error}: {chatError} · {copy.retry}</Text>
+                </Pressable>
               ) : null}
+
+              <View style={[styles.composer, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+                <Pressable onPress={() => setMenuOpen((current) => !current)}
+                  style={({ pressed }) => [styles.leadingAction, pressed && styles.pressed]}>
+                  <Feather color={colors.textDim} name={menuOpen ? 'x' : 'plus'} size={22} />
+                </Pressable>
+                <TextInput multiline onChangeText={setQuery} placeholder={copy.placeholder}
+                  placeholderTextColor={colors.textDim} style={[styles.input, { color: colors.text }]} value={query} />
+                <Pressable disabled={!sending && !query.trim()}
+                  onPress={() => sending ? stopResponse() : void handleSend()}
+                  style={({ pressed }) => [styles.sendBtn, {
+                    backgroundColor: sending || query.trim() ? theme.colors.accent : colors.border,
+                  }, pressed && styles.pressed]}>
+                  <Feather color="#ffffff" name={sending ? 'square' : 'send'} size={18} />
+                </Pressable>
+              </View>
             </View>
           </View>
         </View>
@@ -237,6 +271,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   body: {
+    flex: 1,
     gap: 12,
     padding: 14,
   },
@@ -257,8 +292,11 @@ const styles = StyleSheet.create({
   },
   feed: {
     gap: 10,
-    paddingBottom: 4,
+    paddingBottom: 20,
   },
+  messages: { flex: 1 },
+  progress: { fontSize: 12, paddingHorizontal: 4 },
+  starter: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
   flex: {
     flex: 1,
   },
@@ -277,6 +315,7 @@ const styles = StyleSheet.create({
   headerCopy: {
     gap: 2,
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
   headerIdentity: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -324,10 +363,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderRadius: 18,
     borderWidth: 1,
-    marginBottom: 2,
-    marginLeft: 6,
+    bottom: 85,
+    left: 20,
     minWidth: 188,
     overflow: 'hidden',
+    position: 'absolute',
+    zIndex: 2,
     shadowColor: '#0F172A',
     shadowOffset: { height: 8, width: 0 },
     shadowOpacity: 0.1,
@@ -348,8 +389,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   message: {
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderWidth: 0,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -373,9 +414,9 @@ const styles = StyleSheet.create({
     width: 40,
   },
   sheet: {
-    borderRadius: 28,
-    borderWidth: 1,
-    maxHeight: '62%',
+    borderRadius: 0,
+    borderWidth: 0,
+    flex: 1,
     overflow: 'hidden',
     shadowColor: '#0F172A',
     shadowOffset: { height: 18, width: 0 },
@@ -384,7 +425,5 @@ const styles = StyleSheet.create({
   },
   sheetWrap: {
     flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 22,
   },
 });
