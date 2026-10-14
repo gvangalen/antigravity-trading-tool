@@ -17,8 +17,23 @@ retention, plus menu, feed handoff, NL/EN/DE and narrow browser layout passed
 that QA scope. No proposal was confirmed or order executed. The current
 local repair aligns the featured plan's workspace setup reference, exposes
 owner-scoped FINN 2.0 conversation history, and clarifies the trade-setup
-proposal contract. Backend and frontend suites passed locally; worker-driven
-action and real-provider gates have not yet been repeated for this repair.
+proposal contract. Backend **3570 passed, 3 existing skips** and web build,
+typecheck, i18n, commands, proposals, setups, and the high-severity audit
+passed locally. The isolated FastAPI/Celery action matrix passed **16/16**
+and adapters **19/19**, with zero broker orders, live bots, live-trading calls,
+or production connections (artifact SHA-256
+`c549856c0522464ba1229ef5904c6d2b117413f4e7ba93665afc92e545fd3736`).
+The exact rejected three-turn ETH trade-setup chat produced an unconfirmed
+proposal and restored all three user turns through the FINN 2.0 history API
+on a second local replay; a separate two-setup ETH fixture read the featured
+setup and timeframe correctly. Real Luna/Responses selector development passed
+**20/20** with zero provider failures (artifact SHA-256
+`9bbf28e269ab7a460d6439f01c3c80e49b8bbda967f62ec835fe6bc196296f31`).
+The full real-provider regression passed **109/109**, with zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`6a56596314001e321ad6dfd7b2a86b7a30e06388dacc8569c428423bb8329bf4`).
+These are local Build results; the repair is not live until CI and Auto Deploy
+pass and public backend/frontend identity is verified.
 
 The prior clarification candidate was
 accepted by independent QA. [PR #313](https://github.com/gvangalen/antigravity-trading-tool/pull/313)
