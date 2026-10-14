@@ -6,7 +6,47 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_MULTI_SETUP_COMPARISON_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_RELATIONSHIP_COMPARISON_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the
+preceding live SHA `264b3cb1416db8332016aefe26937afd212ab9ab`: FINN
+completed the seven-setup comparison but assigned Paper-bot links to the
+wrong ETH setups, exposed `as_of`, and confused a DCA purchase rhythm with
+an analysis timeframe. The two-setup comparison, Stop, guided proposal,
+locale, mobile panel, navigation, and feed handoff paths passed in that run.
+[PR #332](https://github.com/gvangalen/antigravity-trading-tool/pull/332)
+groups each owner-scoped setup with its complete strategy collection, linked
+bots, score conditions, and DCA purchase schedule before the model answers;
+raw typed tool evidence remains in the trace. Product SHA:
+`71665854afbb6fa88f11eff262ab9cd737a3c0e1`.
+
+Build evidence on 2026-10-14: backend **3594 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal and
+setup tests, and high-severity audit passed. The local worker action matrix
+passed **16/16** and adapters **19/19**, with zero broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`a173f00b9aa39f0789039aa7c20440e8d9b818f1f13b130386d650dbfa73f208`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`f2787fd08bf8e0990958b9288e7eed30b04e2488c6e8bb4b365cace384249883`)
+and regression **109/109** (SHA-256
+`d8d97db747b8a424bc6d4343d6b7d07bd63ec1b03c1c63fd2c1cff6032e3dd48`),
+with zero provider, schema, timeout, parse or validation failures. Real local
+FastAPI/Celery/PostgreSQL/Responses tests of the mixed seven-setup comparison
+passed, including one setup with two strategy variants and two separately
+linked Paper bots; the exact prior long question passed (artifact SHA-256
+`418156f928bb74cfa9984a28bbeb134a8109cf1e83eb6111d9a4e1b760b2fec8`).
+Candidate [CI run 38567330102](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38567330102)
+and main [CI run 38567622986](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38567622986)
+each passed all five jobs. [Auto Deploy run 38567898347](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38567898347)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA. This status-only commit will have a later SHA;
+independent QA must bind its authenticated browser run to both public
+surfaces. The new independent QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_MULTI_SETUP_COMPARISON_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the later
+status-only live SHA `264b3cb1416db8332016aefe26937afd212ab9ab` for the
+bot-link, DCA-cadence, and raw-field issues described above.
+
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
 preceding live SHA `cec58a52a3b86560e1426637f00195a93d296163`: the exact
 read-only question about differences among the account's seven ETH setups
@@ -38,8 +78,8 @@ and main [CI run 38562912547](https://github.com/gvangalen/antigravity-trading-t
 each passed all five jobs. [Auto Deploy run 38563175062](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38563175062)
 succeeded. Public backend health and frontend build-info both returned HTTP
 200 and the exact product SHA. This status-only commit will have a later SHA;
-independent QA must bind its authenticated browser run to both public
-surfaces. The new independent QA verdict is pending.
+independent QA bound to the later status-only SHA and returned the verdict
+recorded above.
 
 Prior phase: `CHAT_SIDE_PANEL_READ_AND_STOP_REPAIR_READY_FOR_INDEPENDENT_QA`.
 Independent browser QA returned **NOT ACCEPTED** on the preceding deployed
