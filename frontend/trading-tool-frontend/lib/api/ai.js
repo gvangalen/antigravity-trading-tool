@@ -167,6 +167,15 @@ export const getAssistantSessionDetail = (sessionId) => {
   });
 };
 
+export const getFinnV2Conversations = () => fetchAuth(`/api/assistant/v2/conversations`, {
+  method: 'GET',
+});
+
+export const getFinnV2ConversationDetail = (conversationId) => fetchAuth(
+  `/api/assistant/v2/conversations/${encodeURIComponent(conversationId)}`,
+  { method: 'GET' },
+);
+
 // ========================================
 // Execute a server-issued FINN action
 // ========================================

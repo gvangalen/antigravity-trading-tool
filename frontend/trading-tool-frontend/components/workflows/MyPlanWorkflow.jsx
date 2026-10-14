@@ -616,6 +616,20 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       || null;
   }, [activeSetup, marketBestPlan, plans]);
 
+  // The highlighted plan is the workspace selection FINN receives with an
+  // explicit question on this page. Keep its owner-validated setup identity
+  // aligned with the card the user can actually see.
+  useEffect(() => {
+    const featured = activePlan?.setup;
+    const featuredId = getSetupId(featured);
+    if (!featuredId || loading || normalizeId(featuredId) === normalizeId(getSetupId(activeSetup))) return;
+    setActiveSetup({
+      ...featured,
+      setup_id: featuredId,
+      strategy_id: activePlan?.strategy?.id || null,
+    });
+  }, [activePlan, activeSetup, loading, setActiveSetup]);
+
   const closeDrawer = () => setDrawer(null);
 
   const openStrategyDrawer = (setup, strategy = null, mode = "edit-strategy") => {

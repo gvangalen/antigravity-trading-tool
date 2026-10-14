@@ -6,7 +6,36 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_LIVE_PENDING_QA`. The prior clarification candidate was
+Phase: `CHAT_SIDE_PANEL_REPAIR_LOCAL_VALIDATION`. Independent authenticated
+browser QA returned **NOT ACCEPTED** on backend/frontend SHA
+`26f151bcfa7e86bcfc7fe9bf5541b7730ec71314`: the visible featured ETH plan
+and FINN's named setup differed; a completed trade-setup conversation with
+optional score boundaries omitted produced no proposal card; FINN 2.0
+history was empty and did not restore the conversation after refresh.
+The panel layout, direct Enter submission, open/close and navigation draft
+retention, plus menu, feed handoff, NL/EN/DE and narrow browser layout passed
+that QA scope. No proposal was confirmed or order executed. The current
+local repair aligns the featured plan's workspace setup reference, exposes
+owner-scoped FINN 2.0 conversation history, and clarifies the trade-setup
+proposal contract. Backend **3570 passed, 3 existing skips** and web build,
+typecheck, i18n, commands, proposals, setups, and the high-severity audit
+passed locally. The isolated FastAPI/Celery action matrix passed **16/16**
+and adapters **19/19**, with zero broker orders, live bots, live-trading calls,
+or production connections (artifact SHA-256
+`c549856c0522464ba1229ef5904c6d2b117413f4e7ba93665afc92e545fd3736`).
+The exact rejected three-turn ETH trade-setup chat produced an unconfirmed
+proposal and restored all three user turns through the FINN 2.0 history API
+on a second local replay; a separate two-setup ETH fixture read the featured
+setup and timeframe correctly. Real Luna/Responses selector development passed
+**20/20** with zero provider failures (artifact SHA-256
+`9bbf28e269ab7a460d6439f01c3c80e49b8bbda967f62ec835fe6bc196296f31`).
+The full real-provider regression passed **109/109**, with zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`6a56596314001e321ad6dfd7b2a86b7a30e06388dacc8569c428423bb8329bf4`).
+These are local Build results; the repair is not live until CI and Auto Deploy
+pass and public backend/frontend identity is verified.
+
+The prior clarification candidate was
 accepted by independent QA. [PR #313](https://github.com/gvangalen/antigravity-trading-tool/pull/313)
 contains the persistent web right panel, direct ordinary chat submission,
 single visible composer, conversation/draft persistence, header history and
@@ -17,8 +46,8 @@ web export were built together on candidate source commit
 The PR merged as product SHA `906462e2f1dc2fd00bba260e9a00b563d71601b1`.
 Auto Deploy run `38516477656` succeeded. On 2026-10-14, public backend
 health and frontend build-info each returned HTTP 200 with exactly that
-product SHA. This is deployment identity only; the authenticated chat UX
-still awaits independent QA. The mobile source passed Expo bundle exports,
+product SHA. This was deployment identity, not authenticated chat acceptance;
+the subsequent independent QA verdict is recorded above. The mobile source passed Expo bundle exports,
 but this repository has no configured mobile OTA/store release path.
 
 Measured local gates on this source: backend `pytest -q` **3569 passed, 3
