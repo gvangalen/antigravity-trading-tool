@@ -526,6 +526,30 @@ class FinnResponsesAnswerVerifier:
                 return False
         return True
 
+    @classmethod
+    def _language_matches_model_answer(cls, text: str, locale: str | None) -> bool:
+        """Judge a long coach answer as a whole, not by one data-heavy sentence.
+
+        Plans, strategy names and table labels can fool sentence-level language
+        detection. A predominantly foreign answer still fails this boundary.
+        """
+        if locale not in {"nl", "en", "de"}:
+            return True
+        if cls._language_matches(text, locale):
+            return True
+        prose = " ".join(
+            line for line in text.splitlines()
+            if line.strip() and not line.lstrip().startswith(("|", "#"))
+        )
+        prose = re.sub(r"[*_`]", "", prose)
+        if len(re.findall(r"\b[^\W\d_]+\b", prose, re.UNICODE)) < 12:
+            return False
+        try:
+            language = detect_langs(prose)[0]
+        except LangDetectException:
+            return False
+        return language.lang == locale or (locale == "nl" and language.lang == "af")
+
     @staticmethod
     def _profile_presence_claim_supported(text: str, evidence: tuple[dict[str, Any], ...]) -> bool:
         has_saved_risk_profile = any(
@@ -3900,7 +3924,7 @@ class FinnResponsesAnswerVerifier:
         def presentation_ok(text: str) -> bool:
             if result.model_led_coach:
                 checks = {
-                    "language": self._language_matches(text, locale),
+                    "language": self._language_matches_model_answer(text, locale),
                     "user_mutation": self._assistant_does_not_claim_user_mutation(text),
                     "proposal_speaker": self._proposal_speaker_is_user(text),
                 }

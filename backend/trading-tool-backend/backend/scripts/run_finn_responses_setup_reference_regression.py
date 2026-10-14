@@ -40,7 +40,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 16))
+    parser.add_argument("--sequence", type=int, choices=range(1, 17))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -144,6 +144,9 @@ def main() -> None:
         (
             "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid bij de huidige scores. Alleen lezen, niets wijzigen.",
         ),
+        (
+            "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid bij de huidige scores. Alleen lezen, niets wijzigen.",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
@@ -161,6 +164,27 @@ def main() -> None:
                 other_eth = _insert_setup(connection, user["id"], "ETH QA Tweede Setup", symbol="ETH")
                 _insert_strategy(connection, user["id"], eth_setups[0], "ETH Full Strategy")
                 _insert_strategy(connection, user["id"], other_eth, "ETH QA Tweede Strategy")
+        if sequence_number == 16:
+            with sync_engine.begin() as connection:
+                original = connection.execute(text("""
+                    SELECT id FROM setups WHERE user_id=:user_id AND name='ETH Full Setup'
+                """), {"user_id": user["id"]}).scalar_one()
+                _insert_strategy(connection, user["id"], original, "ETH Full Strategy")
+                for index in range(2, 8):
+                    setup_id = _insert_setup(
+                        connection, user["id"], f"ETH QA Setup {index}", symbol="ETH",
+                    )
+                    connection.execute(text("""
+                        UPDATE setups SET timeframe=:timeframe, min_macro_score=:macro
+                        WHERE id=:id AND user_id=:user_id
+                    """), {
+                        "timeframe": "1D" if index % 2 == 0 else "4H",
+                        "macro": 20 + index, "id": setup_id, "user_id": user["id"],
+                    })
+                    if index != 5:
+                        _insert_strategy(connection, user["id"], setup_id, f"ETH QA Strategy {index}")
+                    if index == 3:
+                        _insert_strategy(connection, user["id"], setup_id, "ETH QA Strategy 3 Variant")
         conversation_id = None
         second_btc_setup_id = None
         last_verified_linked_setup_ids: set[int] = set()
@@ -433,6 +457,34 @@ def main() -> None:
                             for call in trace for item in (call.get("result") or {}).get("results") or [])
                     and "FINN kon dit antwoord niet afronden" not in answer
                     and exchange.get("answer_kind") != "saved_setup_collection"
+                )
+            if sequence_number == 16:
+                named = {"ETH Full Setup", *(f"ETH QA Setup {index}" for index in range(2, 8))}
+                saved_rows = [
+                    row
+                    for call in trace
+                    for item in (call.get("result") or {}).get("results") or []
+                    if item.get("scope") == "read_saved_setup_inventory"
+                    for row in (item.get("data") or {}).get("setups") or []
+                ]
+                linked = [
+                    item for call in trace
+                    for item in (call.get("result") or {}).get("results") or []
+                    if item.get("scope") == "read_linked_strategies"
+                    and item.get("status") == "completed"
+                ]
+                checks["complete_eth_comparison_evidence"] = (
+                    {str(row.get("name") or "") for row in saved_rows} == named
+                    and len({(item.get("data") or {}).get("setup_id") for item in linked}) == 7
+                    and any(item.get("scope") == "read_asset_scores"
+                            for call in trace
+                            for item in (call.get("result") or {}).get("results") or [])
+                    and len(trace) == 1
+                )
+                checks["all_eth_setups_answered"] = (
+                    all(name in answer for name in named)
+                    and "FINN kon dit antwoord niet afronden" not in answer
+                    and "BTC Other" not in answer
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,

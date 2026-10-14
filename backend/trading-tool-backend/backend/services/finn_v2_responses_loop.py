@@ -16,6 +16,7 @@ from backend.services.finn_v2_responses_tool_catalog import (
     FinnResponsesToolError,
 )
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
+from backend.services.finn_v2_turn_contract import requests_comparison
 
 
 logger = logging.getLogger(__name__)
@@ -713,6 +714,16 @@ class FinnResponsesLoop:
                         "\nThe trader is answering a clarification for this original request: "
                         + json.dumps(original_user_request, ensure_ascii=False)
                     )
+            many_plan_comparison = bool(
+                model_led_coach and requests_comparison(message)
+                and any(
+                    item.get("scope") == "read_saved_setup_inventory"
+                    and len((item.get("data") or {}).get("setups") or []) > 2
+                    for prior_call in trace
+                    for item in (prior_call.get("result") or {}).get("results") or []
+                    if isinstance(item, dict)
+                )
+            )
             kwargs: dict[str, Any] = {
                 "model": (
                     self.clarification_model
@@ -725,6 +736,7 @@ class FinnResponsesLoop:
                 "parallel_tool_calls": False,
                 "store": True,
                 "max_output_tokens": output_token_override or (
+                    1800 if many_plan_comparison else
                     1000 if model_led_coach and trace else 700 if not trace else 350
                 ),
             }
@@ -1031,7 +1043,10 @@ class FinnResponsesLoop:
                     and (remaining_after is None or remaining_after > 7)
                 ):
                     incomplete_output_retry_used = True
-                    output_token_override = min(kwargs["max_output_tokens"] * 2, 1400)
+                    output_token_override = min(
+                        kwargs["max_output_tokens"] * 2,
+                        2400 if many_plan_comparison else 1400,
+                    )
                     continue
                 raise FinnResponsesError("responses_incomplete")
             # A successful canonical provider call proves that a shared quota
