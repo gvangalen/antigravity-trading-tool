@@ -6,7 +6,51 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_PROPOSAL_RESUME_AND_COUNT_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_SCORE_COUNT_AND_LOCALE_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the
+preceding live SHA `2a1d4fe50970f7c06e1b5381d6535434af2d92f5`:
+the proposal card now survived navigation and refresh, cancellation removed
+its confirmation action, and the Paper-bot total was consistent at five with
+two setups without bots. The seven-ETH-setup explanation nevertheless counted
+four macro minimums of zero even though the saved records had three zero,
+three 30, and one unbounded setup. A follow-up after switching the UI to
+German kept the correct setup context but replied in Dutch. This was an
+independent browser retest, not a protected official runner matrix; its
+fixture had one strategy per setup.
+
+[PR #336](https://github.com/gvangalen/antigravity-trading-tool/pull/336)
+supplies typed, owner-scoped score-condition groups and explicit asset scope
+for collection reads, distinguishing an absent bound from literal zero. FINN
+still composes the answer; the existing bounded language-only repair now
+detects a short German/Dutch mixed sentence, and the web composer submits the
+language displayed at send time. Product SHA:
+`917c7fa43fdccd4dc9a44ab9c5c51405dcaaae78`.
+
+Build evidence on 2026-10-14: backend **3597 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal and
+setup tests, and high-severity audit passed. The local worker action matrix
+passed **16/16** and adapters **19/19** with zero broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`cb8b734faf1c08dbbf19950d3cfc8f52809f549743c8efba7b4ba31476d2f51b`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`081c8d404204bc5e993396e2fd8bbed1ca694aa0d9fd0e72d8972c643f709ef0`)
+and regression **109/109** (SHA-256
+`e8767cabaaf5d8c60b534ad8e7ac0d6f5a0d029fde06725280aa1c21217bb86d`).
+The local FastAPI/Celery/PostgreSQL/Responses seven-setup comparison and
+German follow-up passed **2/2** (SHA-256
+`6043410d4c7679223deb7bb2693f17511c5fe550cfa0586cda6a31005d026c11`);
+the alternate asset-scoped wording passed **1/1** (SHA-256
+`ab7589fde2817df58725529eba76a096059902423160227bad6489b9af139d10`).
+No protected QA material or production account was used. Candidate
+[CI run 38580468313](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38580468313)
+and main [CI run 38581372766](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38581372766)
+each passed all five jobs. [Auto Deploy run 38581681364](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38581681364)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA. This status-only commit will have a later SHA;
+independent QA must bind its authenticated browser run to both public
+surfaces. The new independent QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_PROPOSAL_RESUME_AND_COUNT_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
 preceding live SHA `14052b67a49f584eca677e55deab7b4fed345533`:
 the seven-setup comparison now kept bot links, strategy links, DCA rhythm,
@@ -48,7 +92,9 @@ each passed all five jobs. [Auto Deploy run 38572862655](https://github.com/gvan
 succeeded. Public backend health and frontend build-info both returned HTTP
 200 and the exact product SHA. This status-only commit will have a later SHA;
 independent QA must bind its authenticated browser run to both public
-surfaces. The new independent QA verdict is pending.
+surfaces. Independent QA later returned **NOT ACCEPTED** on the status-only
+SHA `2a1d4fe50970f7c06e1b5381d6535434af2d92f5` for the score-count and
+German follow-up issues recorded in the current phase.
 
 Prior phase: `CHAT_SIDE_PANEL_RELATIONSHIP_COMPARISON_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the later
