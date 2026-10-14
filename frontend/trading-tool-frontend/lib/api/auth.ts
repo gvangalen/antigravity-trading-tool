@@ -53,6 +53,7 @@ const USER_STATE_SESSION_PREFIXES = [
   "finn-insight:",
   "finn-mission-control:",
   "finn-recent-conversations:v1",
+  "finn-composer-draft:v1",
 ];
 
 function clearStorageKeysByPrefixes(

@@ -39,6 +39,7 @@ import {
   updateFeedDiscussionDraftIfCurrent,
 } from "@/lib/finnCommandSearch";
 import { normalizeScopedAssetSymbol } from "@/lib/finnAssetIsolation";
+import { readFinnComposerDraft, writeFinnComposerDraft } from "@/lib/finnComposerDraft.mjs";
 
 export default function FinnWorkspaceShell({ children }) {
   const pathname = usePathname();
@@ -49,6 +50,7 @@ export default function FinnWorkspaceShell({ children }) {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
   const [composerQuery, setComposerQuery] = useState("");
+  const [hydratedDraftOwnerId, setHydratedDraftOwnerId] = useState(null);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [commandRequest, setCommandRequest] = useState(null);
   const [feedDiscussion, setFeedDiscussion] = useState(null);
@@ -84,6 +86,19 @@ export default function FinnWorkspaceShell({ children }) {
     // A discussion belongs to the account that selected its feed item.
     setFeedDiscussion(null);
   }, [user?.id]);
+
+  useEffect(() => {
+    const ownerId = user?.id == null ? null : String(user.id);
+    setComposerQuery(ownerId ? readFinnComposerDraft(window.sessionStorage, ownerId) : "");
+    setHydratedDraftOwnerId(ownerId);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const ownerId = user?.id == null ? null : String(user.id);
+    if (ownerId && hydratedDraftOwnerId === ownerId) {
+      writeFinnComposerDraft(window.sessionStorage, ownerId, composerQuery);
+    }
+  }, [composerQuery, hydratedDraftOwnerId, user?.id]);
 
   const openAssistant = () => {
     if (assistantOpen || feedDiscussion) return;

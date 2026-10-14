@@ -675,11 +675,9 @@ class FinnV2RunService:
             )
             context["locale"] = locale
             previous_response = None
-            # A Responses cursor includes the previous language's model
-            # continuation. Keep the owner conversation and saved references,
-            # but start a fresh model turn when the UI language changes.
-            if (cursor.get("run_id") and cursor.get("response_id")
-                    and normalize_locale(cursor.get("locale")) == locale):
+            # Keep verified conversation facts across a language switch. Only
+            # the provider continuation belongs to the previous language.
+            if cursor.get("run_id") and cursor.get("response_id"):
                 prior_contract = await orchestrator.runtime_contracts.get_for_run(
                     run_id=str(cursor["run_id"]),
                 )
@@ -698,7 +696,10 @@ class FinnV2RunService:
                             "run_id": prior_contract.run_id,
                             "response_id": (
                                 cursor["response_id"]
-                                if exchange.get("response_id_reusable", True) else None
+                                if (
+                                    exchange.get("response_id_reusable", True)
+                                    and normalize_locale(cursor.get("locale")) == locale
+                                ) else None
                             ),
                             "answer": dict(prior_state.get("terminal_response") or {}).get("content"),
                             "terminal_kind": exchange.get("answer_kind") or prior_state.get("terminal_status"),
