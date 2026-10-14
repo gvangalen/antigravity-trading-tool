@@ -226,6 +226,14 @@ class FinnV2OperationStateService:
         for key, value in (supplied_inputs or {}).items():
             if is_slot_turn:
                 continue
+            if (
+                key == "name" and model_tool_inputs
+                and contract.operation_id.startswith("create_")
+                and self._requests_name_prompt(message)
+            ):
+                # A user's instruction to be asked for a name outranks a
+                # model-generated name candidate for this draft.
+                continue
             if dca_strategy and key in {"entry", "stop_loss", "targets", "risk_profile", "setup_type"}:
                 continue
             if (contract.operation_id == "create_setup" and (
@@ -1337,7 +1345,23 @@ class FinnV2OperationStateService:
         return dict(raw)
 
     @staticmethod
+    def _requests_name_prompt(text: str) -> bool:
+        return bool(re.search(
+            r"(?:^|[.!?]\s*|\b(?:en|and|und)\s+)"
+            r"(?:vraag|ask|frag(?:e)?)\s+(?:mij|me|mich)?\s*"
+            r"(?:eerst\s+|first\s+|zuerst\s+)?"
+            r"(?:om|for|nach)\s+(?:(?:de|een|the|a|den|einen)\s+)?"
+            r"(?:naam|name|namen)\b",
+            text, re.IGNORECASE,
+        ))
+
+    @staticmethod
     def _name_input_from_text(text: str) -> Optional[str]:
+        # An instruction to ask for a name does not supply one. In particular,
+        # "vraag mij om de naam en sla niets op" must not turn the conjunction
+        # after "naam" into a user-chosen title.
+        if FinnV2OperationStateService._requests_name_prompt(text):
+            return None
         quoted = re.search(
             r"\b(?:met\s+(?:de\s+)?naam|naam|name|named|called|"
             r"noem\s+(?:hem|haar|het|(?:de|het|een)\s+(?:setup|strategie|plan|bot)))"
