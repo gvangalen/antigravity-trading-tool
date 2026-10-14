@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
 
 test("trade drafts have no DCA frequency and DCA labels cannot stringify objects", () => {
   const translate = (value) => value;
@@ -50,6 +50,26 @@ test("retired server proposal loses its confirmation card while a new draft rema
   assert.equal(result[0].state.setup_draft, null);
   assert.equal(result[0].proposalRetired, true);
   assert.equal(result[1], newCard);
+});
+
+test("a repeated proposal ID leaves exactly one confirmable card", () => {
+  const first = {
+    streamId: "first", role: "assistant", text: "ETH voorstel", canConfirm: true,
+    actions: [{ type: "v2_proposal", proposal_id: "same" }],
+    setupDraft: { operation_id: "create_setup" },
+  };
+  const latest = { streamId: "latest", role: "assistant", text: "Ik toon het voorstel opnieuw" };
+  const unrelated = {
+    streamId: "other", role: "assistant", canConfirm: true,
+    actions: [{ type: "v2_proposal", proposal_id: "different" }],
+  };
+  const result = retireEarlierFinnProposalCards([first, latest, unrelated], "latest", "same");
+  assert.equal(result[0].canConfirm, false);
+  assert.deepEqual(result[0].actions, []);
+  assert.equal(result[0].setupDraft, null);
+  assert.equal(result[0].text, first.text);
+  assert.equal(result[1], latest);
+  assert.equal(result[2], unrelated);
 });
 
 test("a failed status read does not invent a cancellation", () => {
