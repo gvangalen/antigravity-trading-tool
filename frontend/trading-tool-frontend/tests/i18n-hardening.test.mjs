@@ -69,7 +69,8 @@ test("FINN draft actions and pending state have NL, EN and DE copy", () => {
   assert.notEqual(de.assistant.draftCards.unsaved, nl.assistant.draftCards.unsaved);
   assert.notEqual(de.assistant.draftCards.cancelledResponse, nl.assistant.draftCards.cancelledResponse);
   assert.equal(de.assistant.draftStatus.saved, "✓ Entwurf erfolgreich gespeichert!");
-  assert.match(source, /const requestContext = \{ \.\.\.baseRequestContext, \.\.\.commandContext, locale,[\s\S]*?symbol: chatAssetOverride \|\| commandContext\.symbol \|\| baseRequestContext\.symbol \}/);
+  assert.match(source, /const submissionLocale = finnSubmissionLocale\([\s\S]*?document\.documentElement\.lang/);
+  assert.match(source, /const requestContext = \{ \.\.\.baseRequestContext, \.\.\.commandContext, locale: submissionLocale,[\s\S]*?symbol: chatAssetOverride \|\| commandContext\.symbol \|\| baseRequestContext\.symbol \}/);
   assert.match(source, /operationId\.includes\("strategy"\).*linkedName/s);
 });
 

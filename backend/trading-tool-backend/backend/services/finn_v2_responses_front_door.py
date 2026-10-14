@@ -231,10 +231,10 @@ class FinnResponsesFrontDoor:
                     "month_day": row.get("dca_month_day"),
                 } if row.get("setup_type") == "dca" else None),
                 "score_conditions": {
-                    field: row.get(field) for field in (
+                    field: row[field] for field in (
                         "min_market_score", "max_market_score", "min_macro_score",
                         "max_macro_score", "min_technical_score", "max_technical_score",
-                    )
+                    ) if row.get(field) is not None
                 },
                 "linked_strategy_read_status": linked.get("status", "unavailable"),
                 "linked_strategies": strategies,
@@ -243,6 +243,29 @@ class FinnResponsesFrontDoor:
             })
         score_item = next((item for item in results if item.get("scope") == "read_asset_scores"), None)
         score_data = (score_item or {}).get("data") or {}
+        condition_groups = {}
+        for field in (
+            "min_market_score", "max_market_score", "min_macro_score",
+            "max_macro_score", "min_technical_score", "max_technical_score",
+        ):
+            configured = {}
+            without = []
+            for row in grouped:
+                value = row["score_conditions"].get(field)
+                if value is None:
+                    without.append(row["setup_name"])
+                else:
+                    configured.setdefault(str(value), {"value": value, "setup_names": []})[
+                        "setup_names"
+                    ].append(row["setup_name"])
+            condition_groups[field] = {
+                "configured": [
+                    {**item, "setup_count": len(item["setup_names"])}
+                    for item in configured.values()
+                ],
+                "not_configured_setup_names": without,
+                "not_configured_count": len(without),
+            }
         return {
             "status": read_result.get("status"),
             "evidence_scope": "owner_scoped_setup_comparison",
@@ -254,6 +277,7 @@ class FinnResponsesFrontDoor:
                 bot.get("is_live") is False
                 for row in grouped for bot in row["linked_bots"]
             ),
+            "score_condition_groups": condition_groups,
             "current_asset_scores": ({
                 "status": score_item.get("status"),
                 "asset": score_data.get("symbol"),
@@ -270,6 +294,8 @@ class FinnResponsesFrontDoor:
                 "linked_bots": "Bot links belong only to the setup in the same row.",
                 "linked_bot_count": "Zero means no bot linked to this setup in the complete owner-scoped inventory.",
                 "linked_bot_total": "Use this exact collection count for any summary, rather than recounting prose rows.",
+                "score_conditions": "An absent bound is not configured. A literal zero is a configured bound.",
+                "score_condition_groups": "These owner-scoped groups give exact setup names and counts for score-bound summaries.",
             },
         }
 
@@ -308,6 +334,10 @@ class FinnResponsesFrontDoor:
             "Keep source ownership explicit: entry, stop and targets read from a strategy "
             "are strategy fields, not setup fields. If asked which strategies are linked "
             "to a setup, use get_linked_strategies to read the full owner-scoped list. "
+            "When asked for a field per saved setup, cover each setup in the returned "
+            "owner-scoped collection before summarizing totals. Use typed score-condition "
+            "groups for exact counts; if asked how many, state each count explicitly. "
+            "A missing bound is distinct from a bound of zero. "
             "When one strategy must be selected and several exist, ask which one. "
             "If a general boundary can be answered without the exact saved rule, answer "
             "that boundary first. For example, a rule for one asset does not automatically "
@@ -1727,6 +1757,23 @@ class FinnResponsesFrontDoor:
                             "specific clarification if a user choice is genuinely missing."
                         ),
                     }
+                if (
+                    call.name == "get_saved_setup_inventory"
+                    and collection_cue
+                    and len(mentioned_assets) == 1
+                    and not call.inputs.get("setup_ids")
+                    and not entity_resolution_module.FinnV2EntityResolutionService.is_all_assets_collection_request(message)
+                    and not re.search(
+                        r"\b(?:alle|all)\s+(?:(?:mijn|my|meine[nr]?)\s+)?"
+                        r"(?:setups|set-ups|plannen|plans)\b", message, re.I,
+                    )
+                ):
+                    # Bind the collection source to the asset the trader
+                    # named. The model may omit the filter for a phrasing such
+                    # as "per ETH-setup"; all-asset requests remain complete.
+                    call = replace(call, inputs={
+                        **call.inputs, "asset": next(iter(mentioned_assets)),
+                    })
                 read_result = await self.reads(call)
                 if call.name == "get_saved_setup_inventory":
                     # Match explicit names against the owner-scoped result. The

@@ -36,6 +36,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
+import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
 import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
 import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
@@ -4511,7 +4512,12 @@ function AIAssistantContent({
         usedFeedRequestRef.current = commandRequest?.nonce;
         if (!attachFeed) delete commandContext.feed_item_id;
       }
-      const requestContext = { ...baseRequestContext, ...commandContext, locale,
+      // The language selector updates <html lang> synchronously. Read it at
+      // submission so a just-switched UI cannot send a stale render locale.
+      const submissionLocale = finnSubmissionLocale(
+        locale, typeof document === "undefined" ? null : document.documentElement.lang,
+      );
+      const requestContext = { ...baseRequestContext, ...commandContext, locale: submissionLocale,
         symbol: chatAssetOverride || commandContext.symbol || baseRequestContext.symbol };
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current

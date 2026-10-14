@@ -1477,7 +1477,7 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
                      "linked_bots": ([{"name": "Paper Bot 2", "mode": "manual", "is_live": False,
                                       "strategy_id": 102}]
                                      if index == 2 else []),
-                     "min_macro_score": 20 + index}
+                     "min_macro_score": (0 if index in {1, 2, 3} else None if index == 4 else 30)}
                     for index in range(1, 8)
                 ] + [{"setup_id": 99, "name": "BTC Other", "symbol": "BTC"}]},
             }]}
@@ -1536,7 +1536,48 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
     assert model_evidence["linked_bot_total"] == 1
     assert model_evidence["setups_with_linked_bots_count"] == 1
     assert model_evidence["paper_bot_total"] == 1
+    macro_groups = model_evidence["score_condition_groups"]["min_macro_score"]
+    assert {group["value"]: group["setup_count"] for group in macro_groups["configured"]} == {0: 3, 30: 3}
+    assert macro_groups["not_configured_setup_names"] == ["ETH Setup 4"]
+    assert by_name["ETH Setup 4"]["score_conditions"] == {}
     assert "as_of" not in json.dumps(model_evidence)
+
+
+@pytest.mark.parametrize("message, expected_asset", [
+    ("Leg per ETH-setup de scoregrens uit. Hoeveel setups hebben geen grens?", "ETH"),
+    ("Vergelijk alle mijn setups, inclusief ETH. Welke grenzen ontbreken?", None),
+])
+def test_asset_scoped_inventory_uses_explicit_asset_when_model_omits_filter(
+    message, expected_asset,
+):
+    fake = FakeResponses(
+        response("inventory", calls=[tool_call("inventory-call", "get_saved_setup_inventory", {
+            "asset": None, "timeframe": None, "answer_mode": "list",
+            "setup_names": [], "strategy_name": None,
+        })]),
+        response("answer", text="Voor ETH zie ik drie plannen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="eth-collection-filter", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"complete": True, "setups": []},
+        }]}
+
+    front.reads = read
+    asyncio.run(front.run(
+        message=message,
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    assert calls[0].name == "get_saved_setup_inventory"
+    assert calls[0].inputs.get("asset") == expected_asset
 
 
 def test_collection_turn_contract_never_selects_one_of_multiple_strategies():
@@ -11190,6 +11231,12 @@ def test_response_language_check_catches_short_foreign_sentence_without_rejectin
     assert FinnResponsesAnswerVerifier._language_matches(
         "Zonder die koppeling kan ik niet vaststellen hoe de bot je huidige plan beïnvloedt. "
         "Welke bot of strategie bedoel je?", "nl",
+    )
+    assert not FinnResponsesAnswerVerifier._language_matches(
+        "Mit 1D meinte ik de drie ETH-setups met dat timeframe. Ik wijzig niets.", "de",
+    )
+    assert FinnResponsesAnswerVerifier._language_matches(
+        "Mit 1D meinte ich **Mijn DCA Plan**. Ich habe nichts geändert.", "de",
     )
     assert FinnResponsesAnswerVerifier._language_matches(
         "Ik kan je actieve setup nog niet beoordelen: het systeem kan niet bepalen welke "

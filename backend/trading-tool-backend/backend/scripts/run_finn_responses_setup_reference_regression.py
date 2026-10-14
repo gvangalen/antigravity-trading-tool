@@ -36,11 +36,27 @@ def _has_number(answer: str, value: int) -> bool:
     }
 
 
+def _explicit_group_count(answer: str, label: str, count: int) -> bool:
+    for raw in answer.splitlines():
+        line = re.sub(r"[*_`]", "", raw).casefold()
+        if "ondergrens" not in line or label not in line:
+            continue
+        group = (
+            r"geen(?:\s+macro)?-?ondergrens" if label == "geen"
+            else rf"ondergrens\s+(?:van\s+)?{label}\b"
+        )
+        if re.search(rf"{group}\s*[:—-]\s*{count}\b", line) or re.search(
+            rf"\b{count}\s+(?:hebben|heeft|setups?)\b[^\n]*{group}", line,
+        ):
+            return True
+    return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 20))
+    parser.add_argument("--sequence", type=int, choices=range(1, 22))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -156,6 +172,13 @@ def main() -> None:
         (
             "Noem per ETH-setup de naam, gekoppelde strategie, Paper-bot en het DCA-koopritme. Geef daarna het totale aantal gekoppelde Paper-bots. Alleen lezen.",
         ),
+        (
+            "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid bij de huidige scores. Tel ook hoeveel ETH-setups een macro-ondergrens van 0 hebben, hoeveel 30 en hoeveel geen macro-ondergrens. Alleen lezen, niets wijzigen.",
+            "Welches Setup meintest du gerade mit 1D? Nichts ändern.",
+        ),
+        (
+            "Leg per ETH-setup uit welke macro-ondergrens is opgeslagen. Tel daarna hoeveel setups een ondergrens van 0 hebben, hoeveel een ondergrens van 30 hebben en hoeveel geen macro-ondergrens hebben. Alleen lezen.",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
@@ -194,11 +217,15 @@ def main() -> None:
                         _insert_strategy(connection, user["id"], setup_id, f"ETH QA Strategy {index}")
                     if index == 3:
                         _insert_strategy(connection, user["id"], setup_id, "ETH QA Strategy 3 Variant")
-        if sequence_number in {17, 18, 19}:
+        if sequence_number in {17, 18, 19, 20, 21}:
             with sync_engine.begin() as connection:
                 original = connection.execute(text("""
                     SELECT id FROM setups WHERE user_id=:user_id AND name='ETH Full Setup'
                 """), {"user_id": user["id"]}).scalar_one()
+                if sequence_number in {20, 21}:
+                    connection.execute(text("""
+                        UPDATE setups SET min_macro_score=0 WHERE id=:id AND user_id=:user_id
+                    """), {"id": original, "user_id": user["id"]})
                 _insert_strategy(connection, user["id"], original, "ETH Full Strategy")
                 for index in range(2, 8):
                     name = f"ETH QA Bot Setup {index}"
@@ -215,6 +242,14 @@ def main() -> None:
                         "day": "1" if index in {2, 4} else None,
                         "id": setup_id, "user_id": user["id"],
                     })
+                    if sequence_number in {20, 21} and index != 4:
+                        connection.execute(text("""
+                            UPDATE setups SET min_macro_score=:macro
+                            WHERE id=:id AND user_id=:user_id
+                        """), {
+                            "macro": 0 if index in {2, 3} else 30,
+                            "id": setup_id, "user_id": user["id"],
+                        })
                     strategy_id = _insert_strategy(
                         connection, user["id"], setup_id, f"ETH QA Bot Strategy {index}",
                     )
@@ -237,6 +272,7 @@ def main() -> None:
             observed = run_gate(
                 base_url=args.base_url, bearer_token=token, message=message,
                 conversation_id=conversation_id, timeout_seconds=75,
+                workspace_hints={"locale": "de" if sequence_number == 20 and turn_number == 2 else "nl"},
             )
             conversation_id = observed["conversation_id"]
             record = _runtime_record(observed["run_id"])
@@ -570,6 +606,20 @@ def main() -> None:
                     and not re.search(r"\bvier\s+(?:gekoppelde\s+)?paper.?bots?\b", answer.casefold())
                     and not re.search(r"\b4\s+(?:gekoppelde\s+)?paper.?bots?\b", answer.casefold())
                     and not re.search(r"\bas_of\b", answer)
+                )
+            if sequence_number in {20, 21} and turn_number == 1:
+                checks["score_bound_counts"] = (
+                    all(f"ETH QA Bot Setup {index}" in answer for index in range(2, 8))
+                    and "ETH Full Setup" in answer
+                    and _explicit_group_count(answer, "0", 3)
+                    and _explicit_group_count(answer, "30", 3)
+                    and _explicit_group_count(answer, "geen", 1)
+                )
+            if sequence_number == 20 and turn_number == 2:
+                checks["german_followup"] = (
+                    "1D" in answer
+                    and any(word in answer.casefold() for word in ("setup", "setups"))
+                    and not re.search(r"\b(?:ik|mijn|jouw|geen|welke|deze|bedoelde)\b", answer.casefold())
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,
