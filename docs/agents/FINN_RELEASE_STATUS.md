@@ -6,16 +6,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_REPAIR_LOCAL_VALIDATION`. Independent authenticated
-browser QA returned **NOT ACCEPTED** on backend/frontend SHA
+Phase: `CHAT_SIDE_PANEL_REPAIR_READY_FOR_INDEPENDENT_QA`. [PR #315](https://github.com/gvangalen/antigravity-trading-tool/pull/315)
+merged the repair as product SHA `cb3fa9d3e88b87c677564623582578aa8ed298f8`.
+Candidate [CI run 38519837753](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38519837753)
+and main [CI run 38520063513](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38520063513)
+each passed all five jobs. [Auto Deploy run 38520226235](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38520226235)
+succeeded. Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 and exactly
+that product SHA on 2026-10-14. This status-only update will have a later
+deployed SHA; QA must bind to the SHA reported by both public surfaces.
+The prior independent authenticated browser QA returned **NOT ACCEPTED** on backend/frontend SHA
 `26f151bcfa7e86bcfc7fe9bf5541b7730ec71314`: the visible featured ETH plan
 and FINN's named setup differed; a completed trade-setup conversation with
 optional score boundaries omitted produced no proposal card; FINN 2.0
 history was empty and did not restore the conversation after refresh.
 The panel layout, direct Enter submission, open/close and navigation draft
 retention, plus menu, feed handoff, NL/EN/DE and narrow browser layout passed
-that QA scope. No proposal was confirmed or order executed. The current
-local repair aligns the featured plan's workspace setup reference, exposes
+that QA scope. No proposal was confirmed or order executed. The repair
+aligns the featured plan's workspace setup reference, exposes
 owner-scoped FINN 2.0 conversation history, and clarifies the trade-setup
 proposal contract. Backend **3570 passed, 3 existing skips** and web build,
 typecheck, i18n, commands, proposals, setups, and the high-severity audit
@@ -32,8 +40,8 @@ setup and timeframe correctly. Real Luna/Responses selector development passed
 The full real-provider regression passed **109/109**, with zero provider,
 schema, parse, validation or timeout failures (artifact SHA-256
 `6a56596314001e321ad6dfd7b2a86b7a30e06388dacc8569c428423bb8329bf4`).
-These are local Build results; the repair is not live until CI and Auto Deploy
-pass and public backend/frontend identity is verified.
+These are local Build results. The repair is live, but the independent
+authenticated browser verdict for the three repaired paths is pending.
 
 The prior clarification candidate was
 accepted by independent QA. [PR #313](https://github.com/gvangalen/antigravity-trading-tool/pull/313)
