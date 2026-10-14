@@ -51,6 +51,14 @@ def _listed_setup_ordinal(message: str) -> int | None:
     return listed_setup_ordinal(message)
 
 
+def _proposal_explicitly_excluded(message: str) -> bool:
+    return bool(re.search(
+        r"\b(?:geen|no|kein(?:e|en|er|es)?)\s+(?:voorstel|proposal|draft|concept(?:kaart)?)\b"
+        r"|\b(?:hypothetisch|hypothetical|hypothetisch(?:es|er)?|denkbeeldig)\b",
+        message, re.I,
+    ))
+
+
 def _explicit_create_operation_request(message: str) -> str | None:
     """Recognize a fresh registry creation request across draft domains.
 
@@ -58,7 +66,7 @@ def _explicit_create_operation_request(message: str) -> str | None:
     object is not that slot's answer. Questions and negated requests stay in
     the ordinary conversation path.
     """
-    if "?" in message or not re.match(
+    if "?" in message or _proposal_explicitly_excluded(message) or not re.match(
         r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b", message, re.I,
     ) or re.match(r"^\s*maak\s+geen\b", message, re.I):
         return None
@@ -702,6 +710,7 @@ class FinnResponsesFrontDoor:
         guard = getattr(self, "relevance_guard", None)
         previous_kind = str((previous_response or {}).get("terminal_kind") or "")
         request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+        explicit_create_request = _explicit_create_operation_request(message)
         imperative_operation = FinnV2OperationClassificationService._explicit_mutation_operation(
             message=message, facts=request_facts,
             workspace_hints=None, client_context=None,
@@ -1366,10 +1375,24 @@ class FinnResponsesFrontDoor:
                     required_inputs=(), missing_inputs=(),
                     evaluation_operation_id=None,
                 )
+            if call.operation_id and _proposal_explicitly_excluded(message):
+                return {
+                    "status": "retry", "reason": "proposal_excluded_by_user",
+                    "instruction": (
+                        "The user explicitly excluded a proposal or described a hypothetical. "
+                        "Answer in conversation without a confirmable action card."
+                    ),
+                }
             should_check = (
                 not pending_operation
                 and not resuming_clarification
                 and not normalized_inventory_read
+                # A direct imperative to create this exact draft already
+                # establishes intent. A second model's relevance verdict can
+                # otherwise veto the proposal on "show it, don't save it".
+                # Contract validation and a separate confirmation still gate
+                # every persisted change.
+                and not (call.operation_id and call.operation_id == explicit_create_request)
                 and (
                     call.operation_id is not None
                     or (not getattr(self, "model_led_coach", False)
