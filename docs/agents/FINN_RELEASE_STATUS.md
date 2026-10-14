@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_FIFTH_REPAIR_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_FIFTH_REPAIR_ACCEPTED_FOR_SCOPED_BROWSER_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
 previous live SHA `8e4f5e5a6c67247aa2987a79e21e0b22f7d37607`: the
 three-turn ETH proposal, locale and draft persistence, panel, history and
@@ -36,7 +36,19 @@ and main [CI run 38535847666](https://github.com/gvangalen/antigravity-trading-t
 each passed all five jobs. [Auto Deploy run 38536073816](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38536073816)
 succeeded. Public backend health and frontend build-info both returned HTTP
 200 and the exact product SHA. This status-only update will receive a later
-SHA; QA must bind to both public surfaces. The new live QA verdict is pending.
+SHA; QA bound its test to both public surfaces. Independent authenticated
+browser QA returned **ACCEPTED for the scoped paneel regression** on final
+live SHA `4203b5fa598d29f5790ba5f5165112cc3435c164`. The Stop text
+“Antwoord gestopt.” persisted exactly after hard refresh; a later read-only
+answer did not overwrite it. The three-turn ETH flow left one active
+proposal card without confirmation. DE→NL setup reference, unsent composer
+draft, Enter, conversation history, feed handoff, add menu, side panel and
+console checks passed. A 390 px composer placeholder was partly clipped
+while input remained usable (P3). The worker-completed-before-Stop race,
+cross-user draft isolation and the full protected-runner matrix were not
+separately observed, so this is not broader FINN acceptance. The QA-verdict
+documentation commit will receive a later SHA; it does not change product
+code.
 
 Prior phase: `CHAT_SIDE_PANEL_FOURTH_REPAIR_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
