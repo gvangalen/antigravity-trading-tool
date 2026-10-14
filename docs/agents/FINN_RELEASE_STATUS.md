@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Chat Side Panel
+
+Phase: `CHAT_SIDE_PANEL_CANDIDATE_CI`. The prior clarification candidate was
+accepted by independent QA. [PR #313](https://github.com/gvangalen/antigravity-trading-tool/pull/313)
+contains the persistent web right panel, direct ordinary chat submission,
+single visible composer, conversation/draft persistence, header history and
+context controls, and responsive mobile chat layout. Source and the tracked
+web export were built together on product commit
+`75a28ed2b33e108c58ea9dc2cf9e0554eb73807c`. The PR is draft until the
+final candidate CI passes; nothing in this section claims deployment or live
+QA acceptance.
+
+Measured local gates on this source: backend `pytest -q` **3569 passed, 3
+existing skips**. Web production build, typecheck, i18n lint and tests,
+command, proposal and setup tests passed. The production dependency audit
+passed its high-severity gate with one moderate Next.js advisory. Mobile
+typecheck, lint (warnings only), and Expo web/iOS/Android bundle exports
+passed; these exports are not native store builds or a mobile deployment.
+The isolated local FastAPI/Celery/PostgreSQL/Redis/Responses safe-action matrix
+passed **16/16**, and action adapters passed **19/19**, with zero broker
+orders, live bots, live-trading calls or production connections. Its artifact
+`.local-finn-parity-artifacts/full-action-matrix.json` has SHA-256
+`3dff99f2633578d98659fbf9fb5932d16c070a98a021a9987459990b7587adda`.
+Real `gpt-6-luna`/Responses selector development passed **20/20** (artifact
+SHA-256 `c4e8fc9c6ae2ab797bc48365a11ff70e5e3a8723324539db4594f29916fa10e4`)
+and the full regression passed **109/109** (artifact SHA-256
+`c41c45c1e5bf7df660b6a4532c47940954a425234fadfd88e81764cc600bab36`),
+with zero provider, schema, parse, validation or timeout failures. These are
+local Build facts, not an authenticated live browser verdict.
+
 ## General FINN Clarification Choices
 
 Phase: `OPEN_CARD_TARGET_CORRECTION_QA_ACCEPTED`. The prior live
