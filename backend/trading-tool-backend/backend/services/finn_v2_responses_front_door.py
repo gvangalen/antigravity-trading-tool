@@ -36,6 +36,7 @@ from backend.services.finn_v2_verified_setup_reference import (
 )
 from backend.services.finn_v2_turn_contract import (
     build_turn_contract, can_compose_after_first_read, referenced_setup_rows,
+    requests_comparison,
 )
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
@@ -821,7 +822,8 @@ class FinnResponsesFrontDoor:
         # including setups without any linked strategy or bot. This is a
         # data read only; the model still composes the coaching answer.
         collection_answer_requested = bool(
-            re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*|per\s+setup|"
+            requests_comparison(message)
+            or re.search(r"\b(?:per\s+setup|"
                       r"voor\s+elke\s+setup|welke\s+van|which\s+of|hoeveel\s+setups?)\b",
                       message, re.I)
             or re.search(r"\b(?:noem|toon|list|show|nenne|zeige)\s+(?:ze|hen|them)\b",
@@ -848,7 +850,7 @@ class FinnResponsesFrontDoor:
                     message, re.I,
                 )
                 or (
-                    re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*)\b", message, re.I)
+                    requests_comparison(message)
                     and re.search(r"\b(?:mijn|my|meine)\b.{0,80}\b(?:setups|set-ups|plannen|plans)\b", message, re.I)
                 )
             )
@@ -1663,6 +1665,10 @@ class FinnResponsesFrontDoor:
                             r"\s*(?:nu\s+)?(?:mijn|my)\b.{0,80}"
                             r"\b(?:setups|set-ups|plannen|plans)\b",
                             comparison_target, re.I,
+                        ) or (
+                            complete_collection_read
+                            and referenced_rows is available_rows
+                            and len(mentioned_assets) == 1
                         ))
                         explicit_pair = bool(
                             comparison_verb and len(referenced_rows) == 2
@@ -1671,6 +1677,12 @@ class FinnResponsesFrontDoor:
                         named_rows = (
                             referenced_rows if explicit_pair else available_rows
                         ) if complete_collection_read else referenced_rows
+                        if all_setups_target and len(mentioned_assets) == 1:
+                            requested_asset = next(iter(mentioned_assets))
+                            named_rows = [
+                                row for row in available_rows
+                                if str(row.get("symbol") or "").upper() == requested_asset
+                            ]
                         if (
                             call.answer_mode == "compare"
                             and not call.setup_names
@@ -1687,7 +1699,10 @@ class FinnResponsesFrontDoor:
                                 # two owner-scoped ETH rows, without relying on
                                 # names invented by the model or a global filter.
                                 named_rows = asset_rows
-                        if call.setup_names:
+                        if call.setup_names and not (
+                            complete_collection_read and all_setups_target
+                            and referenced_rows is available_rows
+                        ):
                             by_name = {
                                 str(row.get("name") or "").casefold(): row
                                 for row in available_rows
@@ -1791,6 +1806,42 @@ class FinnResponsesFrontDoor:
                         tool_trace=({"name": call.name, "result": read_result},),
                         previous_contract=previous_turn_contract,
                     ).get("answer_type") == "compare"
+                    if (
+                        getattr(self, "model_led_coach", False)
+                        and comparison and len(resolved_setup_ids) > 2
+                        and read_result.get("status") == "completed"
+                    ):
+                        # The inventory already carries every setup condition.
+                        # Hydrate the complete owner-scoped strategy relation
+                        # for each selected setup in this one tool result. A
+                        # separate model round per setup does not scale to an
+                        # ordinary account with several plans for one asset.
+                        linked_evidence: list[dict[str, Any]] = []
+                        for setup_id in resolved_setup_ids:
+                            linked = await self.reads(replace(
+                                call, name="get_linked_strategies",
+                                inputs={"setup_id": setup_id},
+                                read_tools=("read_linked_strategies",),
+                                answer_mode=None, setup_names=(),
+                            ))
+                            linked_evidence.extend(linked.get("results") or [])
+                        if (
+                            len(mentioned_assets) == 1
+                            and re.search(r"\b(?:score\w*|benchmark\w*)\b", message, re.I)
+                        ):
+                            scores = await self.reads(replace(
+                                call, name="get_current_asset_scores",
+                                inputs={"asset": next(iter(mentioned_assets))},
+                                read_tools=("read_asset_scores",),
+                                answer_mode=None, setup_names=(),
+                            ))
+                            linked_evidence.extend(scores.get("results") or [])
+                        read_result["results"] = [
+                            *(read_result.get("results") or []), *linked_evidence,
+                        ]
+                        if any(item.get("status") != "completed" for item in linked_evidence):
+                            read_result["status"] = "partial"
+                        read_result["finalize_now"] = True
                     selected_dca_explanation = (
                         verified_answer_mode == "explain"
                         and len(resolved_setup_ids) == 1
@@ -1910,6 +1961,19 @@ class FinnResponsesFrontDoor:
                         read_result["results"] = [*read_result.get("results", []), *details]
                         if any(item.get("status") != "completed" for item in details):
                             read_result["status"] = "partial"
+                        if (
+                            comparison and len(mentioned_assets) == 1
+                            and re.search(r"\b(?:score\w*|benchmark\w*)\b", message, re.I)
+                        ):
+                            scores = await self.reads(replace(
+                                call, name="get_current_asset_scores",
+                                inputs={"asset": next(iter(mentioned_assets))},
+                                read_tools=("read_asset_scores",),
+                                answer_mode=None, setup_names=(),
+                            ))
+                            read_result["results"].extend(scores.get("results") or [])
+                            if scores.get("status") != "completed":
+                                read_result["status"] = "partial"
                     if (multiple_targets or pair_followup) and any(
                         item.get("scope") == "read_saved_setup_inventory"
                         and len((item.get("data") or {}).get("setups") or []) == 2

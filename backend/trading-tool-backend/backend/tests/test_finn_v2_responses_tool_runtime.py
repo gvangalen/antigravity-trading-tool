@@ -281,6 +281,18 @@ def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
 
     async def read(call):
         calls.append(call)
+        if call.name == "get_linked_strategies":
+            setup_id = call.inputs["setup_id"]
+            linked = next(row for row in rows if row["setup_id"] == setup_id)
+            return {"status": "completed", "results": [{
+                "scope": "read_linked_strategies", "status": "completed",
+                "data": {"setup_id": setup_id, "strategies": linked["linked_strategies"]},
+            }]}
+        if call.name == "get_current_asset_scores":
+            return {"status": "completed", "results": [{
+                "scope": "read_asset_scores", "status": "completed",
+                "data": {"asset": "ETH", "scores": {}},
+            }]}
         return {"status": "completed", "results": [{
             "scope": "read_saved_setup_inventory", "status": "completed",
             "data": {"setups": rows, "setup_count": len(rows), "complete": True},
@@ -295,9 +307,11 @@ def test_model_led_broad_comparison_keeps_unlinked_setup_in_owner_inventory(
     assert fake.requests[0]["tool_choice"] == {
         "type": "function", "name": "get_saved_setup_inventory",
     }
-    assert len(calls) == 1
+    assert len([call for call in calls if call.name == "get_saved_setup_inventory"]) == 1
     assert calls[0].name == "get_saved_setup_inventory"
     assert calls[0].inputs == expected_inputs
+    if result.response.turn_contract["answer_type"] == "compare" and expected_inputs.get("asset") == "ETH":
+        assert [call.inputs["setup_id"] for call in calls if call.name == "get_linked_strategies"] == [11, 12, 13]
     evidence = result.response.tool_trace[0]["result"]["results"][0]["data"]
     assert evidence["setup_count"] == 3
     assert [row["name"] for row in evidence["setups"]] == ["ETH A", "ETH B", "ETH C"]
@@ -1169,7 +1183,7 @@ def test_asset_inventory_can_be_refined_to_all_named_setups_in_same_turn():
         message=question, instructions=front._model_led_instructions("nl"),
         conversation_context={}, verified_asset=None,
     ))
-    assert [call.name for call in calls[:2]] == [
+    assert [call.name for call in calls if call.name == "get_saved_setup_inventory"] == [
         "get_saved_setup_inventory", "get_saved_setup_inventory",
     ]
     assert all(call["status"] == "completed" for call in result.response.tool_trace)
@@ -1428,6 +1442,107 @@ def test_complete_cross_asset_inventory_ends_read_round_without_guessing_source(
     assert "turn_request" not in tool_result
     assert result.response.turn_contract["targets"] == []
     assert fake.requests[1]["tool_choice"] == "none"
+
+
+def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_round():
+    message = (
+        "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, "
+        "scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid "
+        "bij de huidige scores. Alleen lezen, niets wijzigen."
+    )
+    fake = FakeResponses(
+        response("inventory", calls=[tool_call("inventory-call", "get_saved_setup_inventory", {
+            "asset": "ETH", "timeframe": None, "answer_mode": "list",
+            "setup_names": [], "strategy_name": None,
+        })]),
+        response("answer", text="De zeven ETH-setups verschillen in timeframe en scoregrenzen; actuele geschiktheid vergt complete scores."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="seven-eth-comparison", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"complete": True, "setups": [
+                    {"setup_id": index, "name": f"ETH Setup {index}", "symbol": "ETH",
+                     "timeframe": "4H" if index % 2 else "1D",
+                     "min_macro_score": 20 + index}
+                    for index in range(1, 8)
+                ] + [{"setup_id": 99, "name": "BTC Other", "symbol": "BTC"}]},
+            }]}
+        if call.name == "get_linked_strategies":
+            setup_id = call.inputs["setup_id"]
+            return {"status": "completed", "results": [{
+                "scope": "read_linked_strategies", "status": "completed",
+                "data": {"setup_id": setup_id, "strategy_count": 1, "complete": True,
+                         "strategies": [{"strategy_id": setup_id + 100,
+                                         "setup_id": setup_id,
+                                         "name": f"ETH Strategy {setup_id}"}]},
+            }]}
+        assert call.name == "get_current_asset_scores"
+        assert call.inputs == {"asset": "ETH"}
+        return {"status": "partial", "results": [{
+            "scope": "read_asset_scores", "status": "unavailable",
+            "reason": "macro_score_missing", "data": None,
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    tool_result = result.response.tool_trace[0]["result"]
+    assert [call.name for call in calls] == [
+        "get_saved_setup_inventory", *(["get_linked_strategies"] * 7),
+        "get_current_asset_scores",
+    ]
+    assert tool_result["finalize_now"] is True
+    assert tool_result["turn_request"]["target_ids"] == list(range(1, 8))
+    assert [row["name"] for row in tool_result["results"][0]["data"]["setups"]] == [
+        f"ETH Setup {index}" for index in range(1, 8)
+    ]
+    assert result.response.turn_contract["answer_type"] == "compare"
+    assert len(result.response.turn_contract["targets"]) == 7
+    assert result.response.turn_contract["targets"][0]["strategy"]["name"].startswith("ETH Strategy")
+    assert fake.requests[1]["tool_choice"] == "none"
+    assert fake.requests[1]["max_output_tokens"] == 1800
+
+
+def test_collection_turn_contract_never_selects_one_of_multiple_strategies():
+    contract = build_turn_contract(
+        message="Hoe verschillen mijn ETH-setups en hun strategieën?",
+        tool_trace=({"name": "get_saved_setup_inventory", "result": {
+            "turn_request": {"target_ids": [1, 2]},
+            "results": [
+                {"scope": "read_saved_setup_inventory", "status": "completed", "data": {
+                    "setups": [
+                        {"setup_id": 1, "name": "ETH A", "symbol": "ETH"},
+                        {"setup_id": 2, "name": "ETH B", "symbol": "ETH"},
+                    ],
+                }},
+                {"scope": "read_linked_strategies", "status": "completed", "data": {
+                    "setup_id": 1, "complete": True, "strategy_count": 2,
+                    "strategies": [
+                        {"setup_id": 1, "strategy_id": 10, "name": "A One"},
+                        {"setup_id": 1, "strategy_id": 11, "name": "A Two"},
+                    ],
+                }},
+                {"scope": "read_linked_strategies", "status": "completed", "data": {
+                    "setup_id": 2, "complete": True, "strategy_count": 1,
+                    "strategies": [{"setup_id": 2, "strategy_id": 20, "name": "B Only"}],
+                }},
+            ],
+        }},),
+    )
+    assert contract["answer_type"] == "compare"
+    assert contract["targets"][0]["strategy"] == {}
+    assert contract["targets"][1]["strategy"]["name"] == "B Only"
+    assert contract["focused_strategy_id"] is None
 
 
 def test_current_risk_tradeoff_outweighs_tool_list_hint():
@@ -11053,6 +11168,24 @@ def test_response_language_check_catches_short_foreign_sentence_without_rejectin
     assert FinnResponsesAnswerVerifier._language_matches(
         "Ik kan je actieve setup nog niet beoordelen: het systeem kan niet bepalen welke "
         "opgeslagen setup je bedoelt. Welke setup wil je laten beoordelen?", "nl",
+    )
+
+
+def test_long_model_answer_uses_document_language_despite_english_plan_labels():
+    answer = (
+        "De zeven opgeslagen ETH-setups hebben verschillende scoregrenzen. "
+        "Voor de eerste setup staat een macrogrens opgeslagen, maar de actuele "
+        "macro-score ontbreekt en daarom kan ik geen geschiktheid bevestigen.\n\n"
+        "The strategy risk profile remains a fixed amount for every setup.\n\n"
+        "Bij alle plannen moet je de gekoppelde strategie en het vooraf gekozen "
+        "risicobudget controleren voordat je een beslissing neemt."
+    )
+    assert not FinnResponsesAnswerVerifier._language_matches(answer, "nl")
+    assert FinnResponsesAnswerVerifier._language_matches_model_answer(answer, "nl")
+    assert not FinnResponsesAnswerVerifier._language_matches_model_answer(
+        "The saved ETH setups have different score limits. None of these records "
+        "proves that the current market conditions fit your plan, so check the "
+        "missing macro score before making a decision.", "nl",
     )
 
 

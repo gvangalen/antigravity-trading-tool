@@ -11,6 +11,15 @@ from typing import Any, Mapping
 from backend.services.finn_v2_verified_setup_reference import references_selected_setup
 
 
+def requests_comparison(message: str) -> bool:
+    """Recognize a comparison regardless of whether the user says 'compare'."""
+    return bool(re.search(
+        r"\b(?:vergelijk\w*|verschil\w*|compare\w*|differ\w*|"
+        r"difference\w*|contrast\w*|vergleich\w*|unterschied\w*)\b",
+        message, re.I,
+    ))
+
+
 def referenced_setup_rows(
     *, message: str, rows: list[dict[str, Any]],
     previous_contract: Mapping[str, Any] | None = None,
@@ -109,6 +118,13 @@ def build_turn_contract(
                     setups[row["setup_id"]] = {**setups.get(row["setup_id"], {}), **row}
             if item.get("scope") == "read_linked_strategy" and isinstance(data.get("setup_id"), int):
                 strategies[data["setup_id"]] = data
+            if item.get("scope") == "read_linked_strategies" and isinstance(data.get("setup_id"), int):
+                linked = [
+                    row for row in data.get("strategies") or []
+                    if isinstance(row, dict) and row.get("setup_id") == data["setup_id"]
+                ]
+                if data.get("complete") is True and len(linked) == 1:
+                    strategies[data["setup_id"]] = linked[0]
 
     all_rows = list(setups.values())
     selected_rows = referenced_setup_rows(
@@ -143,7 +159,7 @@ def build_turn_contract(
 
     if answer_type in {"list", "compare", "weigh", "explain"}:
         selected_answer_type = answer_type
-    elif re.search(r"\b(?:vergelijk\w*|verschil\w*|compare\w*|vergleich\w*)\b", message, re.I):
+    elif requests_comparison(message):
         selected_answer_type = "compare"
     elif re.search(r"\b(?:verstandiger|afweging|weeg|wegen|wise|trade.off)\b", message, re.I):
         selected_answer_type = "weigh"
