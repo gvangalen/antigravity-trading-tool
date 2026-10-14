@@ -6,7 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_SECOND_REPAIR_CANDIDATE`. Independent QA
+Phase: `CHAT_SIDE_PANEL_SECOND_REPAIR_READY_FOR_INDEPENDENT_QA`.
+[PR #317](https://github.com/gvangalen/antigravity-trading-tool/pull/317)
+merged as product SHA `4d2e43ee34b483c35b32196bfca79e18cd5b7a3c`.
+Candidate [CI run 38523392138](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38523392138)
+and main [CI run 38523621843](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38523621843)
+each passed all five jobs. [Auto Deploy run 38523809897](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38523809897)
+succeeded. On 2026-10-14, public backend health and frontend build-info each
+returned HTTP 200 and exactly that product SHA. This status-only update will
+receive a later SHA; QA must bind to the SHA reported by both public surfaces.
+Independent QA
 returned **NOT ACCEPTED** on the prior repair release SHA
 `58f0ffc46f0867e6f8a76e3f08ad2f2dab10797a`: the owner-scoped setup and
 conversation history worked, but a trade setup follow-up lost an already
@@ -29,7 +38,7 @@ Real Luna/Responses selector development passed **20/20** (SHA-256
 and full regression **109/109** (SHA-256
 `2c0cba687b707fa01fa38e57f1b516506d81ec83ff0a9e315966b184cbd5bf61`),
 with zero provider, schema, parse, validation, or timeout failures. These are
-Build results. CI, deployment, and independent live QA remain pending.
+Build results. Independent authenticated live QA remains pending.
 
 Prior phase: `CHAT_SIDE_PANEL_REPAIR_READY_FOR_INDEPENDENT_QA`. [PR #315](https://github.com/gvangalen/antigravity-trading-tool/pull/315)
 merged the repair as product SHA `cb3fa9d3e88b87c677564623582578aa8ed298f8`.
