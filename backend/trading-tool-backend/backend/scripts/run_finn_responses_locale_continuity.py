@@ -21,6 +21,8 @@ TURNS = (
     ("Why?", "en"),
     ("Antworte ab jetzt auf Deutsch. Was fehlt meinem BTC-Plan noch?", "de"),
     ("Warum?", "de"),
+    ("Welche gespeicherte BTC-Setup ist auf 1D eingestellt? Nenne den Namen.", "de"),
+    ("Welke setup bedoelde je zojuist precies bij die 1D? Wijzig niets.", "nl"),
 )
 
 
@@ -37,7 +39,8 @@ def main() -> None:
             "user_id": user["id"],
             "preferences": json.dumps({"selected_asset": "BTC", "locale": "nl"}),
         })
-        _insert_setup(connection, user["id"], "Taalcontinuiteit BTC", setup_type="dca")
+        setup_id = _insert_setup(connection, user["id"], "Taalcontinuiteit BTC", setup_type="dca")
+        connection.execute(text("UPDATE setups SET timeframe = '1D' WHERE id = :setup_id"), {"setup_id": setup_id})
     token = create_access_token({"sub": str(user["id"]), "role": "user"})
     artifact = {"version": 1, "synthetic_local_only": True, "cases": []}
     conversation_id = None
@@ -45,6 +48,7 @@ def main() -> None:
         observed = run_gate(
             base_url=args.base_url, bearer_token=token, message=message,
             conversation_id=conversation_id, timeout_seconds=75,
+            workspace_hints={"locale": expected_locale},
         )
         conversation_id = observed["conversation_id"]
         record = _runtime_record(observed["run_id"])
@@ -63,6 +67,8 @@ def main() -> None:
             "polling_sse_parity": bool(observed["polling_sse_contract_projection"]),
             "no_proposal": not record["proposal"],
         }
+        if "zojuist precies" in message:
+            checks["prior_setup_reference"] = "Taalcontinuiteit BTC" in answer
         artifact["cases"].append({
             "question": message, "run_id": observed["run_id"], "answer": answer,
             "expected_locale": expected_locale, "status": observed["status"],

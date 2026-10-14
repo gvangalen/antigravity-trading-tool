@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
-import { useTranslation } from "@/app/providers/I18nProvider";
+import { getDictionary, useTranslation } from "@/app/providers/I18nProvider";
 import { getLocaleLabel } from "@/lib/i18n";
 
 import { User, LogOut, Loader2, Moon, Sun, Languages } from "lucide-react";
@@ -50,7 +50,8 @@ export default function AvatarMenu() {
 
   function selectLanguage(newLocale) {
     setLocale(newLocale);
-    showSnackbar(`${menuText.languageChanged} ${getLocaleLabel(newLocale)}`, "success");
+    const translatedText = getDictionary(newLocale)?.ui?.avatarMenu;
+    showSnackbar(`${translatedText?.languageChanged} ${getLocaleLabel(newLocale)}`, "success");
   }
 
   /* Close on click outside */

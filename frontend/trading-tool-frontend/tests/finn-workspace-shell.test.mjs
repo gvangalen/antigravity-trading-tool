@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readFinnComposerDraft, writeFinnComposerDraft } from "../lib/finnComposerDraft.mjs";
 
 const shellSource = await readFile(
   new URL("../components/finn/FinnWorkspaceShell.jsx", import.meta.url), "utf8",
@@ -43,6 +44,21 @@ test("ordinary questions submit directly and chat stays beside the workspace", (
   assert.doesNotMatch(shellSource, /backdrop-blur-sm/);
   assert.match(assistantSource, /if \(event\.key === "Enter" && !event\.shiftKey && !event\.nativeEvent\.isComposing\)/);
   assert.match(assistantSource, /\{isCommandSearchOpen \? \(\s*<FinnCommandCenter/);
+});
+
+test("unsent composer drafts survive remount only for their owner", () => {
+  const entries = new Map();
+  const storage = {
+    getItem: (key) => entries.get(key) ?? null,
+    setItem: (key, value) => entries.set(key, value),
+    removeItem: (key) => entries.delete(key),
+  };
+  writeFinnComposerDraft(storage, 17, "Onverzonden ETH-conceptvraag");
+  assert.equal(readFinnComposerDraft(storage, 17), "Onverzonden ETH-conceptvraag");
+  assert.equal(readFinnComposerDraft(storage, 18), "");
+  writeFinnComposerDraft(storage, 17, "");
+  assert.equal(readFinnComposerDraft(storage, 17), "");
+  assert.match(shellSource, /hydratedDraftOwnerId === ownerId/);
 });
 
 test("explicit contextual requests still reach ordinary FINN chat", () => {
