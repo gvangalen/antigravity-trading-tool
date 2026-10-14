@@ -1704,6 +1704,13 @@ class FinnV2RunService:
             content = "FINN heeft de response veilig afgewezen omdat de verificatie faalde."
             mode = "UNAVAILABLE"
             verifier_status = "failed"
+        elif terminal_status == "canceled":
+            content = {
+                "nl": "Antwoord gestopt.",
+                "en": "Response stopped.",
+                "de": "Antwort gestoppt.",
+            }[normalize_locale(locale) or "nl"]
+            mode = "UNAVAILABLE"
         elif terminal_status == "unavailable":
             content = "FINN kon geen betrouwbare response afronden met de beschikbare of geldige context."
             mode = "UNAVAILABLE"
@@ -1844,7 +1851,9 @@ class FinnV2RunService:
         if run is None:
             raise LookupError("FINN V2 run not found")
         response_json = self._terminal_placeholder_response(
-            interaction_mode="UNAVAILABLE", terminal_status="unavailable", orchestrator={}, verifier={}, reasoning={}, delivery_envelope={}
+            interaction_mode="UNAVAILABLE", terminal_status="canceled", orchestrator={}, verifier={}, reasoning={}, delivery_envelope={},
+            locale=(getattr(run, "workspace_hints_json", None) or {}).get("locale")
+            or (getattr(run, "client_context_json", None) or {}).get("locale"),
         )
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id, status="canceled", mode="UNAVAILABLE", response=response_json, error_code="run_canceled"

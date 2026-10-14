@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from unittest.mock import AsyncMock
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -1293,6 +1294,30 @@ def test_selected_capability_uses_the_post_selector_registry_fast_path():
     assert response["mode"] == "CAPABILITY"
     assert response["verifier_status"] == "registry_grounded"
     assert "tradingcontext" in response["content"]
+
+
+@pytest.mark.parametrize("locale, expected", [
+    ("nl", "Antwoord gestopt."),
+    ("en", "Response stopped."),
+    ("de", "Antwort gestoppt."),
+])
+def test_cancel_run_persists_the_same_localized_text_as_the_chat(locale, expected):
+    service = FinnV2RunService(session=object())
+    service.runs = SimpleNamespace(get_by_id_for_user=AsyncMock(return_value=SimpleNamespace(
+        workspace_hints_json={"locale": locale}, client_context_json={},
+    )))
+    service.runtime_contracts = SimpleNamespace(materialize_terminal=AsyncMock(
+        return_value=SimpleNamespace(terminal_projection_json={"status": "canceled"}),
+    ))
+    service.persist_transition = AsyncMock()
+
+    asyncio.run(service.cancel_run(run_id="run-stop", user_id=7))
+
+    contract_response = service.runtime_contracts.materialize_terminal.await_args.kwargs["response"]
+    persisted = service.persist_transition.await_args.kwargs["response_json"]
+    assert contract_response["content"] == expected
+    assert persisted["content"] == expected
+    assert service.persist_transition.await_args.kwargs["next_status"] == "canceled"
 
 
 def test_collecting_setup_draft_uses_product_copy_in_its_terminal_placeholder():
