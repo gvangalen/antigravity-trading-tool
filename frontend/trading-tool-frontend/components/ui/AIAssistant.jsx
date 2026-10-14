@@ -2,11 +2,10 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
-import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
@@ -472,6 +471,10 @@ function AIAssistantContent({
   previewSectionsOnly = false,
   className = "",
   modal = false,
+  dock = false,
+  expanded = false,
+  onToggleExpanded,
+  onCommandComplete,
   queryValue,
   onQueryChange,
   autoFocusComposer = false,
@@ -509,6 +512,9 @@ function AIAssistantContent({
   const [missionDetailSection, setMissionDetailSection] = useState("");
   const [recentConversations, setRecentConversations] = useState([]);
   const [showComposerMenu, setShowComposerMenu] = useState(false);
+  const [manualCommandRequest, setManualCommandRequest] = useState(null);
+  const [showSessionMenu, setShowSessionMenu] = useState(false);
+  const [chatAssetOverride, setChatAssetOverride] = useState(null);
   const [draftDrawer, setDraftDrawer] = useState(null);
   const [activeFinnSessionId, setActiveFinnSessionId] = useState(null);
   const [availableFinnSessions, setAvailableFinnSessions] = useState([]);
@@ -544,7 +550,33 @@ function AIAssistantContent({
     feedDraftEdit, consumedFeedNonce,
   );
   const updateQuery = onQueryChange || setQuery;
-  const isSimpleFinnModal = modal;
+  const isSimpleFinnModal = modal || dock;
+  const effectiveCommandRequest = manualCommandRequest || commandRequest;
+  const isCommandSearchOpen = isSimpleFinnModal && ["asset", "indicator", "all"].includes(effectiveCommandRequest?.mode);
+  const stashedComposerDraftRef = useRef(null);
+  const updateVisibleQuery = (value) => {
+    if (isFeedHandoff) setFeedDraftEdit({ nonce: commandRequest?.nonce, value });
+    updateQuery(value);
+  };
+  const leaveCommandSearch = () => {
+    setManualCommandRequest(null);
+    onCommandComplete?.();
+    updateVisibleQuery(stashedComposerDraftRef.current ?? "");
+    stashedComposerDraftRef.current = null;
+    composerInputRef.current?.focus();
+  };
+  const enterCommandSearch = (mode) => {
+    stashedComposerDraftRef.current = activeQuery;
+    updateVisibleQuery("");
+    setShowComposerMenu(false);
+    setManualCommandRequest({ mode, nonce: `menu:${Date.now()}` });
+  };
+  useLayoutEffect(() => {
+    const input = composerInputRef.current;
+    if (!input || !isOpen) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  }, [activeQuery, isOpen]);
   const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
   const isAssetAnalysisPage = pathname === "/asset";
   const userScopedRecentConversationStorageKey = React.useMemo(
@@ -595,6 +627,7 @@ function AIAssistantContent({
     setActiveFinnSessionId(null);
     activeFinnSessionIdRef.current = null;
     setAvailableFinnSessions([]);
+    setChatAssetOverride(null);
     handledContextRequestRef.current = null;
     loadedFinnStateRef.current = false;
     missionControlCacheKeyRef.current = "";
@@ -1016,15 +1049,6 @@ function AIAssistantContent({
     }
     return null;
   };
-
-  // A typed V2 clarification owns the next short answer. Command search is a
-  // useful discovery surface, but must never consume that answer as a direct
-  // navigation or asset command.
-  const latestAssistantState = getLatestAssistantState();
-  const hasActiveFinnV2GuidedTurn = Boolean(
-    latestAssistantState?.run_status === "clarification_required" ||
-    latestAssistantState?.setup_draft?.draft_status === "collecting"
-  );
 
   const getFlowProgress = (state) => {
     if (!state || !state.current_flow || state.current_flow === "none") return null;
@@ -4344,7 +4368,18 @@ function AIAssistantContent({
     }
   }
 
-  async function handleChat(directQuery, isSilent = false, overrideContext = null) {
+  const stopCurrentResponse = () => {
+    const streamId = activeStreamIdRef.current;
+    if (!streamId) return;
+    activeStreamIdRef.current = null;
+    abortAssistantChatStream();
+    setMessages((current) => current.map((message) => message.streamId === streamId
+      ? { ...message, text: at("uiText.responseStopped"), isComplete: true, isStopped: true, actions: [], draft: null }
+      : message));
+    setLoading(false);
+  };
+
+  async function handleChat(directQuery, isSilent = false, overrideContext = null, retryMessageIndex = null) {
     if (loading || activeStreamIdRef.current) return;
     const nextQuery = directQuery !== undefined ? directQuery : activeQuery;
     if (!nextQuery.trim()) return;
@@ -4354,6 +4389,9 @@ function AIAssistantContent({
     }
 
     setLoading(true);
+    if (retryMessageIndex !== null) {
+      setMessages((current) => current.filter((_, index) => index !== retryMessageIndex && index !== retryMessageIndex - 1));
+    }
     if (isFinnProposalCorrection(nextQuery)) {
       const openIds = new Set(messagesRef.current.flatMap((message) =>
         (message.actions || [])
@@ -4380,11 +4418,12 @@ function AIAssistantContent({
       text: "", 
       isComplete: false,
       streamId,
+      retryQuery: nextQuery,
     }]);
 
     try {
       const cleanHistory = [
-        ...messages.map(m => ({ role: m.role, text: m.text })),
+        ...messages.filter((m, index) => index !== retryMessageIndex && index !== retryMessageIndex - 1 && !m.isError && !m.isStopped && m.text?.trim()).map(m => ({ role: m.role, text: m.text })),
         { role: "user", text: nextQuery }
       ];
 
@@ -4400,7 +4439,8 @@ function AIAssistantContent({
         usedFeedRequestRef.current = commandRequest?.nonce;
         if (!attachFeed) delete commandContext.feed_item_id;
       }
-      const requestContext = { ...baseRequestContext, ...commandContext, locale };
+      const requestContext = { ...baseRequestContext, ...commandContext, locale,
+        symbol: chatAssetOverride || commandContext.symbol || baseRequestContext.symbol };
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"
@@ -4430,6 +4470,7 @@ function AIAssistantContent({
           // onEnvelope
           if (activeStreamIdRef.current !== streamId) return;
           await persistActiveFinnSessionId(envelope?.session_id || chatSessionId);
+          if (activeStreamIdRef.current !== streamId) return;
           const pendingRunId = envelope?.state?.run_id || envelope?.response_trace?.run_id;
           if (envelope?.state?.current_flow === "finn_v2_visible_pending" && pendingRunId) {
             setMessages(prev => prev.map((message) => (
@@ -5829,7 +5870,7 @@ function AIAssistantContent({
   const compactFinnHeader = [
     "FINN",
     workspaceContextLabel,
-    String(context.symbol || globalSymbol || "BTC").toUpperCase(),
+    String(chatAssetOverride || context.symbol || globalSymbol || "BTC").toUpperCase(),
   ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"
@@ -6114,12 +6155,7 @@ function AIAssistantContent({
 
   const recentFinnSessionItems = availableFinnSessions.slice(0, MAX_RECENT_FINN_CONVERSATIONS);
 
-  const showSimpleFinnHistory =
-    !isSimpleFinnModal ||
-    messages.length > 0 ||
-    loading ||
-    Boolean(activeState) ||
-    recentFinnSessionItems.length > 0;
+  const showSimpleFinnHistory = true;
 
   useEffect(() => {
     if (!isOpen || !hasTraderProfile) return;
@@ -6149,7 +6185,13 @@ function AIAssistantContent({
       setFinnDraft(null);
       setMessages([]);
     }
-    updateQuery(commandRequest.query || "");
+    if (commandRequest.query !== undefined) updateQuery(commandRequest.query);
+  }, [commandRequest?.nonce, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !commandRequest?.nonce || !["asset", "indicator", "all"].includes(commandRequest.mode)) return;
+    if (stashedComposerDraftRef.current === null) stashedComposerDraftRef.current = activeQuery;
+    updateQuery("");
   }, [commandRequest?.nonce, isOpen]);
 
   useEffect(() => {
@@ -6165,6 +6207,8 @@ function AIAssistantContent({
     ? previewSectionsOnly
       ? "relative w-full bg-card dark:bg-[#0f172a] flex flex-col"
       : "relative h-[70dvh] w-full bg-card dark:bg-[#0f172a] flex flex-col lg:h-full"
+    : dock
+      ? "relative h-full w-full overflow-hidden bg-card dark:bg-[#0f172a] flex flex-col"
     : modal
       ? `relative max-h-[82vh] w-[min(960px,calc(100vw-2rem))] overflow-hidden rounded-[32px] border border-slate-200 bg-card shadow-2xl transition-all duration-300 dark:border-slate-800 dark:bg-[#0f172a] flex flex-col ${
           isOpen ? "translate-y-0 opacity-100 scale-100" : "translate-y-4 opacity-0 scale-[0.98]"
@@ -6187,9 +6231,21 @@ function AIAssistantContent({
                 <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">
                   FINN
                 </h2>
-                <p className="mt-0.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-tight">
-                  {compactFinnHeader.slice(1).join(" • ")}
-                </p>
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span>{compactFinnHeader[1]}</span>
+                  <span aria-hidden="true">·</span>
+                  <select
+                    aria-label={at("uiText.assetContext")}
+                    value={chatAssetOverride || context.symbol || globalSymbol || ""}
+                    onChange={(event) => setChatAssetOverride(event.target.value || null)}
+                    className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none dark:text-slate-300"
+                  >
+                    {!FINN_ASSETS.some((asset) => asset.symbol === (chatAssetOverride || context.symbol || globalSymbol)) ? (
+                      <option value={chatAssetOverride || context.symbol || globalSymbol || ""}>{chatAssetOverride || context.symbol || globalSymbol || "—"}</option>
+                    ) : null}
+                    {FINN_ASSETS.map((asset) => <option key={asset.symbol} value={asset.symbol}>{asset.symbol}</option>)}
+                  </select>
+                </div>
               </>
             ) : (
               <>
@@ -6209,15 +6265,36 @@ function AIAssistantContent({
             )}
           </div>
         </div>
-        {!persistent ? (
-          <button
-            onClick={() => setIsOpen(false)}
-            aria-label={closeLabel || at("uiText.closeChat")}
-            className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg transition-colors text-secondary hover:text-slate-900 dark:hover:text-slate-100"
-          >
-            <X size={18} />
-          </button>
-        ) : null}
+        <div className="flex items-center gap-1">
+          {isSimpleFinnModal ? (
+            <>
+              <button type="button" onClick={() => setShowSessionMenu((current) => !current)}
+                aria-label={uiText.backendSessions} aria-expanded={showSessionMenu}
+                className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">
+                <History size={18} />
+              </button>
+              <button type="button" onClick={() => { setShowSessionMenu(false); void startNewFinnConversation(); }}
+                aria-label={uiText.newConversation}
+                className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">
+                <Plus size={18} />
+              </button>
+              {dock && onToggleExpanded ? (
+                <button type="button" onClick={onToggleExpanded}
+                  aria-label={expanded ? at("uiText.shrinkChat") : at("uiText.expandChat")}
+                  className="hidden rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900 xl:inline-flex">
+                  {expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+          {!persistent ? (
+            <button type="button" onClick={() => setIsOpen(false)}
+              aria-label={closeLabel || at("uiText.closeChat")}
+              className="rounded-lg p-2 text-secondary hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-slate-900 dark:hover:text-slate-100">
+              <X size={18} />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth" ref={scrollRef}>
@@ -6798,15 +6875,15 @@ function AIAssistantContent({
         {/* MESSAGES AREA */}
         {showSimpleFinnHistory ? (
         <div className={`space-y-4 ${isSimpleFinnModal ? "p-5 pb-8" : "p-6 pb-20"}`}>
-          {isSimpleFinnModal && (
-            <div className="space-y-2">
+          {isSimpleFinnModal && showSessionMenu && (
+            <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-3">
-                <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+                <div className="px-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
                   {uiText.backendSessions}
                 </div>
                 <button
                   type="button"
-                  onClick={() => void startNewFinnConversation()}
+                  onClick={() => { setShowSessionMenu(false); void startNewFinnConversation(); }}
                   className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                 >
                   {uiText.newConversation}
@@ -6818,7 +6895,7 @@ function AIAssistantContent({
                   <button
                     key={session.id}
                     type="button"
-                    onClick={() => void restoreFinnSession(session.id)}
+                    onClick={() => { setShowSessionMenu(false); void restoreFinnSession(session.id); }}
                     className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                       isActiveSession
                         ? "border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20"
@@ -6837,22 +6914,47 @@ function AIAssistantContent({
             </div>
           )}
 
+          {isSimpleFinnModal && messages.length === 0 && !loading && !isCommandSearchOpen && (
+            <div className="space-y-3 py-5">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{at("uiText.emptyChatTitle")}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{at("uiText.emptyChatHint")}</p>
+              <div className="grid gap-2">
+                {[
+                  ["uiText.starterPlan", "uiText.starterPlanPrompt"],
+                  ["uiText.starterAttention", "uiText.starterAttentionPrompt"],
+                  ["uiText.starterScore", "uiText.starterScorePrompt"],
+                ].map(([labelKey, promptKey]) => (
+                  <button key={labelKey} type="button" onClick={() => handleChat(at(promptKey))}
+                    className="rounded-xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-slate-800 dark:text-slate-200">
+                    {at(labelKey)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[90%] rounded-2xl p-4 ${
+              <div className={`${m.role === "user" ? "max-w-[90%] rounded-2xl px-4 py-3" : "w-full"} ${
                 m.role === "user" 
                   ? "bg-blue-600 text-white shadow-lg shadow-blue-600/10" 
                   : m.isError 
-                    ? "bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900 text-rose-700 dark:text-rose-300"
-                    : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
+                    ? "text-rose-700 dark:text-rose-300"
+                    : "text-foreground dark:text-slate-100"
                 }`}>
-                <p className="whitespace-pre-line text-sm leading-relaxed">
+                <p className="whitespace-pre-line text-[15px] leading-7">
                   {m.role === "assistant"
                     ? parseFinnChatText(m.text).map((part, index) => part.bold
                       ? <strong key={index}>{part.text}</strong>
                       : <React.Fragment key={index}>{part.text}</React.Fragment>)
                     : m.text}
                 </p>
+                {m.isError && m.retryQuery ? (
+                  <button type="button" onClick={() => handleChat(m.retryQuery, false, null, i)}
+                    className="mt-2 text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">
+                    {uiText.retry}
+                  </button>
+                ) : null}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOperatorReadoutCard(m)}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderDecisionReviewV3Card(getMessageDecisionReview(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderPlanAdherenceCard(getMessagePlanAdherenceReview(m))}
@@ -6924,7 +7026,7 @@ function AIAssistantContent({
                 {renderV2ActionDraftCard(m, i)}
                 {!isSimpleFinnModal && renderDraftCard(m)}
                 {renderInlineActionCard(m)}
-                {m.isError && (
+                {m.isError && !isSimpleFinnModal && (
                   <button 
                     onClick={() => handleChat(messages[i-1]?.text)} 
                     className="mt-2 text-[10px] font-bold uppercase tracking-widest underline hover:text-rose-900 dark:hover:text-rose-100"
@@ -6998,7 +7100,10 @@ function AIAssistantContent({
           })()}
 
           {loading && (
-            <ChatSkeleton />
+            <div role="status" className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <Loader2 size={16} className="animate-spin" />
+              {at("uiText.working")}
+            </div>
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -7112,17 +7217,29 @@ function AIAssistantContent({
             </div>
           </div>
         )}
-          {isSimpleFinnModal ? (
+          {isCommandSearchOpen ? (
             <FinnCommandCenter
               ref={commandCenterRef}
               isOpen={isOpen}
               query={activeQuery}
-              request={commandRequest}
-              onQueryChange={updateQuery}
-              onAskFinn={() => handleChat()}
-              onClose={() => setIsOpen(false)}
+              request={effectiveCommandRequest}
+              onQueryChange={updateVisibleQuery}
+              onAskFinn={() => {
+                const question = activeQuery;
+                setManualCommandRequest(null);
+                onCommandComplete?.();
+                stashedComposerDraftRef.current = null;
+                handleChat(question);
+              }}
+              onClose={leaveCommandSearch}
               watchlist={watchlist}
             />
+          ) : null}
+          {isCommandSearchOpen ? (
+            <button type="button" onClick={leaveCommandSearch}
+              className="mb-3 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+              {at("uiText.backToChat")}
+            </button>
           ) : null}
           <div className="relative group">
           {isSimpleFinnModal && showComposerMenu ? (
@@ -7130,10 +7247,7 @@ function AIAssistantContent({
               <button
                 type="button"
                 onClick={() => {
-                  setShowComposerMenu(false);
-                  updateQuery("");
-                  commandCenterRef.current?.openAssetSearch();
-                  composerInputRef.current?.focus();
+                  enterCommandSearch("asset");
                 }}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900"
               >
@@ -7143,10 +7257,7 @@ function AIAssistantContent({
               <button
                 type="button"
                 onClick={() => {
-                  setShowComposerMenu(false);
-                  updateQuery("");
-                  commandCenterRef.current?.openIndicatorSearch();
-                  composerInputRef.current?.focus();
+                  enterCommandSearch("indicator");
                 }}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900"
               >
@@ -7166,9 +7277,9 @@ function AIAssistantContent({
               <Plus size={22} className={`transition-transform ${showComposerMenu ? "rotate-45" : ""}`} />
             </button>
           ) : null}
-          <input 
+          <textarea
             ref={composerInputRef}
-            type="text" 
+            rows={1}
             value={activeQuery}
             onChange={(e) => {
               setShowComposerMenu(false);
@@ -7179,21 +7290,27 @@ function AIAssistantContent({
             }}
             onKeyDown={(event) => {
               if (loading || activeStreamIdRef.current) return;
-              if (commandRequest?.mode !== "chat" && !hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
-              if (event.key === "Enter") handleChat();
+              if (isCommandSearchOpen && event.key === "Escape") { event.preventDefault(); leaveCommandSearch(); return; }
+              if (isCommandSearchOpen && commandCenterRef.current?.handleKeyDown(event)) return;
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                handleChat();
+              }
             }}
             placeholder={isSimpleFinnModal ? composerMenuCopy.placeholder : uiText.inputPlaceholder}
-            className={`w-full pr-14 py-4 bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-600/5 focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600/20 transition-all outline-none text-sm text-foreground dark:text-slate-100 ${isSimpleFinnModal ? "pl-14" : "pl-6"}`}
+            className={`block max-h-40 min-h-[56px] w-full resize-none overflow-y-auto rounded-2xl border border-slate-100 bg-[var(--color-border-subtle)] py-4 pr-14 text-[15px] leading-6 text-foreground outline-none transition-all focus:border-blue-600/20 focus:bg-white focus:ring-4 focus:ring-blue-600/5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:bg-slate-800 ${isSimpleFinnModal ? "pl-14" : "pl-6"}`}
           />
           <button 
             onClick={() => {
-              if (commandRequest?.mode !== "chat" && !hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.submitPrimary()) return;
+              if (loading) { stopCurrentResponse(); return; }
+              if (isCommandSearchOpen && commandCenterRef.current?.submitPrimary()) return;
               handleChat();
             }}
-            disabled={loading || !activeQuery.trim()}
-            className="absolute right-3 top-2.5 p-2 rounded-xl bg-slate-900 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg"
+            aria-label={loading ? at("uiText.stopResponse") : at("uiText.sendMessage")}
+            disabled={!loading && !activeQuery.trim()}
+            className="absolute bottom-3 right-3 rounded-xl bg-blue-600 p-2 text-white shadow-lg transition-all hover:bg-blue-700 disabled:opacity-50"
           >
-            <Send size={18} />
+            {loading ? <Square size={18} fill="currentColor" /> : <Send size={18} />}
           </button>
         </div>
       </div>

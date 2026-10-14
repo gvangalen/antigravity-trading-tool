@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { theme } from '../../constants/theme';
 import { useIntelligenceContext } from '../../contexts/ActiveIntelligenceContext';
 import { useFinnOverlay } from '../../contexts/FinnOverlayContext';
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
@@ -10,7 +9,7 @@ import { triggerHaptic } from '../../utils/haptics';
 
 export function FloatingFinnComposer() {
   const insets = useSafeAreaInsets();
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const { context } = useIntelligenceContext();
   const { openFinn } = useFinnOverlay();
@@ -42,7 +41,7 @@ export function FloatingFinnComposer() {
         </View>
         <View style={styles.copy}>
           <Text style={[styles.placeholder, { color: colors.textDim }]} numberOfLines={1}>
-            Ask FINN, search an asset or add an indicator...
+            {language === 'nl' ? 'Vraag FINN over jouw plan...' : language === 'de' ? 'Frag FINN zu deinem Plan...' : 'Ask FINN about your plan...'}
           </Text>
         </View>
         <View style={[styles.sendPill, { backgroundColor: colors.textDim }]}>

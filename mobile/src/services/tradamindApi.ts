@@ -342,12 +342,10 @@ export const assistantApi = {
     });
   },
 
-  chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null) {
-    return apiClient.post<AssistantEnvelope>('/api/assistant/chat', {
-      context,
-      history,
-      query,
-      session_id: sessionId,
+  chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null, signal?: AbortSignal) {
+    return apiClient.request<AssistantEnvelope>('/api/assistant/chat', {
+      method: 'POST', signal,
+      body: { context, history, query, session_id: sessionId },
     });
   },
 

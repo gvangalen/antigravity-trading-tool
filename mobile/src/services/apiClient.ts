@@ -66,6 +66,7 @@ export type ApiRequestOptions = {
   timeoutMs?: number;
   skipAuth?: boolean;
   skipRefresh?: boolean;
+  signal?: AbortSignal;
 };
 
 export class ApiError extends Error {
@@ -93,12 +94,14 @@ class APIClient {
     didRetry: boolean,
   ): Promise<T> {
     const controller = new AbortController();
+    const abortFromCaller = () => controller.abort();
+    if (options.signal?.aborted) controller.abort();
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12000);
-    const accessToken = options.skipAuth ? null : await getAccessToken();
-    const refreshToken = options.skipAuth ? null : await getRefreshToken();
-    const locale = await getStoredAppLanguage();
-
     try {
+      const accessToken = options.skipAuth ? null : await getAccessToken();
+      const refreshToken = options.skipAuth ? null : await getRefreshToken();
+      const locale = await getStoredAppLanguage();
       const response = await fetch(this.buildUrl(path, options.query), {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         credentials: USE_COOKIE_CREDENTIALS ? 'include' : 'omit',
@@ -139,6 +142,7 @@ class APIClient {
       throw new ApiError(error instanceof Error ? error.message : 'Network request failed', 0);
     } finally {
       clearTimeout(timeout);
+      options.signal?.removeEventListener('abort', abortFromCaller);
     }
   }
 

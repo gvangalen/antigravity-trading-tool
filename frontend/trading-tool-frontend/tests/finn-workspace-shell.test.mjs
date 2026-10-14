@@ -24,17 +24,25 @@ test("shared workspace shows the persisted coach feed and opens chat on demand",
   assert.doesNotMatch(shellSource, /loadMissionControl|first_dashboard_context/);
 });
 
-test("feed discussion uses its own modal, draft and close lifecycle", () => {
+test("feed discussion enters the persistent FINN panel with its event identity", () => {
   assert.match(shellSource, /setFeedDiscussion\(\{ request: handoff, draft: nextQuery \}\)/);
-  assert.match(shellSource, /data-feed-handoff-id=\{feedDiscussion\.request\.context\.feed_item_id\}/);
-  assert.match(shellSource, /key=\{feedDiscussion\.request\.nonce\}/);
-  assert.match(shellSource, /commandRequest=\{feedDiscussion\.request\}/);
-  assert.match(shellSource, /\)\s*:\s*assistantOpen\s*\?\s*\(/);
-  assert.match(shellSource, /<div\s+aria-hidden="true"[\s\S]*?onClick=\{\(\) => closeFeedDiscussion/);
+  assert.match(shellSource, /data-feed-handoff-id=\{feedDiscussion\?\.request\.context\.feed_item_id \|\| undefined\}/);
+  assert.match(shellSource, /data-testid="finn-chat-panel"/);
+  assert.match(shellSource, /commandRequest=\{feedDiscussion \? feedDiscussion\.request : commandRequest\}/);
+  assert.match(shellSource, /closeFeedDiscussion\(feedDiscussion\.request\.nonce\)/);
   assert.match(shellSource, /closeLabel=\{workspaceCopy\.closeBackdrop\}/);
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
   assert.match(assistantSource, /resolveFeedDraftQuery\(/);
   assert.match(assistantSource, /aria-label=\{closeLabel \|\| at\("uiText\.closeChat"\)\}/);
+});
+
+test("ordinary questions submit directly and chat stays beside the workspace", () => {
+  assert.match(shellSource, /mode: "chat", query: composerQuery\.trim\(\), autoSubmit: true/);
+  assert.match(shellSource, /xl:pr-\[440px\]/);
+  assert.match(shellSource, /dock\s+expanded=/);
+  assert.doesNotMatch(shellSource, /backdrop-blur-sm/);
+  assert.match(assistantSource, /if \(event\.key === "Enter" && !event\.shiftKey && !event\.nativeEvent\.isComposing\)/);
+  assert.match(assistantSource, /\{isCommandSearchOpen \? \(\s*<FinnCommandCenter/);
 });
 
 test("explicit contextual requests still reach ordinary FINN chat", () => {

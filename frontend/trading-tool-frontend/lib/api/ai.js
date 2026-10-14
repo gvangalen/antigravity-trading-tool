@@ -185,6 +185,12 @@ export const executePendingAction = (actionIdOrAction) => {
 // ========================================
 let activeAbortController = null;
 
+export const abortAssistantChatStream = () => {
+  if (!activeAbortController) return;
+  activeAbortController.abort();
+  activeAbortController = null;
+};
+
 export const assistantChatStream = async (
   query,
   context = {},
