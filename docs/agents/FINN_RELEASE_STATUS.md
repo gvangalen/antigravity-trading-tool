@@ -6,7 +6,43 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_SECOND_REPAIR_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_THIRD_REPAIR_READY_FOR_INDEPENDENT_QA`.
+The independent authenticated browser QA returned **NOT ACCEPTED** on the
+previous live SHA `9ae9ecacf175787184def2d086fc709eacf3b2c5`: the setup,
+Stop, panel, history, feed handoff and mobile browser paths passed, but a
+German-to-Dutch follow-up lost the named setup, an unsent ordinary composer
+draft disappeared after a hard refresh, and the locale-switch toast stayed
+in German. [PR #319](https://github.com/gvangalen/antigravity-trading-tool/pull/319)
+repairs those three findings and merged as product SHA
+`de8ac113447371d20755a763ee5db8b7c05a6d80`. The prior owner-scoped
+answer and verified setup remain available after a language switch while
+the old Responses provider continuation is reset. The unsent composer draft
+is stored per signed-in user for the browser session and cleared on logout;
+the language toast uses the destination locale.
+
+Build evidence on 2026-10-14: backend **3571 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal and
+setup tests, and high-severity audit passed. The local worker action matrix
+passed **16/16**, adapters **19/19**, with zero broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`a61d77b56180c30ae77c952b189c291f2e45ba1861bfb39b37794a3d1023c4bd`).
+The real local six-turn locale replay passed **6/6**, including the German
+1D setup reference followed by Dutch “welke setup bedoelde je zojuist?”
+(SHA-256 `ba733ad79fb0547c8f0a4ea721b5727e01ecdfb923a1ed7eaaa5e4b397e560a3`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`8f878f0aa3d052953932e07c0a40929234b363825835a6c7b1825f9a99da26b5`)
+and full regression **109/109** (SHA-256
+`9f7e5737a02d7a5aa444a76c67fc93063b3a3ed73e00d72f6c944ae72d1637e5`),
+with zero provider, schema, parse, validation or timeout failures.
+Candidate [CI run 38526764853](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38526764853)
+and main [CI run 38527017752](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38527017752)
+each passed all five jobs. [Auto Deploy run 38527240781](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38527240781)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA above. This status-only update will receive a
+later SHA; independent QA must bind to the SHA reported by both public
+surfaces. The new authenticated live QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_SECOND_REPAIR_READY_FOR_INDEPENDENT_QA`.
 [PR #317](https://github.com/gvangalen/antigravity-trading-tool/pull/317)
 merged as product SHA `4d2e43ee34b483c35b32196bfca79e18cd5b7a3c`.
 Candidate [CI run 38523392138](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38523392138)
