@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from backend.infrastructure.database import sync_engine
 from backend.scripts.run_finn_v2_full_action_matrix import (
-    _create_local_user, _insert_setup, _insert_strategy, _runtime_record,
+    _create_local_user, _insert_bot, _insert_setup, _insert_strategy, _runtime_record,
 )
 from backend.scripts.run_finn_v2_persisted_runtime_gate import run_gate
 from backend.utils.auth_utils import create_access_token
@@ -40,7 +40,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 17))
+    parser.add_argument("--sequence", type=int, choices=range(1, 19))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -147,6 +147,12 @@ def main() -> None:
         (
             "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid bij de huidige scores. Alleen lezen, niets wijzigen.",
         ),
+        (
+            "Vergelijk mijn ETH-setups per naam: noem hun analyse-timeframe, DCA-koopritme als dat bestaat, gekoppelde strategieën en welke setup een Paper-bot heeft. Noem ook expliciet welke geen bot heeft. Alleen lezen.",
+        ),
+        (
+            "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid bij de huidige scores. Alleen lezen, niets wijzigen.",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
@@ -185,6 +191,42 @@ def main() -> None:
                         _insert_strategy(connection, user["id"], setup_id, f"ETH QA Strategy {index}")
                     if index == 3:
                         _insert_strategy(connection, user["id"], setup_id, "ETH QA Strategy 3 Variant")
+        if sequence_number in {17, 18}:
+            with sync_engine.begin() as connection:
+                original = connection.execute(text("""
+                    SELECT id FROM setups WHERE user_id=:user_id AND name='ETH Full Setup'
+                """), {"user_id": user["id"]}).scalar_one()
+                _insert_strategy(connection, user["id"], original, "ETH Full Strategy")
+                for index in range(2, 8):
+                    name = f"ETH QA Bot Setup {index}"
+                    setup_id = _insert_setup(
+                        connection, user["id"], name, symbol="ETH",
+                        setup_type="dca" if index in {2, 4} else "trade",
+                    )
+                    connection.execute(text("""
+                        UPDATE setups SET timeframe=:timeframe, dca_frequency=:frequency,
+                            dca_day=:day WHERE id=:id AND user_id=:user_id
+                    """), {
+                        "timeframe": "1D" if index in {2, 3, 4} else "4H",
+                        "frequency": "weekly" if index in {2, 4} else None,
+                        "day": "1" if index in {2, 4} else None,
+                        "id": setup_id, "user_id": user["id"],
+                    })
+                    strategy_id = _insert_strategy(
+                        connection, user["id"], setup_id, f"ETH QA Bot Strategy {index}",
+                    )
+                    if index == 2:
+                        strategy_id = _insert_strategy(
+                            connection, user["id"], setup_id,
+                            "ETH QA Bot Strategy 2 Variant",
+                        )
+                    if index in {2, 5}:
+                        bot_id = _insert_bot(
+                            connection, user["id"], strategy_id, f"ETH QA Paper Bot {index}",
+                        )
+                        connection.execute(text("""
+                            UPDATE bot_configs SET symbol='ETH' WHERE id=:id AND user_id=:user_id
+                        """), {"id": bot_id, "user_id": user["id"]})
         conversation_id = None
         second_btc_setup_id = None
         last_verified_linked_setup_ids: set[int] = set()
@@ -485,6 +527,31 @@ def main() -> None:
                     all(name in answer for name in named)
                     and "FINN kon dit antwoord niet afronden" not in answer
                     and "BTC Other" not in answer
+                )
+            if sequence_number == 17:
+                rows_by_name = {
+                    index: next((line for line in answer.splitlines()
+                                 if f"ETH QA Bot Setup {index}" in line), "")
+                    for index in range(2, 8)
+                }
+                checks["bot_links_stay_with_their_setup"] = (
+                    all(rows_by_name.values())
+                    and "ETH QA Paper Bot 2" in rows_by_name[2]
+                    and "ETH QA Paper Bot 5" in rows_by_name[5]
+                    and all("geen bot" in rows_by_name[index].casefold()
+                            for index in (3, 4, 6, 7))
+                )
+                checks["analysis_timeframe_distinct_from_dca_schedule"] = (
+                    all("1D" in rows_by_name[index] and "maandag" in rows_by_name[index].casefold()
+                        for index in (2, 4))
+                    and not re.search(r"\bas_of\b", answer)
+                )
+            if sequence_number == 18:
+                checks["mixed_plan_answer_complete"] = (
+                    all(f"ETH QA Bot Setup {index}" in answer for index in range(2, 8))
+                    and "ETH Full Setup" in answer
+                    and "1D" in answer and "4H" in answer
+                    and not re.search(r"\bas_of\b", answer)
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,
