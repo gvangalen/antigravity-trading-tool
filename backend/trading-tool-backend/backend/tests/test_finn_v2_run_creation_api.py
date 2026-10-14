@@ -15,19 +15,47 @@ from backend.main import app
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope
 
 
-def test_cancel_reports_completion_race_as_conflict_for_authoritative_refetch():
-    gateway = SimpleNamespace(get_run=AsyncMock(return_value=SimpleNamespace(status="planned")))
+def test_cancel_returns_authoritative_completion_when_worker_wins_the_race(monkeypatch):
+    planned = SimpleNamespace(status="planned")
+    gateway = SimpleNamespace(get_run=AsyncMock(return_value=planned))
+    terminal_envelope = AgentRunStatusEnvelope(
+        run_id="run-race", conversation_id="conversation-race", status="completed",
+        visibility="visible", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+    )
     service = SimpleNamespace(cancel_run=AsyncMock(side_effect=RuntimeContractConflictError(
         "runtime_contract_already_terminal"
-    )))
+    )), envelope_from_run=AsyncMock())
+    fresh_read = AsyncMock(return_value=terminal_envelope)
+    monkeypatch.setattr(finn_v2_api, "_load_run_envelope", fresh_read)
 
-    with pytest.raises(HTTPException) as caught:
-        asyncio.run(finn_v2_api.cancel_finn_v2_run(
-            run_id="run-race", current_user={"id": 351}, gateway=gateway, run_service=service,
-        ))
+    response = asyncio.run(finn_v2_api.cancel_finn_v2_run(
+        run_id="run-race", current_user={"id": 351}, gateway=gateway, run_service=service,
+    ))
 
-    assert caught.value.status_code == 409
+    assert response.run.status == "completed"
     service.cancel_run.assert_awaited_once_with(run_id="run-race", user_id=351)
+    fresh_read.assert_awaited_once_with(run_id="run-race", user_id=351)
+    service.envelope_from_run.assert_not_awaited()
+
+
+def test_cancel_of_already_terminal_run_is_an_idempotent_read():
+    completed = SimpleNamespace(status="completed")
+    gateway = SimpleNamespace(get_run=AsyncMock(return_value=completed))
+    terminal_envelope = AgentRunStatusEnvelope(
+        run_id="run-race", conversation_id="conversation-race", status="completed",
+        visibility="visible", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+    )
+    service = SimpleNamespace(cancel_run=AsyncMock(), envelope_from_run=AsyncMock(
+        return_value=terminal_envelope
+    ))
+
+    response = asyncio.run(finn_v2_api.cancel_finn_v2_run(
+        run_id="run-race", current_user={"id": 351}, gateway=gateway, run_service=service,
+    ))
+
+    assert response.run.status == "completed"
+    service.cancel_run.assert_not_awaited()
+    service.envelope_from_run.assert_awaited_once_with(completed)
 
 
 def test_authenticated_run_creation_uses_the_injected_database_session_for_runtime_contract(monkeypatch):

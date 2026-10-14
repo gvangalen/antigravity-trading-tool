@@ -844,18 +844,43 @@ class FinnResponsesAnswerVerifier:
         )
         for match in probability_claim.finditer(text):
             prefix = re.split(r"[.!?;\n]|\b(?:maar|but|aber)\b", text[:match.start()], flags=re.I)[-1]
+            suffix = re.split(r"[.!?;\n]|\b(?:maar|but|aber)\b", text[match.end():], flags=re.I)[0]
+            # A limit on what the available facts can establish is not a
+            # forecast. Keep positive success claims blocked below.
+            uncertainty_about_chance = bool(
+                re.search(
+                    r"\b(?:niets?|nothing|nichts)\s+(?:zeggen|says?|aussagen?)\s+over\s+(?:de\s+)?$"
+                    r"|\b(?:zegt?|zeggen|says?)\b[^.!?;\n]{0,45}\b(?:niets?|nothing|nichts)\s+over\s+(?:de\s+)?$"
+                    r"|\b(?:niet|not|nicht)\s+(?:betrouwbaar\s+)?(?:vast(?:\s+te)?\s*stellen|"
+                    r"beoordelen|inschatten|assess|estimate|bestimmen)\b[^.!?;\n]{0,45}$"
+                    r"|\b(?:geen|no|keine?)\s+(?:betrouwbare\s+|reliable\s+|verlässliche\s+)?"
+                    r"(?:uitspraak|conclusie|inschatting|schatting|voorspelling|bewijs|oordeel|claim|statement|"
+                    r"conclusion|assessment|estimate|prediction|forecast|evidence|Aussage|Einschätzung|Beweis)\b"
+                    r"[^.!?;\n]{0,35}$",
+                    prefix, re.I,
+                )
+                or re.match(r"\s+(?:is\s+|kan\s+|cannot\s+be\s+)?(?:niet|not|nicht)\s+"
+                            r"(?:vast(?:\s+te)?\s*stellen|te\s+beoordelen|assessed|known|bekannt)", suffix, re.I)
+            )
+            if uncertainty_about_chance:
+                continue
             if not re.search(
                 r"\b(?:geen|no|not|kein\w*)\s+(?:(?:a|an)\s+)?(?:(?:betrouwbare|reliable|verlässliche)\s+)?"
-                r"(?:beoordeling|inschatting|oordeel|uitspraak|bewijs|assessment|estimate|"
-                r"judgment|evidence|Bewertung|Einschätzung|Aussage)\b[^.!?;\n]{0,50}$",
+                r"(?:beoordeling|inschatting|schatting|voorspelling|oordeel|uitspraak|bewijs|assessment|estimate|"
+                r"prediction|forecast|judgment|evidence|Bewertung|Einschätzung|Aussage)\b[^.!?;\n]{0,50}$",
                 prefix, re.I,
             ):
+                logger.info("FINN outcome guard category=probability")
                 return True
+        loss_risk = (
+            r"(?:risic\w*\s+op\s+verlies|verliesrisic\w*|risk\s+of\s+loss\w*|"
+            r"loss\s+risk|verlustrisic\w*|verlust\w*|loss\w*)"
+        )
         risk_reduction = re.compile(
-            r"\b(?:risic\w*|risk\w*|verlust\w*|loss\w*)\b.{0,40}\b"
+            rf"\b{loss_risk}\b.{{0,40}}\b"
             r"(?:beperk\w*|verminder\w*|verklein\w*|reduc\w*|lower\w*|senk\w*)\b"
             r"|\b(?:beperk\w*|verminder\w*|verklein\w*|reduc\w*|lower\w*|senk\w*)\b"
-            r".{0,40}\b(?:risic\w*|risk\w*|verlust\w*|loss\w*)\b",
+            rf".{{0,40}}\b{loss_risk}\b",
             re.IGNORECASE | re.DOTALL,
         )
         for match in risk_reduction.finditer(text):
@@ -877,8 +902,9 @@ class FinnResponsesAnswerVerifier:
                 # Position size changes the amount exposed to a given stop;
                 # this is risk arithmetic, not a promised trading outcome.
                 continue
+            logger.info("FINN outcome guard category=risk_reduction")
             return True
-        return bool(re.search(
+        terminal_promise = bool(re.search(
             r"\b(?:verlies voorkomen|verliezen vermijden|prevent losses|avoid losses|"
             r"verluste vermeiden|verluste verhindern|"
             r"verliezen.{0,30}vermijd\w*|"
@@ -887,6 +913,9 @@ class FinnResponsesAnswerVerifier:
             r"increases? the chance)\b",
             text, re.IGNORECASE,
         ))
+        if terminal_promise:
+            logger.info("FINN outcome guard category=terminal_promise")
+        return terminal_promise
 
     @staticmethod
     def _strategy_levels_attributed_to_setup(
@@ -1473,6 +1502,33 @@ class FinnResponsesAnswerVerifier:
                         continue
                     if value in price_distance_claims:
                         grounded.add(value)
+        # A geometry percentage only supports an explicitly described price
+        # distance. It must not turn into a saved risk limit or success claim.
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
+            if not percentages(sentence) or not re.search(r"\b(?:entry|instap|invoer)\b", sentence, re.I):
+                continue
+            if re.search(r"\b(?:grens|limiet|kans|rendement)\b", sentence, re.I):
+                continue
+            for item in evidence:
+                if item.get("scope") != "read_linked_strategy" or item.get("status") != "completed":
+                    continue
+                data = item.get("data") or {}
+                geometry = data.get("level_geometry") if isinstance(data, dict) else None
+                if not isinstance(geometry, dict) or geometry.get("status") != "completed":
+                    continue
+                try:
+                    if re.search(r"\b(?:stop|risicoafstand|stopafstand)\b", sentence, re.I):
+                        grounded.add(Decimal(str(geometry["entry_stop_distance_percent"])))
+                    if re.search(r"\b(?:target|doel|winstafstand)\b", sentence, re.I):
+                        entry = Decimal(str(data["entry"]))
+                        if entry > 0:
+                            grounded.update(
+                                Decimal(str(target["reward_per_unit"])) / entry * 100
+                                for target in geometry.get("targets") or []
+                                if isinstance(target, dict) and target.get("reward_per_unit") is not None
+                            )
+                except (InvalidOperation, KeyError, TypeError, ZeroDivisionError):
+                    continue
         return claimed <= grounded
 
     @staticmethod
@@ -1500,6 +1556,30 @@ class FinnResponsesAnswerVerifier:
             except InvalidOperation:
                 continue
         return True
+
+    @staticmethod
+    def _expand_linked_strategy_collections(
+        evidence: tuple[dict[str, Any], ...],
+    ) -> tuple[dict[str, Any], ...]:
+        """Expose each owner-scoped collection member to fact checks.
+
+        The collection read does not select a strategy for an action. It only
+        lets the numerical verifier check comparisons against each stored row.
+        """
+        expanded = list(evidence)
+        for item in evidence:
+            if item.get("scope") != "read_linked_strategies" or item.get("status") != "completed":
+                continue
+            data = item.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            for strategy in data.get("strategies") or []:
+                if not isinstance(strategy, dict) or strategy.get("setup_id") != data.get("setup_id"):
+                    continue
+                expanded.append({
+                    **item, "scope": "read_linked_strategy", "data": strategy,
+                })
+        return tuple(expanded)
 
     @staticmethod
     def _saved_strategy_levels_supported(
@@ -1560,6 +1640,66 @@ class FinnResponsesAnswerVerifier:
             prefix = re.split(
                 r"[,;.!?\n|]", plain_answer[max(0, match.start() - 55):match.start()]
             )[-1]
+            if match in labelled:
+                label = match.group(0).split(match.group(1), 1)[0]
+                suffix = plain_answer[match.end():match.end() + 55]
+                prefix_distance = bool(re.search(
+                    r"(?:(?:afstand|verschil)\s+(?:van|tussen)\s+(?:entry|instap|invoer)(?:\s+tot|\s+naar|\s+en)|"
+                    r"distance\s+from\s+entry\s+to|abstand\s+von\s+einstieg\s+zu[mr]?)\s*$",
+                    prefix, re.I,
+                ))
+                if not prefix_distance and re.search(
+                    r"\b(?:tussen|van)\s+(?:entry|instap|invoer)\s+(?:en|tot|naar)\s*$",
+                    prefix, re.I,
+                ):
+                    # The second leg of "the difference between entry and
+                    # stop ... and between entry and target ..." inherits
+                    # the distance noun in the same sentence.
+                    phrase = re.split(r"[.!?;\n]", plain_answer[max(0, match.start() - 130):match.start()])[-1]
+                    prefix_distance = bool(re.search(r"\b(?:afstand|verschil)\b", phrase, re.I))
+                risk_distance_suffix = bool(re.match(
+                    r"\s*(?:(?:punten|points?|eenheden|units?)\s+)?"
+                    r"(?:(?:onder|below)\s+(?:de\s+|the\s+)?"
+                    r"(?:entry|instap|invoer|einstieg)|eronder)\b",
+                    suffix, re.I,
+                ))
+                reward_distance_suffix = bool(re.match(
+                    r"\s*(?:(?:punten|points?|eenheden|units?)\s+)?"
+                    r"(?:(?:boven|above)\s+(?:de\s+|the\s+)?"
+                    r"(?:entry|instap|invoer|einstieg)|erboven)\b",
+                    suffix, re.I,
+                ))
+                is_stop_distance = (prefix_distance or risk_distance_suffix) and re.match(
+                    r"stop(?:[- ]?loss)?\b", label, re.I,
+                )
+                is_target_distance = (prefix_distance or reward_distance_suffix) and re.match(
+                    r"(?:targets?|doelen?|koersdoelen?|ziele?)\b", label, re.I,
+                )
+            else:
+                is_stop_distance = is_target_distance = False
+            if is_stop_distance or is_target_distance:
+                # Compare a derived distance with typed level geometry. The
+                # same number without distance context remains a price claim.
+                distance_values = {
+                    Decimal(str(value))
+                    for data in strategies
+                    for geometry in [data.get("level_geometry")]
+                    if isinstance(geometry, dict) and geometry.get("status") == "completed"
+                    for value in (
+                        ([geometry.get("risk_per_unit")] if is_stop_distance else [
+                            target.get("reward_per_unit") for target in geometry.get("targets") or []
+                            if isinstance(target, dict)
+                        ])
+                    )
+                    if value is not None
+                }
+                try:
+                    stated_distance = Decimal(match.group(1).rstrip(".,").replace(",", "."))
+                except InvalidOperation:
+                    return False
+                if stated_distance not in distance_values:
+                    return False
+                continue
             try:
                 possible_ratio = Decimal(match.group(1).rstrip(".,").replace(",", "."))
             except InvalidOperation:
@@ -1593,6 +1733,33 @@ class FinnResponsesAnswerVerifier:
                     level = Decimal(normalized)
                 except InvalidOperation:
                     continue
+                if level not in saved and match in labelled:
+                    derived = {
+                        Decimal(str(value))
+                        for data in strategies
+                        for geometry in [data.get("level_geometry")]
+                        if isinstance(geometry, dict) and geometry.get("status") == "completed"
+                        for value in (
+                            [geometry.get("risk_per_unit")]
+                            + [target.get("reward_per_unit") for target in geometry.get("targets") or []
+                               if isinstance(target, dict)]
+                        )
+                        if value is not None
+                    }
+                    nearby = plain_answer[max(0, match.start() - 65):match.end() + 35]
+                    if (
+                        level in derived
+                        and re.search(
+                            r"\b(?:afstand|verschil|punten|eenheden|units?|onder|boven|below|above)\b|%",
+                            nearby, re.I,
+                        )
+                        and not re.search(
+                            r"\b(?:opgeslagen|ingestelde|stored|saved)\s+"
+                            r"(?:entry|instap|stop(?:[- ]?loss)?|target|doel)\s*(?:is|:|=)?\s*$",
+                            plain_answer[max(0, match.start() - 55):match.start()], re.I,
+                        )
+                    ):
+                        continue
                 if level not in saved and token not in user_message:
                     return False
         return True
@@ -2778,7 +2945,9 @@ class FinnResponsesAnswerVerifier:
             text: str, *,
             source_evidence: tuple[dict[str, Any], ...] | None = None,
         ) -> bool:
-            checked_evidence = evidence if source_evidence is None else source_evidence
+            checked_evidence = self._expand_linked_strategy_collections(
+                evidence if source_evidence is None else source_evidence
+            )
             user_question_context = "\n".join(filter(None, (
                 str((previous_response or {}).get("user_message") or "")
                 if reusing_previous_read else "",
@@ -2800,7 +2969,19 @@ class FinnResponsesAnswerVerifier:
                         "status": "completed",
                         "data": {"base_amount_before": previous_amount},
                     })
-            return (
+            claim_audit = advice_diagnostics.get(text, {})
+            outcome_audited = bool(
+                result.model_led_coach
+                and result.answer_kind == "free_text"
+                and claim_audit.get("claim_boundary_available") is True
+                and not claim_audit.get("claim_boundary_violations")
+                and all(
+                    str(call.get("name") or "").startswith(("get_", "evaluate_"))
+                    or call.get("name") == "answer_directly"
+                    for call in result.tool_trace
+                )
+            )
+            verified = (
                 self._amounts_supported(
                     answer=text, message=user_question_context, previous_answer=prior_quantity_context,
                     evidence=amount_evidence,
@@ -2836,11 +3017,11 @@ class FinnResponsesAnswerVerifier:
                         for item in checked_evidence
                     ) else frozenset(),
                 )
-                and not self._promises_unverified_trading_outcome(text)
+                and (outcome_audited or not self._promises_unverified_trading_outcome(text))
                 and not self._strategy_levels_attributed_to_setup(text, checked_evidence)
                 and self._saved_entity_type_supported(
                     text,
-                    tuple((*evidence, *(relevant_previous_source_evidence if reusing_previous_read else ()))),
+                    tuple((*checked_evidence, *(relevant_previous_source_evidence if reusing_previous_read else ()))),
                     user_message=message,
                 )
                 and self._profile_presence_claim_supported(
@@ -2860,6 +3041,27 @@ class FinnResponsesAnswerVerifier:
                 and (not limited_evaluation or not self._unevaluated_positive_fit_claim(text))
                 and (not personal_evidence or not self._ungrounded_level_advice(text))
             )
+            if not verified:
+                diagnostic_checks = {
+                    "amounts": self._amounts_supported(answer=text, message=user_question_context, previous_answer=prior_quantity_context, evidence=amount_evidence),
+                    "percentages": self._percentage_claims_supported(answer=text, message=user_question_context, previous_answer=previous_answer, evidence=checked_evidence, response_focus=result.response_focus),
+                    "risk_units": self._static_risk_units_supported(text, checked_evidence),
+                    "strategy_levels": self._saved_strategy_levels_supported(text, checked_evidence, message, selected_setup_id=(None if (result.turn_contract or {}).get("answer_type") == "compare" and len((result.turn_contract or {}).get("targets") or []) > 1 else (prior_selected_setup or (None,))[0])),
+                    "asset_quantities": self._asset_quantities_supported(answer=text, message=user_question_context, evidence=checked_evidence),
+                    "currency_units": self._currency_units_supported(answer=text, message=user_question_context, previous_answer=prior_quantity_context, evidence=amount_evidence),
+                    "geometry": self._static_geometry_complete(text, checked_evidence, result.response_focus),
+                    "internal_identifier": not self._contains_internal_identifier(text, allowed_fields=frozenset({"entry_type"}) if result.model_led_coach and any(item.get("scope") == "read_linked_strategy" and item.get("status") == "completed" and isinstance(item.get("data"), dict) and "entry_type" in item["data"] for item in checked_evidence) else frozenset()),
+                    "trading_outcome": not self._promises_unverified_trading_outcome(text),
+                    "field_attribution": not self._strategy_levels_attributed_to_setup(text, checked_evidence),
+                    "saved_entity_type": self._saved_entity_type_supported(text, tuple((*checked_evidence, *(relevant_previous_source_evidence if reusing_previous_read else ()))), user_message=message),
+                    "profile_presence": self._profile_presence_claim_supported(text, tuple((*evidence, *relevant_previous_source_evidence))),
+                    "saved_horizon": self._saved_horizon_claim_supported(text, tuple((*evidence, *relevant_previous_source_evidence))),
+                    "new_catalog_option": not (reusing_previous_read and self._introduces_new_catalog_option(text, previous_answer, tuple((*evidence, *relevant_previous_source_evidence)))),
+                    "positive_fit": (not personal_evidence and not limited_evaluation) or not self._unevaluated_positive_fit_claim(text),
+                    "level_advice": not personal_evidence or not self._ungrounded_level_advice(text),
+                }
+                logger.info("FINN quantity guard rejected checks=%s", ",".join(name for name, passed in diagnostic_checks.items() if not passed))
+            return verified
         confirmed_action = {
             key: recent_action_result.get(key)
             for key in ("operation_id", "entity_type", "canonical_name", "previous_name", "result_status")
@@ -3697,11 +3899,14 @@ class FinnResponsesAnswerVerifier:
 
         def presentation_ok(text: str) -> bool:
             if result.model_led_coach:
-                return (
-                    self._language_matches(text, locale)
-                    and self._assistant_does_not_claim_user_mutation(text)
-                    and self._proposal_speaker_is_user(text)
-                )
+                checks = {
+                    "language": self._language_matches(text, locale),
+                    "user_mutation": self._assistant_does_not_claim_user_mutation(text),
+                    "proposal_speaker": self._proposal_speaker_is_user(text),
+                }
+                if not all(checks.values()):
+                    logger.info("FINN answer presentation checks failed: %s", ",".join(name for name, passed in checks.items() if not passed))
+                return all(checks.values())
             personal_profile_read = any(
                 item.get("scope") == "read_profile" and item.get("status") == "completed"
                 for item in evidence
@@ -4019,7 +4224,33 @@ class FinnResponsesAnswerVerifier:
             and bool(verdict.reason_codes)
             and set(verdict.reason_codes) == {"setup_ambiguous"}
         )
-        verdict_passes = (verdict.passes or selected_targets_grounded or ambiguity_explained or general_risk_tradeoff) if result.model_led_coach else (
+        # The semantic verifier is advisory for an already sourced read-only
+        # comparison. A transient malformed/timeout verifier response must
+        # not erase FINN's answer when owner-scoped facts and the independent
+        # hard claim checks are available. Action paths remain outside this
+        # exception and still require their normal confirmation contract.
+        audited_read_during_verifier_outage = (
+            result.model_led_coach and not verdict.available
+            and result.turn_contract is not None
+            and result.answer_kind == "free_text"
+            and bool(result.tool_trace)
+            and any(
+                item.get("status") == "completed"
+                for call in result.tool_trace
+                for item in (call.get("result") or {}).get("results") or []
+                if isinstance(item, dict)
+            )
+            and all(
+                str(call.get("name") or "").startswith(("get_", "evaluate_"))
+                or call.get("name") == "answer_directly"
+                for call in result.tool_trace
+            )
+            and turn_contract_gap(result.turn_contract, result.text) is None
+            and advice_ok
+            and not self._unevaluated_positive_fit_claim(result.text)
+            and not self._ungrounded_level_advice(result.text)
+        )
+        verdict_passes = (verdict.passes or selected_targets_grounded or ambiguity_explained or general_risk_tradeoff or audited_read_during_verifier_outage) if result.model_led_coach else (
             verdict.passes or (
                 not previous_explanation_only and personal_evidence
                 and self.client is not None and advice_ok
@@ -4040,7 +4271,7 @@ class FinnResponsesAnswerVerifier:
             and advice_ok
             and not previous_explanation_only
         )
-        verification_available = verdict.available if result.model_led_coach else (
+        verification_available = (verdict.available or audited_read_during_verifier_outage) if result.model_led_coach else (
             verdict.available or independently_audited_limit
         )
         if verdict.available and not catalog_ok and catalog_options and not result.model_led_coach:

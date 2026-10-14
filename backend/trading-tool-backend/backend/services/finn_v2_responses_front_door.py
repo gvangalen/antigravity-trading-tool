@@ -1407,6 +1407,25 @@ class FinnResponsesFrontDoor:
                 if call.name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}:
                     # The model can express the choice, but only the user's text
                     # and owner-scoped persisted evidence may select the object.
+                    # A read of a collection may legitimately be followed by
+                    # detail reads for its members, even if the user asked for
+                    # "my ETH setups" rather than spelling out every name.
+                    # Bind that name only to a unique row from this turn's
+                    # owner-scoped inventory; never trust a model-supplied ID.
+                    model_setup_name = str(call.inputs.get("setup_name") or "").strip().casefold()
+                    inventory_target_ids = {
+                        int(row["setup_id"])
+                        for prior_read in read_context
+                        for item in (prior_read.get("results") or [])
+                        if item.get("scope") == "read_saved_setup_inventory"
+                        and item.get("status") == "completed"
+                        for row in (item.get("data") or {}).get("setups") or []
+                        if isinstance(row, dict)
+                        and str(row.get("name") or "").strip().casefold() == model_setup_name
+                        and isinstance(row.get("setup_id"), int)
+                        and (not mentioned_assets or str(row.get("symbol") or "").upper() in mentioned_assets)
+                    } if model_setup_name else set()
+                    inventory_target_id = next(iter(inventory_target_ids)) if len(inventory_target_ids) == 1 else None
                     reference = call.inputs.get("reference")
                     if (
                         not reference and confirmed_strategy_followup
@@ -1492,7 +1511,7 @@ class FinnResponsesFrontDoor:
                     call = replace(call, inputs={
                         key: value for key, value in call.inputs.items()
                         if key not in {"setup_name", "reference"}
-                    })
+                    } | ({"setup_id": inventory_target_id} if inventory_target_id is not None else {}))
                     strategy_name = str(call.inputs.get("strategy_name") or "")
                     if strategy_name and strategy_name.casefold() not in message.casefold():
                         call = replace(call, inputs={
@@ -1582,7 +1601,14 @@ class FinnResponsesFrontDoor:
                         call = replace(call, inputs={
                             **call.inputs, "setup_id": chosen_setups[-1]["data"]["setup_id"],
                         })
-                read_identity = (call.name, repr(sorted(call.inputs.items())))
+                # The collection adapter may clear global filters for a
+                # multi-setup comparison, but a later owner-scoped read of
+                # two named rows is a narrower request than the inventory.
+                # Keep that refinement distinct from an actual duplicate.
+                read_identity = (
+                    call.name,
+                    repr((sorted(call.inputs.items()), call.setup_names, call.answer_mode)),
+                )
                 if call.read_tools and read_identity in completed_read_calls:
                     return {
                         "status": "retry", "reason": "read_already_completed_this_turn",
@@ -1645,6 +1671,22 @@ class FinnResponsesFrontDoor:
                         named_rows = (
                             referenced_rows if explicit_pair else available_rows
                         ) if complete_collection_read else referenced_rows
+                        if (
+                            call.answer_mode == "compare"
+                            and not call.setup_names
+                            and len(mentioned_assets) == 1
+                            and re.search(r"\b(?:setups|set-ups|plannen|plans)\b", message, re.I)
+                        ):
+                            asset = next(iter(mentioned_assets))
+                            asset_rows = [
+                                row for row in available_rows
+                                if str(row.get("symbol") or "").upper() == asset
+                            ]
+                            if len(asset_rows) == 2:
+                                # "Compare my ETH setups" selects exactly the
+                                # two owner-scoped ETH rows, without relying on
+                                # names invented by the model or a global filter.
+                                named_rows = asset_rows
                         if call.setup_names:
                             by_name = {
                                 str(row.get("name") or "").casefold(): row
@@ -1654,6 +1696,32 @@ class FinnResponsesFrontDoor:
                                 row["setup_id"] for row in prior_pair
                                 if isinstance(row.get("setup_id"), int)
                             }
+                            # An inventory read earlier in this same turn can
+                            # resolve "my ETH setups" into exact saved names.
+                            # Accept the model's refinement only when it names
+                            # the complete owner-scoped set for that asset.
+                            if len(mentioned_assets) == 1:
+                                asset = next(iter(mentioned_assets))
+                                asset_rows = [
+                                    row for row in available_rows
+                                    if str(row.get("symbol") or "").upper() == asset
+                                ]
+                                if (
+                                    asset_rows
+                                    and {str(row.get("name") or "").casefold() for row in asset_rows}
+                                    == {name.casefold() for name in call.setup_names}
+                                    and any(
+                                        item.get("scope") == "read_saved_setup_inventory"
+                                        and item.get("status") == "completed"
+                                        for prior_read in read_context
+                                        for item in prior_read.get("results") or []
+                                        if isinstance(item, dict)
+                                    )
+                                ):
+                                    previous_ids.update(
+                                        row["setup_id"] for row in asset_rows
+                                        if isinstance(row.get("setup_id"), int)
+                                    )
                             if (
                                 verified_subject and subject_asset in mentioned_assets
                                 and references_selected_setup(message, subject_asset)
@@ -1828,27 +1896,8 @@ class FinnResponsesFrontDoor:
                                         "status": "unavailable",
                                         "reason": "comparison_detail_identity_mismatch",
                                     }
-                                projected_item = item
-                                if (
-                                    item.get("scope") == "read_linked_strategy"
-                                    and isinstance(data, dict)
-                                    and not re.search(
-                                        r"\b(?:bereken\w*|afstand|verhouding|ratio|"
-                                        r"risk.reward|risico.opbrengst|percentage)\b|%",
-                                        message, re.I,
-                                    )
-                                ):
-                                    # A source comparison needs stored fields.
-                                    # Derived geometry invites an unrelated
-                                    # calculation and slows answer verification.
-                                    projected_item = {
-                                        **item, "data": {
-                                            key: value for key, value in data.items()
-                                            if key != "level_geometry"
-                                        },
-                                    }
                                 details.append({
-                                    **projected_item, "requested_setup_id": setup_id,
+                                    **item, "requested_setup_id": setup_id,
                                     "requested_setup_name": selected_names.get(setup_id),
                                 })
                             for missing_scope in {"read_active_setup", "read_linked_strategy"} - returned_scopes:

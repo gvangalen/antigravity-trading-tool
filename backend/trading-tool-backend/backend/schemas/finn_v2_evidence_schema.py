@@ -191,6 +191,7 @@ class LinkedStrategyData(BaseModel):
     mid_score_percent: Optional[float] = None
     high_score_percent: Optional[float] = None
     dca_score_bands: List[Dict[str, Any]] = Field(default_factory=list)
+    level_geometry: Optional[Dict[str, Any]] = None
 
 
 class LinkedStrategyCollectionData(BaseModel):
@@ -312,6 +313,7 @@ ToolDataUnion = Union[
     ActiveSetupData,
     SavedSetupInventoryData,
     LinkedStrategyData,
+    LinkedStrategyCollectionData,
     LinkedBotData,
     BotStatusData,
     WatchlistData,
@@ -333,6 +335,7 @@ TOOL_DATA_MODEL_BY_NAME = {
     "ActiveSetupData": ActiveSetupData,
     "SavedSetupInventoryData": SavedSetupInventoryData,
     "LinkedStrategyData": LinkedStrategyData,
+    "LinkedStrategyCollectionData": LinkedStrategyCollectionData,
     "LinkedBotData": LinkedBotData,
     "BotStatusData": BotStatusData,
     "WatchlistData": WatchlistData,

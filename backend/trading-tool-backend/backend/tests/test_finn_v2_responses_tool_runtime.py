@@ -1088,6 +1088,7 @@ def test_model_owned_comparison_binds_exact_owner_scoped_pair():
                     "setup_id": setup_id,
                     "name": "BTC Full Strategy" if setup_id == 1 else "Apple Full Strategy",
                     "entry": "76000" if setup_id == 1 else "210",
+                    "level_geometry": {"status": "completed", "entry_stop_distance_percent": "5"},
                 }},
             ]}
         return {"status": "completed", "results": [{
@@ -1117,7 +1118,64 @@ def test_model_owned_comparison_binds_exact_owner_scoped_pair():
     assert [target["strategy"]["entry"] for target in result.response.turn_contract["targets"]] == [
         "76000", "210",
     ]
+    assert all(
+        item["data"].get("level_geometry", {}).get("status") == "completed"
+        for call in result.response.tool_trace
+        for item in (call.get("result") or {}).get("results") or []
+        if item.get("scope") == "read_linked_strategy"
+    )
     assert result.response.model_owned_repair
+
+
+def test_asset_inventory_can_be_refined_to_all_named_setups_in_same_turn():
+    question = "Vergelijk mijn ETH-setups en hun gekoppelde strategieën. Alleen lezen, niets wijzigen."
+    fake = FakeResponses(
+        response("inventory", calls=[tool_call("inventory-call", "get_saved_setup_inventory", {
+            "asset": None, "timeframe": None, "answer_mode": "list", "setup_names": None,
+        })]),
+        response("refined", calls=[tool_call("refined-call", "get_saved_setup_inventory", {
+            "asset": None, "timeframe": None, "answer_mode": "compare",
+            "setup_names": ["ETH One", "ETH Two"],
+        })]),
+        response("answer", text="ETH One en ETH Two hebben elk een eigen gekoppelde strategie."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="refined-inventory", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_active_plan_and_strategy":
+            setup_id = call.inputs["setup_id"]
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed",
+                 "data": {"setup_id": setup_id, "name": "ETH One" if setup_id == 1 else "ETH Two"}},
+                {"scope": "read_linked_strategy", "status": "completed",
+                 "data": {"setup_id": setup_id, "name": "Strategy One" if setup_id == 1 else "Strategy Two"}},
+            ]}
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"complete": True, "setups": [
+                {"setup_id": 1, "name": "ETH One", "symbol": "ETH", "timeframe": "4H"},
+                {"setup_id": 2, "name": "ETH Two", "symbol": "ETH", "timeframe": "1D"},
+                {"setup_id": 3, "name": "BTC Other", "symbol": "BTC", "timeframe": "4H"},
+            ]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+    ))
+    assert [call.name for call in calls[:2]] == [
+        "get_saved_setup_inventory", "get_saved_setup_inventory",
+    ]
+    assert all(call["status"] == "completed" for call in result.response.tool_trace)
+    assert {target["name"] for target in result.response.turn_contract["targets"]} == {
+        "ETH One", "ETH Two",
+    }, result.response.tool_trace
 
 
 def test_single_saved_dca_explanation_reads_strategy_even_when_model_chooses_inventory():
@@ -2537,7 +2595,42 @@ def test_unverified_trading_outcome_promises_are_not_grounded_process_coaching()
         "Een ruimere stop betekent meer risico per eenheid; "
         "een kleinere positie kan dat risico beperken."
     )
+    assert not check(
+        "De opgeslagen stop begrenst het geplande risico per eenheid; "
+        "dit garandeert geen uitvoeringsprijs of uitkomst."
+    )
     assert check("Bevestiging kan het risico op verlies beperken.")
+
+
+def test_model_led_read_uses_available_claim_audit_for_outcome_wording(monkeypatch):
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    question = "Leg mijn opgeslagen plan uit. Alleen lezen."
+    draft = "De stop kan het risico op verlies beperken. Dit is geen garantie."
+    result = FinnResponsesResult(
+        draft, "audited-outcome-read", ({
+            "name": "get_my_profile_and_risk_style", "status": "completed",
+            "result": {"results": [{"scope": "read_profile", "status": "completed",
+                                   "data": {"has_profile": True}}]},
+        },), model_led_coach=True, answer_kind="free_text",
+        turn_contract={"question": question, "answer_type": "explain", "targets": []},
+    )
+    verifier = FinnResponsesAnswerVerifier(semantic=semantic, client=SimpleNamespace())
+    accepted = asyncio.run(verifier.verify(message=question, result=result, locale="nl"))
+    assert accepted.status == "completed" and accepted.text == draft
+
+    async def rejects_outcome(_self, **_kwargs):
+        return HardClaimBoundaryResult(True, ("outcome_claim",), {
+            "outcome_claim_quote": "kan het risico op verlies beperken",
+        })
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_answer_verifier.FinnV2HardClaimBoundary.assess",
+        rejects_outcome,
+    )
+    rejected = asyncio.run(verifier.verify(message=question, result=result, locale="nl"))
+    assert rejected.text != draft
 
 
 def test_locale_check_preserves_saved_proper_names_in_short_field_rows():
@@ -7572,6 +7665,30 @@ def test_read_executor_uses_server_owner_and_does_not_invent_as_of():
     assert all(kwargs["user_id"] == 44 and kwargs["run_id"] == "run-1" for kwargs in executor.reads.calls)
 
 
+def test_linked_strategy_collection_read_includes_typed_level_geometry():
+    class Reads:
+        async def execute_tool(self, **kwargs):
+            data = ({"setup_id": 42, "name": "ETH Setup", "symbol": "ETH"}
+                    if kwargs["tool_name"] == "read_active_setup" else {
+                        "setup_id": 42, "setup_name": "ETH Setup", "strategy_count": 1,
+                        "strategies": [{"setup_id": 42, "strategy_id": 7,
+                                        "name": "ETH Strategy", "entry": "100",
+                                        "stop_loss": "90", "targets": ["120"]}],
+                    })
+            return SimpleNamespace(success=True, availability="available",
+                                   freshness_status="unknown", source="owner_database",
+                                   asset="ETH", result=data, error_codes=[])
+
+    executor = FinnResponsesReadExecutor(session=object(), user_id=44, run_id="run-1")
+    executor.reads = Reads()
+    result = asyncio.run(executor(FinnResponsesToolCatalog().validate(
+        "get_linked_strategies", {"asset": "ETH", "setup_name": "ETH Setup"},
+    )))
+    collection = next(item["data"] for item in result["results"]
+                      if item["scope"] == "read_linked_strategies")
+    assert collection["strategies"][0]["level_geometry"]["risk_per_unit"] == "10"
+
+
 def test_active_asset_read_preserves_owner_scoped_selection_source():
     class Reads:
         async def execute_tool(self, **kwargs):
@@ -9232,6 +9349,53 @@ def test_general_coaching_with_current_profile_read_keeps_source_review():
     semantic.verify_async.assert_awaited()
 
 
+def test_sourced_read_answer_survives_unavailable_semantic_verifier():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=False, passes=False, reason_codes=["incomplete_structured_response"],
+    )))
+    question = "Welke BTC-setup heb ik opgeslagen? Alleen lezen."
+    draft = "Je opgeslagen BTC-setup heet BTC Rustig en heeft timeframe 4H."
+    result = FinnResponsesResult(
+        draft, "sourced-read", ({
+            "name": "get_my_setups", "status": "completed",
+            "result": {"results": [{
+                "scope": "read_active_setup", "status": "completed", "source": "owner_setup",
+                "data": {"name": "BTC Rustig", "symbol": "BTC", "timeframe": "4H"},
+            }]},
+        },), model_led_coach=True, answer_kind="free_text",
+        turn_contract={"question": question, "answer_type": "explain", "targets": []},
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.text == draft
+    semantic.verify_async.assert_awaited()
+
+
+def test_unavailable_semantic_verifier_does_not_approve_write_or_unsourced_claim():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=False, passes=False, reason_codes=["incomplete_structured_response"],
+    )))
+    question = "Welke BTC-setup heb ik opgeslagen? Alleen lezen."
+    contract = {"question": question, "answer_type": "explain", "targets": []}
+    for trace in (
+        ({"name": "update_strategy", "result": {"results": [{
+            "scope": "read_active_setup", "status": "completed",
+            "data": {"name": "BTC Rustig", "symbol": "BTC"},
+        }]}},),
+        ({"name": "answer_directly", "result": {"results": []}},),
+    ):
+        draft = "Je opgeslagen BTC-setup heet BTC Rustig."
+        answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+            message=question, result=FinnResponsesResult(
+                draft, "unverified-read", trace, model_led_coach=True,
+                answer_kind="free_text", turn_contract=contract,
+            ), locale="nl",
+        ))
+        assert answer.text != draft
+
+
 @pytest.mark.parametrize("draft", [
     "In jouw opgeslagen strategie staat een stop-loss op 72.000.",
     "BTC stijgt vandaag, dus die stop is nu te krap.",
@@ -9742,6 +9906,31 @@ def test_read_only_coach_can_answer_after_five_successful_reads():
     assert fake.requests[-1]["tools"] == []
 
 
+def test_read_only_coach_can_answer_after_a_duplicate_read_at_the_round_limit():
+    fake = FakeResponses(
+        response("first", calls=(tool_call("c1", "get_saved_setup_inventory", {}),)),
+        response("duplicate", calls=(tool_call("c2", "get_saved_setup_inventory", {}),)),
+        response("answer", text="De twee ETH-setups verschillen; voor actuele geschiktheid ontbreken scores."),
+    )
+    calls = 0
+
+    async def execute(_call):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"status": "completed", "results": []}
+        return {"status": "retry", "reason": "read_already_completed_this_turn"}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute, max_rounds=2,
+    ).run(message="Vergelijk mijn ETH-setups; wijzig niets", instructions="Gebruik gelezen feiten",
+          model_led_coach=True, read_only_turn=True))
+
+    assert result.text.startswith("De twee ETH-setups")
+    assert len(fake.requests) == 3
+    assert fake.requests[-1]["tool_choice"] == "none"
+
+
 def test_read_only_coach_rejects_tool_call_in_final_answer_round():
     fake = FakeResponses(
         response("read", calls=(tool_call("c1", "get_current_asset_scores", {}),)),
@@ -10004,6 +10193,50 @@ def test_saved_level_claims_cannot_borrow_prices_from_another_btc_strategy():
                         both_strategies, "Wat staat bij dat plan?", selected_setup_id=42)
     assert supports("Je opgeslagen entry is 76.000 en de stop-loss 72.000.",
                     both_strategies, "Wat staat bij dat plan?", selected_setup_id=42)
+
+
+def test_saved_level_guard_distinguishes_typed_stop_distance_from_stop_price():
+    evidence = ({"scope": "read_linked_strategy", "status": "completed", "data": {
+        "name": "ETH Strategy", "setup_id": 42,
+        "entry": "100", "stop_loss": "90", "targets": ["120"],
+        "level_geometry": {"status": "completed", "risk_per_unit": "10",
+                           "targets": [{"reward_per_unit": "20"}]},
+    }},)
+    supports = FinnResponsesAnswerVerifier._saved_strategy_levels_supported
+    question = "Vergelijk de opgeslagen risicobeperking van mijn ETH-setups."
+    assert supports("De afstand van entry tot stop is 10 per eenheid.", evidence, question)
+    assert supports("De afstand van entry tot target is 20 eenheden.", evidence, question)
+    assert supports("De stop-loss staat 10 punten onder de entry en het target 20 punten boven de entry.", evidence, question)
+    assert supports("De stop staat 10 punten onder de entry en het target 20 punten erboven.", evidence, question)
+    assert supports("De afstand van entry tot stop is 10, en de target ligt 20 boven de entry.", evidence, question)
+    assert supports("De afstand tussen invoer en stop-loss is 10 punten; het doel ligt 20 punten boven de invoer.", evidence, question)
+    assert supports("Bij beide strategieën is het opgeslagen verschil tussen entry en stop-loss 10 punten en tussen entry en target 20 punten.", evidence, question)
+    assert supports("De stop-loss is 10 punten onder entry; het target ligt 20 punten erboven.", evidence, question)
+    assert not supports("De afstand van entry tot stop is 15 per eenheid.", evidence, question)
+    assert not supports("De afstand van entry tot target is 25 eenheden.", evidence, question)
+    assert not supports("De opgeslagen stop is 10.", evidence, question)
+
+
+def test_linked_strategy_collection_grounds_comparison_math_without_selecting_one_strategy():
+    strategy = {
+        "setup_id": 42, "name": "ETH Strategy", "entry": "100",
+        "stop_loss": "90", "targets": ["120"],
+        "level_geometry": {"status": "completed", "risk_per_unit": "10",
+                           "entry_stop_distance_percent": "10",
+                           "targets": [{"reward_per_unit": "20"}]},
+    }
+    collection = ({"scope": "read_linked_strategies", "status": "completed", "data": {
+        "setup_id": 42, "strategies": [strategy, {**strategy, "setup_id": 43}],
+    }},)
+    expanded = FinnResponsesAnswerVerifier._expand_linked_strategy_collections(collection)
+    assert len(expanded) == 2
+    assert expanded[1]["data"]["setup_id"] == 42
+    answer = "De stop ligt 10 punten onder de entry en het target 20 erboven: een afstand van respectievelijk 10% en 20% van de entry."
+    assert FinnResponsesAnswerVerifier._saved_strategy_levels_supported(answer, expanded, "Vergelijk ETH.")
+    assert FinnResponsesAnswerVerifier._percentage_claims_supported(
+        answer=answer, message="Vergelijk ETH.", previous_answer="",
+        evidence=expanded, response_focus=None,
+    )
 
 
 def test_rejected_coaching_retains_only_the_named_setups_linked_strategy():
@@ -12079,6 +12312,11 @@ def test_stop_loss_coach_uses_safe_reply_before_terminal_deadline(monkeypatch):
 def test_outcome_guard_allows_negated_probability_assessment_but_blocks_positive_claim():
     guard = FinnResponsesAnswerVerifier._promises_unverified_trading_outcome
     assert not guard("Dit is alleen niveau-rekenwerk, geen beoordeling van de kans op succes.")
+    assert not guard("De opgeslagen niveaus zeggen op zichzelf niets over de kans op succes.")
+    assert not guard("Ik kan op basis van deze gegevens de kans op succes niet vaststellen.")
+    assert not guard("Er is geen betrouwbare inschatting van de kans op succes.")
+    assert not guard("Dit is rekenwerk op opgeslagen niveaus, geen schatting van de kans op succes.")
+    assert not guard("Dit is geen voorspelling van de kans op winst.")
     assert not guard("This is not an assessment of the chance of success.")
     assert guard("Deze strategie heeft een hoge kans op succes.")
     assert guard("Geen beoordeling van de koers, maar de kans op winst is hoog.")
@@ -12173,6 +12411,22 @@ def test_risk_distance_percentage_is_grounded_in_saved_strategy_geometry():
     assert FinnResponsesAnswerVerifier._percentage_claims_supported(
         answer="De risicoafstand is 5% van de entry.", message="Beoordeel mijn plan.",
         previous_answer="", response_focus=None,
+        evidence=({"scope": "read_linked_strategy", "status": "completed",
+                   "data": {"level_geometry": {
+                       "status": "completed", "entry_stop_distance_percent": "5.00",
+                   }}},),
+    )
+    assert FinnResponsesAnswerVerifier._percentage_claims_supported(
+        answer="De stop ligt 5% onder de entry.", message="Vergelijk de niveaus.",
+        previous_answer="", response_focus=None,
+        evidence=({"scope": "read_linked_strategy", "status": "completed",
+                   "data": {"level_geometry": {
+                       "status": "completed", "entry_stop_distance_percent": "5.00",
+                   }}},),
+    )
+    assert FinnResponsesAnswerVerifier._percentage_claims_supported(
+        answer="Volgens de opgeslagen niveaus is de afstand van entry tot stop 5%.",
+        message="Vergelijk de strategieën.", previous_answer="", response_focus=None,
         evidence=({"scope": "read_linked_strategy", "status": "completed",
                    "data": {"level_geometry": {
                        "status": "completed", "entry_stop_distance_percent": "5.00",

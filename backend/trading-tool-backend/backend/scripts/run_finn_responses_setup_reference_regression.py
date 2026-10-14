@@ -40,7 +40,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 15))
+    parser.add_argument("--sequence", type=int, choices=range(1, 16))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -141,6 +141,9 @@ def main() -> None:
             "En welke stop staat bij die strategie?",
             "Lees alleen Apple Full Strategy, die bij Apple Full Setup hoort. Welke entry en stop staan daarin?",
         ),
+        (
+            "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid bij de huidige scores. Alleen lezen, niets wijzigen.",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
@@ -149,6 +152,15 @@ def main() -> None:
         if sequence_number == 13 or (sequence_number == 14 and args.sequence == 14):
             with sync_engine.begin() as connection:
                 _insert_strategy(connection, user["id"], apple, "Apple Retest Strategy")
+        if sequence_number == 15:
+            with sync_engine.begin() as connection:
+                eth_setups = connection.execute(text("""
+                    SELECT id FROM setups WHERE user_id=:user_id AND name='ETH Full Setup'
+                """), {"user_id": user["id"]}).scalars().all()
+                assert len(eth_setups) == 1
+                other_eth = _insert_setup(connection, user["id"], "ETH QA Tweede Setup", symbol="ETH")
+                _insert_strategy(connection, user["id"], eth_setups[0], "ETH Full Strategy")
+                _insert_strategy(connection, user["id"], other_eth, "ETH QA Tweede Strategy")
         conversation_id = None
         second_btc_setup_id = None
         last_verified_linked_setup_ids: set[int] = set()
@@ -397,6 +409,30 @@ def main() -> None:
                         for call in trace for item in (call.get("result") or {}).get("results") or []
                     ) and "210" in answer and "190" in answer
                     and "Ik kan dit nog niet onderbouwen" not in answer
+                )
+            if sequence_number == 15:
+                linked_names = {
+                    str(strategy.get("name") or "")
+                    for call in trace
+                    for item in (call.get("result") or {}).get("results") or []
+                    if item.get("status") == "completed"
+                    for strategy in (
+                        (item.get("data") or {}).get("strategies") or []
+                        if item.get("scope") == "read_linked_strategies" else
+                        [item.get("data") or {}] if item.get("scope") == "read_linked_strategy" else []
+                    )
+                    if isinstance(strategy, dict)
+                }
+                checks["both_eth_setups_compared"] = (
+                    "ETH Full Setup" in answer and "ETH QA Tweede Setup" in answer
+                    and "ETH Full Strategy" in answer and "ETH QA Tweede Strategy" in answer
+                    and {"ETH Full Strategy", "ETH QA Tweede Strategy"} <= linked_names
+                    and "4H" in answer and "score" in answer.casefold()
+                    and "stop" in answer.casefold()
+                    and any(item.get("scope") == "read_asset_scores" and item.get("status") == "completed"
+                            for call in trace for item in (call.get("result") or {}).get("results") or [])
+                    and "FINN kon dit antwoord niet afronden" not in answer
+                    and exchange.get("answer_kind") != "saved_setup_collection"
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,
                           "run_id": observed["run_id"], "message": message,
