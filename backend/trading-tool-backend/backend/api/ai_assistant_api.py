@@ -656,6 +656,17 @@ async def _try_v2_visible_delivery(
         envelope["response_trace"]["runtime_selection"] = selection.dict()
         return envelope
     except Exception as exc:
+        logger.error(
+            "FINN V2 visible delivery failed",
+            extra={
+                "trace_id": trace_id,
+                "request_id": request_id,
+                "user_id": user_id,
+                "failure_stage": getattr(exc, "failure_stage", "visible_delivery"),
+                "exception_class": exc.__class__.__name__,
+                "error_code": getattr(exc, "code", None),
+            },
+        )
         try:
             await db.rollback()
         except Exception:
@@ -669,7 +680,7 @@ async def _try_v2_visible_delivery(
                     "request_path": request_path,
                 },
             )
-        reason = getattr(exc, "code", str(exc))
+        reason = getattr(exc, "code", None) or str(exc) or exc.__class__.__name__
         return {
             "response": "Ik kan nu geen veilige verified V2-response uitleveren.",
             "intent": "unavailable",

@@ -5,6 +5,17 @@ export function inactiveProposalIds(proposalIds, settledResults) {
   ));
 }
 
+export function setupDraftFrequencyLabel(supplied, translate) {
+  if (supplied?.setup_type !== "dca") return "";
+  const label = (value) => {
+    if (typeof value !== "string" && typeof value !== "number") return null;
+    const normalized = String(value).trim();
+    return normalized ? translate(normalized) : null;
+  };
+  return [label(supplied.dca_frequency), label(supplied.dca_day || supplied.dca_month_day)]
+    .filter(Boolean).join(" · ");
+}
+
 export function suspendedProposalIds(proposalIds, settledResults, clarificationRequired = false) {
   return new Set(proposalIds.filter((_, index) =>
     settledResults[index]?.status !== "fulfilled"

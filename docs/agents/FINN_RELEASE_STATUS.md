@@ -6,7 +6,32 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_REPAIR_READY_FOR_INDEPENDENT_QA`. [PR #315](https://github.com/gvangalen/antigravity-trading-tool/pull/315)
+Phase: `CHAT_SIDE_PANEL_SECOND_REPAIR_CANDIDATE`. Independent QA
+returned **NOT ACCEPTED** on the prior repair release SHA
+`58f0ffc46f0867e6f8a76e3f08ad2f2dab10797a`: the owner-scoped setup and
+conversation history worked, but a trade setup follow-up lost an already
+complete proposal, its card displayed `[object Object]` as a frequency, and
+Stop followed by a new question could leave the chat loading. An existing
+German conversation also kept German after the UI switched to Dutch. No
+proposal was confirmed and no order was executed. The current repair keeps
+an open proposal across follow-ups unless the user explicitly asks for a
+separate object, omits DCA frequency from trade cards, cancels a stopped V2
+run and ignores its late terminal answer, and resets the model continuation
+when the request locale changes. The exact three-turn ETH flow with a
+different highlighted ETH setup now ends in the same unconfirmed proposal
+locally. Backend **3571 passed, 3 existing skips**; web build, typecheck,
+i18n, commands, proposals, setups, and high-severity audit passed. The local
+worker action matrix passed **16/16**, adapters **19/19**, and recorded zero
+broker orders, live bots, live-trading calls, or production connections
+(artifact SHA-256 `c14cc328ffb557d96f58c97c248859672fc4d3dd9a7a48f089278c9711f22bc1`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`b3d4b73da7bebb778b817c6e951a8dd51dcde2890a0643ee3452caccfbb57cee`)
+and full regression **109/109** (SHA-256
+`2c0cba687b707fa01fa38e57f1b516506d81ec83ff0a9e315966b184cbd5bf61`),
+with zero provider, schema, parse, validation, or timeout failures. These are
+Build results. CI, deployment, and independent live QA remain pending.
+
+Prior phase: `CHAT_SIDE_PANEL_REPAIR_READY_FOR_INDEPENDENT_QA`. [PR #315](https://github.com/gvangalen/antigravity-trading-tool/pull/315)
 merged the repair as product SHA `cb3fa9d3e88b87c677564623582578aa8ed298f8`.
 Candidate [CI run 38519837753](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38519837753)
 and main [CI run 38520063513](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38520063513)
@@ -40,8 +65,8 @@ setup and timeframe correctly. Real Luna/Responses selector development passed
 The full real-provider regression passed **109/109**, with zero provider,
 schema, parse, validation or timeout failures (artifact SHA-256
 `6a56596314001e321ad6dfd7b2a86b7a30e06388dacc8569c428423bb8329bf4`).
-These are local Build results. The repair is live, but the independent
-authenticated browser verdict for the three repaired paths is pending.
+These were local Build results for that prior release; its independent
+authenticated browser verdict is recorded above.
 
 The prior clarification candidate was
 accepted by independent QA. [PR #313](https://github.com/gvangalen/antigravity-trading-tool/pull/313)
