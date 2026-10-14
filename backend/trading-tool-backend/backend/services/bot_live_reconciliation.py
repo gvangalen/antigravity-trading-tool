@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import math
+from decimal import Decimal
 from typing import Optional
 
 from backend.ai_agents.trading_bot_agent import record_bot_ledger_entry
@@ -99,14 +100,24 @@ def reconcile_live_orders(*, user_id: Optional[int] = None, order_id: Optional[i
                         conn.rollback()
                         continue
                     prior_qty = float(locked[1] or 0)
-                    prior_avg = float(locked[2] or 0)
                     if filled_qty < prior_qty - 1e-10:
                         raise RuntimeError("Exchange cumulative fill decreased")
                     new_qty = max(0.0, filled_qty - prior_qty)
                     if new_qty > 1e-10:
-                        cumulative_cash = round(filled_qty * avg_price, 2)
-                        prior_cash = round(prior_qty * prior_avg, 2)
-                        cash = round(cumulative_cash - prior_cash, 2)
+                        cur.execute("""
+                            SELECT COALESCE(SUM(ABS(cash_delta_eur)), 0)
+                            FROM bot_ledger
+                            WHERE user_id=%s AND order_id=%s AND entry_type='execute'
+                        """, (row["user_id"], row["id"]))
+                        prior_cash = Decimal(str(cur.fetchone()[0]))
+                        exchange_cost = exchange_order.get("cost")
+                        cumulative_cash = (
+                            Decimal(str(exchange_cost)) if exchange_cost is not None else
+                            Decimal(str(filled_qty)) * Decimal(str(avg_price))
+                        )
+                        if not cumulative_cash.is_finite():
+                            raise RuntimeError("Exchange returned invalid cumulative fill cost")
+                        cash = cumulative_cash - prior_cash
                         if cash <= 0:
                             raise RuntimeError("Exchange cumulative fill cost did not increase")
                         cur.execute("""
@@ -122,7 +133,7 @@ def reconcile_live_orders(*, user_id: Optional[int] = None, order_id: Optional[i
                             entry_type="execute", symbol=row["symbol"],
                             cash_delta_eur=-cash if side == "buy" else cash,
                             qty_delta=new_qty if side == "buy" else -new_qty,
-                            price_eur=cash / new_qty, note="Exchange confirmed fill",
+                            price_eur=cash / Decimal(str(new_qty)), note="Exchange confirmed fill",
                             fill_sequence=fill_sequence,
                             meta={"exchange_order_id": row["exchange_order_id"], "exchange_status": status,
                                   "cumulative_filled_qty": filled_qty},
