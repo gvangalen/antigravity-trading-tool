@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, isFinnProposalCorrection, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+import { hasConfirmableDraft } from "../lib/finnDraftConversation.mjs";
+
+test("only an active server proposal restores its confirmable draft card", () => {
+  const messages = mapBackendSessionMessages([
+    { role: "assistant", content: "Oude kaart", proposal_id: "old" },
+    { role: "assistant", content: "Dit is je ETH-concept", pending_proposal: {
+      proposal_id: "open", run_id: "run-open", conversation_id: "finn-v2-conv-owned",
+      operation_id: "create_setup", asset: "ETH",
+      draft: { operation_id: "create_setup", draft_status: "complete",
+        supplied_inputs: { name: "ETH QA", symbol: "ETH", timeframe: "1D" }, missing_inputs: [] },
+    } },
+  ]);
+  assert.equal(hasConfirmableDraft(messages[0]), false);
+  assert.equal(hasConfirmableDraft(messages[1]), true);
+  assert.equal(messages[1].setupDraft.supplied_inputs.name, "ETH QA");
+  assert.equal(messages[1].actions[0].proposal_id, "open");
+  assert.equal(messages[1].actions[0].display_context.conversation_id, "finn-v2-conv-owned");
+  assert.equal(JSON.stringify(messages).includes("confirmation_token"), false);
+});
 
 test("trade drafts have no DCA frequency and DCA labels cannot stringify objects", () => {
   const translate = (value) => value;

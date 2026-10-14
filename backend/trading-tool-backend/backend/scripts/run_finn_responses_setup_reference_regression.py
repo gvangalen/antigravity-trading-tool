@@ -40,7 +40,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--sequence", type=int, choices=range(1, 19))
+    parser.add_argument("--sequence", type=int, choices=range(1, 20))
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("setup_reference_regression_is_local_only")
@@ -153,6 +153,9 @@ def main() -> None:
         (
             "Leg uitgebreid uit hoe mijn ETH-setups verschillen in timeframe, scorevoorwaarden, gekoppelde strategie, risicobeperking en geschiktheid bij de huidige scores. Alleen lezen, niets wijzigen.",
         ),
+        (
+            "Noem per ETH-setup de naam, gekoppelde strategie, Paper-bot en het DCA-koopritme. Geef daarna het totale aantal gekoppelde Paper-bots. Alleen lezen.",
+        ),
     )
     cases = []
     for sequence_number, sequence in enumerate(conversations, 1):
@@ -191,7 +194,7 @@ def main() -> None:
                         _insert_strategy(connection, user["id"], setup_id, f"ETH QA Strategy {index}")
                     if index == 3:
                         _insert_strategy(connection, user["id"], setup_id, "ETH QA Strategy 3 Variant")
-        if sequence_number in {17, 18}:
+        if sequence_number in {17, 18, 19}:
             with sync_engine.begin() as connection:
                 original = connection.execute(text("""
                     SELECT id FROM setups WHERE user_id=:user_id AND name='ETH Full Setup'
@@ -220,7 +223,7 @@ def main() -> None:
                             connection, user["id"], setup_id,
                             "ETH QA Bot Strategy 2 Variant",
                         )
-                    if index in {2, 5}:
+                    if index in ({2, 3, 4, 5, 6} if sequence_number == 19 else {2, 5}):
                         bot_id = _insert_bot(
                             connection, user["id"], strategy_id, f"ETH QA Paper Bot {index}",
                         )
@@ -551,6 +554,21 @@ def main() -> None:
                     all(f"ETH QA Bot Setup {index}" in answer for index in range(2, 8))
                     and "ETH Full Setup" in answer
                     and "1D" in answer and "4H" in answer
+                    and not re.search(r"\bas_of\b", answer)
+                )
+            if sequence_number == 19:
+                rows_by_name = {
+                    index: next((line for line in answer.splitlines()
+                                 if f"ETH QA Bot Setup {index}" in line), "")
+                    for index in range(2, 8)
+                }
+                checks["five_bots_have_one_consistent_total"] = (
+                    all(f"ETH QA Paper Bot {index}" in rows_by_name[index]
+                        for index in (2, 3, 4, 5, 6))
+                    and "geen" in rows_by_name[7].casefold()
+                    and "ETH QA Paper Bot" not in rows_by_name[7]
+                    and not re.search(r"\bvier\s+(?:gekoppelde\s+)?paper.?bots?\b", answer.casefold())
+                    and not re.search(r"\b4\s+(?:gekoppelde\s+)?paper.?bots?\b", answer.casefold())
                     and not re.search(r"\bas_of\b", answer)
                 )
             cases.append({"sequence": sequence_number, "turn": turn_number,

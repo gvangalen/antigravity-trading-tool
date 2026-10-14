@@ -1533,6 +1533,9 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
     }]
     assert by_name["ETH Setup 3"]["linked_bot_count"] == 0
     assert by_name["ETH Setup 3"]["linked_strategies"][0]["name"] == "ETH Strategy 3"
+    assert model_evidence["linked_bot_total"] == 1
+    assert model_evidence["setups_with_linked_bots_count"] == 1
+    assert model_evidence["paper_bot_total"] == 1
     assert "as_of" not in json.dumps(model_evidence)
 
 

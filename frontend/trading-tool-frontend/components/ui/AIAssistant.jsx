@@ -36,7 +36,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
-import { inactiveProposalIds, isFinnProposalCorrection, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
 import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 
@@ -66,16 +66,6 @@ function isFinnV2ConversationId(value) {
 function scopedRecentConversationStorageKey(userId) {
   const scope = String(userId || "anonymous").trim() || "anonymous";
   return `${FINN_RECENT_CONVERSATIONS_STORAGE_KEY}:${scope}`;
-}
-
-function mapBackendSessionMessages(messages = []) {
-  return (Array.isArray(messages) ? messages : [])
-    .filter((message) => typeof message?.content === "string" && message.content.trim())
-    .map((message) => ({
-      role: message.role === "user" ? "user" : "assistant",
-      text: message.content,
-      isComplete: true,
-    }));
 }
 
 function sanitizeMessageForPersistence(message) {
