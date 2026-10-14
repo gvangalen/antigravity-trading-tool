@@ -4546,6 +4546,24 @@ def test_guided_name_suggestion_is_a_question_until_user_accepts_it():
     assert custom.proposal_analysis.request_plan.operation_state["collected_inputs"]["name"] == "ETH Rustig Plan"
 
 
+def test_asking_finn_to_request_a_name_does_not_supply_a_name():
+    message = "Maak een ETH trade-setup op 4H. Vraag mij om de naam en sla niets op."
+    states = FinnV2OperationStateService()
+    assert states._name_input_from_text(message) is None
+    assert states._name_input_from_text("Vraag mij eerst om een naam") is None
+    assert states._name_input_from_text('Noem hem "Wat stel je voor"') == "Wat stel je voor"
+    call = FinnResponsesToolCatalog().validate("create_or_update_trade_plan_proposal", {
+        "operation_id": "create_setup",
+        "inputs": {"symbol": "ETH", "timeframe": "4H", "setup_type": "trade", "name": "en"},
+    })
+    selected = FinnResponsesProposalSelection().from_call(
+        call=call, message=message, conversation_context={}, verified_asset="ETH",
+    )
+    state = selected.request_plan.operation_state
+    assert "name" not in state["collected_inputs"]
+    assert state["next_missing_input"] == "name"
+
+
 def test_model_generated_name_is_not_user_supplied_input():
     call = FinnResponsesToolCatalog().validate("create_dca_plan_proposal", {
         "operation_id": "create_setup",

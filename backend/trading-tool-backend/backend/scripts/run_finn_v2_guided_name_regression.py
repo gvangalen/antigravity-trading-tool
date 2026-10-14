@@ -46,7 +46,30 @@ def main() -> None:
             "polling_sse_parity": observed["polling_sse_contract_projection"],
         })
 
+    ask_for_name = []
+    conversation_id = None
+    for message in (
+        "Maak een ETH trade-setup op 4H. Vraag mij om de naam en sla niets op.",
+        "ETH Rustig 4H",
+    ):
+        observed = run_gate(
+            base_url=args.base_url.rstrip("/"), bearer_token=token,
+            conversation_id=conversation_id, message=message, timeout_seconds=75,
+        )
+        conversation_id = observed["conversation_id"]
+        record = _runtime_record(observed["run_id"])
+        ask_for_name.append({
+            "message": message,
+            "status": observed["status"],
+            "operation_id": observed["final_operation_id"],
+            "missing_inputs": dict(record["terminal_projection"] or {}).get("missing_inputs"),
+            "supplied_inputs": dict(record["terminal_projection"] or {}).get("supplied_inputs"),
+            "proposal_status": dict(record.get("proposal") or {}).get("status"),
+            "polling_sse_parity": observed["polling_sse_contract_projection"],
+        })
+
     first, suggestion, accepted = observations
+    prompted, typed = ask_for_name
     passed = all((
         first["status"] == "clarification_required",
         first["operation_id"] == "create_setup",
@@ -57,15 +80,21 @@ def main() -> None:
         accepted["operation_id"] == "create_setup",
         dict(accepted["supplied_inputs"] or {}).get("name") == "ETH 4H Trade",
         accepted["proposal_status"] in {"draft", "pending", "ready", "awaiting_confirmation"},
-        all(item["polling_sse_parity"] for item in observations),
+        prompted["status"] == "clarification_required",
+        prompted["missing_inputs"] == ["name"],
+        prompted["proposal_status"] is None,
+        "name" not in dict(prompted["supplied_inputs"] or {}),
+        dict(typed["supplied_inputs"] or {}).get("name") == "ETH Rustig 4H",
+        typed["proposal_status"] in {"draft", "pending", "ready", "awaiting_confirmation"},
+        all(item["polling_sse_parity"] for item in observations + ask_for_name),
     ))
-    artifact = {"version": "finn_v2.guided_name_regression.v1",
+    artifact = {"version": "finn_v2.guided_name_regression.v2",
                 "synthetic_local_user": True, "passed": passed,
-                "observations": observations}
+                "observations": observations, "ask_for_name": ask_for_name}
     Path(args.output).write_text(json.dumps(artifact, indent=2, ensure_ascii=False) + "\n")
     if not passed:
         raise AssertionError("guided_name_regression_failed")
-    print(json.dumps({"passed": passed, "turns": len(observations)}))
+    print(json.dumps({"passed": passed, "turns": len(observations) + len(ask_for_name)}))
 
 
 if __name__ == "__main__":
