@@ -4481,6 +4481,71 @@ def test_model_tool_call_fills_only_pending_guided_slot():
     assert state["next_missing_input"] == "dca_frequency"
 
 
+def test_guided_name_suggestion_is_a_question_until_user_accepts_it():
+    catalog = FinnResponsesToolCatalog()
+    selection = FinnResponsesProposalSelection()
+    first = selection.from_call(
+        call=catalog.validate("create_or_update_trade_plan_proposal", {
+            "operation_id": "create_setup",
+            "inputs": {"setup_type": "trade", "symbol": "ETH", "timeframe": "4H"},
+        }),
+        message="Maak een ETH-setup op 4H", conversation_context={}, verified_asset="ETH",
+    )
+    state = first.request_plan.operation_state
+    assert state["next_missing_input"] == "name"
+    contract = selection.registry.require_supported("create_setup")
+    assert selection.states._requested_slot_value(
+        field="name", text="wat stel je voor", contract=contract,
+    ) is None
+    assert selection.states._requested_slot_value(
+        field="name", text="ja", contract=contract,
+    ) is None
+    assert selection.states._requested_slot_value(
+        field="name", text="wat zou jij kiezen", contract=contract,
+    ) is None
+    assert selection.states._requested_slot_value(
+        field="name", text="welke naam past erbij", contract=contract,
+    ) is None
+    assert selection.states.is_name_suggestion_request("wat stel je voor als naam")
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="wat stel je voor", contract=contract, registry=selection.registry,
+        requested_slot="name",
+    )
+    assert selection.states._requested_slot_value(
+        field="name", text='Noem hem "Wat stel je voor"', contract=contract,
+    ) == "Wat stel je voor"
+
+    fake = FakeResponses()
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=21,
+        run_id="guided-name",
+    )
+    context = {"active_guided_operation": state}
+    suggestion = asyncio.run(front.run(
+        message="wat stel je voor", instructions="", conversation_context=context,
+        verified_asset="ETH",
+    ))
+    assert suggestion.proposal_analysis is None
+    assert "ETH 4H Trade" in suggestion.response.text
+    assert "name" not in state["collected_inputs"]
+    assert not fake.requests
+
+    accepted = asyncio.run(front.run(
+        message="ja, gebruik die naam", instructions="",
+        conversation_context=context, verified_asset="ETH",
+        previous_response={"tool_trace": suggestion.response.tool_trace},
+    ))
+    assert accepted.proposal_analysis.request_plan.operation_state["collected_inputs"]["name"] == "ETH 4H Trade"
+    assert "name" not in state["collected_inputs"]
+    assert not fake.requests
+
+    custom = asyncio.run(front.run(
+        message="ETH Rustig Plan", instructions="", conversation_context=context,
+        verified_asset="ETH", previous_response={"tool_trace": suggestion.response.tool_trace},
+    ))
+    assert custom.proposal_analysis.request_plan.operation_state["collected_inputs"]["name"] == "ETH Rustig Plan"
+
+
 def test_model_generated_name_is_not_user_supplied_input():
     call = FinnResponsesToolCatalog().validate("create_dca_plan_proposal", {
         "operation_id": "create_setup",

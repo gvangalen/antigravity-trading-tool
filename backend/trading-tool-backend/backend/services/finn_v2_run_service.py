@@ -47,6 +47,7 @@ from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, FinnResponsesFrontDoorResult,
     _explicit_create_operation_request,
     _explicit_fresh_create_operation_request,
+    _previous_guided_name_suggestion,
 )
 from backend.services.finn_v2_responses_loop import FinnResponsesError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
@@ -945,6 +946,14 @@ class FinnV2RunService:
                     if len(matching) == 1:
                         corrected_guided_operation_id = matching[0].operation_id
                 continuation = False
+            elif requested_slot == "name" and (
+                FinnV2OperationStateService.is_name_suggestion_request(message)
+                or (
+                    FinnV2OperationStateService.is_name_suggestion_acceptance(message)
+                    and _previous_guided_name_suggestion(previous_response, pending_guided)
+                )
+            ):
+                continuation = True
             elif requested_slot and FinnResponsesFrontDoor.binds_guided_slot(
                 message=message, contract=contract, registry=FinnV2OperationRegistry(),
                 requested_slot=requested_slot,
@@ -1245,6 +1254,24 @@ class FinnV2RunService:
                 response_id_reusable=result.response.response_id_reusable,
                 turn_contract=result.response.turn_contract,
             )
+            if (
+                guided.get("status") == "collecting"
+                and guided.get("next_missing_input") == "name"
+                and any(call.get("name") == "guided_name_suggestion"
+                        for call in result.response.tool_trace)
+            ):
+                # This answer only suggests a name. Keep the same owner-scoped
+                # draft available for the user's next choice; ordinary READ
+                # turns should not retain an unrelated guided operation.
+                conversations = FinnV2ConversationRepository(session)
+                saved_context = await conversations.get_context(
+                    conversation_id=conversation_id, user_id=user_id,
+                )
+                saved_context["active_guided_operation"] = guided
+                await conversations.update_context(
+                    conversation_id=conversation_id, user_id=user_id,
+                    context=saved_context,
+                )
             logger.info(
                 "FINN Responses exchange recorded in %.2fs",
                 monotonic() - exchange_started,

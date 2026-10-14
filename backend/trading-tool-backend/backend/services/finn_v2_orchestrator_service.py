@@ -1348,11 +1348,18 @@ class FinnV2OrchestratorService:
                 exclude_run_id=run_id,
             )
         guided_state = dict(previous_state.get("guided_state") or {})
-        if not guided_state and previous_state.get("terminal_status") in {"failed", "unavailable"}:
-            # A failed Responses turn has no new guided draft to persist. The
-            # owner-scoped conversation projection still holds the last
-            # successfully released collecting draft, so a retry can fill it.
-            # Never revive it after a completed or confirmed action.
+        prior_suggested_name = any(
+            call.get("name") == "guided_name_suggestion"
+            for call in (dict(previous_state.get("responses_exchange") or {}).get("tool_trace") or [])
+        )
+        if not guided_state and (
+            previous_state.get("terminal_status") in {"failed", "unavailable"}
+            or prior_suggested_name
+        ):
+            # A failed turn or a name suggestion has no new guided draft to
+            # persist. The owner-scoped conversation projection holds the
+            # collecting draft so the next answer can fill it. Never revive
+            # it after a completed or confirmed action.
             projected = dict(context.get("active_guided_operation") or {})
             if projected.get("status") == "collecting" and projected.get("missing_required_inputs"):
                 guided_state = projected
