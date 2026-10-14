@@ -6,7 +6,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_LIVE_PENDING_QA`. The prior clarification candidate was
+Phase: `CHAT_SIDE_PANEL_REPAIR_LOCAL_VALIDATION`. Independent authenticated
+browser QA returned **NOT ACCEPTED** on backend/frontend SHA
+`26f151bcfa7e86bcfc7fe9bf5541b7730ec71314`: the visible featured ETH plan
+and FINN's named setup differed; a completed trade-setup conversation with
+optional score boundaries omitted produced no proposal card; FINN 2.0
+history was empty and did not restore the conversation after refresh.
+The panel layout, direct Enter submission, open/close and navigation draft
+retention, plus menu, feed handoff, NL/EN/DE and narrow browser layout passed
+that QA scope. No proposal was confirmed or order executed. The current
+local repair aligns the featured plan's workspace setup reference, exposes
+owner-scoped FINN 2.0 conversation history, and clarifies the trade-setup
+proposal contract. Backend and frontend suites passed locally; worker-driven
+action and real-provider gates have not yet been repeated for this repair.
+
+The prior clarification candidate was
 accepted by independent QA. [PR #313](https://github.com/gvangalen/antigravity-trading-tool/pull/313)
 contains the persistent web right panel, direct ordinary chat submission,
 single visible composer, conversation/draft persistence, header history and
@@ -17,8 +31,8 @@ web export were built together on candidate source commit
 The PR merged as product SHA `906462e2f1dc2fd00bba260e9a00b563d71601b1`.
 Auto Deploy run `38516477656` succeeded. On 2026-10-14, public backend
 health and frontend build-info each returned HTTP 200 with exactly that
-product SHA. This is deployment identity only; the authenticated chat UX
-still awaits independent QA. The mobile source passed Expo bundle exports,
+product SHA. This was deployment identity, not authenticated chat acceptance;
+the subsequent independent QA verdict is recorded above. The mobile source passed Expo bundle exports,
 but this repository has no configured mobile OTA/store release path.
 
 Measured local gates on this source: backend `pytest -q` **3569 passed, 3

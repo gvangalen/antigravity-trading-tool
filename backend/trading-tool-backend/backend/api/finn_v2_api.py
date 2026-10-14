@@ -7,10 +7,12 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import is_terminal_status
 from backend.infrastructure.database import async_session_factory, get_db
+from backend.infrastructure.models import FinnV2Conversation, FinnV2Run
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_schema import (
     AgentRunCancelResponse,
@@ -23,6 +25,77 @@ from backend.utils.auth_utils import get_current_user
 
 
 router = APIRouter()
+
+
+@router.get("/assistant/v2/conversations")
+async def list_finn_v2_conversations(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List only the owner's visible FINN 2.0 conversations."""
+    user_id = int(current_user["id"])
+    rows = (await db.execute(
+        select(FinnV2Conversation)
+        .where(FinnV2Conversation.user_id == user_id)
+        .order_by(FinnV2Conversation.updated_at.desc())
+        .limit(20)
+    )).scalars().all()
+    result = []
+    for row in rows:
+        first_run = (await db.execute(
+            select(FinnV2Run.message)
+            .where(
+                FinnV2Run.user_id == user_id,
+                FinnV2Run.conversation_id == row.id,
+                FinnV2Run.visibility == "visible",
+            )
+            .order_by(FinnV2Run.created_at.asc())
+            .limit(1)
+        )).scalar_one_or_none()
+        if first_run is None:
+            continue
+        # V2 rows still carry a legacy internal placeholder title. The first
+        # visible user turn is the readable conversation title.
+        title = str(first_run or "FINN gesprek").strip()
+        result.append({"id": row.id, "title": title[:88], "updated_at": row.updated_at})
+    return result
+
+
+@router.get("/assistant/v2/conversations/{conversation_id}")
+async def get_finn_v2_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return visible text only; old proposals never regain a confirm button."""
+    user_id = int(current_user["id"])
+    row = (await db.execute(
+        select(FinnV2Conversation).where(
+            FinnV2Conversation.id == conversation_id,
+            FinnV2Conversation.user_id == user_id,
+        )
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="FINN gesprek niet gevonden")
+    runs = (await db.execute(
+        select(FinnV2Run)
+        .where(
+            FinnV2Run.user_id == user_id,
+            FinnV2Run.conversation_id == conversation_id,
+            FinnV2Run.visibility == "visible",
+        )
+        .order_by(FinnV2Run.created_at.asc())
+        .limit(100)
+    )).scalars().all()
+    messages = []
+    for run in runs:
+        if run.message and run.message != "[redacted by finn_v2_retention]":
+            messages.append({"role": "user", "content": run.message})
+        response = run.response_json or {}
+        content = response.get("content") if isinstance(response, dict) else None
+        if isinstance(content, str) and content.strip():
+            messages.append({"role": "assistant", "content": content})
+    return {"id": row.id, "messages": messages}
 
 # Prevent proxy buffering from hiding the terminal event or keeping a closed
 # generator observable as an open client stream.

@@ -3203,6 +3203,19 @@ def test_catalog_rejects_model_owned_identity_and_undeclared_inputs():
     })
     assert nested.operation_id == "update_setup"
 
+    # A trade setup may be drafted before a strategy exists and with no
+    # score boundaries. The earlier live guided flow incorrectly concluded
+    # that no proposal action could represent this complete setup.
+    plain_trade = catalog.validate("create_or_update_trade_plan_proposal", {
+        "payload": {
+            "operation_id": "create_setup", "draft_intent": "new",
+            "inputs": {"symbol": "ETH", "setup_type": "trade", "timeframe": "4H", "name": "ETH rustige trade"},
+        },
+    })
+    assert plain_trade.operation_id == "create_setup"
+    assert plain_trade.missing_inputs == ()
+    assert "score boundaries are optional" in strategy_tool["description"]
+
 
 def test_responses_provider_call_disables_sdk_retries_and_sets_timeout():
     fake = FakeResponses(response("r1", text="Een algemene uitleg."))

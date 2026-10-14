@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -3800,15 +3800,17 @@ function AIAssistantContent({
 
         const browserSessionId = readBrowserFinnConversation();
         const preferredSessionId = normalizeFinnSessionId(nextPreferences?.[ACTIVE_FINN_SESSION_ID_KEY]);
-        const sessions = await getAssistantSessions();
+        const sessions = await getFinnV2Conversations();
         setAvailableFinnSessions(Array.isArray(sessions) ? sessions : []);
         const latestSessionId = normalizeFinnSessionId(sessions?.[0]?.id);
         const resolvedSessionId = browserSessionId || preferredSessionId || latestSessionId;
         if (!resolvedSessionId) return;
 
         if (isFinnV2ConversationId(resolvedSessionId)) {
+          const detail = await getFinnV2ConversationDetail(resolvedSessionId);
           activeFinnSessionIdRef.current = resolvedSessionId;
           setActiveFinnSessionId(resolvedSessionId);
+          setMessages((current) => (current.length > 0 ? current : mapBackendSessionMessages(detail?.messages)));
           return;
         }
 
@@ -3829,6 +3831,11 @@ function AIAssistantContent({
     setActiveFinnSessionId(normalized);
     if (typeof window !== "undefined") {
       writeActiveFinnConversation(window.sessionStorage, user?.id, normalized);
+    }
+    if (isFinnV2ConversationId(normalized)) {
+      getFinnV2Conversations()
+        .then((sessions) => setAvailableFinnSessions(Array.isArray(sessions) ? sessions : []))
+        .catch((error) => console.warn("Kon FINN-gespreksgeschiedenis niet laden:", error));
     }
     try {
       await updateAssistantPreferences({
@@ -3870,7 +3877,9 @@ function AIAssistantContent({
     const normalized = normalizeFinnSessionId(sessionId);
     if (!normalized) return;
     try {
-      const detail = await getAssistantSessionDetail(normalized);
+      const detail = isFinnV2ConversationId(normalized)
+        ? await getFinnV2ConversationDetail(normalized)
+        : await getAssistantSessionDetail(normalized);
       await persistActiveFinnSessionId(normalized);
       setFinnDraft(null);
       setActiveState(null);
