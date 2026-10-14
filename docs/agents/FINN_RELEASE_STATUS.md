@@ -6,39 +6,48 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_FINAL_FLOW_READY_FOR_INDEPENDENT_QA`.
-The previous scoped browser QA accepted the core right-panel flow on
-`4203b5fa598d29f5790ba5f5165112cc3435c164`, while finding a clipped
-390 px composer placeholder and leaving early Stop and terminal worker races
-unobserved. [PR #326](https://github.com/gvangalen/antigravity-trading-tool/pull/326)
-repairs those gaps: the server now preserves the first terminal runtime
-outcome, early Stop waits for the run envelope, and a completed run is not
-presented as canceled. The guided reply path remains a chat reply rather
-than an unintended command search. The short NL/EN/DE composer prompt fits
-narrow mobile widths. Product SHA:
-`be3fd2025a615be3e70162302229c48ac05e68f7`.
+Phase: `CHAT_SIDE_PANEL_READ_AND_STOP_REPAIR_READY_FOR_INDEPENDENT_QA`.
+Independent browser QA returned **NOT ACCEPTED** on the preceding deployed
+status SHA `b255b3376d1db61a7289cf2913503d530cadb1bc`: the exact
+read-only ETH setup comparison ended in a generic error, and Stop near
+completion produced a 409 console error. [PR #328](https://github.com/gvangalen/antigravity-trading-tool/pull/328)
+repairs the read-only intent, owner-scoped collection evidence, comparison
+answer boundary, and completed-run Stop race. Product SHA:
+`5cb0d9ec55bcaf2201cc3009170b2f0153662f8b`.
 
-Build evidence on 2026-10-14: backend **3577 passed, 3 existing skips**;
-frontend production build, typecheck, i18n lint/tests, command, proposal,
-setup and guided modal tests, and high-severity audit passed. The local
-worker action matrix passed **16/16** and adapters **19/19**, with zero
-broker orders, live bots, live-trading calls or production connections
-(artifact SHA-256
-`1ae5b1f894c1744a4727ce2041ce44c46dbcb437ec5f04fb16477d49a7bb2290`).
+Build evidence on 2026-10-14: backend **3591 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal
+and setup tests, and high-severity audit passed. The local worker action
+matrix passed **16/16** and adapters **19/19**, with zero broker orders,
+live bots, live-trading calls or production connections (artifact SHA-256
+`827d6e808368c1aa14e3c2cc9681cfc20d7cf9eaaa95ce3696f526ad4bfd544a`).
 Real Luna/Responses selector development passed **20/20** (SHA-256
-`f888a6d96cd9ddad0d8683d525d8fce5c1c16700d663be11f18fa86cf7e7c4e2`)
+`f247cbbef621c4eef088b6777aa9a1cbd77666244fda275acbff708c3c1ff4ad`)
 and regression **109/109** (SHA-256
-`2665a0cec497a176276b2da38724faa627d8bc43d444751ab3d7d73237ea4b4f`),
-with zero provider, schema, timeout, parse or validation failures. Local
-PostgreSQL race checks rejected late cancellation after completion and late
-completion after cancellation without changing contract revision. Candidate
-[CI run 38543425648](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38543425648)
-and main [CI run 38543690770](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38543690770)
-each passed all five jobs. [Auto Deploy run 38543954147](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38543954147)
+`fd04f46621c51258e9e98d136b96a42af3e01efff211553527cfac6a8f7aa685`),
+with zero provider, schema, timeout, parse or validation failures. The exact
+ETH comparison passed five consecutive local FastAPI/Celery/PostgreSQL and
+real Responses replays; the final replay artifact SHA-256 is
+`8daaed00c3e4a4fe42c4854a5af9c5818d40f15eb1cc958148c724524cccd421`.
+Candidate [CI run 38557902117](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38557902117)
+and main [CI run 38558218407](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38558218407)
+each passed all five jobs. [Auto Deploy run 38558454656](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38558454656)
 succeeded. Public backend health and frontend build-info both returned HTTP
 200 and the exact product SHA. This status-only commit will have a later SHA;
 independent QA must bind its authenticated browser run to both public
 surfaces. The new independent QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_FINAL_FLOW_READY_FOR_INDEPENDENT_QA`.
+The scoped browser QA accepted the core right-panel flow on
+`4203b5fa598d29f5790ba5f5165112cc3435c164`. [PR #326](https://github.com/gvangalen/antigravity-trading-tool/pull/326)
+addressed the observed 390 px composer and Stop timing gaps. Product SHA:
+`be3fd2025a615be3e70162302229c48ac05e68f7`. Backend **3577 passed,
+3 existing skips**; local worker action matrix **16/16**, adapters **19/19**;
+real Luna/Responses selector development **20/20**, regression **109/109**.
+Candidate [CI run 38543425648](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38543425648),
+main [CI run 38543690770](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38543690770),
+and [Auto Deploy run 38543954147](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38543954147)
+succeeded. The later status-only SHA was `b255b3376d1db61a7289cf2913503d530cadb1bc`.
 
 Prior phase: `CHAT_SIDE_PANEL_FIFTH_REPAIR_ACCEPTED_FOR_SCOPED_BROWSER_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
