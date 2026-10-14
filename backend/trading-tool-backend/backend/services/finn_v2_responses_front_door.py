@@ -176,6 +176,97 @@ def _feed_evidence_instruction(facts: list[dict[str, Any]] | None) -> str:
 
 class FinnResponsesFrontDoor:
     @staticmethod
+    def _grouped_comparison_evidence(read_result: dict[str, Any]) -> dict[str, Any]:
+        """Present owner-scoped comparisons as complete rows to the model.
+
+        The durable trace keeps the underlying typed reads. Grouping only the
+        model-facing copy prevents a bot or strategy from being attributed to
+        a neighboring setup in a long collection answer.
+        """
+        results = [item for item in read_result.get("results") or [] if isinstance(item, dict)]
+        inventory = next((
+            item for item in results if item.get("scope") == "read_saved_setup_inventory"
+            and item.get("status") == "completed"
+        ), None)
+        rows = ((inventory or {}).get("data") or {}).get("setups") or []
+        linked_by_setup = {
+            (item.get("data") or {}).get("setup_id"): item
+            for item in results if item.get("scope") == "read_linked_strategies"
+            and isinstance(item.get("data"), dict)
+        }
+        strategy_fields = (
+            "name", "execution_mode", "risk_profile", "entry", "entry_type",
+            "stop_loss", "targets", "base_amount", "level_geometry",
+        )
+        grouped = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            linked = linked_by_setup.get(row.get("setup_id")) or {}
+            linked_data = linked.get("data") or {}
+            strategies = [
+                {field: strategy[field] for field in strategy_fields if strategy.get(field) is not None}
+                for strategy in linked_data.get("strategies") or [] if isinstance(strategy, dict)
+            ]
+            strategy_names_by_id = {
+                strategy.get("strategy_id"): strategy.get("name")
+                for strategy in linked_data.get("strategies") or []
+                if isinstance(strategy, dict) and isinstance(strategy.get("strategy_id"), int)
+            }
+            bots = [
+                {
+                    **{field: bot[field] for field in ("name", "mode", "is_live") if bot.get(field) is not None},
+                    "linked_strategy": strategy_names_by_id.get(bot.get("strategy_id")),
+                }
+                for bot in row.get("linked_bots") or [] if isinstance(bot, dict)
+            ]
+            grouped.append({
+                "setup_name": row.get("name"),
+                "asset": row.get("symbol"),
+                "analysis_timeframe": row.get("timeframe"),
+                "setup_type": row.get("setup_type"),
+                "dca_purchase_schedule": ({
+                    "frequency": row.get("dca_frequency"),
+                    "weekday": row.get("dca_day_name"),
+                    "month_day": row.get("dca_month_day"),
+                } if row.get("setup_type") == "dca" else None),
+                "score_conditions": {
+                    field: row.get(field) for field in (
+                        "min_market_score", "max_market_score", "min_macro_score",
+                        "max_macro_score", "min_technical_score", "max_technical_score",
+                    )
+                },
+                "linked_strategy_read_status": linked.get("status", "unavailable"),
+                "linked_strategies": strategies,
+                "linked_bots": bots,
+                "linked_bot_count": len(bots),
+            })
+        score_item = next((item for item in results if item.get("scope") == "read_asset_scores"), None)
+        score_data = (score_item or {}).get("data") or {}
+        return {
+            "status": read_result.get("status"),
+            "evidence_scope": "owner_scoped_setup_comparison",
+            "setups": grouped,
+            "setup_count": len(grouped),
+            "current_asset_scores": ({
+                "status": score_item.get("status"),
+                "asset": score_data.get("symbol"),
+                "score_date": score_data.get("as_of"),
+                "source_status": score_data.get("source_status"),
+                "reported_scores": score_data.get("reported_scores"),
+                "benchmark_score": score_data.get("benchmark_score"),
+                "component_source_status": score_data.get("component_source_status"),
+                "component_source_observed_at": score_data.get("component_source_observed_at"),
+            } if score_item is not None else None),
+            "field_meaning": {
+                "analysis_timeframe": "Chart interval, not an automated purchase schedule.",
+                "dca_purchase_schedule": "Only this field describes DCA purchase timing.",
+                "linked_bots": "Bot links belong only to the setup in the same row.",
+                "linked_bot_count": "Zero means no bot linked to this setup in the complete owner-scoped inventory.",
+            },
+        }
+
+    @staticmethod
     def _model_led_instructions(locale: str, *, feed_evidence: list[dict[str, Any]] | None = None) -> str:
         language = {"nl": "Dutch", "en": "English", "de": "German"}.get(locale, "Dutch")
         return (
@@ -1842,6 +1933,7 @@ class FinnResponsesFrontDoor:
                         if any(item.get("status") != "completed" for item in linked_evidence):
                             read_result["status"] = "partial"
                         read_result["finalize_now"] = True
+                        read_result["_model_output"] = self._grouped_comparison_evidence(read_result)
                     selected_dca_explanation = (
                         verified_answer_mode == "explain"
                         and len(resolved_setup_ids) == 1

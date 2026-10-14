@@ -1471,6 +1471,12 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
                 "data": {"complete": True, "setups": [
                     {"setup_id": index, "name": f"ETH Setup {index}", "symbol": "ETH",
                      "timeframe": "4H" if index % 2 else "1D",
+                     "setup_type": "dca" if index == 2 else "trade",
+                     "dca_frequency": "weekly" if index == 2 else None,
+                     "dca_day_name": "monday" if index == 2 else None,
+                     "linked_bots": ([{"name": "Paper Bot 2", "mode": "manual", "is_live": False,
+                                      "strategy_id": 102}]
+                                     if index == 2 else []),
                      "min_macro_score": 20 + index}
                     for index in range(1, 8)
                 ] + [{"setup_id": 99, "name": "BTC Other", "symbol": "BTC"}]},
@@ -1511,6 +1517,23 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
     assert result.response.turn_contract["targets"][0]["strategy"]["name"].startswith("ETH Strategy")
     assert fake.requests[1]["tool_choice"] == "none"
     assert fake.requests[1]["max_output_tokens"] == 1800
+    assert "_model_output" not in tool_result
+    model_evidence = json.loads(next(
+        item["output"] for item in fake.requests[1]["input"]
+        if item.get("type") == "function_call_output"
+    ))
+    assert model_evidence["evidence_scope"] == "owner_scoped_setup_comparison"
+    assert len(model_evidence["setups"]) == 7
+    by_name = {row["setup_name"]: row for row in model_evidence["setups"]}
+    assert by_name["ETH Setup 2"]["analysis_timeframe"] == "1D"
+    assert by_name["ETH Setup 2"]["dca_purchase_schedule"]["frequency"] == "weekly"
+    assert by_name["ETH Setup 2"]["linked_bots"] == [{
+        "name": "Paper Bot 2", "mode": "manual", "is_live": False,
+        "linked_strategy": "ETH Strategy 2",
+    }]
+    assert by_name["ETH Setup 3"]["linked_bot_count"] == 0
+    assert by_name["ETH Setup 3"]["linked_strategies"][0]["name"] == "ETH Strategy 3"
+    assert "as_of" not in json.dumps(model_evidence)
 
 
 def test_collection_turn_contract_never_selects_one_of_multiple_strategies():

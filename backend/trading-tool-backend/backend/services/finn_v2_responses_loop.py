@@ -1236,6 +1236,7 @@ class FinnResponsesLoop:
                 except Exception:
                     logger.exception("FINN Responses tool execution failed name=%s", tool_name)
                     output = {"status": "error", "reason": "tool_execution_failed"}
+                model_output = output.pop("_model_output", None)
                 trace.append({
                     "call_id": call_id,
                     "name": tool_name,
@@ -1263,7 +1264,7 @@ class FinnResponsesLoop:
                 current_input.append({
                     "type": "function_call_output",
                     "call_id": call_id,
-                    "output": json.dumps(output, default=str),
+                    "output": json.dumps(model_output if model_output is not None else output, default=str),
                 })
             tool_exchange.extend(current_input)
             if (
