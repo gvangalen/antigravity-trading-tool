@@ -51,6 +51,35 @@ def _listed_setup_ordinal(message: str) -> int | None:
     return listed_setup_ordinal(message)
 
 
+def _guided_name_suggestion(operation_id: str, guided_state: Mapping[str, object]) -> str:
+    """Suggest a descriptive label from draft fields, without mutating the draft."""
+    inputs = dict(guided_state.get("collected_inputs") or {})
+    symbol = str(inputs.get("symbol") or inputs.get("asset") or "").upper().strip()
+    timeframe = str(inputs.get("timeframe") or "").upper().strip()
+    if operation_id == "create_setup":
+        kind = "DCA" if str(inputs.get("setup_type") or "").casefold() == "dca" else "Trade"
+    elif operation_id == "create_strategy":
+        kind = "DCA Strategie" if str(inputs.get("setup_type") or "").casefold() == "dca" else "Strategie"
+    elif operation_id == "create_bot":
+        kind = "Paper Bot"
+    else:
+        kind = "Plan"
+    return " ".join(part for part in (symbol, timeframe, kind) if part)
+
+
+def _previous_guided_name_suggestion(
+    previous_response: Mapping[str, object] | None, operation_id: str,
+) -> str | None:
+    for item in reversed((previous_response or {}).get("tool_trace") or []):
+        if item.get("name") != "guided_name_suggestion" or item.get("status") != "completed":
+            continue
+        result = item.get("result") or {}
+        if result.get("operation_id") == operation_id:
+            name = str(result.get("suggested_name") or "").strip()
+            return name or None
+    return None
+
+
 def _proposal_explicitly_excluded(message: str) -> bool:
     return bool(re.search(
         r"\b(?:geen|no|kein(?:e|en|er|es)?)\s+(?:voorstel|proposal|draft|concept(?:kaart)?)\b"
@@ -657,6 +686,56 @@ class FinnResponsesFrontDoor:
                 and not unsupported_catalog_pair_mention(message)):
             contract = self.proposals.registry.require_supported(pending_operation)
             states = self.proposals.states
+            if requested_slot == "name" and states.is_name_suggestion_request(message):
+                suggestion = _guided_name_suggestion(pending_operation, guided_state)
+                language = str(locale or "nl").split("-")[0].lower()
+                answer = {
+                    "en": f"I suggest ‘{suggestion}’. Would you like to use that name or choose another? Nothing has been saved.",
+                    "de": f"Ich schlage „{suggestion}“ vor. Möchtest du diesen Namen verwenden oder einen anderen wählen? Es wurde noch nichts gespeichert.",
+                }.get(language, f"Ik stel ‘{suggestion}’ voor. Wil je die naam gebruiken of liever een andere? Er is nog niets opgeslagen.")
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=answer,
+                        response_id=f"guided-name-suggestion-{self.run_id}",
+                        tool_trace=({"name": "guided_name_suggestion", "status": "completed",
+                                     "result": {"operation_id": pending_operation,
+                                                "suggested_name": suggestion}},),
+                        response_id_reusable=False,
+                    ),
+                    None, previous_response, locale=locale,
+                )
+            accepted_name = (
+                _previous_guided_name_suggestion(previous_response, pending_operation)
+                if requested_slot == "name" and states.is_name_suggestion_acceptance(message)
+                else None
+            )
+            if accepted_name:
+                selected = self.proposals.from_call(
+                    call=FinnResponsesToolCall(
+                        name=catalog.proposal_tool_for_operation(pending_operation),
+                        operation_id=pending_operation, inputs={"name": accepted_name},
+                        read_tools=(), required_inputs=contract.required_inputs,
+                        missing_inputs=tuple(guided_state.get("missing_required_inputs") or ()),
+                        draft_intent="new",
+                    ),
+                    message=f'naam is "{accepted_name}"',
+                    conversation_context=conversation_context,
+                    verified_asset=verified_asset,
+                )
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text={"en": "I have added that name to the draft.",
+                              "de": "Ich habe diesen Namen in den Entwurf übernommen."}.get(
+                                  str(locale or "nl").split("-")[0].lower(),
+                                  "Ik heb die naam in het concept gezet."),
+                        response_id=f"guided-name-accepted-{self.run_id}",
+                        tool_trace=({"name": "guided_slot_binding", "status": "completed",
+                                     "result": {"operation_id": pending_operation,
+                                                "requested_slot": "name"}},),
+                        response_id_reusable=False,
+                    ),
+                    selected, previous_response, locale=locale,
+                )
             switches_operation = any(
                 message.strip().casefold().startswith(alias.casefold())
                 for other in self.proposals.registry.list()

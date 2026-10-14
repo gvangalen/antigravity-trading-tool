@@ -1010,6 +1010,41 @@ class FinnV2OperationStateService:
         return not mentioned or mentioned == {requested_slot}
 
     @staticmethod
+    def is_name_suggestion_request(text: str) -> bool:
+        """A request for a name is not itself a name, even without punctuation."""
+        value = re.sub(r"[?.!]+$", "", str(text or "").strip().casefold())
+        if re.match(r"^(?:wat|welke|heb|kun|kan|what|which|could|can|was|welchen|welche|hast|kannst)\b", value) and re.search(
+            r"\b(?:naam|name|namen|naamidee|suggest\w*|voorstel\w*|aanraad\w*|kiezen|idee|call|nenn\w*)\b"
+            r"|\bstel\b.+\bvoor\b|\bschl[aä]gst\b.+\bvor\b",
+            value,
+        ):
+            return True
+        if re.fullmatch(r"(?:welke|wat\s+voor\s+een)\s+naam\s+(?:past|zou\s+passen)(?:\s+(?:erbij|hierbij))?", value):
+            return True
+        return bool(re.fullmatch(
+            r"(?:wat\s+(?:stel\s+je\s+voor|raad\s+je\s+aan)|"
+            r"wat\s+zou\s+(?:je|jij)\s+(?:voorstellen|aanraden|kiezen)|"
+            r"(?:welke|wat\s+voor\s+een)\s+naam\s+(?:stel\s+je\s+voor|raad\s+je\s+aan)|"
+            r"heb\s+je\s+(?:een\s+)?(?:naamidee|suggestie\s+voor\s+(?:een\s+)?naam)|"
+            r"(?:kun|kan)\s+je\s+(?:een\s+)?naam\s+(?:voorstellen|bedenken)|"
+            r"what\s+do\s+you\s+suggest|what\s+would\s+you\s+call\s+it|"
+            r"(?:can\s+you\s+)?suggest\s+(?:a\s+)?name|"
+            r"was\s+schl[aä]gst\s+du\s+vor|(?:welchen|was\s+f[uü]r\s+einen)\s+namen\s+schl[aä]gst\s+du\s+vor)",
+            value,
+        ))
+
+    @staticmethod
+    def is_name_suggestion_acceptance(text: str) -> bool:
+        """Only a clear acceptance can select the immediately prior suggestion."""
+        value = re.sub(r"[.!]+$", "", str(text or "").strip().casefold())
+        value = re.sub(r"\s*,\s*", " ", value)
+        return value in {
+            "ja", "ja graag", "ja doe maar", "ja gebruik die naam", "gebruik die naam",
+            "die naam is goed", "die is goed", "yes", "yes please", "use that name",
+            "that name works", "ja bitte", "nimm diesen namen", "der name passt",
+        }
+
+    @staticmethod
     def _is_explicit_correction(text: str) -> bool:
         return bool(re.search(
             r"\b(?:corrigeer|correct|correctie|wijzig|verander|pas\s+aan|update|change|"
@@ -1071,6 +1106,14 @@ class FinnV2OperationStateService:
         if not value:
             return None
         if field == "name":
+            if self.is_name_suggestion_request(value) or self.is_name_suggestion_acceptance(value):
+                return None
+            if re.match(
+                r"^(?:wat|welke|heb|kan|kun|hoe|what|which|could|can|do|"
+                r"was|welchen|welche|hast|kannst)\b",
+                value, re.IGNORECASE,
+            ):
+                return None
             named = self._name_input_from_text(value)
             if named is None:
                 # The pending question asks for a name. A reply may start
