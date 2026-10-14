@@ -478,6 +478,10 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
     ) -> FinnV2RuntimeContract:
         row = await self._required_for_update(run_id)
         state = deepcopy(row.state_json or {})
+        if state.get("terminal_status") != PENDING_STATUS:
+            # Stop and the worker can reach this row at almost the same time.
+            # The row lock makes the first terminal writer authoritative.
+            raise RuntimeContractConflictError("runtime_contract_already_terminal")
         state["final_operation_id"] = state.get("final_operation_id") or state.get("initial_operation_id")
         state["final_mode"] = mode or state.get("final_mode") or state.get("requested_mode")
         state["terminal_status"] = status

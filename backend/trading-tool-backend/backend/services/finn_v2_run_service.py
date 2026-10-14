@@ -22,7 +22,7 @@ from backend.domain.finn_v2_contract import (
     normalize_interaction_mode,
     validate_run_transition,
 )
-from backend.domain.finn_v2_runtime_contract import build_terminal_runtime_contract
+from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError, build_terminal_runtime_contract
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
@@ -1758,9 +1758,15 @@ class FinnV2RunService:
             response_json["content"] = await self._localized_runtime_failure_content(
                 run_id=run_id, user_id=user_id,
             )
-            contract = await self.runtime_contracts.materialize_terminal(
-                run_id=run_id, status="failed", mode="UNAVAILABLE", response=response_json, error_code=error_code
-            )
+            try:
+                contract = await self.runtime_contracts.materialize_terminal(
+                    run_id=run_id, status="failed", mode="UNAVAILABLE", response=response_json, error_code=error_code
+                )
+            except RuntimeContractConflictError as exc:
+                if str(exc) != "runtime_contract_already_terminal":
+                    raise
+                logger.info("FINN V2 failure cleanup found an existing terminal run", extra={"run_id": run_id})
+                return
             response_json["_runtime_contract_projection"] = contract.terminal_projection_json
             await self.persist_transition(
                 run_id,
@@ -1798,9 +1804,15 @@ class FinnV2RunService:
         response_json["content"] = await self._localized_runtime_failure_content(
             run_id=run_id, user_id=user_id, error_code=error_code,
         )
-        contract = await self.runtime_contracts.materialize_terminal(
-            run_id=run_id, status="unavailable", mode="UNAVAILABLE", response=response_json, error_code=error_code
-        )
+        try:
+            contract = await self.runtime_contracts.materialize_terminal(
+                run_id=run_id, status="unavailable", mode="UNAVAILABLE", response=response_json, error_code=error_code
+            )
+        except RuntimeContractConflictError as exc:
+            if str(exc) != "runtime_contract_already_terminal":
+                raise
+            logger.info("FINN V2 unavailable terminalizer found an existing terminal run", extra={"run_id": run_id})
+            return
         response_json["_runtime_contract_projection"] = contract.terminal_projection_json
         await self.persist_transition(
             run_id, user_id, next_status="unavailable", interaction_mode="UNAVAILABLE",
@@ -1900,6 +1912,9 @@ class FinnV2RunService:
             )
             raise
         except Exception as exc:
+            if isinstance(exc, RuntimeContractConflictError) and str(exc) == "runtime_contract_already_terminal":
+                logger.info("FINN V2 lifecycle lost the terminal race", extra={"run_id": run_id, "user_id": user_id})
+                return
             logger.exception(
                 "FINN V2 lifecycle primary failure",
                 extra={
@@ -2323,6 +2338,9 @@ class FinnV2RunService:
             raise
         except Exception as exc:
             await _cancel_lifecycle_within_reserve()
+            if isinstance(exc, RuntimeContractConflictError) and str(exc) == "runtime_contract_already_terminal":
+                logger.info("FINN V2 owned lifecycle lost the terminal race", extra={"run_id": run_id, "user_id": user_id})
+                return
             logger.exception(
                 "FINN V2 owned lifecycle primary failure",
                 extra={"run_id": run_id, "user_id": user_id, "primary_exception": str(exc)},

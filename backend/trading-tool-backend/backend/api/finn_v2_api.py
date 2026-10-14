@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import is_terminal_status
+from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
 from backend.infrastructure.database import async_session_factory, get_db
 from backend.infrastructure.models import FinnV2Conversation, FinnV2Run
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
@@ -183,7 +184,14 @@ async def cancel_finn_v2_run(
     run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
     if is_terminal_status(run.status):
         raise HTTPException(status_code=409, detail="FINN V2 run is already terminal")
-    await run_service.cancel_run(run_id=run_id, user_id=int(current_user["id"]))
+    try:
+        await run_service.cancel_run(run_id=run_id, user_id=int(current_user["id"]))
+    except RuntimeContractConflictError as exc:
+        # A terminal worker result won after the first status read. The client
+        # can GET that authoritative result instead of displaying a local Stop.
+        if str(exc) != "runtime_contract_already_terminal":
+            raise
+        raise HTTPException(status_code=409, detail="FINN V2 run is already terminal") from exc
     refreshed = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
     return AgentRunCancelResponse(run=await run_service.envelope_from_run(refreshed))
 
