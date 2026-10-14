@@ -6,7 +6,39 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_FOURTH_REPAIR_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_FIFTH_REPAIR_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the
+previous live SHA `8e4f5e5a6c67247aa2987a79e21e0b22f7d37607`: the
+three-turn ETH proposal, locale and draft persistence, panel, history and
+mobile browser checks passed, but Stop displayed “Antwoord gestopt.”
+immediately while the stored conversation showed the generic unavailable
+sentence after refresh. [PR #323](https://github.com/gvangalen/antigravity-trading-tool/pull/323)
+persists localized Stop text in the terminal run contract and reads the
+server's terminal result back into the stopped chat bubble, including when
+the worker completed before cancellation. Product SHA:
+`4ac4081e412dc2b9161b7254cdeff30cff50aa74`.
+
+Build evidence on 2026-10-14: backend **3574 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal
+and setup tests, and high-severity audit passed. The local worker matrix
+passed **16/16** and adapters **19/19**, with zero broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`ebc13ec3579b29030fbf1cea60f624847a41a4fed21fec53fc9ff6204306ee20`).
+Local HTTP cancellation and conversation-history readback both returned
+“Antwoord gestopt.” Real Luna/Responses selector development passed
+**20/20** (SHA-256
+`1d92e3343f2cbe7e339df2608de3e88a241ff7d8090fa63e9f48b1c7776306c8`)
+and regression **109/109** (SHA-256
+`77b1e34b422ce3ea04d1594f4b3e2a260133f8c6cb6065bfbfa1c7713b41516c`),
+with zero provider, schema, parse, validation or timeout failures.
+Candidate [CI run 38535552019](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38535552019)
+and main [CI run 38535847666](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38535847666)
+each passed all five jobs. [Auto Deploy run 38536073816](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38536073816)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA. This status-only update will receive a later
+SHA; QA must bind to both public surfaces. The new live QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_FOURTH_REPAIR_READY_FOR_INDEPENDENT_QA`.
 Independent authenticated browser QA returned **NOT ACCEPTED** on the
 previous live SHA `eecfbdd761355bbe25712f6c49d5b4ff7821071d`: the
 language switch, unsent composer refresh, Stop, history, mobile browser
