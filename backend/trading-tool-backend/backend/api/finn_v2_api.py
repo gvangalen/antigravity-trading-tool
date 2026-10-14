@@ -183,15 +183,22 @@ async def cancel_finn_v2_run(
 ):
     run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
     if is_terminal_status(run.status):
-        raise HTTPException(status_code=409, detail="FINN V2 run is already terminal")
+        return AgentRunCancelResponse(run=await run_service.envelope_from_run(run))
     try:
         await run_service.cancel_run(run_id=run_id, user_id=int(current_user["id"]))
     except RuntimeContractConflictError as exc:
-        # A terminal worker result won after the first status read. The client
-        # can GET that authoritative result instead of displaying a local Stop.
+        # A terminal worker result won after the first status read. Return the
+        # authoritative terminal result as a successful idempotent response.
         if str(exc) != "runtime_contract_already_terminal":
             raise
-        raise HTTPException(status_code=409, detail="FINN V2 run is already terminal") from exc
+        # The worker uses its own transaction. A fresh session avoids reusing
+        # the request session's pre-race ORM snapshot.
+        for _ in range(20):
+            terminal = await _load_run_envelope(run_id=run_id, user_id=int(current_user["id"]))
+            if is_terminal_status(terminal.status):
+                return AgentRunCancelResponse(run=terminal)
+            await asyncio.sleep(0.05)
+        return AgentRunCancelResponse(run=terminal)
     refreshed = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
     return AgentRunCancelResponse(run=await run_service.envelope_from_run(refreshed))
 

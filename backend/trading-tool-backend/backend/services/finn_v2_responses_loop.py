@@ -489,8 +489,20 @@ class FinnResponsesLoop:
             if answer_only_round and not (
                 trace and not proposal_selected
                 and not repair_tool_name
-                and all(item["name"].startswith(("get_", "evaluate_")) for item in trace)
-                and all(item["status"] in {"completed", "partial", "unavailable"} for item in trace)
+                and all(
+                    (
+                        item["name"].startswith(("get_", "evaluate_"))
+                        and item["status"] in {"completed", "partial", "unavailable", "retry"}
+                    ) or (
+                        item["status"] == "retry"
+                        and (item.get("result") or {}).get("reason") in {
+                            "tool_not_relevant_to_request",
+                            "primary_operation_mismatch",
+                            "read_already_completed_this_turn",
+                        }
+                    )
+                    for item in trace
+                )
             ):
                 raise FinnResponsesError("responses_tool_round_limit")
             remaining = remaining_lifecycle_seconds()

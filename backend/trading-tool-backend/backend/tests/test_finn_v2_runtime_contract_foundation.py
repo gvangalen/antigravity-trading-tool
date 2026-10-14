@@ -44,6 +44,19 @@ def _run():
     )
 
 
+def test_verified_read_losing_to_cancel_is_a_benign_terminal_race():
+    service = FinnV2RunService(session=object())
+    service.runs.get_by_id_for_user = AsyncMock(return_value=SimpleNamespace(status="canceled"))
+
+    with pytest.raises(RuntimeContractConflictError, match="runtime_contract_already_terminal"):
+        asyncio.run(service.complete_responses_read(
+            run_id="run-contract-1", user_id=7, response_id="response-race",
+            answer=SimpleNamespace(status="completed"),
+        ))
+
+    service.runs.get_by_id_for_user.assert_awaited_once_with(run_id="run-contract-1", user_id=7)
+
+
 def _selected_strategy_state():
     state = new_runtime_contract_state(run=_run(), contract_id="finn-v2-contract-run-contract-1")
     state = record_initial_intent(state, operation_id="update_strategy", requested_mode="CREATE_PROPOSAL")

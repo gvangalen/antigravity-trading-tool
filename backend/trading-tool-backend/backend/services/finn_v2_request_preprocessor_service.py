@@ -525,8 +525,10 @@ class FinnV2RequestPreprocessorService:
         no_change_tail = re.search(
             r"(?:^|[.;!?]\s*|,\s*(?:maar\s+)?|\s+(?:maar|en)\s+)"
             r"(?:maak\s+of\s+)?"
-            r"(?:wijzig|verander|update|change|ändere|aendere)\s+"
-            r"(?:niets|niks|nothing|nichts)[.!?]*$",
+            r"(?:(?:wijzig|verander|update|change|ändere|aendere)\s+"
+            r"(?:niets|niks|nothing|nichts)|"
+            r"(?:niets|niks|nothing|nichts)\s+"
+            r"(?:wijzig\w*|verander\w*|updat\w*|chang\w*|änder\w*|aender\w*))[.!?]*$",
             text,
         )
         if no_change_tail:

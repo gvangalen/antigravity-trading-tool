@@ -4427,6 +4427,19 @@ function AIAssistantContent({
         // Read that terminal result instead of showing a local-only stop.
         try { recordedRun = await fetchFinnV2Run(pendingRunId); } catch {}
       }
+      if (recordedRun && !["completed", "blocked", "failed", "canceled", "unavailable", "downgraded", "rejected", "clarification_required"]
+        .includes(recordedRun.status)) {
+        // The terminal contract can win before the worker's run row is
+        // visible in a separate transaction. Keep showing "stopping" until
+        // the authoritative terminal projection arrives.
+        try {
+          recordedRun = await waitForFinnV2TerminalSse(pendingRunId, {
+            signal: AbortSignal.timeout(8000),
+          });
+        } catch {
+          try { recordedRun = await fetchFinnV2Run(pendingRunId); } catch {}
+        }
+      }
       const savedText = recordedRun?.response?.content;
       const terminal = ["completed", "blocked", "failed", "canceled", "unavailable", "downgraded", "rejected", "clarification_required"]
         .includes(recordedRun?.status);

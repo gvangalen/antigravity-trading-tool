@@ -367,6 +367,8 @@ class FinnV2RunService:
         status = answer.status
         if status not in {"completed", "unavailable", "clarification_required"}:
             raise ValueError("responses_read_terminal_status_invalid")
+        if is_terminal_status(run.status):
+            raise RuntimeContractConflictError("runtime_contract_already_terminal")
         validate_run_transition(run.status, status)
         if status == "clarification_required":
             clarification = answer.clarification or {}

@@ -108,6 +108,13 @@ class FinnResponsesReadExecutor:
                 data = {**data, "level_geometry": strategy_level_geometry(
                     data.get("entry"), data.get("stop_loss"), data.get("targets"),
                 )}
+            if read_tool == "read_linked_strategies" and isinstance(data, dict):
+                data = {**data, "strategies": [
+                    {**row, "level_geometry": strategy_level_geometry(
+                        row.get("entry"), row.get("stop_loss"), row.get("targets"),
+                    )}
+                    for row in data.get("strategies") or [] if isinstance(row, dict)
+                ]}
             if read_tool == "read_market_snapshot" and isinstance(data, dict):
                 # Preserve the exact provider instant for freshness checks in
                 # the tool service; format only the model-facing evidence.
