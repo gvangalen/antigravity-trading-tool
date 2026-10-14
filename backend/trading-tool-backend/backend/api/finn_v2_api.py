@@ -68,7 +68,7 @@ async def get_finn_v2_conversation(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return visible text only; old proposals never regain a confirm button."""
+    """Restore visible conversation text and its latest still-open proposal."""
     user_id = int(current_user["id"])
     row = (await db.execute(
         select(FinnV2Conversation).where(
@@ -88,6 +88,37 @@ async def get_finn_v2_conversation(
         .order_by(FinnV2Run.created_at.asc())
         .limit(100)
     )).scalars().all()
+    from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+
+    latest_open = await FinnV2ProposalRepository(db).get_latest_open_for_conversation(
+        conversation_id=conversation_id, user_id=user_id,
+    )
+    pending_by_run = {}
+    if latest_open is not None:
+        proposal, contract = latest_open
+        state = dict(contract.state_json or {})
+        guided = dict(state.get("guided_state") or {})
+        operation_id = str(proposal.operation_type or "")
+        draft_key = "setup_draft" if operation_id == "create_setup" else "action_draft"
+        draft = dict(state.get(draft_key) or {})
+        if not draft:
+            draft = {
+                "operation_id": operation_id,
+                "draft_status": "complete",
+                "supplied_inputs": dict(guided.get("collected_inputs") or {}),
+                "missing_inputs": [],
+            }
+        change = dict((proposal.payload_json or {}).get("change") or {})
+        pending_by_run[proposal.run_id] = {
+            "proposal_id": proposal.id,
+            "run_id": proposal.run_id,
+            "conversation_id": conversation_id,
+            "operation_id": operation_id,
+            "asset": proposal.asset,
+            "draft": draft,
+            "before_state": dict(change.get("before_state") or change.get("before") or {}),
+            "requested_state": dict(change.get("requested_state") or change.get("changed_fields") or {}),
+        }
     messages = []
     for run in runs:
         if run.message and run.message != "[redacted by finn_v2_retention]":
@@ -95,7 +126,11 @@ async def get_finn_v2_conversation(
         response = run.response_json or {}
         content = response.get("content") if isinstance(response, dict) else None
         if isinstance(content, str) and content.strip():
-            messages.append({"role": "assistant", "content": content})
+            message = {"role": "assistant", "content": content}
+            pending = pending_by_run.get(getattr(run, "id", None))
+            if pending is not None:
+                message["pending_proposal"] = pending
+            messages.append(message)
     return {"id": row.id, "messages": messages}
 
 # Prevent proxy buffering from hiding the terminal event or keeping a closed

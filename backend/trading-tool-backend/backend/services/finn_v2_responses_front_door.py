@@ -248,6 +248,12 @@ class FinnResponsesFrontDoor:
             "evidence_scope": "owner_scoped_setup_comparison",
             "setups": grouped,
             "setup_count": len(grouped),
+            "linked_bot_total": sum(row["linked_bot_count"] for row in grouped),
+            "setups_with_linked_bots_count": sum(bool(row["linked_bots"]) for row in grouped),
+            "paper_bot_total": sum(
+                bot.get("is_live") is False
+                for row in grouped for bot in row["linked_bots"]
+            ),
             "current_asset_scores": ({
                 "status": score_item.get("status"),
                 "asset": score_data.get("symbol"),
@@ -263,6 +269,7 @@ class FinnResponsesFrontDoor:
                 "dca_purchase_schedule": "Only this field describes DCA purchase timing.",
                 "linked_bots": "Bot links belong only to the setup in the same row.",
                 "linked_bot_count": "Zero means no bot linked to this setup in the complete owner-scoped inventory.",
+                "linked_bot_total": "Use this exact collection count for any summary, rather than recounting prose rows.",
             },
         }
 

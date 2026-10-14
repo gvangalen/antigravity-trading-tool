@@ -75,3 +75,60 @@ export function verifiedPaperBotStrategy({ target, draftStrategyId, ownerStrateg
       || !Number.isSafeInteger(draftId) || draftId !== proposalId) return null;
   return ownerStrategies.find((item) => Number(item.id || item.strategy_id) === proposalId) || null;
 }
+
+// Conversation history may restore only the latest owner-scoped, unexpired
+// proposal. No confirmation token is stored in the browser; Confirm always
+// rereads the proposal and uses the server's publish/confirm/execute path.
+export function mapBackendSessionMessages(messages = []) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter((message) => typeof message?.content === "string" && message.content.trim())
+    .map((message) => {
+      const base = {
+        role: message.role === "user" ? "user" : "assistant",
+        text: message.content,
+        isComplete: true,
+      };
+      const pending = message.role === "assistant" ? message.pending_proposal : null;
+      const operationId = String(pending?.operation_id || "");
+      const draft = pending?.draft;
+      if (!pending?.proposal_id || !operationId || !draft
+          || draft.operation_id !== operationId || (draft.missing_inputs || []).length) return base;
+      const supplied = draft.supplied_inputs || {};
+      const isSetup = operationId === "create_setup";
+      const isDraftCard = isSetup || ["create_strategy", "create_bot", "watchlist_add", "watchlist_remove",
+        "create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"].includes(operationId);
+      const confirmationSuspended = operationId === "create_bot" && !supplied.strategy_name;
+      return {
+        ...base,
+        setupDraft: isSetup ? draft : null,
+        actionDraft: !isSetup && isDraftCard ? draft : null,
+        canConfirm: !confirmationSuspended,
+        confirmationSuspended,
+        state: {
+          run_status: "completed",
+          setup_draft: isSetup ? draft : null,
+          action_draft: !isSetup && isDraftCard ? draft : null,
+        },
+        actions: [{
+          type: "v2_proposal",
+          proposal_id: pending.proposal_id,
+          requires_confirmation: true,
+          display_context: {
+            conversation_id: pending.conversation_id,
+            run_id: pending.run_id,
+            operation_id: operationId,
+            name: supplied.name,
+            symbol: supplied.symbol || pending.asset,
+            timeframe: supplied.timeframe,
+            setup_name: supplied.setup_name,
+            strategy_name: supplied.strategy_name,
+            supplied_inputs: supplied,
+            before_state: pending.before_state || {},
+            requested_state: pending.requested_state || {},
+            changed_fields: pending.requested_state || {},
+            safety_mode: operationId === "create_bot" ? "Paper · niet-live" : null,
+          },
+        }],
+      };
+    });
+}
