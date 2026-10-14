@@ -224,6 +224,15 @@ async def get_bot_portfolios(
 # ==========================================================
 # 📊 BOT TRADES
 # ==========================================================
+@router.get("/bot/trades/all")
+async def get_account_bot_trades(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service),
+):
+    return await service.get_account_bot_trades(current_user["id"], limit, offset)
+
 @router.get("/bot/trades")
 async def get_bot_trades(
     bot_id: int,

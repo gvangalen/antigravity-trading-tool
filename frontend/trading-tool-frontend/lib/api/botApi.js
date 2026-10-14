@@ -212,6 +212,15 @@ export const fetchBotTrades = async (bot_id, limit = 50) => {
   }));
 };
 
+export const fetchAllBotTrades = async (limit = 50, offset = 0) => {
+  const data = await handleApi(fetchAuth(`/api/bot/trades/all?${buildQuery({ limit, offset })}`, { forceFresh: true }));
+  return {
+    items: ensureArray(data?.items),
+    has_more: data?.has_more === true,
+    next_offset: data?.next_offset ?? null,
+  };
+};
+
 /* =====================================================
    📊 9. TRADE PLAN (GET)
 ===================================================== */

@@ -101,7 +101,7 @@ class BotRepository:
 
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
-            SELECT b.id, b.name, b.updated_at AS bot_updated_at,
+            SELECT b.id, b.name, b.is_live, b.updated_at AS bot_updated_at,
               COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol,
               COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe, '—') AS timeframe,
               s.setup_type, s.id AS strategy_id,
@@ -173,13 +173,17 @@ class BotRepository:
         idempotency_key: Optional[str] = None,
         quote_amount_eur: Optional[float] = None,
         status: str = "filled",
+        is_live: bool = False,
+        exchange_name: Optional[str] = None,
     ) -> tuple[int, bool]:
         query = text("""
             INSERT INTO bot_orders (
                 user_id, bot_id, decision_id, symbol, side, order_type,
-                quantity, limit_price, quote_amount_eur, status, source, idempotency_key, created_at, updated_at
+                quantity, limit_price, quote_amount_eur, status, source, idempotency_key,
+                execution_environment, exchange_name, created_at, updated_at
             )
-            VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,:quote_amount_eur,:status,'manual',:idempotency_key,NOW(),NOW())
+            VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,:quote_amount_eur,:status,'manual',:idempotency_key,
+                    :execution_environment,:exchange_name,NOW(),NOW())
             ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING id
         """)
@@ -193,6 +197,8 @@ class BotRepository:
             "quote_amount_eur": quote_amount_eur,
             "status": status,
             "idempotency_key": idempotency_key,
+            "execution_environment": "live" if is_live else "paper",
+            "exchange_name": exchange_name,
         })
         row = result.fetchone()
         if row:
@@ -206,9 +212,25 @@ class BotRepository:
             raise RuntimeError("Manual order idempotency conflict occurred but existing order was not found.")
         return int(existing["id"]), False
 
+    async def lock_live_account(self, user_id: int) -> None:
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id, 0)"),
+                                   {"user_id": user_id})
+
+    async def get_live_pending_order_exposure(self, user_id: int) -> List[dict]:
+        result = await self.session.execute(text("""
+            SELECT symbol, side,
+              COALESCE(quote_amount_eur, estimated_qty * estimated_price_eur,
+                       quantity * limit_price, 0) AS notional_eur
+            FROM bot_orders
+            WHERE user_id=:user_id AND execution_environment='live'
+              AND status IN ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
+        """), {"user_id": user_id})
+        return [dict(row._mapping) for row in result.fetchall()]
+
     async def get_manual_order_by_idempotency_key(self, user_id: int, idempotency_key: str) -> Optional[dict]:
         query = text("""
-            SELECT id, bot_id, symbol, side, quantity, limit_price, quote_amount_eur, status, source, created_at
+            SELECT id, bot_id, symbol, side, quantity, limit_price, quote_amount_eur, status, source,
+                   execution_environment, exchange_order_id, created_at
             FROM bot_orders
             WHERE user_id = :user_id AND idempotency_key = :idempotency_key
             LIMIT 1
@@ -224,6 +246,21 @@ class BotRepository:
             WHERE id = :order_id AND user_id = :user_id
         """)
         await self.session.execute(query, {"user_id": user_id, "order_id": order_id, "status": status})
+
+    async def set_exchange_order_details(
+        self, user_id: int, order_id: int, exchange_name: str,
+        exchange_order_id: Optional[str], exchange_symbol: str, status: str,
+    ) -> None:
+        await self.session.execute(text("""
+            UPDATE bot_orders SET exchange_name=:exchange_name,
+                exchange_order_id=:exchange_order_id, exchange_symbol=:exchange_symbol,
+                status=:status, updated_at=NOW()
+            WHERE user_id=:user_id AND id=:order_id AND execution_environment='live'
+        """), {
+            "user_id": user_id, "order_id": order_id,
+            "exchange_name": exchange_name, "exchange_order_id": exchange_order_id,
+            "exchange_symbol": exchange_symbol, "status": status,
+        })
 
     async def create_bot_execution(self, user_id: int, order_id: int, quantity: float, price: float) -> int:
         query = text("""
@@ -246,10 +283,10 @@ class BotRepository:
         query_ledger = text("""
             INSERT INTO bot_ledger (
                 user_id, bot_id, order_id, symbol, entry_type,
-                cash_delta_eur, qty_delta, price_eur, ts
+                cash_delta_eur, qty_delta, price_eur, fill_sequence, ts
             )
-            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,NOW())
-            ON CONFLICT (user_id, order_id, entry_type) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING
+            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,0,NOW())
+            ON CONFLICT (user_id, order_id, entry_type, fill_sequence) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING
             RETURNING id
         """)
         ledger_result = await self.session.execute(query_ledger, {
@@ -554,9 +591,9 @@ class BotRepository:
         query = text("""
             SELECT COALESCE(SUM(ABS(l.cash_delta_eur)), 0)
             FROM bot_ledger l
-            JOIN bot_configs b ON b.id = l.bot_id AND b.user_id = l.user_id
+            LEFT JOIN bot_orders o ON o.id=l.order_id AND o.user_id=l.user_id
             WHERE l.user_id = :user_id
-              AND b.is_live = TRUE
+              AND (o.execution_environment='live' OR o.execution_environment IS NULL)
               AND DATE(l.ts) = :today
               AND l.entry_type = 'execute'
               AND l.cash_delta_eur < 0
@@ -622,20 +659,51 @@ class BotRepository:
     # ==========================
     # BOT TRADES
     # ==========================
+    async def get_unresolved_live_orders(self, user_id: int) -> List[dict]:
+        result = await self.session.execute(text("""
+            SELECT DISTINCT ON (bot_id) id, bot_id, status, created_at
+            FROM bot_orders
+            WHERE user_id=:user_id AND execution_environment='live'
+              AND status IN ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
+            ORDER BY bot_id, created_at DESC, id DESC
+        """), {"user_id": user_id})
+        return [dict(row._mapping) for row in result.fetchall()]
+
     async def get_bot_trades(self, user_id: int, bot_id: int, limit: int) -> List[dict]:
         if not await self.check_table_exists("bot_executions") or not await self.check_table_exists("bot_orders"):
             return []
         query = text("""
             SELECT
               e.id AS execution_id, o.id AS order_id, o.symbol, o.side,
-              e.filled_qty, e.avg_fill_price, o.quote_amount_eur, e.status, e.created_at
+              e.filled_qty, e.avg_fill_price, o.quote_amount_eur, e.status, e.created_at,
+              o.execution_environment, o.source, d.executed_by
             FROM bot_executions e
             JOIN bot_orders o ON o.id = e.bot_order_id
+            LEFT JOIN bot_decisions d ON d.id = o.decision_id AND d.user_id=e.user_id
             WHERE e.user_id = :user_id AND o.bot_id = :bot_id AND e.status IN ('filled', 'partial')
             ORDER BY e.created_at DESC
             LIMIT :limit
         """)
         result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "limit": limit})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_account_bot_trades(self, user_id: int, limit: int, offset: int) -> List[dict]:
+        query = text("""
+            SELECT e.id AS execution_id, o.bot_id, b.name AS bot_name,
+                   o.symbol, o.side, e.filled_qty, e.avg_fill_price,
+                   o.quote_amount_eur, e.status, e.updated_at AS executed_at,
+                   o.execution_environment, o.source, d.executed_by
+            FROM bot_executions e
+            JOIN bot_orders o ON o.id=e.bot_order_id AND o.user_id=e.user_id
+            JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=e.user_id
+            LEFT JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=e.user_id
+            WHERE e.user_id=:user_id AND e.status IN ('filled', 'partial')
+            ORDER BY e.updated_at DESC, e.id DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        result = await self.session.execute(query, {
+            "user_id": user_id, "limit": limit, "offset": offset,
+        })
         return [dict(r._mapping) for r in result.fetchall()]
 
     async def get_bot_decision(self, user_id: int, decision_id: int) -> bool:

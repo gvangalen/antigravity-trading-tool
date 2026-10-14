@@ -303,7 +303,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     saved_orders = []
     auto_calls = []
     monkeypatch.setattr(paper_worker, "_persist_bot_order", lambda **kwargs: saved_orders.append(kwargs) or 14)
-    monkeypatch.setattr(paper_worker, "_auto_execute_decision", lambda **kwargs: auto_calls.append(kwargs))
+    monkeypatch.setattr(paper_worker, "_auto_execute_decision", lambda **kwargs: auto_calls.append(kwargs) or "filled")
     persisted = {}
     monkeypatch.setattr(paper_worker, "_persist_decision_and_order", lambda **kwargs: persisted.update(kwargs) or 13)
 

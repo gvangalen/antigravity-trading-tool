@@ -381,10 +381,56 @@ def test_bot_with_order_history_cannot_be_deleted():
     assert not repo.deleted
 
 
+def test_saved_safety_check_reports_block_and_staleness():
+    service = BotService.__new__(BotService)
+    checked = datetime.now(timezone.utc)
+    decision = {
+        "id": 12, "bot_id": 9, "status": "planned",
+        "requested_amount_eur": 100,
+        "guardrails_checked_at": checked.isoformat(),
+        "guardrails_result": {
+            "allowed": False, "adjusted_amount_eur": 0,
+            "original_amount_eur": 100, "blocked_by": "insufficient_funds",
+            "reason": "Onvoldoende kassaldo",
+        },
+    }
+    blocked = service._safety_contract(decision, is_live=False)
+    assert blocked["state"] == "blocked"
+    assert blocked["allowed_amount_eur"] == 0
+    assert blocked["reason_code"] == "insufficient_funds"
+
+    decision["guardrails_checked_at"] = (checked - timedelta(hours=2)).isoformat()
+    assert service._safety_contract(decision, is_live=True)["state"] == "stale"
+
+
+def test_account_trades_use_confirmed_fill_value_and_historical_environment():
+    class Repo:
+        async def get_account_bot_trades(self, user_id, limit, offset):
+            assert (user_id, limit, offset) == (7, 3, 0)
+            return [{
+                "execution_id": 55, "bot_id": 9, "bot_name": "BTC Bot",
+                "symbol": "BTC", "side": "buy", "filled_qty": 0.0004,
+                "avg_fill_price": 50000, "quote_amount_eur": 50,
+                "status": "partial", "executed_at": datetime.now(timezone.utc),
+                "execution_environment": "live", "source": "manual", "executed_by": None,
+            }]
+
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+    page = asyncio.run(service.get_account_bot_trades(7, 2, 0))
+    assert page["has_more"] is False
+    assert page["items"][0]["amount_eur"] == 20
+    assert page["items"][0]["environment"] == "live"
+    assert page["items"][0]["execution_mode"] == "manual"
+
+
 def test_paused_bot_rejects_manual_sell_before_order_creation():
     class PausedRepo:
         def __init__(self):
             self.created_orders = 0
+
+        async def lock_live_account(self, user_id):
+            return None
 
         async def lock_bot_config(self, user_id, bot_id):
             return None
@@ -514,6 +560,18 @@ class _ManualOrderRepo:
     async def lock_bot_config(self, user_id, bot_id):
         return None
 
+    async def lock_live_account(self, user_id):
+        return None
+
+    async def get_live_pending_order_exposure(self, user_id):
+        return []
+
+    async def get_manual_order_by_idempotency_key(self, user_id, idempotency_key):
+        return None
+
+    async def get_unresolved_live_orders(self, user_id):
+        return []
+
     async def get_bot_config(self, user_id, bot_id):
         return {
             "id": bot_id,
@@ -557,6 +615,25 @@ class _ManualOrderRepo:
     async def get_market_price(self, symbol):
         snapshot = await self.get_market_price_snapshot(symbol)
         return snapshot.get("price") if snapshot else None
+
+
+def _attach_live_portfolio_context(service, repo):
+    async def context(user_id):
+        source = repo.portfolio_context
+        values = {}
+        for item in source.get("bots", []):
+            symbol = str(item.get("symbol") or "").upper()
+            values[symbol] = values.get(symbol, 0) + float(item.get("position_value") or 0)
+        return {
+            "total_equity": float(source["global"]["total_equity"]),
+            "current_position_value": float(source["global"]["current_position_value"]),
+            "asset_values": values,
+            "exchange": "bitvavo",
+        }
+    service._live_exchange_portfolio_context = context
+    async def cash(bot, user_id, symbol):
+        return float(repo.portfolio_context["global"]["total_equity"])
+    service._actual_cash_for_order = cash
 
 
 class _NoExchangeKeys:
@@ -991,6 +1068,45 @@ def test_live_manual_order_requires_idempotency_and_risk_acknowledgement():
     assert exc.value.detail["behavioral_event"]["type"] == "execution_pressure"
 
 
+def test_live_manual_order_replay_does_not_submit_and_open_order_blocks_new_key():
+    class Repo(_ManualOrderRepo):
+        async def get_manual_order_by_idempotency_key(self, user_id, idempotency_key):
+            if idempotency_key != "existing-live-order":
+                return None
+            return {
+                "id": 51, "bot_id": 9, "symbol": "BTC", "side": "buy",
+                "quantity": 0.001, "limit_price": 50000, "quote_amount_eur": 50,
+                "status": "unknown_exchange_state",
+            }
+
+        async def get_unresolved_live_orders(self, user_id):
+            return [{"id": 51, "bot_id": 9, "status": "unknown_exchange_state"}]
+
+    service = BotService(_FakeSession())
+    repo = Repo()
+    service.repository = repo
+
+    async def preflight(*_args):
+        return {}
+
+    service.require_live_manual_order_preflight_context = preflight
+    payload = BotManualOrderSchema(
+        bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000,
+        idempotency_key="existing-live-order", risk_acknowledged=True,
+    )
+    replay = asyncio.run(service.create_manual_order(payload, user_id=1))
+    assert replay["duplicate"] is True
+    assert replay["order_id"] == 51
+    assert replay["status"] == "unknown_exchange_state"
+    assert repo.created_orders == 0
+
+    payload.idempotency_key = "new-live-order"
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+    assert exc.value.status_code == 409
+    assert repo.created_orders == 0
+
+
 def test_live_manual_order_checks_exchange_keys_before_order_insert():
     service = BotService(_FakeSession())
     repo = _ManualOrderRepo()
@@ -1014,8 +1130,8 @@ def test_live_manual_order_checks_exchange_keys_before_order_insert():
     with pytest.raises(HTTPException) as exc:
         asyncio.run(service.create_manual_order(payload, user_id=1))
 
-    assert exc.value.status_code == 400
-    assert "exchange keys" in exc.value.detail
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_EXCHANGE_NOT_CONNECTED"
     assert repo.created_orders == 0
 
 
@@ -1186,6 +1302,7 @@ def test_live_order_risk_context_blocks_asset_exposure(monkeypatch):
         "bots": [{"symbol": "BTC", "position_value": 650}],
     })
     service.repository = repo
+    _attach_live_portfolio_context(service, repo)
     bot = asyncio.run(repo.get_bot_config(1, 9))
     payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.002, price=50000)
 
@@ -1206,6 +1323,7 @@ def test_live_order_portfolio_exposure_reports_asset_exposure_when_both_block(mo
         "bots": [{"symbol": "BTC", "position_value": 690}],
     })
     service.repository = repo
+    _attach_live_portfolio_context(service, repo)
     bot = asyncio.run(repo.get_bot_config(1, 9))
     payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000)
 
@@ -1229,6 +1347,7 @@ def test_live_order_portfolio_exposure_reports_asset_projection_when_asset_does_
         "bots": [{"symbol": "BTC", "position_value": 980}],
     })
     service.repository = repo
+    _attach_live_portfolio_context(service, repo)
     bot = asyncio.run(repo.get_bot_config(1, 9))
     bot["symbol"] = "ETH"
     bot["max_asset_exposure_pct"] = 50
@@ -1262,6 +1381,7 @@ def test_live_order_preflight_reports_setup_match_without_blocking(monkeypatch):
     service = BotService(_FakeSession())
     repo = _ManualOrderRepo(bot_setup_id=42)
     service.repository = repo
+    _attach_live_portfolio_context(service, repo)
     bot = asyncio.run(repo.get_bot_config(1, 9))
     payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000)
 
@@ -1345,6 +1465,7 @@ def test_live_manual_order_preflight_is_not_persisted_and_returns_guardrail_cont
     service = BotService(session)
     repo = _ManualOrderRepo()
     service.repository = repo
+    _attach_live_portfolio_context(service, repo)
 
     async def _preflight_ok(user_id, bot_id, token):
         return {
