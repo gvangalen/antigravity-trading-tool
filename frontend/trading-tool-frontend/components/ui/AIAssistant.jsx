@@ -4402,11 +4402,28 @@ function AIAssistantContent({
         : message));
     }
     if (pendingRunId) {
+      let recordedRun = null;
       try {
-        await cancelFinnV2Run(pendingRunId);
+        const canceled = await cancelFinnV2Run(pendingRunId);
+        recordedRun = canceled?.run || null;
       } catch {
-        // A completed run can win the race and return 409. Its late terminal
-        // response still cannot overwrite a stopped bubble or a newer turn.
+        // The worker may have finalized before Stop reached the server.
+        // Read that terminal result instead of showing a local-only stop.
+        try { recordedRun = await fetchFinnV2Run(pendingRunId); } catch {}
+      }
+      const savedText = recordedRun?.response?.content;
+      if (streamId && typeof savedText === "string" && savedText.trim()) {
+        setMessages((current) => current.map((message) => message.streamId === streamId
+          ? {
+              ...message,
+              text: savedText,
+              isComplete: true,
+              isStopped: recordedRun.status === "canceled",
+              isError: ["failed", "unavailable", "rejected"].includes(recordedRun.status),
+              actions: [],
+              draft: null,
+            }
+          : message));
       }
     }
     if (!streamId || pendingRunRef.current?.streamId === streamId) pendingRunRef.current = null;
