@@ -6,7 +6,44 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Chat Side Panel
 
-Phase: `CHAT_SIDE_PANEL_THIRD_REPAIR_READY_FOR_INDEPENDENT_QA`.
+Phase: `CHAT_SIDE_PANEL_FOURTH_REPAIR_READY_FOR_INDEPENDENT_QA`.
+Independent authenticated browser QA returned **NOT ACCEPTED** on the
+previous live SHA `eecfbdd761355bbe25712f6c49d5b4ff7821071d`: the
+language switch, unsent composer refresh, Stop, history, mobile browser
+layout and console checks passed, but the guided ETH setup flow displayed
+two simultaneously confirmable cards. Local public-route replay proved
+that both turns referenced the same backend proposal ID, so the server did
+not create two proposals. [PR #321](https://github.com/gvangalen/antigravity-trading-tool/pull/321)
+retains the earlier explanation but retires its card when the same proposal
+appears in a later turn. It also clarifies the model's tool-selection
+instruction for a selected feed update about the whole plan versus setup
+fields. Product SHA: `d8ed3e6ef9fb86e35782aeb1a5a5b23085ba10b2`.
+
+Build evidence on 2026-10-14: backend **3571 passed, 3 existing skips**;
+frontend production build, typecheck, i18n lint/tests, command, proposal
+and setup tests, and high-severity audit passed. The local worker matrix
+passed **16/16**, adapters **19/19**, with zero broker orders, live bots,
+live-trading calls or production connections (artifact SHA-256
+`b0c895ab0161eff02d8dc3bb69e456d1beba2f006513ea3829aa0a117556b626`).
+The real local guided ETH replay returned one proposal ID in turns 2 and 3;
+none was confirmed (SHA-256
+`bfd3640b16f31868e3c2c367f38b8b1024541be4b8f3919f7cd478de902957d4`).
+Real Luna/Responses selector development passed **20/20** (SHA-256
+`5bed1e8a9d12bbec23c6369ab004dfc151869f9fb86df8011a2904112944f8bb`)
+and regression **109/109** (SHA-256
+`20c8f565a904eb3ba7e665986c26ff644ec4194a272979d4a1585f06cae8aaba`),
+with zero provider, schema, parse, validation or timeout failures. An
+earlier development run before the selector clarification scored 19/20
+because a feed question received a setup read instead of a full plan read;
+the same case passed in the complete final runs. Candidate
+[CI run 38531236972](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38531236972)
+and main [CI run 38531554568](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38531554568)
+each passed all five jobs. [Auto Deploy run 38531792185](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38531792185)
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and the exact product SHA. This status-only update will receive a later
+SHA; QA must bind to both public surfaces. The new live QA verdict is pending.
+
+Prior phase: `CHAT_SIDE_PANEL_THIRD_REPAIR_READY_FOR_INDEPENDENT_QA`.
 The independent authenticated browser QA returned **NOT ACCEPTED** on the
 previous live SHA `9ae9ecacf175787184def2d086fc709eacf3b2c5`: the setup,
 Stop, panel, history, feed handoff and mobile browser paths passed, but a
