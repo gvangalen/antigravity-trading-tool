@@ -328,6 +328,83 @@ def test_existing_unused_paper_bot_can_receive_one_explicit_initial_credit(monke
     assert session.commits == 2  # bot+credit transaction, then behavioral audit
 
 
+def test_null_mode_fields_cannot_bypass_live_budget_validation():
+    class Repo:
+        def __init__(self):
+            self.updated = False
+
+        async def get_bot_config(self, _user_id, bot_id):
+            return {
+                "id": bot_id, "is_live": True, "is_active": True, "mode": "manual",
+                "budget_total_eur": 100, "budget_daily_limit_eur": 50,
+                "budget_min_order_eur": 1, "budget_max_order_eur": 50,
+            }
+
+        async def update_bot_config(self, *_args):
+            self.updated = True
+
+    service = BotService(_FakeSession())
+    repo = Repo()
+    service.repository = repo
+    with pytest.raises(HTTPException, match="expliciete budgetlimieten") as exc:
+        asyncio.run(service.update_bot_config(
+            9, BotConfigUpdateSchema(is_live=None, mode=None, budget_total_eur=0), 1,
+        ))
+    assert exc.value.status_code == 400
+    assert not repo.updated
+
+
+def test_bot_with_order_history_cannot_be_deleted():
+    class Repo:
+        def __init__(self):
+            self.deleted = False
+
+        async def lock_bot_config(self, user_id, bot_id):
+            return None
+
+        async def get_bot_config(self, user_id, bot_id):
+            return {"id": bot_id}
+
+        async def has_execution_history(self, user_id, bot_id):
+            return True
+
+        async def delete_bot_config(self, user_id, bot_id):
+            self.deleted = True
+
+    service = BotService(_FakeSession())
+    repo = Repo()
+    service.repository = repo
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.delete_bot_config(9, 1))
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "BOT_HISTORY_PRESERVED"
+    assert not repo.deleted
+
+
+def test_paused_bot_rejects_manual_sell_before_order_creation():
+    class PausedRepo:
+        def __init__(self):
+            self.created_orders = 0
+
+        async def lock_bot_config(self, user_id, bot_id):
+            return None
+
+        async def get_bot_config(self, user_id, bot_id):
+            return {"id": bot_id, "is_live": False, "is_active": False}
+
+        async def create_manual_order(self, *_args, **_kwargs):
+            self.created_orders += 1
+
+    service = BotService(_FakeSession())
+    repo = PausedRepo()
+    service.repository = repo
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="sell", quantity=0.001, price=50000)
+    with pytest.raises(HTTPException, match="gepauzeerd") as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+    assert exc.value.status_code == 409
+    assert repo.created_orders == 0
+
+
 def test_paper_order_preflight_uses_virtual_cash_not_unused_budget(monkeypatch):
     service = BotService(_FakeSession())
 
@@ -433,6 +510,9 @@ class _ManualOrderRepo:
             if market_snapshot is _DEFAULT_MARKET_SNAPSHOT
             else market_snapshot
         )
+
+    async def lock_bot_config(self, user_id, bot_id):
+        return None
 
     async def get_bot_config(self, user_id, bot_id):
         return {

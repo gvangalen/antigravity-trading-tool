@@ -10,6 +10,25 @@ class BotRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def lock_bot_config(self, user_id: int, bot_id: int) -> None:
+        await self.session.execute(text("""
+            SELECT id FROM bot_configs WHERE user_id=:user_id AND id=:bot_id FOR UPDATE
+        """), {"user_id": user_id, "bot_id": bot_id})
+
+    async def has_execution_history(self, user_id: int, bot_id: int) -> bool:
+        result = await self.session.execute(text("""
+            SELECT 1 WHERE EXISTS (
+                SELECT 1 FROM bot_orders WHERE user_id=:user_id AND bot_id=:bot_id
+            ) OR EXISTS (
+                SELECT 1 FROM bot_ledger WHERE user_id=:user_id AND bot_id=:bot_id
+            ) OR EXISTS (
+                SELECT 1 FROM bot_portfolios WHERE user_id=:user_id AND bot_id=:bot_id
+                  AND (cash_eur <> 0 OR position_qty <> 0 OR invested_eur <> 0
+                       OR realized_pnl_eur <> 0)
+            )
+        """), {"user_id": user_id, "bot_id": bot_id})
+        return result.fetchone() is not None
+
     async def check_table_exists(self, table_name: str) -> bool:
         query = text("""
             SELECT 1

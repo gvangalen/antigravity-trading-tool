@@ -469,7 +469,9 @@ class BotService:
         if not existing:
             raise HTTPException(404, "Bot niet gevonden")
 
-        updates = payload.dict(exclude_unset=True)
+        # The repository ignores NULL values via COALESCE. Validate against the
+        # same effective configuration that the UPDATE will persist.
+        updates = payload.dict(exclude_unset=True, exclude_none=True)
         risk_acknowledged = bool(updates.pop("risk_acknowledged", False))
         # Handle aliases
         if "total_eur" in updates: updates["budget_total_eur"] = updates.pop("total_eur")
@@ -534,6 +536,14 @@ class BotService:
         return result
 
     async def delete_bot_config(self, bot_id: int, user_id: int) -> dict:
+        await self.repository.lock_bot_config(user_id, bot_id)
+        if not await self.repository.get_bot_config(user_id, bot_id):
+            raise HTTPException(404, "Bot niet gevonden")
+        if await self.repository.has_execution_history(user_id, bot_id):
+            raise HTTPException(409, {
+                "code": "BOT_HISTORY_PRESERVED",
+                "message": "Deze bot heeft orders of paper-saldohistorie. Pauzeer de bot; verwijderen zou de handelsgeschiedenis wissen.",
+            })
         deleted = await self.repository.delete_bot_config(user_id, bot_id)
         if not deleted:
             raise HTTPException(404, "Bot niet gevonden")
@@ -1357,6 +1367,8 @@ class BotService:
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden.")
+        if not bot.get("is_active", True):
+            raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order voorbereidt.")
 
         self._validate_manual_order_payload(payload)
 
@@ -1497,10 +1509,13 @@ class BotService:
     async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int, trace_id: Optional[str] = None) -> dict:
         self._validate_manual_order_payload(payload)
 
-        # 1. Fetch bot config to get limits
+        await self.repository.lock_bot_config(user_id, payload.bot_id)
+        # Read the current configuration under the same lock as deletion.
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden")
+        if not bot.get("is_active", True):
+            raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order plaatst.")
 
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
@@ -1531,6 +1546,8 @@ class BotService:
             bot = await self.repository.get_bot_config(user_id, payload.bot_id)
             if not bot:
                 raise HTTPException(404, "Bot niet gevonden")
+            if not bot.get("is_active", True):
+                raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order plaatst.")
             if bot.get("is_live"):
                 raise HTTPException(409, "Botmodus is gewijzigd. Controleer het voorstel opnieuw.")
             if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
@@ -1699,6 +1716,8 @@ class BotService:
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden")
+        if not bot.get("is_active", True):
+            raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order voorbereidt.")
 
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:

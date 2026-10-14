@@ -2132,13 +2132,15 @@ def execute_manual_decision(
     # a manual-versus-auto lock inversion.
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT is_live FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE",
+            "SELECT is_live, is_active FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE",
             (bot_id, user_id),
         )
         bot_row = cur.fetchone()
     if bot_row is None:
         raise RuntimeError("Bot not found")
     bot_live = bool(bot_row[0])
+    if not bot_row[1]:
+        raise RuntimeError("Bot is paused")
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
         user_id=user_id,
