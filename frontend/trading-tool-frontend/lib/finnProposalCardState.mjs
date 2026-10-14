@@ -58,6 +58,15 @@ export function retireFinnProposalCards(messages, proposalIds) {
   });
 }
 
+// A guided follow-up can return the existing proposal ID again. Keep the
+// explanation in chat history, but only the latest turn may offer Confirm.
+export function retireEarlierFinnProposalCards(messages, streamId, proposalId) {
+  if (!proposalId) return messages;
+  return messages.map((message) => message.streamId === streamId
+    ? message
+    : retireFinnProposalCards([message], new Set([proposalId]))[0]);
+}
+
 export function verifiedPaperBotStrategy({ target, draftStrategyId, ownerStrategies }) {
   const proposalId = Number(target?.target_id);
   const draftId = Number(draftStrategyId);

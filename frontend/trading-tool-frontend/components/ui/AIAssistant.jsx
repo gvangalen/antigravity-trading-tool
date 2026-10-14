@@ -36,7 +36,7 @@ import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.m
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
-import { inactiveProposalIds, isFinnProposalCorrection, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { canCacheMissionControl, firstBriefingPhase } from "@/lib/finn/firstBriefingState.mjs";
 import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 
@@ -4274,7 +4274,9 @@ function AIAssistantContent({
           }
         : null;
       const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
-      setMessages((prev) => prev.map((message) => (
+      setMessages((prev) => retireEarlierFinnProposalCards(
+        prev, streamId, verified?.proposal_id,
+      ).map((message) => (
         message.streamId === streamId
           ? {
               ...message,
@@ -4528,8 +4530,10 @@ function AIAssistantContent({
             Array.isArray(envelope?.suggested_actions) && envelope.suggested_actions.length > 0
               ? envelope.suggested_actions
               : parseSuggestedActions(originalResponse);
+          const latestProposalId = (Array.isArray(envelope?.actions) ? envelope.actions : [])
+            .find((action) => action?.type === "v2_proposal")?.proposal_id;
           setMessages(prev => {
-            const copy = [...prev];
+            const copy = [...retireEarlierFinnProposalCards(prev, streamId, latestProposalId)];
             const msgIndex = copy.findIndex(message => message.streamId === streamId);
             if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
               copy[msgIndex] = {
