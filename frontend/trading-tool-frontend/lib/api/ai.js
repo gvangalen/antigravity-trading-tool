@@ -289,7 +289,7 @@ export const assistantChatStream = async (
           } else if (event === 'envelope') {
             try {
               const parsedEnvelope = JSON.parse(data);
-              onEnvelope(parsedEnvelope);
+              await onEnvelope(parsedEnvelope);
             } catch (err) {
               console.error('Error parsing SSE envelope:', err);
             }

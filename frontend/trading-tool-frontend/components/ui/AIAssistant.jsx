@@ -530,6 +530,7 @@ function AIAssistantContent({
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
   const pendingRunRef = useRef(null);
+  const stopRequestedStreamIdRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
   const missionControlRequestRef = useRef(null);
   const missionControlRequestKeyRef = useRef("");
@@ -554,6 +555,10 @@ function AIAssistantContent({
   const isSimpleFinnModal = modal || dock;
   const effectiveCommandRequest = manualCommandRequest || commandRequest;
   const isCommandSearchOpen = isSimpleFinnModal && ["asset", "indicator", "all"].includes(effectiveCommandRequest?.mode);
+  const latestMessage = messages[messages.length - 1];
+  const hasActiveFinnV2GuidedTurn = latestMessage?.role === "assistant"
+    && latestMessage?.isComplete !== false
+    && (isCollectingDraft(latestMessage) || isOpenClarification(latestMessage));
   const stashedComposerDraftRef = useRef(null);
   const updateVisibleQuery = (value) => {
     if (isFeedHandoff) setFeedDraftEdit({ nonce: commandRequest?.nonce, value });
@@ -4394,11 +4399,22 @@ function AIAssistantContent({
     const streamId = activeStreamIdRef.current;
     const pendingRunId = (!streamId || pendingRunRef.current?.streamId === streamId)
       ? pendingRunRef.current?.runId : null;
+    if (streamId && !pendingRunId) {
+      // The request may already be creating a server run. Keep the stream
+      // alive until its envelope gives us the id needed to cancel that run.
+      if (stopRequestedStreamIdRef.current === streamId) return;
+      stopRequestedStreamIdRef.current = streamId;
+      setMessages((current) => current.map((message) => message.streamId === streamId
+        ? { ...message, text: at("uiText.stoppingResponse"), isComplete: false }
+        : message));
+      return;
+    }
+    stopRequestedStreamIdRef.current = null;
     activeStreamIdRef.current = null;
     abortAssistantChatStream();
     if (streamId) {
       setMessages((current) => current.map((message) => message.streamId === streamId
-        ? { ...message, text: at("uiText.responseStopped"), isComplete: true, isStopped: true, actions: [], draft: null }
+        ? { ...message, text: at("uiText.stoppingResponse"), isComplete: false, actions: [], draft: null }
         : message));
     }
     if (pendingRunId) {
@@ -4412,19 +4428,20 @@ function AIAssistantContent({
         try { recordedRun = await fetchFinnV2Run(pendingRunId); } catch {}
       }
       const savedText = recordedRun?.response?.content;
-      if (streamId && typeof savedText === "string" && savedText.trim()) {
-        setMessages((current) => current.map((message) => message.streamId === streamId
-          ? {
-              ...message,
-              text: savedText,
-              isComplete: true,
-              isStopped: recordedRun.status === "canceled",
-              isError: ["failed", "unavailable", "rejected"].includes(recordedRun.status),
-              actions: [],
-              draft: null,
-            }
-          : message));
-      }
+      const terminal = ["completed", "blocked", "failed", "canceled", "unavailable", "downgraded", "rejected", "clarification_required"]
+        .includes(recordedRun?.status);
+      if (streamId) setMessages((current) => current.map((message) => message.streamId === streamId
+        ? {
+            ...message,
+            text: terminal && typeof savedText === "string" && savedText.trim()
+              ? savedText : at("uiText.stopStatusUnknown"),
+            isComplete: true,
+            isStopped: recordedRun?.status === "canceled",
+            isError: !terminal || ["failed", "unavailable", "rejected"].includes(recordedRun?.status),
+            actions: [],
+            draft: null,
+          }
+        : message));
     }
     if (!streamId || pendingRunRef.current?.streamId === streamId) pendingRunRef.current = null;
     if (!activeStreamIdRef.current) setLoading(false);
@@ -4461,6 +4478,7 @@ function AIAssistantContent({
     }
 
     const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    stopRequestedStreamIdRef.current = null;
     activeStreamIdRef.current = streamId;
 
     // Append initial empty assistant bubble
@@ -4504,7 +4522,7 @@ function AIAssistantContent({
         cleanHistory,
         (token) => {
           // onChunk
-          if (activeStreamIdRef.current !== streamId) return;
+          if (activeStreamIdRef.current !== streamId || stopRequestedStreamIdRef.current === streamId) return;
           setMessages(prev => {
             const copy = [...prev];
             const msgIndex = copy.findIndex(message => message.streamId === streamId);
@@ -4523,6 +4541,16 @@ function AIAssistantContent({
           await persistActiveFinnSessionId(envelope?.session_id || chatSessionId);
           if (activeStreamIdRef.current !== streamId) return;
           const pendingRunId = envelope?.state?.run_id || envelope?.response_trace?.run_id;
+          if (stopRequestedStreamIdRef.current === streamId) {
+            stopRequestedStreamIdRef.current = null;
+            if (pendingRunId) {
+              pendingRunRef.current = { streamId, runId: pendingRunId };
+              await stopCurrentResponse();
+              return;
+            }
+            // A legacy response finished before it exposed a cancellable run.
+            // Show its actual answer below instead of claiming it was stopped.
+          }
           if (envelope?.state?.current_flow === "finn_v2_visible_pending" && pendingRunId) {
             pendingRunRef.current = { streamId, runId: pendingRunId };
             setMessages(prev => prev.map((message) => (
@@ -4664,6 +4692,7 @@ function AIAssistantContent({
         (errorMessage) => {
           // onError
           if (activeStreamIdRef.current !== streamId) return;
+          if (stopRequestedStreamIdRef.current === streamId) stopRequestedStreamIdRef.current = null;
           setMessages(prev => {
             const copy = [...prev];
             const msgIndex = copy.findIndex(message => message.streamId === streamId);
@@ -4699,6 +4728,13 @@ function AIAssistantContent({
       });
       activeStreamIdRef.current = null;
     } finally {
+      if (stopRequestedStreamIdRef.current === streamId && activeStreamIdRef.current === streamId) {
+        stopRequestedStreamIdRef.current = null;
+        setMessages((current) => current.map((message) => message.streamId === streamId
+          ? { ...message, text: at("uiText.stopStatusUnknown"), isComplete: true, isError: true }
+          : message));
+        activeStreamIdRef.current = null;
+      }
       if (activeStreamIdRef.current === null) {
         setLoading(false);
       }
@@ -7356,7 +7392,7 @@ function AIAssistantContent({
             onKeyDown={(event) => {
               if (loading || activeStreamIdRef.current) return;
               if (isCommandSearchOpen && event.key === "Escape") { event.preventDefault(); leaveCommandSearch(); return; }
-              if (isCommandSearchOpen && commandCenterRef.current?.handleKeyDown(event)) return;
+              if (!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && isCommandSearchOpen && commandCenterRef.current?.handleKeyDown(event)) return;
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 handleChat();
@@ -7368,7 +7404,7 @@ function AIAssistantContent({
           <button 
             onClick={() => {
               if (loading) { stopCurrentResponse(); return; }
-              if (isCommandSearchOpen && commandCenterRef.current?.submitPrimary()) return;
+              if (!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && isCommandSearchOpen && commandCenterRef.current?.submitPrimary()) return;
               handleChat();
             }}
             aria-label={loading ? at("uiText.stopResponse") : at("uiText.sendMessage")}

@@ -3,13 +3,31 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
-from fastapi import Request
+import pytest
+from fastapi import HTTPException, Request
 
 from backend.api import finn_v2_api
+from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
 from backend.main import app
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope
+
+
+def test_cancel_reports_completion_race_as_conflict_for_authoritative_refetch():
+    gateway = SimpleNamespace(get_run=AsyncMock(return_value=SimpleNamespace(status="planned")))
+    service = SimpleNamespace(cancel_run=AsyncMock(side_effect=RuntimeContractConflictError(
+        "runtime_contract_already_terminal"
+    )))
+
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(finn_v2_api.cancel_finn_v2_run(
+            run_id="run-race", current_user={"id": 351}, gateway=gateway, run_service=service,
+        ))
+
+    assert caught.value.status_code == 409
+    service.cancel_run.assert_awaited_once_with(run_id="run-race", user_id=351)
 
 
 def test_authenticated_run_creation_uses_the_injected_database_session_for_runtime_contract(monkeypatch):

@@ -26,6 +26,7 @@ from backend.domain.finn_v2_runtime_contract import (
     terminal_projection,
 )
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 
@@ -1318,6 +1319,26 @@ def test_cancel_run_persists_the_same_localized_text_as_the_chat(locale, expecte
     assert contract_response["content"] == expected
     assert persisted["content"] == expected
     assert service.persist_transition.await_args.kwargs["next_status"] == "canceled"
+
+
+@pytest.mark.parametrize("first_status, second_status", [
+    ("completed", "canceled"),
+    ("canceled", "completed"),
+])
+def test_first_terminal_writer_wins_when_stop_races_with_completion(first_status, second_status):
+    repo = object.__new__(FinnV2RuntimeContractRepository)
+    row = SimpleNamespace(state_json={"terminal_status": first_status})
+    repo._required_for_update = AsyncMock(return_value=row)
+    repo._write_revision = AsyncMock()
+
+    with pytest.raises(RuntimeContractConflictError, match="runtime_contract_already_terminal"):
+        asyncio.run(repo.materialize_terminal(
+            run_id="run-stop", status=second_status, mode="UNAVAILABLE",
+            response={"content": "late response"},
+        ))
+
+    assert row.state_json["terminal_status"] == first_status
+    repo._write_revision.assert_not_awaited()
 
 
 def test_collecting_setup_draft_uses_product_copy_in_its_terminal_placeholder():

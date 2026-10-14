@@ -15,7 +15,8 @@ test("renders V2 setup drafts and proposals inside the simple FINN modal", () =>
   assert.doesNotMatch(source, /\{!isSimpleFinnModal && renderV2SetupDraftCard\(m\)\}/);
   assert.doesNotMatch(source, /\{!isSimpleFinnModal && renderInlineActionCard\(m\)\}/);
   assert.match(source, /supplied\.min_investment != null/);
-  assert.match(source, /Bedrag:.*Intl\.NumberFormat/);
+  assert.match(source, /at\("draftCards\.minimumInvestment", "Minimuminvestering"\)/);
+  assert.match(source, /euro\(supplied\.min_investment\)/);
 });
 
 test("builds strategy and bot draft cards from the terminal runtime contract", () => {
@@ -76,6 +77,6 @@ test("update cards use the immutable server proposal snapshot", () => {
 
 test("keeps a typed guided answer out of command search", () => {
   assert.match(source, /hasActiveFinnV2GuidedTurn/);
-  assert.match(source, /!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef\.current\?\.handleKeyDown/);
-  assert.match(source, /!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef\.current\?\.submitPrimary/);
+  assert.match(source, /!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && isCommandSearchOpen && commandCenterRef\.current\?\.handleKeyDown/);
+  assert.match(source, /!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && isCommandSearchOpen && commandCenterRef\.current\?\.submitPrimary/);
 });
