@@ -13,6 +13,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT_PATH = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "run_finn_production_qa.py"
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "finn-production-qa.yml"
+DISPATCH_SCRIPT_PATH = REPO_ROOT / "ops" / "qa" / "run_finn_production_qa.sh"
 CRYPTO_SCRIPT_PATH = REPO_ROOT / "ops" / "qa" / "finn_qa_manifest_bundle.py"
 
 
@@ -74,6 +75,38 @@ def test_stale_score_paper_profile_is_explicitly_gated_and_owner_isolated(monkey
     monkeypatch.setenv("FINN_QA_ALLOW_STALE_SCORE_FIXTURE", "1")
     assert probe._require_protected_run("qa-123456-1-abcd1234-5678abcd") == 42
     with pytest.raises(RuntimeError, match="stale_fixture_namespace_invalid"):
+        probe._require_protected_run("../unsafe")
+
+
+def test_auto_paper_history_profile_is_explicitly_gated_and_owner_isolated(monkeypatch):
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    probe_path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_protected_auto_paper_history.py"
+    probe_source = probe_path.read_text(encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("protected_auto_paper_probe", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+
+    assert "auto_paper_trade_history" in module.ALLOWED_PROFILES
+    assert "auto_paper_trade_history" in workflow
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "auto_paper_trade_history" in dispatch
+    assert '"$manifest_id" != "none"' in dispatch
+    assert '"$allow_safe_fixture_execution" != "true"' in dispatch
+    assert "FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=0" in workflow
+    assert 'if [ "$qa_profile" = "auto_paper_trade_history" ]' in workflow
+    assert "VALUES (%s,%s,'user',FALSE,%s::jsonb)" in probe_source
+    assert "_auto_execute_decision(" in probe_source
+    assert "get_account_bot_trades(user_id, 10, 0)" in probe_source
+    assert "is_live=False, mode=\"auto\"" in probe_source
+    monkeypatch.delenv("FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE", raising=False)
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    with pytest.raises(RuntimeError, match="auto_paper_fixture_not_authorized"):
+        probe._require_protected_run("qa-123456-1-abcd1234-5678abcd")
+    monkeypatch.setenv("FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE", "1")
+    assert probe._require_protected_run("qa-123456-1-abcd1234-5678abcd") == 42
+    with pytest.raises(RuntimeError, match="auto_paper_fixture_namespace_invalid"):
         probe._require_protected_run("../unsafe")
 
 

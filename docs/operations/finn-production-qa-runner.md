@@ -21,12 +21,12 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, or `score2_stale_paper`. |
+| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, or `auto_paper_trade_history`. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
 | `allow_fixture_actions` | Explicit per-run permission for allowlisted QA-fixture proposals and confirmations; defaults to `false`. |
-| `allow_safe_fixture_execution` | Explicit per-run permission for the existing non-financial fixture-execution allowlist; defaults to `false` and requires `allow_fixture_actions=true`. |
+| `allow_safe_fixture_execution` | Explicit per-run permission for the non-financial fixture-execution allowlist or the separately named virtual EUR 50 `auto_paper_trade_history` profile; defaults to `false` and requires `allow_fixture_actions=true`. |
 
 The profile defines only the execution class. The active QA goal remains the
 authority for scope, acceptance criteria, and whether a sealed QA manifest is
@@ -203,3 +203,40 @@ required fields that are intentionally absent on that turn. A matching typed
 `missing_inputs` response is a valid guided-flow outcome, not
 `proposal_missing`; a later case using the same conversation key can supply
 the missing values and require the resulting proposal lifecycle.
+
+## Automatic Paper Trade History Probe
+
+`auto_paper_trade_history` is a separate one-shot protected QA profile. It
+requires `manifest_id=none`, an empty manifest bundle, and both fixture
+authorization inputs set to `true`. Only independent QA starts it for an
+explicit user-approved Paper-order goal after the exact live SHA is recorded
+as a complete candidate in `FINN_RELEASE_STATUS.md`. It does not widen the
+general FINN safe-execution operation allowlist.
+
+The probe checks the bound QA fixture, then creates one inactive, random-
+password synthetic owner with a run namespace and no exchange keys. It seeds
+one auto Paper bot with EUR 100 virtual funding, a plan-revision-bound buy
+decision, and one EUR 50 proposed order. The production automatic Paper
+executor must fill exactly that order. The probe then checks the owner-scoped
+order, execution, ledger, virtual cash and the same account trade-history
+service used by `/api/bot/trades/all`: one `paper` / `auto` / `filled` entry
+for EUR 50 and EUR 50 remaining cash. This proves the automatic Paper executor
+and history projection, not the market scoring/decision scheduler or browser
+rendering. There are no broker credentials, Live calls, shared market writes,
+or ordinary user writes.
+
+The inactive owner is outside the regular bot dispatcher. On success, the
+probe durably deactivates the bot before deleting only rows under the
+run-namespace-checked synthetic owner. On failure it deactivates the bot and
+keeps the rows for a separately authorized fixture reset. Cleanup failure
+fails the run and leaves the owner inactive and bot deactivated. The sanitized
+artifact contains only fixed outcome fields, not owner/bot/order IDs or raw
+database rows.
+
+QA invocation after the candidate is live:
+
+```bash
+FINN_QA_ALLOW_FIXTURE_ACTIONS=true FINN_QA_ALLOW_FIXTURE_EXECUTION=true \
+  ./ops/qa/run_finn_production_qa.sh \
+  <FULL_LIVE_SHA> auto_paper_trade_history none qa-auto-paper-history
+```
