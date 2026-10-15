@@ -4,6 +4,57 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Botflow: automatische Paper-order en geschiedenis
+
+Phase: `READY_FOR_INDEPENDENT_PRODUCTION_QA`. De complete botflow is via
+[PR #345](https://github.com/gvangalen/antigravity-trading-tool/pull/345)
+overgezet naar de actuele `main` en gemerged als product-SHA
+`62dc964b47b63b7ba2058571404303ff472f122c`. De afzonderlijke beschermde
+Paper-orderproef is via
+[PR #351](https://github.com/gvangalen/antigravity-trading-tool/pull/351)
+gemerged als QA-runner-SHA `77b5e84bee05e26ad67ef8ff483c1979d3cbac4e`.
+Deze documentatie-update verandert alleen de release-aantekening en creëert
+een latere SHA. QA bindt haar officiële run uitsluitend aan de dan actuele,
+identieke SHA van backend-health, frontend-buildinfo, productiecheckout en
+release-marker.
+
+Build-evidence voor de botflow: volledige backend lokaal **3672 passed,
+3 skipped**; frontend productiebuild, typecheck, i18n- en commandtests
+geslaagd. De geïsoleerde lokale PostgreSQL-proef vulde één automatische
+Paper-order van €50, bracht virtuele kas van €100 naar €50 en gaf in de
+accountgeschiedenis `paper / auto / filled / €50` terug. De proef gebruikte
+een voorbereide beslissing en stubde alleen de planrevisiecontrole; hij
+bewijst daardoor niet de volledige automatische beoordeling. Onafhankelijke
+Build-branch QA, Security en Architecture accepteerden de wijziging.
+[Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38693391119)
+was groen; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38693605207)
+slaagde op product-SHA `62dc964b47b63b7ba2058571404303ff472f122c`.
+
+Build-evidence voor de beschermde QA-proef: volledige backend lokaal
+**3673 passed, 3 skipped**, runner-tests **66 passed**, shellsyntax en
+diffcontrole geslaagd. Een geïsoleerde lokale PostgreSQL-uitvoering van de
+nieuwe probe gaf `paper / auto / filled / €50`, €50 resterend virtueel saldo,
+één execute-ledgerboeking en nul exchange keys. Onafhankelijke Security en
+Architecture accepteerden commit `4b03308bd9c7735ae5cfd865d30bd2e4f1750de2`
+voor de expliciete executor→ledger→accountgeschiedenis-scope.
+[PR #351 CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38694851079)
+en [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38695117190)
+waren groen. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38695291018)
+slaagde; op 2026-10-15 gaven `/api/health` en `/build-info.json` ieder
+HTTP 200 met exact `77b5e84bee05e26ad67ef8ff483c1979d3cbac4e`.
+
+Onafhankelijke QA heeft nu als actieve scope: één officiële beschermde
+`auto_paper_trade_history` run op de actuele live SHA, met
+`allow_fixture_actions=true` en `allow_safe_fixture_execution=true`. Alleen
+een inactieve synthetische eigenaar zonder exchange keys mag één virtuele
+Paper-koop van €50 doen. Acceptatie vereist `paper / auto / filled / €50` in
+de accountgeschiedenis, één uitvoeringsboeking, virtuele kas €100→€50,
+geen Live-uitvoering en geslaagde cleanup of veilige quarantaine. De probe
+seedt de beslissing en order; scheduling, marktbeoordeling, planvorming en
+browserweergave blijven buiten dit specifieke productie-QA-verdict. De
+onafhankelijke productie-QA-run is nog **niet uitgevoerd**; Build claimt
+hiervoor geen acceptatie.
+
 ## Portfolio-overzicht met gedeelde geldbetekenis
 
 Phase: `PORTFOLIO_ENVIRONMENT_TRANSITION_ACCEPTED_BY_INDEPENDENT_QA`.
