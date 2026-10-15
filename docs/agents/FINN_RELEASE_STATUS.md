@@ -6,16 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
-Phase: `BUILD_CANDIDATE_PR_CI_GREEN_AWAITING_DEPLOY`. De actieve kandidaat is
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_LIVE_QA`. De botflow is via
 [PR #358](https://github.com/gvangalen/antigravity-trading-tool/pull/358)
-op branch `codex/bot-end-to-end-paper`, gebaseerd op de actuele `main` van
-2026-10-15. De geïntegreerde code- en exportcommit is
-`07974eb8ca1863364a029ebc539c68d26191962f`. Deze botflow toont de
+van branch `codex/bot-end-to-end-paper` in `main` gemerged als product-SHA
+`23f06c38de3f097cb4a4c3858a669c538987f2f4` op 2026-10-15. Deze botflow toont de
 gebruiker waarom een order wordt tegengehouden of een bedrag wordt verlaagd,
 en koppelt Paper-uitvoering aan order- en transactiehistorie. Een gebruiker
 kan zijn eigen botinstellingen aanpassen; de server bewaakt de effectieve
-limieten bij de daadwerkelijke uitvoering. De uiteindelijke deployment-SHA
-wordt na merge uit Git en de publieke build-endpoints vastgesteld.
+limieten bij de daadwerkelijke uitvoering. Deze statusupdate wijzigt zelf
+opnieuw de deployment-SHA; de botproductcode blijft gelijk.
 
 Op de geïntegreerde kandidaat slaagden **3738 backendtests, 3 bestaande
 skips**, frontendbuild, typecheck, i18n-, command-, proposal- en setuptests,
@@ -34,9 +33,13 @@ en **109/109** regressie (SHA-256
 zonder provider-, schema- of validatiefouten. De onafhankelijke QA-, Security- en
 Architecture-hercontroles van de geïntegreerde kandidaat gaven alle drie
 **GO**, zonder blokkerende bevinding. De
-[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38770197553)
-slaagde met alle vijf jobs op die commit. Onafhankelijke ingelogde productie-QA
-voor deze botflow volgt pas na de deployment en exacte SHA-controle.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38771245261)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38771592305)
+slaagden met alle vijf jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38771842361)
+slaagde. Beide publieke endpoints, `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json`, gaven daarna HTTP 200 met exact
+`23f06c38de3f097cb4a4c3858a669c538987f2f4`. Onafhankelijke ingelogde
+productie-QA voor deze botflow volgt op de definitieve live deployment-SHA.
 
 ## Live-brokercash per bot toewijzen
 
