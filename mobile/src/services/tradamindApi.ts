@@ -1,19 +1,6 @@
 import { AssistantEnvelope, AssistantHistoryMessage, AssistantRuntimeContext } from '../types/assistant';
 import { apiClient } from './apiClient';
 
-export type AssistantInsightResponse = {
-  greeting: string;
-  bot_insight?: Record<string, string> | null;
-  market_insight?: Record<string, string> | null;
-  context_detected?: Record<string, string> | null;
-  suggested_actions?: string[];
-};
-
-type FinnTodayResponse = {
-  finn_briefing?: { greeting?: string | null; summary?: string | null } | null;
-  first_dashboard_context?: { briefing_text?: string | null } | null;
-};
-
 export type AssistantPreferencesResponse = {
   preferences: Record<string, unknown>;
 };
@@ -360,23 +347,6 @@ export type IntelligenceWeightsPayload = {
 };
 
 export const assistantApi = {
-  async insight(context: AssistantRuntimeContext): Promise<AssistantInsightResponse> {
-    const mission = await apiClient.get<FinnTodayResponse>(
-      '/api/assistant/mission-control',
-      { symbol: context.symbol || undefined },
-    );
-    const summary = String(
-      mission.first_dashboard_context?.briefing_text || mission.finn_briefing?.summary || '',
-    ).trim();
-    return {
-      greeting: String(mission.finn_briefing?.greeting || 'Hoi!'),
-      bot_insight: summary ? { conclusion: summary } : null,
-      market_insight: null,
-      context_detected: { symbol: context.symbol || '' },
-      suggested_actions: [],
-    };
-  },
-
   preferences() {
     return apiClient.get<AssistantPreferencesResponse>('/api/assistant/preferences');
   },

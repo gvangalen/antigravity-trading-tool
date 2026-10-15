@@ -5,15 +5,12 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 BACKEND_ROOT = REPO_ROOT / "backend" / "trading-tool-backend" / "backend"
 
 
-def test_intelligence_event_service_degrades_missing_mobile_push_table_to_warning():
-    source = (BACKEND_ROOT / "services" / "intelligence_event_service.py").read_text(encoding="utf-8")
+def test_retired_intelligence_event_service_cannot_publish_parallel_feed():
+    main = (BACKEND_ROOT / "main.py").read_text(encoding="utf-8")
 
-    assert "def _is_missing_mobile_push_table" in source
-    assert "mobile_push_tokens" in source
-    assert "does not exist" in source
-    assert "undefinedtable" in source
-    assert "no such table" in source
-    assert 'logger.warning("Push notification dispatch overgeslagen: mobile_push_tokens table ontbreekt nog.")' in source
+    assert not (BACKEND_ROOT / "services" / "intelligence_event_service.py").exists()
+    assert not (BACKEND_ROOT / "api" / "intelligence_event_api.py").exists()
+    assert 'safe_include("backend.api.finn_coach_feed_api", "finn_coach_feed_api")' in main
 
 
 def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():

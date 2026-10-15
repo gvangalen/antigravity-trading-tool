@@ -20713,7 +20713,6 @@ class FinnPlanService:
             "verified": verified,
         }
         await self._upsert_action_audit(user_id, action_id, action, status="executed", result=result)
-        await self._log_intelligence_event(user_id, draft, result)
         await self.clear_state(user_id)
         return result
 
@@ -22171,30 +22170,6 @@ class FinnPlanService:
         if not verified["indicator_config"] or not verified[node_key]:
             raise HTTPException(500, f"Indicator read-after-write verificatie faalde: {verified}")
         return verified
-
-    async def _log_intelligence_event(self, user_id: int, draft: Dict[str, Any], result: Dict[str, Any]) -> None:
-        if not self.session:
-            return
-        await self.session.execute(text("""
-            INSERT INTO ai_intelligence_events (user_id, type, symbol, title, description, severity, payload, status)
-            VALUES (
-                :user_id,
-                'finn_plan_created',
-                :symbol,
-                :title,
-                :description,
-                'info',
-                CAST(:payload AS JSONB),
-                'active'
-            )
-        """), {
-            "user_id": user_id,
-            "symbol": draft.get("asset"),
-            "title": f"Finn heeft {draft.get('asset')} {draft.get('plan_type')} plan aangemaakt",
-            "description": "Setup, strategy en optioneel bot zijn via bevestigde Finn-actie aangemaakt.",
-            "payload": json.dumps({"draft": draft, "result": result}, default=str),
-        })
-        await self.session.commit()
 
     async def _unique_setup_name(self, setup_service: SetupService, base_name: str, user_id: int) -> str:
         name = (base_name or "Finn Plan").strip()

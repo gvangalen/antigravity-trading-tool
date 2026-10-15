@@ -4,7 +4,6 @@ import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "r
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { assistantChat, cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
-import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -469,7 +468,6 @@ function AIAssistantContent({
   queryValue,
   onQueryChange,
   autoFocusComposer = false,
-  eventsEnabled = true,
   commandRequest = null,
   closeLabel = null,
 }) {
@@ -482,9 +480,6 @@ function AIAssistantContent({
   const { showSnackbar } = useModal();
   const { t, locale } = useTranslation();
   const governanceCopy = t?.pages?.report?.finn?.governance || {};
-  const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents({
-    enabled: eventsEnabled,
-  });
   
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);

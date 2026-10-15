@@ -20,14 +20,14 @@ def test_market_macro_technical_routes_no_longer_force_asset_redirect():
     assert "canonicalizeLegacy" not in technical_page
 
 
-def test_assistant_events_get_is_read_only_and_refresh_is_explicit():
-    source = _read(BACKEND_ROOT / "api" / "intelligence_event_api.py")
+def test_legacy_assistant_events_route_is_retired_in_favor_of_coach_feed():
+    main_source = _read(BACKEND_ROOT / "main.py")
+    assistant_source = _read(FRONTEND_ROOT / "components" / "ui" / "AIAssistant.jsx")
+    coach_feed_source = _read(FRONTEND_ROOT / "components" / "finn" / "FinnCoachFeed.jsx")
 
-    get_section = source.split('@router.get("/assistant/events"', 1)[1].split('@router.post("/assistant/events/refresh")', 1)[0]
-    refresh_section = source.split('@router.post("/assistant/events/refresh")', 1)[1]
-
-    assert "evaluate_and_generate_events" not in get_section
-    assert "evaluate_and_generate_events" in refresh_section
+    assert "intelligence_event_api" not in main_source
+    assert "useIntelligenceEvents" not in assistant_source
+    assert "/api/assistant/feed?history=" in coach_feed_source
 
 
 def test_market_intelligence_cache_ttl_and_mission_control_persisted_read_are_hardened():
