@@ -51,6 +51,25 @@ probe requires a separately authorized protected fixture reset, never an
 automatic retry that erases failing evidence. This exception does not permit
 a second login fixture or change either server binding.
 
+### Inactive synthetic automatic Paper history owner
+
+The user-authorized `auto_paper_trade_history` protected profile has the same
+bound-QA-account and namespace requirements. It may create one separate,
+inactive synthetic owner with no exchange keys, one auto Paper bot, EUR 100
+virtual funding and one EUR 50 Paper buy. Its only execution call is the
+canonical automatic Paper executor with `is_live=False`; it checks the
+owner-scoped order, ledger and account trade-history projection. It never
+changes shared market rows or ordinary user data, activates Live mode, calls
+an exchange, or grants the synthetic owner a login token. The general FINN
+safe-execution allowlist remains unchanged.
+
+The protected workflow requires both per-run fixture authorization flags and
+an active QA goal naming this exact test. The probe deactivates the bot and
+retains failed evidence. Successful cleanup requires an exact owner marker
+and run namespace and commits bot deactivation before deleting fixture rows.
+See [the runner contract](finn-production-qa-runner.md) for its sanitized
+evidence and coverage limits.
+
 ## Token Handling
 
 The existing
@@ -82,9 +101,11 @@ before any product cases.
 ## Fixture Safety
 
 Before and after a runtime or QA run, take read-only snapshots of the approved
-fixture records needed to prove no execution, trade, live-bot activation, or
-unexpected business write occurred. A proposal-only test is not an execution
-test and must not confirm a proposal.
+fixture records needed to prove no unexpected execution, trade, live-bot
+activation, or business write occurred. The separately authorized automatic
+Paper history probe expects exactly one owner-scoped virtual Paper execution;
+every other execution remains unexpected. A proposal-only test is not an
+execution test and must not confirm a proposal.
 
 The fixture may be reset only through an explicitly approved fixture-reset
 procedure. Never delete or alter records to hide a failed validation.
