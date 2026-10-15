@@ -291,6 +291,10 @@ class PortfolioData(BaseModel):
     valuation_status: str = "unavailable"
     valuation_as_of: Optional[datetime] = None
     unallocated_cash_eur: Optional[float] = None
+    available_cash_eur: Optional[float] = None
+    reserved_cash_eur: Optional[float] = None
+    exchange_name: Optional[str] = None
+    balance_time_basis: Optional[str] = None
     covered_scopes: List[str] = Field(default_factory=list)
     excluded_scopes: List[str] = Field(default_factory=list)
 

@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { fetchBotTrades, fetchPortfolioSummary, fetchVerifiedPortfolioHistory } from "@/lib/api/botApi";
+import { fetchBotTrades, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, saveLiveCashAllocations } from "@/lib/api/botApi";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -25,6 +25,9 @@ function PortfolioPageInner() {
   const [tradesError, setTradesError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [cashDraft, setCashDraft] = useState({});
+  const [cashSaveError, setCashSaveError] = useState(null);
+  const [cashSaving, setCashSaving] = useState(false);
 
   const money = useCallback((value) => known(value)
     ? formatCurrency(Number(value), locale, "EUR", { maximumFractionDigits: 2 })
@@ -45,6 +48,10 @@ function PortfolioPageInner() {
       if (sequence === requestSequence.current) {
         setLoadedOverview({ environment, data: summary.value?.data || null });
         setLoadedHistory({ environment, data: history.status === "fulfilled" ? history.value : null });
+        if (environment === "live") setCashDraft(Object.fromEntries(
+          (summary.value?.data?.bots || []).map((bot) => [bot.bot_id,
+            known(bot.cash_eur) ? String(bot.cash_eur) : ""]),
+        ));
       }
     } catch (cause) {
       if (sequence === requestSequence.current) {
@@ -101,7 +108,7 @@ function PortfolioPageInner() {
         : overview?.valuation_status === "empty" ? copy.empty : null;
 
   const discuss = (bot) => openFinnContext({
-    query: `Bespreek de opgeslagen portefeuille van bot ${bot.name}. Leg de bekende waarde, positie, het resultaat en ontbrekende gegevens uit.`,
+    query: `Bespreek de opgeslagen ${environment === "live" ? "Live" : "Paper"}-portefeuille van bot ${bot.name}. Leg de bekende waarde, positie, het resultaat en ontbrekende gegevens uit.`,
     context: { page: "/portfolio", bot_id: bot.bot_id, bot_name: bot.name,
       symbol: bot.symbol, finn_subject_type: "bot", locale },
   });
@@ -113,6 +120,27 @@ function PortfolioPageInner() {
     setError(null);
     setSelectedId(null);
     setEnvironment(nextEnvironment);
+  };
+
+  const saveCash = async () => {
+    setCashSaveError(null);
+    setCashSaving(true);
+    try {
+      const allocations = bots.flatMap((bot) => {
+        const raw = String(cashDraft[bot.bot_id] ?? "").trim();
+        if (!raw) return [];
+        const normalized = raw.replace(",", ".");
+        const amount = Number(normalized);
+        if (!Number.isFinite(amount) || amount < 0 || !/^\d+(?:\.\d{1,2})?$/.test(normalized)) throw new Error(copy.invalidAllocation);
+        return [{ bot_id: bot.bot_id, amount_eur: amount }];
+      });
+      await saveLiveCashAllocations(allocations);
+      await load();
+    } catch (cause) {
+      setCashSaveError(cause?.message || copy.allocationError);
+    } finally {
+      setCashSaving(false);
+    }
   };
 
   return (
@@ -142,10 +170,30 @@ function PortfolioPageInner() {
       {environment === "paper" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.paperMoney}</p>}
       {environment === "live" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.liveAttribution}</p>}
 
+      {environment === "live" && overview?.exchange_name && <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800" aria-label={copy.brokerAccount}>
+        <h2 className="text-lg font-semibold">{copy.brokerAccount}: {overview.exchange_name}</h2>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{copy.allocationHint}</p>
+        {overview.balance_time_basis === "retrieval" && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{copy.retrievalTimeBasis}</p>}
+        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <span>{copy.availableCash}: <strong>{money(overview.available_cash_eur)}</strong></span>
+          <span>{copy.reservedCash}: <strong>{money(overview.reserved_cash_eur)}</strong></span>
+          <span>{copy.unallocatedCash}: <strong>{money(overview.unallocated_cash_eur)}</strong></span>
+        </div>
+        {bots.length > 0 && <div className="mt-5 space-y-3">{bots.map((bot) => <label key={bot.bot_id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>{bot.name} · {copy.allocatedCash}</span>
+          <input type="text" inputMode="decimal" value={cashDraft[bot.bot_id] ?? ""}
+            onChange={(event) => setCashDraft((current) => ({ ...current, [bot.bot_id]: event.target.value }))}
+            placeholder="—" className="w-36 rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" />
+        </label>)}</div>}
+        {cashSaveError && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">{cashSaveError}</p>}
+        {bots.length > 0 && <button type="button" disabled={cashSaving} onClick={saveCash}
+          className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{copy.saveAllocation}</button>}
+      </section>}
+
       <section className="grid grid-cols-2 gap-4 rounded-2xl border border-slate-200 p-5 dark:border-slate-800 md:grid-cols-4" aria-label={copy.totalValue}>
         {[
           [copy.totalValue, valuationAvailable ? global.total_equity : null],
-          [copy.cash, global.cash_balance],
+          [environment === "live" ? copy.brokerCash : copy.cash, global.cash_balance],
           [copy.positions, global.current_position_value],
           [copy.result, result],
         ].map(([label, value]) => (
@@ -178,11 +226,12 @@ function PortfolioPageInner() {
 
       <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
         <h2 className="text-lg font-semibold">{copy.bots}</h2>
+        {environment === "live" && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{copy.liveRowsHint}</p>}
         {!loading && bots.length === 0 && <p className="mt-4 text-sm text-slate-500">{copy.noBots}</p>}
         {bots.length > 0 && <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[650px] text-left text-sm">
             <thead className="border-b border-slate-200 text-xs text-slate-500 dark:border-slate-800">
-              <tr>{[copy.bot, copy.value, copy.cash, copy.positions, copy.result].map((label) => <th key={label} scope="col" className="px-3 py-3 font-medium">{label}</th>)}<th scope="col"><span className="sr-only">{copy.details}</span></th></tr>
+              <tr>{[copy.bot, copy.value, environment === "live" ? copy.allocatedCash : copy.cash, copy.positions, copy.result].map((label) => <th key={label} scope="col" className="px-3 py-3 font-medium">{label}</th>)}<th scope="col"><span className="sr-only">{copy.details}</span></th></tr>
             </thead>
             <tbody>{bots.map((bot) => <tr key={bot.bot_id} className="border-b border-slate-100 dark:border-slate-800">
               <th scope="row" className="px-3 py-4 font-semibold">{bot.name}<span className="block text-xs font-normal text-slate-500">{bot.symbol} · {environment === "paper" ? copy.paper : copy.live}</span>
@@ -195,13 +244,13 @@ function PortfolioPageInner() {
               <td className="px-3 py-4"><button type="button" onClick={() => { setSelectedId(bot.bot_id); setDetailTab("positions"); }}
                 aria-label={`${copy.details}: ${bot.name}`} className="text-blue-600 hover:underline dark:text-blue-400">{copy.details} <ArrowRight className="inline" size={14} /></button></td>
             </tr>)}</tbody>
-            <tfoot><tr className="border-t border-slate-300 font-semibold dark:border-slate-700">
+            {environment === "paper" && <tfoot><tr className="border-t border-slate-300 font-semibold dark:border-slate-700">
               <th scope="row" className="px-3 py-4">{copy.total}</th>
               <td className="px-3 py-4 tabular-nums">{money(global.total_equity)}</td>
               <td className="px-3 py-4 tabular-nums">{money(global.cash_balance)}</td>
               <td className="px-3 py-4 tabular-nums">{money(global.current_position_value)}</td>
               <td className="px-3 py-4 tabular-nums">{money(result)}</td><td />
-            </tr></tfoot>
+            </tr></tfoot>}
           </table>
         </div>}
       </section>

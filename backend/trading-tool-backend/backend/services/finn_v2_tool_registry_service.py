@@ -25,8 +25,10 @@ class FinnV2ToolRegistryService:
             ToolDefinition(
                 name="read_portfolio",
                 description=(
-                    "Read owner-scoped Paper-bot portfolio valuation, budgets, balances, exposure, "
+                    "Read owner-scoped Paper or Live portfolio valuation, budgets, balances, exposure, "
                     "and each saved bot's linked setup, strategy and execution mode. "
+                    "For Live questions use environment=live; for Paper use environment=paper. "
+                    "Live broker cash is counted once and bot cash requires explicit allocation. "
                     "This source does not contain trade transaction history, tax records or tax calculations."
                 ),
             ),

@@ -1,6 +1,8 @@
 import logging
+from decimal import Decimal
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, condecimal, conlist
 from sqlalchemy import text
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,7 @@ from backend.utils.auth_utils import get_current_user
 from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
 from backend.services.bot_service import BotService
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
+from backend.services.live_portfolio_allocation_service import read_live_account, replace_allocations
 from backend.schemas.bot_schema import (
     BotConfigCreateSchema,
     BotConfigUpdateSchema,
@@ -22,6 +25,7 @@ from backend.schemas.bot_schema import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 order_rate_limiter = InMemoryRateLimiter(requests_limit=20, window_seconds=60)
+allocation_rate_limiter = InMemoryRateLimiter(requests_limit=3, window_seconds=60)
 ORDER_USER_LIMIT = 20
 ORDER_IP_LIMIT = 30
 LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
@@ -283,6 +287,44 @@ async def get_portfolio_summary(
     """Expose the same owner-scoped valuation projection that FINN reads."""
     result = await PortfolioToolAdapter(db).execute(user_id=current_user["id"], environment=environment)
     return {"data": result["data"], "as_of": result["as_of"]}
+
+
+class LiveCashAllocation(BaseModel):
+    bot_id: int
+    amount_eur: condecimal(ge=Decimal("0"), max_digits=20, decimal_places=2)
+
+
+class LiveCashAllocationsUpdate(BaseModel):
+    allocations: conlist(LiveCashAllocation, max_items=100)
+
+
+@router.put("/portfolio/live-cash-allocations")
+async def update_live_cash_allocations(
+    payload: LiveCashAllocationsUpdate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Attribute shared free broker EUR to bots for display only."""
+    allocation_rate_limiter.check_rate_limit(
+        f"owner:{current_user['id']}", limit=3,
+        detail="Te veel portfoliotoewijzingen. Probeer het later opnieuw.",
+    )
+    ip_addr = client_ip(request)
+    if ip_addr not in LOCAL_PROXY_IPS:
+        allocation_rate_limiter.check_rate_limit(
+            f"ip:{ip_addr}", limit=6,
+            detail="Te veel portfoliotoewijzingen vanaf dit adres.",
+        )
+    account = await read_live_account(db, current_user["id"])
+    if account is None:
+        raise HTTPException(409, "Live-brokerbalans is niet volledig verifieerbaar")
+    saved = await replace_allocations(
+        db, current_user["id"], account,
+        [item.dict() for item in payload.allocations],
+    )
+    return {"allocations": saved, "exchange": account["exchange_name"],
+            "available_cash_eur": account["cash_eur"], "as_of": account["as_of"]}
 
 
 @router.get("/portfolio/balance-history")

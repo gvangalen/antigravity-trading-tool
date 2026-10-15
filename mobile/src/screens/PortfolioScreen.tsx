@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 
 import { ScreenContainer } from '../components/layout/ScreenContainer';
@@ -25,6 +25,9 @@ export function PortfolioScreen() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [tradesLoading, setTradesLoading] = useState(false);
   const [tradesError, setTradesError] = useState(false);
+  const [cashDraft, setCashDraft] = useState<Record<number, string>>({});
+  const [cashSaveError, setCashSaveError] = useState(false);
+  const [cashSaving, setCashSaving] = useState(false);
   const fetchOverview = useCallback(() => intelligenceApi.portfolioSummary(environment), [environment]);
   const overview = useApiResource<PortfolioOverviewResponse | null>({ fallbackData: null, fetcher: fetchOverview });
   const fetchHistory = useCallback(() => intelligenceApi.portfolioValueHistory(environment), [environment]);
@@ -49,6 +52,31 @@ export function PortfolioScreen() {
   const label = (key: string) => translate(language, `portfolio.v2.${key}` as Parameters<typeof translate>[1]);
 
   useEffect(() => { setSelectedId(null); setTrades([]); }, [environment]);
+  useEffect(() => {
+    if (environment !== 'live' || !data) return;
+    setCashDraft(Object.fromEntries(data.bots.map((bot) =>
+      [bot.bot_id, isKnown(bot.cash_eur) ? String(bot.cash_eur) : ''])));
+  }, [environment, overview.data]);
+
+  const saveCash = async () => {
+    setCashSaveError(false);
+    setCashSaving(true);
+    try {
+      const allocations = bots.flatMap((bot) => {
+        const raw = String(cashDraft[bot.bot_id] ?? '').trim();
+        if (!raw) return [];
+        const normalized = raw.replace(',', '.');
+        if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) throw new Error('invalid allocation');
+        return [{ bot_id: bot.bot_id, amount_eur: Number(normalized) }];
+      });
+      await intelligenceApi.saveLiveCashAllocations(allocations);
+      overview.refresh();
+    } catch {
+      setCashSaveError(true);
+    } finally {
+      setCashSaving(false);
+    }
+  };
   useEffect(() => {
     if (!selectedId || detailTab !== 'transactions') return;
     let active = true;
@@ -79,12 +107,32 @@ export function PortfolioScreen() {
       </View>
     </View>
     <Text style={[styles.note, { color: colors.textDim }]}>{environment === 'paper' ? label('paperMoney') : label('liveAttribution')}</Text>
+    {environment === 'live' && data?.exchange_name && <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>{label('brokerAccount')}: {data.exchange_name}</Text>
+      <Text style={[styles.small, { color: colors.textDim }]}>{label('allocationHint')}</Text>
+      {data.balance_time_basis === 'retrieval' && <Text style={[styles.small, { color: colors.textDim }]}>{label('retrievalTimeBasis')}</Text>}
+      <Text style={{ color: colors.text }}>{label('availableCash')}: {money(data.available_cash_eur)}</Text>
+      <Text style={{ color: colors.text }}>{label('reservedCash')}: {money(data.reserved_cash_eur)}</Text>
+      <Text style={{ color: colors.text }}>{label('unallocatedCash')}: {money(data.unallocated_cash_eur)}</Text>
+      {bots.map((bot) => <View key={bot.bot_id} style={styles.botRow}>
+        <Text style={{ color: colors.text }}>{bot.name} · {label('allocatedCash')}</Text>
+        <TextInput keyboardType="decimal-pad" value={cashDraft[bot.bot_id] ?? ''}
+          onChangeText={(value) => setCashDraft((current) => ({ ...current, [bot.bot_id]: value }))}
+          accessibilityLabel={`${bot.name}: ${label('allocatedCash')}`}
+          style={{ color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 8, minWidth: 100, padding: 8 }} />
+      </View>)}
+      {cashSaveError && <Text style={{ color: colors.danger }}>{label('allocationError')}</Text>}
+      {bots.length > 0 && <Pressable disabled={cashSaving} onPress={saveCash} accessibilityRole="button"
+        style={[styles.tab, { backgroundColor: colors.accent, alignSelf: 'flex-start' }]}>
+        <Text style={{ color: '#fff' }}>{label('saveAllocation')}</Text>
+      </Pressable>}
+    </View>}
     {overview.error && <Text style={[styles.notice, { color: colors.danger }]}>{label('loadError')}</Text>}
     {status && <Text style={[styles.notice, { color: colors.warning }]}>{status}</Text>}
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={styles.metricGrid}>
         <Metric label={label('total')} value={money(valuationAvailable ? global?.total_equity : null)} colors={colors} />
-        <Metric label={label('cash')} value={money(global?.cash_balance)} colors={colors} />
+        <Metric label={environment === 'live' ? label('brokerCash') : label('cash')} value={money(global?.cash_balance)} colors={colors} />
         <Metric label={label('positions')} value={money(global?.current_position_value)} colors={colors} />
         <Metric label={label('result')} value={money(result)} colors={colors} />
       </View>
@@ -101,6 +149,7 @@ export function PortfolioScreen() {
     </View>
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{label('byBot')}</Text>
+      {environment === 'live' && <Text style={[styles.small, { color: colors.textDim }]}>{label('liveRowsHint')}</Text>}
       {!overview.loading && !overview.error && bots.length === 0 &&
         <Text style={[styles.notice, { color: colors.textDim }]}>{label('noBots')}</Text>}
       {bots.map((bot) => <Pressable key={bot.bot_id} onPress={() => { setSelectedId(bot.bot_id); setDetailTab('positions'); }}
@@ -109,7 +158,7 @@ export function PortfolioScreen() {
           <Text style={[styles.small, { color: colors.textDim }]}>{bot.symbol} · {label(environment)}</Text>
           {bot.valuation_status === 'unverified_ledger' &&
             <Text style={[styles.small, { color: colors.warning }]}>{label('unverifiedLedger')}</Text>}
-          <Text style={[styles.small, { color: colors.textDim }]}>{label('cash')}: {money(bot.cash_eur)} · {label('positions')}: {money(bot.position_value_eur)}</Text></View>
+          <Text style={[styles.small, { color: colors.textDim }]}>{environment === 'live' ? label('allocatedCash') : label('cash')}: {money(bot.cash_eur)} · {label('positions')}: {money(bot.position_value_eur)}</Text></View>
         <View style={styles.botValue}><Text style={[styles.botTitle, { color: colors.text }]}>{money(bot.equity)}</Text>
           <Text style={[styles.small, { color: colors.textDim }]}>{label('result')}: {money(bot.result_eur)}</Text></View>
       </Pressable>)}
@@ -139,7 +188,7 @@ export function PortfolioScreen() {
       </Text>) : <Text style={{ color: colors.textDim }}>{label('noTransactions')}</Text>}</View>}
       {detailTab === 'limits' && <View style={styles.detail}><Text style={{ color: colors.text }}>{label('budget')}: {money(selected.budget_total_eur)}</Text>
         <Text style={{ color: colors.textDim }}>{label('budgetHint')}</Text></View>}
-      <Pressable onPress={() => openFinn({ prefill: `Bespreek mijn opgeslagen botportfolio ${selected.name || selected.symbol}. Leg de bekende bedragen en ontbrekende gegevens uit.`,
+      <Pressable onPress={() => openFinn({ prefill: `Bespreek mijn opgeslagen ${environment === 'live' ? 'Live' : 'Paper'}-botportfolio ${selected.name || selected.symbol}. Leg de bekende bedragen en ontbrekende gegevens uit.`,
         source: 'portfolio-bot', symbol: selected.symbol || undefined })} accessibilityRole="button" style={styles.finnButton}>
         <Text style={{ color: colors.accent, fontWeight: '700' }}>{label('discuss')}</Text>
       </Pressable>

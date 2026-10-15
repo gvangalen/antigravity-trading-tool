@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Live-brokercash per bot toewijzen
+
+Phase: `LOCAL_BUILD_GATE_GREEN` — branch `codex/live-portfolio-allocation`, **niet
+gedeployed**. De wijziging telt één eigenaargebonden brokerrekening één keer
+in het Live-totaal, laat vrije EUR-cash expliciet aan eigen Live-bots toewijzen
+voor de weergave en toont de rest als niet-toegewezen cash. Een toewijzing
+reserveert geen exchange-geld en verandert geen orders of botlimieten.
+Onvolledige brokerbedragen en ontbrekende of oude EUR-koersen blijven onbekend.
+Web, mobiel en FINN lezen dezelfde projectie; de directe Responses-tool kan
+`environment=live|paper` doorgeven.
+
+Op de definitieve lokale code slaagden **3724 backendtests, 3 bestaande skips**,
+webbuild, typecheck, i18n-, command-, proposal- en setuptests, mobiele
+typecheck, lint zonder errors en web/iOS/Android Expo-bundles. De
+high-severity audit slaagde met één bestaande moderate Next.js-melding.
+Onafhankelijke Security- en Architecture-codehercontroles vonden geen concrete
+blokkade. Een gerichte echte Luna/Responses-run op een synthetische lokale
+eigenaar voltooide zonder voorstel en koos `get_portfolio_and_exposure` met
+`environment=live`.
+
+De lokale API/Celery-paritymatrix slaagde **37/37**, inclusief **16/16**
+actiecontracten, **9/9** lineagecontroles, polling/SSE-pariteit en de
+veiligheidscontroles. Voor modelgeleide leesvragen toetst deze poort nu de
+daadwerkelijk gebruikte eigenaargebonden Responses-tool, het voltooide
+antwoord en afwezigheid van een schrijfvoorstel; zij vereist daarvoor geen
+oude `operation_id` meer. Artifact SHA-256:
+`8716b5320afa2cdafc167d07153c399521f5821c68fa078936827018ddf22975`.
+De echte `gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development
+(SHA-256 `761eb193b77d76c2581b8742830803fb33666436c7b895e02d10b004afd80e23`)
+en **109/109** regressie (SHA-256
+`0c1f5a3a63b20e2c55a22051ae2c5e14fd4dda96113f199be1cda542c5d31357`),
+zonder provider-, schema- of validatiefouten. CI, deploymentidentiteit en
+ingelogde Live-broker-QA zijn nog niet uitgevoerd voor deze branch.
+
 ## Portfolio 2.0: verifieerbare waardering per bot
 
 Phase: `INDEPENDENT_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)

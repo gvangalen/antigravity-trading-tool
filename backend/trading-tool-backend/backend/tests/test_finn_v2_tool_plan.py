@@ -44,6 +44,31 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
     ]
     assert plan.read_only is True
 
+
+def test_live_portfolio_environment_reaches_read_tool_for_read_and_evaluate():
+    analysis_service = FinnV2RequestAnalysisService()
+    domain_service = FinnV2DomainRequirementService()
+    for operation_id, message in (
+        ("read_portfolio", "Toon mijn live portfolio."),
+        ("evaluate_portfolio", "Beoordeel mijn live portfolio."),
+    ):
+        contract = analysis_service.operations.require_supported(operation_id)
+        analysis_service.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+            operation_id=operation_id,
+            action=contract.action_polarity.value,
+            domain=contract.domain,
+            discourse="information_request" if operation_id == "read_portfolio" else "evaluation",
+            confidence="high",
+            selector_source="structured",
+        )
+        analysis = analysis_service.analyze(message=message)
+        plan = FinnV2ToolPlanService().build(
+            run_id=f"run-{operation_id}", analysis=analysis,
+            domain_plan=domain_service.determine(analysis),
+        )
+        assert analysis.request_plan.operation_state["collected_inputs"]["environment"] == "live"
+        assert plan.tool_inputs["read_portfolio"]["environment"] == "live"
+
 def test_tool_plan_keeps_strategy_and_bot_requests_grounded_without_indicator_gate():
     analysis_service = FinnV2RequestAnalysisService()
     domain_service = FinnV2DomainRequirementService()

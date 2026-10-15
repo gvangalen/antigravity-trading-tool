@@ -101,6 +101,11 @@ export type PortfolioOverviewData = {
   valuation_status: string;
   valuation_as_of: string | null;
   read_at: string | null;
+  unallocated_cash_eur: number | null;
+  available_cash_eur: number | null;
+  reserved_cash_eur: number | null;
+  exchange_name: string | null;
+  balance_time_basis: string | null;
   global: {
     total_equity: number | null;
     cash_balance: number | null;
@@ -570,6 +575,9 @@ export const intelligenceApi = {
 
   portfolioSummary(environment: 'paper' | 'live') {
     return apiClient.get<PortfolioOverviewResponse>('/api/portfolio/summary', { environment });
+  },
+  saveLiveCashAllocations(allocations: { bot_id: number; amount_eur: number }[]) {
+    return apiClient.put<Record<string, unknown>>('/api/portfolio/live-cash-allocations', { allocations });
   },
   portfolioValueHistory(environment: 'paper' | 'live') {
     return apiClient.get<PortfolioValueHistory>('/api/portfolio/value-history', { environment, bucket: '1h', limit: 720 });

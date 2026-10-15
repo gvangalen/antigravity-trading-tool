@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from sqlalchemy import text
 from redis import Redis
 
-from backend.scripts.run_finn_v2_full_action_matrix import _create_local_user
+from backend.scripts.run_finn_v2_full_action_matrix import _create_local_user, _runtime_record
 from backend.scripts.run_finn_v2_persisted_runtime_gate import run_gate
 from backend.infrastructure.database import sync_engine
 from backend.utils.auth_utils import create_access_token
@@ -53,6 +53,63 @@ PUBLIC_PROBES = (
     ("capability_en", "What support is available?", "capability"),
 )
 
+# Read and coaching turns use the model-led Responses tool path. They do not
+# have a legacy operation_id in the public runtime projection. Assert the
+# actual owner-scoped tool used, a completed answer, and absence of a write
+# proposal instead of accepting a missing operation ID as success by itself.
+READ_TOOLS = {
+    "active_asset": "get_active_asset_context",
+    "indicator_read": "get_indicator_snapshot",
+    "evaluate_plan": "evaluate_plan",
+    "evaluate_setup": "evaluate_setup",
+    "evaluate_strategy": "evaluate_strategy",
+    "evaluate_bot": "evaluate_bot",
+    "read_setup": "get_active_plan_and_strategy",
+    "read_bot": "get_saved_bots",
+    "scores": "get_current_asset_scores",
+    "portfolio": "get_portfolio_and_exposure",
+    "indicator_evaluate": "evaluate_indicator_configuration",
+    "asset_precedence": "get_active_asset_context",
+    "setup_graph": "get_active_plan_and_strategy",
+}
+DIRECT_ANSWER_CASES = {"capability", "concept", "off_topic", "clarify", "financial_concept_de", "capability_en"}
+WRITE_TOOLS = {
+    "create_or_update_trade_plan_proposal", "manage_paper_bot_proposal",
+    "manage_watchlist_proposal", "manage_indicator_proposal",
+}
+
+
+def _probe_contract(case_id: str, expected_operation: str, observed: dict, record: dict) -> tuple[bool, list[str]]:
+    exchange = dict((record.get("runtime_state") or {}).get("responses_exchange") or {})
+    trace = list(exchange.get("tool_trace") or [])
+    names = [str(call.get("name") or "") for call in trace]
+    answer = str(exchange.get("answer") or "").strip()
+    no_proposal = record.get("proposal") is None
+    base = (
+        observed.get("polling_sse_contract_projection") is True
+        and bool(answer)
+        and no_proposal
+        and not any(call.get("status") == "error" for call in trace)
+    )
+    if case_id in READ_TOOLS:
+        return bool(base and observed.get("status") == "completed"
+                    and READ_TOOLS[case_id] in names
+                    and not WRITE_TOOLS.intersection(names)), names
+    if case_id in DIRECT_ANSWER_CASES:
+        return bool(base and observed.get("status") == "completed"
+                    and not WRITE_TOOLS.intersection(names)), names
+    if case_id == "unsupported":
+        # A safe clarification may consult context or prepare an incomplete
+        # Paper proposal, but may never persist a proposal or execute a write.
+        return bool(base and observed.get("status") in {"completed", "clarification_required"}
+                    and not any(call.get("status") == "completed" and call.get("name") in WRITE_TOOLS
+                                for call in trace)), names
+    if case_id == "guided_setup":
+        return bool(base and observed.get("status") == "clarification_required"
+                    and observed.get("final_operation_id") == expected_operation
+                    and "create_or_update_trade_plan_proposal" in names), names
+    return False, names
+
 
 def _run_probe(*, base_url: str, token: str, item: tuple[str, str, str]) -> dict:
     case_id, message, expected_operation = item
@@ -64,16 +121,13 @@ def _run_probe(*, base_url: str, token: str, item: tuple[str, str, str]) -> dict
             message=message,
             timeout_seconds=60,
         )
-        passed = (
-            observed["initial_operation_id"] == expected_operation
-            and observed["final_operation_id"] == expected_operation
-            and observed["status"] in {"completed", "downgraded", "unavailable", "failed", "clarification_required"}
-            and observed["polling_sse_contract_projection"]
-        )
+        record = _runtime_record(observed["run_id"])
+        passed, tool_names = _probe_contract(case_id, expected_operation, observed, record)
         return {
             "case_id": case_id,
             "expected_operation_id": expected_operation,
             "actual_operation_id": observed["final_operation_id"],
+            "responses_tool_names": tool_names,
             "run_id": observed["run_id"],
             "terminal_status": observed["status"],
             "run_create_elapsed_ms": observed["run_create_elapsed_ms"],

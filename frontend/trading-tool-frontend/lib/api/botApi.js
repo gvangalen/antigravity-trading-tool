@@ -445,6 +445,11 @@ export const fetchPortfolioSummary = async (environment = null) => {
   return handleApi(fetchAuth(`/api/portfolio/summary${query ? `?${query}` : ""}`, { forceFresh: true }));
 };
 
+export const saveLiveCashAllocations = async (allocations) => handleApi(fetchAuth(
+  "/api/portfolio/live-cash-allocations",
+  { method: "PUT", body: JSON.stringify({ allocations }) },
+));
+
 export const fetchVerifiedPortfolioHistory = async (environment = "paper") => {
   const query = buildQuery({ environment, bucket: "1h", limit: 720 });
   return handleApi(fetchAuth(`/api/portfolio/value-history?${query}`, { forceFresh: true }));
