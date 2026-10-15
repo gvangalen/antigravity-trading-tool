@@ -863,7 +863,7 @@ class BotService:
                         key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
                     )
                     ticker = await ExchangeService.fetch_ticker(ticker_client, currency)
-                    price = ExchangeService.verified_eur_ticker_price(ticker)
+                    price = ExchangeService.verified_eur_ticker_price(ticker, currency)
                 except Exception as ticker_exc:
                     raise HTTPException(409, {
                         "code": "LIVE_EXPOSURE_PRICE_UNAVAILABLE",
@@ -1017,6 +1017,20 @@ class BotService:
                 "symbol": symbol,
                 "safe_next_step": "Ververs market data en doe de live preflight opnieuw.",
             })
+        if str(snapshot.get("quote_currency") or "").upper() != "EUR":
+            raise HTTPException(409, {
+                "code": "LIVE_MARKET_PRICE_QUOTE_UNVERIFIED",
+                "message": f"Geen gecontroleerde EUR-marktprijs voor {symbol}; live order wordt geblokkeerd.",
+                "symbol": symbol,
+                "safe_next_step": "Gebruik een geverifieerde EUR-koers en doe de live preflight opnieuw.",
+            })
+        price = float(snapshot["price"])
+        if not isfinite(price) or price <= 0:
+            raise HTTPException(409, {
+                "code": "LIVE_MARKET_PRICE_INVALID",
+                "message": f"Ongeldige EUR-marktprijs voor {symbol}; live order wordt geblokkeerd.",
+                "symbol": symbol,
+            })
         timestamp = self._parse_execution_timestamp(snapshot.get("timestamp"))
         if not timestamp:
             raise HTTPException(409, {
@@ -1040,7 +1054,7 @@ class BotService:
             })
         return {
             "symbol": symbol,
-            "market_price": snapshot.get("price"),
+            "market_price": price,
             "market_timestamp": timestamp.isoformat(),
             "age_seconds": age_seconds,
             "stale_after_seconds": LIVE_MARKET_PRICE_STALE_AFTER_SECONDS,
@@ -1083,7 +1097,22 @@ class BotService:
                 "message": "Live preflight hoort niet bij de huidige bot-beslissing. Voer preflight opnieuw uit.",
                 "safe_next_step": "Doe live preflight voor de nieuwste bot-beslissing.",
             })
-        market_price = await self.require_fresh_live_market_price(payload.symbol)
+        try:
+            market_price = await self.require_fresh_live_market_price(payload.symbol)
+        except HTTPException as market_error:
+            try:
+                key = await self._single_live_exchange_key(user_id)
+                client = await ExchangeService.get_client(
+                    key.exchange_name, key.api_key, key.api_secret, key.api_passphrase,
+                )
+                ticker = await ExchangeService.fetch_ticker(client, payload.symbol)
+                reference = ExchangeService.verified_eur_ticker_price(ticker, payload.symbol)
+                market_price = {
+                    "symbol": payload.symbol, "market_price": reference,
+                    "source": "verified_exchange_eur_ticker",
+                }
+            except Exception:
+                raise market_error
         reference_price = float(market_price["market_price"])
         if not isfinite(reference_price) or reference_price <= 0 or abs(payload.price - reference_price) / reference_price > 0.03:
             raise HTTPException(409, {

@@ -38,7 +38,7 @@ class _Connection:
         self.queries = []
         self.spent = spent
         self.pending = pending or []
-        self.market = market if market is not None else [(50000, 0)]
+        self.market = market if market is not None else [(50000, 0, "EUR")]
         self.market_by_asset = market_by_asset
 
     def cursor(self):
@@ -77,7 +77,7 @@ def test_auto_live_exposure_uses_exchange_ticker_for_unpriced_holdings(monkeypat
 
     monkeypatch.setattr(trading_bot_agent, "_get_live_asset_eur_price", lambda *_args: 0.9)
     _validate_live_auto_order_risk(
-        _Connection(market_by_asset={"BTC": [(50000, 0)], "USDT": []}),
+        _Connection(market_by_asset={"BTC": [(50000, 0, "EUR")], "USDT": []}),
         1, "BTC", 10,
         {"total": {"EUR": 900, "USDT": 100}}, 100,
         exchange_name="bybit",
@@ -85,9 +85,26 @@ def test_auto_live_exposure_uses_exchange_ticker_for_unpriced_holdings(monkeypat
 
 
 def test_live_price_rejects_stale_or_invalid_market_snapshot():
-    assert _get_live_price(_Connection(market=[(50000, 301)]), "BTC", max_age_seconds=300) is None
-    assert _get_live_price(_Connection(market=[(50000, 299)]), "BTC", max_age_seconds=300) == 50000
-    assert _get_live_price(_Connection(market=[(50000, None)]), "BTC", max_age_seconds=300) is None
+    assert _get_live_price(_Connection(market=[(50000, 301, "EUR")]), "BTC", max_age_seconds=300) is None
+    assert _get_live_price(_Connection(market=[(50000, 299, "EUR")]), "BTC", max_age_seconds=300) == 50000
+    assert _get_live_price(_Connection(market=[(50000, None, "EUR")]), "BTC", max_age_seconds=300) is None
+    assert _get_live_price(_Connection(market=[(50000, 0, "USDT")]), "BTC", max_age_seconds=300) is None
+
+
+def test_auto_live_exposure_uses_verified_eur_ticker_instead_of_usdt_market_data(monkeypatch):
+    from backend.ai_agents import trading_bot_agent
+
+    prices = []
+    def eur_ticker(_conn, _user_id, _exchange, asset):
+        prices.append(asset)
+        return 50000
+    monkeypatch.setattr(trading_bot_agent, "_get_live_asset_eur_price", eur_ticker)
+    _validate_live_auto_order_risk(
+        _Connection(market=[(49000, 0, "USDT")]), 1, "BTC", 100,
+        {"total": {"EUR": 900, "BTC": 0.002}}, 100,
+        exchange_name="bitvavo",
+    )
+    assert prices == ["BTC"]
 
 
 def test_auto_live_order_rechecks_limit_against_exchange_quote(monkeypatch):

@@ -598,9 +598,9 @@ class _ManualOrderRepo:
         }
         self.bot_setup_id = bot_setup_id
         self.market_snapshot = (
-            {"price": 50000, "timestamp": datetime.now(timezone.utc)}
+            {"price": 50000, "timestamp": datetime.now(timezone.utc), "quote_currency": "EUR"}
             if market_snapshot is _DEFAULT_MARKET_SNAPSHOT
-            else market_snapshot
+            else {"quote_currency": "EUR", **market_snapshot} if market_snapshot is not None else None
         )
 
     async def lock_bot_config(self, user_id, bot_id):
@@ -1530,6 +1530,19 @@ def test_fresh_live_market_price_context_returns_snapshot():
     assert result["stale_after_seconds"] == 300
 
 
+def test_live_market_price_context_rejects_non_eur_quote():
+    service = BotService(_FakeSession())
+    service.repository = _ManualOrderRepo(market_snapshot={
+        "price": 50000, "timestamp": datetime.now(timezone.utc), "quote_currency": "USDT",
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_fresh_live_market_price("BTC"))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_MARKET_PRICE_QUOTE_UNVERIFIED"
+
+
 def test_live_market_price_context_blocks_missing_snapshot():
     service = BotService(_FakeSession())
     service.repository = _ManualOrderRepo(market_snapshot=None)
@@ -1631,6 +1644,39 @@ def test_live_manual_order_preflight_is_not_persisted_and_returns_guardrail_cont
     audit_payload = json.loads(audit_events[0]["params"]["payload"])
     assert audit_payload["result"]["execution_audit"]["not_persisted"] is True
     assert audit_payload["result"]["execution_audit"]["exchange_order_created"] is False
+
+
+def test_live_manual_preflight_uses_verified_eur_ticker_when_market_data_is_usdt(monkeypatch):
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(market_snapshot={
+        "price": 50000, "timestamp": datetime.now(timezone.utc), "quote_currency": "USDT",
+    })
+    service.repository = repo
+    _attach_live_portfolio_context(service, repo)
+    async def active_keys(_user_id):
+        return [SimpleNamespace(exchange_name="bitvavo", api_key="test", api_secret="test", api_passphrase=None)]
+    async def client(*_args):
+        return object()
+    async def ticker(_client, _symbol):
+        return {"symbol": "BTC/EUR", "last": 50000, "bid": 49999, "ask": 50001}
+    async def preflight(_user_id, _bot_id, token):
+        return {"token": token, "decision_id": 1}
+    service.exchange_repo = SimpleNamespace(get_active_keys=active_keys)
+    service.require_recent_live_preflight = preflight
+    monkeypatch.setattr("backend.services.bot_service.ExchangeService.get_client", client)
+    monkeypatch.setattr("backend.services.bot_service.ExchangeService.fetch_ticker", ticker)
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(
+        bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000,
+        idempotency_key="manual-live-eur-ticker", risk_acknowledged=True,
+        live_preflight_token="preflight-ok",
+    )
+
+    result = asyncio.run(service.require_live_manual_order_preflight_context(1, bot, payload, 50))
+
+    assert result["live_market_price"]["source"] == "verified_exchange_eur_ticker"
+    assert result["live_market_price"]["market_price"] == 50000
+    assert repo.created_orders == 0
 
 
 def test_live_manual_order_block_records_execution_audit():

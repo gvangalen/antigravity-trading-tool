@@ -604,10 +604,11 @@ class BotRepository:
 
     async def get_market_price_snapshot(self, symbol: str) -> Optional[dict]:
         query = text("""
-            SELECT price, timestamp
-            FROM market_data
-            WHERE symbol=:symbol
-            ORDER BY timestamp DESC
+            SELECT m.price, m.timestamp, a.quote_currency
+            FROM market_data m
+            LEFT JOIN asset_catalog a ON a.symbol = m.symbol
+            WHERE m.symbol=:symbol
+            ORDER BY m.timestamp DESC
             LIMIT 1
         """)
         result = await self.session.execute(query, {"symbol": symbol})
@@ -617,6 +618,7 @@ class BotRepository:
         return {
             "price": float(row[0]) if row[0] is not None else None,
             "timestamp": row[1],
+            "quote_currency": str(row[2] or "").upper(),
         }
 
     async def get_market_price(self, symbol: str) -> Optional[float]:

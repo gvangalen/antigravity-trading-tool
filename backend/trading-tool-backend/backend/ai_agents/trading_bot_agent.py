@@ -86,11 +86,13 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT price, EXTRACT(EPOCH FROM (NOW() - timestamp)) AS age_seconds
-            FROM market_data
-            WHERE symbol = %s
-              AND price IS NOT NULL
-            ORDER BY timestamp DESC
+            SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
+                   a.quote_currency
+            FROM market_data m
+            LEFT JOIN asset_catalog a ON a.symbol = m.symbol
+            WHERE m.symbol = %s
+              AND m.price IS NOT NULL
+            ORDER BY m.timestamp DESC
             LIMIT 1
             """,
             (symbol,),
@@ -101,6 +103,8 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
         return None
 
     if max_age_seconds is not None and (row[1] is None or float(row[1]) > max_age_seconds or float(row[1]) < -60):
+        return None
+    if max_age_seconds is not None and str(row[2] or "").upper() != "EUR":
         return None
 
     return float(row[0])
@@ -223,7 +227,7 @@ def _get_live_asset_eur_price(conn, user_id: int, exchange_name: str, asset: str
         return await ExchangeService.fetch_ticker(client, asset)
 
     ticker = asyncio.run(_fetch())
-    return ExchangeService.verified_eur_ticker_price(ticker)
+    return ExchangeService.verified_eur_ticker_price(ticker, asset)
 
 
 def _validate_live_auto_order_risk(
@@ -273,14 +277,18 @@ def _validate_live_auto_order_risk(
     with conn.cursor() as cur:
         def fresh_price(asset: str) -> float:
             cur.execute("""
-                SELECT price, EXTRACT(EPOCH FROM (NOW() - timestamp)) AS age_seconds
-                FROM market_data WHERE symbol=%s AND price IS NOT NULL
-                ORDER BY timestamp DESC LIMIT 1
+                SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
+                       a.quote_currency
+                FROM market_data m
+                LEFT JOIN asset_catalog a ON a.symbol = m.symbol
+                WHERE m.symbol=%s AND m.price IS NOT NULL
+                ORDER BY m.timestamp DESC LIMIT 1
             """, (asset,))
             market = cur.fetchone()
             if market and market[0] is not None and market[1] is not None:
                 price, age_seconds = float(market[0]), float(market[1])
-                if math.isfinite(price) and price > 0 and age_seconds <= LIVE_MARKET_PRICE_STALE_AFTER_SECONDS:
+                if (str(market[2] or "").upper() == "EUR" and math.isfinite(price) and price > 0
+                        and -60 <= age_seconds <= LIVE_MARKET_PRICE_STALE_AFTER_SECONDS):
                     return price
             if not exchange_name:
                 raise RuntimeError("Exchange asset price unavailable for exposure check")
@@ -1769,9 +1777,16 @@ def run_trading_bot_agent(
             if price_key not in price_cache:
                 if bot.get("is_live"):
                     from backend.services.bot_service import LIVE_MARKET_PRICE_STALE_AFTER_SECONDS
-                    price_cache[price_key] = _get_live_price(
+                    live_price = _get_live_price(
                         conn, symbol, max_age_seconds=LIVE_MARKET_PRICE_STALE_AFTER_SECONDS,
                     )
+                    if live_price is None:
+                        try:
+                            exchange_name, _ = _get_live_exchange_balance(conn, user_id)
+                            live_price = _get_live_asset_eur_price(conn, user_id, exchange_name, symbol)
+                        except Exception:
+                            logger.warning("Verified live EUR price unavailable for %s", symbol)
+                    price_cache[price_key] = live_price
                 else:
                     price_cache[price_key] = _get_live_price(conn, symbol)
             live_price = price_cache[price_key]

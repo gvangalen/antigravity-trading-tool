@@ -10,9 +10,12 @@ logger = logging.getLogger(__name__)
 
 class ExchangeService:
     @staticmethod
-    def verified_eur_ticker_price(ticker: Dict[str, Any], max_age_seconds: int = 300) -> float:
+    def verified_eur_ticker_price(ticker: Dict[str, Any], asset: str, max_age_seconds: int = 300) -> float:
         if not isinstance(ticker, dict):
             raise ValueError("Missing exchange ticker")
+        pair = str(ticker.get("symbol") or "").strip().upper().replace("-", "/")
+        if pair != f"{str(asset or '').strip().upper()}/EUR":
+            raise ValueError("Exchange ticker is not the expected spot EUR pair")
         last = float(ticker.get("last") or 0)
         bid = float(ticker.get("bid") or 0)
         ask = float(ticker.get("ask") or 0)

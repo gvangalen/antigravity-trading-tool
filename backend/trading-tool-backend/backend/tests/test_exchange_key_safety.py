@@ -62,13 +62,17 @@ def test_pending_live_order_prevents_exchange_disconnection(monkeypatch):
 
 def test_exchange_valuation_requires_current_two_sided_quote():
     assert ExchangeService.verified_eur_ticker_price(
-        {"last": 0.9, "bid": 0.899, "ask": 0.901}
+        {"symbol": "USDT/EUR", "last": 0.9, "bid": 0.899, "ask": 0.901}, "USDT"
     ) == 0.9
     with pytest.raises(ValueError, match="stale"):
         ExchangeService.verified_eur_ticker_price(
-            {"last": 0.9, "bid": 0.899, "ask": 0.901, "timestamp": 1}
+            {"symbol": "USDT/EUR", "last": 0.9, "bid": 0.899, "ask": 0.901, "timestamp": 1}, "USDT"
         )
     with pytest.raises(ValueError, match="wide"):
         ExchangeService.verified_eur_ticker_price(
-            {"last": 0.9, "bid": 0.8, "ask": 1.0}
+            {"symbol": "USDT/EUR", "last": 0.9, "bid": 0.8, "ask": 1.0}, "USDT"
+        )
+    with pytest.raises(ValueError, match="spot EUR pair"):
+        ExchangeService.verified_eur_ticker_price(
+            {"symbol": "USDT/EUR:EUR", "last": 0.9, "bid": 0.899, "ask": 0.901}, "USDT"
         )

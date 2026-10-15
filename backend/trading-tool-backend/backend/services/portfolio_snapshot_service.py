@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Literal, List, Tuple
 
@@ -48,7 +49,10 @@ def _get_latest_price(cur, symbol: str) -> float:
         observed_at = observed_at.replace(tzinfo=timezone.utc)
     if not timedelta(0) <= datetime.now(timezone.utc) - observed_at <= timedelta(hours=24):
         raise RuntimeError(f"Geen recente EUR-prijs voor {symbol.upper()}")
-    return float(row[0])
+    price = float(row[0])
+    if not math.isfinite(price) or price <= 0:
+        raise RuntimeError(f"Geen geldige EUR-prijs voor {symbol.upper()}")
+    return price
 
 
 # =====================================================
