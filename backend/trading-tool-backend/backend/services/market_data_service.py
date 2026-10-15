@@ -457,6 +457,8 @@ class MarketDataService:
         try:
             provider = self.provider_registry.resolve_for_asset(asset)
             snapshot = await provider.fetch_latest_snapshot(asset)
+            if str(snapshot.currency or "").upper() != str(asset.quote_currency or "").upper():
+                raise ValueError("market_quote_currency_mismatch")
         except Exception as exc:
             logger.error(
                 "❌ Kon live prijs voor %s niet ophalen via provider %s: %s",

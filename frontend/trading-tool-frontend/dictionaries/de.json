@@ -694,7 +694,8 @@
       "consequence": "After saving, the connection status refreshes immediately on this screen.",
       "manageButton": "Manage exchange",
       "connectButton": "Connect exchange",
-      "saveError": "Saving exchange keys failed"
+      "saveError": "Saving exchange keys failed",
+      "valueUnavailable": "Wert nicht verfügbar"
     },
     "tradingAdvice": {
       "title": "Trading advice",
@@ -2038,6 +2039,8 @@
     "budgetHint": "Ein Limit ist weder Bargeld noch Portfoliowert.",
     "unreconciledLive": "Das Live-Konto lässt sich noch nicht zuverlässig mit Botpositionen abgleichen. Gesamtwert und verfügbares Bargeld bleiben unbekannt.",
     "unfunded": "Einem oder mehreren Botportfolios ist noch kein Bargeld zugewiesen.",
+    "unverifiedLedger": "Ältere Paper-Transaktionen haben noch keine geprüfte Euro-Umrechnung. Ihr Portfoliowert bleibt bis zum Abgleich unbekannt.",
+    "unverifiedBot": "Bewertung noch nicht geprüft",
     "missingPrice": "Für eine Position fehlt ein geprüfter Euro-Kurs. Der Gesamtwert bleibt daher unbekannt.",
     "empty": "Noch keine finanzierten Botportfolios vorhanden.",
     "asOf": "Bewertungszeitpunkt",
@@ -2053,6 +2056,7 @@
     "noPosition": "Keine offene Position.",
     "foreignQuote": "Kurswährung",
     "conversionNeeded": "Eine geprüfte Umrechnung in Euro fehlt.",
+    "conversionAsOf": "Quellzeit der EUR-Umrechnung",
     "quantity": "Menge",
     "asset": "Asset",
     "close": "Schließen",

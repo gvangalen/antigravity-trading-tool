@@ -2,8 +2,9 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { fetchBotTrades, fetchPortfolioSummary } from "@/lib/api/botApi";
+import { fetchBotTrades, fetchPortfolioSummary, fetchVerifiedPortfolioHistory } from "@/lib/api/botApi";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -15,6 +16,7 @@ function PortfolioPageInner() {
   const copy = t?.portfolioPage || {};
   const [environment, setEnvironment] = useState("paper");
   const [loadedOverview, setLoadedOverview] = useState(null);
+  const [loadedHistory, setLoadedHistory] = useState(null);
   const requestSequence = useRef(0);
   const [selectedId, setSelectedId] = useState(null);
   const [detailTab, setDetailTab] = useState("positions");
@@ -36,14 +38,19 @@ function PortfolioPageInner() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetchPortfolioSummary(environment);
+      const [summary, history] = await Promise.allSettled([
+        fetchPortfolioSummary(environment), fetchVerifiedPortfolioHistory(environment),
+      ]);
+      if (summary.status === "rejected") throw summary.reason;
       if (sequence === requestSequence.current) {
-        setLoadedOverview({ environment, data: response?.data || null });
+        setLoadedOverview({ environment, data: summary.value?.data || null });
+        setLoadedHistory({ environment, data: history.status === "fulfilled" ? history.value : null });
       }
     } catch (cause) {
       if (sequence === requestSequence.current) {
         setError(cause?.message || copy.loadError);
         setLoadedOverview({ environment, data: null });
+        setLoadedHistory({ environment, data: null });
       }
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
@@ -60,6 +67,11 @@ function PortfolioPageInner() {
   // A render after switching tabs must never relabel the previous environment's
   // money as the newly selected one, even before the next effect starts.
   const overview = loadedOverview?.environment === environment ? loadedOverview.data : null;
+  const history = loadedHistory?.environment === environment ? loadedHistory.data?.points || [] : [];
+  const chartHistory = history.flatMap((point, index) => {
+    if (index === 0 || new Date(point.ts).getTime() - new Date(history[index - 1].ts).getTime() <= 90 * 60 * 1000) return [point];
+    return [{ ts: new Date(new Date(history[index - 1].ts).getTime() + 60 * 60 * 1000).toISOString(), equity_eur: null }, point];
+  });
   const bots = overview?.bots || [];
   const selected = bots.find((bot) => bot.bot_id === selectedId) || null;
   useEffect(() => {
@@ -80,6 +92,8 @@ function PortfolioPageInner() {
     ? Number(global.realized_pnl) + Number(global.unrealized_pnl) : null;
   const statusMessage = overview?.valuation_status === "unreconciled_live"
     ? copy.unreconciledLive
+    : overview?.valuation_status === "unverified_ledger"
+      ? copy.unverifiedLedger
     : overview?.valuation_status === "unfunded"
       ? copy.unfunded
       : overview?.valuation_status === "missing_price"
@@ -149,7 +163,17 @@ function PortfolioPageInner() {
       <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
         <h2 className="text-lg font-semibold">{copy.history}</h2>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{copy.historyHint}</p>
-        <p className="mt-6 text-sm text-slate-500">{copy.noHistory}</p>
+        {history.length > 1 ? <div className="mt-6 h-56 w-full" role="img" aria-label={copy.history}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartHistory} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 5" stroke="#cbd5e1" opacity={0.55} />
+              <XAxis dataKey="ts" tickFormatter={(value) => new Date(value).toLocaleDateString(locale, { day: "numeric", month: "short" })} minTickGap={36} tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={(value) => money(value)} width={82} domain={["auto", "auto"]} tick={{ fontSize: 11 }} />
+              <Tooltip labelFormatter={(value) => time(value)} formatter={(value) => [money(value), copy.totalValue]} />
+              <Line type="linear" dataKey="equity_eur" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} connectNulls={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div> : <p className="mt-6 text-sm text-slate-500">{environment === "live" ? copy.unreconciledLive : copy.noHistory}</p>}
       </section>
 
       <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
@@ -161,7 +185,9 @@ function PortfolioPageInner() {
               <tr>{[copy.bot, copy.value, copy.cash, copy.positions, copy.result].map((label) => <th key={label} scope="col" className="px-3 py-3 font-medium">{label}</th>)}<th scope="col"><span className="sr-only">{copy.details}</span></th></tr>
             </thead>
             <tbody>{bots.map((bot) => <tr key={bot.bot_id} className="border-b border-slate-100 dark:border-slate-800">
-              <th scope="row" className="px-3 py-4 font-semibold">{bot.name}<span className="block text-xs font-normal text-slate-500">{bot.symbol} · {environment === "paper" ? copy.paper : copy.live}</span></th>
+              <th scope="row" className="px-3 py-4 font-semibold">{bot.name}<span className="block text-xs font-normal text-slate-500">{bot.symbol} · {environment === "paper" ? copy.paper : copy.live}</span>
+                {bot.valuation_status === "unverified_ledger" && <span className="mt-1 block text-xs font-normal text-amber-700 dark:text-amber-300">{copy.unverifiedBot}</span>}
+              </th>
               <td className="px-3 py-4 tabular-nums">{money(bot.equity)}</td>
               <td className="px-3 py-4 tabular-nums">{money(bot.cash_eur)}</td>
               <td className="px-3 py-4 tabular-nums">{money(bot.position_value_eur)}</td>
@@ -183,6 +209,7 @@ function PortfolioPageInner() {
       {selected && <section className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5 dark:border-blue-900 dark:bg-blue-950/20" aria-label={selected.name}>
         <div className="flex justify-between gap-3"><div><h2 className="text-lg font-semibold">{selected.name}</h2><p className="text-xs text-slate-500">{selected.symbol} · {environment === "paper" ? copy.paper : copy.live}</p></div>
           <button type="button" onClick={() => setSelectedId(null)} className="text-sm text-slate-600 dark:text-slate-300">{copy.close}</button></div>
+        {selected.valuation_status === "unverified_ledger" && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{copy.unverifiedLedger}</p>}
         <div className="mt-5 flex flex-wrap gap-2">{[["positions", copy.positions], ["transactions", copy.transactions], ["limits", copy.limits]].map(([key, label]) =>
           <button type="button" key={key} onClick={() => setDetailTab(key)} aria-pressed={detailTab === key}
             className={`rounded-lg px-3 py-2 text-sm ${detailTab === key ? "bg-blue-600 text-white" : "border border-slate-200 dark:border-slate-700"}`}>{label}</button>)}</div>
@@ -191,8 +218,10 @@ function PortfolioPageInner() {
           <div>{copy.quantity}: <strong>{known(selected.position_qty) ? formatNumber(selected.position_qty, locale, { maximumFractionDigits: 8 }) : "—"}</strong></div>
           <div>{copy.value}: <strong>{money(selected.position_value_eur)}</strong></div>
           {selected.position_qty === 0 && <p className="text-slate-500">{copy.noPosition}</p>}
-          {Number(selected.position_qty) > 0 && selected.price_quote_currency && selected.price_quote_currency !== "EUR" &&
+          {Number(selected.position_qty) > 0 && !selected.valuation_available && selected.price_quote_currency && selected.price_quote_currency !== "EUR" &&
             <p className="text-slate-500 sm:col-span-3">{copy.foreignQuote}: {selected.price_quote_currency}. {copy.conversionNeeded}</p>}
+          {Number(selected.position_qty) > 0 && selected.valuation_available && selected.fx_as_of &&
+            <p className="text-slate-500 sm:col-span-3">{copy.foreignQuote}: {selected.price_quote_currency} · {copy.conversionAsOf}: {time(selected.fx_as_of)}</p>}
         </div>}
         {detailTab === "transactions" && <div className="mt-5 space-y-2 text-sm">
           {tradesLoading ? <p>{copy.loadingTransactions}</p> : tradesError ? <p role="alert">{copy.transactionsError}</p> : trades.length ? trades.map((trade) => <div key={trade.id} className="flex justify-between gap-3 border-b border-slate-200 py-2 dark:border-slate-800"><span>{copy[trade.side] || trade.side} · {trade.qty} {trade.symbol}</span><span>{money(trade.amount_eur)} · {time(trade.executed_at)}</span></div>) : <p>{copy.noTransactions}</p>}

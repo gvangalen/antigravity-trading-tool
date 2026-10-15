@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Svg, { Circle, Polyline } from 'react-native-svg';
 
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { useApiResource } from '../hooks/useApiResource';
@@ -15,6 +16,7 @@ const isKnown = (value: unknown): value is number => typeof value === 'number' &
 
 export function PortfolioScreen() {
   const { appearance, language } = useAppPreferences();
+  const { width: windowWidth } = useWindowDimensions();
   const colors = preferenceColors(appearance);
   const { openFinn } = useFinnOverlay();
   const [environment, setEnvironment] = useState<Environment>('paper');
@@ -25,7 +27,11 @@ export function PortfolioScreen() {
   const [tradesError, setTradesError] = useState(false);
   const fetchOverview = useCallback(() => intelligenceApi.portfolioSummary(environment), [environment]);
   const overview = useApiResource<PortfolioOverviewResponse | null>({ fallbackData: null, fetcher: fetchOverview });
-  const data = overview.data?.data;
+  const fetchHistory = useCallback(() => intelligenceApi.portfolioValueHistory(environment), [environment]);
+  const history = useApiResource({ fallbackData: null, fetcher: fetchHistory });
+  // Keep responses bound to their requested environment during fast tab changes.
+  const historyPoints = history.data?.environment === environment ? history.data.points : [];
+  const data = overview.data?.data?.environment === environment ? overview.data.data : null;
   const bots = data?.bots ?? [];
   const selected = bots.find((bot) => bot.bot_id === selectedId);
   const global = data?.global;
@@ -54,10 +60,12 @@ export function PortfolioScreen() {
   }, [selectedId, detailTab]);
 
   const status = data?.valuation_status === 'unreconciled_live' ? label('unreconciled')
+    : data?.valuation_status === 'unverified_ledger' ? label('unverifiedLedger')
     : data?.valuation_status === 'unfunded' ? label('unfunded')
       : data?.valuation_status === 'missing_price' ? label('missingPrice') : null;
 
-  return <ScreenContainer refreshing={overview.refreshing} onRefresh={overview.refresh}>
+  return <ScreenContainer refreshing={overview.refreshing || history.refreshing}
+    onRefresh={() => { overview.refresh(); history.refresh(); }}>
     <View style={styles.header}>
       <Text style={[styles.title, { color: colors.text }]}>{translate(language, 'workspace.portfolio')}</Text>
       <View style={[styles.switch, { borderColor: colors.border }]}>
@@ -84,7 +92,9 @@ export function PortfolioScreen() {
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{label('history')}</Text>
       <Text style={[styles.small, { color: colors.textDim }]}>{label('historyHint')}</Text>
-      <Text style={[styles.notice, { color: colors.textDim }]}>{label('noHistory')}</Text>
+      {historyPoints.length > 1 ? <PortfolioLine points={historyPoints}
+        width={Math.max(220, windowWidth - 72)} color={colors.accent} label={label('history')} locale={locale} />
+        : <Text style={[styles.notice, { color: colors.textDim }]}>{environment === 'live' ? label('unreconciled') : label('noHistory')}</Text>}
     </View>
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{label('byBot')}</Text>
@@ -93,6 +103,8 @@ export function PortfolioScreen() {
         style={[styles.botRow, { borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`${label('details')}: ${bot.name ?? bot.symbol}`}>
         <View style={styles.botName}><Text style={[styles.botTitle, { color: colors.text }]}>{bot.name || bot.symbol}</Text>
           <Text style={[styles.small, { color: colors.textDim }]}>{bot.symbol} · {label(environment)}</Text>
+          {bot.valuation_status === 'unverified_ledger' &&
+            <Text style={[styles.small, { color: colors.warning }]}>{label('unverifiedLedger')}</Text>}
           <Text style={[styles.small, { color: colors.textDim }]}>{label('cash')}: {money(bot.cash_eur)} · {label('positions')}: {money(bot.position_value_eur)}</Text></View>
         <View style={styles.botValue}><Text style={[styles.botTitle, { color: colors.text }]}>{money(bot.equity)}</Text>
           <Text style={[styles.small, { color: colors.textDim }]}>{label('result')}: {money(bot.result_eur)}</Text></View>
@@ -101,6 +113,8 @@ export function PortfolioScreen() {
     {selected && <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={styles.header}><Text style={[styles.sectionTitle, { color: colors.text }]}>{selected.name || selected.symbol}</Text>
         <Pressable onPress={() => setSelectedId(null)} accessibilityRole="button"><Text style={{ color: colors.accent }}>{label('close')}</Text></Pressable></View>
+      {selected.valuation_status === 'unverified_ledger' &&
+        <Text style={[styles.notice, { color: colors.warning }]}>{label('unverifiedLedger')}</Text>}
       <View style={styles.tabs}>{(['positions', 'transactions', 'limits'] as DetailTab[]).map((tab) => <Pressable key={tab} onPress={() => setDetailTab(tab)}
         accessibilityRole="button" accessibilityState={{ selected: detailTab === tab }} style={[styles.tab, { borderColor: colors.border }, detailTab === tab && { backgroundColor: colors.accent }]}>
         <Text style={{ color: detailTab === tab ? '#fff' : colors.text }}>{label(tab)}</Text></Pressable>)}</View>
@@ -109,8 +123,10 @@ export function PortfolioScreen() {
         <Text style={{ color: colors.text }}>{label('quantity')}: {isKnown(selected.position_qty) ? selected.position_qty.toLocaleString(locale) : '—'}</Text>
         <Text style={{ color: colors.text }}>{label('value')}: {money(selected.position_value_eur)}</Text>
         {selected.position_qty === 0 && <Text style={{ color: colors.textDim }}>{label('noPosition')}</Text>}
-        {isKnown(selected.position_qty) && selected.position_qty > 0 && selected.price_quote_currency && selected.price_quote_currency !== 'EUR' &&
+        {isKnown(selected.position_qty) && selected.position_qty > 0 && !selected.valuation_available && selected.price_quote_currency && selected.price_quote_currency !== 'EUR' &&
           <Text style={{ color: colors.textDim }}>{label('foreignQuote')}: {selected.price_quote_currency}. {label('conversionNeeded')}</Text>}
+        {isKnown(selected.position_qty) && selected.position_qty > 0 && selected.valuation_available && selected.fx_as_of &&
+          <Text style={{ color: colors.textDim }}>{label('foreignQuote')}: {selected.price_quote_currency} · {label('conversionAsOf')}: {time(selected.fx_as_of)}</Text>}
       </View>}
       {detailTab === 'transactions' && <View style={styles.detail}>{tradesLoading ? <Text style={{ color: colors.textDim }}>{label('loadingTransactions')}</Text>
         : tradesError ? <Text style={{ color: colors.danger }}>{label('transactionsError')}</Text>
@@ -125,6 +141,40 @@ export function PortfolioScreen() {
       </Pressable>
     </View>}
   </ScreenContainer>;
+}
+
+function PortfolioLine({ points, width, color, label, locale }: {
+  points: { ts: string; equity_eur: number }[]; width: number; color: string; label: string; locale: string;
+}) {
+  const height = 150;
+  const values = points.map((point) => point.equity_eur);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const spread = Math.max(maximum - minimum, 1);
+  const first = new Date(points[0].ts).getTime();
+  const last = new Date(points[points.length - 1].ts).getTime();
+  const x = (point: typeof points[number]) => 10 + (new Date(point.ts).getTime() - first) * (width - 20) / Math.max(last - first, 1);
+  const y = (point: typeof points[number]) => height - 10 - (point.equity_eur - minimum) * (height - 20) / spread;
+  const segments: string[] = [];
+  let current: typeof points = [];
+  points.forEach((point, index) => {
+    if (index && new Date(point.ts).getTime() - new Date(points[index - 1].ts).getTime() > 90 * 60 * 1000) {
+      if (current.length > 1) segments.push(current.map((item) => `${x(item)},${y(item)}`).join(' '));
+      current = [];
+    }
+    current.push(point);
+  });
+  if (current.length > 1) segments.push(current.map((item) => `${x(item)},${y(item)}`).join(' '));
+  return <View style={{ marginTop: 20 }}>
+    <Svg width={width} height={height} accessibilityLabel={label}>
+      {segments.map((segment, index) => <Polyline key={index} points={segment} fill="none" stroke={color} strokeWidth={2} />)}
+      {points.map((point, index) => <Circle key={index} cx={x(point)} cy={y(point)} r={2} fill={color} />)}
+    </Svg>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+      <Text style={{ color, fontSize: 11 }}>{new Date(points[0].ts).toLocaleDateString(locale)}</Text>
+      <Text style={{ color, fontSize: 11 }}>{new Date(points[points.length - 1].ts).toLocaleDateString(locale)}</Text>
+    </View>
+  </View>;
 }
 
 function Metric({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof preferenceColors> }) {

@@ -90,6 +90,9 @@ export type PortfolioOverviewBot = {
   budget_total_eur: number | null;
   price_as_of: string | null;
   price_quote_currency: string | null;
+  fx_as_of: string | null;
+  valuation_available: boolean;
+  valuation_status: string;
 };
 
 export type PortfolioOverviewData = {
@@ -110,6 +113,13 @@ export type PortfolioOverviewData = {
 };
 
 export type PortfolioOverviewResponse = { data: PortfolioOverviewData; as_of: string | null };
+export type PortfolioValueHistory = {
+  environment: 'paper' | 'live';
+  currency: 'EUR';
+  status: string;
+  valuation_version: 2;
+  points: { ts: string; equity_eur: number; cash_eur: number; position_value_eur: number; source_min_at: string }[];
+};
 
 export type MobileOverviewPortfolio = {
   total_balance_eur: number;
@@ -560,6 +570,9 @@ export const intelligenceApi = {
 
   portfolioSummary(environment: 'paper' | 'live') {
     return apiClient.get<PortfolioOverviewResponse>('/api/portfolio/summary', { environment });
+  },
+  portfolioValueHistory(environment: 'paper' | 'live') {
+    return apiClient.get<PortfolioValueHistory>('/api/portfolio/value-history', { environment, bucket: '1h', limit: 720 });
   },
 
   botTrades(botId: number) {

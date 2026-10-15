@@ -1,8 +1,10 @@
 import logging
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Literal, List, Tuple
 
 from backend.utils.db import get_db_connection
+from backend.services.portfolio_fx_service import price_in_eur
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -22,18 +24,110 @@ def floor_timestamp(dt: datetime, bucket: BucketType) -> datetime:
     return dt
 
 
+def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime) -> bool:
+    """Write a complete Paper-only valuation; partial or Live ledgers never enter this series."""
+    cur.execute("""
+        SELECT c.id, COALESCE(NULLIF(UPPER(c.symbol), ''), 'BTC') AS symbol,
+               p.bot_id IS NOT NULL AS initialized, p.cash_eur, p.position_qty,
+               (u.bot_id IS NOT NULL OR EXISTS (
+                   SELECT 1 FROM bot_ledger legacy WHERE legacy.user_id=c.user_id
+                     AND legacy.bot_id=c.id AND legacy.entry_type='execute'
+                     AND legacy.valuation_version < 2
+               )) AS unverified_ledger,
+               p.updated_at
+        FROM bot_configs c
+        LEFT JOIN bot_portfolios p ON p.user_id=c.user_id AND p.bot_id=c.id
+             AND p.symbol=COALESCE(NULLIF(UPPER(c.symbol), ''), 'BTC')
+        LEFT JOIN portfolio_unverified_paper_bots u
+             ON u.user_id=c.user_id AND u.bot_id=c.id
+        WHERE c.user_id=%s AND c.is_live=FALSE
+        ORDER BY c.id
+    """, (user_id,))
+    bots = cur.fetchall()
+    if not bots or any(not row[2] or row[5] for row in bots):
+        return False
+    cur.execute("""
+        SELECT quote_currency, eur_per_unit, observed_at, provider, provider_pair FROM portfolio_fx_rates
+        WHERE quote_currency IN ('USD','USDT')
+    """)
+    fx = {str(row[0]).upper(): {"eur_per_unit": row[1], "observed_at": row[2],
+                              "provider": row[3], "provider_pair": row[4]} for row in cur.fetchall()}
+    held_symbols = sorted({str(row[1]).upper() for row in bots if float(row[4] or 0) != 0})
+    prices = {}
+    if held_symbols:
+        cur.execute("""
+            SELECT DISTINCT ON (m.symbol) m.symbol, m.price, m.source_observed_at, a.quote_currency, m.id
+            FROM market_data m LEFT JOIN asset_catalog a ON a.symbol=m.symbol
+            WHERE m.symbol = ANY(%s) AND m.price IS NOT NULL AND m.price>0
+                  AND m.source_observed_at IS NOT NULL
+            ORDER BY m.symbol, m.source_observed_at DESC, m.timestamp DESC
+        """, (held_symbols,))
+        prices = {str(row[0]).upper(): row[1:] for row in cur.fetchall()}
+    cash = 0.0
+    position_value = 0.0
+    source_times = []
+    evidence = []
+    now = datetime.now(timezone.utc)
+    for bot_id, symbol, _initialized, bot_cash, qty, _unverified, portfolio_updated_at in bots:
+        cash += float(bot_cash or 0)
+        bot_evidence = {
+            "bot_id": bot_id, "symbol": symbol,
+            "cash_eur": float(bot_cash or 0),
+            "portfolio_updated_at": portfolio_updated_at.isoformat() if portfolio_updated_at else None,
+            "quantity": float(qty or 0),
+        }
+        evidence.append(bot_evidence)
+        if float(qty or 0) == 0:
+            continue
+        price_row = prices.get(str(symbol).upper())
+        if not price_row:
+            return False
+        price, source_at, quote, price_row_id = price_row
+        eur_price, effective_at, factor, fx_at = price_in_eur(
+            price=price, price_at=source_at, quote_currency=quote,
+            fx=fx.get(str(quote or "").upper()), now=now,
+        )
+        if eur_price is None:
+            return False
+        position_value += float(qty) * eur_price
+        source_times.append(effective_at)
+        fx_row = fx.get(str(quote or "").upper()) or {}
+        bot_evidence.update({
+            "price_row_id": price_row_id, "source_price": float(price),
+            "quote_currency": quote, "price_at": source_at.isoformat(),
+            "eur_per_unit": factor, "fx_at": fx_at.isoformat() if fx_at else None,
+            "fx_provider": fx_row.get("provider"), "fx_provider_pair": fx_row.get("provider_pair"),
+        })
+    cur.execute("""
+        INSERT INTO portfolio_value_snapshots_v2
+          (user_id, environment, bucket, ts, equity_eur, cash_eur,
+           position_value_eur, covered_bot_count, source_min_at, evidence_json)
+        VALUES (%s,'paper',%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+        ON CONFLICT (user_id, environment, bucket, ts) DO UPDATE SET
+          equity_eur=EXCLUDED.equity_eur, cash_eur=EXCLUDED.cash_eur,
+          position_value_eur=EXCLUDED.position_value_eur,
+          covered_bot_count=EXCLUDED.covered_bot_count,
+          source_min_at=EXCLUDED.source_min_at,
+          evidence_json=EXCLUDED.evidence_json
+    """, (user_id, bucket, ts, cash + position_value, cash,
+          position_value, len(bots), min(source_times) if source_times else now,
+          json.dumps({"valuation_version": 2, "positions": evidence})))
+    return True
+
+
 # =====================================================
 # 💰 Symbol Price
 # =====================================================
 
 def _get_latest_price(cur, symbol: str) -> float:
     cur.execute("""
-        SELECT m.price, a.quote_currency, m.timestamp
+        SELECT m.price, a.quote_currency, m.source_observed_at
         FROM market_data m
         LEFT JOIN asset_catalog a ON a.symbol = m.symbol
         WHERE m.symbol = %s
           AND m.price IS NOT NULL
-        ORDER BY m.timestamp DESC
+          AND m.source_observed_at IS NOT NULL
+        ORDER BY m.source_observed_at DESC, m.timestamp DESC
         LIMIT 1
     """, (symbol.upper(),))
     row = cur.fetchone()
@@ -60,7 +154,13 @@ def snapshot_all_for_user(
     bucket: BucketType = "1h",
 ) -> None:
 
-    ts = floor_timestamp(datetime.utcnow(), bucket)
+    ts = floor_timestamp(datetime.now(timezone.utc), bucket)
+
+    # Commit the verified Paper point independently of the legacy mixed
+    # snapshots below. A legacy valuation failure cannot erase a valid point.
+    with get_db_connection() as verified_conn:
+        with verified_conn.cursor() as verified_cur:
+            _snapshot_verified_paper(verified_cur, user_id, bucket, ts)
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:

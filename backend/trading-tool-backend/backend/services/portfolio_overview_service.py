@@ -25,7 +25,8 @@ def project_portfolio(
     read_at = payload.get("read_at") or datetime.now(timezone.utc)
     mixed = len({bool(row.get("is_live")) for row in rows}) > 1
     live = bool(rows) and all(bool(row.get("is_live")) for row in rows)
-    initialized = bool(rows) and all(row.get("portfolio_initialized", True) for row in rows)
+    unverified = any(row.get("unverified_ledger", False) for row in rows)
+    initialized = bool(rows) and all(row.get("portfolio_initialized", True) and not row.get("unverified_ledger", False) for row in rows)
     priced = initialized and all(row.get("price_available", True) for row in rows)
     budget = sum(float(row.get("budget_total") or 0) for row in rows)
 
@@ -55,7 +56,7 @@ def project_portfolio(
 
     bots = []
     for row in rows:
-        row_initialized = bool(row.get("portfolio_initialized", True))
+        row_initialized = bool(row.get("portfolio_initialized", True)) and not bool(row.get("unverified_ledger", False))
         row_priced = row_initialized and bool(row.get("price_available", True))
         row_live = bool(row.get("is_live"))
         row_cash = float(row.get("cash") or 0) if row_initialized and not row_live else None
@@ -74,10 +75,19 @@ def project_portfolio(
             unrealized_pnl_eur=row_unrealized,
             result_eur=(row_realized + row_unrealized if row_realized is not None and row_unrealized is not None else None),
             portfolio_initialized=row_initialized, valuation_available=row_priced,
+            valuation_status=(
+                "unverified_ledger" if row.get("unverified_ledger") else
+                "unreconciled_live" if row_live else
+                "unfunded" if not row_initialized else
+                "missing_price" if not row_priced else "available"
+            ),
             budget_total_eur=float(row.get("budget_total") or 0),
             paper_cash_eur=row_cash, is_active=row.get("is_active"), is_live=row_live,
             price_as_of=row.get("price_as_of"),
             price_quote_currency=row.get("price_quote_currency"),
+            source_price_as_of=row.get("source_price_as_of"),
+            fx_as_of=row.get("fx_as_of"),
+            fx_eur_per_unit=row.get("fx_eur_per_unit"),
         ))
 
     held = [row for row in rows if float(row.get("qty") or 0) != 0]
@@ -96,6 +106,8 @@ def project_portfolio(
         status = "empty"
     elif live:
         status = "unreconciled_live"
+    elif unverified:
+        status = "unverified_ledger"
     elif not initialized:
         status = "unfunded"
     elif not priced:

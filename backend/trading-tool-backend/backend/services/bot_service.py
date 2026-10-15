@@ -30,6 +30,7 @@ LIVE_PORTFOLIO_DAILY_LIMIT_EUR = float(os.getenv("LIVE_PORTFOLIO_DAILY_LIMIT_EUR
 LIVE_MAX_PORTFOLIO_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_PORTFOLIO_EXPOSURE_PCT", "95"))
 LIVE_MAX_ASSET_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_ASSET_EXPOSURE_PCT", "70"))
 LIVE_MARKET_PRICE_STALE_AFTER_SECONDS = int(os.getenv("LIVE_MARKET_PRICE_STALE_AFTER_SECONDS", "300"))
+PAPER_PREVIEW_TTL_MINUTES = 5
 
 
 def _utc_db_timestamp() -> datetime:
@@ -78,6 +79,70 @@ class BotService:
             return json.loads(v)
         except Exception:
             return fallback
+
+    @staticmethod
+    def _paper_preview_token(*, user_id: int, payload: BotManualOrderSchema,
+                             quantity: float, price: float, gross_eur: float) -> str:
+        from backend.utils.auth_utils import create_token
+        if not payload.idempotency_key:
+            raise HTTPException(400, "Een unieke orderreferentie is vereist voor Paper.")
+        return create_token({
+            "user_id": user_id, "bot_id": payload.bot_id, "symbol": payload.symbol,
+            "side": payload.side, "quantity": round(quantity, 8),
+            "price_eur": round(price, 8), "gross_eur": round(gross_eur, 2),
+            "idempotency_key": payload.idempotency_key,
+        }, timedelta(minutes=PAPER_PREVIEW_TTL_MINUTES), "paper_manual_preview")
+
+    @staticmethod
+    def _verify_paper_preview(payload: BotManualOrderSchema, user_id: int) -> float:
+        from backend.utils.auth_utils import decode_token
+        if not payload.idempotency_key:
+            raise HTTPException(409, "Paper-orderpreview vereist een unieke orderreferentie.")
+        try:
+            claims = decode_token(payload.paper_preview_token or "")
+            valid = (
+                claims.get("type") == "paper_manual_preview"
+                and claims.get("user_id") == user_id
+                and claims.get("bot_id") == payload.bot_id
+                and claims.get("symbol") == payload.symbol
+                and claims.get("side") == payload.side
+                and claims.get("idempotency_key") == payload.idempotency_key
+                and payload.price_currency == "EUR"
+                and round(float(claims.get("quantity")), 8) == round(payload.quantity, 8)
+                and round(float(claims.get("price_eur")), 8) == round(payload.price, 8)
+                and round(float(claims.get("gross_eur")), 2) == round(float(payload.value_eur), 2)
+            )
+        except (ValueError, TypeError, KeyError):
+            valid = False
+        if not valid:
+            raise HTTPException(409, "Paper-orderpreview is ongeldig of verlopen. Controleer de EUR-prijs opnieuw.")
+        return round(float(claims["gross_eur"]), 2)
+
+    async def get_paper_price_eur(self, user_id: int, bot_id: int) -> dict:
+        from backend.services.portfolio_fx_service import price_in_eur
+        bot = await self.repository.get_bot_config(user_id, bot_id)
+        if not bot:
+            raise HTTPException(404, "Bot niet gevonden.")
+        if bot.get("is_live"):
+            raise HTTPException(400, "EUR Paper-prijs is alleen beschikbaar voor Paper-bots.")
+        symbol = str(bot.get("symbol") or "").upper()
+        if not symbol:
+            raise HTTPException(409, "Botasset ontbreekt.")
+        quote = (await self.repository.get_asset_quote_currencies([symbol])).get(symbol)
+        market = (await self.repository.get_valuatable_market_prices([symbol])).get(symbol)
+        fx = (await self.repository.get_portfolio_fx_rates()).get(str(quote or "").upper())
+        price, observed_at, factor, fx_at = price_in_eur(
+            price=market.get("price") if market else None,
+            price_at=market.get("observed_at") if market else None,
+            quote_currency=quote, fx=fx,
+        )
+        if price is None:
+            raise HTTPException(409, "Geen recente gecontroleerde EUR-prijs voor deze Paper-bot.")
+        return {
+            "bot_id": bot_id, "symbol": symbol, "price_eur": price,
+            "quote_currency": quote, "source_observed_at": observed_at,
+            "fx_eur_per_unit": factor, "fx_observed_at": fx_at,
+        }
 
     async def _paper_manual_buy_match(self, user_id: int, bot: Dict[str, Any], payload: BotManualOrderSchema) -> Dict[str, Any]:
         """Use the same owner-scoped setup match as Analyse before a Paper buy.
@@ -1377,19 +1442,26 @@ class BotService:
                 "not_persisted": True, "exchange_order_created": False,
             }
 
-        # Default values from payload
+        # Immediate Paper fills use only the server's dated market price.
         price = payload.price
-        amount_eur = payload.value_eur or (payload.quantity * payload.price)
+        if not bot.get("is_live"):
+            from backend.services.portfolio_fx_service import price_in_eur
+            if not payload.idempotency_key:
+                raise HTTPException(400, "Een unieke orderreferentie is vereist voor Paper.")
+            quote = (await self.repository.get_asset_quote_currencies([payload.symbol])).get(payload.symbol.upper())
+            fx = (await self.repository.get_portfolio_fx_rates()).get(str(quote or "").upper())
+            market = (await self.repository.get_valuatable_market_prices([payload.symbol])).get(payload.symbol.upper())
+            price, _source_at, _factor, _fx_at = price_in_eur(
+                price=market.get("price") if market else None,
+                price_at=market.get("observed_at") if market else None,
+                quote_currency=quote, fx=fx,
+            )
+            if price is None:
+                raise HTTPException(400, "Geen gecontroleerde EUR-prijs voor deze Paper-order.")
+        amount_eur = payload.value_eur or (payload.quantity * price)
         fee_rate = 0.0025 # Default Bitvavo taker fee
         fee_eur = amount_eur * fee_rate
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
-
-        if not price or price <= 0:
-            market_price = await self.repository.get_market_price(payload.symbol)
-            if market_price:
-                price = market_price
-            else:
-                raise HTTPException(400, "Geen geldige prijs beschikbaar voor order preview.")
 
         if bot.get("is_live"):
             keys = await self.exchange_repo.get_active_keys(user_id)
@@ -1455,7 +1527,8 @@ class BotService:
             min_order_eur=bot.get("budget_min_order_eur"),
         )
         if payload.side == "buy" and not bot.get("is_live") and float(guardrails.get("adjusted_amount_eur") or 0) + 0.001 < gross_eur:
-            guardrails.update(allowed=False, blocked_by="insufficient_paper_cash", reason="Onvoldoende virtueel Paper-kassaldo voor het gevraagde bedrag.")
+            guardrails.update(allowed=False, blocked_by="paper_order_exceeds_limits",
+                              reason="Het Paper-bedrag overschrijdt het kassaldo of een botlimiet.")
 
         if payload.side == "sell":
             current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
@@ -1474,6 +1547,15 @@ class BotService:
                 },
             }
 
+        if bot.get("is_live"):
+            # A submitted limit order is not evidence of a fill. Until exchange
+            # fills are reconciled, never offer a confirmable Live preview.
+            guardrails.update(
+                allowed=False,
+                blocked_by="live_fill_reconciliation_unavailable",
+                reason="Live-orders zijn tijdelijk niet beschikbaar: een beursbevestiging van uitvoering ontbreekt.",
+            )
+
         draft = {
             "type": "manual_order_preview",
             "bot_id": payload.bot_id,
@@ -1486,9 +1568,13 @@ class BotService:
         }
 
         return {
+            "ok": bool(guardrails.get("allowed")),
+            "blocked": not bool(guardrails.get("allowed")),
+            "message": guardrails.get("reason") if not guardrails.get("allowed") else None,
             "symbol": payload.symbol,
             "side": payload.side,
             "price": price,
+            "price_currency": "EUR" if not bot.get("is_live") else payload.price_currency,
             "gross_eur": round(gross_eur, 2),
             "fee_eur": round(fee_eur, 2),
             "fee_rate": fee_rate,
@@ -1497,6 +1583,12 @@ class BotService:
             "is_live": bot.get("is_live", False),
             "guardrails": guardrails,
             "draft": draft,
+            "paper_preview_token": (
+                self._paper_preview_token(
+                    user_id=user_id, payload=payload, quantity=quantity,
+                    price=price, gross_eur=gross_eur,
+                ) if not bot.get("is_live") and guardrails.get("allowed") else None
+            ),
         }
 
     async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int, trace_id: Optional[str] = None) -> dict:
@@ -1507,10 +1599,6 @@ class BotService:
         if not bot:
             raise HTTPException(404, "Bot niet gevonden")
 
-        notional = round(payload.quantity * payload.price, 2)
-        if notional <= 0:
-            raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
-
         paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
         if not paper_match["allowed"]:
             raise HTTPException(409, {
@@ -1519,6 +1607,13 @@ class BotService:
                 "safe_next_step": paper_match["safe_next_step"],
                 "setup_match_status": paper_match["status"],
             })
+
+        notional = (
+            self._verify_paper_preview(payload, user_id)
+            if not bot.get("is_live") else round(payload.quantity * payload.price, 2)
+        )
+        if notional <= 0:
+            raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
 
         live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
 
@@ -1560,6 +1655,12 @@ class BotService:
             live_keys = await self.exchange_repo.get_active_keys(user_id)
             if not live_keys:
                 raise HTTPException(400, "Geen actieve exchange keys gevonden voor live trading.")
+            # The exchange can leave a limit order open. Booking a fill here
+            # would fabricate cash and positions in the portfolio ledger.
+            raise HTTPException(409, {
+                "code": "LIVE_FILL_RECONCILIATION_UNAVAILABLE",
+                "message": "Live-orders zijn tijdelijk niet beschikbaar: een beursbevestiging van uitvoering ontbreekt.",
+            })
 
         order_id, is_new_order = await self.repository.create_manual_order(
             user_id,
@@ -1574,6 +1675,15 @@ class BotService:
         )
         if not is_new_order:
             existing = await self.repository.get_manual_order_by_idempotency_key(user_id, payload.idempotency_key)
+            if not existing or (
+                int(existing.get("bot_id") or 0) != int(payload.bot_id)
+                or str(existing.get("symbol") or "").upper() != str(payload.symbol).upper()
+                or str(existing.get("side") or "").lower() != str(payload.side).lower()
+                or round(float(existing.get("quantity") or 0), 8) != round(payload.quantity, 8)
+                or round(float(existing.get("limit_price") or 0), 8) != round(payload.price, 8)
+                or round(float(existing.get("quote_amount_eur") or 0), 2) != round(notional, 2)
+            ):
+                raise HTTPException(409, "Deze orderreferentie hoort bij een ander voorstel.")
             return {
                 "ok": True,
                 "duplicate": True,
@@ -1653,14 +1763,22 @@ class BotService:
             await self.repository.update_manual_order_status(user_id, order_id, "filled")
 
         await self.repository.create_bot_execution(user_id, order_id, payload.quantity, payload.price)
-        await self.repository.insert_bot_ledger(user_id, payload.bot_id, order_id, payload.symbol, cash_delta, qty_delta, payload.price)
+        await self.repository.insert_bot_ledger(
+            user_id, payload.bot_id, order_id, payload.symbol, cash_delta, qty_delta,
+            payload.price, valuation_version=2 if not bot.get("is_live") else 1,
+        )
         
         await self.session.commit()
         behavioral_event = None
         if bot.get("is_live"):
             behavioral_event = self._manual_order_pressure_event(bot, payload, notional)
             await self._record_behavioral_risk_event(user_id, "manual_order", behavioral_event)
-        await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
+        try:
+            await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
+        except Exception:
+            # The order and ledger have already committed. A projection failure
+            # must never be reported as a failed execution that invites a retry.
+            logger.exception("Post-order portfolio snapshot failed for user=%s order=%s", user_id, order_id)
         
         result = {
             "ok": True, "order_id": order_id, "symbol": payload.symbol, "side": payload.side,
@@ -1874,11 +1992,18 @@ class BotService:
     async def get_bot_portfolios(self, user_id: int) -> List[dict]:
         bots = await self.repository.get_bot_portfolios_base(user_id)
         if not bots: return []
+
+        from backend.services.portfolio_fx_service import price_in_eur
+        symbols = sorted({str(b.get("symbol") or "").strip().upper() for b in bots if b.get("symbol")})
+        price_rows = await self.repository.get_valuatable_market_prices(symbols)
+        quote_currencies = await self.repository.get_asset_quote_currencies(symbols)
+        fx_rates = await self.repository.get_portfolio_fx_rates()
         
         today = date.today()
         out = []
         for b in bots:
             bot_id = b["id"]
+            unverified_ledger = bool(b.get("unverified_ledger"))
             symbol = str(b.get("symbol") or "").strip().upper()
             stats_raw = await self.repository.get_bot_ledger_stats(user_id, bot_id, today)
             
@@ -1897,21 +2022,43 @@ class BotService:
                     if not b["is_live"] and b.get("paper_cash_eur") is not None else None
                 ),
             }
+            if unverified_ledger:
+                stats["net_cash_delta_eur"] = None
+                stats["net_executed_cash_delta_eur"] = None
+                stats["net_qty"] = None
+                stats["invested_eur"] = None
+                stats["paper_cash_eur"] = None
             
-            stats["remaining_budget_limit_eur"] = max(float(b["budget_total_eur"]) - stats["invested_eur"], 0)
-            stats["remaining_daily_eur"] = max(float(b["budget_daily_limit_eur"]) - stats["today_spent_eur"], 0)
+            stats["remaining_budget_limit_eur"] = (
+                max(float(b["budget_total_eur"]) - stats["invested_eur"], 0)
+                if stats["invested_eur"] is not None else None
+            )
+            stats["remaining_daily_eur"] = (
+                max(float(b["budget_daily_limit_eur"]) - stats["today_spent_eur"], 0)
+                if not unverified_ledger else None
+            )
             
-            # Fetch price individually
-            last_price = await self.repository.get_market_price(symbol) if symbol else None
-            stats["last_price"] = last_price
-            if last_price is not None:
-                stats["position_value_eur"] = round(stats["net_qty"] * last_price, 2)
+            # Bot cards use the same dated EUR price as FINN and Portfolio.
+            market = price_rows.get(symbol) or {}
+            quote = quote_currencies.get(symbol)
+            eur_price, source_at, factor, fx_at = price_in_eur(
+                price=market.get("price"), price_at=market.get("observed_at"),
+                quote_currency=quote, fx=fx_rates.get(str(quote or "").upper()),
+            )
+            stats["last_price"] = eur_price
+            stats["price_currency"] = "EUR" if eur_price is not None else None
+            stats["price_source_at"] = source_at
+            stats["fx_eur_per_unit"] = factor
+            stats["fx_source_at"] = fx_at
+            if eur_price is not None and not unverified_ledger:
+                stats["position_value_eur"] = round(stats["net_qty"] * eur_price, 2)
             
             out.append({
                 "bot_id": bot_id,
                 "name": b["name"],
                 "is_active": bool(b["is_active"]),
                 "is_live": bool(b["is_live"]),
+                "valuation_status": "unverified_ledger" if unverified_ledger else "available",
                 "mode": b["mode"],
                 "risk_profile": b["risk_profile"],
                 "symbol": symbol,

@@ -1,6 +1,7 @@
 import logging
 from typing import List, Literal, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import text
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.database import get_db
@@ -154,6 +155,14 @@ async def mark_bot_executed(
 # ==========================================================
 # 🟡 MANUAL ORDERS (PAPER TRADE / DISCRETIONARY)
 # ==========================================================
+@router.get("/bot/{bot_id}/paper-price-eur")
+async def get_paper_price_eur(
+    bot_id: int,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service),
+):
+    return await service.get_paper_price_eur(current_user["id"], bot_id)
+
 @router.post("/orders/preview")
 async def preview_manual_order(
     payload: BotManualOrderSchema,
@@ -276,6 +285,47 @@ async def get_portfolio_balance_history(
     service: BotService = Depends(get_bot_service)
 ):
     return await service.get_portfolio_history(bucket, limit, current_user["id"], is_live)
+
+
+@router.get("/portfolio/value-history")
+async def get_verified_portfolio_value_history(
+    environment: Literal["paper", "live"] = "paper",
+    bucket: Literal["1h", "1d"] = "1h",
+    limit: int = Query(720, ge=1, le=720),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Only complete, versioned Paper EUR snapshots are chartable."""
+    if environment == "live":
+        return {"environment": environment, "currency": "EUR", "points": [],
+                "status": "unreconciled_live", "valuation_version": 2}
+    result = await db.execute(text("""
+        SELECT ts, equity_eur, cash_eur, position_value_eur,
+               covered_bot_count, source_min_at
+        FROM (
+          SELECT ts, equity_eur, cash_eur, position_value_eur,
+                 covered_bot_count, source_min_at
+          FROM portfolio_value_snapshots_v2
+          WHERE user_id=:user_id AND environment='paper' AND bucket=:bucket
+            AND evidence_json <> '{}'::jsonb
+            AND NOT EXISTS (
+              SELECT 1 FROM bot_configs c
+              WHERE c.user_id=:user_id AND c.is_live=FALSE
+                AND (EXISTS (
+                  SELECT 1 FROM portfolio_unverified_paper_bots u
+                  WHERE u.user_id=c.user_id AND u.bot_id=c.id
+                ) OR EXISTS (
+                  SELECT 1 FROM bot_ledger legacy
+                  WHERE legacy.user_id=c.user_id AND legacy.bot_id=c.id
+                    AND legacy.entry_type='execute' AND legacy.valuation_version < 2
+                ))
+            )
+          ORDER BY ts DESC LIMIT :limit
+        ) recent ORDER BY ts ASC
+    """), {"user_id": current_user["id"], "bucket": bucket, "limit": limit})
+    points = [dict(row._mapping) for row in result.fetchall()]
+    return {"environment": environment, "currency": "EUR", "points": points,
+            "status": "available" if points else "no_verified_history", "valuation_version": 2}
 
 @router.get("/bot/balance-history")
 async def get_bot_balance_history(

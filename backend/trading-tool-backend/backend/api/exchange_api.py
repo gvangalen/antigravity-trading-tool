@@ -73,17 +73,21 @@ async def get_exchange_balances(
             )
             balance = await ExchangeService.fetch_balance(client)
             
-            # Simple heuristic for total value (could be expanded)
-            total_eur = balance.get('total', {}).get('EUR', 0)
-            if total_eur == 0:
-                total_eur = balance.get('total', {}).get('USDT', 0) # assume 1:1 for simplicity if no EUR
+            totals = balance.get('total', {}) or {}
+            # EUR cash alone is not an account valuation when the same account
+            # also holds assets. Never turn USDT into EUR at an assumed 1:1.
+            has_non_eur_holdings = any(
+                str(currency).upper() != 'EUR' and float(amount or 0) != 0
+                for currency, amount in totals.items()
+            )
+            total_eur = None if has_non_eur_holdings else float(totals.get('EUR') or 0)
             
             results.append({
                 "exchange": k.exchange_name,
-                "total": balance.get('total', {}),
+                "total": totals,
                 "free": balance.get('free', {}),
                 "used": balance.get('used', {}),
-                "total_eur": float(total_eur)
+                "total_eur": total_eur
             })
             
         return results
