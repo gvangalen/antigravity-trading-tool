@@ -139,7 +139,9 @@ class IntelligenceEventService:
         for b in bots:
             symbol = b.get("symbol", "BTC").upper()
             budget = float(b.get("budget_total", 0.0))
-            unrealized_pnl = float(b.get("unrealized_pnl", 0.0))
+            if b.get("unrealized_pnl") is None:
+                continue
+            unrealized_pnl = float(b["unrealized_pnl"])
             
             if budget > 0 and unrealized_pnl < 0:
                 pnl_pct = (unrealized_pnl / budget) * 100

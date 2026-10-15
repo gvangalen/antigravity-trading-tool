@@ -1,5 +1,6 @@
 import inspect
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -216,8 +217,9 @@ def test_deploy_script_has_no_user_specific_business_actions():
 
 
 class _FakeCursor:
-    def __init__(self, prices, portfolios):
+    def __init__(self, prices, portfolios, quotes=None):
         self.prices = prices
+        self.quotes = quotes or {}
         self.portfolios = portfolios
         self._rows = []
         self.inserted_bot_snapshots = []
@@ -229,7 +231,7 @@ class _FakeCursor:
         if "from market_data" in sql_lower:
             symbol = params[0]
             price = self.prices.get(symbol)
-            self._rows = [(price,)] if price is not None else []
+            self._rows = [(price, self.quotes.get(symbol, "EUR"), datetime.now(timezone.utc))] if price is not None else []
             return
         if "from bot_portfolios" in sql_lower:
             self._rows = list(self.portfolios)
@@ -308,6 +310,19 @@ def test_portfolio_global_snapshot_keeps_btc_value_symbol_specific(monkeypatch):
     assert params[3] == 10150  # equity: cash 150 + ETH 5000 + BTC 5000
     assert params[5] == 0.1
     assert params[6] == 5000  # btc_value_eur must not include ETH position value
+
+
+def test_portfolio_snapshot_does_not_label_usdt_quote_as_eur(monkeypatch):
+    cursor = _FakeCursor(
+        prices={"ETH": 2500}, quotes={"ETH": "USDT"},
+        portfolios=[(101, "ETH", 100, 2, 4000, 2000, 0)],
+    )
+    monkeypatch.setattr(portfolio_snapshot_service, "get_db_connection", lambda: _FakeConnection(cursor))
+
+    portfolio_snapshot_service.snapshot_all_for_user(9)
+
+    assert cursor.inserted_bot_snapshots == []
+    assert cursor.inserted_global_snapshots == []
 
 
 def test_portfolio_snapshot_skips_bot_when_symbol_price_missing(monkeypatch):

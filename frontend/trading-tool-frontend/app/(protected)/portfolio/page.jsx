@@ -1,125 +1,191 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { Wallet } from "lucide-react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 
-import useBotData from "@/hooks/useBotData";
-import BotPortfolioOverview from "@/components/bot/BotPortfolioOverview";
-import PortfolioBalanceCard from "@/components/bot/PortfolioBalanceCard";
-import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+import { fetchBotTrades, fetchPortfolioSummary } from "@/lib/api/botApi";
+import { openFinnContext } from "@/lib/finnCommandSearch";
+import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
-function PortfolioPageInner() {
-  const { t } = useTranslation();
-  const copy = t?.portfolioOverview || {};
-  const [envFilter, setEnvFilter] = useState("all");
+const known = (value) => value !== null && value !== undefined && Number.isFinite(Number(value));
 
-  const {
-    configs: bots = [],
-    portfolios = [],
-    loading,
-    error,
-  } = useBotData();
+function PortfolioPageInner() {
+  const { t, locale } = useTranslation();
+  const copy = t?.portfolioPage || {};
+  const [environment, setEnvironment] = useState("paper");
+  const [overview, setOverview] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [detailTab, setDetailTab] = useState("positions");
+  const [trades, setTrades] = useState([]);
+  const [tradesLoading, setTradesLoading] = useState(false);
+  const [tradesError, setTradesError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const money = useCallback((value) => known(value)
+    ? formatCurrency(Number(value), locale, "EUR", { maximumFractionDigits: 2 })
+    : "—", [locale]);
+  const time = useCallback((value) => value
+    ? formatDateTime(new Date(value), locale, { dateStyle: "medium", timeStyle: "short" })
+    : null, [locale]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetchPortfolioSummary(environment);
+      setOverview(response?.data || null);
+    } catch (cause) {
+      setError(cause?.message || copy.loadError);
+      setOverview(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [environment, copy.loadError]);
 
   useEffect(() => {
-    trackAssistantEvent({
-      event_name: "screen_view",
-      page: "/portfolio",
-      surface: "web",
-      flow_type: "portfolio_review",
-    });
-  }, []);
+    load();
+    window.addEventListener("portfolio:updated", load);
+    return () => window.removeEventListener("portfolio:updated", load);
+  }, [load]);
+  useEffect(() => { setSelectedId(null); setTrades([]); }, [environment]);
 
-  const aggregatedBotsForOverview = useMemo(() => {
-    return bots.map((bot) => {
-      const portfolio = portfolios.find((item) => item.bot_id === bot.id);
-      return {
-        bot_id: bot.id,
-        symbol: portfolio?.symbol ?? bot?.symbol ?? "—",
-        is_live: bot.is_live,
-        budget: portfolio?.budget ?? {},
-        stats: portfolio?.stats ?? {},
-      };
-    });
-  }, [bots, portfolios]);
-  const hasPaperBots = bots.some((bot) => !bot.is_live);
-  const hasLiveBots = bots.some((bot) => bot.is_live);
-  const splitBalances = envFilter === "all" && hasPaperBots && hasLiveBots;
+  const bots = overview?.bots || [];
+  const selected = bots.find((bot) => bot.bot_id === selectedId) || null;
+  useEffect(() => {
+    if (!selectedId || detailTab !== "transactions") return;
+    let active = true;
+    setTradesLoading(true);
+    setTradesError(false);
+    fetchBotTrades(selectedId, 30)
+      .then((items) => { if (active) setTrades(Array.isArray(items) ? items : []); })
+      .catch(() => { if (active) { setTrades([]); setTradesError(true); } })
+      .finally(() => { if (active) setTradesLoading(false); });
+    return () => { active = false; };
+  }, [selectedId, detailTab]);
+
+  const global = overview?.global || {};
+  const valuationAvailable = Boolean(overview?.valuation_available);
+  const result = valuationAvailable && known(global.realized_pnl) && known(global.unrealized_pnl)
+    ? Number(global.realized_pnl) + Number(global.unrealized_pnl) : null;
+  const statusMessage = overview?.valuation_status === "unreconciled_live"
+    ? copy.unreconciledLive
+    : overview?.valuation_status === "unfunded"
+      ? copy.unfunded
+      : overview?.valuation_status === "missing_price"
+        ? copy.missingPrice
+        : overview?.valuation_status === "empty" ? copy.empty : null;
+
+  const discuss = (bot) => openFinnContext({
+    query: `Bespreek de opgeslagen portefeuille van bot ${bot.name}. Leg de bekende waarde, positie, het resultaat en ontbrekende gegevens uit.`,
+    context: { page: "/portfolio", bot_id: bot.bot_id, bot_name: bot.name,
+      symbol: bot.symbol, finn_subject_type: "bot", locale },
+  });
 
   return (
-    <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible pb-24">
-      <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
-        <div className="page-label text-[11px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-[0.3em] mb-2 opacity-80 flex items-center gap-2">
-          <Wallet size={12} />
-          {copy.eyebrow}
+    <main className="mx-auto w-full max-w-7xl space-y-8 px-4 py-8 pb-28 text-slate-900 dark:text-slate-100 sm:px-6 lg:px-8">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
         </div>
-        <div className="max-w-2xl">
-          <h1 className="page-title text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-3">
-            {copy.title || "Portfolio"}
-          </h1>
-          <p className="page-subtitle text-[15px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">
-            {copy.subtitle}
-          </p>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-xl border border-slate-200 p-1 dark:border-slate-700" role="group" aria-label={copy.environment}>
+            {(["paper", "live"]).map((item) => (
+              <button key={item} type="button" onClick={() => setEnvironment(item)}
+                aria-pressed={environment === item}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold ${environment === item ? "bg-blue-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>
+                {copy[item]}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={load} aria-label={copy.refresh}
+            className="rounded-xl border border-slate-200 p-2.5 dark:border-slate-700"><RefreshCw size={18} /></button>
         </div>
       </header>
 
-      <div className="space-y-8">
-        {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-            {t?.botPage?.partialError || "Er ging iets mis bij het laden van portfolio-data."}
-          </div>
-        )}
+      {error && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-200">{copy.loadError} {error}</div>}
+      {statusMessage && !loading && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{statusMessage}</p>}
+      {environment === "paper" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.paperMoney}</p>}
+      {environment === "live" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.liveAttribution}</p>}
 
-        <div className="card bg-white dark:bg-[#0f172a] border-2 border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
-          <div className="card-header border-b border-slate-100 dark:border-slate-800 p-6">
-            <div className="card-title text-slate-900 dark:text-white flex items-center gap-3 font-black uppercase tracking-widest text-xs">
-              {copy.portfolioOverviewTitle}
-            </div>
+      <section className="grid grid-cols-2 gap-4 rounded-2xl border border-slate-200 p-5 dark:border-slate-800 md:grid-cols-4" aria-label={copy.totalValue}>
+        {[
+          [copy.totalValue, valuationAvailable ? global.total_equity : null],
+          [copy.cash, global.cash_balance],
+          [copy.positions, global.current_position_value],
+          [copy.result, result],
+        ].map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
+            <div className="mt-1 text-xl font-bold tabular-nums sm:text-2xl">{money(value)}</div>
           </div>
-          <div className="card-p p-8">
-            {splitBalances ? (
-              <div className="grid gap-6 lg:grid-cols-2">
-                <PortfolioBalanceCard
-                  title={`${copy.portfolioOverviewCardTitle} · Paper`}
-                  defaultRange="1W"
-                  is_live={false}
-                />
-                <PortfolioBalanceCard
-                  title={`${copy.portfolioOverviewCardTitle} · Live`}
-                  defaultRange="1W"
-                  is_live={true}
-                />
-              </div>
-            ) : (
-              <PortfolioBalanceCard
-                title={copy.portfolioOverviewCardTitle}
-                defaultRange="1W"
-                is_live={envFilter === "all" ? (hasPaperBots ? false : hasLiveBots ? true : null) : envFilter === "live"}
-              />
-            )}
-          </div>
-        </div>
+        ))}
+      </section>
+      {overview && <p className="text-xs text-slate-500 dark:text-slate-400">
+        {overview.valuation_as_of ? `${copy.asOf}: ${time(overview.valuation_as_of)} · ` : ""}
+        {copy.readAt}: {time(overview.read_at) || copy.unknown}
+      </p>}
 
-        {!loading?.configs && !loading?.portfolios && aggregatedBotsForOverview.length === 0 ? (
-          <div className="card p-10 text-center text-sm font-bold text-slate-500 dark:text-slate-400">
-            {copy.noBotsYet || "Nog geen portfolio-data beschikbaar."}
-          </div>
-        ) : null}
+      <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+        <h2 className="text-lg font-semibold">{copy.history}</h2>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{copy.historyHint}</p>
+        <p className="mt-6 text-sm text-slate-500">{copy.noHistory}</p>
+      </section>
 
-        <BotPortfolioOverview
-          bots={aggregatedBotsForOverview}
-          envFilter={envFilter}
-          onEnvFilterChange={setEnvFilter}
-        />
-      </div>
-    </div>
+      <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+        <h2 className="text-lg font-semibold">{copy.bots}</h2>
+        {!loading && bots.length === 0 && <p className="mt-4 text-sm text-slate-500">{copy.noBots}</p>}
+        {bots.length > 0 && <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[650px] text-left text-sm">
+            <thead className="border-b border-slate-200 text-xs text-slate-500 dark:border-slate-800">
+              <tr>{[copy.bot, copy.value, copy.cash, copy.positions, copy.result].map((label) => <th key={label} scope="col" className="px-3 py-3 font-medium">{label}</th>)}<th scope="col"><span className="sr-only">{copy.details}</span></th></tr>
+            </thead>
+            <tbody>{bots.map((bot) => <tr key={bot.bot_id} className="border-b border-slate-100 dark:border-slate-800">
+              <th scope="row" className="px-3 py-4 font-semibold">{bot.name}<span className="block text-xs font-normal text-slate-500">{bot.symbol} · {environment === "paper" ? copy.paper : copy.live}</span></th>
+              <td className="px-3 py-4 tabular-nums">{money(bot.equity)}</td>
+              <td className="px-3 py-4 tabular-nums">{money(bot.cash_eur)}</td>
+              <td className="px-3 py-4 tabular-nums">{money(bot.position_value_eur)}</td>
+              <td className="px-3 py-4 tabular-nums">{money(bot.result_eur)}</td>
+              <td className="px-3 py-4"><button type="button" onClick={() => { setSelectedId(bot.bot_id); setDetailTab("positions"); }}
+                aria-label={`${copy.details}: ${bot.name}`} className="text-blue-600 hover:underline dark:text-blue-400">{copy.details} <ArrowRight className="inline" size={14} /></button></td>
+            </tr>)}</tbody>
+            <tfoot><tr className="border-t border-slate-300 font-semibold dark:border-slate-700">
+              <th scope="row" className="px-3 py-4">{copy.total}</th>
+              <td className="px-3 py-4 tabular-nums">{money(global.total_equity)}</td>
+              <td className="px-3 py-4 tabular-nums">{money(global.cash_balance)}</td>
+              <td className="px-3 py-4 tabular-nums">{money(global.current_position_value)}</td>
+              <td className="px-3 py-4 tabular-nums">{money(result)}</td><td />
+            </tr></tfoot>
+          </table>
+        </div>}
+      </section>
+
+      {selected && <section className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5 dark:border-blue-900 dark:bg-blue-950/20" aria-label={selected.name}>
+        <div className="flex justify-between gap-3"><div><h2 className="text-lg font-semibold">{selected.name}</h2><p className="text-xs text-slate-500">{selected.symbol} · {environment === "paper" ? copy.paper : copy.live}</p></div>
+          <button type="button" onClick={() => setSelectedId(null)} className="text-sm text-slate-600 dark:text-slate-300">{copy.close}</button></div>
+        <div className="mt-5 flex flex-wrap gap-2">{[["positions", copy.positions], ["transactions", copy.transactions], ["limits", copy.limits]].map(([key, label]) =>
+          <button type="button" key={key} onClick={() => setDetailTab(key)} aria-pressed={detailTab === key}
+            className={`rounded-lg px-3 py-2 text-sm ${detailTab === key ? "bg-blue-600 text-white" : "border border-slate-200 dark:border-slate-700"}`}>{label}</button>)}</div>
+        {detailTab === "positions" && <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+          <div>{copy.asset}: <strong>{selected.symbol}</strong></div>
+          <div>{copy.quantity}: <strong>{known(selected.position_qty) ? formatNumber(selected.position_qty, locale, { maximumFractionDigits: 8 }) : "—"}</strong></div>
+          <div>{copy.value}: <strong>{money(selected.position_value_eur)}</strong></div>
+          {selected.position_qty === 0 && <p className="text-slate-500">{copy.noPosition}</p>}
+          {Number(selected.position_qty) > 0 && selected.price_quote_currency && selected.price_quote_currency !== "EUR" &&
+            <p className="text-slate-500 sm:col-span-3">{copy.foreignQuote}: {selected.price_quote_currency}. {copy.conversionNeeded}</p>}
+        </div>}
+        {detailTab === "transactions" && <div className="mt-5 space-y-2 text-sm">
+          {tradesLoading ? <p>{copy.loadingTransactions}</p> : tradesError ? <p role="alert">{copy.transactionsError}</p> : trades.length ? trades.map((trade) => <div key={trade.id} className="flex justify-between gap-3 border-b border-slate-200 py-2 dark:border-slate-800"><span>{copy[trade.side] || trade.side} · {trade.qty} {trade.symbol}</span><span>{money(trade.amount_eur)} · {time(trade.executed_at)}</span></div>) : <p>{copy.noTransactions}</p>}
+        </div>}
+        {detailTab === "limits" && <div className="mt-5 text-sm"><span>{copy.budget}: <strong>{money(selected.budget_total_eur)}</strong></span><p className="mt-2 text-xs text-slate-500">{copy.budgetHint}</p></div>}
+        <button type="button" onClick={() => discuss(selected)} className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-blue-600 dark:text-blue-400"><Wallet size={16} />{copy.discuss}</button>
+      </section>}
+    </main>
   );
 }
 
 export default function PortfolioPage() {
-  return (
-    <Suspense fallback={null}>
-      <PortfolioPageInner />
-    </Suspense>
-  );
+  return <Suspense fallback={null}><PortfolioPageInner /></Suspense>;
 }

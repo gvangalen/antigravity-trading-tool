@@ -77,6 +77,40 @@ export type MobileOverviewBot = {
   profit_pct?: number | null;
 };
 
+export type PortfolioOverviewBot = {
+  bot_id: number;
+  name: string | null;
+  symbol: string | null;
+  is_live: boolean;
+  equity: number | null;
+  cash_eur: number | null;
+  position_value_eur: number | null;
+  position_qty: number | null;
+  result_eur: number | null;
+  budget_total_eur: number | null;
+  price_as_of: string | null;
+  price_quote_currency: string | null;
+};
+
+export type PortfolioOverviewData = {
+  environment: 'paper' | 'live' | null;
+  valuation_available: boolean;
+  valuation_status: string;
+  valuation_as_of: string | null;
+  read_at: string | null;
+  global: {
+    total_equity: number | null;
+    cash_balance: number | null;
+    current_position_value: number | null;
+    realized_pnl: number | null;
+    unrealized_pnl: number | null;
+    total_budget_limit: number | null;
+  };
+  bots: PortfolioOverviewBot[];
+};
+
+export type PortfolioOverviewResponse = { data: PortfolioOverviewData; as_of: string | null };
+
 export type MobileOverviewPortfolio = {
   total_balance_eur: number;
   total_invested_eur: number;
@@ -522,6 +556,14 @@ export const intelligenceApi = {
 
   botPortfolios() {
     return apiClient.get<PortfolioResponse>('/api/bot/portfolios');
+  },
+
+  portfolioSummary(environment: 'paper' | 'live') {
+    return apiClient.get<PortfolioOverviewResponse>('/api/portfolio/summary', { environment });
+  },
+
+  botTrades(botId: number) {
+    return apiClient.get<{ id: number; side: string; qty: number; symbol: string; amount_eur: number | null; executed_at: string | null }[]>('/api/bot/trades', { bot_id: botId, limit: 30 });
   },
 
   exchangeBalances() {
