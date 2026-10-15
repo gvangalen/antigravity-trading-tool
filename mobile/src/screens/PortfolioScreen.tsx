@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } fro
 import Svg, { Circle, Polyline } from 'react-native-svg';
 
 import { ScreenContainer } from '../components/layout/ScreenContainer';
+import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
 import { useApiResource } from '../hooks/useApiResource';
 import { translate } from '../i18n';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
@@ -96,6 +97,7 @@ export function PortfolioScreen() {
 
   return <ScreenContainer refreshing={overview.refreshing || history.refreshing}
     onRefresh={() => { overview.refresh(); history.refresh(); }}>
+    <TodayWithFinnCard headline="" support="" />
     <View style={styles.header}>
       <Text style={[styles.title, { color: colors.text }]}>{translate(language, 'workspace.portfolio')}</Text>
       <View style={[styles.switch, { borderColor: colors.border }]}>

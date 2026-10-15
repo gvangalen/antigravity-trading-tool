@@ -1,9 +1,12 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-native';
 
 import { FinnOverlaySheet } from '../components/assistant/FinnOverlaySheet';
 import { useAuth } from '../auth/AuthProvider';
 import type { AssistantFeedItem } from '../types/assistant';
+import { assistantApi } from '../services/tradamindApi';
+
+const ACTIVE_FINN_SESSION_ID_KEY = 'active_finn_session_id';
 
 type FinnOverlayParams = {
   contextMetric?: string;
@@ -33,20 +36,63 @@ function ScopedFinnOverlayProvider({ children, accountKey }: { children: ReactNo
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<AssistantFeedItem[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const restoreGeneration = useRef(0);
   useEffect(() => {
+    restoreGeneration.current += 1;
     setIsOpen(false);
     setParams(null);
     setDraft('');
     setMessages([]);
     setSessionId(null);
   }, [accountKey]);
+  useEffect(() => {
+    if (accountKey === 'signed-out') return;
+    let canceled = false;
+    const generation = ++restoreGeneration.current;
+    async function restoreConversation() {
+      try {
+        const preferences = await assistantApi.preferences();
+        const saved = preferences.preferences || {};
+        const hasChoice = Object.prototype.hasOwnProperty.call(saved, ACTIVE_FINN_SESSION_ID_KEY);
+        const preferred = saved[ACTIVE_FINN_SESSION_ID_KEY];
+        if (hasChoice && !preferred) return;
+        const conversations = await assistantApi.v2Conversations();
+        const id = typeof preferred === 'string' && conversations.some((item) => item.id === preferred)
+          ? preferred : conversations[0]?.id;
+        if (!id) return;
+        const detail = await assistantApi.v2ConversationDetail(id);
+        if (canceled || generation !== restoreGeneration.current) return;
+        setSessionId(id);
+        setMessages((detail.messages || []).filter((item) => item.content?.trim()).map((item, index) => ({
+          id: `saved-${index}`,
+          type: 'message',
+          role: item.role,
+          text: item.content,
+        })));
+      } catch {
+        // A temporarily unavailable history must not prevent a new chat.
+      }
+    }
+    void restoreConversation();
+    return () => { canceled = true; };
+  }, [accountKey]);
   const newConversation = useCallback(() => {
+    restoreGeneration.current += 1;
     setMessages([]);
     setSessionId(null);
     setDraft('');
+    void assistantApi.updatePreferences({ [ACTIVE_FINN_SESSION_ID_KEY]: null }).catch(() => {});
   }, []);
 
+  const persistSessionId = useCallback((next: string | null | ((current: string | null) => string | null)) => {
+    restoreGeneration.current += 1;
+    const id = typeof next === 'function' ? next(sessionId) : next;
+    setSessionId(id);
+    if (id) void assistantApi.updatePreferences({ [ACTIVE_FINN_SESSION_ID_KEY]: id }).catch(() => {});
+  }, [sessionId]);
+
   const openFinn = useCallback((next?: FinnOverlayParams) => {
+    restoreGeneration.current += 1;
     setParams(next ?? null);
     if (next?.prefill) setDraft(next.prefill);
     setIsOpen(true);
@@ -85,7 +131,7 @@ function ScopedFinnOverlayProvider({ children, accountKey }: { children: ReactNo
           messages={messages}
           onMessagesChange={setMessages}
           sessionId={sessionId}
-          onSessionIdChange={setSessionId}
+          onSessionIdChange={persistSessionId}
           onNewConversation={newConversation}
         />
       </Modal>

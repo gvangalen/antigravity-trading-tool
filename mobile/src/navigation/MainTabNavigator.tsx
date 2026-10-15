@@ -13,6 +13,7 @@ import { WatchlistScreen } from '../screens/WatchlistScreen';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { WorkspaceHeader } from '../components/layout/WorkspaceHeader';
 import { translate } from '../i18n';
+import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 
 export type MainTabParamList = {
   Watchlist: undefined;
@@ -27,12 +28,26 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export function MainTabNavigator() {
   const { appearance, language } = useAppPreferences();
+  const { updateContext } = useIntelligenceContext();
   const colors = preferenceColors(appearance);
 
   return (
     <View style={styles.shell}>
       <Tab.Navigator
         initialRouteName="Watchlist"
+        screenListeners={({ route }) => ({
+          focus: () => {
+            const workspace: Record<keyof MainTabParamList, string> = {
+              Watchlist: 'Analysis',
+              Setup: 'My Plan',
+              Automation: 'Automation',
+              Portfolio: 'Portfolio',
+              Report: 'Reflection',
+              Settings: 'Settings',
+            };
+            updateContext({ screen: workspace[route.name] });
+          },
+        })}
         screenOptions={({ route }) => ({
           header: () => <WorkspaceHeader routeName={route.name} />,
           headerStatusBarHeight: 0,

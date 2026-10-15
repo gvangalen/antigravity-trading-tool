@@ -10,7 +10,7 @@ import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { StatusChip } from '../components/layout/StatusChip';
 import { BottomSheet } from '../components/sheets/BottomSheet';
 import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
-import { TodayWithFinnCard, type TodayWithFinnQueueItem } from '../components/workspace/TodayWithFinnCard';
+import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
 import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { listRowStandards } from '../constants/listRows';
@@ -20,7 +20,6 @@ import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { useApiResource } from '../hooks/useApiResource';
 import { translate, translateFinnTag } from '../i18n';
-import { localizedBackendText } from '../i18n';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 import { mapBotDecision } from '../services/dataMappers';
@@ -180,25 +179,9 @@ export function AutomationScreen() {
         decisionResource.refresh();
       }}
     >
-      {visibleTopBot ? (
-      <AutomationTodayHero
-          activeAsset={activeAsset}
-          activeCount={activeBots.length}
-          bot={visibleTopBot}
-          briefing={overviewResource.data?.finn_briefing}
-          decision={decision}
-          liveCount={liveBots.length}
-          onOpen={() =>
-            openFinn({
-              prefill: `Open the automation workspace for ${visibleTopBot.name} on ${visibleTopBot.symbol}. Summarize today's execution state, key blockers and the first review step.`,
-              source: 'automation-today',
-              symbol: visibleTopBot.symbol,
-            })
-          }
-          pausedCount={pausedBots.length}
-          reviewCount={Math.max(1, pausedBots.length)}
-        />
-      ) : null}
+      <WorkspaceHeroSection>
+        <TodayWithFinnCard headline="" support="" />
+      </WorkspaceHeroSection>
       <WorkflowStepsRail
         steps={[
           {
@@ -223,6 +206,19 @@ export function AutomationScreen() {
       />
 
       {loading ? <LoadingSkeletonCard /> : null}
+
+      {!loading && !visibleTopBot && !staleMessage ? (
+        <InsightCard
+          label={translate(language, 'automation.workspaceTitle')}
+          title={translate(language, 'automation.emptyTitle')}
+          body={translate(language, 'automation.emptyBody')}
+          cta={translate(language, 'automation.newBot')}
+          onPress={() => openFinn({
+            prefill: translate(language, 'automation.emptyPrompt'),
+            source: 'automation-empty',
+          })}
+        />
+      ) : null}
 
       {visibleTopBot ? (
         <>
@@ -929,91 +925,6 @@ function AutomationBotsSection({
         ))}
       </View>
     </View>
-  );
-}
-
-function AutomationTodayHero({
-  activeAsset,
-  activeCount,
-  bot,
-  briefing,
-  decision,
-  liveCount,
-  pausedCount,
-  reviewCount,
-  onOpen,
-}: {
-  activeAsset: string;
-  activeCount: number;
-  bot: AutomationBot;
-  briefing?: MobileOverviewResponse['finn_briefing'];
-  decision: ReturnType<typeof mapBotDecision>;
-  liveCount: number;
-  pausedCount: number;
-  reviewCount: number;
-  onOpen: () => void;
-}) {
-  const { language } = useAppPreferences();
-  const headline = localizedBackendText(
-    language,
-    briefing?.summary?.trim(),
-    translate(language, 'finn.noBriefingReady'),
-  );
-  const support =
-    bot.budgetTotal <= 0
-      ? translate(language, 'automation.noBudgetSupport')
-      : translate(language, 'automation.pausedLiveSupport', { liveCount, pausedCount });
-
-  const metaItems = [
-    translateFinnTag(language, bot.isActive ? 'Active bot' : 'Paused bot'),
-    translate(language, 'common.confidence', { count: decision.confidence }),
-    translateFinnTag(language, bot.isLive ? 'Live' : 'Paper'),
-  ];
-
-  const queueItems: TodayWithFinnQueueItem[] = [
-    {
-      body: translate(language, 'queue.body.botsWaitingReview'),
-      key: 'tasks',
-      label: translate(language, 'queue.label.tasks'),
-      value: reviewCount,
-      detail: translate(language, 'queue.body.botsPausedOrBlocked'),
-    },
-    {
-      body: translate(language, 'queue.body.botsCurrentlyEnabled'),
-      key: 'bots',
-      label: translate(language, 'queue.label.bots'),
-      value: activeCount,
-    },
-    {
-      body: translate(language, 'queue.body.botsWaitingReview'),
-      key: 'reviews',
-      label: translate(language, 'queue.label.reviews'),
-      value: reviewCount,
-    },
-    {
-      body: translate(language, 'queue.body.botsUsingLiveCapital'),
-      key: 'live',
-      label: translate(language, 'queue.label.live'),
-      value: liveCount,
-    },
-    {
-      body: translate(language, 'queue.body.botsPausedOrBlocked'),
-      key: 'paused',
-      label: translate(language, 'queue.label.paused'),
-      value: pausedCount,
-    },
-  ];
-
-  return (
-    <WorkspaceHeroSection>
-      <TodayWithFinnCard
-        headline={headline}
-        metaItems={metaItems}
-        queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: reviewCount })}
-        support={support}
-      />
-    </WorkspaceHeroSection>
   );
 }
 

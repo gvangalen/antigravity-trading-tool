@@ -8,6 +8,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test:chat": "node --experimental-strip-types --test scripts/*.test.mjs",
     "lint": "expo lint",
     "smoke:web": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && expo export --platform web --output-dir dist",
     "smoke:ios": "node -e \"require('fs').rmSync('dist-ios', { recursive: true, force: true })\" && expo export --platform ios --output-dir dist-ios",

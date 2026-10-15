@@ -2,6 +2,7 @@ import { NativeModules, Platform } from 'react-native';
 
 import { getStoredAppLanguage } from '../preferences/appLocale';
 import { clearTokens, getAccessToken, getRefreshToken, saveAccessToken } from './tokenStorage';
+import { withRequestDeadline } from './requestDeadline';
 
 declare const __DEV__: boolean;
 
@@ -85,7 +86,18 @@ export class ApiError extends Error {
 
 class APIClient {
   async request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    return this.requestInternal<T>(path, options, false);
+    // Some native fetch implementations do not reject when an AbortSignal is
+    // fired. Bound read-only calls and chat delivery. A confirmed mutation
+    // keeps its existing transport semantics so a late write is not mistaken
+    // for a safely failed action that the user can repeat.
+    if ((options.method ?? 'GET') !== 'GET' && path !== '/api/assistant/chat') {
+      return this.requestInternal<T>(path, options, false);
+    }
+    return withRequestDeadline(
+      this.requestInternal<T>(path, options, false),
+      options.timeoutMs ?? 12000,
+      () => new ApiError('Request timed out', 0),
+    );
   }
 
   private async requestInternal<T>(

@@ -1,5 +1,6 @@
 import { AssistantEnvelope, AssistantHistoryMessage, AssistantRuntimeContext } from '../types/assistant';
 import { apiClient } from './apiClient';
+import { pollFinnRun, type FinnRunEnvelope } from './finnRunPolling';
 
 export type AssistantPreferencesResponse = {
   preferences: Record<string, unknown>;
@@ -25,6 +26,12 @@ export type AssistantChatSessionMessage = {
 export type AssistantChatSessionDetailResponse = {
   session: AssistantChatSession;
   messages: AssistantChatSessionMessage[];
+};
+
+export type FinnV2Conversation = { id: string; title: string; updated_at: string };
+export type FinnV2ConversationDetail = {
+  id: string;
+  messages: { role: 'assistant' | 'user'; content: string }[];
 };
 
 export type MobileOverviewAsset = {
@@ -361,11 +368,33 @@ export const assistantApi = {
     });
   },
 
-  chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null, signal?: AbortSignal) {
-    return apiClient.request<AssistantEnvelope>('/api/assistant/chat', {
-      method: 'POST', signal,
+  async chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null, signal?: AbortSignal) {
+    const initial = await apiClient.request<AssistantEnvelope>('/api/assistant/chat', {
+      method: 'POST', signal, timeoutMs: 90000,
       body: { context, history, query, session_id: sessionId },
     });
+    const runId = initial.state?.current_flow === 'finn_v2_visible_pending'
+      ? initial.state.run_id : null;
+    if (!runId) return initial;
+    const run = await pollFinnRun(runId, (id) => apiClient.request<FinnRunEnvelope>(
+      `/api/assistant/v2/runs/${encodeURIComponent(id)}`,
+      { signal, timeoutMs: 12000 },
+    ), signal);
+    const content = run.response?.content?.trim();
+    if (['failed', 'unavailable', 'canceled'].includes(run.status)) {
+      throw new Error('FINN kon dit antwoord niet afronden. Probeer het opnieuw.');
+    }
+    if (!content) throw new Error('FINN gaf geen afgerond antwoord terug. Probeer het opnieuw.');
+    return {
+      ...initial,
+      response: content,
+      intent: String(run.response?.mode || run.mode || 'read').toLowerCase(),
+      flow: 'finn_v2_visible',
+      session_id: run.conversation_id || initial.session_id,
+      state: { current_flow: 'finn_v2_visible', status: 'complete', slots: {}, run_id: run.run_id },
+      can_confirm: Boolean(run.response?.confirmation_required && run.response?.proposal_id),
+      next_best_action: run.response?.next_step?.title || null,
+    } satisfies AssistantEnvelope;
   },
 
   sessions() {
@@ -374,6 +403,14 @@ export const assistantApi = {
 
   sessionDetail(sessionId: string) {
     return apiClient.get<AssistantChatSessionDetailResponse>(`/api/assistant/sessions/${encodeURIComponent(sessionId)}`);
+  },
+
+  v2Conversations() {
+    return apiClient.get<FinnV2Conversation[]>('/api/assistant/v2/conversations');
+  },
+
+  v2ConversationDetail(conversationId: string) {
+    return apiClient.get<FinnV2ConversationDetail>(`/api/assistant/v2/conversations/${encodeURIComponent(conversationId)}`);
   },
 
   executePendingAction(actionId: string) {
