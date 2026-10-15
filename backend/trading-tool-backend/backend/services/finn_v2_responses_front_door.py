@@ -795,6 +795,93 @@ class FinnResponsesFrontDoor:
             workspace_hints=None, client_context=None,
         )
         is_read_request = request_facts.action_polarity == "read" and not imperative_operation
+        prior_action = dict(conversation_context.get("previous_action_result") or {})
+        if (
+            imperative_operation == "update_strategy"
+            and request_facts.action_polarity == "update"
+            and request_facts.discourse_act == "contextual_follow_up"
+            and not pending_operation
+            and prior_action.get("owner_user_id") == self.user_id
+            and prior_action.get("result_status") == "succeeded"
+            and prior_action.get("entity_type") == "strategy"
+            and str(prior_action.get("entity_id") or "").isdigit()
+            and not conversation_context.get("proposal_correction_result")
+        ):
+            # An explicit mutation of the previously confirmed strategy is a
+            # proposal request. Bind only the owner-scoped confirmed target;
+            # the normal proposal and confirmation boundaries still apply.
+            contract = self.proposals.registry.require_supported("update_strategy")
+            explicit = self.proposals.states.explicit_inputs(
+                contract=contract, message=message, explicit_asset=None,
+            )
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(contract.operation_id),
+                    operation_id=contract.operation_id,
+                    inputs={"changed_fields": explicit.get("changed_fields") or {}},
+                    read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new", target_reference="confirmed_previous_plan",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+                verified_target_inputs={"strategy_id": int(prior_action["entity_id"])},
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={"en": "I have prepared the change for your review.",
+                          "de": "Ich habe die Änderung zur Prüfung vorbereitet."}.get(
+                              locale.split("-")[0].lower(),
+                              "Ik heb de wijziging ter controle voorbereid.",
+                          ),
+                    response_id=f"verified-strategy-update-{self.run_id}",
+                    tool_trace=({"name": "verified_strategy_update_proposal", "status": "completed",
+                                 "result": {"operation_id": contract.operation_id}},),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
+        if (
+            imperative_operation == "delete_strategy"
+            and request_facts.action_polarity in {"delete", "remove"}
+            and request_facts.discourse_act == "operation_request"
+            and not pending_operation
+            and prior_action.get("owner_user_id") == self.user_id
+            and prior_action.get("result_status") == "succeeded"
+            and prior_action.get("entity_type") == "bot"
+            and prior_action.get("parent_entity_type") == "strategy"
+            and str(prior_action.get("parent_entity_id") or "").isdigit()
+            and re.search(r"\b(?:linked|gekoppelde|verkn[uü]pfte)\s+strateg\w*\b", message, re.I)
+        ):
+            # A confirmed bot action carries its owner-scoped strategy link.
+            # Deleting that linked strategy is still a separate, confirmable
+            # proposal; the removed bot itself is never used as its target.
+            contract = self.proposals.registry.require_supported("delete_strategy")
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(contract.operation_id),
+                    operation_id=contract.operation_id, inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new", target_reference="confirmed_previous_plan",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+                verified_target_inputs={"strategy_id": int(prior_action["parent_entity_id"])},
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={"en": "I have prepared the linked strategy deletion for review.",
+                          "de": "Ich habe das Löschen der verknüpften Strategie zur Prüfung vorbereitet."}.get(
+                              locale.split("-")[0].lower(),
+                              "Ik heb de verwijdering van de gekoppelde strategie ter controle voorbereid.",
+                          ),
+                    response_id=f"verified-linked-strategy-delete-{self.run_id}",
+                    tool_trace=({"name": "verified_linked_strategy_delete_proposal", "status": "completed",
+                                 "result": {"operation_id": contract.operation_id}},),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
         if (
             imperative_operation == "update_setup"
             and request_facts.discourse_act == "operation_request"

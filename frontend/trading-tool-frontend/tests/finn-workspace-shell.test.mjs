@@ -12,6 +12,9 @@ const feedSource = await readFile(
 const assistantSource = await readFile(
   new URL("../components/ui/AIAssistant.jsx", import.meta.url), "utf8",
 );
+const assistantApiSource = await readFile(
+  new URL("../lib/api/ai.js", import.meta.url), "utf8",
+);
 const planSource = await readFile(
   new URL("../components/workflows/MyPlanWorkflow.jsx", import.meta.url), "utf8",
 );
@@ -23,6 +26,8 @@ test("shared workspace shows the persisted coach feed and opens chat on demand",
   assert.match(shellSource, /<FinnCoachFeed\s+key=/);
   assert.match(shellSource, /<AIAssistant\s+[\s\S]*?commandRequest=/);
   assert.doesNotMatch(shellSource, /loadMissionControl|first_dashboard_context/);
+  assert.doesNotMatch(assistantSource, /loadMissionControl\(|fetchFinnMissionControl/);
+  assert.doesNotMatch(assistantApiSource, /assistant\/mission-control/);
 });
 
 test("feed discussion enters the persistent FINN panel with its event identity", () => {

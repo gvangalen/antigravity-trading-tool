@@ -62,14 +62,9 @@ def test_finn_actions_are_issued_and_user_bound_before_execution():
     assert "status = 'pending'" in source
 
 
-def test_mission_control_endpoint_routes_directly_to_v2_visible_delivery():
+def test_retired_mission_control_endpoint_is_not_exposed():
     api_source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
-    service_source = _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
+    feed_source = _read(BACKEND_ROOT / "api" / "finn_coach_feed_api.py")
 
-    assert '"/assistant/mission-control"' in api_source
-    assert "service = FinnV2VisibleDeliveryService(db)" in api_source
-    assert "service.deliver_mission_control(" in api_source
-    assert "timeout=8.0" in api_source
-    assert "response = await service.deliver_mission_control_fallback(" in api_source
-    assert "def _is_server_issued_action" in service_source
-    assert "resolve_mission_item" in service_source
+    assert '"/assistant/mission-control"' not in api_source
+    assert '"/assistant/feed"' in feed_source

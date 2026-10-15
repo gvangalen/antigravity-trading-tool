@@ -150,16 +150,9 @@ def test_deploy_env_applies_the_finn_v2_canonical_mode_backfill():
     assert "2026_08_22_finn_v2_remove_legacy_fact_mode.py" in source
 
 
-def test_mission_control_api_uses_bounded_persisted_reads_across_pm2_workers():
+def test_retired_mission_control_api_is_absent():
     source = (BACKEND_ROOT / "api" / "ai_assistant_api.py").read_text(encoding="utf-8")
-
-    endpoint = source[source.index('async def get_finn_mission_control('):source.index('@router.get("/assistant/v2/proposals/', source.index('async def get_finn_mission_control('))]
-    assert "_get_cached_mission_control" not in endpoint
-    assert "_store_cached_mission_control" not in endpoint
-    assert "asyncio.wait_for" in endpoint
-    assert "timeout=8.0" in endpoint
-    assert "deliver_mission_control(" in endpoint
-    assert "deliver_mission_control_fallback(" in endpoint
+    assert '"/assistant/mission-control"' not in source
 
 
 def test_portfolio_intelligence_context_batches_market_prices():

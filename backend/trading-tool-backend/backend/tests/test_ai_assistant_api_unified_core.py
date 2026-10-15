@@ -1,15 +1,11 @@
 import asyncio
 from datetime import date
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from backend.api import ai_assistant_api
-from backend.api.ai_assistant_api import assistant_chat, _audit_context_summary, get_finn_mission_control, router
+from backend.api.ai_assistant_api import assistant_chat, _audit_context_summary, router
 from backend.schemas.assistant_schema import AssistantChatRequest
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 
@@ -17,7 +13,7 @@ from backend.infrastructure.repositories.conversation_state_repository import Co
 def test_finn_routes_retire_the_separate_insight_endpoint():
     paths = {route.path for route in router.routes}
     assert "/assistant/chat" in paths
-    assert "/assistant/mission-control" in paths
+    assert "/assistant/mission-control" not in paths
     assert "/assistant/insight" not in paths
 
 def test_audit_context_summary_includes_profile_match_metadata():
@@ -121,145 +117,6 @@ def test_assistant_chat_returns_legacy_response_text_after_profile_overlay(monke
     )
 
     assert "fear of missing out" in response.response
-
-def test_get_finn_mission_control_survives_non_database_action_failures(monkeypatch):
-    db = SimpleNamespace(rollback=AsyncMock())
-    captured = {}
-
-    class VisibleService:
-        async def deliver_mission_control(self, **kwargs):
-            captured.update(kwargs)
-            return {
-                "greeting": "Today with FINN",
-                "finn_briefing": {"summary": "Ready", "suggested_actions": []},
-                "generation_status": "completed",
-                "response_trace": {"pipeline_version": "finn_v2"},
-                "first_dashboard_context": {"generation_status": "ready"},
-            }
-
-    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda db_session: VisibleService())
-
-    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
-    request.state.trace_id = "trace-mission-control"
-
-    response = asyncio.run(
-        get_finn_mission_control(
-            symbol="aapl",
-            current_user={"id": 30},
-            db=db,
-            request=request,
-        )
-    )
-
-    db.rollback.assert_not_awaited()
-    assert response["first_dashboard_context"]["generation_status"] == "ready"
-    assert captured["context_payload"]["symbol"] == "AAPL"
-
-
-def test_mission_control_passes_active_request_locale_to_briefing_projection(monkeypatch):
-    captured = {}
-
-    class VisibleService:
-        async def deliver_mission_control(self, **kwargs):
-            return {"first_dashboard_context": {"content_locale": "de", "briefing_text": "Guten Morgen"}}
-
-    async def localize(payload, locale):
-        captured["locale"] = locale
-        return {"first_dashboard_context": {**payload["first_dashboard_context"], "briefing_text": "Good morning"}}
-
-    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda _: VisibleService())
-    monkeypatch.setattr("backend.api.ai_assistant_api.localize_first_dashboard_context", localize)
-    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
-    response = asyncio.run(get_finn_mission_control(
-        current_user={"id": 30}, db=SimpleNamespace(), request=request,
-        request_locale="en",
-    ))
-    assert captured["locale"] == "en"
-    assert response["first_dashboard_context"]["briefing_text"] == "Good morning"
-
-
-def test_mission_control_http_locale_header_selects_saved_briefing_language(monkeypatch):
-    class VisibleService:
-        async def deliver_mission_control(self, **_kwargs):
-            return {"first_dashboard_context": {"content_locale": "de", "briefing_text": "Guten Morgen"}}
-
-    async def localize(payload, locale):
-        assert locale == "en"
-        return {"first_dashboard_context": {**payload["first_dashboard_context"], "briefing_text": "Good morning"}}
-
-    monkeypatch.setattr(ai_assistant_api, "FinnV2VisibleDeliveryService", lambda _: VisibleService())
-    monkeypatch.setattr(ai_assistant_api, "localize_first_dashboard_context", localize)
-    app = FastAPI()
-    app.include_router(router, prefix="/api")
-    app.dependency_overrides[ai_assistant_api.get_current_user] = lambda: {"id": 30}
-    app.dependency_overrides[ai_assistant_api.get_db] = lambda: SimpleNamespace()
-    response = TestClient(app).get("/api/assistant/mission-control", headers={"X-Locale": "en"})
-    assert response.status_code == 200
-    assert response.json()["first_dashboard_context"]["briefing_text"] == "Good morning"
-
-def test_get_finn_mission_control_returns_owner_scoped_fallback_after_enrichment_failure(monkeypatch):
-    db = SimpleNamespace(rollback=AsyncMock())
-
-    class VisibleService:
-        async def deliver_mission_control(self, **kwargs):
-            raise RuntimeError("live mission control exploded")
-
-        async def deliver_mission_control_fallback(self, **kwargs):
-            return {
-                "finn_briefing": {
-                    "summary": "Je hebt 2 opgeslagen setups: BTC Base, BTC Breakout.",
-                    "suggested_actions": [],
-                },
-                "generation_status": "degraded",
-                "response_trace": {
-                    "pipeline_version": "finn_v2",
-                    "response_source": "owner_scoped_deterministic_fallback",
-                },
-            }
-
-    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda db_session: VisibleService())
-
-    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
-    request.state.trace_id = "trace-mission-control-fallback"
-
-    response = asyncio.run(
-        get_finn_mission_control(
-            current_user={"id": 30},
-            db=db,
-            request=request,
-        )
-    )
-
-    db.rollback.assert_not_awaited()
-    assert response["generation_status"] == "degraded"
-    assert response["response_trace"]["pipeline_version"] == "finn_v2"
-    assert response["response_trace"]["response_source"] == "owner_scoped_deterministic_fallback"
-    assert "BTC Base" in response["finn_briefing"]["summary"]
-
-def test_get_finn_mission_control_bounds_enrichment_and_returns_owner_fallback(monkeypatch):
-    db = SimpleNamespace(rollback=AsyncMock())
-
-    class VisibleService:
-        async def deliver_mission_control(self, **kwargs):
-            return {"generation_status": "completed"}
-
-        async def deliver_mission_control_fallback(self, **kwargs):
-            return {"generation_status": "degraded", "finn_briefing": {"summary": "Persisted owner state"}}
-
-    async def timeout_wait_for(awaitable, *, timeout):
-        awaitable.close()
-        assert timeout == 8.0
-        raise asyncio.TimeoutError
-
-    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda _db: VisibleService())
-    monkeypatch.setattr("backend.api.ai_assistant_api.asyncio.wait_for", timeout_wait_for)
-    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
-    request.state.trace_id = "trace-timeout"
-
-    response = asyncio.run(get_finn_mission_control(current_user={"id": 30}, db=db, request=request))
-
-    assert response["generation_status"] == "degraded"
-    assert response["finn_briefing"]["summary"] == "Persisted owner state"
 
 def test_conversation_state_repository_serializes_date_values():
     class _Session:

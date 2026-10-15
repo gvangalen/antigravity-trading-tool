@@ -93,7 +93,7 @@ def build_profile_requests(
 
     if profile == "read-heavy":
         template = [
-            {"name": "mission-control", "method": "GET", "path": "/api/assistant/mission-control", "cache_bust": True},
+            {"name": "finn-coach-feed", "method": "GET", "path": "/api/assistant/feed", "cache_bust": True},
             {"name": "daily-report-latest", "method": "GET", "path": "/api/report/daily/latest?symbol=BTC"},
             {"name": "daily-report-history", "method": "GET", "path": "/api/report/daily/history"},
             {"name": "top-setups", "method": "GET", "path": "/api/setups/top?limit=3"},
