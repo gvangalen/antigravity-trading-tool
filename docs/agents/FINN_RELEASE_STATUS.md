@@ -6,10 +6,27 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Portfolio-overzicht met gedeelde geldbetekenis
 
-Phase: `PORTFOLIO_OVERVIEW_DEPLOYED_AWAITING_INDEPENDENT_QA`.
+Phase: `PORTFOLIO_OVERVIEW_QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`.
 [PR #347](https://github.com/gvangalen/antigravity-trading-tool/pull/347)
 leverde product-SHA `dcb6b80ba2607df3fc2c78dcb845574fb45891df`.
-Onafhankelijke ingelogde web- en mobiele QA: nog niet vastgesteld.
+Onafhankelijke ingelogde QA op de documentatie-SHA
+`a3fd4cac24eeed1678f13b1c8b6a69b1fdc46cc9` gaf **NOT ACCEPTED**:
+bij Paper → Live bleven de Paper-botrijen kort zichtbaar met het label Live,
+inclusief Paper-cash, totdat de lege Live-state laadde. Daarnaast faalde een
+vóór de deploy geopende tab bij de eerste navigatie met een webpack-
+`undefined.call`-fout; een harde refresh herstelde hem. De definitieve
+Paper-/Live-gegevens, botbudgetgrens, FINN-pariteit voor bekende en onbekende
+Paper-cash en NL/EN/DE-teksten slaagden in deze fixture. Native mobiel,
+niet-EUR posities, API-foutstatus en volledig gefinancierde totalen bleven
+onbewezen.
+
+De gerichte herstelkandidaat bindt geladen overzichtsgegevens aan hun
+Paper-/Live-omgeving en negeert verouderde responses na een wissel. De
+oude-tabherstelfunctie herkent nu ook precies de webpack-`undefined.call`-
+fout, zonder gewone React-fouten te herladen. Lokaal slaagden frontend
+productiebuild, typecheck, i18n-lint en -tests, command- en proposaltests,
+de 14 release-hardening-tests en high-severity audit. Onafhankelijke live
+herkeuring van deze kandidaat is nog niet uitgevoerd.
 
 De nieuwe eigenaargebonden projectie scheidt Paper en Live en geeft web,
 mobiel en FINN dezelfde botrijen. Botbudget blijft een limiet en wordt niet
