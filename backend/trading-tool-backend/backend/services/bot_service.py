@@ -1662,6 +1662,17 @@ class BotService:
         for r in rows:
             scores = self._safe_json(r["scores_json"], {})
             reasons = self._safe_json(r["reason_json"], [])
+            # Legacy rows may contain an empty JSON object. It is not a
+            # human-readable reason and must not appear as literal "{}".
+            if isinstance(reasons, list):
+                reasons = [reason.strip() for reason in reasons
+                           if isinstance(reason, str) and reason.strip()
+                           and reason.strip() not in ("{}", "[]", "null")]
+            elif isinstance(reasons, dict):
+                reasons = [reasons[key].strip() for key in ("reason", "message", "detail")
+                           if isinstance(reasons.get(key), str) and reasons[key].strip()]
+            else:
+                reasons = []
             
             setup_match = (
                 scores.get("setup_match")
@@ -1682,7 +1693,7 @@ class BotService:
                 "confidence": r["confidence"],
                 "amount_eur": r["amount_eur"],
                 "setup_match": setup_match,
-                "reasons": reasons if isinstance(reasons, list) else [str(reasons)],
+                "reasons": reasons,
                 "guardrails_result": scores.get("guardrails_result"),
                 "execution_failure": scores.get("execution_failure"),
                 "status": r["status"]

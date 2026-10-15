@@ -100,7 +100,9 @@ export default function BotHistoryTable({
                     return hasAmounts ? `${label}: ${formatCurrency(Number(item.from_amount_eur), locale)} → ${formatCurrency(Number(item.to_amount_eur), locale)}` : label;
                   }).join(" · ")
                 : riskCodes[guardrailResult.blocked_by] || (h.is_trade ? copy.tradeExecutedReason : null)
-                  || h.reasons?.[0] || guardrailResult.reason || "—");
+                  || h.reasons?.find((item) => typeof item === "string" && item.trim() && !["{}", "[]", "null"].includes(item.trim()))
+                  || guardrailResult.reason
+                  || (status === "executed" ? copy.executedDecisionReason : copy.reasonNotRecorded));
               const dateValue = h.created_at || h.date;
               const dateLabel = dateValue
                 ? formatDateTime(dateValue, locale, { day: "2-digit", month: "short", year: "numeric" })

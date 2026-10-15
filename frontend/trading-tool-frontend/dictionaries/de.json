@@ -2088,6 +2088,9 @@
       "bots": "Bots",
       "allTrades": "Alle Trades",
       "allTradesDescription": "Ausgeführte Trades all deiner Bots, neueste zuerst.",
+      "legacyEnvironmentHint": "Bei einigen Orders wurde Paper oder Live nicht gespeichert. Die Umgebung bleibt unbekannt; die aktuelle Bot-Einstellung belegt nicht, wo diese Order ausgeführt wurde.",
+      "legacyEnvironment": "Nicht erfasst",
+      "scheduledDcaReason": "Der regelmäßige Kaufbetrag wurde aus dem bestätigten Plan gewählt.",
       "date": "Datum",
       "bot": "Bot",
       "trade": "Trade",
@@ -2498,7 +2501,9 @@
       "confidence": "Vertrauen",
       "status": "Status",
       "statuses": { "planned": "Geplant", "failed": "Fehlgeschlagen", "failed_execution": "Ausführung fehlgeschlagen" },
-      "tradeExecutedReason": "Ausgeführter Trade; die Bot-Entscheidung in diesem Verlauf zeigt mögliche Limits."
+      "tradeExecutedReason": "Ausgeführter Trade; die Bot-Entscheidung in diesem Verlauf zeigt mögliche Limits.",
+      "executedDecisionReason": "Ausgeführt; für diese Entscheidung wurde kein weiterer Grund erfasst.",
+      "reasonNotRecorded": "Für diese Entscheidung wurde kein Grund erfasst."
     },
     "budgetBar": {
       "noBudget": "Kein Budget konfiguriert",
