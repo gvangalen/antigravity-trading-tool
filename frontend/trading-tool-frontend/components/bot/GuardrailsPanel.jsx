@@ -168,8 +168,8 @@ export default function GuardrailsPanel({
           <Shield size={14} className="text-slate-300" />
           {copy.safetyCheck}
         </div>
-        <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${noProposal ? "bg-slate-100 text-slate-600 border border-slate-200" : allowed ? "bg-green-100 text-green-600 border border-green-200" : "bg-red-100 text-red-600 border border-red-200"}`}>
-          {noProposal ? copy.noProposal : allowed ? copy.goClear : copy.systemBlocked}
+        <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${noProposal ? "bg-slate-100 text-slate-600 border border-slate-200" : !allowed ? "bg-red-100 text-red-600 border border-red-200" : tradeAdjusted ? "bg-orange-100 text-orange-700 border border-orange-200" : "bg-green-100 text-green-600 border border-green-200"}`}>
+          {noProposal ? copy.noProposal : !allowed ? copy.systemBlocked : tradeAdjusted ? copy.systemReduced : copy.goClear}
         </div>
       </div>
 
@@ -199,8 +199,8 @@ export default function GuardrailsPanel({
       {isBuyDecision && <div className="bg-[var(--color-border-subtle)] border border-slate-100 rounded-xl p-3 space-y-2">
          <div className="flex justify-between items-center">
             <div className="text-[9px] font-black text-secondary uppercase tracking-tighter">{copy.adjustedPositionSize}</div>
-            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded ${tradeAdjusted ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
-              {tradeAdjusted ? copy.scaledDown : copy.optimalSize}
+            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded ${!allowed ? 'bg-red-100 text-red-700' : tradeAdjusted ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+              {!allowed ? copy.systemBlocked : tradeAdjusted ? copy.scaledDown : copy.optimalSize}
             </div>
          </div>
          <div className="text-sm font-black text-foreground font-mono tracking-tighter">

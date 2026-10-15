@@ -2467,7 +2467,9 @@
       "price": "Price",
       "amount": "Amount",
       "confidence": "Confidence",
-      "status": "Status"
+      "status": "Status",
+      "statuses": { "planned": "Planned", "failed": "Failed", "failed_execution": "Execution failed" },
+      "tradeExecutedReason": "Executed trade; the bot decision in this history shows any limits."
     },
     "budgetBar": {
       "noBudget": "No budget configured",
@@ -2848,6 +2850,7 @@
     "guardrailsPanel": {
       "safetyCheck": "Risk limits",
       "goClear": "RISK LIMITS CLEAR",
+      "systemReduced": "ORDER REDUCED BY RISK LIMIT",
       "systemBlocked": "RISK LIMIT BLOCKED",
       "maxRiskPerTrade": "Maximum order size",
       "noProposal": "No buy proposal",

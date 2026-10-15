@@ -261,7 +261,9 @@ export default function BotFocusView({
               </section>
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><h3 className="font-black text-slate-950 dark:text-white">{copy.lastDecision}</h3>
                 <p className="mt-2 text-sm font-bold">{decision?.action ? (copy.actions?.[decision.action] || decision.action) : copy.noDecision}</p>
-                <p className="mt-1 text-sm text-slate-500">{decision?.strategy_reason || risk.reason || copy.noDecision}</p>
+                <p className="mt-1 text-sm text-slate-500">{["blocked", "reduced", "error"].includes(risk.state) || explanations.length > 0
+                  ? riskReason
+                  : decision?.strategy_reason || risk.reason || copy.noDecision}</p>
               </section>
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="flex justify-between gap-3"><h3 className="font-black text-slate-950 dark:text-white">{copy.recentTrades}</h3><button type="button" onClick={() => setView("trades")} className="text-sm font-bold text-blue-700">{copy.allTrades}</button></div>
                 {trades.length ? <ul className="mt-3 space-y-2">{trades.slice(0, 3).map((trade) => <li key={trade.id} className="flex justify-between gap-3 text-sm"><span>{trade.side === "buy" ? copy.buy : copy.sell} {trade.symbol} · {money(trade.amount_eur)}</span><span className="text-slate-500">{trade.executed_at ? formatDateTime(trade.executed_at, locale, { day: "2-digit", month: "short" }) : "—"}</span></li>)}</ul>

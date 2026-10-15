@@ -2468,7 +2468,9 @@
       "price": "Prijs",
       "amount": "Bedrag",
       "confidence": "Vertrouwen",
-      "status": "Status"
+      "status": "Status",
+      "statuses": { "planned": "Gepland", "failed": "Mislukt", "failed_execution": "Uitvoering mislukt" },
+      "tradeExecutedReason": "Uitgevoerde trade; de botbeslissing in deze geschiedenis toont eventuele limieten."
     },
     "budgetBar": {
       "noBudget": "Geen budget ingesteld",
@@ -2849,6 +2851,7 @@
     "guardrailsPanel": {
       "safetyCheck": "Risicolimieten",
       "goClear": "RISICOLIMIETEN IN ORDE",
+      "systemReduced": "ORDER VERKLEIND DOOR RISICOLIMIET",
       "systemBlocked": "RISICOLIMIET BLOKKEERT",
       "maxRiskPerTrade": "Maximale ordergrootte",
       "noProposal": "Geen koopvoorstel",

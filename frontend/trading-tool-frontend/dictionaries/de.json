@@ -2484,7 +2484,9 @@
       "price": "Price",
       "amount": "Amount",
       "confidence": "Vertrauen",
-      "status": "Status"
+      "status": "Status",
+      "statuses": { "planned": "Geplant", "failed": "Fehlgeschlagen", "failed_execution": "Ausführung fehlgeschlagen" },
+      "tradeExecutedReason": "Ausgeführter Trade; die Bot-Entscheidung in diesem Verlauf zeigt mögliche Limits."
     },
     "budgetBar": {
       "noBudget": "Kein Budget konfiguriert",
@@ -2865,6 +2867,7 @@
     "guardrailsPanel": {
       "safetyCheck": "Risikogrenzen",
       "goClear": "RISIKOGRENZEN EINGEHALTEN",
+      "systemReduced": "ORDER DURCH RISIKOGRENZE VERKLEINERT",
       "systemBlocked": "RISIKOGRENZE BLOCKIERT",
       "maxRiskPerTrade": "Maximale Ordergröße",
       "noProposal": "Kein Kaufvorschlag",

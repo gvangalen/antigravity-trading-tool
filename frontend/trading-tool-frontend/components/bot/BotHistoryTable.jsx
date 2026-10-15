@@ -12,7 +12,9 @@ export default function BotHistoryTable({
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.history || {};
-  const riskCodes = t?.botPage?.focus?.riskCodes || {};
+  const focusCopy = t?.botPage?.focus || {};
+  const riskCodes = focusCopy.riskCodes || {};
+  const confidenceLabels = t?.botPage?.agentCard?.confidenceLabels || {};
 
   return (
     <CardWrapper
@@ -58,11 +60,13 @@ export default function BotHistoryTable({
               /* =====================
                  Status styling
               ===================== */
-              let status = h.status || (h.executed ? "executed" : "planned");
+              const guardrailResult = h.guardrails_result || {};
+              const blocked = Boolean(guardrailResult.blocked_by || h.execution_failure);
+              const status = blocked ? "blocked" : h.status || (h.executed ? "executed" : "planned");
               let statusClass = "text-[var(--text-muted)]";
 
               if (status === "executed") statusClass = "icon-success";
-              else if (status === "failed" || status === "failed_execution") statusClass = "icon-danger";
+              else if (status === "blocked" || status === "failed" || status === "failed_execution") statusClass = "icon-danger";
               else if (status === "skipped") statusClass = "icon-warning";
 
               /* =====================
@@ -87,15 +91,26 @@ export default function BotHistoryTable({
                   : h.amount != null
                   ? formatCurrency(Number(h.amount), locale)
                   : formatCurrency(0, locale);
-              const guardrailExplanations = Array.isArray(h.guardrails_result?.explanations)
-                ? h.guardrails_result.explanations : [];
+              const guardrailExplanations = Array.isArray(guardrailResult.explanations)
+                ? guardrailResult.explanations : [];
               const reason = h.execution_failure || (guardrailExplanations.length > 0
                 ? guardrailExplanations.map((item) => {
                     const label = riskCodes[item.code] || item.message;
                     const hasAmounts = Number.isFinite(Number(item.from_amount_eur)) && Number.isFinite(Number(item.to_amount_eur));
                     return hasAmounts ? `${label}: ${formatCurrency(Number(item.from_amount_eur), locale)} → ${formatCurrency(Number(item.to_amount_eur), locale)}` : label;
                   }).join(" · ")
-                : h.reasons?.[0] || h.guardrails_result?.reason || "—");
+                : riskCodes[guardrailResult.blocked_by] || (h.is_trade ? copy.tradeExecutedReason : null)
+                  || h.reasons?.[0] || guardrailResult.reason || "—");
+              const dateValue = h.created_at || h.date;
+              const dateLabel = dateValue
+                ? formatDateTime(dateValue, locale, { day: "2-digit", month: "short", year: "numeric" })
+                : "—";
+              const action = String(h.action || h.side || "").toLowerCase();
+              const actionLabel = h.is_trade
+                ? (action === "buy" ? focusCopy.buy : action === "sell" ? focusCopy.sell : null) || h.action || h.side || "—"
+                : focusCopy.actions?.[action] || h.action || h.side || "—";
+              const statusLabel = focusCopy.states?.[status] || copy.statuses?.[status] || status;
+              const confidence = String(h.confidence || "").toLowerCase();
 
               return (
                 <tr
@@ -108,15 +123,12 @@ export default function BotHistoryTable({
                 >
                   {/* DATE */}
                   <td className="py-2">
-                    {h.date ||
-                      (h.created_at
-                        ? formatDateTime(h.created_at, locale)
-                        : "—")}
+                    {dateLabel}
                   </td>
 
                   {/* ACTION */}
                   <td className="font-medium capitalize">
-                    {h.action || h.side || "—"}
+                    {actionLabel}
                   </td>
 
                   {/* QTY */}
@@ -136,12 +148,12 @@ export default function BotHistoryTable({
 
                   {/* CONFIDENCE */}
                   <td>
-                    {h.confidence || "—"}
+                    {confidenceLabels[confidence] || h.confidence || "—"}
                   </td>
 
                   {/* STATUS */}
                   <td className={`font-medium capitalize ${statusClass}`}>
-                    {status}
+                    {statusLabel}
                   </td>
                   <td className="max-w-xs py-2 text-xs text-[var(--text-muted)]">{reason}</td>
                 </tr>

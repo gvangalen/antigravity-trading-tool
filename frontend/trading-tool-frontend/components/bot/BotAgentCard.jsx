@@ -47,6 +47,8 @@ export default function BotAgentCard({
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.agentCard || {};
+  const focusCopy = t?.botPage?.focus || {};
+  const riskCodes = focusCopy.riskCodes || {};
   if (!bot) return null;
 
   const [backtestResult, setBacktestResult] = useState(null);
@@ -120,12 +122,16 @@ export default function BotAgentCard({
   const confidenceLabels = copy.confidenceLabels || {};
 
   const deriveDecisionReason = (decisionState) => {
+    const guardrailResult = decisionState?.guardrails_result || decisionState?.guardrails || {};
+    const explanations = Array.isArray(guardrailResult.explanations) ? guardrailResult.explanations : [];
+    const guardrailCode = guardrailResult.blocked_by || explanations[0]?.code || decisionState?.guardrail_reason;
+    if (decisionState?.execution_failure) return decisionState.execution_failure;
+    if (guardrailCode) {
+      return riskCodes[guardrailCode] || explanations[0]?.message || guardrailResult.reason || focusCopy.reasonUnavailable;
+    }
     const directReason =
-      decisionState?.execution_failure ||
       decisionState?.reason ||
-      decisionState?.guardrail_reason ||
-      decisionState?.guardrails_result?.reason ||
-      decisionState?.guardrails?.reason ||
+      guardrailResult.reason ||
       decisionState?.reasons?.[0] ||
       decisionState?.guardrails_result?.warnings?.[0] ||
       decisionState?.guardrails?.warnings?.[0] ||
@@ -303,6 +309,20 @@ export default function BotAgentCard({
           body: copy.blockerPausedCompleteBody || copy.blockerPausedBody,
           nextStep: copy.blockerPausedCompleteStep || copy.blockerPausedStep,
         }
+      : normalizedDecision?.safety_check?.state === "blocked" || normalizedDecision?.safety_check?.state === "error" || normalizedDecision?.execution_failure
+        ? {
+            tone: "amber",
+            title: focusCopy.states?.[normalizedDecision?.safety_check?.state] || focusCopy.states?.blocked,
+            body: decisionReason || focusCopy.reasonUnavailable,
+            nextStep: focusCopy.nextSteps?.[normalizedDecision?.safety_check?.reason_code] || focusCopy.nextStepFallback,
+          }
+      : normalizedDecision?.status === "executed"
+        ? {
+            tone: "emerald",
+            title: focusCopy.states?.executed,
+            body: decisionReason || focusCopy.reasons?.executed,
+            nextStep: focusCopy.nextSteps?.executed,
+          }
       : !hasDecision || normalizedAction === "hold" || normalizedAction === "observe"
         ? {
             tone: "blue",
@@ -333,7 +353,7 @@ export default function BotAgentCard({
       blocker,
       blockerToneClasses,
     };
-  }, [bot?.is_active, copy, decisionStale, hasBudget, hasCompleteChain, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
+  }, [bot?.is_active, copy, decisionStale, focusCopy, hasBudget, hasCompleteChain, hasLinkedStrategy, normalizedAction, normalizedActionLabel, riskCodes, safeDecision]);
 
   const {
     normalizedDecision,
@@ -360,6 +380,7 @@ export default function BotAgentCard({
       symbol: t.symbol,
       mode: t.mode,
       action: t.side,
+      is_trade: true,
     }));
 
     const merged = [...tradeAsHistory, ...botHistory].sort((a, b) => {
