@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Portfolio 2.0: verifieerbare waardering per bot
 
-Phase: `READY_FOR_INDEPENDENT_QA`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)
+Phase: `INDEPENDENT_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)
 is gemerged als product-SHA `971c3ca398ccda7810b77d1502e626bc8b4c905a`.
 De [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698223064)
 en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698745232)
@@ -44,9 +44,28 @@ Luna-regressie SHA-256
 FINN-portfolioproef SHA-256
 `6fe509fc9207d9758ec6c0150dfa93ab2de87c1ebb9805d9fc76ad945abd9f03`.
 
-De officiële onafhankelijke live QA kan nu volgen. Die moet vooral echte
-waarderingsdekking, botrijen en totalen, Live/Paper-scheiding, fout- en
-versheidsstatus, FINN-pariteit en veilige Paper-actiegrenzen beoordelen.
+Onafhankelijke ingelogde QA op status-SHA
+`0778a8d4ca9cc931b9a338edf05f7b665a420420` gaf **NOT ACCEPTED voor de
+volledige matrix wegens bewijsgrenzen, zonder aangetoonde nieuwe
+productregressie**. Paper en Live bleven bij zes snelle wissels gescheiden.
+Drie historische ETH-bots kregen geen onbewezen waardering; twee cash-only
+bots toonden ieder €20; een ongefinancierde bot toonde zijn €20 limiet niet
+als saldo. FINN hield dezelfde read-only geldbetekenis aan. NL/EN/DE en een
+op 390 px horizontaal bedienbare botlijst werkten zonder consolefouten.
+QA's Paper- en Live-screenshots hebben respectievelijk SHA-256
+`bc2f3a2725018c3521f0f19f98b4a383b04233de7ee6679176e095706e8e042d`
+en `0a00607ccdc6394847485c75e2a5cdd787f28aa97e29998aeaba9daca8a6bc08`.
+
+De browserfixture bood geen geverifieerde niet-EUR positie met verse koers
+en FX, geen geforceerde API-fout en geen geautoriseerde Paper-herhaalproef.
+Native mobiel was niet bereikbaar in deze run. QA kon productiecheckout en
+release-marker niet zelf rechtstreeks lezen; het geslaagde
+[Auto Deploy-log](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38699662596)
+registreert wel de uitgecheckte SHA, de productierelease-marker en
+`LAST_GOOD_COMMIT` alle drie als
+`0778a8d4ca9cc931b9a338edf05f7b665a420420`. Dat log is
+Build/Operations-bewijs, geen vervanging van een onafhankelijke QA-preflight.
+Een nieuwe beschermde Paper-fixture en herkeuring zijn nog niet uitgevoerd.
 
 ## Botflow: automatische Paper-order en geschiedenis
 
