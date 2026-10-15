@@ -72,6 +72,7 @@ export type AssistantDraft = {
 
 export type AssistantConversationState = {
   current_flow: string;
+  run_id?: string;
   asset?: string;
   slots: Record<string, unknown>;
   missing_slots?: string[];

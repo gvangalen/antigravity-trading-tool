@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Mobiele feed en chat na onafhankelijke herkeuring
+
+Phase: `CANDIDATE_READY_AWAITING_CI_DEPLOY`. Kandidaatbranch:
+`codex/finn-mobile-feed-qa-repair`. Onafhankelijke mobiele QA op live SHA
+`cf1c8678d755f5712d9d7a65fba9c40480a40278` gaf `NOT_ACCEPTED`:
+een read-only chatvraag bleef op “Even controleren…”, de chat hield op
+Reflectie en Automatisering het Analyse-label vast, en de feed was op
+Automatisering zonder bot onzichtbaar. Een directe, eigenaargebonden API-proef
+met een apart QA-account toonde de oorzaak van de vastloper: `/assistant/chat`
+leverde een `finn_v2_visible_pending`-contract met run-ID. De mobiele client
+behandelde die tekst als eindantwoord en haalde de terminale run nooit op.
+De read-only run-GET voor hetzelfde account bereikte `completed` met inhoud.
+
+De huidige reparatiekandidaat laat mobiel het eigenaargebonden run-ID begrensd
+ophalen, bewaakt een niet reagerende native read met een zichtbare timeout,
+herstelt een afgeronde V2-conversatie na herladen, koppelt de chatcontext aan
+de actieve tab, en toont de gedeelde feed ook op Automatisering zonder bot en
+Portfolio. De lokale iPhone-simulator op de live API gaf voor de exacte
+QA-vraag een terminal coachantwoord; de lege feed en juiste
+Automatisering-context waren zichtbaar. Dit is Build-diagnostiek, geen
+onafhankelijke productieacceptatie. Er is nog geen nieuwe kandidaat gedeployed.
+
+De backend-suite slaagde met **3740 tests, 3 bestaande skips**. De webbuild,
+typecheck, i18n-, command- en auditpoort slaagden; de audit meldt één
+moderate Next.js-bevinding. Mobiele typecheck, lint zonder errors, zeven
+gerichte chat-/pollingregressies en web/iOS/Android Expo-bundels slaagden.
+De eerste lokale API/Celery/Responses-matrix voltooide **37/37** cases,
+**16/16** acties en **9/9** relaties, maar miste de p95-grens met
+**10,08 s** (artifact SHA-256
+`e59538ba524026d62b9a752e98bb214a4e6cfdb643d8dc189bab99419e07b949`).
+Een herhaling zonder gelijktijdige mobiele bundelbouw slaagde **37/37**,
+**16/16** acties en **9/9** relaties met p95 **7,43 s**, maximale beurtduur
+**12,27 s**, nul Live-bots en nul niet-toegestane executies (artifact SHA-256
+`de470a619ddf643aac0333c14932c78b32b539f6e55306d12abf1869fe831c61`).
+De eerste rode latency blijft zichtbaar in deze overdracht.
+De echte Responses-selectorproef op `gpt-6-luna` slaagde op de
+developmentset **20/20** (artifact SHA-256
+`d6b4e46746bd88f0f46429a3816aef30910b9e5a2cf8f64220e12f3e582a83c5`)
+en de volledige regressieset **109/109** (artifact SHA-256
+`76e6e6066b0191c33ee805abaa0e8d31fef7526a0d64f3f2bf974470a36f7be9`).
+Beide hadden nul provider-, schema-, timeout-, parse- of validatiefouten.
+CI, Auto Deploy en onafhankelijke live QA zijn nog niet uitgevoerd voor deze
+kandidaat.
+De laatste mobiele controle na alle bronwijzigingen slaagde: zeven gerichte
+tests, typecheck, lint met nul errors, en Expo web-, iOS- en Android-bundels.
+
 ## Oude FINN-meldingen opruimen
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Op branch

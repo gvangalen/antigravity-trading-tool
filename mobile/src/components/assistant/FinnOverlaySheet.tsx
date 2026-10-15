@@ -13,6 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '../../constants/theme';
+import { translate } from '../../i18n';
 import { useIntelligenceContext } from '../../contexts/ActiveIntelligenceContext';
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { mapAssistantEnvelopeToFeedItems } from '../../services/assistantEnvelopeMapper';
@@ -59,7 +60,15 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
   const activeSymbol = symbol || context.asset;
   const activeTimeframe = String(context.timeframe || '1D').toUpperCase();
   const activeWorkspace = context.screen || context.page || 'Analysis';
-  const contextLine = `${activeWorkspace} · ${activeSymbol}`;
+  const workspaceLabels: Record<string, Parameters<typeof translate>[1]> = {
+    Analysis: 'workspace.analysis',
+    'My Plan': 'workspace.myPlan',
+    Automation: 'workspace.automation',
+    Portfolio: 'workspace.portfolio',
+    Reflection: 'workspace.reflection',
+    Settings: 'workspace.settings',
+  };
+  const contextLine = `${workspaceLabels[activeWorkspace] ? translate(language, workspaceLabels[activeWorkspace]) : activeWorkspace} · ${activeSymbol}`;
 
   const apiContext = useMemo(
     () => ({

@@ -194,6 +194,7 @@ jobs:
         run: |
           npm run typecheck
           npm run lint
+          npm run test:chat
           npm run smoke:web
           npm run smoke:ios
           npm run smoke:android
