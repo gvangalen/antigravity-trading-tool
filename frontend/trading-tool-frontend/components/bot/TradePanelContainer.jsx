@@ -6,6 +6,7 @@ import TradePanel from "./TradePanel";
 import OrderPreviewModal from "./OrderPreviewModal";
 import { fetchTradePlan, createManualOrder, preflightManualOrder, previewManualOrder } from "@/lib/api/botApi";
 import { fetchLatestPrice } from "@/lib/api/market";
+import { fetchPaperPriceEur } from "@/lib/api/botApi";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
@@ -108,6 +109,11 @@ export default function TradePanelContainer({
     let cappedAvailable = remainingTotal;
     if (remainingDaily < cappedAvailable) cappedAvailable = remainingDaily;
     if (maxOrder > 0 && maxOrder < cappedAvailable) cappedAvailable = maxOrder;
+    if (!bot?.is_live) {
+      const paperCash = Number(portfolio?.stats?.paper_cash_eur);
+      cappedAvailable = portfolio?.stats?.paper_cash_eur == null
+        ? 0 : Math.min(cappedAvailable, Math.max(0, paperCash));
+    }
 
     setBalanceQuote(remainingTotal);
     setAvailableQuote(cappedAvailable);
@@ -126,9 +132,11 @@ export default function TradePanelContainer({
   }, [
     bot?.budget?.total_eur,
     bot?.budget_total_eur,
+    bot?.is_live,
     portfolio?.stats?.net_executed_cash_delta_eur,
     portfolio?.stats?.invested_eur,
     portfolio?.stats?.net_qty,
+    portfolio?.stats?.paper_cash_eur,
     decision
   ]);
 
@@ -183,15 +191,21 @@ export default function TradePanelContainer({
 
     try {
 
-      const latest = await fetchLatestPrice(tradeSymbol, { forceFresh: true });
+      const latest = bot?.is_live
+        ? await fetchLatestPrice(tradeSymbol, { forceFresh: true })
+        : await fetchPaperPriceEur(botId);
 
-      if (latest?.price) {
-        setPrice(Number(latest.price));
+      const nextPrice = bot?.is_live ? latest?.price : latest?.price_eur;
+      if (nextPrice) {
+        setPrice(Number(nextPrice));
+      } else {
+        setPrice(null);
       }
 
     } catch (err) {
 
       console.error("Price load error:", err);
+      setPrice(null);
 
     } finally {
       priceFetchingRef.current = false;
@@ -243,6 +257,7 @@ export default function TradePanelContainer({
         side: order.side,
         quantity: order.quantity,
         price: order.orderType === "market" ? price : order.price,
+        price_currency: bot?.is_live ? bot?.base_currency : "EUR",
         value_eur: order.value_eur,
         idempotency_key: order.idempotency_key,
         risk_acknowledged: order.risk_acknowledged,
@@ -301,6 +316,8 @@ export default function TradePanelContainer({
         side: draftOrder.side,
         quantity: previewData.quantity,
         price: previewData.price,
+        price_currency: previewData.price_currency,
+        paper_preview_token: previewData.paper_preview_token,
         value_eur: previewData.gross_eur ?? previewData.notional_eur,
         idempotency_key: draftOrder.idempotency_key,
         risk_acknowledged: draftOrder.risk_acknowledged,
@@ -379,7 +396,7 @@ export default function TradePanelContainer({
         balanceQuote={balanceQuote}
         availableQuote={availableQuote}
         balanceBase={balanceBase}
-        quoteSymbol={bot?.base_currency || "EUR"}
+        quoteSymbol={bot?.is_live ? (bot?.base_currency || "EUR") : "EUR"}
         baseSymbol={tradeSymbol}
         symbol={tradeSymbol}
         watchLevels={watchLevels}
@@ -387,6 +404,7 @@ export default function TradePanelContainer({
         loading={loading}
         error={error}
         disabled={tradingDisabled}
+        paperMarketOnly={!bot?.is_live}
         disabledReason={copy.pausedBotTradingBlocked}
         onSubmit={handleOrderRequest}
       />
@@ -396,7 +414,7 @@ export default function TradePanelContainer({
           preview={previewData}
           loading={loading}
           botName={bot?.name || `Bot #${botId}`}
-          currencySymbol={bot?.base_currency === "USD" ? "$" : "€"}
+          currencySymbol={bot?.is_live && bot?.base_currency === "USD" ? "$" : "€"}
           onConfirm={handleConfirmOrder}
           onAcknowledgeSetupBlock={handleAcknowledgeSetupBlock}
           onCancel={() => setShowPreview(false)}

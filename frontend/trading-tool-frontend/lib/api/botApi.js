@@ -285,6 +285,7 @@ export const previewManualOrder = async ({
   side,
   quantity,
   price,
+  price_currency,
   value_eur,
 }) => {
   if (!bot_id) throw new Error("bot_id is verplicht");
@@ -298,18 +299,22 @@ export const previewManualOrder = async ({
       side,
       quantity: toNumber(quantity, 0),
       price: toNumber(price, 0),
+      price_currency,
       value_eur: toNumber(value_eur, 0),
     }),
   });
   // A setup-match refusal is an expected, structured preview. Keep its
   // explanation and order identity so the modal can show why confirmation is
   // disabled. Other API failures still use the normal error path.
-  if (preview?.blocked === true && preview?.code === "PAPER_SETUP_MATCH_REQUIRED") {
+  if (preview?.blocked === true) {
     return preview;
   }
   if (preview?.ok === false) throw new Error(preview.error || "API error");
   return preview;
 };
+
+export const fetchPaperPriceEur = (botId) =>
+  handleApi(fetchAuth(`/api/bot/${encodeURIComponent(botId)}/paper-price-eur`, { method: "GET" }));
 
 export const createManualOrder = async ({
   bot_id,
@@ -317,6 +322,8 @@ export const createManualOrder = async ({
   side,
   quantity,
   price,
+  price_currency,
+  paper_preview_token,
   value_eur,
   idempotency_key,
   risk_acknowledged = false,
@@ -342,6 +349,8 @@ export const createManualOrder = async ({
         side,
         quantity: qty,
         price: pr,
+        price_currency,
+        paper_preview_token,
         value_eur: toNumber(value_eur, undefined),
         idempotency_key,
         risk_acknowledged,
@@ -434,6 +443,11 @@ export const fetchPortfolioBalanceHistory = async ({
 export const fetchPortfolioSummary = async (environment = null) => {
   const query = buildQuery({ environment });
   return handleApi(fetchAuth(`/api/portfolio/summary${query ? `?${query}` : ""}`, { forceFresh: true }));
+};
+
+export const fetchVerifiedPortfolioHistory = async (environment = "paper") => {
+  const query = buildQuery({ environment, bucket: "1h", limit: 720 });
+  return handleApi(fetchAuth(`/api/portfolio/value-history?${query}`, { forceFresh: true }));
 };
 
 /* =====================================================

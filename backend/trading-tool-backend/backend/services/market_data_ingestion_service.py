@@ -100,7 +100,10 @@ class MarketDataIngestionService:
 
     async def _fetch_snapshot(self, asset: AssetRecord) -> PriceSnapshotDTO:
         provider = self.provider_registry.resolve_for_asset(asset)
-        return await provider.fetch_latest_snapshot(asset)
+        snapshot = await provider.fetch_latest_snapshot(asset)
+        if str(snapshot.currency or "").upper() != str(asset.quote_currency or "").upper():
+            raise ValueError("market_quote_currency_mismatch")
+        return snapshot
 
     def _build_market_data_row(self, snapshot: PriceSnapshotDTO) -> MarketData:
         observed_at = snapshot.observed_at

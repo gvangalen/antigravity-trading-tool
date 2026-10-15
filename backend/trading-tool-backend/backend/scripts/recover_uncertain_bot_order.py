@@ -28,8 +28,7 @@ def _read_order(conn, user_id: int, order_id: int) -> dict:
     with conn.cursor() as cur:
         cur.execute("""
             SELECT user_id, id, bot_id, decision_id, symbol, side,
-                   COALESCE(estimated_qty, quantity),
-                   COALESCE(estimated_price_eur, limit_price), exchange_name,
+                   estimated_qty, estimated_price_eur, exchange_name,
                    exchange_order_id, status
             FROM bot_orders
             WHERE user_id=%s AND id=%s AND execution_environment='live'
@@ -111,8 +110,7 @@ def recover_order(*, user_id: int, order_id: int, action: str,
             cur.execute("SELECT pg_advisory_xact_lock(%s, 0)", (user_id,))
             cur.execute("""
                 SELECT status, exchange_order_id, exchange_name, symbol, side,
-                       COALESCE(estimated_qty, quantity),
-                       COALESCE(estimated_price_eur, limit_price), decision_id
+                       estimated_qty, estimated_price_eur, decision_id
                 FROM bot_orders WHERE user_id=%s AND id=%s
                   AND execution_environment='live' FOR UPDATE
             """, (user_id, order_id))

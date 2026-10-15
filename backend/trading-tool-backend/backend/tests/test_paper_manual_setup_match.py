@@ -21,6 +21,7 @@ def _service(monkeypatch, *, setup, match_status="insufficient_data", match_comp
         "symbol": "BTC", "is_live": False, "is_active": True,
     })
     service.repository.get_bot_ledger_stats = AsyncMock(return_value={})
+    service.repository.get_asset_quote_currencies = AsyncMock(return_value={"BTC": "EUR"})
     service.repository.create_manual_order = AsyncMock()
     get_setup = AsyncMock(return_value=setup)
     for_asset = AsyncMock(return_value={

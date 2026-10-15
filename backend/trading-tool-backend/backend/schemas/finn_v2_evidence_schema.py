@@ -270,12 +270,16 @@ class PortfolioBotData(BaseModel):
     result_eur: Optional[float] = None
     portfolio_initialized: bool = False
     valuation_available: bool = False
+    valuation_status: str = "unavailable"
     budget_total_eur: Optional[float] = None
     paper_cash_eur: Optional[float] = None
     is_active: Optional[bool] = None
     is_live: Optional[bool] = None
     price_as_of: Optional[datetime] = None
     price_quote_currency: Optional[str] = None
+    source_price_as_of: Optional[datetime] = None
+    fx_as_of: Optional[datetime] = None
+    fx_eur_per_unit: Optional[float] = None
 
 
 class PortfolioData(BaseModel):

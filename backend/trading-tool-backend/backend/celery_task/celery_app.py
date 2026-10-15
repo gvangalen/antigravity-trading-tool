@@ -160,6 +160,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.market_task.fetch_market_data",
         crontab(minute="*/15"),
     ),
+    "refresh_portfolio_fx_rates": build_task_schedule_entry(
+        "backend.celery_task.portfolio_fx_task.refresh_portfolio_fx_rates",
+        crontab(minute=4),
+    ),
     "sync_configured_market_snapshots": build_task_schedule_entry(
         "backend.celery_task.market_task.sync_configured_market_snapshots",
         crontab(minute="*/5"),
@@ -259,6 +263,7 @@ try:
         import backend.celery_task.bot_reconciliation_task
         import backend.celery_task.regime_memory_task
         import backend.celery_task.portfolio_snapshot_task
+        import backend.celery_task.portfolio_fx_task
         import backend.celery_task.system_task
         import backend.celery_task.daily_report_task
         import backend.celery_task.weekly_report_task

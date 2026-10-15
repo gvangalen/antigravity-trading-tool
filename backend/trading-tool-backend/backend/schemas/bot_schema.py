@@ -62,6 +62,8 @@ class BotManualOrderSchema(BaseModel):
     side: str
     quantity: float
     price: float
+    price_currency: Optional[str] = None
+    paper_preview_token: Optional[str] = None
     value_eur: Optional[float] = None
     idempotency_key: Optional[str] = None
     risk_acknowledged: bool = False

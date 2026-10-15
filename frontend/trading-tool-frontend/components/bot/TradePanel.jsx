@@ -47,6 +47,7 @@ export default function TradePanel({
   error = null,
   disabled = false,
   disabledReason = "",
+  paperMarketOnly = false,
   onSubmit,
 }) {
 
@@ -98,9 +99,9 @@ export default function TradePanel({
   ========================= */
 
   const effectivePrice = useMemo(() => {
-    if (orderType === "market") return num(price, null);
+    if (paperMarketOnly || orderType === "market") return num(price, null);
     return num(orderPrice, null);
-  }, [orderType, price, orderPrice]);
+  }, [paperMarketOnly, orderType, price, orderPrice]);
 
   useEffect(() => {
 
@@ -279,7 +280,7 @@ export default function TradePanel({
       await onSubmit?.({
         symbol,
         side,
-        orderType,
+        orderType: paperMarketOnly ? "market" : orderType,
         quantity: q,
         value_eur: v,
         size_mode: sizeMode,
@@ -357,8 +358,8 @@ export default function TradePanel({
         </div>
         <input
           type="number"
-          value={orderType === "market" ? num(price,"") : orderPrice ?? ""}
-          disabled={orderType === "market"}
+          value={paperMarketOnly || orderType === "market" ? num(price,"") : orderPrice ?? ""}
+          disabled={paperMarketOnly || orderType === "market"}
           onChange={(e) => setOrderPrice(Number(e.target.value))}
           className="trade-input"
         />

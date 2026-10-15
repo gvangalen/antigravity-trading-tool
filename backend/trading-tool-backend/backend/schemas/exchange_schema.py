@@ -12,7 +12,7 @@ class ExchangeBalanceResponse(BaseModel):
     total: Dict[str, float]
     free: Dict[str, float]
     used: Dict[str, float]
-    total_eur: float = 0.0
+    total_eur: Optional[float] = None
 
 class ExchangeStatusResponse(BaseModel):
     exchange: str

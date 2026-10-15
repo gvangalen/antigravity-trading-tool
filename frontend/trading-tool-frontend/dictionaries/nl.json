@@ -694,7 +694,8 @@
       "consequence": "Na opslaan vernieuwt de verbindingsstatus direct in dit scherm.",
       "manageButton": "Beheer exchange",
       "connectButton": "Koppel exchange",
-      "saveError": "Opslaan van exchange-sleutels mislukt"
+      "saveError": "Opslaan van exchange-sleutels mislukt",
+      "valueUnavailable": "Waarde onbekend"
     },
     "tradingAdvice": {
       "title": "Tradingadvies",
@@ -2022,6 +2023,8 @@
     "budgetHint": "Een limiet is geen cash of portefeuillewaarde.",
     "unreconciledLive": "Het live rekeningoverzicht is nog niet betrouwbaar met botposities te verrekenen. Het totaal en beschikbare cash blijven daarom onbekend.",
     "unfunded": "Een of meer botportfolio’s hebben nog geen toegewezen cash.",
+    "unverifiedLedger": "Oudere Paper-transacties hebben nog geen gecontroleerde euro-omrekening. Hun portefeuillewaarde blijft onbekend tot reconciliatie.",
+    "unverifiedBot": "Waardering nog niet geverifieerd",
     "missingPrice": "Een positie heeft geen gecontroleerde koers in euro. De totale waarde blijft daarom onbekend.",
     "empty": "Er zijn nog geen gefinancierde botportfolio’s.",
     "asOf": "Waarde op basis van bronmoment",
@@ -2037,6 +2040,7 @@
     "noPosition": "Geen open positie.",
     "foreignQuote": "Koersvaluta",
     "conversionNeeded": "Een gecontroleerde omrekening naar euro ontbreekt.",
+    "conversionAsOf": "EUR-omrekening met bronmoment",
     "quantity": "Aantal",
     "asset": "Asset",
     "close": "Sluiten",

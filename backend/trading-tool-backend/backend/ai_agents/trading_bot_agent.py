@@ -87,7 +87,7 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
         cur.execute(
             """
             SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
-                   a.quote_currency
+                   a.quote_currency, m.source_observed_at
             FROM market_data m
             LEFT JOIN asset_catalog a ON a.symbol = m.symbol
             WHERE m.symbol = %s
@@ -107,8 +107,26 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
     if max_age_seconds is not None and str(row[2] or "").upper() != "EUR":
         return None
 
-    price = float(row[0])
-    return price if math.isfinite(price) and price > 0 else None
+    if max_age_seconds is not None:
+        price = float(row[0])
+        return price if math.isfinite(price) and price > 0 else None
+
+    from backend.services.portfolio_fx_service import price_in_eur
+    quote = str(row[2] or "").upper()
+    fx = None
+    if quote in {"USD", "USDT"}:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT eur_per_unit, observed_at FROM portfolio_fx_rates
+                WHERE quote_currency=%s
+            """, (quote,))
+            fx_row = cur.fetchone()
+        if fx_row:
+            fx = {"eur_per_unit": fx_row[0], "observed_at": fx_row[1]}
+    eur_price, _source_at, _factor, _fx_at = price_in_eur(
+        price=row[0], price_at=row[3], quote_currency=quote, fx=fx,
+    )
+    return eur_price
 
 def _clear_existing_pending_orders_for_day(
     conn,
@@ -255,7 +273,7 @@ def _validate_live_auto_order_risk(
         today_spent = float(cur.fetchone()[0] or 0)
         cur.execute("""
             SELECT symbol, COALESCE(quote_amount_eur,
-                estimated_qty * estimated_price_eur, quantity * limit_price, 0)
+                estimated_qty * estimated_price_eur, 0)
             FROM bot_orders WHERE user_id=%s AND execution_environment='live'
               AND side='buy' AND status IN
                 ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
@@ -1103,6 +1121,7 @@ def record_bot_ledger_entry(
     note: Optional[str] = None,
     meta: Optional[dict] = None,
     fill_sequence: int = 0,
+    valuation_version: int = 1,
 ):
     with conn.cursor() as cur:
         # 1. Insert Ledger
@@ -1110,9 +1129,10 @@ def record_bot_ledger_entry(
             """
             INSERT INTO bot_ledger (
                 user_id, bot_id, decision_id, order_id, entry_type,
-                symbol, cash_delta_eur, qty_delta, price_eur, note, meta, fill_sequence, ts
+                symbol, cash_delta_eur, qty_delta, price_eur, note, meta,
+                fill_sequence, valuation_version, ts
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
             ON CONFLICT (user_id, order_id, entry_type, fill_sequence)
             WHERE entry_type = 'execute' AND order_id IS NOT NULL
             DO NOTHING
@@ -1131,6 +1151,7 @@ def record_bot_ledger_entry(
                 note,
                 json.dumps(meta or {}),
                 fill_sequence,
+                valuation_version,
             ),
         )
         inserted = cur.fetchone()
@@ -2235,6 +2256,10 @@ def _auto_execute_decision(
     if qty <= 0 or price <= 0:
         raise RuntimeError("Invalid execution parameters")
 
+    if not is_live:
+        price = _get_live_price(conn, symbol)
+        if price is None:
+            raise RuntimeError("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering")
     cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
@@ -2373,6 +2398,7 @@ def _auto_execute_decision(
                 decision_id=decision_id,
                 order_id=bot_order_id,
                 note="Auto execution",
+                valuation_version=1 if is_live else 2,
                 meta={
                     "side": side,
                     "price": price,
@@ -2448,6 +2474,10 @@ def execute_manual_decision(
     bot_live = bool(bot_row[0])
     if not bot_row[1]:
         raise RuntimeError("Bot is paused")
+    if bot_live:
+        # This legacy confirmation route still books a sent limit order as a
+        # fill. Use the reconciled Live manual-order path instead.
+        raise RuntimeError("Live botbeslissing kan pas na bevestigde exchange-fill worden uitgevoerd")
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
         user_id=user_id,
@@ -2487,6 +2517,10 @@ def execute_manual_decision(
         if qty <= 0 or price <= 0:
             raise RuntimeError("Invalid order execution values")
 
+        if not bot_live:
+            price = _get_live_price(conn, symbol)
+            if price is None:
+                raise RuntimeError("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering")
         if side == "buy":
             _require_current_setup_revision_for_buy(
                 conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
@@ -2537,6 +2571,7 @@ def execute_manual_decision(
                 decision_id=decision_id,
                 order_id=bot_order_id,
                 note="Manual execution",
+                valuation_version=1 if bot_live else 2,
                 meta={
                     "side": side,
                     "price": price,

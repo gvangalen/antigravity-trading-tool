@@ -102,7 +102,8 @@ class BotRepository:
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
             SELECT b.id, b.name, b.is_live, b.updated_at AS bot_updated_at,
-              COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol,
+              COALESCE(NULLIF(UPPER(b.symbol), ''), NULLIF(UPPER(s.symbol), ''),
+                       NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), '')) AS symbol,
               COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe, '—') AS timeframe,
               s.setup_type, s.id AS strategy_id,
               st.name AS setup_name, st.id AS setup_id,
@@ -179,11 +180,14 @@ class BotRepository:
         query = text("""
             INSERT INTO bot_orders (
                 user_id, bot_id, decision_id, symbol, side, order_type,
-                quantity, limit_price, quote_amount_eur, status, source, idempotency_key,
+                estimated_qty, estimated_price_eur, quote_amount_eur,
+                executed_qty, executed_price_eur, status, idempotency_key,
                 execution_environment, exchange_name, created_at, updated_at
             )
-            VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,:quote_amount_eur,:status,'manual',:idempotency_key,
-                    :execution_environment,:exchange_name,NOW(),NOW())
+            VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,:quote_amount_eur,
+                    CASE WHEN CAST(:status AS text)='filled' THEN CAST(:quantity AS numeric) ELSE NULL END,
+                    CASE WHEN CAST(:status AS text)='filled' THEN CAST(:price AS numeric) ELSE NULL END,
+                    :status,:idempotency_key,:execution_environment,:exchange_name,NOW(),NOW())
             ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING id
         """)
@@ -219,8 +223,7 @@ class BotRepository:
     async def get_live_pending_order_exposure(self, user_id: int) -> List[dict]:
         result = await self.session.execute(text("""
             SELECT symbol, side,
-              COALESCE(quote_amount_eur, estimated_qty * estimated_price_eur,
-                       quantity * limit_price, 0) AS notional_eur
+              COALESCE(quote_amount_eur, estimated_qty * estimated_price_eur, 0) AS notional_eur
             FROM bot_orders
             WHERE user_id=:user_id AND execution_environment='live'
               AND status IN ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
@@ -229,8 +232,9 @@ class BotRepository:
 
     async def get_manual_order_by_idempotency_key(self, user_id: int, idempotency_key: str) -> Optional[dict]:
         query = text("""
-            SELECT id, bot_id, symbol, side, quantity, limit_price, quote_amount_eur, status, source,
-                   execution_environment, exchange_order_id, created_at
+            SELECT id, bot_id, symbol, side, estimated_qty AS quantity,
+                   estimated_price_eur AS limit_price, quote_amount_eur,
+                   status, execution_environment, exchange_name, exchange_order_id, created_at
             FROM bot_orders
             WHERE user_id = :user_id AND idempotency_key = :idempotency_key
             LIMIT 1
@@ -278,20 +282,21 @@ class BotRepository:
         result = await self.session.execute(query, {"user_id": user_id, "order_id": order_id, "quantity": quantity, "price": price})
         return result.fetchone()[0]
 
-    async def insert_bot_ledger(self, user_id: int, bot_id: int, order_id: int, symbol: str, cash_delta: float, qty_delta: float, price_eur: Optional[float] = None):
+    async def insert_bot_ledger(self, user_id: int, bot_id: int, order_id: int, symbol: str, cash_delta: float, qty_delta: float, price_eur: Optional[float] = None, valuation_version: int = 1):
         # 1. Insert into ledger (record everything)
         query_ledger = text("""
             INSERT INTO bot_ledger (
                 user_id, bot_id, order_id, symbol, entry_type,
-                cash_delta_eur, qty_delta, price_eur, fill_sequence, ts
+                cash_delta_eur, qty_delta, price_eur, fill_sequence, valuation_version, ts
             )
-            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,0,NOW())
+            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,0,:valuation_version,NOW())
             ON CONFLICT (user_id, order_id, entry_type, fill_sequence) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING
             RETURNING id
         """)
         ledger_result = await self.session.execute(query_ledger, {
             "user_id": user_id, "bot_id": bot_id, "order_id": order_id, "symbol": symbol, 
-            "cash_delta": cash_delta, "qty_delta": qty_delta, "price_eur": price_eur
+            "cash_delta": cash_delta, "qty_delta": qty_delta, "price_eur": price_eur,
+            "valuation_version": valuation_version,
         })
         if ledger_result.fetchone() is None:
             increment_execution_safety_counter("execution_duplicate_guard_hits")
@@ -517,8 +522,16 @@ class BotRepository:
               b.id, b.name, b.is_active, b.is_live, b.mode, COALESCE(b.risk_profile,'balanced') as risk_profile,
               COALESCE(b.budget_total_eur,0) as budget_total_eur, COALESCE(b.budget_daily_limit_eur,0) as budget_daily_limit_eur,
               COALESCE(b.budget_min_order_eur,0) as budget_min_order_eur, COALESCE(b.budget_max_order_eur,0) as budget_max_order_eur,
-              COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol,
+              COALESCE(
+                NULLIF(UPPER(b.symbol), ''), NULLIF(UPPER(s.symbol), ''),
+                NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), '')
+              ) AS symbol,
               p.cash_eur AS paper_cash_eur,
+              (u.bot_id IS NOT NULL OR (b.is_live=FALSE AND EXISTS (
+                SELECT 1 FROM bot_ledger legacy
+                WHERE legacy.user_id=b.user_id AND legacy.bot_id=b.id
+                  AND legacy.entry_type='execute' AND legacy.valuation_version < 2
+              ))) AS unverified_ledger,
               """ + base_currency_select + """
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
@@ -528,6 +541,8 @@ class BotRepository:
                 NULLIF(UPPER(b.symbol), ''), NULLIF(UPPER(s.symbol), ''),
                 NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), '')
               )
+            LEFT JOIN portfolio_unverified_paper_bots u
+              ON u.user_id=b.user_id AND u.bot_id=b.id AND b.is_live=FALSE
             WHERE b.user_id=:user_id
             ORDER BY b.id ASC
         """)
@@ -658,6 +673,23 @@ class BotRepository:
         """), {"symbols": normalized})
         return {str(row._mapping["symbol"]).upper(): row._mapping["timestamp"] for row in result.fetchall()}
 
+    async def get_valuatable_market_prices(self, symbols: List[str]) -> Dict[str, dict]:
+        """Price and true provider moment from one row; receipt time is not evidence."""
+        normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return {}
+        result = await self.session.execute(text("""
+            SELECT DISTINCT ON (symbol) symbol, price, source_observed_at
+            FROM market_data
+            WHERE symbol=ANY(:symbols) AND price IS NOT NULL AND price>0
+                  AND source_observed_at IS NOT NULL
+            ORDER BY symbol, source_observed_at DESC, timestamp DESC
+        """), {"symbols": normalized})
+        return {str(row._mapping["symbol"]).upper(): {
+            "price": float(row._mapping["price"]),
+            "observed_at": row._mapping["source_observed_at"],
+        } for row in result.fetchall()}
+
     async def get_asset_quote_currencies(self, symbols: List[str]) -> Dict[str, str]:
         normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})
         if not normalized:
@@ -669,6 +701,16 @@ class BotRepository:
         result = await self.session.execute(query, {"symbols": normalized})
         return {
             str(row._mapping["symbol"]).upper(): str(row._mapping["quote_currency"] or "").upper()
+            for row in result.fetchall()
+        }
+
+    async def get_portfolio_fx_rates(self) -> Dict[str, dict]:
+        result = await self.session.execute(text("""
+            SELECT quote_currency, eur_per_unit, provider, provider_pair, observed_at
+            FROM portfolio_fx_rates WHERE quote_currency IN ('USD', 'USDT')
+        """), {})
+        return {
+            str(row._mapping["quote_currency"]).upper(): dict(row._mapping)
             for row in result.fetchall()
         }
 
@@ -692,7 +734,9 @@ class BotRepository:
             SELECT
               e.id AS execution_id, o.id AS order_id, o.symbol, o.side,
               e.filled_qty, e.avg_fill_price, o.quote_amount_eur, e.status, e.created_at,
-              o.execution_environment, o.source, d.executed_by
+              o.execution_environment,
+              CASE WHEN o.decision_id IS NULL THEN 'manual' ELSE 'decision' END AS source,
+              d.executed_by
             FROM bot_executions e
             JOIN bot_orders o ON o.id = e.bot_order_id
             LEFT JOIN bot_decisions d ON d.id = o.decision_id AND d.user_id=e.user_id
@@ -708,7 +752,9 @@ class BotRepository:
             SELECT e.id AS execution_id, o.bot_id, b.name AS bot_name,
                    o.symbol, o.side, e.filled_qty, e.avg_fill_price,
                    o.quote_amount_eur, e.status, e.updated_at AS executed_at,
-                   o.execution_environment, o.source, d.executed_by
+                   o.execution_environment,
+                   CASE WHEN o.decision_id IS NULL THEN 'manual' ELSE 'decision' END AS source,
+                   d.executed_by
             FROM bot_executions e
             JOIN bot_orders o ON o.id=e.bot_order_id AND o.user_id=e.user_id
             JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=e.user_id
@@ -822,8 +868,7 @@ class BotRepository:
     async def get_portfolio_intelligence_context(self, user_id: int) -> Dict[str, Any]:
         """
         Reads owner-scoped bot ledgers and only values positions when the
-        market quote is a dated, recent EUR price. Other quote currencies
-        require a verified FX conversion before they can become EUR amounts.
+        market quote and any FX conversion are dated and recent.
         """
         query = text("""
             SELECT 
@@ -831,6 +876,11 @@ class BotRepository:
                 c.name, 
                 COALESCE(p.symbol, NULLIF(UPPER(c.symbol), ''), st.symbol, 'BTC') AS symbol,
                 p.bot_id IS NOT NULL AS portfolio_initialized,
+                (u.bot_id IS NOT NULL OR (c.is_live=FALSE AND EXISTS (
+                    SELECT 1 FROM bot_ledger legacy
+                    WHERE legacy.user_id=c.user_id AND legacy.bot_id=c.id
+                      AND legacy.entry_type='execute' AND legacy.valuation_version < 2
+                ))) AS unverified_ledger,
                 COALESCE(p.cash_eur, 0) AS cash_eur, 
                 COALESCE(p.position_qty, 0) AS position_qty, 
                 COALESCE(p.invested_eur, 0) AS invested_eur, 
@@ -853,6 +903,8 @@ class BotRepository:
                    ON p.bot_id = c.id
                   AND p.user_id = c.user_id
                   AND p.symbol = COALESCE(NULLIF(UPPER(c.symbol), ''), NULLIF(UPPER(st.symbol), ''), 'BTC')
+            LEFT JOIN portfolio_unverified_paper_bots u
+                   ON u.user_id=c.user_id AND u.bot_id=c.id AND c.is_live=FALSE
             WHERE c.user_id = :user_id
             ORDER BY c.id ASC
         """)
@@ -861,9 +913,11 @@ class BotRepository:
         
         # Get unique symbols and retrieve their live market prices in one query
         symbols = [row._mapping["symbol"] for row in rows]
-        prices = await self.get_market_prices(symbols)
-        price_timestamps = await self.get_market_price_timestamps(symbols)
+        price_rows = await self.get_valuatable_market_prices(symbols)
         quote_currencies = await self.get_asset_quote_currencies(symbols)
+        from backend.services.portfolio_fx_service import price_in_eur
+        fx_rates = await self.get_portfolio_fx_rates()
+        valuation_now = datetime.now(timezone.utc)
             
         bot_states = []
         global_cash = 0.0
@@ -890,19 +944,18 @@ class BotRepository:
             has_live_bot = has_live_bot or is_live
             risk = mapping["risk_profile"]
             
-            price = prices.get(sym, 0.0)
-            # market_data.price is in the asset's quote currency (commonly
-            # USDT for crypto and USD for stocks), while the ledger is EUR.
-            # Without a dated FX conversion it is not a EUR valuation.
+            price_row = price_rows.get(sym) or {}
+            price = price_row.get("price")
+            # The market price is in the catalog quote currency. Apply a
+            # separately sourced, dated conversion before calling it EUR.
             quote_currency = quote_currencies.get(sym)
-            observed_at = price_timestamps.get(sym)
-            if observed_at is not None and observed_at.tzinfo is None:
-                observed_at = observed_at.replace(tzinfo=timezone.utc)
-            price_fresh = bool(observed_at and timedelta(0) <= datetime.now(timezone.utc) - observed_at <= timedelta(hours=24))
-            price_available = qty == 0 or (
-                quote_currency == "EUR" and sym in prices and price > 0 and price_fresh
+            observed_at = price_row.get("observed_at")
+            eur_price, valuation_source_at, fx_factor, fx_at = price_in_eur(
+                price=price, price_at=observed_at, quote_currency=quote_currency,
+                fx=fx_rates.get(str(quote_currency or "").upper()), now=valuation_now,
             )
-            pos_val = qty * price if price_available else None
+            price_available = qty == 0 or eur_price is not None
+            pos_val = qty * eur_price if eur_price is not None and qty != 0 else (0.0 if qty == 0 else None)
             unrealized = pos_val - invested if pos_val is not None else None
             bot_equity = cash + pos_val if pos_val is not None else None
             
@@ -920,9 +973,13 @@ class BotRepository:
             bot_states.append({
                 "bot_id": bot_id,
                 "portfolio_initialized": bool(mapping["portfolio_initialized"]),
+                "unverified_ledger": bool(mapping["unverified_ledger"]),
                 "price_available": price_available,
                 "price_quote_currency": quote_currency,
-                "price_as_of": observed_at if qty != 0 and price_available else None,
+                "price_as_of": valuation_source_at if qty != 0 and price_available else None,
+                "source_price_as_of": observed_at if qty != 0 else None,
+                "fx_as_of": fx_at if qty != 0 else None,
+                "fx_eur_per_unit": fx_factor if qty != 0 else None,
                 "name": name,
                 "symbol": sym,
                 "cash": None if is_live else cash,
@@ -945,7 +1002,7 @@ class BotRepository:
             })
             
         valuation_available = bool(bot_states) and all(
-            bot["portfolio_initialized"] and bot["price_available"]
+            bot["portfolio_initialized"] and bot["price_available"] and not bot["unverified_ledger"]
             for bot in bot_states
         )
         global_equity = global_cash + global_position_value if valuation_available and not has_live_bot else None
@@ -964,10 +1021,10 @@ class BotRepository:
             "global": {
                 "total_equity": global_equity,
                 "cash_balance": global_cash if valuation_available and not has_live_bot else None,
-                "invested_value": global_invested,
+                "invested_value": global_invested if valuation_available else None,
                 "current_position_value": global_position_value if valuation_available else None,
-                "realized_pnl": global_realized,
-                "unrealized_pnl": global_unrealized,
+                "realized_pnl": global_realized if valuation_available else None,
+                "unrealized_pnl": global_unrealized if valuation_available else None,
                 "total_budget_limit": global_budget,
                 "allocations_pct": allocations
             },

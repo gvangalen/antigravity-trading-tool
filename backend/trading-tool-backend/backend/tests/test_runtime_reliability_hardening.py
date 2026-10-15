@@ -171,4 +171,4 @@ def test_portfolio_intelligence_context_batches_market_prices():
     assert "async def get_market_prices(self, symbols: List[str]) -> Dict[str, float]:" in source
     assert "SELECT DISTINCT ON (symbol) symbol, price" in source
     assert "WHERE symbol = ANY(:symbols)" in source
-    assert "prices = await self.get_market_prices(symbols)" in source
+    assert "price_rows = await self.get_valuatable_market_prices(symbols)" in source

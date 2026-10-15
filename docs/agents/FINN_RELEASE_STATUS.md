@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Portfolio 2.0: verifieerbare waardering per bot
+
+Phase: `BUILD_LOCAL_VALIDATION`. De nieuwe portfoliolezing scheidt Live en
+Paper, toont botbudgetten afzonderlijk van geld, en telt een bot alleen in
+waarde, cash en resultaat mee wanneer de onderliggende posities en valuta
+verifieerbaar zijn. Oudere Paper-ledgers zonder controleerbare kostprijs
+worden niet als actuele waarde voorgesteld. Een gedateerde EUR-valutakoers
+is vereist voor niet-EUR posities. De gedeelde projectie wordt door de
+webpagina, mobiel en FINN gelezen; paginaweergave veroorzaakt geen order.
+
+De Build-branch is op de actuele bot-release gebaseerd. Lokaal slaagden
+**3698 backendtests, 3 skipped** en frontendbuild, typecheck, i18n-,
+command- en proposaltests en de high-severity audit. Mobiele typecheck,
+lint en web-, iOS- en Android-bundles slaagden. In een lokale Paper-API-proef
+werd een door de client aangeleverde prijs van €1 genegeerd: de server
+gebruikte €100, boekte één EUR-ledgerfill, en herkende een herhaalde
+bevestiging als duplicaat. Een oude Live-botbeslissingsroute die een
+exchange-order zonder bewezen afwikkeling als fill kon boeken is nu
+fail-closed; de bestaande nieuwe Live-reconciliatie blijft intact.
+
+De officiële onafhankelijke live QA volgt pas na groene PR/CI, Auto Deploy
+en identieke publieke backend- en frontend-SHA. Die QA moet vooral echte
+waarderingsdekking, botrijen en totalen, Live/Paper-scheiding, fout- en
+versheidsstatus, FINN-pariteit en veilige Paper-actiegrenzen beoordelen.
+
 ## Botflow: automatische Paper-order en geschiedenis
 
 Phase: `AUTO_PAPER_HISTORY_ACCEPTED_BY_INDEPENDENT_QA`. De complete botflow is via

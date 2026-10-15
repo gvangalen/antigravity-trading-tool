@@ -1,8 +1,9 @@
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+import pytest
 
-from backend.schemas.market_provider_schema import PriceSnapshotDTO
+from backend.schemas.market_provider_schema import AssetRecord, PriceSnapshotDTO
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 
 
@@ -41,3 +42,16 @@ def test_market_ingestion_preserves_provider_time_separately_from_receipt_time()
     assert verified.source_observed_at == observed.replace(tzinfo=None)
     assert unknown.source_observed_at is None
     assert unknown.timestamp is not None
+
+
+def test_market_ingestion_refuses_provider_currency_different_from_catalog():
+    service = MarketDataIngestionService(session=object())
+    class Provider:
+        async def fetch_latest_snapshot(self, _asset):
+            return PriceSnapshotDTO(symbol="BTC", provider="test", provider_symbol="BTCEUR",
+                                    price=100, currency="EUR", observed_at=datetime.now(timezone.utc))
+
+    service.provider_registry.resolve_for_asset = lambda _asset: Provider()
+    asset = AssetRecord(symbol="BTC", display_name="Bitcoin", asset_class="crypto", quote_currency="USDT")
+    with pytest.raises(ValueError, match="market_quote_currency_mismatch"):
+        asyncio.run(service._fetch_snapshot(asset))
