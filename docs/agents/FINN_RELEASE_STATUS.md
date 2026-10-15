@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Botflow: automatische Paper-order en geschiedenis
 
-Phase: `READY_FOR_INDEPENDENT_PRODUCTION_QA`. De complete botflow is via
+Phase: `AUTO_PAPER_HISTORY_ACCEPTED_BY_INDEPENDENT_QA`. De complete botflow is via
 [PR #345](https://github.com/gvangalen/antigravity-trading-tool/pull/345)
 overgezet naar de actuele `main` en gemerged als product-SHA
 `62dc964b47b63b7ba2058571404303ff472f122c`. De afzonderlijke beschermde
@@ -43,7 +43,7 @@ waren groen. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool
 slaagde; op 2026-10-15 gaven `/api/health` en `/build-info.json` ieder
 HTTP 200 met exact `77b5e84bee05e26ad67ef8ff483c1979d3cbac4e`.
 
-Onafhankelijke QA heeft nu als actieve scope: één officiële beschermde
+Onafhankelijke QA had als actieve scope: één officiële beschermde
 `auto_paper_trade_history` run op de actuele live SHA, met
 `allow_fixture_actions=true` en `allow_safe_fixture_execution=true`. Alleen
 een inactieve synthetische eigenaar zonder exchange keys mag één virtuele
@@ -51,9 +51,24 @@ Paper-koop van €50 doen. Acceptatie vereist `paper / auto / filled / €50` in
 de accountgeschiedenis, één uitvoeringsboeking, virtuele kas €100→€50,
 geen Live-uitvoering en geslaagde cleanup of veilige quarantaine. De probe
 seedt de beslissing en order; scheduling, marktbeoordeling, planvorming en
-browserweergave blijven buiten dit specifieke productie-QA-verdict. De
-onafhankelijke productie-QA-run is nog **niet uitgevoerd**; Build claimt
-hiervoor geen acceptatie.
+browserweergave blijven buiten dit specifieke productie-QA-verdict.
+
+Onafhankelijke QA voerde precies één beschermde
+[productierun 38696292790](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38696292790)
+uit op de toen live SHA `25c53897bbef52f584719224785ab2f06f76c70a`
+en gaf **ACCEPTED voor deze afgebakende scope**. Het gesanitiseerde rapport
+`finn-production-qa-38696292790-1.json` heeft SHA-256
+`d8cab5206646d08576546885c9c1a15ff6ec1c457bc536f25f09937235abfb6e`;
+QA verifieerde de bijbehorende sidecar. Releasecheckout, release-marker,
+publieke backend-health en frontend-buildinfo matchten de exacte SHA;
+fixture-authenticatie gaf HTTP 200. De probe rapporteerde `paper / auto /
+filled / €50`, virtuele kas €50 na €100 startkapitaal, één
+uitvoeringsboeking, nul exchange keys, nul Live-trading- of
+Live-bot-activatiecalls en geen runnerfouten. De geslaagde protected run
+impliceert dat de verplichte cleanup terugkeerde; het rapport heeft geen
+afzonderlijk cleanup-statusveld. Dit is geen bewijs voor planning, scheduler,
+marktbeoordeling of de zichtbare browserweergave van `/bot > Alle trades`.
+Deze statusupdate wijzigt geen runtimecode en creëert opnieuw een latere SHA.
 
 ## Portfolio-overzicht met gedeelde geldbetekenis
 
