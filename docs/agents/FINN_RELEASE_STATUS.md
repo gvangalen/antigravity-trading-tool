@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Live-brokercash per bot toewijzen
 
-Phase: `AWAITING_INDEPENDENT_QA` — [PR #361](https://github.com/gvangalen/antigravity-trading-tool/pull/361)
+Phase: `INDEPENDENT_QA_PARTIAL_EVIDENCE_GAP` — [PR #361](https://github.com/gvangalen/antigravity-trading-tool/pull/361)
 is gemerged en productcommit `e53d76900c14c7dfc0835ddf698283987bcc90b3`
 is gedeployed. De wijziging telt één eigenaargebonden brokerrekening één keer
 in het Live-totaal, laat vrije EUR-cash expliciet aan eigen Live-bots toewijzen
@@ -42,9 +42,25 @@ zonder provider-, schema- of validatiefouten. De
 en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38724796225)
 slaagden. Op 2026-10-15 gaven `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json` beide HTTP 200 met exact
-`e53d76900c14c7dfc0835ddf698283987bcc90b3`. Deze statuswijziging creëert
-na merge een nieuwe commit; de actuele publieke SHA is steeds de identiteit
-voor QA. Ingelogde Live-broker-QA is nog niet uitgevoerd.
+`e53d76900c14c7dfc0835ddf698283987bcc90b3`. De daaropvolgende
+statusdeploy draaide op `3c52b7cd3399dc312c4640c91a9ff90880ead27a`:
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38725237096)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38725476295)
+slaagden en beide publieke build-endpoints gaven HTTP 200 met die SHA.
+
+Onafhankelijke ingelogde browser-QA op `3c52b7cd3399dc312c4640c91a9ff90880ead27a`
+bevestigde scheiding tussen Live en Paper, blijvende Paper-bedragen na refresh,
+onbekende waarderingen waar bewijs ontbreekt, en een read-only FINN-antwoord
+dat Live niet als nul, Paper-cash of botbudget voorstelde. Er waren geen
+consolefouten, gegevenswijzigingen of orders. **De Live-toewijzing is niet
+afgetekend:** dit QA-account heeft geen veilige verbonden Live-broker met
+twee bots. Eenmalig tellen van broker-cash, twee toewijzingen, restcash,
+overallocatie, eigenaarsscheiding en persistentie zijn daardoor niet live
+bewezen. Native mobiel en een geforceerde requestfout waren in deze QA-run
+niet bereikbaar. De bestaande beschermde portefeuillefixture dekt Paper/FX,
+niet deze Live-toewijzing. Een volgende positieve acceptatieproef vereist een
+veilig verbonden Live-testbroker zonder orderuitvoering. Deze documentupdate
+wijzigt opnieuw de deployment-SHA; de productcode blijft gelijk.
 
 ## Portfolio 2.0: verifieerbare waardering per bot
 
