@@ -4,6 +4,29 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Oude FINN-meldingen opruimen
+
+Phase: `LOCAL_BUILD_GATE_RED_NOT_DEPLOYED`. Op branch
+`codex/retire-legacy-finn-events` verwijdert commit `3242fdf6c` de ongebruikte
+legacy `/assistant/events`-API en -service, de parallelle webpoll in het
+chatpaneel, de oude dashboardfeed en een ongebruikte mobiele Mission
+Control/Today-adapter. De nieuwe eigenaargebonden FINN-coachfeed blijft de
+zichtbare meldingsbron. De oude `finn_plan_created`-eventwrite is verwijderd;
+governance-events en de niet-aangeroepen Mission Control-route zijn buiten
+deze batch gelaten.
+
+Lokaal: `pytest -q` **3724 passed, 3 skipped**; webbuild en typecheck,
+command- en i18n-tests/lint, mobiele typecheck, lint zonder errors en de
+Expo-webbundle slaagden. De geïsoleerde API/Celery/Responses-paritymatrix was
+**rood: 15/16 actiecontracten en 8/9 lineagecontroles**. In het
+`strategy_update`-vervolg “Update that strategy and set the base amount to
+120 euro” vond FINN de eerder gemaakte strategie niet en bleef read-only.
+De andere veiligheidscontroles, inclusief nul Live-bots en nul
+niet-toegestane executies, slaagden. Artifact SHA-256:
+`ec8276e384906b75722843aad8ec4071f7bc29f2e0ee82d1b29b68189bf0c7ea`.
+Er is geen releasekandidaat gepusht, geen CI/Auto Deploy uitgevoerd en geen
+onafhankelijke QA-verdict voor deze wijziging. Deze code is niet live.
+
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
 Phase: `INDEPENDENT_QA_NOT_ACCEPTED_REPAIR_CANDIDATE`. De botflow is via
