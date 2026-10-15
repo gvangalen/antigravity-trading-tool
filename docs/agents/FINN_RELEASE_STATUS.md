@@ -4,10 +4,91 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Live-brokercash per bot toewijzen
+
+Phase: `INDEPENDENT_QA_PARTIAL_EVIDENCE_GAP` — [PR #361](https://github.com/gvangalen/antigravity-trading-tool/pull/361)
+is gemerged en productcommit `e53d76900c14c7dfc0835ddf698283987bcc90b3`
+is gedeployed. De wijziging telt één eigenaargebonden brokerrekening één keer
+in het Live-totaal, laat vrije EUR-cash expliciet aan eigen Live-bots toewijzen
+voor de weergave en toont de rest als niet-toegewezen cash. Een toewijzing
+reserveert geen exchange-geld en verandert geen orders of botlimieten.
+Onvolledige brokerbedragen en ontbrekende of oude EUR-koersen blijven onbekend.
+Web, mobiel en FINN lezen dezelfde projectie; de directe Responses-tool kan
+`environment=live|paper` doorgeven.
+
+Op de definitieve lokale code slaagden **3724 backendtests, 3 bestaande skips**,
+webbuild, typecheck, i18n-, command-, proposal- en setuptests, mobiele
+typecheck, lint zonder errors en web/iOS/Android Expo-bundles. De
+high-severity audit slaagde met één bestaande moderate Next.js-melding.
+Onafhankelijke Security- en Architecture-codehercontroles vonden geen concrete
+blokkade. Een gerichte echte Luna/Responses-run op een synthetische lokale
+eigenaar voltooide zonder voorstel en koos `get_portfolio_and_exposure` met
+`environment=live`.
+
+De lokale API/Celery-paritymatrix slaagde **37/37**, inclusief **16/16**
+actiecontracten, **9/9** lineagecontroles, polling/SSE-pariteit en de
+veiligheidscontroles. Voor modelgeleide leesvragen toetst deze poort nu de
+daadwerkelijk gebruikte eigenaargebonden Responses-tool, het voltooide
+antwoord en afwezigheid van een schrijfvoorstel; zij vereist daarvoor geen
+oude `operation_id` meer. Artifact SHA-256:
+`8716b5320afa2cdafc167d07153c399521f5821c68fa078936827018ddf22975`.
+De echte `gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development
+(SHA-256 `761eb193b77d76c2581b8742830803fb33666436c7b895e02d10b004afd80e23`)
+en **109/109** regressie (SHA-256
+`0c1f5a3a63b20e2c55a22051ae2c5e14fd4dda96113f199be1cda542c5d31357`),
+zonder provider-, schema- of validatiefouten. De
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38724276652),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38724554980)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38724796225)
+slaagden. Op 2026-10-15 gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` beide HTTP 200 met exact
+`e53d76900c14c7dfc0835ddf698283987bcc90b3`. De daaropvolgende
+statusdeploy draaide op `3c52b7cd3399dc312c4640c91a9ff90880ead27a`:
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38725237096)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38725476295)
+slaagden en beide publieke build-endpoints gaven HTTP 200 met die SHA.
+
+Onafhankelijke ingelogde browser-QA op `3c52b7cd3399dc312c4640c91a9ff90880ead27a`
+bevestigde scheiding tussen Live en Paper, blijvende Paper-bedragen na refresh,
+onbekende waarderingen waar bewijs ontbreekt, en een read-only FINN-antwoord
+dat Live niet als nul, Paper-cash of botbudget voorstelde. Er waren geen
+consolefouten, gegevenswijzigingen of orders. **De Live-toewijzing is niet
+afgetekend:** dit QA-account heeft geen veilige verbonden Live-broker met
+twee bots. Eenmalig tellen van broker-cash, twee toewijzingen, restcash,
+overallocatie, eigenaarsscheiding en persistentie zijn daardoor niet live
+bewezen. Native mobiel en een geforceerde requestfout waren in deze QA-run
+niet bereikbaar. De bestaande beschermde portefeuillefixture dekt Paper/FX,
+niet deze Live-toewijzing. Een volgende positieve acceptatieproef vereist een
+veilig verbonden Live-testbroker zonder orderuitvoering. Deze documentupdate
+wijzigt opnieuw de deployment-SHA; de productcode blijft gelijk.
+
 ## Portfolio 2.0: verifieerbare waardering per bot
 
 Phase: `INDEPENDENT_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)
 is gemerged als product-SHA `971c3ca398ccda7810b77d1502e626bc8b4c905a`.
+De huidige Build-kandidaat voegt uitsluitend een apart beschermd QA-profiel
+`portfolio_paper_fx` toe voor de nog onbewezen niet-EUR waardering, server-
+Paper-fill en replay. Het profiel leest vóór enige fixture-write bestaande
+gedateerde BTC-prijs- en FX-bronnen, maakt alleen een inactieve synthetische
+owner en heeft twee expliciete uitvoeringsflags nodig. Het is **lokaal
+voorbereid, niet op productie uitgevoerd of door QA geaccepteerd**. De
+volledige lokale backend suite gaf **3699 passed, 3 skipped**; `actionlint`
+op de beschermde workflow en `git diff --check` slaagden. Security vond geen
+concrete blocker; Architecture wees op bron- en bewijsgrenzen, waarna de
+prijsverificatie en doorgifte van de autorisatieflag zijn aangescherpt. Het
+profiel bewijst de gedeelde adapterprojectie, niet zelfstandig de ingelogde
+web-, FINN-chat- of native mobiele runtime.
+Een gerichte mobiele foutstatefix volgde via
+[PR #357](https://github.com/gvangalen/antigravity-trading-tool/pull/357) als
+product-SHA `33ee99b714ac45635edd777dbda89f300383d3df`: bij een mislukte
+Portfolio- of historieaanvraag verdwijnen oude bedragen en grafiekpunten,
+en NL/EN/DE tonen een concrete fout. Mobiele typecheck, lint en iOS/Android-
+bundles, [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38702199695),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38702480677)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38702701841)
+slaagden. Beide publieke build-endpoints gaven daarna HTTP 200 met exact die
+SHA. Dit is een nieuwe, nog niet onafhankelijk geaccepteerde build; het
+onderstaande QA-verdict hoort bij de eerdere status-SHA.
 De [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698223064)
 en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698745232)
 zijn groen. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698966645)
@@ -48,6 +129,14 @@ Onafhankelijke ingelogde QA op status-SHA
 `0778a8d4ca9cc931b9a338edf05f7b665a420420` gaf **NOT ACCEPTED voor de
 volledige matrix wegens bewijsgrenzen, zonder aangetoonde nieuwe
 productregressie**. Paper en Live bleven bij zes snelle wissels gescheiden.
+Een nieuwe gerichte read-only webherkeuring op SHA
+`b63586ec305e45bc337e0c9bf0144bca96670e30` slaagde voor de beschikbare
+accountdata: Paper/Live-scheiding, onbekende historische ETH-waardering,
+twee virtuele cashrijen van €20, FINN-pariteit voor budget versus saldo,
+NL/EN/DE en 390 px tabelbereik zonder consolefout. QA kon daarmee geen
+actuele niet-EUR FX-positie, een echte API-fout of Paper-replay bewijzen;
+native mobiel bleef door een vergrendelde Mac onbeproefd. Dit verandert het
+volledige verdict nog niet.
 Drie historische ETH-bots kregen geen onbewezen waardering; twee cash-only
 bots toonden ieder €20; een ongefinancierde bot toonde zijn €20 limiet niet
 als saldo. FINN hield dezelfde read-only geldbetekenis aan. NL/EN/DE en een

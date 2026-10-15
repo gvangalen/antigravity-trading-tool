@@ -450,6 +450,19 @@ class FinnV2RequestAnalysisService:
         if guided_state is not None:
             missing_essential_inputs = list(guided_state.missing_required_inputs)
         operation_state_payload = guided_state.dict() if guided_state is not None else {}
+        if guided_state is None and operation_id in {"read_portfolio", "evaluate_portfolio"}:
+            # Portfolio reads have no required slots and therefore do not
+            # enter the guided-state resolver. Preserve an explicit Live or
+            # Paper selector so the tool reads the requested environment.
+            portfolio_inputs = {
+                key: value for key, value in dict(semantic.supplied_inputs or {}).items()
+                if key in operation.input_fields
+            }
+            portfolio_inputs.update(self.operation_state.explicit_inputs(
+                contract=operation, message=text, explicit_asset=operation_asset,
+            ))
+            if portfolio_inputs:
+                operation_state_payload = {"collected_inputs": portfolio_inputs}
         clarification_state_transition = None
         if guided_state is not None:
             clarification_state_transition = "continued" if semantic.selector_source == "guided_state" else "started_or_updated"

@@ -70,6 +70,19 @@ and run namespace and commits bot deactivation before deleting fixture rows.
 See [the runner contract](finn-production-qa-runner.md) for its sanitized
 evidence and coverage limits.
 
+### Inactive synthetic Portfolio Paper FX owner
+
+The separately authorized `portfolio_paper_fx` profile may create one
+inactive, random-namespace owner with no login token or exchange keys and
+EUR 100 virtual Paper cash. Only after checking existing dated non-EUR market
+and FX sources does it make one Paper buy, then reject a replay of that same
+decision. It cannot write shared source rows, ordinary user rows, or Live
+orders. Both per-run fixture authorization flags and an active QA goal naming
+this exact test are required. Success deletes only its marked owner and rows
+after bot deactivation; failure retains inactive evidence for authorized
+reset. The [runner contract](finn-production-qa-runner.md) defines its
+sanitized output.
+
 ## Token Handling
 
 The existing

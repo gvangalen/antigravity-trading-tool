@@ -2047,7 +2047,19 @@
     "loadError": "Portfolio data could not be loaded.",
     "refresh": "Retry",
     "paperMoney": "Virtual Paper money",
-    "liveAttribution": "Positions attributed to bots; shared broker cash is not assigned per bot."
+    "liveAttribution": "The broker account is counted once. Only explicitly allocated free cash appears under a bot; bot budgets are limits.",
+    "brokerAccount": "Broker account",
+    "availableCash": "Free EUR cash",
+    "reservedCash": "Reserved EUR cash",
+    "unallocatedCash": "Unallocated free cash",
+    "allocatedCash": "Allocated free cash (€)",
+    "brokerCash": "EUR cash at broker",
+    "liveRowsHint": "The account total above also includes unallocated cash and manual positions. Bot rows therefore do not necessarily sum to that total.",
+    "allocationHint": "This allocation is for the portfolio view only. It does not reserve broker funds or change a bot or order.",
+    "retrievalTimeBasis": "The broker provides no source timestamp for its balance. The displayed time is when FINN fetched it directly.",
+    "saveAllocation": "Save allocation",
+    "invalidAllocation": "Enter a nonnegative amount with at most two decimal places.",
+    "allocationError": "The allocation could not be saved."
   },
   "botPage": {
     "focus": {

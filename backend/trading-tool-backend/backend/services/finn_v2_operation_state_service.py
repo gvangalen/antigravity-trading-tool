@@ -660,6 +660,11 @@ class FinnV2OperationStateService:
         lowered = text.casefold()
         values: dict[str, object] = {}
         accepted_inputs = set(contract.input_fields)
+        if "environment" in accepted_inputs:
+            has_live = bool(re.search(r"\b(?:live|echte?\s+(?:broker|rekening|portfolio))\b", lowered))
+            has_paper = bool(re.search(r"\b(?:paper|virtuele?\s+portfolio)\b", lowered))
+            if has_live != has_paper:
+                values["environment"] = "live" if has_live else "paper"
         # A short reply belongs to the one persisted requested slot. A setup
         # name has no keyword and must not be reclassified as a fresh request.
         if continuation and requested_slot in accepted_inputs and text:

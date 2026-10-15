@@ -54,6 +54,7 @@ class FinnV2ToolPlanService:
         )
         selector_values = {
             "asset": selector_asset,
+            "environment": collected_inputs.get("environment") if operation_id in ("read_portfolio", "evaluate_portfolio") else None,
             "setup_id": analysis.explicit_setup_id or collected_inputs.get("setup_id"),
             "strategy_id": analysis.explicit_strategy_id or collected_inputs.get("strategy_id"),
             "bot_id": analysis.explicit_bot_id or collected_inputs.get("bot_id"),

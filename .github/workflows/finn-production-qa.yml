@@ -25,6 +25,7 @@ name: FINN Production QA
           - latency
           - score2_stale_paper
           - auto_paper_trade_history
+          - portfolio_paper_fx
       manifest_id:
         description: Approved, non-secret manifest identifier; use none for auth_preflight
         required: true
@@ -45,7 +46,7 @@ name: FINN Production QA
         default: false
         type: boolean
       allow_safe_fixture_execution:
-        description: Permit allowlisted fixture execution; auto_paper_trade_history makes one EUR 50 virtual Paper buy
+        description: Permit allowlisted fixture execution; named Paper profiles make one virtual buy only
         required: true
         default: false
         type: boolean
@@ -95,7 +96,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|auto_paper_trade_history)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|auto_paper_trade_history|portfolio_paper_fx)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -115,6 +116,10 @@ jobs:
           fi
           if [ "$QA_PROFILE" = "auto_paper_trade_history" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
             echo "The auto Paper history probe requires no manifest and explicit fixture and execution authorization." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "portfolio_paper_fx" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+            echo "The Paper FX portfolio probe requires no manifest and explicit fixture and execution authorization." >&2
             exit 1
           fi
           git fetch origin main --quiet
@@ -227,6 +232,7 @@ jobs:
           export FINN_QA_ALLOW_FIXTURE_EXECUTION=0
           export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=0
           export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=0
+          export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=0
           if [ "$allow_fixture_actions" = "true" ]; then
             export FINN_QA_ALLOW_FIXTURE_ACTIONS=1
           fi
@@ -238,6 +244,9 @@ jobs:
           fi
           if [ "$qa_profile" = "auto_paper_trade_history" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=1
+          fi
+          if [ "$qa_profile" = "portfolio_paper_fx" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
+            export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=1
           fi
           runner_args=(
               --release-sha "$release_sha" \
@@ -267,6 +276,7 @@ jobs:
           export FINN_QA_ALLOW_FIXTURE_EXECUTION=$(printf '%q' "$FINN_QA_ALLOW_FIXTURE_EXECUTION")
           export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_STALE_SCORE_FIXTURE")
           export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE")
+          export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE")
           # Preserve both a partial checkpoint and an exit code.  `set -e`
           # would otherwise skip runner.exit after a crash and make a later
           # SSH reconnect mistake a valid partial matrix for a fresh run.

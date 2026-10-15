@@ -6547,9 +6547,24 @@ def test_portfolio_tool_description_matches_its_actual_evidence_scope():
         tool for tool in FinnResponsesToolCatalog().definitions()
         if tool["name"] == "get_portfolio_and_exposure"
     )
-    assert "Paper-bot portfolio valuation" in definition["description"]
+    assert "Paper or Live portfolio valuation" in definition["description"]
     assert "does not contain trade transaction history" in definition["description"]
     assert "tax calculations" in definition["description"]
+
+
+def test_portfolio_responses_tools_preserve_only_typed_live_or_paper_environment():
+    catalog = FinnResponsesToolCatalog()
+    for name in ("get_portfolio_and_exposure", "get_saved_bots"):
+        definition = next(tool for tool in catalog.definitions() if tool["name"] == name)
+        assert definition["parameters"]["properties"]["environment"]["enum"] == ["paper", "live", None]
+        call = catalog.validate(name, {"asset": None, "timeframe": None, "environment": "live"})
+        assert call.read_tools == ("read_portfolio",)
+        assert call.inputs["environment"] == "live"
+        with pytest.raises(FinnResponsesToolError, match="read_environment_invalid"):
+            catalog.validate(name, {"environment": "demo"})
+    evaluation = next(tool for tool in catalog.definitions() if tool["name"] == "evaluate_portfolio")
+    assert evaluation["parameters"]["properties"]["environment"]["enum"] == ["paper", "live"]
+    assert catalog.validate("evaluate_portfolio", {"environment": "live"}).inputs["environment"] == "live"
 
 
 def test_saved_bot_status_reads_owner_scoped_bot_rows_without_strategy_selection():

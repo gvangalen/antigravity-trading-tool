@@ -420,4 +420,4 @@ def test_portfolio_tool_dispatch_passes_only_the_contract_derived_asset_filter()
         )
     )
 
-    assert captured == {"user_id": 17, "asset": "SOL"}
+    assert captured == {"user_id": 17, "asset": "SOL", "environment": None}

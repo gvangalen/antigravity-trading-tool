@@ -2064,7 +2064,19 @@
     "loadError": "Portfoliodaten konnten nicht geladen werden.",
     "refresh": "Erneut laden",
     "paperMoney": "Virtuelles Paper-Geld",
-    "liveAttribution": "Bots zugeordnete Positionen; gemeinsames Broker-Guthaben ist keinem Bot zugewiesen."
+    "liveAttribution": "Das Brokerkonto zählt einmal. Nur ausdrücklich zugewiesenes freies Guthaben erscheint bei einem Bot; Botbudgets sind Grenzen.",
+    "brokerAccount": "Brokerkonto",
+    "availableCash": "Freies EUR-Guthaben",
+    "reservedCash": "Gebundenes EUR-Guthaben",
+    "unallocatedCash": "Nicht zugewiesenes freies Guthaben",
+    "allocatedCash": "Zugewiesenes freies Guthaben (€)",
+    "brokerCash": "EUR-Guthaben beim Broker",
+    "liveRowsHint": "Das Kontototal oben enthält auch nicht zugewiesenes Guthaben und manuelle Positionen. Botzeilen ergeben daher nicht automatisch dieses Total.",
+    "allocationHint": "Diese Zuordnung dient nur der Portfolioansicht. Sie reserviert kein Geld beim Broker und ändert weder Bot noch Order.",
+    "retrievalTimeBasis": "Der Broker liefert keinen eigenen Quellzeitpunkt für den Kontostand. Angezeigt wird der Zeitpunkt des direkten Abrufs durch FINN.",
+    "saveAllocation": "Zuordnung speichern",
+    "invalidAllocation": "Bitte einen nichtnegativen Betrag mit höchstens zwei Dezimalstellen eingeben.",
+    "allocationError": "Die Zuordnung konnte nicht gespeichert werden."
   },
   "botPage": {
     "focus": {

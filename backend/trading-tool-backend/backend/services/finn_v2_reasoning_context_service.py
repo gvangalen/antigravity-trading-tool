@@ -581,6 +581,11 @@ class FinnV2ReasoningContextService:
                 "valuation_as_of": payload.get("valuation_as_of"),
                 "read_at": payload.get("read_at"),
                 "environment": payload.get("environment"),
+                "available_cash_eur": payload.get("available_cash_eur"),
+                "reserved_cash_eur": payload.get("reserved_cash_eur"),
+                "unallocated_cash_eur": payload.get("unallocated_cash_eur"),
+                "exchange_name": payload.get("exchange_name"),
+                "balance_time_basis": payload.get("balance_time_basis"),
             }
         if tool_name == "read_latest_report":
             return {key: payload.get(key) for key in [
