@@ -8,6 +8,17 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 Phase: `INDEPENDENT_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)
 is gemerged als product-SHA `971c3ca398ccda7810b77d1502e626bc8b4c905a`.
+Een gerichte mobiele foutstatefix volgde via
+[PR #357](https://github.com/gvangalen/antigravity-trading-tool/pull/357) als
+product-SHA `33ee99b714ac45635edd777dbda89f300383d3df`: bij een mislukte
+Portfolio- of historieaanvraag verdwijnen oude bedragen en grafiekpunten,
+en NL/EN/DE tonen een concrete fout. Mobiele typecheck, lint en iOS/Android-
+bundles, [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38702199695),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38702480677)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38702701841)
+slaagden. Beide publieke build-endpoints gaven daarna HTTP 200 met exact die
+SHA. Dit is een nieuwe, nog niet onafhankelijk geaccepteerde build; het
+onderstaande QA-verdict hoort bij de eerdere status-SHA.
 De [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698223064)
 en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698745232)
 zijn groen. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698966645)
