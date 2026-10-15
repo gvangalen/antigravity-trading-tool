@@ -30,8 +30,10 @@ export function PortfolioScreen() {
   const fetchHistory = useCallback(() => intelligenceApi.portfolioValueHistory(environment), [environment]);
   const history = useApiResource({ fallbackData: null, fetcher: fetchHistory });
   // Keep responses bound to their requested environment during fast tab changes.
-  const historyPoints = history.data?.environment === environment ? history.data.points : [];
-  const data = overview.data?.data?.environment === environment ? overview.data.data : null;
+  const historyPoints = !overview.error && !history.error && history.data?.environment === environment
+    ? history.data.points : [];
+  const data = !overview.error && overview.data?.data?.environment === environment
+    ? overview.data.data : null;
   const bots = data?.bots ?? [];
   const selected = bots.find((bot) => bot.bot_id === selectedId);
   const global = data?.global;
@@ -94,11 +96,13 @@ export function PortfolioScreen() {
       <Text style={[styles.small, { color: colors.textDim }]}>{label('historyHint')}</Text>
       {historyPoints.length > 1 ? <PortfolioLine points={historyPoints}
         width={Math.max(220, windowWidth - 72)} color={colors.accent} label={label('history')} locale={locale} />
-        : <Text style={[styles.notice, { color: colors.textDim }]}>{environment === 'live' ? label('unreconciled') : label('noHistory')}</Text>}
+        : <Text style={[styles.notice, { color: colors.textDim }]}>{overview.error || history.error ? label('historyError')
+          : environment === 'live' ? label('unreconciled') : label('noHistory')}</Text>}
     </View>
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{label('byBot')}</Text>
-      {bots.length === 0 && <Text style={[styles.notice, { color: colors.textDim }]}>{label('noBots')}</Text>}
+      {!overview.loading && !overview.error && bots.length === 0 &&
+        <Text style={[styles.notice, { color: colors.textDim }]}>{label('noBots')}</Text>}
       {bots.map((bot) => <Pressable key={bot.bot_id} onPress={() => { setSelectedId(bot.bot_id); setDetailTab('positions'); }}
         style={[styles.botRow, { borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`${label('details')}: ${bot.name ?? bot.symbol}`}>
         <View style={styles.botName}><Text style={[styles.botTitle, { color: colors.text }]}>{bot.name || bot.symbol}</Text>
