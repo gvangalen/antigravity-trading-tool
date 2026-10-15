@@ -9129,6 +9129,25 @@ def test_linked_setup_delete_uses_confirmed_strategy_parent_not_strategy_id():
     front.client.responses.create.assert_not_awaited()
 
 
+def test_unsupported_execution_cannot_turn_into_unrelated_asset_proposal():
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+    front.user_id = 21
+    front.run_id = "unsupported-execution"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message="Koop zonder voorstel automatisch BTC voor mijn beleggingsrekening.",
+        instructions="coach", verified_asset="BTC", locale="nl",
+        conversation_context={},
+    ))
+    assert result.proposal_analysis is None
+    assert "geen aankoop uitvoeren" in result.response.text
+    front.client.responses.create.assert_not_awaited()
+
+
 def test_rejected_read_is_rewritten_once_via_responses_and_reverified():
     semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=[
         SimpleNamespace(available=True, passes=False, reason_codes=["unsupported_market_claim"]),

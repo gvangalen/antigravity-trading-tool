@@ -795,6 +795,21 @@ class FinnResponsesFrontDoor:
             workspace_hints=None, client_context=None,
         )
         is_read_request = request_facts.action_polarity == "read" and not imperative_operation
+        if request_facts.action_polarity == "execute" and not imperative_operation:
+            # An execution request without a supported action contract must
+            # never be converted into an unrelated proposal by tool selection.
+            language = locale.split("-")[0].lower()
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={
+                        "en": "I cannot execute a purchase here. We can discuss your plan and risk first; supported actions require a separate proposal and confirmation.",
+                        "de": "Ich kann hier keinen Kauf ausführen. Wir können zuerst deinen Plan und das Risiko besprechen; unterstützte Aktionen brauchen einen eigenen Vorschlag und eine Bestätigung.",
+                    }.get(language, "Ik kan hier geen aankoop uitvoeren. We kunnen eerst je plan en risico bespreken; ondersteunde acties vragen een apart voorstel en bevestiging."),
+                    response_id=f"unsupported-execution-{self.run_id}",
+                    tool_trace=(), response_id_reusable=False,
+                ),
+                None, previous_response, locale=locale,
+            )
         immediate_action = dict(conversation_context.get("immediate_previous_action_result") or {})
         prior_action = (
             immediate_action

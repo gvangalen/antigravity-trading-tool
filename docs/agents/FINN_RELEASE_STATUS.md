@@ -6,13 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Oude FINN-meldingen opruimen
 
-Phase: `LOCAL_BUILD_GREEN_AWAITING_CI_DEPLOY`. Op branch
-`codex/retire-legacy-finn-events` verwijdert commit `3242fdf6c` de ongebruikte
+Phase: `INTEGRATED_LOCAL_GATE_GREEN_AWAITING_CI_DEPLOY`. Op branch
+`codex/retire-legacy-finn-events` verwijdert commit `9c82b0ac0` de ongebruikte
 legacy `/assistant/events`-API en -service, de parallelle webpoll in het
 chatpaneel, de oude dashboardfeed en een ongebruikte mobiele Mission
 Control/Today-adapter. De nieuwe eigenaargebonden FINN-coachfeed blijft de
 zichtbare meldingsbron. De oude `finn_plan_created`-eventwrite is verwijderd;
-governance-events blijven actief. Vervolgcommit `5a08cc995` verwijdert ook de
+governance-events blijven actief. Vervolgcommit `2f68f219b` verwijdert ook de
 niet-aangeroepen publieke Mission Control-route, de dode webclientloader en
 verouderde route- en UI-tests. De interne Mission Control-berekening blijft
 staan omdat een andere interne coachafnemer die nog gebruikt. Een bevestigde
@@ -26,18 +26,21 @@ de antwoordronde na een nog niet opgeslagen verduidelijking. De kandidaat
 herhaalt zo'n veilige antwoordronde nu eenmaal zonder de actietool opnieuw
 uit te voeren; voorstellen met een opgeslagen `proposal_id` vallen niet onder
 die retry.
+De geïntegreerde kandidaat weigert bovendien expliciete uitvoeringsverzoeken
+zonder ondersteund actiecontract; zo wordt een aankoopverzoek niet omgezet in
+een ongerelateerd asset- of watchlistvoorstel.
 
-Op de definitieve lokale code: `pytest -q` **3724 passed, 3 skipped**; webbuild,
+Op de met actuele `main` geïntegreerde code: `pytest -q` **3739 passed, 3 skipped**; webbuild,
 typecheck, command-, proposal- en i18n-tests/lint, mobiele typecheck,
 lint zonder errors en web/iOS/Android Expo-bundles slaagden. De echte
 `gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development en
 **109/109** regressie, zonder provider-, schema- of validatiefout. De
-uiteindelijke geïsoleerde API/Celery/Responses-paritymatrix slaagde **37/37**,
+uiteindelijke geïntegreerde API/Celery/Responses-paritymatrix slaagde **37/37**,
 inclusief **16/16** actiecontracten, **9/9** lineagecontroles, HTTP 200,
 polling/SSE-pariteit en nul Live-bots of niet-toegestane executies. De
-terminale p95 was **6,25 s** bij een grens van **10 s**; maximale beurtduur
-**6,41 s**. Artifact SHA-256:
-`1c3754ae8d240f40943f012feecc067d39690499cd9272a99db105d71bbed2bf`.
+terminale p95 was **7,41 s** bij een grens van **10 s**;
+maximale beurtduur **11,24 s** bij een grens van **15 s**. Artifact SHA-256:
+`357815fb9e7c650ebe0ffe25381a4e07d5ff80892aaf53a57cce2ee593d1e946`.
 Eerdere runs op dezelfde provider lieten wisselende latency en één tijdelijke
 HTTP 520 zien; de laatste kandidaat behaalde alle verplichte acceptatievelden
 zonder verlaging van grenswaarden of verwijdering van cases. CI, Auto Deploy
