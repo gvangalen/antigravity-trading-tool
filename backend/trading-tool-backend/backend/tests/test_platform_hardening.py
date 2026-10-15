@@ -325,6 +325,18 @@ def test_portfolio_snapshot_does_not_label_usdt_quote_as_eur(monkeypatch):
     assert cursor.inserted_global_snapshots == []
 
 
+def test_portfolio_snapshot_skips_nonpositive_or_nonfinite_eur_price(monkeypatch):
+    for price in (0, -1, float("nan"), float("inf")):
+        cursor = _FakeCursor(
+            prices={"ETH": price},
+            portfolios=[(101, "ETH", 100, 2, 4000, 2000, 0)],
+        )
+        monkeypatch.setattr(portfolio_snapshot_service, "get_db_connection", lambda: _FakeConnection(cursor))
+        portfolio_snapshot_service.snapshot_all_for_user(9)
+        assert cursor.inserted_bot_snapshots == []
+        assert cursor.inserted_global_snapshots == []
+
+
 def test_portfolio_snapshot_skips_bot_when_symbol_price_missing(monkeypatch):
     cursor = _FakeCursor(
         prices={"BTC": 50000},

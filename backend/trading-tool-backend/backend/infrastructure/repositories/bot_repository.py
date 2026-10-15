@@ -10,6 +10,25 @@ class BotRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def lock_bot_config(self, user_id: int, bot_id: int) -> None:
+        await self.session.execute(text("""
+            SELECT id FROM bot_configs WHERE user_id=:user_id AND id=:bot_id FOR UPDATE
+        """), {"user_id": user_id, "bot_id": bot_id})
+
+    async def has_execution_history(self, user_id: int, bot_id: int) -> bool:
+        result = await self.session.execute(text("""
+            SELECT 1 WHERE EXISTS (
+                SELECT 1 FROM bot_orders WHERE user_id=:user_id AND bot_id=:bot_id
+            ) OR EXISTS (
+                SELECT 1 FROM bot_ledger WHERE user_id=:user_id AND bot_id=:bot_id
+            ) OR EXISTS (
+                SELECT 1 FROM bot_portfolios WHERE user_id=:user_id AND bot_id=:bot_id
+                  AND (cash_eur <> 0 OR position_qty <> 0 OR invested_eur <> 0
+                       OR realized_pnl_eur <> 0)
+            )
+        """), {"user_id": user_id, "bot_id": bot_id})
+        return result.fetchone() is not None
+
     async def check_table_exists(self, table_name: str) -> bool:
         query = text("""
             SELECT 1
@@ -82,7 +101,7 @@ class BotRepository:
 
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
-            SELECT b.id, b.name, b.updated_at AS bot_updated_at,
+            SELECT b.id, b.name, b.is_live, b.updated_at AS bot_updated_at,
               COALESCE(NULLIF(UPPER(b.symbol), ''), NULLIF(UPPER(s.symbol), ''),
                        NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), '')) AS symbol,
               COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe, '—') AS timeframe,
@@ -155,17 +174,20 @@ class BotRepository:
         idempotency_key: Optional[str] = None,
         quote_amount_eur: Optional[float] = None,
         status: str = "filled",
+        is_live: bool = False,
+        exchange_name: Optional[str] = None,
     ) -> tuple[int, bool]:
         query = text("""
             INSERT INTO bot_orders (
                 user_id, bot_id, decision_id, symbol, side, order_type,
                 estimated_qty, estimated_price_eur, quote_amount_eur,
-                executed_qty, executed_price_eur, status, idempotency_key, created_at, updated_at
+                executed_qty, executed_price_eur, status, idempotency_key,
+                execution_environment, exchange_name, created_at, updated_at
             )
             VALUES (:user_id,:bot_id,NULL,:symbol,:side,'market',:quantity,:price,:quote_amount_eur,
                     CASE WHEN CAST(:status AS text)='filled' THEN CAST(:quantity AS numeric) ELSE NULL END,
                     CASE WHEN CAST(:status AS text)='filled' THEN CAST(:price AS numeric) ELSE NULL END,
-                    :status,:idempotency_key,NOW(),NOW())
+                    :status,:idempotency_key,:execution_environment,:exchange_name,NOW(),NOW())
             ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING id
         """)
@@ -179,6 +201,8 @@ class BotRepository:
             "quote_amount_eur": quote_amount_eur,
             "status": status,
             "idempotency_key": idempotency_key,
+            "execution_environment": "live" if is_live else "paper",
+            "exchange_name": exchange_name,
         })
         row = result.fetchone()
         if row:
@@ -192,11 +216,25 @@ class BotRepository:
             raise RuntimeError("Manual order idempotency conflict occurred but existing order was not found.")
         return int(existing["id"]), False
 
+    async def lock_live_account(self, user_id: int) -> None:
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id, 0)"),
+                                   {"user_id": user_id})
+
+    async def get_live_pending_order_exposure(self, user_id: int) -> List[dict]:
+        result = await self.session.execute(text("""
+            SELECT symbol, side,
+              COALESCE(quote_amount_eur, estimated_qty * estimated_price_eur, 0) AS notional_eur
+            FROM bot_orders
+            WHERE user_id=:user_id AND execution_environment='live'
+              AND status IN ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
+        """), {"user_id": user_id})
+        return [dict(row._mapping) for row in result.fetchall()]
+
     async def get_manual_order_by_idempotency_key(self, user_id: int, idempotency_key: str) -> Optional[dict]:
         query = text("""
             SELECT id, bot_id, symbol, side, estimated_qty AS quantity,
                    estimated_price_eur AS limit_price, quote_amount_eur,
-                   status, created_at
+                   status, execution_environment, exchange_name, exchange_order_id, created_at
             FROM bot_orders
             WHERE user_id = :user_id AND idempotency_key = :idempotency_key
             LIMIT 1
@@ -212,6 +250,21 @@ class BotRepository:
             WHERE id = :order_id AND user_id = :user_id
         """)
         await self.session.execute(query, {"user_id": user_id, "order_id": order_id, "status": status})
+
+    async def set_exchange_order_details(
+        self, user_id: int, order_id: int, exchange_name: str,
+        exchange_order_id: Optional[str], exchange_symbol: str, status: str,
+    ) -> None:
+        await self.session.execute(text("""
+            UPDATE bot_orders SET exchange_name=:exchange_name,
+                exchange_order_id=:exchange_order_id, exchange_symbol=:exchange_symbol,
+                status=:status, updated_at=NOW()
+            WHERE user_id=:user_id AND id=:order_id AND execution_environment='live'
+        """), {
+            "user_id": user_id, "order_id": order_id,
+            "exchange_name": exchange_name, "exchange_order_id": exchange_order_id,
+            "exchange_symbol": exchange_symbol, "status": status,
+        })
 
     async def create_bot_execution(self, user_id: int, order_id: int, quantity: float, price: float) -> int:
         query = text("""
@@ -234,10 +287,10 @@ class BotRepository:
         query_ledger = text("""
             INSERT INTO bot_ledger (
                 user_id, bot_id, order_id, symbol, entry_type,
-                cash_delta_eur, qty_delta, price_eur, valuation_version, ts
+                cash_delta_eur, qty_delta, price_eur, fill_sequence, valuation_version, ts
             )
-            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,:valuation_version,NOW())
-            ON CONFLICT (user_id, order_id, entry_type) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING
+            VALUES (:user_id,:bot_id,:order_id,:symbol,'execute',:cash_delta,:qty_delta,:price_eur,0,:valuation_version,NOW())
+            ON CONFLICT (user_id, order_id, entry_type, fill_sequence) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING
             RETURNING id
         """)
         ledger_result = await self.session.execute(query_ledger, {
@@ -553,9 +606,9 @@ class BotRepository:
         query = text("""
             SELECT COALESCE(SUM(ABS(l.cash_delta_eur)), 0)
             FROM bot_ledger l
-            JOIN bot_configs b ON b.id = l.bot_id AND b.user_id = l.user_id
+            LEFT JOIN bot_orders o ON o.id=l.order_id AND o.user_id=l.user_id
             WHERE l.user_id = :user_id
-              AND b.is_live = TRUE
+              AND (o.execution_environment='live' OR o.execution_environment IS NULL)
               AND DATE(l.ts) = :today
               AND l.entry_type = 'execute'
               AND l.cash_delta_eur < 0
@@ -566,10 +619,11 @@ class BotRepository:
 
     async def get_market_price_snapshot(self, symbol: str) -> Optional[dict]:
         query = text("""
-            SELECT price, timestamp
-            FROM market_data
-            WHERE symbol=:symbol
-            ORDER BY timestamp DESC
+            SELECT m.price, m.timestamp, a.quote_currency
+            FROM market_data m
+            LEFT JOIN asset_catalog a ON a.symbol = m.symbol
+            WHERE m.symbol=:symbol
+            ORDER BY m.timestamp DESC
             LIMIT 1
         """)
         result = await self.session.execute(query, {"symbol": symbol})
@@ -579,6 +633,7 @@ class BotRepository:
         return {
             "price": float(row[0]) if row[0] is not None else None,
             "timestamp": row[1],
+            "quote_currency": str(row[2] or "").upper(),
         }
 
     async def get_market_price(self, symbol: str) -> Optional[float]:
@@ -662,20 +717,55 @@ class BotRepository:
     # ==========================
     # BOT TRADES
     # ==========================
+    async def get_unresolved_live_orders(self, user_id: int) -> List[dict]:
+        result = await self.session.execute(text("""
+            SELECT DISTINCT ON (bot_id) id, bot_id, status, created_at
+            FROM bot_orders
+            WHERE user_id=:user_id AND execution_environment='live'
+              AND status IN ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
+            ORDER BY bot_id, created_at DESC, id DESC
+        """), {"user_id": user_id})
+        return [dict(row._mapping) for row in result.fetchall()]
+
     async def get_bot_trades(self, user_id: int, bot_id: int, limit: int) -> List[dict]:
         if not await self.check_table_exists("bot_executions") or not await self.check_table_exists("bot_orders"):
             return []
         query = text("""
             SELECT
               e.id AS execution_id, o.id AS order_id, o.symbol, o.side,
-              e.filled_qty, e.avg_fill_price, o.quote_amount_eur, e.status, e.created_at
+              e.filled_qty, e.avg_fill_price, o.quote_amount_eur, e.status, e.created_at,
+              o.execution_environment,
+              CASE WHEN o.decision_id IS NULL THEN 'manual' ELSE 'decision' END AS source,
+              d.executed_by
             FROM bot_executions e
             JOIN bot_orders o ON o.id = e.bot_order_id
+            LEFT JOIN bot_decisions d ON d.id = o.decision_id AND d.user_id=e.user_id
             WHERE e.user_id = :user_id AND o.bot_id = :bot_id AND e.status IN ('filled', 'partial')
             ORDER BY e.created_at DESC
             LIMIT :limit
         """)
         result = await self.session.execute(query, {"user_id": user_id, "bot_id": bot_id, "limit": limit})
+        return [dict(r._mapping) for r in result.fetchall()]
+
+    async def get_account_bot_trades(self, user_id: int, limit: int, offset: int) -> List[dict]:
+        query = text("""
+            SELECT e.id AS execution_id, o.bot_id, b.name AS bot_name,
+                   o.symbol, o.side, e.filled_qty, e.avg_fill_price,
+                   o.quote_amount_eur, e.status, e.updated_at AS executed_at,
+                   o.execution_environment,
+                   CASE WHEN o.decision_id IS NULL THEN 'manual' ELSE 'decision' END AS source,
+                   d.executed_by
+            FROM bot_executions e
+            JOIN bot_orders o ON o.id=e.bot_order_id AND o.user_id=e.user_id
+            JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=e.user_id
+            LEFT JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=e.user_id
+            WHERE e.user_id=:user_id AND e.status IN ('filled', 'partial')
+            ORDER BY e.updated_at DESC, e.id DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        result = await self.session.execute(query, {
+            "user_id": user_id, "limit": limit, "offset": offset,
+        })
         return [dict(r._mapping) for r in result.fetchall()]
 
     async def get_bot_decision(self, user_id: int, decision_id: int) -> bool:
@@ -709,14 +799,21 @@ class BotRepository:
     # BOT BALANCE HISTORY
     # ==========================
     async def get_portfolio_balance_history(self, user_id: int, bucket: str, limit: int) -> List[dict]:
-        if not await self.check_table_exists("portfolio_balance_snapshots"):
+        if not await self.check_table_exists("bot_portfolio_snapshots"):
             return []
         query = text("""
             SELECT * FROM (
-                SELECT ts, equity_eur, cash_eur, btc_qty, btc_value_eur, invested_eur, unrealized_pnl_eur
-                FROM portfolio_balance_snapshots
-                WHERE user_id = :user_id AND bucket = :bucket
-                ORDER BY ts DESC LIMIT :limit
+                SELECT s.ts, SUM(s.equity_eur) AS equity_eur,
+                       SUM(s.cash_eur) AS cash_eur,
+                       SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty ELSE 0 END) AS btc_qty,
+                       SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty * s.price_eur ELSE 0 END) AS btc_value_eur,
+                       SUM(s.invested_eur) AS invested_eur,
+                       SUM(s.equity_eur - s.cash_eur - s.invested_eur) AS unrealized_pnl_eur
+                FROM bot_portfolio_snapshots s
+                JOIN bot_configs b ON b.id=s.bot_id AND b.user_id=s.user_id
+                WHERE s.user_id = :user_id AND s.bucket = :bucket AND b.is_live=FALSE
+                GROUP BY s.ts
+                ORDER BY s.ts DESC LIMIT :limit
             ) latest ORDER BY ts ASC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "bucket": bucket, "limit": limit})
@@ -728,8 +825,10 @@ class BotRepository:
         query = text("""
             SELECT * FROM (
                 SELECT ts, equity_eur, cash_eur, net_qty, price_eur, invested_eur
-                FROM bot_portfolio_snapshots
-                WHERE user_id = :user_id AND bot_id = :bot_id AND bucket = :bucket
+                FROM bot_portfolio_snapshots s
+                JOIN bot_configs b ON b.id = s.bot_id AND b.user_id = s.user_id
+                WHERE s.user_id = :user_id AND s.bot_id = :bot_id AND s.bucket = :bucket
+                  AND b.is_live = FALSE
                 ORDER BY ts DESC LIMIT :limit
             ) latest ORDER BY ts ASC
         """)
@@ -737,6 +836,10 @@ class BotRepository:
         return [dict(r._mapping) for r in result.fetchall()]
 
     async def get_filtered_portfolio_balance_history(self, user_id: int, is_live: bool, bucket: str, limit: int) -> List[dict]:
+        if is_live:
+            # Historical live ledger cash is an unfunded trade delta. Existing
+            # snapshots cannot prove exchange equity and must not be charted.
+            return []
         if not await self.check_table_exists("bot_portfolio_snapshots"):
             return []
         
@@ -747,11 +850,12 @@ class BotRepository:
                 s.ts,
                 SUM(s.equity_eur) as equity_eur,
                 SUM(s.cash_eur) as cash_eur,
-                SUM(s.net_qty) as btc_qty,
-                AVG(s.price_eur) as price_eur, -- price should be similar across bots at same ts
-                SUM(s.invested_eur) as invested_eur
+                SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty ELSE 0 END) as btc_qty,
+                SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty * s.price_eur ELSE 0 END) as btc_value_eur,
+                SUM(s.invested_eur) as invested_eur,
+                SUM(s.equity_eur - s.cash_eur - s.invested_eur) as unrealized_pnl_eur
             FROM bot_portfolio_snapshots s
-            JOIN bot_configs b ON b.id = s.bot_id
+            JOIN bot_configs b ON b.id = s.bot_id AND b.user_id = s.user_id
             WHERE s.user_id = :user_id AND b.is_live = :is_live AND s.bucket = :bucket
             GROUP BY s.ts
             ORDER BY s.ts DESC
@@ -822,6 +926,7 @@ class BotRepository:
         global_position_value = 0.0
         global_budget = 0.0
         asset_values = {}
+        has_live_bot = False
         
         for r in rows:
             mapping = r._mapping
@@ -836,6 +941,7 @@ class BotRepository:
             budget = float(mapping["budget_total_eur"])
             is_active = bool(mapping["is_active"])
             is_live = bool(mapping["is_live"])
+            has_live_bot = has_live_bot or is_live
             risk = mapping["risk_profile"]
             
             price_row = price_rows.get(sym) or {}
@@ -853,7 +959,8 @@ class BotRepository:
             unrealized = pos_val - invested if pos_val is not None else None
             bot_equity = cash + pos_val if pos_val is not None else None
             
-            global_cash += cash
+            if not is_live:
+                global_cash += cash
             global_invested += invested
             global_realized += realized
             if pos_val is not None:
@@ -875,14 +982,14 @@ class BotRepository:
                 "fx_eur_per_unit": fx_factor if qty != 0 else None,
                 "name": name,
                 "symbol": sym,
-                "cash": cash,
+                "cash": None if is_live else cash,
                 "qty": qty,
                 "invested": invested,
                 "avg_entry": avg_entry,
                 "realized_pnl": realized,
                 "unrealized_pnl": unrealized,
                 "position_value": pos_val,
-                "equity": bot_equity,
+                "equity": None if is_live else bot_equity,
                 "budget_total": budget,
                 "is_active": is_active,
                 "is_live": is_live,
@@ -894,11 +1001,11 @@ class BotRepository:
                 "risk_profile": risk
             })
             
-        valuation_available = all(
+        valuation_available = bool(bot_states) and all(
             bot["portfolio_initialized"] and bot["price_available"] and not bot["unverified_ledger"]
             for bot in bot_states
         )
-        global_equity = global_cash + global_position_value if valuation_available else None
+        global_equity = global_cash + global_position_value if valuation_available and not has_live_bot else None
         global_unrealized = global_position_value - global_invested if valuation_available else None
         
         allocations = {}
@@ -913,7 +1020,7 @@ class BotRepository:
             "read_at": datetime.now(timezone.utc),
             "global": {
                 "total_equity": global_equity,
-                "cash_balance": global_cash if valuation_available else None,
+                "cash_balance": global_cash if valuation_available and not has_live_bot else None,
                 "invested_value": global_invested if valuation_available else None,
                 "current_position_value": global_position_value if valuation_available else None,
                 "realized_pnl": global_realized if valuation_available else None,

@@ -8,6 +8,7 @@ import {
   fetchBotHistory,
   fetchBotPortfolios,
   fetchBotTrades,
+  fetchAllBotTrades,
   fetchTradePlan,
   saveTradePlan,
   generateBotDecision,
@@ -41,6 +42,7 @@ export default function useBotData(options = {}) {
   const [history, setHistory] = useState([]);
   const [portfolios, setPortfolios] = useState([]);
   const [tradesByBot, setTradesByBot] = useState({});
+  const [allTrades, setAllTrades] = useState({ items: [], has_more: false, next_offset: null });
   const [tradePlans, setTradePlans] = useState({});
 
   const [loading, setLoading] = useState({
@@ -206,6 +208,22 @@ export default function useBotData(options = {}) {
     },
     []
   );
+
+  const loadAllTrades = useCallback(async (offset = 0) => {
+    setLoading((state) => ({ ...state, trades: true }));
+    try {
+      const page = await fetchAllBotTrades(50, offset);
+      setAllTrades((previous) => offset === 0 ? page : {
+        ...page, items: [...previous.items, ...page.items],
+      });
+      return page;
+    } catch (err) {
+      setError(err.message || "Trades laden mislukt");
+      throw err;
+    } finally {
+      setLoading((state) => ({ ...state, trades: false }));
+    }
+  }, []);
 
   /* =====================================================
      📊 TRADE PLAN
@@ -618,6 +636,7 @@ const createManualOrder = useCallback(
     history,
     portfolios,
     tradesByBot,
+    allTrades,
     tradePlans,
   
     decisionsByBot,
@@ -643,5 +662,7 @@ const createManualOrder = useCallback(
     loadToday,
     loadHistory,
     loadPortfolios,
+    loadTradesForBot,
+    loadAllTrades,
   };
 }

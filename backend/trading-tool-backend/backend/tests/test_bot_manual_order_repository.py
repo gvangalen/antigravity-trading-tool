@@ -23,7 +23,8 @@ def test_paper_order_insert_and_replay_use_canonical_bot_orders_columns():
                 quote_amount_eur NUMERIC, estimated_price_eur NUMERIC,
                 estimated_qty NUMERIC, executed_price_eur NUMERIC,
                 executed_qty NUMERIC, status TEXT, created_at TEXT,
-                updated_at TEXT, idempotency_key TEXT
+                updated_at TEXT, idempotency_key TEXT,
+                execution_environment TEXT, exchange_name TEXT, exchange_order_id TEXT
             )
         """))
         connection.execute(text("""

@@ -11,6 +11,7 @@ import Drawer from "@/components/ui/Drawer";
 
 import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import BotAgentCard from "@/components/bot/BotAgentCard";
+import BotFocusView from "@/components/bot/BotFocusView";
 import AddBotForm from "@/components/bot/AddBotForm";
 import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
 import BotBudgetForm from "@/components/bot/BotBudgetForm";
@@ -168,6 +169,7 @@ function BotPageInner() {
     portfolios = [],
     decisionsByBot = {},
     tradesByBot = {},
+    allTrades = { items: [], has_more: false, next_offset: null },
     loading,
     error,
 
@@ -175,6 +177,8 @@ function BotPageInner() {
     updateBot,
     deleteBot,
     reloadAll,
+    loadTradesForBot,
+    loadAllTrades,
 
     generateDecisionForBot,
     runBacktest,
@@ -240,6 +244,11 @@ function BotPageInner() {
       compareBotsForAutomation(left, right, strategies)
     ));
   }, [resolvedBots, strategies]);
+
+  useEffect(() => {
+    const refreshed = resolvedBots.find((bot) => bot.id === activeBot?.id);
+    if (refreshed && refreshed !== activeBot) setActiveBot(refreshed);
+  }, [resolvedBots, activeBot?.id, setActiveBot]);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -962,225 +971,50 @@ function BotPageInner() {
       ) : null}
 
       {!showOnboardingGuide ? (
-      <div className="max-w-full flex flex-col lg:flex-row gap-8 pb-24 items-start relative">
-        
-        {/* 🕋 LEFT: MAIN COMMAND CENTER */}
-        <div ref={botListColumnRef} className="flex-1 min-w-0 space-y-8">
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-              {copy.partialError}
-            </div>
-          )}
-
-          {/* BOT DEPLOYMENT SECTION */}
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{copy.myBotsTitle}</h2>
-                <p className="text-[13px] font-medium text-slate-400 dark:text-slate-500 mt-1">{copy.myBotsSubtitle}</p>
-              </div>
-
-              <div id="bot-create" className="flex flex-wrap items-center justify-between gap-6 scroll-mt-32">
-                <div className="flex gap-4">
-                  <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner">
-                    <button onClick={() => setStatusFilter("all")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-slate-600"}`}>{copy.filterAll} ({bots.length})</button>
-                    <button onClick={() => setStatusFilter("active")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "active" ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-emerald-500"}`}>{copy.filterActive} ({bots.filter(b => b.is_active).length})</button>
-                    <button onClick={() => setStatusFilter("paused")} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === "paused" ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-md" : "text-slate-400 dark:text-slate-500 hover:text-amber-500"}`}>{copy.filterPaused} ({bots.filter(b => !b.is_active).length})</button>
-                  </div>
-                  
-                  <div className="flex bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-inner items-center">
-                    <select
-                      value={assetFilter}
-                      onChange={(e) => setAssetFilter(e.target.value)}
-                      className="bg-transparent px-4 py-1 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer appearance-none"
-                    >
-                      <option value="all">{copy.allAssets}</option>
-                      {availableAssets.map((a) => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <DashboardErrorBoundary>
-                    <SystemConnectivity />
-                  </DashboardErrorBoundary>
-
-                  <button onClick={handleAddBot} className={actionButtonStyles({ variant: "primary", className: "min-h-12 px-6 rounded-2xl shadow-sm" })}>
-                    <Plus size={18} strokeWidth={3} />
-                    {copy.createTitle}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <div className="hidden grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-3 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 dark:border-slate-800 dark:bg-slate-900/60 md:grid">
-                <span>{copy.botList?.bot || "Bot"}</span>
-                <span>{copy.botList?.status || "Status"}</span>
-                <span>{copy.botList?.action || "Action"}</span>
-                <span>{copy.botList?.confidence || "Confidence"}</span>
-                <span className="sr-only">{copy.botList?.open || "Open"}</span>
-              </div>
-
-              {filteredBots.map((bot) => {
-                const isSelected = activeBot?.id === bot.id;
-                const isExpanded = expandedBotId === bot.id;
-                const presentation = getBotPresentation(bot);
-                const toggleBot = () => {
-                  if (!isSelected) {
-                    setActiveBot(bot);
-                    setExpandedBotId(bot.id);
-                    setTradePanelBotId(null);
-                    persistBotSelection(bot.id);
-                    return;
-                  }
-                  setExpandedBotId((currentId) => currentId === bot.id ? null : bot.id);
-                };
-                const toggleTradePanel = (event) => {
-                  event?.stopPropagation();
-                  if (!isSelected) {
-                    setActiveBot(bot);
-                    setExpandedBotId(bot.id);
-                    persistBotSelection(bot.id);
-                  }
-                  setTradePanelBotId((currentId) => currentId === bot.id ? null : bot.id);
-                };
-                return (
-                  <div
-                    key={bot.id}
-                    ref={(node) => {
-                      const botKey = String(bot.id);
-                      if (node) botRowRefs.current.set(botKey, node);
-                      else botRowRefs.current.delete(botKey);
-                    }}
-                    className="border-b border-slate-100 last:border-b-0 dark:border-slate-800"
-                  >
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isExpanded}
-                      onClick={toggleBot}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          toggleBot();
-                        }
-                      }}
-                      className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition md:grid-cols-[minmax(0,2fr)_0.8fr_0.8fr_0.8fr_auto] ${isSelected ? "bg-blue-50 ring-1 ring-inset ring-blue-200 shadow-[inset_3px_0_0_#2563eb] dark:bg-blue-950/25 dark:ring-blue-900" : "hover:bg-slate-50 dark:hover:bg-slate-900/50"}`}
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-900"}`}>
-                          <Bot size={18} />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-slate-950 dark:text-white">{bot.name}</span>
-                          <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                            {presentation.symbol} · {presentation.schedule || presentation.timeframe} · {bot.is_live ? copy.modeLive : copy.modePaper}
-                          </span>
-                        </span>
-                      </div>
-
-                      <span className={`hidden w-fit rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] md:inline-flex ${bot.is_active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-                        {bot.is_active ? copy.filterActive : copy.filterPaused}
-                      </span>
-                      <span className="hidden text-xs font-black uppercase text-blue-700 dark:text-blue-300 md:block">{presentation.action}</span>
-                      <span className="hidden text-xs font-black uppercase text-slate-600 dark:text-slate-300 md:block">{presentation.confidence}</span>
-
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          aria-pressed={tradePanelBotId === bot.id}
-                          onClick={toggleTradePanel}
-                          className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-black transition ${tradePanelBotId === bot.id ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-950/50 dark:hover:text-blue-300"}`}
-                        >
-                          <Wallet size={14} />
-                          <span className="hidden xl:inline">
-                            {tradePanelBotId === bot.id
-                              ? (copy.botList?.closeTrade || "Close")
-                              : (copy.botList?.trade || "Trade")}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            askFinnAboutBot(bot);
-                          }}
-                          className="inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-black text-slate-400 opacity-100 transition hover:bg-blue-100 hover:text-blue-700 focus-visible:opacity-100 dark:hover:bg-blue-950/50 dark:hover:text-blue-300 lg:opacity-0 lg:group-hover:opacity-100"
-                        >
-                          <Sparkles size={14} />
-                          <span className="hidden xl:inline">{copy.botList?.askFinn || "Ask FINN"}</span>
-                        </button>
-                        <ChevronDown size={17} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-180 text-blue-600" : ""}`} />
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="border-t border-blue-100 bg-blue-50/30 p-3 sm:p-5 dark:border-blue-950 dark:bg-blue-950/10">
-                        <BotAgentCard
-                          bot={bot}
-                          decision={presentation.decision}
-                          order={(today?.orders || []).find((o) => o.bot_id === bot.id)}
-                          marketIntelligence={marketIntelligence}
-                          loadingMarketIntelligence={loadingMarketIntelligence}
-                          portfolio={presentation.portfolio}
-                          trades={tradesByBot?.[bot.id] ?? []}
-                          history={history}
-                          loadingDecision={generatingBotId === bot.id}
-                          onGenerate={() => requestPaperDecision(bot)}
-                          onExecute={() => {}}
-                          onSkip={() => {}}
-                          onOpenSettings={handleOpenBotSettings}
-                          onSaveTradePlan={() => {}}
-                          onPlaceManualOrder={() => {}}
-                          onBacktest={runBacktest}
-                          onTrade={() => toggleTradePanel()}
-                          tradeActionLabel={
-                            tradePanelBotId === bot.id
-                              ? (copy.botList?.closeTrade || "Close")
-                              : (copy.botList?.trade || "Trade")
-                          }
-                          tradeActive={tradePanelBotId === bot.id}
-                          onAskFinn={() => askFinnAboutBot(bot)}
-                          finnActionLabel={copy.botList?.askFinn || "Ask FINN"}
-                          compact
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {tradePanelBotId === activeBot?.id && (
-          <>
-            <button
-              type="button"
-              aria-label={copy.botList?.closeTrade || "Sluiten"}
-              onClick={() => setTradePanelBotId(null)}
-              className="fixed inset-0 z-[80] bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
+        <div ref={botListColumnRef} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_350px]">
+          <div className={tradePanelBotId === activeBot?.id ? "min-w-0" : "min-w-0 lg:col-span-2"}>
+            {error && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+            <BotFocusView
+              bots={rankedBots.map((bot) => ({ ...bot, decision: decisionsByBot?.[bot.id], pendingOrder: today?.orders?.find((order) => order.bot_id === bot.id) }))}
+              activeBot={activeBot}
+              onSelectBot={(bot) => {
+                setActiveBot(bot);
+                setExpandedBotId(bot.id);
+                setTradePanelBotId(null);
+                persistBotSelection(bot.id);
+              }}
+              decision={decisionsByBot?.[activeBot?.id]}
+              pendingOrder={today?.orders?.find((order) => order.bot_id === activeBot?.id)}
+              portfolio={portfolios.find((item) => item.bot_id === activeBot?.id)}
+              trades={tradesByBot?.[activeBot?.id] || []}
+              allTrades={allTrades}
+              loading={loading}
+              onLoadBotTrades={loadTradesForBot}
+              onLoadAllTrades={loadAllTrades}
+              onCreateBot={() => handleAddBot()}
+              onOpenSettings={handleOpenBotSettings}
+              onUpdateBot={updateBot}
+              onGenerate={requestPaperDecision}
+              onTrade={() => setTradePanelBotId((current) => current === activeBot?.id ? null : activeBot?.id)}
+              tradeActive={tradePanelBotId === activeBot?.id}
+              onBacktest={runBacktest}
+              history={history}
             />
-            <div
-              style={{ "--trade-panel-offset": `${tradePanelOffset}px` }}
-              className="fixed inset-x-0 bottom-0 z-[90] max-h-[88vh] overflow-y-auto rounded-t-[2rem] bg-white p-3 shadow-2xl dark:bg-slate-950 lg:sticky lg:inset-auto lg:top-24 lg:z-auto lg:mt-[var(--trade-panel-offset)] lg:max-h-none lg:w-[350px] lg:shrink-0 lg:overflow-visible lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none lg:dark:bg-transparent"
-            >
-            <div id="tp-final-v2200-smooth">
+          </div>
+          {tradePanelBotId === activeBot?.id && (
+            <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
               <GlobalTradePanel
                 decision={decisionsByBot?.[activeBot?.id]}
-                portfolio={portfolios.find((p) => p.bot_id === activeBot?.id)}
-                onManualTrade={() => reloadAll({ includeHistory: false })}
+                portfolio={portfolios.find((item) => item.bot_id === activeBot?.id)}
+                onManualTrade={() => {
+                  void reloadAll({ includeHistory: false });
+                  void loadTradesForBot(activeBot.id, 5);
+                }}
                 onClose={() => setTradePanelBotId(null)}
               />
             </div>
-            </div>
-          </>
-        )}
-
-      </div>
+          )}
+        </div>
       ) : null}
 
       <Drawer

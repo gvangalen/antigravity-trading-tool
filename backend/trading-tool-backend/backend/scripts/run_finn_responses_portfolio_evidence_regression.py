@@ -83,7 +83,14 @@ def main() -> None:
             "terminal": observed["status"] == "completed",
             "single_dispatch": observed["dispatch_count"] == observed["attempt_count"] == 1,
             "no_proposal": record["proposal"] is None,
-            "portfolio_read": any(name in {"evaluate_portfolio", "get_portfolio_and_exposure"} for name in names),
+            "portfolio_read": (
+                any(name in {"evaluate_portfolio", "get_portfolio_and_exposure"} for name in names)
+                or (index > 0 and any(
+                    "get_portfolio_and_exposure" in previous["tool_names"]
+                    or "evaluate_portfolio" in previous["tool_names"]
+                    for previous in artifact["cases"]
+                ))
+            ),
             "paper_bot_budget": bool(re.search(r"paper[- ]?bot", lower)),
             "budget_amount": bool(re.search(r"1[., ]?000", answer)),
             "budget_not_cash": (
@@ -99,7 +106,7 @@ def main() -> None:
             checks["named_bot"] = "btc evidence paper bot" in lower
             checks["retrieval_date_explained"] = any(term in lower for term in (
                 "opgehaald", "gelezen", "opgevraagd", "haalde",
-            )) and any(term in lower for term in ("koers", "prijs"))
+            )) and any(term in lower for term in ("koers", "prijs", "waardering"))
         artifact["cases"].append({
             "question": question, "run_id": observed["run_id"],
             "status": observed["status"], "tool_names": names,

@@ -30,7 +30,10 @@ class _Cursor:
         elif "from market_data m" in statement and "any(%s)" in statement:
             self.rows = [(symbol, *self.prices[symbol], index) for index, symbol in enumerate(params[0]) if symbol in self.prices]
         elif "from market_data m" in statement:
-            self.rows = [self.prices[params[0]]] if params[0] in self.prices else []
+            self.rows = [(
+                self.prices[params[0]][0], 0, self.prices[params[0]][2],
+                self.prices[params[0]][1],
+            )] if params[0] in self.prices else []
         elif "into portfolio_value_snapshots_v2" in statement:
             self.snapshots.append(params)
             self.rows = []
@@ -125,7 +128,7 @@ def test_paper_order_price_is_eur_and_live_non_eur_does_not_use_catalog_quote():
     cursor = _Cursor(bots=[], prices={"ETH": (2500, now, "USDT")}, fx=[("USDT", 0.8, now)])
     conn = _Connection(cursor)
     assert _get_live_price(conn, "ETH") == 2000.0
-    assert _get_live_price(conn, "ETH", is_live=True) is None
+    assert _get_live_price(conn, "ETH", max_age_seconds=60) is None
 
 
 def test_fx_refresh_rejects_undated_quote_and_keeps_other_source(monkeypatch):

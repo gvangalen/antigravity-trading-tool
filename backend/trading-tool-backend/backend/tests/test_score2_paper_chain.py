@@ -184,11 +184,19 @@ def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
             return False
 
         def execute(self, statement, params):
-            assert "FOR UPDATE" in statement
-            assert params == (11, 7)
+            if "pg_advisory_xact_lock" in statement:
+                assert params == (7, 0)
+                self.row = None
+            elif "FROM bot_orders" in statement:
+                assert params == (7, 11, 13)
+                self.row = None
+            else:
+                assert "FOR UPDATE" in statement
+                assert params == (11, 7)
+                self.row = saved_bot
 
         def fetchone(self):
-            return saved_bot
+            return self.row
 
     class BotConnection:
         def cursor(self):
@@ -203,8 +211,7 @@ def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
         )
 
 
-@pytest.mark.parametrize("execution", ["auto", "manual"])
-def test_live_bot_execution_requires_confirmed_exchange_fill_before_any_claim(monkeypatch, execution):
+def test_legacy_manual_live_bot_decision_cannot_book_unconfirmed_fill(monkeypatch):
     class BotCursor:
         def __enter__(self):
             return self
@@ -217,7 +224,7 @@ def test_live_bot_execution_requires_confirmed_exchange_fill_before_any_claim(mo
             assert params == (11, 7)
 
         def fetchone(self):
-            return ("auto", True, True) if execution == "auto" else (True,)
+            return True, True
 
     class BotConnection:
         def cursor(self):
@@ -225,17 +232,10 @@ def test_live_bot_execution_requires_confirmed_exchange_fill_before_any_claim(mo
 
     monkeypatch.setattr(paper_worker, "_claim_bot_decision_for_execution", lambda **_: pytest.fail("decision claimed"))
     monkeypatch.setattr(paper_worker, "_execute_on_exchange_sync", lambda *_: pytest.fail("exchange order sent"))
-    with pytest.raises(RuntimeError, match="bevestigde exchange-fills"):
-        if execution == "auto":
-            paper_worker._auto_execute_decision(
-                conn=BotConnection(), user_id=7, bot_id=11, decision_id=13,
-                order={"symbol": "ETH", "side": "buy", "estimated_price": 100,
-                       "estimated_qty": 1}, is_live=True, mode="auto",
-            )
-        else:
-            paper_worker.execute_manual_decision(
-                conn=BotConnection(), user_id=7, bot_id=11, decision_id=13,
-            )
+    with pytest.raises(RuntimeError, match="bevestigde exchange-fill"):
+        paper_worker.execute_manual_decision(
+            conn=BotConnection(), user_id=7, bot_id=11, decision_id=13,
+        )
 
 
 @pytest.mark.parametrize("unavailable", [None, "missing", "stale", "outside"])
@@ -338,7 +338,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     saved_orders = []
     auto_calls = []
     monkeypatch.setattr(paper_worker, "_persist_bot_order", lambda **kwargs: saved_orders.append(kwargs) or 14)
-    monkeypatch.setattr(paper_worker, "_auto_execute_decision", lambda **kwargs: auto_calls.append(kwargs))
+    monkeypatch.setattr(paper_worker, "_auto_execute_decision", lambda **kwargs: auto_calls.append(kwargs) or "filled")
     persisted = {}
     monkeypatch.setattr(paper_worker, "_persist_decision_and_order", lambda **kwargs: persisted.update(kwargs) or 13)
 

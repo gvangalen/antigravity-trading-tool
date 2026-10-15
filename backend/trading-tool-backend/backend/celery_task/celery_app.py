@@ -140,6 +140,10 @@ def warm_finn_interactive_worker_after_ready(sender=None, **kwargs):
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)
 # =========================================================
 celery_app.conf.beat_schedule = {
+    "reconcile_live_bot_orders": build_task_schedule_entry(
+        "backend.celery_task.bot_reconciliation_task.reconcile_live_bot_orders",
+        crontab(minute="*/1"),
+    ),
     "recover_finn_v2_dispatches": build_task_schedule_entry(
         "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches",
         timedelta(seconds=5),
@@ -256,6 +260,7 @@ try:
         import backend.celery_task.store_daily_scores_task
         import backend.celery_task.setup_task
         import backend.celery_task.trading_bot_task
+        import backend.celery_task.bot_reconciliation_task
         import backend.celery_task.regime_memory_task
         import backend.celery_task.portfolio_snapshot_task
         import backend.celery_task.portfolio_fx_task

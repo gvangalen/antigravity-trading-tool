@@ -310,7 +310,7 @@ export default function TradePanelContainer({
 
       /* ---------- CREATE ORDER ---------- */
 
-      await createManualOrder({
+      const result = await createManualOrder({
         bot_id: botId,
         symbol: tradeSymbol,
         side: draftOrder.side,
@@ -326,25 +326,24 @@ export default function TradePanelContainer({
         setup_block_acknowledged: draftOrder.setup_block_acknowledged,
       });
 
-      /* ---------- REFRESH LOCAL BALANCE ---------- */
-
-      if (draftOrder.side === "buy") {
-        setBalanceQuote((prev) => Math.max(0, prev - previewData.gross_eur));
-        setBalanceBase((prev) => prev + previewData.quantity);
-      }
-
-      if (draftOrder.side === "sell") {
-        setBalanceQuote((prev) => prev + previewData.gross_eur);
-        setBalanceBase((prev) => Math.max(0, prev - previewData.quantity));
-      }
-
-      onManualTrade?.(draftOrder);
+      // The exchange may accept an order before any fill exists. Balances come
+      // from the refreshed server portfolio, never from the requested amount.
+      onManualTrade?.(result);
       setShowPreview(false);
 
-      showSnackbar(
-        `${draftOrder.side === "buy" ? copy.buySuccess : copy.sellSuccess} ${copy.orderPlacedSuccess}`,
-        "success"
-      );
+      const status = String(result?.status || "").toLowerCase();
+      if (status === "filled") {
+        showSnackbar(
+          `${draftOrder.side === "buy" ? copy.buySuccess : copy.sellSuccess} ${copy.orderPlacedSuccess}`,
+          "success"
+        );
+      } else if (["sent", "partially_filled", "partial"].includes(status)) {
+        showSnackbar(copy.orderAwaitingExchange, "info");
+      } else if (["sending", "unknown_exchange_state"].includes(status)) {
+        showSnackbar(copy.orderStateUnknown, "warning");
+      } else {
+        showSnackbar(copy.orderNotFilled, "warning");
+      }
       
       window.dispatchEvent(new Event("portfolio:updated"));
 

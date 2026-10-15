@@ -4,6 +4,97 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Portfolio 2.0: verifieerbare waardering per bot
+
+Phase: `BUILD_LOCAL_VALIDATION`. De nieuwe portfoliolezing scheidt Live en
+Paper, toont botbudgetten afzonderlijk van geld, en telt een bot alleen in
+waarde, cash en resultaat mee wanneer de onderliggende posities en valuta
+verifieerbaar zijn. Oudere Paper-ledgers zonder controleerbare kostprijs
+worden niet als actuele waarde voorgesteld. Een gedateerde EUR-valutakoers
+is vereist voor niet-EUR posities. De gedeelde projectie wordt door de
+webpagina, mobiel en FINN gelezen; paginaweergave veroorzaakt geen order.
+
+De Build-branch is op de actuele bot-release gebaseerd. Lokaal slaagden
+**3698 backendtests, 3 skipped** en frontendbuild, typecheck, i18n-,
+command- en proposaltests en de high-severity audit. Mobiele typecheck,
+lint en web-, iOS- en Android-bundles slaagden. In een lokale Paper-API-proef
+werd een door de client aangeleverde prijs van €1 genegeerd: de server
+gebruikte €100, boekte één EUR-ledgerfill, en herkende een herhaalde
+bevestiging als duplicaat. Een oude Live-botbeslissingsroute die een
+exchange-order zonder bewezen afwikkeling als fill kon boeken is nu
+fail-closed; de bestaande nieuwe Live-reconciliatie blijft intact.
+
+De officiële onafhankelijke live QA volgt pas na groene PR/CI, Auto Deploy
+en identieke publieke backend- en frontend-SHA. Die QA moet vooral echte
+waarderingsdekking, botrijen en totalen, Live/Paper-scheiding, fout- en
+versheidsstatus, FINN-pariteit en veilige Paper-actiegrenzen beoordelen.
+
+## Botflow: automatische Paper-order en geschiedenis
+
+Phase: `AUTO_PAPER_HISTORY_ACCEPTED_BY_INDEPENDENT_QA`. De complete botflow is via
+[PR #345](https://github.com/gvangalen/antigravity-trading-tool/pull/345)
+overgezet naar de actuele `main` en gemerged als product-SHA
+`62dc964b47b63b7ba2058571404303ff472f122c`. De afzonderlijke beschermde
+Paper-orderproef is via
+[PR #351](https://github.com/gvangalen/antigravity-trading-tool/pull/351)
+gemerged als QA-runner-SHA `77b5e84bee05e26ad67ef8ff483c1979d3cbac4e`.
+Deze documentatie-update verandert alleen de release-aantekening en creëert
+een latere SHA. QA bindt haar officiële run uitsluitend aan de dan actuele,
+identieke SHA van backend-health, frontend-buildinfo, productiecheckout en
+release-marker.
+
+Build-evidence voor de botflow: volledige backend lokaal **3672 passed,
+3 skipped**; frontend productiebuild, typecheck, i18n- en commandtests
+geslaagd. De geïsoleerde lokale PostgreSQL-proef vulde één automatische
+Paper-order van €50, bracht virtuele kas van €100 naar €50 en gaf in de
+accountgeschiedenis `paper / auto / filled / €50` terug. De proef gebruikte
+een voorbereide beslissing en stubde alleen de planrevisiecontrole; hij
+bewijst daardoor niet de volledige automatische beoordeling. Onafhankelijke
+Build-branch QA, Security en Architecture accepteerden de wijziging.
+[Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38693391119)
+was groen; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38693605207)
+slaagde op product-SHA `62dc964b47b63b7ba2058571404303ff472f122c`.
+
+Build-evidence voor de beschermde QA-proef: volledige backend lokaal
+**3673 passed, 3 skipped**, runner-tests **66 passed**, shellsyntax en
+diffcontrole geslaagd. Een geïsoleerde lokale PostgreSQL-uitvoering van de
+nieuwe probe gaf `paper / auto / filled / €50`, €50 resterend virtueel saldo,
+één execute-ledgerboeking en nul exchange keys. Onafhankelijke Security en
+Architecture accepteerden commit `4b03308bd9c7735ae5cfd865d30bd2e4f1750de2`
+voor de expliciete executor→ledger→accountgeschiedenis-scope.
+[PR #351 CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38694851079)
+en [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38695117190)
+waren groen. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38695291018)
+slaagde; op 2026-10-15 gaven `/api/health` en `/build-info.json` ieder
+HTTP 200 met exact `77b5e84bee05e26ad67ef8ff483c1979d3cbac4e`.
+
+Onafhankelijke QA had als actieve scope: één officiële beschermde
+`auto_paper_trade_history` run op de actuele live SHA, met
+`allow_fixture_actions=true` en `allow_safe_fixture_execution=true`. Alleen
+een inactieve synthetische eigenaar zonder exchange keys mag één virtuele
+Paper-koop van €50 doen. Acceptatie vereist `paper / auto / filled / €50` in
+de accountgeschiedenis, één uitvoeringsboeking, virtuele kas €100→€50,
+geen Live-uitvoering en geslaagde cleanup of veilige quarantaine. De probe
+seedt de beslissing en order; scheduling, marktbeoordeling, planvorming en
+browserweergave blijven buiten dit specifieke productie-QA-verdict.
+
+Onafhankelijke QA voerde precies één beschermde
+[productierun 38696292790](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38696292790)
+uit op de toen live SHA `25c53897bbef52f584719224785ab2f06f76c70a`
+en gaf **ACCEPTED voor deze afgebakende scope**. Het gesanitiseerde rapport
+`finn-production-qa-38696292790-1.json` heeft SHA-256
+`d8cab5206646d08576546885c9c1a15ff6ec1c457bc536f25f09937235abfb6e`;
+QA verifieerde de bijbehorende sidecar. Releasecheckout, release-marker,
+publieke backend-health en frontend-buildinfo matchten de exacte SHA;
+fixture-authenticatie gaf HTTP 200. De probe rapporteerde `paper / auto /
+filled / €50`, virtuele kas €50 na €100 startkapitaal, één
+uitvoeringsboeking, nul exchange keys, nul Live-trading- of
+Live-bot-activatiecalls en geen runnerfouten. De geslaagde protected run
+impliceert dat de verplichte cleanup terugkeerde; het rapport heeft geen
+afzonderlijk cleanup-statusveld. Dit is geen bewijs voor planning, scheduler,
+marktbeoordeling of de zichtbare browserweergave van `/bot > Alle trades`.
+Deze statusupdate wijzigt geen runtimecode en creëert opnieuw een latere SHA.
+
 ## Portfolio-overzicht met gedeelde geldbetekenis
 
 Phase: `PORTFOLIO_ENVIRONMENT_TRANSITION_ACCEPTED_BY_INDEPENDENT_QA`.

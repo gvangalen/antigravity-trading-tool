@@ -54,9 +54,12 @@ een serverpreview een eigenaar-, bedrag- en orderreferentiegebonden token dat
 vijf minuten geldig is. De direct geboekte Paper-prijs komt uit de gedateerde
 markt- en FX-bron; een door de client ingevulde prijs of valutamarkering is
 geen koersbewijs. Herhaling van dezelfde bevestiging boekt geen tweede order.
-Handmatige Live-orders zijn voorlopig niet bevestigbaar. Een verzonden
-beurslimietorder kan nog openstaan; zonder bevestigde fills en idempotente
-reconciliatie mag de app geen cash of positie in het Live-ledger boeken.
+Live-orders kunnen na verzending openstaan; de exchange-reconciliatie
+boekt pas bevestigde fills in het Live-ledger. Dat ledger is nog geen bewijs
+van de toewijzing van het gedeelde brokersaldo aan afzonderlijke botten.
+De oude knop voor handmatige bevestiging van een Live-botbeslissing is
+afgeschermd totdat ook dat pad de reconciliatie gebruikt; de afzonderlijke
+handmatige Live-orderroute gebruikt die al wel.
 Een Live-overzicht vereist nog
 brokerreconciliatie die cash en posities precies één keer aan botten toewijst.
 Een Live-bot met een niet-EUR exchange-paar wordt niet met de generieke
