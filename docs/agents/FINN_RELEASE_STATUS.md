@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Botflow: begrijpelijke guardrails en Paper-orderhistorie
+
+Phase: `BUILD_CANDIDATE_PR_CI_GREEN_AWAITING_DEPLOY`. De actieve kandidaat is
+[PR #358](https://github.com/gvangalen/antigravity-trading-tool/pull/358)
+op branch `codex/bot-end-to-end-paper`, gebaseerd op de actuele `main` van
+2026-10-15. De geïntegreerde code- en exportcommit is
+`07974eb8ca1863364a029ebc539c68d26191962f`. Deze botflow toont de
+gebruiker waarom een order wordt tegengehouden of een bedrag wordt verlaagd,
+en koppelt Paper-uitvoering aan order- en transactiehistorie. Een gebruiker
+kan zijn eigen botinstellingen aanpassen; de server bewaakt de effectieve
+limieten bij de daadwerkelijke uitvoering. De uiteindelijke deployment-SHA
+wordt na merge uit Git en de publieke build-endpoints vastgesteld.
+
+Op de geïntegreerde kandidaat slaagden **3738 backendtests, 3 bestaande
+skips**, frontendbuild, typecheck, i18n-, command-, proposal- en setuptests,
+en de high-severity audit (één moderate Next.js-melding). Mobiele typecheck,
+lint zonder errors en web/iOS/Android Expo-bundles slaagden. Een lokale
+Score2→Celery→Paper-proef maakte precies één kooporder en twee ledgerregels,
+met €50 resterende cash en HTTP 200 voor Today, historie en trades; een
+stale-signaalproef hield de bot op Hold zonder order of ledgerregel. De
+volledige lokale worker-actiecontractmatrix slaagde **16/16**, de adapters
+**19/19**; matrixartifact SHA-256
+`3cb88585ec9c4fbf2e397ef2553f4ac545929d8f4477caf3a7b6b12908ae8ce9`.
+De echte `gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development
+(SHA-256 `0c658111fa9051613079729b830d0d87414f3ca1c560bebc3c7fe03cd617c21a`)
+en **109/109** regressie (SHA-256
+`3fd5bf91093a93ff61cd638977e72a46eddabd75c77ba9ed538d4b6d7407acae`),
+zonder provider-, schema- of validatiefouten. De onafhankelijke QA-, Security- en
+Architecture-hercontroles van de geïntegreerde kandidaat gaven alle drie
+**GO**, zonder blokkerende bevinding. De
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38770197553)
+slaagde met alle vijf jobs op die commit. Onafhankelijke ingelogde productie-QA
+voor deze botflow volgt pas na de deployment en exacte SHA-controle.
+
 ## Live-brokercash per bot toewijzen
 
 Phase: `INDEPENDENT_QA_PARTIAL_EVIDENCE_GAP` — [PR #361](https://github.com/gvangalen/antigravity-trading-tool/pull/361)
