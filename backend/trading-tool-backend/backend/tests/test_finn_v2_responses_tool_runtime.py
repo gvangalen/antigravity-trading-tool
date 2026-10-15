@@ -9086,10 +9086,46 @@ def test_linked_strategy_delete_uses_confirmed_bot_parent_not_bot_id():
     result = asyncio.run(front.run(
         message="Delete the linked strategy.",
         instructions="coach", verified_asset="ETH",
-        conversation_context={"previous_action_result": action}, locale="en",
+        conversation_context={
+            "immediate_previous_action_result": action,
+            "previous_action_result": {
+                "owner_user_id": 21, "result_status": "succeeded",
+                "entity_type": "strategy", "entity_id": "999",
+            },
+        }, locale="en",
     ))
     assert result.proposal_analysis.request_plan.operation_id == "delete_strategy"
     assert result.proposal_analysis.request_plan.operation_state["collected_inputs"]["strategy_id"] == 52
+    front.client.responses.create.assert_not_awaited()
+
+
+def test_linked_setup_delete_uses_confirmed_strategy_parent_not_strategy_id():
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+    front.user_id = 21
+    front.run_id = "linked-setup-delete"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    front.reads = SimpleNamespace(session_factory=None)
+    action = {
+        "owner_user_id": 21, "result_status": "succeeded",
+        "operation_id": "delete_strategy", "entity_type": "strategy", "entity_id": "52",
+        "parent_entity_type": "setup", "parent_entity_id": "42",
+    }
+    result = asyncio.run(front.run(
+        message="Entferne das verknuepfte Setup.",
+        instructions="coach", verified_asset="ETH",
+        conversation_context={
+            "immediate_previous_action_result": action,
+            "previous_action_result": {
+                "owner_user_id": 21, "result_status": "succeeded",
+                "entity_type": "setup", "entity_id": "999",
+            },
+        }, locale="de",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "delete_setup"
+    assert result.proposal_analysis.request_plan.operation_state["collected_inputs"]["setup_id"] == 42
     front.client.responses.create.assert_not_awaited()
 
 
@@ -12571,6 +12607,33 @@ def test_first_provider_call_retries_one_transient_server_failure():
     ))
     assert result.text == "BTC Full Base staat op 4H."
     assert len(fake.requests) == 2
+
+
+def test_proposal_clarification_retries_one_provider_520_without_repeating_tool():
+    class TransientProviderError(Exception):
+        status_code = 520
+
+    fake = FakeResponses(
+        response("proposal", calls=(tool_call("proposal-call", "manage_asset_watchlist_proposal", {
+            "operation_id": "watchlist_add", "draft_intent": "new", "inputs": {},
+        }),)),
+        TransientProviderError("temporary provider failure"),
+        response("clarification", text="Welk asset wil je aan je watchlist toevoegen?"),
+    )
+    executions = []
+
+    async def execute(call):
+        executions.append(call.name)
+        return {"status": "validation_pending", "missing_inputs": ["asset"]}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(message="Voeg een asset toe aan mijn watchlist.", instructions="Gebruik het actiecontract."))
+
+    assert result.text == "Welk asset wil je aan je watchlist toevoegen?"
+    assert executions == ["manage_asset_watchlist_proposal"]
+    assert len(fake.requests) == 3
+    assert fake.requests[1]["tool_choice"] == fake.requests[2]["tool_choice"] == "none"
 
 
 def test_read_only_answer_retries_one_transient_failure_after_evidence_read():

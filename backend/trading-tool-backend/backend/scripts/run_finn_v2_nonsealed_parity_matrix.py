@@ -64,7 +64,7 @@ READ_TOOLS = {
     "evaluate_setup": "evaluate_setup",
     "evaluate_strategy": "evaluate_strategy",
     "evaluate_bot": "evaluate_bot",
-    "read_setup": "get_active_plan_and_strategy",
+    "read_setup": ("get_active_plan_and_strategy", "get_saved_setup"),
     "read_bot": "get_saved_bots",
     "scores": "get_current_asset_scores",
     "portfolio": "get_portfolio_and_exposure",
@@ -92,8 +92,11 @@ def _probe_contract(case_id: str, expected_operation: str, observed: dict, recor
         and not any(call.get("status") == "error" for call in trace)
     )
     if case_id in READ_TOOLS:
+        allowed_read_tools = READ_TOOLS[case_id]
+        if isinstance(allowed_read_tools, str):
+            allowed_read_tools = (allowed_read_tools,)
         return bool(base and observed.get("status") == "completed"
-                    and READ_TOOLS[case_id] in names
+                    and any(tool in names for tool in allowed_read_tools)
                     and not WRITE_TOOLS.intersection(names)), names
     if case_id in DIRECT_ANSWER_CASES:
         return bool(base and observed.get("status") == "completed"

@@ -795,7 +795,19 @@ class FinnResponsesFrontDoor:
             workspace_hints=None, client_context=None,
         )
         is_read_request = request_facts.action_polarity == "read" and not imperative_operation
-        prior_action = dict(conversation_context.get("previous_action_result") or {})
+        immediate_action = dict(conversation_context.get("immediate_previous_action_result") or {})
+        prior_action = (
+            immediate_action
+            if immediate_action.get("owner_user_id") == self.user_id
+            and immediate_action.get("result_status") == "succeeded"
+            else dict(conversation_context.get("previous_action_result") or {})
+        )
+        linked_action = (
+            immediate_action
+            if immediate_action.get("owner_user_id") == self.user_id
+            and immediate_action.get("result_status") == "succeeded"
+            else {}
+        )
         if (
             imperative_operation == "update_strategy"
             and request_facts.action_polarity == "update"
@@ -846,12 +858,10 @@ class FinnResponsesFrontDoor:
             and request_facts.action_polarity in {"delete", "remove"}
             and request_facts.discourse_act == "operation_request"
             and not pending_operation
-            and prior_action.get("owner_user_id") == self.user_id
-            and prior_action.get("result_status") == "succeeded"
-            and prior_action.get("entity_type") == "bot"
-            and prior_action.get("parent_entity_type") == "strategy"
-            and str(prior_action.get("parent_entity_id") or "").isdigit()
-            and re.search(r"\b(?:linked|gekoppelde|verkn[uü]pfte)\s+strateg\w*\b", message, re.I)
+            and linked_action.get("entity_type") == "bot"
+            and linked_action.get("parent_entity_type") == "strategy"
+            and str(linked_action.get("parent_entity_id") or "").isdigit()
+            and re.search(r"\b(?:linked|gekoppelde|verkn(?:u|ü|ue)pfte)\s+strateg\w*\b", message, re.I)
         ):
             # A confirmed bot action carries its owner-scoped strategy link.
             # Deleting that linked strategy is still a separate, confirmable
@@ -866,7 +876,7 @@ class FinnResponsesFrontDoor:
                 ),
                 message=message, conversation_context=conversation_context,
                 verified_asset=verified_asset,
-                verified_target_inputs={"strategy_id": int(prior_action["parent_entity_id"])},
+                verified_target_inputs={"strategy_id": int(linked_action["parent_entity_id"])},
             )
             return FinnResponsesFrontDoorResult(
                 FinnResponsesResult(
@@ -877,6 +887,44 @@ class FinnResponsesFrontDoor:
                           ),
                     response_id=f"verified-linked-strategy-delete-{self.run_id}",
                     tool_trace=({"name": "verified_linked_strategy_delete_proposal", "status": "completed",
+                                 "result": {"operation_id": contract.operation_id}},),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
+        if (
+            imperative_operation == "delete_setup"
+            and request_facts.action_polarity in {"delete", "remove"}
+            and request_facts.discourse_act == "operation_request"
+            and not pending_operation
+            and linked_action.get("entity_type") == "strategy"
+            and linked_action.get("parent_entity_type") == "setup"
+            and str(linked_action.get("parent_entity_id") or "").isdigit()
+            and re.search(r"\b(?:linked|gekoppelde|verkn(?:u|ü|ue)pfte)\s+setup\b", message, re.I)
+        ):
+            # A confirmed strategy action carries its owner-scoped setup link.
+            # The setup is still deleted only after a separate proposal and confirmation.
+            contract = self.proposals.registry.require_supported("delete_setup")
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(contract.operation_id),
+                    operation_id=contract.operation_id, inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new", target_reference="confirmed_previous_plan",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+                verified_target_inputs={"setup_id": int(linked_action["parent_entity_id"])},
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={"en": "I have prepared the linked setup deletion for review.",
+                          "de": "Ich habe das Löschen des verknüpften Setups zur Prüfung vorbereitet."}.get(
+                              locale.split("-")[0].lower(),
+                              "Ik heb de verwijdering van de gekoppelde setup ter controle voorbereid.",
+                          ),
+                    response_id=f"verified-linked-setup-delete-{self.run_id}",
+                    tool_trace=({"name": "verified_linked_setup_delete_proposal", "status": "completed",
                                  "result": {"operation_id": contract.operation_id}},),
                     response_id_reusable=False,
                 ),

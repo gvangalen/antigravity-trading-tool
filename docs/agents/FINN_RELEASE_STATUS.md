@@ -6,26 +6,42 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Oude FINN-meldingen opruimen
 
-Phase: `LOCAL_BUILD_GATE_RED_NOT_DEPLOYED`. Op branch
+Phase: `LOCAL_BUILD_GREEN_AWAITING_CI_DEPLOY`. Op branch
 `codex/retire-legacy-finn-events` verwijdert commit `3242fdf6c` de ongebruikte
 legacy `/assistant/events`-API en -service, de parallelle webpoll in het
 chatpaneel, de oude dashboardfeed en een ongebruikte mobiele Mission
 Control/Today-adapter. De nieuwe eigenaargebonden FINN-coachfeed blijft de
 zichtbare meldingsbron. De oude `finn_plan_created`-eventwrite is verwijderd;
-governance-events en de niet-aangeroepen Mission Control-route zijn buiten
-deze batch gelaten.
+governance-events blijven actief. Vervolgcommit `5a08cc995` verwijdert ook de
+niet-aangeroepen publieke Mission Control-route, de dode webclientloader en
+verouderde route- en UI-tests. De interne Mission Control-berekening blijft
+staan omdat een andere interne coachafnemer die nog gebruikt. Een bevestigde
+strategie en een gekoppelde strategie na een botactie blijven nu als
+eigenaargebonden doel beschikbaar voor een afzonderlijk bevestigbaar voorstel.
+Ook een gekoppelde setup na een bevestigde strategieactie wordt via het
+direct voorafgaande actieresultaat aangewezen, nooit via een ouder algemeen
+gespreksresultaat.
+Een nadere runtimeproef vond bovendien een tijdelijke provider-HTTP 520 in
+de antwoordronde na een nog niet opgeslagen verduidelijking. De kandidaat
+herhaalt zo'n veilige antwoordronde nu eenmaal zonder de actietool opnieuw
+uit te voeren; voorstellen met een opgeslagen `proposal_id` vallen niet onder
+die retry.
 
-Lokaal: `pytest -q` **3724 passed, 3 skipped**; webbuild en typecheck,
-command- en i18n-tests/lint, mobiele typecheck, lint zonder errors en de
-Expo-webbundle slaagden. De geïsoleerde API/Celery/Responses-paritymatrix was
-**rood: 15/16 actiecontracten en 8/9 lineagecontroles**. In het
-`strategy_update`-vervolg “Update that strategy and set the base amount to
-120 euro” vond FINN de eerder gemaakte strategie niet en bleef read-only.
-De andere veiligheidscontroles, inclusief nul Live-bots en nul
-niet-toegestane executies, slaagden. Artifact SHA-256:
-`ec8276e384906b75722843aad8ec4071f7bc29f2e0ee82d1b29b68189bf0c7ea`.
-Er is geen releasekandidaat gepusht, geen CI/Auto Deploy uitgevoerd en geen
-onafhankelijke QA-verdict voor deze wijziging. Deze code is niet live.
+Op de definitieve lokale code: `pytest -q` **3724 passed, 3 skipped**; webbuild,
+typecheck, command-, proposal- en i18n-tests/lint, mobiele typecheck,
+lint zonder errors en web/iOS/Android Expo-bundles slaagden. De echte
+`gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development en
+**109/109** regressie, zonder provider-, schema- of validatiefout. De
+uiteindelijke geïsoleerde API/Celery/Responses-paritymatrix slaagde **37/37**,
+inclusief **16/16** actiecontracten, **9/9** lineagecontroles, HTTP 200,
+polling/SSE-pariteit en nul Live-bots of niet-toegestane executies. De
+terminale p95 was **6,25 s** bij een grens van **10 s**; maximale beurtduur
+**6,41 s**. Artifact SHA-256:
+`1c3754ae8d240f40943f012feecc067d39690499cd9272a99db105d71bbed2bf`.
+Eerdere runs op dezelfde provider lieten wisselende latency en één tijdelijke
+HTTP 520 zien; de laatste kandidaat behaalde alle verplichte acceptatievelden
+zonder verlaging van grenswaarden of verwijdering van cases. CI, Auto Deploy
+en onafhankelijke ingelogde QA moeten nog volgen. Deze code is nog niet live.
 
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
