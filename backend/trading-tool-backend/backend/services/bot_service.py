@@ -1882,7 +1882,7 @@ class BotService:
             exchange_id = str((exchange_order or {}).get("id") or "")
             await self.repository.set_exchange_order_details(
                 user_id, order_id, key.exchange_name, exchange_id or None,
-                str((exchange_order or {}).get("symbol") or payload.symbol),
+                str((exchange_order or {}).get("symbol") or f"{payload.symbol}/EUR"),
                 "sent" if exchange_id else "unknown_exchange_state",
             )
             await self.session.commit()
@@ -2241,9 +2241,9 @@ class BotService:
                 "equity": float(r["equity_eur"] or 0),
                 "cash": float(r["cash_eur"] or 0),
                 "btc_qty": float(r["btc_qty"] or 0),
-                "btc_value": float(r["btc_qty"] * r["price_eur"]) if r.get("btc_qty") and r.get("price_eur") else 0,
+                "btc_value": float(r["btc_value_eur"] or 0),
                 "invested": float(r["invested_eur"] or 0),
-                "unrealized_pnl": float((r["btc_qty"] * r["price_eur"]) - r["invested_eur"]) if r.get("btc_qty") and r.get("price_eur") else 0
+                "unrealized_pnl": float(r["unrealized_pnl_eur"] or 0)
             } for r in rows]
 
         rows = await self.repository.get_portfolio_balance_history(user_id, bucket, max(1, min(limit, 2000)))

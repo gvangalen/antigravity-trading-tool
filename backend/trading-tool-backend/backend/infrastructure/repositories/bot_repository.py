@@ -789,10 +789,11 @@ class BotRepository:
                 SUM(s.equity_eur) as equity_eur,
                 SUM(s.cash_eur) as cash_eur,
                 SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty ELSE 0 END) as btc_qty,
-                AVG(s.price_eur) as price_eur, -- price should be similar across bots at same ts
-                SUM(s.invested_eur) as invested_eur
+                SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty * s.price_eur ELSE 0 END) as btc_value_eur,
+                SUM(s.invested_eur) as invested_eur,
+                SUM(s.equity_eur - s.cash_eur - s.invested_eur) as unrealized_pnl_eur
             FROM bot_portfolio_snapshots s
-            JOIN bot_configs b ON b.id = s.bot_id
+            JOIN bot_configs b ON b.id = s.bot_id AND b.user_id = s.user_id
             WHERE s.user_id = :user_id AND b.is_live = :is_live AND s.bucket = :bucket
             GROUP BY s.ts
             ORDER BY s.ts DESC

@@ -64,3 +64,28 @@ def test_balance_history_returns_latest_window_in_chart_order():
 def test_live_history_does_not_present_unfunded_ledger_cash_as_equity():
     repository = BotRepository(session=None)
     assert asyncio.run(repository.get_filtered_portfolio_balance_history(7, True, "1h", 10)) == []
+
+
+def test_paper_history_values_btc_and_other_assets_separately():
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.executescript("""
+        CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, is_live INTEGER);
+        CREATE TABLE bot_portfolio_snapshots (
+            user_id INTEGER, bot_id INTEGER, bucket TEXT, ts TEXT, equity_eur REAL,
+            cash_eur REAL, net_qty REAL, price_eur REAL, invested_eur REAL, symbol TEXT
+        );
+        INSERT INTO bot_configs VALUES (4, 7, 0), (6, 7, 0);
+        INSERT INTO bot_portfolio_snapshots VALUES
+            (7, 4, '1h', '2026-10-03', 100, 0, 1, 100, 100, 'BTC'),
+            (7, 6, '1h', '2026-10-03', 200, 0, 1, 200, 100, 'ETH');
+    """)
+    repository = BotRepository(_Session(connection))
+    repository.check_table_exists = AsyncMock(return_value=True)
+
+    rows = asyncio.run(repository.get_filtered_portfolio_balance_history(7, False, "1h", 10))
+
+    assert rows[0]["equity_eur"] == 300
+    assert rows[0]["btc_qty"] == 1
+    assert rows[0]["btc_value_eur"] == 100
+    assert rows[0]["unrealized_pnl_eur"] == 100

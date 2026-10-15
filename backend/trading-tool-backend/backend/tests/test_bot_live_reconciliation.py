@@ -5,6 +5,11 @@ import pytest
 from backend.services import bot_live_reconciliation as reconciliation
 
 
+def _exchange_order(**changes):
+    return {"id": "exchange-55", "symbol": "BTC/EUR", "side": "buy", "amount": 0.001,
+            **changes}
+
+
 class _Cursor:
     def __init__(self, connection):
         self.connection = connection
@@ -79,9 +84,9 @@ def test_reconciliation_records_confirmed_fill_once(monkeypatch):
     connection = _Connection()
     ledger = []
     monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
-    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: {
+    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: _exchange_order(**{
         "status": "closed", "filled": 0.0008, "average": 50100,
-    })
+    }))
     def book(**kwargs):
         ledger.append(kwargs)
         connection.fill_count += 1
@@ -104,9 +109,9 @@ def test_reconciliation_books_open_partial_fill_once(monkeypatch):
     connection = _Connection()
     ledger = []
     monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
-    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: {
+    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: _exchange_order(**{
         "status": "open", "filled": 0.0008, "average": 50100,
-    })
+    }))
     def book(**kwargs):
         ledger.append(kwargs)
         connection.fill_count += 1
@@ -125,7 +130,7 @@ def test_reconciliation_books_open_partial_fill_once(monkeypatch):
 def test_reconciliation_books_only_new_quantity_on_terminal_fill(monkeypatch):
     connection = _Connection()
     ledger = []
-    exchange = {"status": "open", "filled": 0.0004, "average": 50000}
+    exchange = _exchange_order(status="open", filled=0.0004, average=50000)
     monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
     monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: exchange.copy())
 
@@ -149,9 +154,9 @@ def test_reconciliation_does_not_invent_fill_price_from_limit(monkeypatch):
     connection = _Connection()
     ledger = []
     monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
-    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: {
+    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: _exchange_order(**{
         "status": "closed", "filled": 0.0008, "price": 50000,
-    })
+    }))
     monkeypatch.setattr(reconciliation, "record_bot_ledger_entry", lambda **kwargs: ledger.append(kwargs))
 
     assert reconciliation.reconcile_live_orders() == {"processed": 1, "settled": 0, "errors": 1}
@@ -164,10 +169,10 @@ def test_reconciliation_keeps_subcent_confirmed_fill(monkeypatch):
     connection = _Connection()
     ledger = []
     monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
-    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: {
+    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: _exchange_order(**{
         "status": "closed", "filled": 0.00000001, "average": 50000,
         "cost": 0.0005,
-    })
+    }))
 
     def book(**kwargs):
         ledger.append(kwargs)
@@ -185,12 +190,30 @@ def test_reconciliation_rejects_fill_larger_than_submitted_order(monkeypatch):
     connection = _Connection()
     ledger = []
     monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
-    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: {
+    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: _exchange_order(**{
         "status": "closed", "filled": 0.002, "average": 50000,
-    })
+    }))
     monkeypatch.setattr(reconciliation, "record_bot_ledger_entry", lambda **kwargs: ledger.append(kwargs))
 
     assert reconciliation.reconcile_live_orders() == {"processed": 1, "settled": 0, "errors": 1}
+    assert connection.status == "sent"
+    assert ledger == []
+
+
+@pytest.mark.parametrize("order", [
+    _exchange_order(id="other-order", status="closed", filled=0.001, average=50000),
+    _exchange_order(symbol="BTC/USD", status="closed", filled=0.001, average=50000),
+    _exchange_order(side="sell", status="closed", filled=0.001, average=50000),
+    _exchange_order(amount=0.002, status="closed", filled=0.001, average=50000),
+])
+def test_reconciliation_rejects_exchange_identity_mismatch(monkeypatch, order):
+    connection = _Connection()
+    ledger = []
+    monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
+    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", lambda *_: order)
+    monkeypatch.setattr(reconciliation, "record_bot_ledger_entry", lambda **kwargs: ledger.append(kwargs))
+
+    assert reconciliation.reconcile_live_orders()["errors"] == 1
     assert connection.status == "sent"
     assert ledger == []
 
@@ -246,7 +269,7 @@ def test_unknown_exchange_status_does_not_starve_newer_order(monkeypatch):
 
     def fetch(_conn, row):
         fetched.append(row["id"])
-        return {"status": "unrecognized"}
+        return _exchange_order(id=f"exchange-{row['id']}", status="unrecognized")
 
     monkeypatch.setattr(reconciliation, "_fetch_exchange_order", fetch)
     reconciliation.reconcile_live_orders(limit=1)

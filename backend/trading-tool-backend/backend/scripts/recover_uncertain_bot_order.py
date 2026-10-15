@@ -17,22 +17,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.services.bot_live_reconciliation import reconcile_live_orders
+from backend.services.bot_live_reconciliation import is_expected_eur_pair, reconcile_live_orders
 from backend.services.exchange_service import ExchangeService
 from backend.utils.db import get_db_connection
 
 UNCERTAIN_STATUSES = ("sending", "unknown_exchange_state")
 
 
-def _base_symbol(value: str) -> str:
-    return str(value or "").upper().replace("-", "/").split("/")[0]
-
-
 def _read_order(conn, user_id: int, order_id: int) -> dict:
     with conn.cursor() as cur:
         cur.execute("""
             SELECT user_id, id, bot_id, decision_id, symbol, side,
-                   COALESCE(estimated_qty, quantity), exchange_name,
+                   COALESCE(estimated_qty, quantity),
+                   COALESCE(estimated_price_eur, limit_price), exchange_name,
                    exchange_order_id, status
             FROM bot_orders
             WHERE user_id=%s AND id=%s AND execution_environment='live'
@@ -41,7 +38,7 @@ def _read_order(conn, user_id: int, order_id: int) -> dict:
     if not row:
         raise ValueError("Live order not found for this user and order ID")
     keys = ("user_id", "id", "bot_id", "decision_id", "symbol", "side",
-            "quantity", "exchange_name", "exchange_order_id", "status")
+            "quantity", "price", "exchange_name", "exchange_order_id", "status")
     return dict(zip(keys, row))
 
 
@@ -64,17 +61,21 @@ def _fetch_verified_exchange_order(conn, row: dict, exchange_order_id: str) -> d
     order = asyncio.run(fetch())
     if not isinstance(order, dict) or str(order.get("id") or "") != exchange_order_id:
         raise ValueError("Exchange order ID could not be verified")
-    if _base_symbol(order.get("symbol")) != _base_symbol(row["symbol"]):
-        raise ValueError("Exchange order asset differs from local order")
+    if not is_expected_eur_pair(order.get("symbol"), row["symbol"]):
+        raise ValueError("Exchange order EUR pair differs from local order")
     if str(order.get("side") or "").lower() != str(row["side"]).lower():
         raise ValueError("Exchange order side differs from local order")
     try:
         amount = float(order.get("amount"))
         expected = float(row["quantity"])
+        price = float(order.get("price"))
+        expected_price = float(row["price"])
     except (TypeError, ValueError) as exc:
         raise ValueError("Exchange order amount is missing") from exc
     if not math.isfinite(amount) or abs(amount - expected) > max(1e-10, expected * 1e-6):
         raise ValueError("Exchange order amount differs from local order")
+    if not math.isfinite(price) or abs(price - expected_price) > max(0.01, expected_price * 1e-4):
+        raise ValueError("Exchange order limit price differs from local order")
     return order
 
 
@@ -110,36 +111,46 @@ def recover_order(*, user_id: int, order_id: int, action: str,
             cur.execute("SELECT pg_advisory_xact_lock(%s, 0)", (user_id,))
             cur.execute("""
                 SELECT status, exchange_order_id, exchange_name, symbol, side,
-                       COALESCE(estimated_qty, quantity), decision_id
+                       COALESCE(estimated_qty, quantity),
+                       COALESCE(estimated_price_eur, limit_price), decision_id
                 FROM bot_orders WHERE user_id=%s AND id=%s
                   AND execution_environment='live' FOR UPDATE
             """, (user_id, order_id))
             locked = cur.fetchone()
             if (not locked or locked[0] not in UNCERTAIN_STATUSES or locked[1]
                     or locked[2] != row["exchange_name"] or locked[3] != row["symbol"]
-                    or locked[4] != row["side"] or float(locked[5]) != float(row["quantity"])):
+                    or locked[4] != row["side"] or float(locked[5]) != float(row["quantity"])
+                    or float(locked[6]) != float(row["price"])):
                 raise ValueError("Order changed during exchange verification; review it again")
+            if action == "attach_exchange_order":
+                cur.execute("""
+                    SELECT id FROM bot_orders
+                    WHERE user_id=%s AND exchange_name=%s AND exchange_order_id=%s AND id<>%s
+                    LIMIT 1
+                """, (user_id, row["exchange_name"], exchange_order_id, order_id))
+                if cur.fetchone():
+                    raise ValueError("Exchange order ID is already linked to another local order")
             if action == "attach_exchange_order":
                 cur.execute("""
                     UPDATE bot_orders SET exchange_order_id=%s, exchange_symbol=%s,
                         status='sent', updated_at=NOW()
                     WHERE user_id=%s AND id=%s
                 """, (exchange_order_id, exchange_order["symbol"], user_id, order_id))
-                if locked[6]:
+                if locked[7]:
                     cur.execute("""
                         UPDATE bot_decisions SET status='awaiting_exchange', updated_at=NOW()
                         WHERE user_id=%s AND id=%s AND bot_id=%s
-                    """, (user_id, locked[6], row["bot_id"]))
+                    """, (user_id, locked[7], row["bot_id"]))
             else:
                 cur.execute("""
                     UPDATE bot_orders SET status='rejected', updated_at=NOW()
                     WHERE user_id=%s AND id=%s
                 """, (user_id, order_id))
-                if locked[6]:
+                if locked[7]:
                     cur.execute("""
                         UPDATE bot_decisions SET status='failed_execution', updated_at=NOW()
                         WHERE user_id=%s AND id=%s AND bot_id=%s
-                    """, (user_id, locked[6], row["bot_id"]))
+                    """, (user_id, locked[7], row["bot_id"]))
             cur.execute("""
                 INSERT INTO bot_order_recovery_events
                     (user_id, order_id, action, exchange_order_id, operator_id, evidence_reference)

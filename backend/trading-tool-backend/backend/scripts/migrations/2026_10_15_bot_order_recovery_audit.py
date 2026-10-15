@@ -17,4 +17,7 @@ ON bot_order_recovery_events (user_id, order_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_bot_orders_live_retry
 ON bot_orders ((COALESCE(updated_at, created_at)), id)
 WHERE execution_environment='live' AND status='sent';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_bot_orders_exchange_identity
+ON bot_orders (user_id, exchange_name, exchange_order_id)
+WHERE exchange_order_id IS NOT NULL;
 """

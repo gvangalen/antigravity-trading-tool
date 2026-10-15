@@ -22,7 +22,8 @@ python3 backend/scripts/recover_uncertain_bot_order.py \
 ```
 
 The script fetches that order using the account's active exchange connection,
-checks ID, asset, side and quantity against the local order, saves the exchange
+checks ID, full EUR pair, side, quantity and limit price against the local order,
+rejects an ID already linked to another order, saves the exchange
 ID and an audit event atomically, then invokes fill reconciliation. If the
 exchange cannot return or verify it, leave the order blocked and escalate.
 

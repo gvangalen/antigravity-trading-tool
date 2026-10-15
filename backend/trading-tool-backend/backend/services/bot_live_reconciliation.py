@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 TERMINAL_STATUSES = {"closed", "canceled", "cancelled", "expired", "rejected"}
 
 
+def is_expected_eur_pair(exchange_symbol: str, base_symbol: str) -> bool:
+    pair = str(exchange_symbol or "").strip().upper().replace("-", "/").split(":", 1)[0]
+    return pair == f"{str(base_symbol or '').strip().upper()}/EUR"
+
+
 def _fetch_exchange_order(conn, row: dict) -> dict:
     with conn.cursor() as cur:
         cur.execute("""
@@ -64,6 +69,17 @@ def reconcile_live_orders(*, user_id: Optional[int] = None, order_id: Optional[i
             processed += 1
             try:
                 exchange_order = _fetch_exchange_order(conn, row)
+                if (str(exchange_order.get("id") or "") != str(row["exchange_order_id"])
+                        or str(exchange_order.get("side") or "").lower() != str(row["side"] or "").lower()
+                        or not is_expected_eur_pair(exchange_order.get("symbol"), row["symbol"])
+                        or not is_expected_eur_pair(row["exchange_symbol"], row["symbol"])):
+                    raise RuntimeError("Exchange order identity or EUR pair differs from local order")
+                submitted_qty = float(row["submitted_qty"] or 0)
+                exchange_amount = float(exchange_order.get("amount"))
+                if (not math.isfinite(exchange_amount) or not math.isfinite(submitted_qty)
+                        or submitted_qty <= 0
+                        or abs(exchange_amount - submitted_qty) > max(1e-10, submitted_qty * 1e-6)):
+                    raise RuntimeError("Exchange order amount differs from local order")
                 status = str(exchange_order.get("status") or "").lower()
                 terminal = status in TERMINAL_STATUSES
                 if status not in TERMINAL_STATUSES and status not in {"open", "partial"}:
