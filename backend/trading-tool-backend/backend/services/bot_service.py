@@ -906,6 +906,7 @@ class BotService:
             return {"ok": True, "checks": []}
 
         checks = []
+        symbol = str(payload.symbol or bot.get("symbol") or "").upper()
         if notional > LIVE_MAX_MANUAL_ORDER_EUR:
             raise HTTPException(409, {
                 "code": "LIVE_ORDER_NOTIONAL_LIMIT",
@@ -937,7 +938,6 @@ class BotService:
             portfolio = await self._live_exchange_portfolio_context(user_id)
             total_equity = portfolio["total_equity"]
             current_position_value = portfolio["current_position_value"]
-            symbol = str(payload.symbol or bot.get("symbol") or "").upper()
             asset_position_value = portfolio["asset_values"].get(symbol, 0.0)
             pending_asset_value = sum(float(order.get("notional_eur") or 0)
                                       for order in pending_buys if str(order.get("symbol") or "").upper() == symbol)

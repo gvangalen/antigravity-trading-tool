@@ -1391,6 +1391,32 @@ def test_live_order_preflight_reports_setup_match_without_blocking(monkeypatch):
             "source_status": "available", "execution_blocked": False} in result["checks"]
 
 
+def test_live_sell_risk_context_reports_setup_match_without_buy_exposure(monkeypatch):
+    class FakeMatchService:
+        def __init__(self, session):
+            pass
+
+        async def for_asset(self, user_id, symbol):
+            assert (user_id, symbol) == (1, "BTC")
+            return {"source_status": "available", "matches": [
+                {"setup_id": 42, "status": "outside_conditions", "score": 35},
+            ]}
+
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", FakeMatchService)
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(bot_setup_id=42)
+    service.repository = repo
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="sell", quantity=0.001, price=50000)
+
+    result = asyncio.run(service.require_live_order_risk_context(1, bot, payload, 50))
+
+    assert {"code": "setup_match_information", "ok": True, "setup_id": 42,
+            "status": "outside_conditions", "setup_match_score": 35,
+            "source_status": "available", "execution_blocked": False} in result["checks"]
+    assert not any(check["code"] in {"portfolio_exposure", "asset_exposure"} for check in result["checks"])
+
+
 def test_fresh_live_market_price_context_returns_snapshot():
     service = BotService(_FakeSession())
     market_ts = datetime.now(timezone.utc)

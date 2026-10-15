@@ -18,6 +18,7 @@ export default function BotFocusView({
   const copy = t?.botPage?.focus || {};
   const [view, setView] = useState("bots");
   const [cashInput, setCashInput] = useState("");
+  const [cashAcknowledged, setCashAcknowledged] = useState(false);
   const [editingCash, setEditingCash] = useState(false);
   const [savingCash, setSavingCash] = useState(false);
   const [cashError, setCashError] = useState("");
@@ -34,6 +35,7 @@ export default function BotFocusView({
 
   useEffect(() => {
     setCashInput("");
+    setCashAcknowledged(false);
     setEditingCash(false);
     setCashError("");
     setActivityError("");
@@ -67,14 +69,18 @@ export default function BotFocusView({
   async function saveCash(event) {
     event.preventDefault();
     const amount = Number(cashInput.replace(",", "."));
-    if (!Number.isFinite(amount) || amount < 0 || amount > 100000000) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
       setCashError(copy.invalidCash);
+      return;
+    }
+    if (!cashAcknowledged) {
+      setCashError(copy.cashAcknowledgementRequired);
       return;
     }
     setSavingCash(true);
     setCashError("");
     try {
-      await onUpdateBot(activeBot.id, { paper_initial_cash_eur: amount });
+      await onUpdateBot(activeBot.id, { paper_initial_cash_eur: amount, risk_acknowledged: true });
       setEditingCash(false);
     } catch (error) {
       setCashError(error?.message || copy.cashSaveFailed);
@@ -203,8 +209,9 @@ export default function BotFocusView({
             {editingCash && !activeBot.is_live && Number(activeBot.paper_initial_cash_eur || 0) === 0 && !portfolio?.stats?.paper_cash_configured && <form onSubmit={saveCash} className="rounded-xl border border-blue-200 bg-blue-50 p-4">
               <label className="block text-sm font-bold text-slate-800" htmlFor="paper-cash-input">{copy.paperCashInput}</label>
               <p className="mt-1 text-xs text-slate-600">{copy.paperCashExplanation}</p>
-              <div className="mt-3 flex flex-wrap gap-2"><input id="paper-cash-input" type="number" min="0" max="100000000" step="0.01" required value={cashInput} onChange={(event) => setCashInput(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                <button type="submit" disabled={savingCash} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{copy.saveCash}</button></div>
+              <div className="mt-3 flex flex-wrap gap-2"><input id="paper-cash-input" type="number" min="0.01" max="100000000" step="0.01" required value={cashInput} onChange={(event) => setCashInput(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm" />
+                <button type="submit" disabled={savingCash || !cashAcknowledged} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{copy.saveCash}</button></div>
+              <label className="mt-3 flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={cashAcknowledged} onChange={(event) => setCashAcknowledged(event.target.checked)} className="mt-1" />{copy.paperCashAcknowledgement}</label>
               {cashError && <p role="alert" className="mt-2 text-sm text-red-700">{cashError}</p>}
             </form>}
 
