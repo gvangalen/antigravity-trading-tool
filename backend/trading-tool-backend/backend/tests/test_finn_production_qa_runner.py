@@ -138,13 +138,19 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
         probe._require_protected_run("../unsafe")
 
     class SourceCursor:
-        def __init__(self, fx_time):
+        def __init__(self, fx_time, *, diverging_projection=False):
             self.fx_time = fx_time
+            self.diverging_projection = diverging_projection
             self.market_time = datetime.now(timezone.utc)
             self.rows = []
 
         def execute(self, query, _params):
-            self.rows = (2500, self.market_time, "USDT") if "FROM market_data" in query else (0.8, self.fx_time)
+            if "FROM market_data" in query:
+                projected = "ORDER BY m.source_observed_at DESC" in query
+                price = 2600 if projected and self.diverging_projection else 2500
+                self.rows = (price, self.market_time, "USDT")
+            else:
+                self.rows = (0.8, self.fx_time)
 
         def fetchone(self):
             return self.rows
@@ -156,8 +162,8 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
             return False
 
     class SourceConnection:
-        def __init__(self, fx_time):
-            self.cursor_value = SourceCursor(fx_time)
+        def __init__(self, fx_time, **kwargs):
+            self.cursor_value = SourceCursor(fx_time, **kwargs)
 
         def cursor(self):
             return self.cursor_value
@@ -172,6 +178,9 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
     assert source["raw_price"] == 2500.0
     assert source["fx_factor"] == 0.8
     assert source["quote"] == "USDT"
+    monkeypatch.setattr(probe, "_connection", lambda: SourceConnection(now, diverging_projection=True))
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_price_source_mismatch"):
+        probe._verified_source_price_eur()
     monkeypatch.setattr(probe, "_connection", lambda: SourceConnection(now - timedelta(days=2)))
     with pytest.raises(RuntimeError, match="portfolio_paper_fx_source_unavailable"):
         probe._verified_source_price_eur()
