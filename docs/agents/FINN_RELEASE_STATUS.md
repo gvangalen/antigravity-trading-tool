@@ -8,6 +8,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 Phase: `INDEPENDENT_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)
 is gemerged als product-SHA `971c3ca398ccda7810b77d1502e626bc8b4c905a`.
+De huidige Build-kandidaat voegt uitsluitend een apart beschermd QA-profiel
+`portfolio_paper_fx` toe voor de nog onbewezen niet-EUR waardering, server-
+Paper-fill en replay. Het profiel leest vóór enige fixture-write bestaande
+gedateerde BTC-prijs- en FX-bronnen, maakt alleen een inactieve synthetische
+owner en heeft twee expliciete uitvoeringsflags nodig. Het is **lokaal
+voorbereid, niet op productie uitgevoerd of door QA geaccepteerd**. De
+volledige lokale backend suite gaf **3699 passed, 3 skipped**; `actionlint`
+op de beschermde workflow en `git diff --check` slaagden. Security vond geen
+concrete blocker; Architecture wees op bron- en bewijsgrenzen, waarna de
+prijsverificatie en doorgifte van de autorisatieflag zijn aangescherpt. Het
+profiel bewijst de gedeelde adapterprojectie, niet zelfstandig de ingelogde
+web-, FINN-chat- of native mobiele runtime.
 Een gerichte mobiele foutstatefix volgde via
 [PR #357](https://github.com/gvangalen/antigravity-trading-tool/pull/357) als
 product-SHA `33ee99b714ac45635edd777dbda89f300383d3df`: bij een mislukte
@@ -59,6 +71,14 @@ Onafhankelijke ingelogde QA op status-SHA
 `0778a8d4ca9cc931b9a338edf05f7b665a420420` gaf **NOT ACCEPTED voor de
 volledige matrix wegens bewijsgrenzen, zonder aangetoonde nieuwe
 productregressie**. Paper en Live bleven bij zes snelle wissels gescheiden.
+Een nieuwe gerichte read-only webherkeuring op SHA
+`b63586ec305e45bc337e0c9bf0144bca96670e30` slaagde voor de beschikbare
+accountdata: Paper/Live-scheiding, onbekende historische ETH-waardering,
+twee virtuele cashrijen van €20, FINN-pariteit voor budget versus saldo,
+NL/EN/DE en 390 px tabelbereik zonder consolefout. QA kon daarmee geen
+actuele niet-EUR FX-positie, een echte API-fout of Paper-replay bewijzen;
+native mobiel bleef door een vergrendelde Mac onbeproefd. Dit verandert het
+volledige verdict nog niet.
 Drie historische ETH-bots kregen geen onbewezen waardering; twee cash-only
 bots toonden ieder €20; een ongefinancierde bot toonde zijn €20 limiet niet
 als saldo. FINN hield dezelfde read-only geldbetekenis aan. NL/EN/DE en een

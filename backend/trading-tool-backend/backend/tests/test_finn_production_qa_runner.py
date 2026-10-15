@@ -110,6 +110,84 @@ def test_auto_paper_history_profile_is_explicitly_gated_and_owner_isolated(monke
         probe._require_protected_run("../unsafe")
 
 
+def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sources(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_portfolio_paper_fx.py")
+    spec = importlib.util.spec_from_file_location("protected_portfolio_paper_fx_probe", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+
+    assert "portfolio_paper_fx" in module.ALLOWED_PROFILES
+    assert "portfolio_paper_fx" in workflow and "portfolio_paper_fx" in dispatch
+    assert "FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=0" in workflow
+    assert "export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=$(printf '%q'" in workflow
+    assert 'if [ "$qa_profile" = "portfolio_paper_fx" ]' in workflow
+    monkeypatch.delenv("FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE", raising=False)
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_fixture_not_authorized"):
+        probe._require_protected_run("qa-123456-1-abcd1234-5678abcd")
+    monkeypatch.setenv("FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE", "1")
+    assert probe._require_protected_run("qa-123456-1-abcd1234-5678abcd") == 42
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_namespace_invalid"):
+        probe._require_protected_run("../unsafe")
+
+    class SourceCursor:
+        def __init__(self, fx_time):
+            self.fx_time = fx_time
+            self.market_time = datetime.now(timezone.utc)
+            self.rows = []
+
+        def execute(self, query, _params):
+            self.rows = (2500, self.market_time, "USDT") if "FROM market_data" in query else (0.8, self.fx_time)
+
+        def fetchone(self):
+            return self.rows
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class SourceConnection:
+        def __init__(self, fx_time):
+            self.cursor_value = SourceCursor(fx_time)
+
+        def cursor(self):
+            return self.cursor_value
+
+        def close(self):
+            pass
+
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(probe, "_connection", lambda: SourceConnection(now))
+    source = probe._verified_source_price_eur()
+    assert source["eur_price"] == 2000.0
+    assert source["raw_price"] == 2500.0
+    assert source["fx_factor"] == 0.8
+    assert source["quote"] == "USDT"
+    monkeypatch.setattr(probe, "_connection", lambda: SourceConnection(now - timedelta(days=2)))
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_source_unavailable"):
+        probe._verified_source_price_eur()
+
+    called = False
+
+    def seed(*_args):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(probe, "_seed", seed)
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_source_unavailable"):
+        probe.run("qa-123456-1-abcd1234-5678abcd")
+    assert called is False
+
+
 def test_workflow_has_only_the_manual_dispatch_trigger():
     """Official QA must never be started by a repository event."""
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
