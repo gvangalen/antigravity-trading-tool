@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS bot_decisions (
     confidence VARCHAR,
     amount_eur NUMERIC,
     scores_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    reason_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     status VARCHAR NOT NULL DEFAULT 'planned'
         CONSTRAINT bot_decisions_status_check
         CHECK (status IN (
