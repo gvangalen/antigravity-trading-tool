@@ -433,6 +433,27 @@ def test_saved_safety_check_reports_block_and_staleness():
     assert service._safety_contract(decision, is_live=True)["state"] == "stale"
 
 
+def test_execution_failure_overrides_earlier_allowed_proposal():
+    service = BotService.__new__(BotService)
+    decision = {
+        "id": 12, "bot_id": 9, "status": "failed_execution",
+        "execution_failure": "De actuele daglimiet laat dit bedrag niet meer toe.",
+        "guardrails_checked_at": datetime.now(timezone.utc).isoformat(),
+        "guardrails_result": {
+            "allowed": True, "original_amount_eur": 50,
+            "adjusted_amount_eur": 50, "blocked_by": None,
+            "reason": "Het voorstel paste binnen de oude limieten.",
+        },
+    }
+    safety = service._safety_contract(decision, is_live=False)
+    assert safety["state"] == "error"
+    assert safety["reason_code"] == "failed_execution"
+    assert safety["reason"] == decision["execution_failure"]
+    assert safety["proposed_amount_eur"] == 50
+    assert safety["checked_amount_eur"] == 50
+    assert safety["allowed_amount_eur"] == 0
+
+
 def test_account_trades_use_confirmed_fill_value_and_historical_environment():
     class Repo:
         async def get_account_bot_trades(self, user_id, limit, offset):
