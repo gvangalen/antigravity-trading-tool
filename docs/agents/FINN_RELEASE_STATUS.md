@@ -30,20 +30,25 @@ De geïntegreerde kandidaat weigert bovendien expliciete uitvoeringsverzoeken
 zonder ondersteund actiecontract; zo wordt een aankoopverzoek niet omgezet in
 een ongerelateerd asset- of watchlistvoorstel.
 
-Op de met actuele `main` geïntegreerde code: `pytest -q` **3739 passed, 3 skipped**; webbuild,
+Op de met actuele `main` geïntegreerde code: `pytest -q` **3740 passed, 3 skipped**; webbuild,
 typecheck, command-, proposal- en i18n-tests/lint, mobiele typecheck,
 lint zonder errors en web/iOS/Android Expo-bundles slaagden. De echte
 `gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development en
 **109/109** regressie, zonder provider-, schema- of validatiefout. De
-uiteindelijke geïntegreerde API/Celery/Responses-paritymatrix slaagde **37/37**,
+selectorcode en het operatiecontractregister zijn sinds die proeven niet
+gewijzigd. De uiteindelijke op deze `main` gebaseerde
+API/Celery/Responses-paritymatrix slaagde **37/37**,
 inclusief **16/16** actiecontracten, **9/9** lineagecontroles, HTTP 200,
 polling/SSE-pariteit en nul Live-bots of niet-toegestane executies. De
-terminale p95 was **7,41 s** bij een grens van **10 s**;
-maximale beurtduur **11,24 s** bij een grens van **15 s**. Artifact SHA-256:
-`357815fb9e7c650ebe0ffe25381a4e07d5ff80892aaf53a57cce2ee593d1e946`.
-Eerdere runs op dezelfde provider lieten wisselende latency en één tijdelijke
-HTTP 520 zien; de laatste kandidaat behaalde alle verplichte acceptatievelden
-zonder verlaging van grenswaarden of verwijdering van cases. CI, Auto Deploy
+terminale p95 was **8,29 s** bij een grens van **10 s**;
+maximale beurtduur **11,40 s** bij een grens van **15 s**. Artifact SHA-256:
+`bffbdbed64cc5d6c7c2d9ea7393337b59b2a0c1a19a699decde4687bf54a5336`.
+Twee eerdere metingen op dezelfde code waren rood: eenmaal selecteerde de
+provider `delete_indicator_configuration` niet (15/16 acties, p95 11,42 s),
+eenmaal slaagden de acties maar niet de latencygrens (16/16, p95 11,36 s).
+De laatste volledige meting behaalde alle verplichte acceptatievelden zonder
+verlaging van grenswaarden of verwijdering van cases. Deze wisselvalligheid
+blijft een QA-aandachtspunt. CI, Auto Deploy
 en onafhankelijke ingelogde QA moeten nog volgen. Deze code is nog niet live.
 
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
