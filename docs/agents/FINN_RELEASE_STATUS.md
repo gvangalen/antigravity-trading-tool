@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Portfolio-overzicht met gedeelde geldbetekenis
 
-Phase: `PORTFOLIO_OVERVIEW_QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`.
+Phase: `PORTFOLIO_ENVIRONMENT_TRANSITION_ACCEPTED_BY_INDEPENDENT_QA`.
 [PR #347](https://github.com/gvangalen/antigravity-trading-tool/pull/347)
 leverde product-SHA `dcb6b80ba2607df3fc2c78dcb845574fb45891df`.
 Onafhankelijke ingelogde QA op de documentatie-SHA
@@ -26,7 +26,20 @@ oude-tabherstelfunctie herkent nu ook precies de webpack-`undefined.call`-
 fout, zonder gewone React-fouten te herladen. Lokaal slaagden frontend
 productiebuild, typecheck, i18n-lint en -tests, command- en proposaltests,
 de 14 release-hardening-tests en high-severity audit. Onafhankelijke live
-herkeuring van deze kandidaat is nog niet uitgevoerd.
+herkeuring van deze kandidaat volgde op de live product-SHA.
+[PR #349](https://github.com/gvangalen/antigravity-trading-tool/pull/349)
+leverde product-SHA `72978701a0d61fd5dfe4e472e2d6f15042879e5c`.
+Candidate [CI run 38688451136](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38688451136)
+en main [CI run 38688645648](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38688645648)
+slaagden. [Auto Deploy run 38688821014](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38688821014)
+slaagde; publieke backend-health en frontend-buildinfo gaven ieder HTTP 200
+met die product-SHA. Onafhankelijke ingelogde QA gaf **PASS voor de gerichte
+Paper/Live-reparatie**: bij vier snelle wissels verscheen geen Paper-bot onder
+een Live-label; de zes Paper-bots en FINN bleven bij dezelfde bedragen en
+ontbrekende totale waardering; Live bleef leeg. De console bleef schoon.
+Kunstmatig trage requests en herstel van een tab met een vóór-de-fix geladen
+bundle zijn nog niet live bewezen. Dit is geen acceptatie van een volledig
+gewaardeerd Live-portfolio of historische EUR-grafiek.
 
 De nieuwe eigenaargebonden projectie scheidt Paper en Live en geeft web,
 mobiel en FINN dezelfde botrijen. Botbudget blijft een limiet en wordt niet
