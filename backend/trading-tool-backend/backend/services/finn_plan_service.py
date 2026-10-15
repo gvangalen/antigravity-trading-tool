@@ -20639,6 +20639,8 @@ class FinnPlanService:
         from backend.infrastructure.repositories.bot_repository import BotRepository
         bot_repo = BotRepository(self.session)
         portfolio_ctx = await bot_repo.get_portfolio_intelligence_context(user_id)
+        if draft["bot"].get("is_live") and portfolio_ctx["global"].get("total_equity") is None:
+            raise HTTPException(409, "Portefeuillewaarde in euro ontbreekt; de blootstellingsgrens kan niet betrouwbaar worden gecontroleerd.")
         
         # Guardrail 1: Max open trades (bots)
         active_bots = [b for b in portfolio_ctx["bots"] if b["is_active"]]

@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from datetime import date, datetime, timezone
+from sqlalchemy import bindparam, text
+from datetime import date, datetime, timedelta, timezone
 import json
 
 from backend.services.platform_metrics import increment_execution_safety_counter
@@ -600,6 +600,20 @@ class BotRepository:
         """), {"symbols": normalized})
         return {str(row._mapping["symbol"]).upper(): row._mapping["timestamp"] for row in result.fetchall()}
 
+    async def get_asset_quote_currencies(self, symbols: List[str]) -> Dict[str, str]:
+        normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return {}
+        query = text("""
+            SELECT symbol, quote_currency FROM asset_catalog
+            WHERE symbol IN :symbols
+        """).bindparams(bindparam("symbols", expanding=True))
+        result = await self.session.execute(query, {"symbols": normalized})
+        return {
+            str(row._mapping["symbol"]).upper(): str(row._mapping["quote_currency"] or "").upper()
+            for row in result.fetchall()
+        }
+
     # ==========================
     # BOT TRADES
     # ==========================
@@ -704,8 +718,9 @@ class BotRepository:
 
     async def get_portfolio_intelligence_context(self, user_id: int) -> Dict[str, Any]:
         """
-        Calculates and returns real-time cash, equity, asset allocations, 
-        and detailed performance metrics for all bot portfolios.
+        Reads owner-scoped bot ledgers and only values positions when the
+        market quote is a dated, recent EUR price. Other quote currencies
+        require a verified FX conversion before they can become EUR amounts.
         """
         query = text("""
             SELECT 
@@ -733,6 +748,7 @@ class BotRepository:
             LEFT JOIN setups st        ON st.id = s.setup_id AND st.user_id = c.user_id
             LEFT JOIN bot_portfolios p
                    ON p.bot_id = c.id
+                  AND p.user_id = c.user_id
                   AND p.symbol = COALESCE(NULLIF(UPPER(c.symbol), ''), NULLIF(UPPER(st.symbol), ''), 'BTC')
             WHERE c.user_id = :user_id
             ORDER BY c.id ASC
@@ -744,6 +760,7 @@ class BotRepository:
         symbols = [row._mapping["symbol"] for row in rows]
         prices = await self.get_market_prices(symbols)
         price_timestamps = await self.get_market_price_timestamps(symbols)
+        quote_currencies = await self.get_asset_quote_currencies(symbols)
             
         bot_states = []
         global_cash = 0.0
@@ -769,24 +786,37 @@ class BotRepository:
             risk = mapping["risk_profile"]
             
             price = prices.get(sym, 0.0)
-            price_available = qty == 0 or (sym in prices and price > 0)
-            pos_val = qty * price
-            unrealized = pos_val - invested
-            bot_equity = cash + pos_val
+            # market_data.price is in the asset's quote currency (commonly
+            # USDT for crypto and USD for stocks), while the ledger is EUR.
+            # Without a dated FX conversion it is not a EUR valuation.
+            quote_currency = quote_currencies.get(sym)
+            observed_at = price_timestamps.get(sym)
+            if observed_at is not None and observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=timezone.utc)
+            price_fresh = bool(observed_at and timedelta(0) <= datetime.now(timezone.utc) - observed_at <= timedelta(hours=24))
+            price_available = qty == 0 or (
+                quote_currency == "EUR" and sym in prices and price > 0 and price_fresh
+            )
+            pos_val = qty * price if price_available else None
+            unrealized = pos_val - invested if pos_val is not None else None
+            bot_equity = cash + pos_val if pos_val is not None else None
             
             global_cash += cash
             global_invested += invested
             global_realized += realized
-            global_position_value += pos_val
+            if pos_val is not None:
+                global_position_value += pos_val
             global_budget += budget
             
-            asset_values[sym] = asset_values.get(sym, 0.0) + pos_val
+            if pos_val is not None:
+                asset_values[sym] = asset_values.get(sym, 0.0) + pos_val
             
             bot_states.append({
                 "bot_id": bot_id,
                 "portfolio_initialized": bool(mapping["portfolio_initialized"]),
                 "price_available": price_available,
-                "price_as_of": price_timestamps.get(sym) if qty != 0 and price_available else None,
+                "price_quote_currency": quote_currency,
+                "price_as_of": observed_at if qty != 0 and price_available else None,
                 "name": name,
                 "symbol": sym,
                 "cash": cash,
@@ -808,24 +838,28 @@ class BotRepository:
                 "risk_profile": risk
             })
             
-        global_equity = global_cash + global_position_value
-        global_unrealized = global_position_value - global_invested
+        valuation_available = all(
+            bot["portfolio_initialized"] and bot["price_available"]
+            for bot in bot_states
+        )
+        global_equity = global_cash + global_position_value if valuation_available else None
+        global_unrealized = global_position_value - global_invested if valuation_available else None
         
         allocations = {}
-        if global_equity > 0:
+        if global_equity is not None and global_equity > 0:
             allocations["Cash"] = round((global_cash / global_equity) * 100, 2)
             for sym, val in asset_values.items():
                 allocations[sym] = round((val / global_equity) * 100, 2)
-        else:
+        elif global_equity is not None:
             allocations["Cash"] = 100.0
             
         return {
             "read_at": datetime.now(timezone.utc),
             "global": {
                 "total_equity": global_equity,
-                "cash_balance": global_cash,
+                "cash_balance": global_cash if valuation_available else None,
                 "invested_value": global_invested,
-                "current_position_value": global_position_value,
+                "current_position_value": global_position_value if valuation_available else None,
                 "realized_pnl": global_realized,
                 "unrealized_pnl": global_unrealized,
                 "total_budget_limit": global_budget,

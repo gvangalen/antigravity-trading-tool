@@ -1117,6 +1117,23 @@ def test_live_order_risk_context_blocks_asset_exposure(monkeypatch):
     assert exc.value.detail["projected_exposure_pct"] == 75.0
 
 
+def test_live_buy_blocks_when_eur_portfolio_valuation_cannot_be_verified():
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo(portfolio_context={
+        "global": {"total_equity": None, "current_position_value": None},
+        "bots": [{"symbol": "BTC", "position_value": None}],
+    })
+    service.repository = repo
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.002, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 100))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PORTFOLIO_VALUATION_UNAVAILABLE"
+
+
 def test_live_order_portfolio_exposure_reports_asset_exposure_when_both_block(monkeypatch):
     monkeypatch.setattr("backend.services.bot_service.LIVE_MAX_PORTFOLIO_EXPOSURE_PCT", 95)
     monkeypatch.setattr("backend.services.bot_service.LIVE_MAX_ASSET_EXPOSURE_PCT", 70)

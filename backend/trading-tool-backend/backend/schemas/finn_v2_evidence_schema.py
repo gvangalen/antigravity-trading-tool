@@ -261,11 +261,21 @@ class PortfolioBotData(BaseModel):
     setup_name: Optional[str] = None
     mode: Optional[str] = None
     equity: Optional[float] = None
+    cash_eur: Optional[float] = None
+    position_value_eur: Optional[float] = None
+    position_qty: Optional[float] = None
+    invested_eur: Optional[float] = None
+    realized_pnl_eur: Optional[float] = None
+    unrealized_pnl_eur: Optional[float] = None
+    result_eur: Optional[float] = None
+    portfolio_initialized: bool = False
+    valuation_available: bool = False
     budget_total_eur: Optional[float] = None
     paper_cash_eur: Optional[float] = None
     is_active: Optional[bool] = None
     is_live: Optional[bool] = None
     price_as_of: Optional[datetime] = None
+    price_quote_currency: Optional[str] = None
 
 
 class PortfolioData(BaseModel):
@@ -273,6 +283,10 @@ class PortfolioData(BaseModel):
     bots: List[PortfolioBotData] = Field(default_factory=list)
     read_at: Optional[datetime] = None
     valuation_available: bool = False
+    environment: Optional[Literal["paper", "live"]] = None
+    valuation_status: str = "unavailable"
+    valuation_as_of: Optional[datetime] = None
+    unallocated_cash_eur: Optional[float] = None
     covered_scopes: List[str] = Field(default_factory=list)
     excluded_scopes: List[str] = Field(default_factory=list)
 

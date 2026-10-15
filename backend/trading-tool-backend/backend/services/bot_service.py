@@ -782,6 +782,11 @@ class BotService:
             portfolio = await self.repository.get_portfolio_intelligence_context(user_id)
             global_ctx = portfolio.get("global") or {}
             bots = portfolio.get("bots") or []
+            if global_ctx.get("total_equity") is None:
+                raise HTTPException(409, {
+                    "code": "LIVE_PORTFOLIO_VALUATION_UNAVAILABLE",
+                    "message": "De portefeuillewaarde in euro is niet betrouwbaar beschikbaar; een live koop kan niet op blootstelling worden gecontroleerd.",
+                })
             total_equity = float(global_ctx.get("total_equity") or 0)
             current_position_value = float(global_ctx.get("current_position_value") or 0)
             symbol = str(payload.symbol or bot.get("symbol") or "").upper()

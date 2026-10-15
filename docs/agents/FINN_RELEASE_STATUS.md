@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Portfolio-overzicht met gedeelde geldbetekenis
+
+Phase: `PORTFOLIO_OVERVIEW_LOCAL_VALIDATION`.
+Branch: `codex/portfolio-truth-overview`. Product SHA, CI, Auto Deploy en
+onafhankelijke live QA: nog niet vastgesteld.
+
+De nieuwe eigenaargebonden projectie scheidt Paper en Live en geeft web,
+mobiel en FINN dezelfde botrijen. Botbudget blijft een limiet en wordt niet
+als cash of portefeuillewaarde getoond. Paper-cash komt alleen uit een
+gefinancierd virtueel ledger. Posities krijgen alleen een EUR-waarde met een
+controleerbare, recente EUR-koers. Een gedeeld Live-brokersaldo wordt niet
+per bot opgeteld; Live-totaal en beschikbare cash blijven onbekend zolang
+brokerreconciliatie ontbreekt. Historische grafieken met onbekende
+koersvaluta worden niet als euroverloop gepresenteerd. Zie
+`docs/operations/portfolio-overview-v2.md` voor de veldbetekenis.
+
+Lokale Build-validatie: backend **3615 passed, 3 bestaande skips**;
+frontend productiebuild, typecheck, i18n-lint en -tests, command- en
+proposaltests en high-severity audit geslaagd. Mobile typecheck, lint en
+web/iOS/Android-bundels geslaagd; bestaande lintwaarschuwingen blokkeren niet.
+Een lokale eigenaarsscope-API-proef bevestigde dat een bot van een andere
+gebruiker niet in het Paper-overzicht verschijnt en dat een USDT-gequote
+positie geen EUR-totaal krijgt. De echte Luna/Responses-selectorproeven
+haalden **20/20 development** (SHA-256
+`a49f2b21c95d25b689b96232d401f7d8019ab9129a3439f47c4e5650ee74a511`)
+en **109/109 regression** (SHA-256
+`1ba7805fcd88d35bb4ffe06c0fcc1f7954392dc82007c0abc36deae1260bff56`).
+De finale lokale worker-actiecontractmatrix slaagde **16/16**, adaptertests
+**19/19**, zonder brokerorders, Live-bots, Live-trading calls of
+productieverbindingen (SHA-256
+`18a728b5d37e8ac3082e2e09111c9a87221e8737a2a309cd64b1b71e5dd763f8`).
+
 ## FINN Guided Name Prompt Intent
 
 Phase: `GUIDED_NAME_PROMPT_ACCEPTED_BY_INDEPENDENT_QA`.
