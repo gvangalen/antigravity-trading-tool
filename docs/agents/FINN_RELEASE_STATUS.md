@@ -6,9 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Portfolio-overzicht met gedeelde geldbetekenis
 
-Phase: `PORTFOLIO_OVERVIEW_LOCAL_VALIDATION`.
-Branch: `codex/portfolio-truth-overview`. Product SHA, CI, Auto Deploy en
-onafhankelijke live QA: nog niet vastgesteld.
+Phase: `PORTFOLIO_OVERVIEW_DEPLOYED_AWAITING_INDEPENDENT_QA`.
+[PR #347](https://github.com/gvangalen/antigravity-trading-tool/pull/347)
+leverde product-SHA `dcb6b80ba2607df3fc2c78dcb845574fb45891df`.
+Onafhankelijke ingelogde web- en mobiele QA: nog niet vastgesteld.
 
 De nieuwe eigenaargebonden projectie scheidt Paper en Live en geeft web,
 mobiel en FINN dezelfde botrijen. Botbudget blijft een limiet en wordt niet
@@ -35,6 +36,20 @@ De finale lokale worker-actiecontractmatrix slaagde **16/16**, adaptertests
 **19/19**, zonder brokerorders, Live-bots, Live-trading calls of
 productieverbindingen (SHA-256
 `18a728b5d37e8ac3082e2e09111c9a87221e8737a2a309cd64b1b71e5dd763f8`).
+Een volledige lokale FastAPI/Celery/PostgreSQL/Responses-gespreksproef
+bevestigde dat FINN het botbudget niet als beschikbaar saldo uitlegt,
+geen marktprijs of actie verzint en het ophaalmoment onderscheidt van
+een koersbronmoment (SHA-256
+`3492471dce3822a0bd50188beae2d9c9dfbbebd89d493f9c7faecfd3cc2e5299`).
+Candidate [CI run 38686576938](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38686576938)
+en main [CI run 38686804786](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38686804786)
+slaagden; de eerste poging zonder bijgewerkte statische export faalde
+terecht bij de exportinvoercontrole en is vervangen door de geslaagde
+candidate. [Auto Deploy run 38686981931](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38686981931)
+slaagde. Op 2026-10-15 gaven de publieke backend-health en frontend-buildinfo
+ieder HTTP 200 met exact de product-SHA. Deze documentatie-update verandert
+alleen de release-aantekening; de live identiteit wordt na die update opnieuw
+via de publieke oppervlakken gecontroleerd.
 
 ## FINN Guided Name Prompt Intent
 
