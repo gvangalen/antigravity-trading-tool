@@ -27,18 +27,21 @@ def test_balance_history_returns_latest_window_in_chart_order():
         );
         CREATE TABLE bot_portfolio_snapshots (
             user_id INTEGER, bot_id INTEGER, bucket TEXT, ts TEXT, equity_eur REAL,
-            cash_eur REAL, net_qty REAL, price_eur REAL, invested_eur REAL
+            cash_eur REAL, net_qty REAL, price_eur REAL, invested_eur REAL,
+            symbol TEXT
         );
-        CREATE TABLE bot_configs (id INTEGER, is_live INTEGER);
-        INSERT INTO bot_configs VALUES (4, 0);
+        CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, is_live INTEGER);
+        INSERT INTO bot_configs VALUES (4, 7, 0);
+        INSERT INTO bot_configs VALUES (5, 7, 1);
         INSERT INTO portfolio_balance_snapshots VALUES
             (7, '1h', '2026-10-01T00:00:00', 10, 10, 0, 0, 0, 0),
             (7, '1h', '2026-10-02T00:00:00', 20, 20, 0, 0, 0, 0),
             (7, '1h', '2026-10-03T00:00:00', 30, 30, 0, 0, 0, 0);
         INSERT INTO bot_portfolio_snapshots VALUES
-            (7, 4, '1h', '2026-10-01T00:00:00', 10, 10, 0, 1, 0),
-            (7, 4, '1h', '2026-10-02T00:00:00', 20, 20, 0, 1, 0),
-            (7, 4, '1h', '2026-10-03T00:00:00', 30, 30, 0, 1, 0);
+            (7, 4, '1h', '2026-10-01T00:00:00', 10, 10, 0, 1, 0, 'BTC'),
+            (7, 4, '1h', '2026-10-02T00:00:00', 20, 20, 0, 1, 0, 'BTC'),
+            (7, 4, '1h', '2026-10-03T00:00:00', 30, 30, 0, 1, 0, 'BTC'),
+            (7, 5, '1h', '2026-10-03T00:00:00', 0, -100, 0.002, 50000, 100, 'BTC');
     """)
     repository = BotRepository(_Session(connection))
     repository.check_table_exists = AsyncMock(return_value=True)
@@ -54,3 +57,10 @@ def test_balance_history_returns_latest_window_in_chart_order():
         assert [row["ts"] for row in rows] == [
             "2026-10-02T00:00:00", "2026-10-03T00:00:00",
         ]
+        assert rows[-1]["equity_eur"] == 30
+    assert asyncio.run(repository.get_bot_balance_history(7, 5, "1h", 2)) == []
+
+
+def test_live_history_does_not_present_unfunded_ledger_cash_as_equity():
+    repository = BotRepository(session=None)
+    assert asyncio.run(repository.get_filtered_portfolio_balance_history(7, True, "1h", 10)) == []

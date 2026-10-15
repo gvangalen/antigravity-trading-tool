@@ -77,13 +77,18 @@ def snapshot_all_for_user(
                     bp.avg_entry,
                     bp.realized_pnl_eur
                 FROM bot_portfolios bp
-                LEFT JOIN bot_configs bc
+                JOIN bot_configs bc
                     ON bc.id = bp.bot_id
                    AND bc.user_id = bp.user_id
-                WHERE bp.user_id=%s
+                WHERE bp.user_id=%s AND bc.is_live=FALSE
             """, (user_id,))
 
             portfolio_rows = cur.fetchall()
+            # Live ledger cash is a trade delta, not a funded exchange wallet.
+            # Do not publish it as account equity until an exchange-backed
+            # valuation contract is available.
+            if not portfolio_rows:
+                return
 
             # A missing quote makes the complete valuation unknown. Do not
             # write a new partial snapshot that silently excludes a funded

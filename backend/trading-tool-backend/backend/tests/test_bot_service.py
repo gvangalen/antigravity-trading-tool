@@ -298,6 +298,12 @@ def test_existing_unused_paper_bot_can_receive_one_explicit_initial_credit(monke
         return None
 
     class Repo:
+        async def lock_live_account(self, _user_id):
+            events.append("account_lock")
+
+        async def lock_bot_config(self, _user_id, _bot_id):
+            events.append("bot_lock")
+
         async def get_bot_config(self, _user_id, _bot_id):
             return {"id": 41, "strategy_id": 5, "symbol": "ETH", "mode": "auto",
                     "is_live": False, "is_active": True, "paper_initial_cash_eur": 0,
@@ -324,7 +330,7 @@ def test_existing_unused_paper_bot_can_receive_one_explicit_initial_credit(monke
         paper_initial_cash_eur=25, risk_acknowledged=True,
     ), user_id=7))
 
-    assert events == ["eligibility", ("update", 25), ("credit", "ETH", 25)]
+    assert events == ["account_lock", "bot_lock", "eligibility", ("update", 25), ("credit", "ETH", 25)]
     assert session.commits == 2  # bot+credit transaction, then behavioral audit
 
 
@@ -332,6 +338,12 @@ def test_null_mode_fields_cannot_bypass_live_budget_validation():
     class Repo:
         def __init__(self):
             self.updated = False
+
+        async def lock_live_account(self, _user_id):
+            return None
+
+        async def lock_bot_config(self, _user_id, _bot_id):
+            return None
 
         async def get_bot_config(self, _user_id, bot_id):
             return {
@@ -478,6 +490,39 @@ def test_paper_order_preflight_uses_virtual_cash_not_unused_budget(monkeypatch):
         asyncio.run(service.preflight_manual_order(payload, user_id=7))
     assert exc.value.status_code == 400
     assert "cash" in str(exc.value.detail).lower()
+
+
+def test_live_manual_order_rejects_asset_outside_bot_before_exchange():
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo()
+    service.repository = repo
+    payload = BotManualOrderSchema(
+        bot_id=9, symbol="ETH", side="sell", quantity=1, price=100,
+        idempotency_key="cross-asset-sell", risk_acknowledged=True,
+        live_preflight_token="token",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=1))
+
+    assert exc.value.status_code == 400
+    assert "Orderasset" in str(exc.value.detail)
+    assert repo.created_orders == 0
+
+
+@pytest.mark.parametrize("field,value", [
+    ("quantity", float("nan")), ("price", float("nan")),
+    ("value_eur", float("inf")), ("quantity", float("inf")),
+])
+def test_manual_order_rejects_nonfinite_amounts(field, value):
+    service = BotService.__new__(BotService)
+    values = {"bot_id": 9, "symbol": "BTC", "side": "sell", "quantity": 0.001, "price": 50000}
+    values[field] = value
+
+    with pytest.raises(HTTPException) as exc:
+        service._validate_manual_order_payload(BotManualOrderSchema(**values))
+
+    assert exc.value.status_code == 400
 
 
 def test_paper_manual_buy_rejects_guardrail_cash_trimming():
@@ -1113,7 +1158,7 @@ def test_live_manual_order_checks_exchange_keys_before_order_insert():
     service.repository = repo
     service.exchange_repo = _NoExchangeKeys()
     async def _preflight_ok(user_id, bot_id, token):
-        return {"token": token}
+        return {"token": token, "decision_id": 1}
     service.require_recent_live_preflight = _preflight_ok
     payload = BotManualOrderSchema(
         bot_id=9,
@@ -1184,6 +1229,31 @@ def test_recent_live_preflight_token_must_be_successful_and_recent():
     assert result["token"] == "token-123"
     assert result["decision_id"] == 123
     assert result["verified"]["live_preflight"] is True
+
+
+def test_live_preflight_token_cannot_be_reused_for_new_decision():
+    service = BotService(_FakeSession())
+    service.repository = _ManualOrderRepo(decisions=[{
+        "id": 2, "bot_id": 9, "decision_ts": datetime.now(timezone.utc),
+    }])
+
+    async def old_preflight(_user_id, _bot_id, _token):
+        return {"decision_id": 1, "verified": {"live_preflight": True}}
+
+    service.require_recent_live_preflight = old_preflight
+    payload = BotManualOrderSchema(
+        bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000,
+        idempotency_key="stale-decision-token", risk_acknowledged=True,
+        live_preflight_token="token-for-decision-1",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_manual_order_preflight_context(
+            1, {"is_live": True, "symbol": "BTC"}, payload, 50,
+        ))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_PREFLIGHT_DECISION_MISMATCH"
 
 
 def test_recent_live_preflight_token_rejects_failed_preflight():
@@ -1464,7 +1534,7 @@ def test_live_manual_order_blocks_when_market_price_is_stale(monkeypatch):
     service.repository = repo
 
     async def _preflight_ok(user_id, bot_id, token):
-        return {"token": token}
+        return {"token": token, "decision_id": 1}
 
     service.require_recent_live_preflight = _preflight_ok
     payload = BotManualOrderSchema(
@@ -1496,6 +1566,7 @@ def test_live_manual_order_preflight_is_not_persisted_and_returns_guardrail_cont
     async def _preflight_ok(user_id, bot_id, token):
         return {
             "token": token,
+            "decision_id": 1,
             "verified": {"live_preflight": True, "fresh_decision_context": True},
             "freshness": {"status": "fresh"},
         }
@@ -1615,7 +1686,7 @@ def test_live_manual_order_preflight_reuses_stale_market_price_guardrail(monkeyp
     service.repository = repo
 
     async def _preflight_ok(user_id, bot_id, token):
-        return {"token": token}
+        return {"token": token, "decision_id": 1}
 
     service.require_recent_live_preflight = _preflight_ok
     payload = BotManualOrderSchema(

@@ -35,6 +35,9 @@ class _Cursor:
             self.connection.executed_qty = params[1]
             self.connection.executed_price = params[2]
             self.rows = []
+        elif "update bot_orders set updated_at" in normalized:
+            self.connection.retry_advances += 1
+            self.rows = []
         elif "insert into bot_executions" in normalized:
             self.connection.execution_writes += 1
             self.rows = []
@@ -56,6 +59,7 @@ class _Connection:
         self.fill_count = 0
         self.booked_cash = Decimal("0")
         self.execution_writes = 0
+        self.retry_advances = 0
         self.commits = 0
 
     def cursor(self):
@@ -113,6 +117,7 @@ def test_reconciliation_books_open_partial_fill_once(monkeypatch):
     assert reconciliation.reconcile_live_orders() == {"processed": 1, "settled": 0, "errors": 0}
     assert connection.status == "sent"
     assert connection.execution_writes == 1
+    assert connection.retry_advances == 1
     assert len(ledger) == 1
     assert ledger[0]["qty_delta"] == 0.0008
 
@@ -151,6 +156,7 @@ def test_reconciliation_does_not_invent_fill_price_from_limit(monkeypatch):
 
     assert reconciliation.reconcile_live_orders() == {"processed": 1, "settled": 0, "errors": 1}
     assert connection.status == "sent"
+    assert connection.retry_advances == 1
     assert ledger == []
 
 
@@ -187,3 +193,63 @@ def test_reconciliation_rejects_fill_larger_than_submitted_order(monkeypatch):
     assert reconciliation.reconcile_live_orders() == {"processed": 1, "settled": 0, "errors": 1}
     assert connection.status == "sent"
     assert ledger == []
+
+
+def test_unknown_exchange_status_does_not_starve_newer_order(monkeypatch):
+    class Cursor:
+        def __init__(self, connection):
+            self.connection = connection
+            self.rows = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql, params=None):
+            normalized = " ".join(sql.split()).lower()
+            if "from bot_orders" in normalized:
+                assert "coalesce(updated_at, created_at)" in normalized
+                order_id = min(self.connection.attempts, key=self.connection.attempts.get)
+                self.rows = [(
+                    order_id, 1, 9, None, "BTC", "buy", "test-exchange",
+                    f"exchange-{order_id}", "BTC/EUR", 0.001, 50000, 0, None,
+                )]
+            elif "update bot_orders set updated_at" in normalized:
+                self.connection.attempts[params[0]] = self.connection.next_attempt
+                self.connection.next_attempt += 1
+
+        def fetchall(self):
+            return self.rows
+
+    class Connection:
+        def __init__(self):
+            self.attempts = {1: 0, 2: 1}
+            self.next_attempt = 2
+
+        def cursor(self):
+            return Cursor(self)
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+    connection = Connection()
+    fetched = []
+    monkeypatch.setattr(reconciliation, "get_db_connection", lambda: connection)
+
+    def fetch(_conn, row):
+        fetched.append(row["id"])
+        return {"status": "unrecognized"}
+
+    monkeypatch.setattr(reconciliation, "_fetch_exchange_order", fetch)
+    reconciliation.reconcile_live_orders(limit=1)
+    reconciliation.reconcile_live_orders(limit=1)
+
+    assert fetched == [1, 2]

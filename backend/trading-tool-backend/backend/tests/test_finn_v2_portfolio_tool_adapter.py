@@ -214,6 +214,25 @@ def test_paper_and_live_cash_are_not_summed_as_one_spendable_balance():
     assert result["data"].bots[1].paper_cash_eur is None
 
 
+def test_live_only_ledger_delta_is_not_presented_as_exchange_equity():
+    adapter = _adapter()
+
+    async def live_only(_user_id):
+        return {"bots": [{
+            "bot_id": 2, "name": "Live", "symbol": "BTC", "cash": -100,
+            "position_value": 100, "invested": 100, "equity": 0,
+            "budget_total": 200, "portfolio_initialized": True,
+            "price_available": True, "is_live": True,
+        }]}
+
+    adapter.repository.get_portfolio_intelligence_context = live_only
+    result = asyncio.run(adapter.execute(user_id=17))
+    assert result["data"].global_.cash_balance is None
+    assert result["data"].global_.total_equity is None
+    assert result["data"].bots[0].equity is None
+    assert result["data"].global_.current_position_value == 100
+
+
 def test_missing_position_price_does_not_become_zero_market_value():
     adapter = _adapter()
 

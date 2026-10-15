@@ -29,7 +29,7 @@ class PortfolioToolAdapter:
                 setup_id=row.get("setup_id"),
                 setup_name=row.get("setup_name"),
                 mode=row.get("mode"),
-                equity=(row.get("equity") if row.get("portfolio_initialized", True)
+                equity=(row.get("equity") if not row.get("is_live") and row.get("portfolio_initialized", True)
                         and row.get("price_available", True) else None),
                 budget_total_eur=row.get("budget_total"),
                 paper_cash_eur=(row.get("cash") if not row.get("is_live")
@@ -91,7 +91,7 @@ class PortfolioToolAdapter:
         portfolio_complete = bool(rows) and all(
             row.get("portfolio_initialized", True) for row in rows
         )
-        mixed_environments = len({bool(row.get("is_live")) for row in rows}) > 1
+        contains_live = any(bool(row.get("is_live")) for row in rows)
         valuation_complete = portfolio_complete and all(
             row.get("price_available", True) for row in rows
         )
@@ -100,7 +100,7 @@ class PortfolioToolAdapter:
         # single purportedly spendable balance or equity.
         cash_balance = (
             sum(float(row.get("cash") or 0) for row in rows)
-            if portfolio_complete and not mixed_environments else None
+            if portfolio_complete and not contains_live else None
         )
         invested_value = sum(float(row.get("invested") or 0) for row in rows) if portfolio_complete else None
         realized_pnl = sum(float(row.get("realized_pnl") or 0) for row in rows) if portfolio_complete else None
@@ -110,7 +110,7 @@ class PortfolioToolAdapter:
         )
         total_equity = (
             cash_balance + current_position_value
-            if cash_balance is not None and current_position_value is not None and not mixed_environments else None
+            if cash_balance is not None and current_position_value is not None else None
         )
         allocation_values: dict[str, float] = {}
         for row in rows if valuation_complete else []:

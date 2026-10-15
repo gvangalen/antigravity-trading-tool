@@ -737,14 +737,21 @@ class BotRepository:
     # BOT BALANCE HISTORY
     # ==========================
     async def get_portfolio_balance_history(self, user_id: int, bucket: str, limit: int) -> List[dict]:
-        if not await self.check_table_exists("portfolio_balance_snapshots"):
+        if not await self.check_table_exists("bot_portfolio_snapshots"):
             return []
         query = text("""
             SELECT * FROM (
-                SELECT ts, equity_eur, cash_eur, btc_qty, btc_value_eur, invested_eur, unrealized_pnl_eur
-                FROM portfolio_balance_snapshots
-                WHERE user_id = :user_id AND bucket = :bucket
-                ORDER BY ts DESC LIMIT :limit
+                SELECT s.ts, SUM(s.equity_eur) AS equity_eur,
+                       SUM(s.cash_eur) AS cash_eur,
+                       SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty ELSE 0 END) AS btc_qty,
+                       SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty * s.price_eur ELSE 0 END) AS btc_value_eur,
+                       SUM(s.invested_eur) AS invested_eur,
+                       SUM(s.equity_eur - s.cash_eur - s.invested_eur) AS unrealized_pnl_eur
+                FROM bot_portfolio_snapshots s
+                JOIN bot_configs b ON b.id=s.bot_id AND b.user_id=s.user_id
+                WHERE s.user_id = :user_id AND s.bucket = :bucket AND b.is_live=FALSE
+                GROUP BY s.ts
+                ORDER BY s.ts DESC LIMIT :limit
             ) latest ORDER BY ts ASC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "bucket": bucket, "limit": limit})
@@ -756,8 +763,10 @@ class BotRepository:
         query = text("""
             SELECT * FROM (
                 SELECT ts, equity_eur, cash_eur, net_qty, price_eur, invested_eur
-                FROM bot_portfolio_snapshots
-                WHERE user_id = :user_id AND bot_id = :bot_id AND bucket = :bucket
+                FROM bot_portfolio_snapshots s
+                JOIN bot_configs b ON b.id = s.bot_id AND b.user_id = s.user_id
+                WHERE s.user_id = :user_id AND s.bot_id = :bot_id AND s.bucket = :bucket
+                  AND b.is_live = FALSE
                 ORDER BY ts DESC LIMIT :limit
             ) latest ORDER BY ts ASC
         """)
@@ -765,6 +774,10 @@ class BotRepository:
         return [dict(r._mapping) for r in result.fetchall()]
 
     async def get_filtered_portfolio_balance_history(self, user_id: int, is_live: bool, bucket: str, limit: int) -> List[dict]:
+        if is_live:
+            # Historical live ledger cash is an unfunded trade delta. Existing
+            # snapshots cannot prove exchange equity and must not be charted.
+            return []
         if not await self.check_table_exists("bot_portfolio_snapshots"):
             return []
         
@@ -775,7 +788,7 @@ class BotRepository:
                 s.ts,
                 SUM(s.equity_eur) as equity_eur,
                 SUM(s.cash_eur) as cash_eur,
-                SUM(s.net_qty) as btc_qty,
+                SUM(CASE WHEN UPPER(s.symbol)='BTC' THEN s.net_qty ELSE 0 END) as btc_qty,
                 AVG(s.price_eur) as price_eur, -- price should be similar across bots at same ts
                 SUM(s.invested_eur) as invested_eur
             FROM bot_portfolio_snapshots s
@@ -839,6 +852,7 @@ class BotRepository:
         global_position_value = 0.0
         global_budget = 0.0
         asset_values = {}
+        has_live_bot = False
         
         for r in rows:
             mapping = r._mapping
@@ -853,6 +867,7 @@ class BotRepository:
             budget = float(mapping["budget_total_eur"])
             is_active = bool(mapping["is_active"])
             is_live = bool(mapping["is_live"])
+            has_live_bot = has_live_bot or is_live
             risk = mapping["risk_profile"]
             
             price = prices.get(sym, 0.0)
@@ -861,7 +876,8 @@ class BotRepository:
             unrealized = pos_val - invested
             bot_equity = cash + pos_val
             
-            global_cash += cash
+            if not is_live:
+                global_cash += cash
             global_invested += invested
             global_realized += realized
             global_position_value += pos_val
@@ -876,14 +892,14 @@ class BotRepository:
                 "price_as_of": price_timestamps.get(sym) if qty != 0 and price_available else None,
                 "name": name,
                 "symbol": sym,
-                "cash": cash,
+                "cash": None if is_live else cash,
                 "qty": qty,
                 "invested": invested,
                 "avg_entry": avg_entry,
                 "realized_pnl": realized,
                 "unrealized_pnl": unrealized,
                 "position_value": pos_val,
-                "equity": bot_equity,
+                "equity": None if is_live else bot_equity,
                 "budget_total": budget,
                 "is_active": is_active,
                 "is_live": is_live,
@@ -895,22 +911,22 @@ class BotRepository:
                 "risk_profile": risk
             })
             
-        global_equity = global_cash + global_position_value
+        global_equity = None if has_live_bot else global_cash + global_position_value
         global_unrealized = global_position_value - global_invested
         
         allocations = {}
-        if global_equity > 0:
+        if global_equity is not None and global_equity > 0:
             allocations["Cash"] = round((global_cash / global_equity) * 100, 2)
             for sym, val in asset_values.items():
                 allocations[sym] = round((val / global_equity) * 100, 2)
-        else:
+        elif global_equity is not None:
             allocations["Cash"] = 100.0
             
         return {
             "read_at": datetime.now(timezone.utc),
             "global": {
                 "total_equity": global_equity,
-                "cash_balance": global_cash,
+                "cash_balance": None if has_live_bot else global_cash,
                 "invested_value": global_invested,
                 "current_position_value": global_position_value,
                 "realized_pnl": global_realized,

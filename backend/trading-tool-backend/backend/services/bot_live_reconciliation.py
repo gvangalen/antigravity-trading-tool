@@ -51,7 +51,7 @@ def reconcile_live_orders(*, user_id: Optional[int] = None, order_id: Optional[i
                   AND exchange_order_id IS NOT NULL
                   AND (%s IS NULL OR user_id=%s)
                   AND (%s IS NULL OR id=%s)
-                ORDER BY created_at ASC LIMIT %s
+                ORDER BY COALESCE(updated_at, created_at) ASC, id ASC LIMIT %s
             """, (user_id, user_id, order_id, order_id, max(1, min(limit, 200))))
             rows = [dict(zip(
                 ("id", "user_id", "bot_id", "decision_id", "symbol", "side", "exchange_name",
@@ -68,6 +68,12 @@ def reconcile_live_orders(*, user_id: Optional[int] = None, order_id: Optional[i
                 terminal = status in TERMINAL_STATUSES
                 if status not in TERMINAL_STATUSES and status not in {"open", "partial"}:
                     conn.rollback()
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE bot_orders SET updated_at=NOW()
+                            WHERE id=%s AND user_id=%s AND status='sent'
+                        """, (row["id"], row["user_id"]))
+                    conn.commit()
                     continue
                 raw_filled = exchange_order.get("filled")
                 if raw_filled is None:
@@ -140,6 +146,12 @@ def reconcile_live_orders(*, user_id: Optional[int] = None, order_id: Optional[i
                         )
                     if not terminal and new_qty <= 1e-10:
                         conn.rollback()
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE bot_orders SET updated_at=NOW()
+                                WHERE id=%s AND user_id=%s AND status='sent'
+                            """, (row["id"], row["user_id"]))
+                        conn.commit()
                         continue
                     final_status = (
                         "filled" if status == "closed" and filled_qty > 0 else
@@ -174,6 +186,16 @@ def reconcile_live_orders(*, user_id: Optional[int] = None, order_id: Optional[i
                 conn.rollback()
                 errors += 1
                 logger.error("Could not reconcile live bot order %s (%s)", row["id"], type(exc).__name__)
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE bot_orders SET updated_at=NOW()
+                            WHERE id=%s AND user_id=%s AND status='sent'
+                        """, (row["id"], row["user_id"]))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    logger.exception("Could not advance reconciliation retry for live order %s", row["id"])
         return {"processed": processed, "settled": settled, "errors": errors}
     finally:
         conn.close()

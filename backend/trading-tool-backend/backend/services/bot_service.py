@@ -515,6 +515,10 @@ class BotService:
         return {"ok": True, "id": bot_id, **self._bot_contract(bot)}
 
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
+        # Match the order-submission lock order. History and validation must
+        # observe any sending intent committed before this update can proceed.
+        await self.repository.lock_live_account(user_id)
+        await self.repository.lock_bot_config(user_id, bot_id)
         existing = await self.repository.get_bot_config(user_id, bot_id)
         if not existing:
             raise HTTPException(404, "Bot niet gevonden")
@@ -1069,6 +1073,16 @@ class BotService:
         decision_freshness = await self.require_fresh_live_decision_context(user_id, payload.bot_id)
         preflight_token = payload.live_preflight_token or payload.live_preflight_action_id
         preflight = await self.require_recent_live_preflight(user_id, payload.bot_id, preflight_token)
+        try:
+            same_decision = int(preflight.get("decision_id")) == int(decision_freshness.get("decision_id"))
+        except (TypeError, ValueError):
+            same_decision = False
+        if not same_decision:
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_DECISION_MISMATCH",
+                "message": "Live preflight hoort niet bij de huidige bot-beslissing. Voer preflight opnieuw uit.",
+                "safe_next_step": "Doe live preflight voor de nieuwste bot-beslissing.",
+            })
         market_price = await self.require_fresh_live_market_price(payload.symbol)
         reference_price = float(market_price["market_price"])
         if not isfinite(reference_price) or reference_price <= 0 or abs(payload.price - reference_price) / reference_price > 0.03:
@@ -1574,6 +1588,7 @@ class BotService:
             raise HTTPException(404, "Bot niet gevonden.")
         if not bot.get("is_active", True):
             raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order voorbereidt.")
+        self._require_manual_order_bot_symbol(bot, payload)
 
         self._validate_manual_order_payload(payload)
 
@@ -1722,6 +1737,7 @@ class BotService:
             raise HTTPException(404, "Bot niet gevonden")
         if not bot.get("is_active", True):
             raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order plaatst.")
+        self._require_manual_order_bot_symbol(bot, payload)
 
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
@@ -1917,6 +1933,7 @@ class BotService:
             raise HTTPException(404, "Bot niet gevonden")
         if not bot.get("is_active", True):
             raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order voorbereidt.")
+        self._require_manual_order_bot_symbol(bot, payload)
 
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
@@ -2007,6 +2024,10 @@ class BotService:
                 )
         return result
 
+    def _require_manual_order_bot_symbol(self, bot: Dict[str, Any], payload: BotManualOrderSchema) -> None:
+        if str(payload.symbol or "").strip().upper() != str(bot.get("symbol") or "").strip().upper():
+            raise HTTPException(400, "Orderasset wijkt af van de gekoppelde botasset.")
+
     def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:
         side = str(payload.side or "").lower().strip()
         if side not in {"buy", "sell"}:
@@ -2018,11 +2039,13 @@ class BotService:
             raise HTTPException(400, "symbol is verplicht en moet 2-20 karakters lang zijn.")
         payload.symbol = symbol
 
-        if payload.quantity is None or float(payload.quantity) <= 0:
+        if payload.quantity is None or not isfinite(float(payload.quantity)) or float(payload.quantity) <= 0:
             raise HTTPException(400, "quantity moet groter zijn dan 0.")
-        if payload.price is None or float(payload.price) <= 0:
+        if payload.price is None or not isfinite(float(payload.price)) or float(payload.price) <= 0:
             raise HTTPException(400, "price moet groter zijn dan 0.")
-        if payload.value_eur is not None and float(payload.value_eur) <= 0:
+        if not isfinite(float(payload.quantity) * float(payload.price)):
+            raise HTTPException(400, "Orderwaarde moet een eindig bedrag zijn.")
+        if payload.value_eur is not None and (not isfinite(float(payload.value_eur)) or float(payload.value_eur) <= 0):
             raise HTTPException(400, "value_eur moet groter zijn dan 0 wanneer meegegeven.")
         if payload.idempotency_key is not None:
             key = str(payload.idempotency_key).strip()
