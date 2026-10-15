@@ -89,6 +89,9 @@ def test_live_price_rejects_stale_or_invalid_market_snapshot():
     assert _get_live_price(_Connection(market=[(50000, 299, "EUR")]), "BTC", max_age_seconds=300) == 50000
     assert _get_live_price(_Connection(market=[(50000, None, "EUR")]), "BTC", max_age_seconds=300) is None
     assert _get_live_price(_Connection(market=[(50000, 0, "USDT")]), "BTC", max_age_seconds=300) is None
+    assert _get_live_price(_Connection(market=[(0, 0, "EUR")]), "BTC", max_age_seconds=300) is None
+    assert _get_live_price(_Connection(market=[(-1, 0, "EUR")]), "BTC", max_age_seconds=300) is None
+    assert _get_live_price(_Connection(market=[(float("nan"), 0, "EUR")]), "BTC", max_age_seconds=300) is None
 
 
 def test_auto_live_exposure_uses_verified_eur_ticker_instead_of_usdt_market_data(monkeypatch):

@@ -107,7 +107,8 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
     if max_age_seconds is not None and str(row[2] or "").upper() != "EUR":
         return None
 
-    return float(row[0])
+    price = float(row[0])
+    return price if math.isfinite(price) and price > 0 else None
 
 def _clear_existing_pending_orders_for_day(
     conn,
