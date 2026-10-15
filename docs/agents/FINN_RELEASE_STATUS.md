@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Live-brokercash per bot toewijzen
+
+Phase: `LOCAL_BUILD_GATE_RED` — branch `codex/live-portfolio-allocation`, **niet
+gedeployed**. De wijziging telt één eigenaargebonden brokerrekening één keer
+in het Live-totaal, laat vrije EUR-cash expliciet aan eigen Live-bots toewijzen
+voor de weergave en toont de rest als niet-toegewezen cash. Een toewijzing
+reserveert geen exchange-geld en verandert geen orders of botlimieten.
+Onvolledige brokerbedragen en ontbrekende of oude EUR-koersen blijven onbekend.
+Web, mobiel en FINN lezen dezelfde projectie; de directe Responses-tool kan
+`environment=live|paper` doorgeven.
+
+Op de definitieve lokale code slaagden **3720 backendtests, 3 bestaande skips**,
+webbuild, typecheck, i18n-, command- en proposaltests, mobiele typecheck,
+lint zonder errors en web/iOS/Android Expo-bundles. De high-severity audit
+slaagde met één bestaande moderate Next.js-melding. Onafhankelijke Security-
+en Architecture-codehercontroles vonden geen concrete blokkade. De lokale
+API/Celery-actieketen slaagde **16/16**. Een gerichte echte Luna/Responses-run
+op een synthetische lokale eigenaar voltooide zonder voorstel en koos
+`get_portfolio_and_exposure` met `environment=live`.
+
+De verplichte volledige lokale paritymatrix is echter **17/37** en daarom rood
+(artifact SHA-256
+`6c019eba5b0b5d42f53ecedd3ee28e58b57b701e5b0034c26571d32d7bef21a1`).
+Twintig read/coachcases verwachten nog een `operation_id` in de publieke
+terminalprojectie; de huidige directe Responses-route gaf daar `null`, ook
+bij een voltooide portfoliolezing met `get_portfolio_and_exposure`. Dit is
+een vastgestelde poort-/runtimemismatch, geen groen releasebewijs. Er is
+geen CI-, deployment- of ingelogde Live-broker-QA voor deze branch uitgevoerd.
+
 ## Portfolio 2.0: verifieerbare waardering per bot
 
 Phase: `INDEPENDENT_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)

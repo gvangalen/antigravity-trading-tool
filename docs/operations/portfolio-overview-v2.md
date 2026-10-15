@@ -1,7 +1,8 @@
 # Portfolio-overzicht: geldbetekenis en bewijsgrenzen
 
-De Portfolio-pagina, mobiele Portfolio-weergave en FINN lezen dezelfde
+De Portfolio-pagina en mobiele Portfolio-weergave lezen dezelfde
 eigenaargebonden projectie via `GET /api/portfolio/summary?environment=paper|live`.
+FINN gebruikt dezelfde adapter via `read_portfolio` met de gevraagde omgeving.
 Paper en Live worden afzonderlijk getoond. Een botbudget is een limiet en telt
 nooit als cash, belegde waarde of startkapitaal.
 
@@ -27,10 +28,31 @@ nooit als cash, belegde waarde of startkapitaal.
 - **Paper-totaal** is de som van bekende virtuele cash en bekende
   positiewaarden. Als een benodigde waarde ontbreekt, is het totaal onbekend;
   bekende cash blijft afzonderlijk zichtbaar.
-- **Live** heeft nog geen eigenaargebonden reconciliatie van het gedeelde
-  brokerrekeninggeld met de botposities. Het Live-totaal en de beschikbare
-  cash blijven daarom onbekend. Een brokerbedrag wordt niet bij elke bot
-  opgeteld.
+- **Live** leest één actieve brokerrekening per eigenaar. De volledige
+  brokerbalans telt precies één keer in het totaal: totale EUR-cash plus
+  holdings met een gecontroleerde actuele EUR-spotprijs. Als een holding niet
+  kan worden geprijsd, blijven het totaal en die positie onbekend; de wel
+  gelezen EUR-cash blijft zichtbaar. Zonder eenduidige actieve brokerrekening
+  blijven Live-bedragen onbekend.
+- **Botcash in Live** is uitsluitend een expliciete verdeling van vrije
+  EUR-cash. Zonder die verdeling staat geen cashbedrag bij een bot. De som van
+  de bottoewijzingen mag het vrije EUR-saldo niet overschrijden; de rest heet
+  *niet-toegewezen vrije cash*. Gereserveerde EUR-cash wordt apart getoond.
+  Toewijzing is alleen voor het overzicht: zij reserveert geen geld op de
+  exchange en verandert geen order of botrisicolimiet.
+- **Actualiteit van Live:** een brokerbalans wordt rechtstreeks via de
+  gekoppelde rekening gelezen en kort gecachet. Als de broker een bronmoment
+  geeft, mag dat maximaal vijf minuten oud zijn. Bitvavo levert via CCXT geen
+  eigen balansbronmoment; het getoonde leestijdstip is daarom expliciet als
+  *direct opgehaald* gemarkeerd. Iedere gebruikte EUR-koers moet wél een
+  geverifieerd bronmoment van maximaal vijf minuten oud hebben. Voor maximaal
+  veertig holdings worden koersen in één brokerclient en waar mogelijk in één
+  batch opgehaald; ontbrekende koersen houden het rekeningtotaal onbekend.
+- **Live-botposities** gebruiken de eigen botledger en de gecontroleerde
+  brokerprijs. De gezamenlijke botledgerhoeveelheid per asset mag de
+  brokerholding niet overschrijden. Anders blijven de botposities onbekend;
+  de volledige brokerrekening kan nog steeds als rekening worden gewaardeerd.
+  Handmatig gehouden assets blijven in het rekeningtotaal, niet in een bot.
 - **Resultaat** is gerealiseerde plus ongerealiseerde ledgerwinst of -verlies.
   Het is geen rendementpercentage. Stortingen en opnames moeten worden
   verwerkt voordat een grafiek als prestatie kan worden uitgelegd.
@@ -60,8 +82,10 @@ van de toewijzing van het gedeelde brokersaldo aan afzonderlijke botten.
 De oude knop voor handmatige bevestiging van een Live-botbeslissing is
 afgeschermd totdat ook dat pad de reconciliatie gebruikt; de afzonderlijke
 handmatige Live-orderroute gebruikt die al wel.
-Een Live-overzicht vereist nog
-brokerreconciliatie die cash en posities precies één keer aan botten toewijst.
+Een Live-grafiek vereist nog gedateerde, volledige brokerwaardesnapshots;
+de huidige `value-history` geeft voor Live bewust geen punten. Ook een
+rekeningbreed rendementspercentage is niet beschikbaar zonder afzonderlijk
+vastgelegde stortingen en opnames.
 Een Live-bot met een niet-EUR exchange-paar wordt niet met de generieke
 Paper-FX-factor uitgevoerd; daarvoor is een exchange-specifiek
 afrekenvalutacontract nodig. Tot die contracten bestaan, toont de

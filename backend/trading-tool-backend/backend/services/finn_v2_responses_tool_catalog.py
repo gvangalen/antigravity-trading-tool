@@ -206,6 +206,13 @@ class FinnResponsesToolCatalog:
                     "is_active=true. Use the matching row's mode for manual versus automatic; "
                     "do not infer it from Paper status. The budget is a limit, not available cash."
                 )
+            if name == "get_portfolio_and_exposure":
+                description += (
+                    " Set environment=live when the user asks about their real broker account "
+                    "or Live bots, and environment=paper for virtual Paper holdings. "
+                    "If the user did not select one, leave environment null and do not add "
+                    "Paper and Live money together."
+                )
             if name == "get_current_asset_scores":
                 description += (
                     " Read the owner's current market, macro and technical component scores "
@@ -282,6 +289,11 @@ class FinnResponsesToolCatalog:
                 "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
                 "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
             }
+            if name in {"get_portfolio_and_exposure", "get_saved_bots"}:
+                properties["environment"] = {
+                    "type": ["string", "null"], "enum": ["paper", "live", None],
+                    "description": "Use live for the user's real broker account and paper for virtual bots; null when the user did not specify either.",
+                }
             if name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}:
                 properties.update({
                     "setup_name": {"type": ["string", "null"],
@@ -332,6 +344,11 @@ class FinnResponsesToolCatalog:
         })
         for contract in self.evaluation_contracts.values():
             optional_properties = {}
+            if "environment" in contract.optional_inputs:
+                optional_properties["environment"] = {
+                    "type": "string", "enum": ["paper", "live"],
+                    "description": "The explicitly requested portfolio environment.",
+                }
             if "hypothetical_change" in contract.optional_inputs:
                 optional_properties["hypothetical_change"] = {
                     "type": "string",
@@ -518,6 +535,8 @@ class FinnResponsesToolCatalog:
             return FinnResponsesToolCall(name, None, {}, (), (), ())
         if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
+            if name in {"get_portfolio_and_exposure", "get_saved_bots"}:
+                allowed.add("environment")
             if name in self.evaluation_contracts:
                 allowed.update(self.evaluation_contracts[name].optional_inputs)
             if name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}:
@@ -548,6 +567,8 @@ class FinnResponsesToolCatalog:
                 raise FinnResponsesToolError("read_arguments_invalid")
             if "reference" in supplied and supplied["reference"] not in {"current_request", "previous_response"}:
                 raise FinnResponsesToolError("read_reference_invalid")
+            if "environment" in supplied and supplied["environment"] not in {"paper", "live"}:
+                raise FinnResponsesToolError("read_environment_invalid")
             if "timeframe" in supplied:
                 canonical_timeframe = FinnV2SetupInputCatalog.canonical_timeframe(supplied["timeframe"])
                 if canonical_timeframe is None:

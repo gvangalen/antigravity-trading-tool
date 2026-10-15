@@ -2048,7 +2048,19 @@
     "loadError": "Portfoliogegevens konden niet worden geladen.",
     "refresh": "Opnieuw laden",
     "paperMoney": "Virtueel Paper-geld",
-    "liveAttribution": "Aan bots toegeschreven posities; gedeelde broker-cash is niet per bot toegewezen."
+    "liveAttribution": "De brokerrekening telt één keer mee. Alleen expliciet toegewezen vrije cash staat bij een bot; botbudgetten zijn limieten.",
+    "brokerAccount": "Brokerrekening",
+    "availableCash": "Vrije EUR-cash",
+    "reservedCash": "Geblokkeerde EUR-cash",
+    "unallocatedCash": "Niet-toegewezen vrije cash",
+    "allocatedCash": "Toegewezen vrije cash (€)",
+    "brokerCash": "EUR-cash bij broker",
+    "liveRowsHint": "Het rekeningtotaal hierboven bevat ook niet-toegewezen cash en handmatige posities. Botrijen tellen daarom niet vanzelf op tot dit totaal.",
+    "allocationHint": "Deze verdeling is alleen voor het portfolio-overzicht. Zij reserveert geen geld bij de broker en verandert geen bot of order.",
+    "retrievalTimeBasis": "De broker geeft geen eigen bronmoment voor de balans. Het getoonde moment is wanneer FINN de balans rechtstreeks heeft opgehaald.",
+    "saveAllocation": "Verdeling opslaan",
+    "invalidAllocation": "Vul een positief bedrag met maximaal twee decimalen in.",
+    "allocationError": "De verdeling kon niet worden opgeslagen."
   },
   "botPage": {
     "focus": {

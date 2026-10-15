@@ -264,7 +264,7 @@ class FinnResponsesReadExecutor:
             )
         if call.name in {"get_portfolio_and_exposure", "get_saved_bots"}:
             output["evidence_boundary"] = (
-                "Each bots[].budget_total_eur is that saved Paper-bot's own budget. "
+                "Each bots[].budget_total_eur is that saved bot's own budget limit. "
                 "global.total_budget_limit is the sum across the selected bots, not a "
                 "separate budget for one bot. When asked about a particular bot's budget, "
                 "use its matching bot row and never say its budget is missing when that "
@@ -272,10 +272,14 @@ class FinnResponsesReadExecutor:
                 "bots[].paper_cash_eur, when present, is virtual simulation cash for that "
                 "specific Paper bot, never broker cash. A null global.cash_balance may mean "
                 "Paper and Live balances have different meanings; do not add or infer them. "
-                "When valuation_status is unreconciled_live, bot positions are attributed "
-                "ledger positions only; neither a complete broker account value nor "
-                "spendable broker cash is established. A bot's cash_eur and equity are "
-                "null in this case. When price_quote_currency is not EUR, a raw "
+                "For Live, the full broker account is counted once. available_cash_eur is "
+                "broker free EUR, while reserved_cash_eur is not available to allocate. "
+                "A Live bot's cash_eur is an explicit display allocation of free EUR, "
+                "not an exchange reservation or permission to spend. A Live bot without "
+                "an allocation has unknown cash. If a broker holding cannot be priced "
+                "or reconciled, do not infer the missing total from bot budgets. "
+                "balance_time_basis=retrieval means the balance time is when FINN fetched "
+                "it, not a provider timestamp. When price_quote_currency is not EUR, a raw "
                 "market price cannot be treated as a EUR position value without a "
                 "verified FX conversion; explain the unavailable valuation plainly. "
                 "A result_eur is realized plus unrealized ledger P&L, "
