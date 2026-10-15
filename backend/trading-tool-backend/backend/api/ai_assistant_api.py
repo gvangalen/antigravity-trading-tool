@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -36,7 +35,7 @@ from backend.schemas.assistant_schema import (
     ChatSessionDetailResponse,
 )
 from backend.services.finn_product_analytics_service import finn_product_analytics
-from backend.services.locale_service import localize_first_dashboard_context, resolve_locale
+from backend.services.locale_service import resolve_locale
 from backend.services.trader_profile_service import (
     build_trader_profile_context,
     build_trader_profile_summary,
@@ -926,46 +925,6 @@ async def get_finn_state(
     finn = _new_finn_plan_service(db)
     response = await finn.get_open_plan_state(current_user["id"])
     return await _enrich_with_trader_profile(db, current_user["id"], response)
-
-
-@router.get("/assistant/mission-control")
-async def get_finn_mission_control(
-    symbol: Optional[str] = None,
-    request_locale: Optional[str] = Header(None, alias="X-Locale"),
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    request: Request = None,
-):
-    requested_symbol = str(symbol or "").strip().upper()
-    if requested_symbol and not re.fullmatch(r"[A-Z0-9._-]{1,20}", requested_symbol):
-        raise HTTPException(status_code=422, detail="Ongeldig assetsymbool.")
-    trace_id = getattr(request.state, "trace_id", None) if request else None
-    service = FinnV2VisibleDeliveryService(db)
-    try:
-        response = await asyncio.wait_for(
-            service.deliver_mission_control(
-                user_id=current_user["id"],
-                context_payload={
-                    "page": "assistant",
-                    "surface": "today_with_finn",
-                    "symbol": requested_symbol or None,
-                },
-                request_id=trace_id or f"mission-{uuid.uuid4().hex}",
-                trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
-            ),
-            timeout=8.0,
-        )
-    except Exception as exc:
-        logger.exception("FINN mission control enrichment failed", exc_info=exc)
-        response = await service.deliver_mission_control_fallback(
-            user_id=current_user["id"],
-            trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
-            symbol=requested_symbol or None,
-        )
-    # Mission Control projects mutable owner-scoped state. A process-local
-    # cache cannot be coherently invalidated across PM2 workers after an
-    # execution, so every request reads the persisted projection directly.
-    return await localize_first_dashboard_context(response, request_locale) if isinstance(request_locale, str) and request_locale else response
 
 
 @router.get("/assistant/v2/proposals/{proposal_id}")

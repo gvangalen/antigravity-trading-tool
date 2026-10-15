@@ -5,15 +5,12 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 BACKEND_ROOT = REPO_ROOT / "backend" / "trading-tool-backend" / "backend"
 
 
-def test_intelligence_event_service_degrades_missing_mobile_push_table_to_warning():
-    source = (BACKEND_ROOT / "services" / "intelligence_event_service.py").read_text(encoding="utf-8")
+def test_retired_intelligence_event_service_cannot_publish_parallel_feed():
+    main = (BACKEND_ROOT / "main.py").read_text(encoding="utf-8")
 
-    assert "def _is_missing_mobile_push_table" in source
-    assert "mobile_push_tokens" in source
-    assert "does not exist" in source
-    assert "undefinedtable" in source
-    assert "no such table" in source
-    assert 'logger.warning("Push notification dispatch overgeslagen: mobile_push_tokens table ontbreekt nog.")' in source
+    assert not (BACKEND_ROOT / "services" / "intelligence_event_service.py").exists()
+    assert not (BACKEND_ROOT / "api" / "intelligence_event_api.py").exists()
+    assert 'safe_include("backend.api.finn_coach_feed_api", "finn_coach_feed_api")' in main
 
 
 def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
@@ -153,16 +150,9 @@ def test_deploy_env_applies_the_finn_v2_canonical_mode_backfill():
     assert "2026_08_22_finn_v2_remove_legacy_fact_mode.py" in source
 
 
-def test_mission_control_api_uses_bounded_persisted_reads_across_pm2_workers():
+def test_retired_mission_control_api_is_absent():
     source = (BACKEND_ROOT / "api" / "ai_assistant_api.py").read_text(encoding="utf-8")
-
-    endpoint = source[source.index('async def get_finn_mission_control('):source.index('@router.get("/assistant/v2/proposals/', source.index('async def get_finn_mission_control('))]
-    assert "_get_cached_mission_control" not in endpoint
-    assert "_store_cached_mission_control" not in endpoint
-    assert "asyncio.wait_for" in endpoint
-    assert "timeout=8.0" in endpoint
-    assert "deliver_mission_control(" in endpoint
-    assert "deliver_mission_control_fallback(" in endpoint
+    assert '"/assistant/mission-control"' not in source
 
 
 def test_portfolio_intelligence_context_batches_market_prices():

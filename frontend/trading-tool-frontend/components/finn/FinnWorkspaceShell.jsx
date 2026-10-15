@@ -403,7 +403,6 @@ export default function FinnWorkspaceShell({ children }) {
               commandNonceRef.current += 1;
               setCommandRequest({ mode: "chat", nonce: commandNonceRef.current });
             }}
-            eventsEnabled={chatOpen}
             queryValue={feedDiscussion ? feedDiscussion.draft : composerQuery}
             onQueryChange={feedDiscussion
               ? (draft) => setFeedDiscussion((current) => updateFeedDiscussionDraftIfCurrent(current, feedDiscussion.request.nonce, draft))

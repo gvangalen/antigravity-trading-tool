@@ -21,7 +21,6 @@ def test_visibility_polling_helper_exists_and_handles_background_tabs():
 def test_hotspot_polling_uses_visibility_policy_instead_of_raw_intervals():
     hotspot_files = [
         FRONTEND_ROOT / "app" / "(protected)" / "admin" / "logs" / "page.jsx",
-        FRONTEND_ROOT / "hooks" / "useIntelligenceEvents.js",
         FRONTEND_ROOT / "hooks" / "useMarketData.js",
         FRONTEND_ROOT / "components" / "market" / "MarketLiveCard.jsx",
         FRONTEND_ROOT / "components" / "bot" / "TradePanelContainer.jsx",
@@ -34,13 +33,14 @@ def test_hotspot_polling_uses_visibility_policy_instead_of_raw_intervals():
 
 
 def test_freshness_sensitive_frontend_calls_are_explicitly_no_store():
-    intelligence_source = _read(FRONTEND_ROOT / "hooks" / "useIntelligenceEvents.js")
+    coach_feed_source = _read(FRONTEND_ROOT / "components" / "finn" / "FinnCoachFeed.jsx")
     admin_source = _read(FRONTEND_ROOT / "app" / "(protected)" / "admin" / "logs" / "page.jsx")
     market_api_source = _read(FRONTEND_ROOT / "lib" / "api" / "market.js")
     report_page_source = _read(FRONTEND_ROOT / "app" / "(protected)" / "report" / "page.jsx")
     report_hook_source = _read(FRONTEND_ROOT / "hooks" / "useReportData.js")
 
-    assert 'apiGet("/api/assistant/events", { forceFresh: true })' in intelligence_source
+    assert '/api/assistant/feed?history=' in coach_feed_source
+    assert 'forceFresh: true' in coach_feed_source
     assert "fetchAdminLogs(filters, { forceFresh: true })" in admin_source
     assert 'cache: "no-store"' in market_api_source
     assert "waitUntilVisible()" in report_page_source

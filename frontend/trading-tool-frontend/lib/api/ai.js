@@ -30,14 +30,6 @@ export const fetchFinnState = () => {
   });
 };
 
-export const fetchFinnMissionControl = (symbol = null) => {
-  const query = symbol ? `?symbol=${encodeURIComponent(symbol)}` : "";
-  return fetchAuth(`/api/assistant/mission-control${query}`, {
-    method: 'GET',
-    forceFresh: true,
-  });
-};
-
 export const fetchFinnV2Run = (runId) => {
   return fetchAuth(`/api/assistant/v2/runs/${encodeURIComponent(runId)}`, {
     method: 'GET',

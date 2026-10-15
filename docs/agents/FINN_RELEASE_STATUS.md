@@ -4,6 +4,53 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Oude FINN-meldingen opruimen
+
+Phase: `INTEGRATED_LOCAL_GATE_GREEN_AWAITING_CI_DEPLOY`. Op branch
+`codex/retire-legacy-finn-events` verwijdert commit `9c82b0ac0` de ongebruikte
+legacy `/assistant/events`-API en -service, de parallelle webpoll in het
+chatpaneel, de oude dashboardfeed en een ongebruikte mobiele Mission
+Control/Today-adapter. De nieuwe eigenaargebonden FINN-coachfeed blijft de
+zichtbare meldingsbron. De oude `finn_plan_created`-eventwrite is verwijderd;
+governance-events blijven actief. Vervolgcommit `2f68f219b` verwijdert ook de
+niet-aangeroepen publieke Mission Control-route, de dode webclientloader en
+verouderde route- en UI-tests. De interne Mission Control-berekening blijft
+staan omdat een andere interne coachafnemer die nog gebruikt. Een bevestigde
+strategie en een gekoppelde strategie na een botactie blijven nu als
+eigenaargebonden doel beschikbaar voor een afzonderlijk bevestigbaar voorstel.
+Ook een gekoppelde setup na een bevestigde strategieactie wordt via het
+direct voorafgaande actieresultaat aangewezen, nooit via een ouder algemeen
+gespreksresultaat.
+Een nadere runtimeproef vond bovendien een tijdelijke provider-HTTP 520 in
+de antwoordronde na een nog niet opgeslagen verduidelijking. De kandidaat
+herhaalt zo'n veilige antwoordronde nu eenmaal zonder de actietool opnieuw
+uit te voeren; voorstellen met een opgeslagen `proposal_id` vallen niet onder
+die retry.
+De geïntegreerde kandidaat weigert bovendien expliciete uitvoeringsverzoeken
+zonder ondersteund actiecontract; zo wordt een aankoopverzoek niet omgezet in
+een ongerelateerd asset- of watchlistvoorstel.
+
+Op de met actuele `main` geïntegreerde code: `pytest -q` **3740 passed, 3 skipped**; webbuild,
+typecheck, command-, proposal- en i18n-tests/lint, mobiele typecheck,
+lint zonder errors en web/iOS/Android Expo-bundles slaagden. De echte
+`gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development en
+**109/109** regressie, zonder provider-, schema- of validatiefout. De
+selectorcode en het operatiecontractregister zijn sinds die proeven niet
+gewijzigd. De uiteindelijke op deze `main` gebaseerde
+API/Celery/Responses-paritymatrix slaagde **37/37**,
+inclusief **16/16** actiecontracten, **9/9** lineagecontroles, HTTP 200,
+polling/SSE-pariteit en nul Live-bots of niet-toegestane executies. De
+terminale p95 was **8,29 s** bij een grens van **10 s**;
+maximale beurtduur **11,40 s** bij een grens van **15 s**. Artifact SHA-256:
+`bffbdbed64cc5d6c7c2d9ea7393337b59b2a0c1a19a699decde4687bf54a5336`.
+Twee eerdere metingen op dezelfde code waren rood: eenmaal selecteerde de
+provider `delete_indicator_configuration` niet (15/16 acties, p95 11,42 s),
+eenmaal slaagden de acties maar niet de latencygrens (16/16, p95 11,36 s).
+De laatste volledige meting behaalde alle verplichte acceptatievelden zonder
+verlaging van grenswaarden of verwijdering van cases. Deze wisselvalligheid
+blijft een QA-aandachtspunt. CI, Auto Deploy
+en onafhankelijke ingelogde QA moeten nog volgen. Deze code is nog niet live.
+
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
 Phase: `REPAIR_INDEPENDENT_QA_ACCEPTED_LIMITED`. De botflow is via

@@ -9018,6 +9018,136 @@ def test_confirmed_strategy_rename_followup_reads_exact_owner_scoped_strategy(mo
     assert received == [{"setup_id": 42, "strategy_id": "52"}]
 
 
+def test_explicit_update_of_confirmed_strategy_keeps_action_contract():
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+    front.user_id = 21
+    front.run_id = "confirmed-strategy-update"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    front.reads = SimpleNamespace(session_factory=None)
+    action = {
+        "owner_user_id": 21, "result_status": "succeeded",
+        "operation_id": "create_strategy", "entity_type": "strategy",
+        "entity_id": "52", "canonical_name": "ETH Strategy",
+        "parent_entity_type": "setup", "parent_entity_id": "42",
+    }
+    result = asyncio.run(front.run(
+        message="Update that strategy and set the base amount to 120 euro.",
+        instructions="coach", verified_asset="ETH",
+        conversation_context={"previous_action_result": action},
+        previous_response={"answer": "The strategy was saved.", "terminal_status": "completed"},
+        locale="en",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "update_strategy"
+    assert result.proposal_analysis.request_plan.operation_state["collected_inputs"]["strategy_id"] == 52
+    assert result.proposal_analysis.request_plan.operation_state["collected_inputs"]["changed_fields"]["base_amount"] == 120
+    front.client.responses.create.assert_not_awaited()
+
+
+def test_explicit_strategy_followup_cannot_borrow_another_owner_target():
+    front = object.__new__(FinnResponsesFrontDoor)
+    fake = FakeResponses(response("no-target", text="Which saved strategy do you mean?"))
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "unowned-strategy-update"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    front.reads = SimpleNamespace(session_factory=None)
+    action = {
+        "owner_user_id": 22, "result_status": "succeeded",
+        "operation_id": "create_strategy", "entity_type": "strategy", "entity_id": "52",
+    }
+    result = asyncio.run(front.run(
+        message="Update that strategy and set the base amount to 120 euro.",
+        instructions="coach", verified_asset="ETH",
+        conversation_context={"previous_action_result": action},
+        locale="en",
+    ))
+    assert result.proposal_analysis is None
+
+
+def test_linked_strategy_delete_uses_confirmed_bot_parent_not_bot_id():
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+    front.user_id = 21
+    front.run_id = "linked-strategy-delete"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    front.reads = SimpleNamespace(session_factory=None)
+    action = {
+        "owner_user_id": 21, "result_status": "succeeded",
+        "operation_id": "delete_bot", "entity_type": "bot", "entity_id": "75",
+        "parent_entity_type": "strategy", "parent_entity_id": "52",
+    }
+    result = asyncio.run(front.run(
+        message="Delete the linked strategy.",
+        instructions="coach", verified_asset="ETH",
+        conversation_context={
+            "immediate_previous_action_result": action,
+            "previous_action_result": {
+                "owner_user_id": 21, "result_status": "succeeded",
+                "entity_type": "strategy", "entity_id": "999",
+            },
+        }, locale="en",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "delete_strategy"
+    assert result.proposal_analysis.request_plan.operation_state["collected_inputs"]["strategy_id"] == 52
+    front.client.responses.create.assert_not_awaited()
+
+
+def test_linked_setup_delete_uses_confirmed_strategy_parent_not_strategy_id():
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+    front.user_id = 21
+    front.run_id = "linked-setup-delete"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    front.reads = SimpleNamespace(session_factory=None)
+    action = {
+        "owner_user_id": 21, "result_status": "succeeded",
+        "operation_id": "delete_strategy", "entity_type": "strategy", "entity_id": "52",
+        "parent_entity_type": "setup", "parent_entity_id": "42",
+    }
+    result = asyncio.run(front.run(
+        message="Entferne das verknuepfte Setup.",
+        instructions="coach", verified_asset="ETH",
+        conversation_context={
+            "immediate_previous_action_result": action,
+            "previous_action_result": {
+                "owner_user_id": 21, "result_status": "succeeded",
+                "entity_type": "setup", "entity_id": "999",
+            },
+        }, locale="de",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "delete_setup"
+    assert result.proposal_analysis.request_plan.operation_state["collected_inputs"]["setup_id"] == 42
+    front.client.responses.create.assert_not_awaited()
+
+
+def test_unsupported_execution_cannot_turn_into_unrelated_asset_proposal():
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+    front.user_id = 21
+    front.run_id = "unsupported-execution"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = None
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message="Koop zonder voorstel automatisch BTC voor mijn beleggingsrekening.",
+        instructions="coach", verified_asset="BTC", locale="nl",
+        conversation_context={},
+    ))
+    assert result.proposal_analysis is None
+    assert "geen aankoop uitvoeren" in result.response.text
+    front.client.responses.create.assert_not_awaited()
+
+
 def test_rejected_read_is_rewritten_once_via_responses_and_reverified():
     semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=[
         SimpleNamespace(available=True, passes=False, reason_codes=["unsupported_market_claim"]),
@@ -12496,6 +12626,33 @@ def test_first_provider_call_retries_one_transient_server_failure():
     ))
     assert result.text == "BTC Full Base staat op 4H."
     assert len(fake.requests) == 2
+
+
+def test_proposal_clarification_retries_one_provider_520_without_repeating_tool():
+    class TransientProviderError(Exception):
+        status_code = 520
+
+    fake = FakeResponses(
+        response("proposal", calls=(tool_call("proposal-call", "manage_asset_watchlist_proposal", {
+            "operation_id": "watchlist_add", "draft_intent": "new", "inputs": {},
+        }),)),
+        TransientProviderError("temporary provider failure"),
+        response("clarification", text="Welk asset wil je aan je watchlist toevoegen?"),
+    )
+    executions = []
+
+    async def execute(call):
+        executions.append(call.name)
+        return {"status": "validation_pending", "missing_inputs": ["asset"]}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(message="Voeg een asset toe aan mijn watchlist.", instructions="Gebruik het actiecontract."))
+
+    assert result.text == "Welk asset wil je aan je watchlist toevoegen?"
+    assert executions == ["manage_asset_watchlist_proposal"]
+    assert len(fake.requests) == 3
+    assert fake.requests[1]["tool_choice"] == fake.requests[2]["tool_choice"] == "none"
 
 
 def test_read_only_answer_retries_one_transient_failure_after_evidence_read():

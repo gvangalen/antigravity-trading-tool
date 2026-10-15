@@ -964,8 +964,14 @@ class FinnResponsesLoop:
                         lambda task: task.exception() if not task.cancelled() else None
                     )
                     remaining_after_timeout = remaining_lifecycle_seconds()
-                    if (model_led_coach and not transient_provider_retry_used
-                            and not proposal_selected
+                    awaiting_proposal_clarification = bool(
+                        proposal_selected and trace
+                        and trace[-1]["status"] in {"needs_input", "validation_pending"}
+                        and not (trace[-1].get("result") or {}).get("proposal_id")
+                    )
+                    if ((model_led_coach or awaiting_proposal_clarification)
+                            and not transient_provider_retry_used
+                            and (not proposal_selected or awaiting_proposal_clarification)
                             and (remaining_after_timeout is None or remaining_after_timeout > 8)):
                         transient_provider_retry_used = True
                         continue
@@ -1017,7 +1023,7 @@ class FinnResponsesLoop:
                 if provider_code in {"credit_balance_exhausted", "insufficient_quota"}:
                     raise FinnResponsesError("responses_provider_quota_unavailable") from exc
                 transient = (
-                    provider_status in {429, 500, 502, 503, 504}
+                    provider_status in {429, 500, 502, 503, 504, 520, 521, 522, 524}
                     or type(exc).__name__ in {
                         "APIConnectionError", "APITimeoutError", "ConnectError", "ReadError",
                     }
@@ -1027,8 +1033,14 @@ class FinnResponsesLoop:
                     "FINN Responses provider failure type=%s status=%s code=%s retryable=%s",
                     type(exc).__name__, provider_status, provider_code, transient,
                 )
+                awaiting_proposal_clarification = bool(
+                    proposal_selected and trace
+                    and trace[-1]["status"] in {"needs_input", "validation_pending"}
+                    and not (trace[-1].get("result") or {}).get("proposal_id")
+                )
                 if (
-                    transient and not transient_provider_retry_used and not proposal_selected
+                    transient and not transient_provider_retry_used
+                    and (not proposal_selected or awaiting_proposal_clarification)
                     and (remaining_after_error is None or remaining_after_error > 6)
                 ):
                     transient_provider_retry_used = True

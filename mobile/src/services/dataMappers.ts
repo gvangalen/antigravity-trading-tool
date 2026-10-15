@@ -1,65 +1,9 @@
 import { StatusTone } from '../constants/theme';
 import { DomainScore } from '../types/scores';
-import { AssistantInsightResponse, MobileOverviewResponse } from './tradamindApi';
+import { MobileOverviewResponse } from './tradamindApi';
 
 type UnknownRecord = Record<string, unknown>;
 const EMPTY_VALUE = '—';
-
-export function mapAssistantInsightToBriefing(insight?: AssistantInsightResponse) {
-  if (!insight) return { asset: '', status: EMPTY_VALUE, summary: '', risk: '', nextAction: '', updatedAt: nowLabel() };
-
-  const marketInsight = insightText(insight.market_insight);
-  const botInsight = insightText(insight.bot_insight);
-  const context = insightText(insight.context_detected);
-
-  return {
-    asset: insight.context_detected?.symbol || '',
-    status: context || EMPTY_VALUE,
-    summary: insight.greeting || marketInsight || '',
-    risk: botInsight || '',
-    nextAction: '',
-    updatedAt: nowLabel(),
-  };
-}
-
-export function mapAssistantInsightCard(insight?: AssistantInsightResponse) {
-  const marketInsight = insightText(insight?.market_insight);
-  const botInsight = insightText(insight?.bot_insight);
-
-  return {
-    body: marketInsight || botInsight || '',
-    title: insight?.greeting || '',
-  };
-}
-
-export function mapAssistantInsightDetails(insight?: AssistantInsightResponse) {
-  return {
-    bot: insightText(insight?.bot_insight),
-    context: insightText(insight?.context_detected),
-    market: insightText(insight?.market_insight),
-  };
-}
-
-export function mapMobileOverviewBriefing(overview?: MobileOverviewResponse, insight?: AssistantInsightResponse) {
-  if (!overview) return mapAssistantInsightToBriefing(insight);
-
-  const activeAsset = overview.watchlist[0]?.symbol || insight?.context_detected?.symbol || '';
-  const activeBots = overview.portfolio.active_bots_count;
-  const totalProfit = overview.portfolio.total_profit_pct;
-  const risk =
-    activeBots > 0
-      ? `${activeBots}`
-      : EMPTY_VALUE;
-
-  return {
-    asset: activeAsset,
-    status: totalProfit >= 0 ? 'Mobile overview live' : 'Portfolio needs attention',
-    summary: `${overview.finn_briefing.greeting} ${overview.finn_briefing.summary}`.trim(),
-    risk,
-    nextAction: overview.finn_briefing.suggested_actions[0] || '',
-    updatedAt: nowLabel(),
-  };
-}
 
 export function mapMobileOverviewPrompts(overview?: MobileOverviewResponse) {
   const actions = overview?.finn_briefing.suggested_actions.filter(Boolean) ?? [];
@@ -402,19 +346,6 @@ export function nowLabel() {
 function firstObject(value: unknown): UnknownRecord | undefined {
   if (Array.isArray(value)) return value.find(isRecord);
   return isRecord(value) ? value : undefined;
-}
-
-function insightText(value: Record<string, string> | null | undefined) {
-  if (!value) return '';
-  return (
-    value.summary ||
-    value.insight ||
-    value.message ||
-    value.status ||
-    value.context ||
-    Object.values(value).find((item) => typeof item === 'string' && item.trim()) ||
-    ''
-  );
 }
 
 function firstRecord(source: UnknownRecord | undefined, keys: string[]) {

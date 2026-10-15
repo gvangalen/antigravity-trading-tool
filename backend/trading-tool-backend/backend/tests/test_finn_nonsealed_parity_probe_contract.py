@@ -38,6 +38,14 @@ def test_read_rejects_proposal_or_write_tool():
                                _record(names=("get_portfolio_and_exposure", "manage_paper_bot_proposal")))[0]
 
 
+def test_setup_read_accepts_both_owner_scoped_tools_without_write_proposal():
+    for read_tool in ("get_active_plan_and_strategy", "get_saved_setup"):
+        assert _probe_contract("read_setup", "read_active_setup", _observed(),
+                               _record(names=(read_tool,)))[0]
+    assert not _probe_contract("read_setup", "read_active_setup", _observed(),
+                               _record(names=("get_saved_setup", "manage_paper_bot_proposal")))[0]
+
+
 def test_guided_setup_keeps_operation_contract():
     record = _record(names=("create_or_update_trade_plan_proposal",))
     assert _probe_contract("guided_setup", "create_setup",
