@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Oude FINN-meldingen opruimen
 
-Phase: `INTEGRATED_LOCAL_GATE_GREEN_AWAITING_CI_DEPLOY`. Op branch
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Op branch
 `codex/retire-legacy-finn-events` verwijdert commit `9c82b0ac0` de ongebruikte
 legacy `/assistant/events`-API en -service, de parallelle webpoll in het
 chatpaneel, de oude dashboardfeed en een ongebruikte mobiele Mission
@@ -48,8 +48,13 @@ provider `delete_indicator_configuration` niet (15/16 acties, p95 11,42 s),
 eenmaal slaagden de acties maar niet de latencygrens (16/16, p95 11,36 s).
 De laatste volledige meting behaalde alle verplichte acceptatievelden zonder
 verlaging van grenswaarden of verwijdering van cases. Deze wisselvalligheid
-blijft een QA-aandachtspunt. CI, Auto Deploy
-en onafhankelijke ingelogde QA moeten nog volgen. Deze code is nog niet live.
+blijft een QA-aandachtspunt. [PR #366](https://github.com/gvangalen/antigravity-trading-tool/pull/366)
+is als product-SHA `3c7262ba9ab8532d96b8cb84b8b9dc819d69f45a` gemerged.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38779320145)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38779675028)
+slaagden met alle vijf jobs; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38779956941)
+slaagde. Backend-health en frontend-buildinfo gaven daarna beide HTTP 200
+met exact die product-SHA. Onafhankelijke ingelogde QA moet nog volgen.
 
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
