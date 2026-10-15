@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Live-brokercash per bot toewijzen
 
-Phase: `LOCAL_BUILD_GATE_GREEN` — branch `codex/live-portfolio-allocation`, **niet
-gedeployed**. De wijziging telt één eigenaargebonden brokerrekening één keer
+Phase: `AWAITING_INDEPENDENT_QA` — [PR #361](https://github.com/gvangalen/antigravity-trading-tool/pull/361)
+is gemerged en productcommit `e53d76900c14c7dfc0835ddf698283987bcc90b3`
+is gedeployed. De wijziging telt één eigenaargebonden brokerrekening één keer
 in het Live-totaal, laat vrije EUR-cash expliciet aan eigen Live-bots toewijzen
 voor de weergave en toont de rest als niet-toegewezen cash. Een toewijzing
 reserveert geen exchange-geld en verandert geen orders of botlimieten.
@@ -35,8 +36,15 @@ De echte `gpt-6-luna`/Responses-selectorproeven slaagden **20/20** development
 (SHA-256 `761eb193b77d76c2581b8742830803fb33666436c7b895e02d10b004afd80e23`)
 en **109/109** regressie (SHA-256
 `0c1f5a3a63b20e2c55a22051ae2c5e14fd4dda96113f199be1cda542c5d31357`),
-zonder provider-, schema- of validatiefouten. CI, deploymentidentiteit en
-ingelogde Live-broker-QA zijn nog niet uitgevoerd voor deze branch.
+zonder provider-, schema- of validatiefouten. De
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38724276652),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38724554980)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38724796225)
+slaagden. Op 2026-10-15 gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` beide HTTP 200 met exact
+`e53d76900c14c7dfc0835ddf698283987bcc90b3`. Deze statuswijziging creëert
+na merge een nieuwe commit; de actuele publieke SHA is steeds de identiteit
+voor QA. Ingelogde Live-broker-QA is nog niet uitgevoerd.
 
 ## Portfolio 2.0: verifieerbare waardering per bot
 
