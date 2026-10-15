@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mobiele feed en chat na onafhankelijke herkeuring
 
-Phase: `CANDIDATE_READY_AWAITING_CI_DEPLOY`. Kandidaatbranch:
-`codex/finn-mobile-feed-qa-repair`. Onafhankelijke mobiele QA op live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Kandidaatbranch:
+`codex/finn-mobile-feed-qa-repair`; productmerge
+`70ce313b6f85362d83d1c9b72017ab70cfd14203`. Onafhankelijke mobiele QA op vorige live SHA
 `cf1c8678d755f5712d9d7a65fba9c40480a40278` gaf `NOT_ACCEPTED`:
 een read-only chatvraag bleef op “Even controleren…”, de chat hield op
 Reflectie en Automatisering het Analyse-label vast, en de feed was op
@@ -24,7 +25,7 @@ de actieve tab, en toont de gedeelde feed ook op Automatisering zonder bot en
 Portfolio. De lokale iPhone-simulator op de live API gaf voor de exacte
 QA-vraag een terminal coachantwoord; de lege feed en juiste
 Automatisering-context waren zichtbaar. Dit is Build-diagnostiek, geen
-onafhankelijke productieacceptatie. Er is nog geen nieuwe kandidaat gedeployed.
+onafhankelijke productieacceptatie.
 
 De backend-suite slaagde met **3740 tests, 3 bestaande skips**. De webbuild,
 typecheck, i18n-, command- en auditpoort slaagden; de audit meldt één
@@ -45,8 +46,13 @@ developmentset **20/20** (artifact SHA-256
 en de volledige regressieset **109/109** (artifact SHA-256
 `76e6e6066b0191c33ee805abaa0e8d31fef7526a0d64f3f2bf974470a36f7be9`).
 Beide hadden nul provider-, schema-, timeout-, parse- of validatiefouten.
-CI, Auto Deploy en onafhankelijke live QA zijn nog niet uitgevoerd voor deze
-kandidaat.
+PR #370 is gemerged na vijf groene controles. Main-CI
+`38799413895` en Auto Deploy `38799875093` slaagden. Daarna gaven backend
+health en frontend build-info beide HTTP 200 en exact product-SHA
+`70ce313b6f85362d83d1c9b72017ab70cfd14203`. Onafhankelijke ingelogde
+mobiele QA op deze reparatie moet nog volgen. De documentatiehandoff kan een
+latere, inhoudelijk identieke deployment-SHA krijgen; QA gebruikt altijd de
+daadwerkelijk gepubliceerde backend- en frontendidentiteit.
 De laatste mobiele controle na alle bronwijzigingen slaagde: zeven gerichte
 tests, typecheck, lint met nul errors, en Expo web-, iOS- en Android-bundels.
 
