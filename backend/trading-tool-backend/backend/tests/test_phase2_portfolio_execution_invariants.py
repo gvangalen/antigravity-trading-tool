@@ -44,11 +44,17 @@ def test_bot_generated_execution_idempotency_is_enforced_in_schema_and_repositor
     assert "ON bot_ledger (user_id, order_id, entry_type)" in migration
     assert "WHERE entry_type = 'execute' AND order_id IS NOT NULL" in migration
 
+    settlement_migration = _read(
+        BACKEND_ROOT / "scripts" / "migrations" / "2026_10_14_bot_exchange_settlement.py"
+    )
+    assert "ux_bot_ledger_execute_user_order_fill" in settlement_migration
+    assert "ON bot_ledger (user_id, order_id, entry_type, fill_sequence)" in settlement_migration
+
     assert "ON CONFLICT (user_id, bot_order_id) DO UPDATE SET" in repository
-    assert "ON CONFLICT (user_id, order_id, entry_type) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING" in repository
+    assert "ON CONFLICT (user_id, order_id, entry_type, fill_sequence) WHERE entry_type = 'execute' AND order_id IS NOT NULL DO NOTHING" in repository
     assert "if ledger_result.fetchone() is None:" in repository
 
-    assert "ON CONFLICT (user_id, order_id, entry_type)" in agent
+    assert "ON CONFLICT (user_id, order_id, entry_type, fill_sequence)" in agent
     assert "DO NOTHING" in agent
     assert "return False" in agent
 

@@ -1,12 +1,36 @@
 import ccxt.async_support as ccxt
 import logging
 import asyncio
+import math
+import time
 from typing import Dict, Any, Optional, List
 from backend.utils.encryption_utils import EncryptionUtils
 
 logger = logging.getLogger(__name__)
 
 class ExchangeService:
+    @staticmethod
+    def verified_eur_ticker_price(ticker: Dict[str, Any], asset: str, max_age_seconds: int = 300) -> float:
+        if not isinstance(ticker, dict):
+            raise ValueError("Missing exchange ticker")
+        pair = str(ticker.get("symbol") or "").strip().upper().replace("-", "/")
+        if pair != f"{str(asset or '').strip().upper()}/EUR":
+            raise ValueError("Exchange ticker is not the expected spot EUR pair")
+        last = float(ticker.get("last") or 0)
+        bid = float(ticker.get("bid") or 0)
+        ask = float(ticker.get("ask") or 0)
+        if not all(math.isfinite(value) and value > 0 for value in (last, bid, ask)):
+            raise ValueError("Invalid exchange quote")
+        midpoint = (bid + ask) / 2
+        if bid > ask or (ask - bid) / midpoint > 0.05 or abs(last - midpoint) / midpoint > 0.05:
+            raise ValueError("Exchange quote is too wide or inconsistent")
+        timestamp = ticker.get("timestamp")
+        if timestamp is not None:
+            age_seconds = time.time() - float(timestamp) / 1000
+            if not math.isfinite(age_seconds) or age_seconds < -60 or age_seconds > max_age_seconds:
+                raise ValueError("Exchange quote is stale")
+        return last
+
     @staticmethod
     async def get_client(exchange_name: str, api_key: str, api_secret: str, api_passphrase: str = None) -> Any:
         """
@@ -45,9 +69,9 @@ class ExchangeService:
         try:
             balance = await client.fetch_balance()
             return balance
-        except Exception as e:
-            logger.error(f"❌ Error fetching balance from {client.id}: {e}")
-            raise e
+        except Exception:
+            logger.error("Exchange balance fetch failed on %s", client.id)
+            raise
         finally:
             await client.close()
 
@@ -67,8 +91,8 @@ class ExchangeService:
                 if ccxt_symbol in fees:
                     return fees[ccxt_symbol]
             return {}
-        except Exception as e:
-            logger.error(f"❌ Error fetching trading fees from {client.id}: {e}")
+        except Exception:
+            logger.error("Exchange trading fee fetch failed on %s", client.id)
             return {}
         finally:
             await client.close()
@@ -83,8 +107,8 @@ class ExchangeService:
             if '-' not in symbol and '/' not in symbol:
                 ccxt_symbol = f"{symbol}/EUR"
             return await client.fetch_ticker(ccxt_symbol)
-        except Exception as e:
-            logger.error(f"❌ Error fetching ticker from {client.id}: {e}")
+        except Exception:
+            logger.error("Exchange ticker fetch failed on %s", client.id)
             return {}
         finally:
             await client.close()
@@ -98,8 +122,8 @@ class ExchangeService:
             if hasattr(client, 'fetch_positions'):
                 return await client.fetch_positions()
             return []
-        except Exception as e:
-            logger.error(f"❌ Error fetching positions from {client.id}: {e}")
+        except Exception:
+            logger.error("Exchange positions fetch failed on %s", client.id)
             return []
         finally:
             await client.close()
@@ -123,8 +147,16 @@ class ExchangeService:
                 order = await client.create_order(ccxt_symbol, 'limit', side, amount, price)
                 
             return order
-        except Exception as e:
-            logger.error(f"❌ Error creating order on {client.id}: {e}")
-            raise e
+        except Exception:
+            logger.error("Exchange order submission failed on %s", client.id)
+            raise
+        finally:
+            await client.close()
+
+    @staticmethod
+    async def fetch_order(client: Any, order_id: str, symbol: str) -> Dict[str, Any]:
+        try:
+            ccxt_symbol = symbol if '-' in symbol or '/' in symbol else f"{symbol}/EUR"
+            return await client.fetch_order(order_id, ccxt_symbol)
         finally:
             await client.close()

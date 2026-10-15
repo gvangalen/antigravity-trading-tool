@@ -2,7 +2,7 @@
 import logging
 import json
 import math
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.utils.db import get_db_connection
@@ -80,17 +80,19 @@ def _safe_json(v, fallback):
     except Exception:
         return fallback
 
-def _get_live_price(conn, symbol: str) -> Optional[float]:
+def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) -> Optional[float]:
     symbol = (symbol or DEFAULT_SYMBOL).upper()
 
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT price
-            FROM market_data
-            WHERE symbol = %s
-              AND price IS NOT NULL
-            ORDER BY timestamp DESC
+            SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
+                   a.quote_currency
+            FROM market_data m
+            LEFT JOIN asset_catalog a ON a.symbol = m.symbol
+            WHERE m.symbol = %s
+              AND m.price IS NOT NULL
+            ORDER BY m.timestamp DESC
             LIMIT 1
             """,
             (symbol,),
@@ -100,7 +102,13 @@ def _get_live_price(conn, symbol: str) -> Optional[float]:
     if not row or row[0] is None:
         return None
 
-    return float(row[0])
+    if max_age_seconds is not None and (row[1] is None or float(row[1]) > max_age_seconds or float(row[1]) < -60):
+        return None
+    if max_age_seconds is not None and str(row[2] or "").upper() != "EUR":
+        return None
+
+    price = float(row[0])
+    return price if math.isfinite(price) and price > 0 else None
 
 def _clear_existing_pending_orders_for_day(
     conn,
@@ -174,9 +182,143 @@ def _execute_on_exchange_sync(conn, user_id: int, exchange_name: str, symbol: st
 
     try:
         return asyncio.run(_run())
-    except Exception as e:
-        logger.error(f"❌ Exchange execution failed: {e}")
-        raise e
+    except Exception:
+        logger.error("Exchange order submission failed")
+        raise
+
+def _get_live_exchange_balance(conn, user_id: int) -> tuple[str, dict]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT exchange_name, api_key, api_secret, api_passphrase FROM exchange_keys "
+            "WHERE user_id=%s AND is_active=TRUE ORDER BY id ASC LIMIT 2",
+            (user_id,),
+        )
+        rows = cur.fetchall()
+    if len(rows) != 1:
+        raise RuntimeError("Exactly one active exchange connection is required for live execution")
+    row = rows[0]
+
+    async def _fetch():
+        client = await ExchangeService.get_client(*row)
+        return await ExchangeService.fetch_balance(client)
+
+    return row[0], asyncio.run(_fetch())
+
+
+def _get_live_cash_balance(conn, user_id: int) -> float:
+    _, balance = _get_live_exchange_balance(conn, user_id)
+    available = float((balance.get("free") or {}).get("EUR") or 0)
+    if not math.isfinite(available) or available < 0:
+        raise RuntimeError("Invalid exchange cash balance")
+    return available
+
+
+def _get_live_asset_eur_price(conn, user_id: int, exchange_name: str, asset: str) -> float:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT api_key, api_secret, api_passphrase FROM exchange_keys
+            WHERE user_id=%s AND exchange_name=%s AND is_active=TRUE LIMIT 1
+        """, (user_id, exchange_name))
+        credentials = cur.fetchone()
+    if not credentials:
+        raise RuntimeError("Exchange connection unavailable for asset valuation")
+
+    async def _fetch():
+        client = await ExchangeService.get_client(exchange_name, *credentials)
+        return await ExchangeService.fetch_ticker(client, asset)
+
+    ticker = asyncio.run(_fetch())
+    return ExchangeService.verified_eur_ticker_price(ticker, asset)
+
+
+def _validate_live_auto_order_risk(
+    conn, user_id: int, symbol: str, notional: float,
+    balance: dict, max_asset_exposure_pct: float,
+    bot_id: Optional[int] = None, decision_id: Optional[int] = None,
+    exchange_name: Optional[str] = None,
+    order_price: Optional[float] = None,
+) -> None:
+    from backend.services.bot_service import (
+        LIVE_MAX_ASSET_EXPOSURE_PCT, LIVE_MAX_PORTFOLIO_EXPOSURE_PCT,
+        LIVE_MARKET_PRICE_STALE_AFTER_SECONDS, LIVE_PORTFOLIO_DAILY_LIMIT_EUR,
+    )
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT COALESCE(SUM(ABS(l.cash_delta_eur)), 0)
+            FROM bot_ledger l LEFT JOIN bot_orders o ON o.id=l.order_id AND o.user_id=l.user_id
+            WHERE l.user_id=%s
+              AND (o.execution_environment='live' OR o.execution_environment IS NULL)
+              AND DATE(l.ts)=CURRENT_DATE
+              AND l.entry_type='execute' AND l.cash_delta_eur<0
+        """, (user_id,))
+        today_spent = float(cur.fetchone()[0] or 0)
+        cur.execute("""
+            SELECT symbol, COALESCE(quote_amount_eur,
+                estimated_qty * estimated_price_eur, quantity * limit_price, 0)
+            FROM bot_orders WHERE user_id=%s AND execution_environment='live'
+              AND side='buy' AND status IN
+                ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
+              AND (%s IS NULL OR NOT (bot_id=%s AND decision_id=%s))
+        """, (user_id, bot_id, bot_id, decision_id))
+        pending = [(str(asset).upper(), float(amount or 0)) for asset, amount in cur.fetchall()]
+    pending_total = sum(amount for _, amount in pending)
+    if not all(math.isfinite(value) and value >= 0 for value in [notional, today_spent, pending_total, *[v for _, v in pending]]):
+        raise RuntimeError("Invalid live exposure amount")
+    if LIVE_PORTFOLIO_DAILY_LIMIT_EUR > 0 and today_spent + pending_total + notional > LIVE_PORTFOLIO_DAILY_LIMIT_EUR + 0.01:
+        raise RuntimeError("Live portfolio daily limit")
+
+    holdings = balance.get("total") if isinstance(balance, dict) else None
+    if not isinstance(holdings, dict):
+        raise RuntimeError("Exchange balance unavailable for exposure check")
+    quantities = {str(asset).upper(): float(qty or 0) for asset, qty in holdings.items()}
+    if any(not math.isfinite(qty) or qty < 0 for qty in quantities.values()):
+        raise RuntimeError("Invalid exchange balance for exposure check")
+    asset_values = {}
+    with conn.cursor() as cur:
+        def fresh_price(asset: str) -> float:
+            cur.execute("""
+                SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
+                       a.quote_currency
+                FROM market_data m
+                LEFT JOIN asset_catalog a ON a.symbol = m.symbol
+                WHERE m.symbol=%s AND m.price IS NOT NULL
+                ORDER BY m.timestamp DESC LIMIT 1
+            """, (asset,))
+            market = cur.fetchone()
+            if market and market[0] is not None and market[1] is not None:
+                price, age_seconds = float(market[0]), float(market[1])
+                if (str(market[2] or "").upper() == "EUR" and math.isfinite(price) and price > 0
+                        and -60 <= age_seconds <= LIVE_MARKET_PRICE_STALE_AFTER_SECONDS):
+                    return price
+            if not exchange_name:
+                raise RuntimeError("Exchange asset price unavailable for exposure check")
+            return _get_live_asset_eur_price(conn, user_id, exchange_name, asset)
+
+        target_price = fresh_price(symbol)
+        if order_price is not None:
+            # An unattended order must not cross the market after its proposal ages.
+            if not exchange_name:
+                raise RuntimeError("Exchange quote unavailable for live order price check")
+            exchange_price = _get_live_asset_eur_price(conn, user_id, exchange_name, symbol)
+            if abs(float(order_price) - exchange_price) / exchange_price > 0.03:
+                raise RuntimeError("Live order price deviates from current exchange quote")
+            target_price = exchange_price
+        for asset, qty in quantities.items():
+            if asset == "EUR" or qty <= 1e-12:
+                continue
+            price = target_price if asset == symbol else fresh_price(asset)
+            asset_values[asset] = qty * price
+
+    position_value = sum(asset_values.values())
+    equity = quantities.get("EUR", 0) + position_value
+    if not math.isfinite(equity) or equity <= 0:
+        raise RuntimeError("Exchange equity unavailable for exposure check")
+    portfolio_exposure = (position_value + pending_total + notional) / equity * 100
+    pending_asset = sum(amount for asset, amount in pending if asset == symbol)
+    asset_exposure = (asset_values.get(symbol, 0) + pending_asset + notional) / equity * 100
+    if portfolio_exposure > LIVE_MAX_PORTFOLIO_EXPOSURE_PCT or asset_exposure > min(max_asset_exposure_pct, LIVE_MAX_ASSET_EXPOSURE_PCT):
+        raise RuntimeError("Live portfolio exposure limit")
 
 def _touch_bot_last_run(conn, *, user_id: int, bot_id: int) -> None:
     """
@@ -960,6 +1102,7 @@ def record_bot_ledger_entry(
     order_id: Optional[int] = None,
     note: Optional[str] = None,
     meta: Optional[dict] = None,
+    fill_sequence: int = 0,
 ):
     with conn.cursor() as cur:
         # 1. Insert Ledger
@@ -967,10 +1110,10 @@ def record_bot_ledger_entry(
             """
             INSERT INTO bot_ledger (
                 user_id, bot_id, decision_id, order_id, entry_type,
-                symbol, cash_delta_eur, qty_delta, price_eur, note, meta, ts
+                symbol, cash_delta_eur, qty_delta, price_eur, note, meta, fill_sequence, ts
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-            ON CONFLICT (user_id, order_id, entry_type)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            ON CONFLICT (user_id, order_id, entry_type, fill_sequence)
             WHERE entry_type = 'execute' AND order_id IS NOT NULL
             DO NOTHING
             RETURNING id
@@ -987,6 +1130,7 @@ def record_bot_ledger_entry(
                 price_eur,
                 note,
                 json.dumps(meta or {}),
+                fill_sequence,
             ),
         )
         inserted = cur.fetchone()
@@ -1090,6 +1234,18 @@ def _mark_bot_decision_execution_failed(
             """,
             (decision_id, user_id, bot_id),
         )
+        cur.execute("""
+            UPDATE bot_orders SET status='failed', updated_at=NOW()
+            WHERE user_id=%s AND bot_id=%s AND decision_id=%s
+              AND status IN ('ready', 'pending', 'approved')
+        """, (user_id, bot_id, decision_id))
+        cur.execute("""
+            UPDATE bot_executions e SET status='failed', updated_at=NOW()
+            FROM bot_orders o
+            WHERE e.bot_order_id=o.id AND e.user_id=%s
+              AND o.user_id=%s AND o.bot_id=%s AND o.decision_id=%s
+              AND o.status='failed' AND e.status='pending'
+        """, (user_id, user_id, bot_id, decision_id))
 
 
 def _require_current_setup_revision_for_buy(
@@ -1176,6 +1332,7 @@ def _persist_bot_order(
     bot_id: int,
     decision_id: int,
     order: dict,
+    is_live: bool = False,
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -1190,6 +1347,7 @@ def _persist_bot_order(
                 quote_amount_eur,
                 estimated_price_eur,
                 estimated_qty,
+                execution_environment,
                 status,
                 created_at,
                 updated_at
@@ -1199,6 +1357,7 @@ def _persist_bot_order(
                 %s,%s,
                 'market',
                 %s,%s,%s,
+                %s,
                 'ready',
                 NOW(), NOW()
             )
@@ -1213,6 +1372,7 @@ def _persist_bot_order(
                 order["quote_amount_eur"],
                 order["estimated_price"],
                 order["estimated_qty"],
+                "live" if is_live else "paper",
             ),
         )
         bot_order_id = int(cur.fetchone()[0])
@@ -1428,6 +1588,7 @@ def _persist_decision_and_order(
         "strategy_reason": decision.get("strategy_reason"),
         "guardrail_reason": decision.get("guardrail_reason"),
         "guardrails_result": decision.get("guardrails_result"),
+        "guardrails_checked_at": datetime.now(timezone.utc).isoformat() if decision.get("guardrails_result") else None,
         "watch_levels": decision.get("watch_levels"),
         "monitoring": decision.get("monitoring"),
         "alerts_active": decision.get("alerts_active"),
@@ -1576,6 +1737,30 @@ def run_trading_bot_agent(
 
         for bot in bots:
 
+            if bot.get("is_live"):
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT 1 FROM bot_orders
+                        WHERE user_id=%s AND bot_id=%s
+                          AND execution_environment='live'
+                          AND status IN ('ready', 'pending', 'sending', 'sent', 'unknown_exchange_state')
+                        LIMIT 1
+                    """, (user_id, bot["bot_id"]))
+                    if cur.fetchone():
+                        logger.warning("Skipping bot %s while a live order is unresolved", bot["bot_id"])
+                        continue
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT status FROM bot_decisions
+                        WHERE user_id=%s AND bot_id=%s AND decision_date=%s
+                        ORDER BY id DESC LIMIT 1
+                    """, (user_id, bot["bot_id"], report_date))
+                    prior_decision = cur.fetchone()
+                if prior_decision and prior_decision[0] in {
+                    "executed", "skipped", "executing", "awaiting_exchange", "unknown_exchange_state"
+                }:
+                    continue
+
             # =========================
             # SYMBOL
             # =========================
@@ -1589,9 +1774,23 @@ def run_trading_bot_agent(
             # =========================
             # LIVE PRICE (CACHED)
             # =========================
-            if symbol not in price_cache:
-                price_cache[symbol] = _get_live_price(conn, symbol)
-            live_price = price_cache[symbol]
+            price_key = (symbol, bool(bot.get("is_live")))
+            if price_key not in price_cache:
+                if bot.get("is_live"):
+                    from backend.services.bot_service import LIVE_MARKET_PRICE_STALE_AFTER_SECONDS
+                    live_price = _get_live_price(
+                        conn, symbol, max_age_seconds=LIVE_MARKET_PRICE_STALE_AFTER_SECONDS,
+                    )
+                    if live_price is None:
+                        try:
+                            exchange_name, _ = _get_live_exchange_balance(conn, user_id)
+                            live_price = _get_live_asset_eur_price(conn, user_id, exchange_name, symbol)
+                        except Exception:
+                            logger.warning("Verified live EUR price unavailable for %s", symbol)
+                    price_cache[price_key] = live_price
+                else:
+                    price_cache[price_key] = _get_live_price(conn, symbol)
+            live_price = price_cache[price_key]
 
             # =========================
             # SNAPSHOT
@@ -1678,6 +1877,13 @@ def run_trading_bot_agent(
 
             # Use values from bot_portfolios (the new source of truth)
             cash_balance_eur = portfolio_state["cash"]
+            live_cash_error = None
+            if bot.get("is_live"):
+                try:
+                    cash_balance_eur = _get_live_cash_balance(conn, user_id)
+                except Exception:
+                    live_cash_error = "cash_unavailable"
+                    cash_balance_eur = 0.0
             current_qty = portfolio_state["qty"]
             invested_eur = portfolio_state["invested"]
 
@@ -1719,6 +1925,19 @@ def run_trading_bot_agent(
                 portfolio_context=portfolio_context,
             )
             brain = _enforce_setup_match_on_buy(brain, current_match, setup_payload)
+
+            if live_cash_error or (bot.get("is_live") and live_price is None):
+                reason_code = live_cash_error or "market_price_stale"
+                original = float((brain.get("guardrails_result") or {}).get("original_amount_eur") or 0)
+                brain["guardrails_result"] = {
+                    "allowed": False, "adjusted_amount_eur": 0.0,
+                    "original_amount_eur": original, "blocked_by": reason_code,
+                    "reason": "Live kassaldo of actuele EUR-marktprijs is niet bevestigd.",
+                    "warnings": [reason_code], "debug_code": reason_code, "guardrails": {},
+                }
+                brain["guardrail_reason"] = reason_code
+                brain["amount_eur"] = 0.0
+                brain["action"] = "hold"
 
             action = _normalize_action(brain.get("action"))
 
@@ -1855,6 +2074,7 @@ def run_trading_bot_agent(
                     bot_id=bot["bot_id"],
                     decision_id=decision_id,
                     order=order,
+                    is_live=bool(bot.get("is_live")),
                 )
 
                 # A planned order is not consent to execute it. Manual and
@@ -1862,7 +2082,7 @@ def run_trading_bot_agent(
                 # including when an exchange connection is present.
                 if bot.get("mode") == "auto":
                     try:
-                        _auto_execute_decision(
+                        execution_status = _auto_execute_decision(
                             conn=conn,
                             user_id=user_id,
                             bot_id=bot["bot_id"],
@@ -1871,7 +2091,6 @@ def run_trading_bot_agent(
                             is_live=bot.get("is_live", False),
                             mode=bot.get("mode"),
                         )
-                        execution_status = "filled"
                     except Exception as e:
                         logger.exception("❌ Auto execution failed")
                         execution_status = f"failed: {e}"
@@ -1975,13 +2194,27 @@ def _auto_execute_decision(
 ):
     if mode != "auto":
         raise RuntimeError("Automatic execution requires auto mode")
+    if is_live:
+        # Share the account lock with manual orders and exchange key changes.
+        # The lock is released by the durable intent commit before the remote call.
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (user_id, 0))
+            cur.execute("""
+                SELECT 1 FROM bot_orders
+                WHERE user_id=%s AND execution_environment='live'
+                  AND status IN ('sending', 'sent', 'unknown_exchange_state')
+                  AND NOT (bot_id=%s AND decision_id=%s)
+                LIMIT 1
+            """, (user_id, bot_id, decision_id))
+            if cur.fetchone():
+                raise RuntimeError("Another live exchange order is unresolved")
     # Lock the current owner-scoped configuration before any exchange call.
     # A stale worker snapshot must not execute after a user switches mode,
     # disables the bot, or changes its Paper/Live setting.
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT mode, is_live, is_active
+            SELECT mode, is_live, is_active, max_asset_exposure_pct
             FROM bot_configs
             WHERE id=%s AND user_id=%s
             FOR UPDATE
@@ -2013,6 +2246,7 @@ def _auto_execute_decision(
     if not claimed:
         raise RuntimeError("Decision already processing or executed")
 
+    submission_started = False
     try:
         if not is_live and side == "buy":
             with conn.cursor() as cur:
@@ -2028,9 +2262,80 @@ def _auto_execute_decision(
             _require_current_setup_revision_for_buy(
                 conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
             )
-        # 0) Live Execution
+        # Live submission is durable before contacting the exchange. Only a
+        # confirmed exchange fill may update the ledger and Paper-style
+        # portfolio projection.
         if is_live:
-            _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
+            exchange_name, balance = _get_live_exchange_balance(conn, user_id)
+            if side == "buy":
+                available = float((balance.get("free") or {}).get("EUR") or 0)
+                if not math.isfinite(available) or available < notional:
+                    raise RuntimeError("Insufficient live exchange cash at execution time")
+                _validate_live_auto_order_risk(
+                    conn, user_id, symbol, notional, balance,
+                    float(current_bot[3] or 100), bot_id, decision_id,
+                    exchange_name, order_price=price,
+                )
+            else:
+                available = float((balance.get("free") or {}).get(symbol) or 0)
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT COALESCE(SUM(qty_delta), 0) FROM bot_ledger
+                        WHERE user_id=%s AND bot_id=%s AND symbol=%s
+                    """, (user_id, bot_id, symbol))
+                    bot_position = float(cur.fetchone()[0] or 0)
+                if not math.isfinite(available) or available < qty or bot_position < qty:
+                    raise RuntimeError("Insufficient live asset balance at execution time")
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE bot_orders SET status='sending', exchange_name=%s,
+                        updated_at=NOW()
+                    WHERE user_id=%s AND bot_id=%s AND decision_id=%s
+                      AND execution_environment='live' AND status='ready'
+                    RETURNING id
+                """, (exchange_name, user_id, bot_id, decision_id))
+                if not cur.fetchone():
+                    raise RuntimeError("Live order is no longer ready")
+            conn.commit()
+            submission_started = True
+            try:
+                exchange_order = _execute_on_exchange_sync(
+                    conn, user_id, exchange_name, symbol, side, qty, price
+                )
+            except Exception:
+                logger.error("Automatic live exchange response uncertain: bot=%s decision=%s", bot_id, decision_id)
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE bot_orders SET status='unknown_exchange_state', updated_at=NOW()
+                        WHERE user_id=%s AND bot_id=%s AND decision_id=%s
+                    """, (user_id, bot_id, decision_id))
+                    cur.execute("""
+                        UPDATE bot_decisions SET status='unknown_exchange_state', updated_at=NOW()
+                        WHERE id=%s AND user_id=%s AND bot_id=%s
+                    """, (decision_id, user_id, bot_id))
+                conn.commit()
+                return "unknown_exchange_state"
+            exchange_id = str((exchange_order or {}).get("id") or "")
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE bot_orders SET status=%s, exchange_order_id=%s,
+                        exchange_symbol=%s, updated_at=NOW()
+                    WHERE user_id=%s AND bot_id=%s AND decision_id=%s
+                """, (
+                    "sent" if exchange_id else "unknown_exchange_state",
+                    exchange_id or None,
+                    str((exchange_order or {}).get("symbol") or f"{symbol}/EUR"),
+                    user_id, bot_id, decision_id,
+                ))
+                cur.execute("""
+                    UPDATE bot_decisions SET status=%s, updated_at=NOW()
+                    WHERE id=%s AND user_id=%s AND bot_id=%s
+                """, (
+                    "awaiting_exchange" if exchange_id else "unknown_exchange_state",
+                    decision_id, user_id, bot_id,
+                ))
+            conn.commit()
+            return "awaiting_exchange" if exchange_id else "unknown_exchange_state"
 
         with conn.cursor() as cur:
             # 1) Order -> filled (BELANGRIJK: filter ook op user/bot/decision)
@@ -2106,15 +2411,17 @@ def _auto_execute_decision(
                 (decision_id, user_id, bot_id),
             )
     except Exception:
-        _mark_bot_decision_execution_failed(
-            conn=conn,
-            user_id=user_id,
-            bot_id=bot_id,
-            decision_id=decision_id,
-        )
+        if not submission_started:
+            _mark_bot_decision_execution_failed(
+                conn=conn,
+                user_id=user_id,
+                bot_id=bot_id,
+                decision_id=decision_id,
+            )
         raise
 
     logger.info(f"⚡ Auto executed | bot={bot_id} | side={side} | qty={qty} | price={price}")
+    return "filled"
 
 
 # =====================================================
@@ -2132,13 +2439,15 @@ def execute_manual_decision(
     # a manual-versus-auto lock inversion.
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT is_live FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE",
+            "SELECT is_live, is_active FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE",
             (bot_id, user_id),
         )
         bot_row = cur.fetchone()
     if bot_row is None:
         raise RuntimeError("Bot not found")
     bot_live = bool(bot_row[0])
+    if not bot_row[1]:
+        raise RuntimeError("Bot is paused")
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
         user_id=user_id,

@@ -1,5 +1,6 @@
 import logging
 import math
+from math import isfinite
 import asyncio
 import json
 import os
@@ -21,6 +22,7 @@ from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.infrastructure.repositories.exchange_repository import ExchangeRepository
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.services.exchange_service import ExchangeService
+from backend.services.bot_live_reconciliation import reconcile_live_orders
 
 logger = logging.getLogger(__name__)
 LIVE_EXECUTION_STALE_AFTER_MINUTES = 60
@@ -78,6 +80,54 @@ class BotService:
             return json.loads(v)
         except Exception:
             return fallback
+
+    def _safety_contract(self, decision: Dict[str, Any], is_live: bool) -> dict:
+        """Expose the saved guardrail result without rerunning market checks on a read."""
+        result = decision.get("guardrails_result")
+        checked_at = self._parse_execution_timestamp(
+            decision.get("guardrails_checked_at") or (decision.get("created_at") if result else None)
+        )
+        proposed = float((result or {}).get("original_amount_eur") or decision.get("requested_amount_eur") or 0)
+        allowed = float((result or {}).get("adjusted_amount_eur") or 0)
+        blocked_by = (result or {}).get("blocked_by")
+        state = "missing"
+        if isinstance(result, dict):
+            if blocked_by in {"guardrails_error", "cash_unavailable", "market_price_stale", "unsupported_live_currency"}:
+                state = "error"
+            elif proposed > 0 and (blocked_by or result.get("allowed") is False):
+                state = "blocked"
+            elif proposed > 0 and result.get("allowed") is True:
+                state = "reduced" if allowed < proposed - 0.01 else "allowed"
+            else:
+                state = "no_proposal"
+        stale_after_minutes = 60 if is_live else 1440
+        if checked_at and state not in {"missing", "error"}:
+            if (datetime.now(timezone.utc) - checked_at).total_seconds() / 60 > stale_after_minutes:
+                state = "stale"
+        if decision.get("status") in {"executed", "skipped"}:
+            state = decision["status"]
+        next_steps = {
+            "missing": "Laat de bot een nieuwe beslissing en veiligheidscheck maken.",
+            "stale": "Ververs de beslissing en veiligheidscheck voordat je handelt.",
+            "blocked": "Controleer de risicolimieten en het beschikbare kassaldo.",
+            "error": "Probeer de veiligheidscheck opnieuw; plaats nog geen order.",
+            "reduced": "Controleer het toegestane bedrag voordat je bevestigt.",
+            "no_proposal": "Er is nu geen koopvoorstel. Bekijk de laatste beslissing.",
+            "executed": "Bekijk de bevestigde trade.",
+            "skipped": "Wacht op de volgende botcyclus.",
+        }
+        return {
+            "state": state,
+            "checked_at": checked_at.isoformat() if checked_at else None,
+            "stale_after_minutes": stale_after_minutes,
+            "proposed_amount_eur": round(proposed, 2),
+            "allowed_amount_eur": round(allowed, 2) if state in {"allowed", "reduced"} else 0,
+            "reason_code": blocked_by or state,
+            "reason": (result or {}).get("reason") or decision.get("strategy_reason"),
+            "next_step": next_steps.get(state, "Controleer de botinstellingen."),
+            "decision_id": decision.get("id"),
+            "bot_id": decision.get("bot_id"),
+        }
 
     async def _paper_manual_buy_match(self, user_id: int, bot: Dict[str, Any], payload: BotManualOrderSchema) -> Dict[str, Any]:
         """Use the same owner-scoped setup match as Analyse before a Paper buy.
@@ -465,11 +515,17 @@ class BotService:
         return {"ok": True, "id": bot_id, **self._bot_contract(bot)}
 
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
+        # Match the order-submission lock order. History and validation must
+        # observe any sending intent committed before this update can proceed.
+        await self.repository.lock_live_account(user_id)
+        await self.repository.lock_bot_config(user_id, bot_id)
         existing = await self.repository.get_bot_config(user_id, bot_id)
         if not existing:
             raise HTTPException(404, "Bot niet gevonden")
 
-        updates = payload.dict(exclude_unset=True)
+        # The repository ignores NULL values via COALESCE. Validate against the
+        # same effective configuration that the UPDATE will persist.
+        updates = payload.dict(exclude_unset=True, exclude_none=True)
         risk_acknowledged = bool(updates.pop("risk_acknowledged", False))
         # Handle aliases
         if "total_eur" in updates: updates["budget_total_eur"] = updates.pop("total_eur")
@@ -492,6 +548,13 @@ class BotService:
         merged = dict(existing)
         for k, v in updates.items():
             merged[k] = v
+
+        if ("is_live" in updates and bool(updates["is_live"]) != bool(existing.get("is_live"))
+                and await self.repository.has_execution_history(user_id, bot_id)):
+            raise HTTPException(409, {
+                "code": "BOT_ENVIRONMENT_HISTORY_LOCKED",
+                "message": "Deze bot heeft al order- of portefeuillehistorie. Maak een nieuwe bot voor een andere handelsomgeving.",
+            })
 
         await self.validate_bot_payload(merged, user_id, is_update=True, bot_id=bot_id)
         pressure_event = self._bot_update_pressure_event(existing, merged, updates)
@@ -534,6 +597,14 @@ class BotService:
         return result
 
     async def delete_bot_config(self, bot_id: int, user_id: int) -> dict:
+        await self.repository.lock_bot_config(user_id, bot_id)
+        if not await self.repository.get_bot_config(user_id, bot_id):
+            raise HTTPException(404, "Bot niet gevonden")
+        if await self.repository.has_execution_history(user_id, bot_id):
+            raise HTTPException(409, {
+                "code": "BOT_HISTORY_PRESERVED",
+                "message": "Deze bot heeft orders of paper-saldohistorie. Pauzeer de bot; verwijderen zou de handelsgeschiedenis wissen.",
+            })
         deleted = await self.repository.delete_bot_config(user_id, bot_id)
         if not deleted:
             raise HTTPException(404, "Bot niet gevonden")
@@ -747,6 +818,87 @@ class BotService:
             "verified": verified,
         }
 
+    async def _live_exchange_portfolio_context(self, user_id: int) -> Dict[str, Any]:
+        key = await self._single_live_exchange_key(user_id)
+        try:
+            client = await ExchangeService.get_client(
+                key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+            )
+            balance = await ExchangeService.fetch_balance(client)
+        except Exception as exc:
+            logger.warning("Live exposure balance unavailable for user %s", user_id)
+            raise HTTPException(503, {
+                "code": "LIVE_EXPOSURE_BALANCE_UNAVAILABLE",
+                "message": "De exchange-balans kon niet worden gecontroleerd; live order geblokkeerd.",
+            }) from exc
+
+        holdings = balance.get("total") if isinstance(balance, dict) else None
+        if not isinstance(holdings, dict):
+            raise HTTPException(503, {
+                "code": "LIVE_EXPOSURE_BALANCE_UNAVAILABLE",
+                "message": "De exchange gaf geen volledige balans terug; live order geblokkeerd.",
+            })
+        try:
+            normalized = {str(currency).upper(): float(quantity or 0) for currency, quantity in holdings.items()}
+            if any(not isfinite(quantity) or quantity < 0 for quantity in normalized.values()):
+                raise ValueError("non-finite or negative balance")
+            eur_cash = normalized.get("EUR", 0.0)
+            positive_assets = {
+                currency: quantity for currency, quantity in normalized.items()
+                if currency != "EUR" and quantity > 1e-12
+            }
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(503, {
+                "code": "LIVE_EXPOSURE_BALANCE_UNAVAILABLE",
+                "message": "De exchange-balans bevat ongeldige bedragen; live order geblokkeerd.",
+            }) from exc
+        asset_values = {}
+        for currency, quantity in positive_assets.items():
+            try:
+                market = await self.require_fresh_live_market_price(currency)
+                price = float(market["market_price"])
+            except HTTPException:
+                try:
+                    ticker_client = await ExchangeService.get_client(
+                        key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+                    )
+                    ticker = await ExchangeService.fetch_ticker(ticker_client, currency)
+                    price = ExchangeService.verified_eur_ticker_price(ticker, currency)
+                except Exception as ticker_exc:
+                    raise HTTPException(409, {
+                        "code": "LIVE_EXPOSURE_PRICE_UNAVAILABLE",
+                        "message": f"Geen recente EUR-prijs voor {currency}; live order geblokkeerd.",
+                        "symbol": currency,
+                    }) from ticker_exc
+            asset_values[currency] = quantity * price
+        position_value = sum(asset_values.values())
+        total_equity = eur_cash + position_value
+        if total_equity <= 0:
+            raise HTTPException(409, {
+                "code": "LIVE_EXPOSURE_EQUITY_UNAVAILABLE",
+                "message": "De exchange heeft geen berekenbare EUR-portefeuillewaarde; live order geblokkeerd.",
+            })
+        return {
+            "total_equity": total_equity,
+            "current_position_value": position_value,
+            "asset_values": asset_values,
+            "exchange": key.exchange_name,
+        }
+
+    async def _single_live_exchange_key(self, user_id: int):
+        keys = await self.exchange_repo.get_active_keys(user_id)
+        if not keys:
+            raise HTTPException(409, {
+                "code": "LIVE_EXCHANGE_NOT_CONNECTED",
+                "message": "Koppel een exchange voordat je een live order bevestigt.",
+            })
+        if len(keys) != 1:
+            raise HTTPException(409, {
+                "code": "LIVE_EXCHANGE_AMBIGUOUS",
+                "message": "Er zijn meerdere actieve exchanges. Houd er één actief voordat je live handelt.",
+            })
+        return keys[0]
+
     async def require_live_order_risk_context(
         self,
         user_id: int,
@@ -758,6 +910,7 @@ class BotService:
             return {"ok": True, "checks": []}
 
         checks = []
+        symbol = str(payload.symbol or bot.get("symbol") or "").upper()
         if notional > LIVE_MAX_MANUAL_ORDER_EUR:
             raise HTTPException(409, {
                 "code": "LIVE_ORDER_NOTIONAL_LIMIT",
@@ -767,39 +920,36 @@ class BotService:
         checks.append({"code": "live_order_notional", "ok": True, "limit_eur": LIVE_MAX_MANUAL_ORDER_EUR, "notional_eur": notional})
 
         live_daily_spend = await self.repository.get_live_daily_spend(user_id, date.today())
-        if payload.side == "buy" and LIVE_PORTFOLIO_DAILY_LIMIT_EUR > 0 and (live_daily_spend + notional) > (LIVE_PORTFOLIO_DAILY_LIMIT_EUR + 0.01):
+        pending_orders = await self.repository.get_live_pending_order_exposure(user_id)
+        pending_buys = [order for order in pending_orders if order.get("side") == "buy"]
+        pending_notional = sum(float(order.get("notional_eur") or 0) for order in pending_buys)
+        if not isfinite(pending_notional) or pending_notional < 0:
+            raise HTTPException(503, "Openstaande live orders konden niet veilig worden berekend.")
+        if payload.side == "buy" and LIVE_PORTFOLIO_DAILY_LIMIT_EUR > 0 and (live_daily_spend + pending_notional + notional) > (LIVE_PORTFOLIO_DAILY_LIMIT_EUR + 0.01):
             raise HTTPException(409, {
                 "code": "LIVE_PORTFOLIO_DAILY_LIMIT",
-                "message": f"Live daglimiet portfolio overschreden: {live_daily_spend + notional:g} EUR > {LIVE_PORTFOLIO_DAILY_LIMIT_EUR:g} EUR.",
+                "message": f"Live daglimiet portfolio overschreden: {live_daily_spend + pending_notional + notional:g} EUR > {LIVE_PORTFOLIO_DAILY_LIMIT_EUR:g} EUR.",
                 "today_spent_eur": live_daily_spend,
+                "pending_eur": pending_notional,
                 "notional_eur": notional,
                 "limit_eur": LIVE_PORTFOLIO_DAILY_LIMIT_EUR,
                 "behavioral_event": self._manual_order_guardrail_event(bot, payload, notional, "portfolio live daglimiet overschreden"),
             })
-        checks.append({"code": "portfolio_daily_spend", "ok": True, "today_spent_eur": live_daily_spend, "limit_eur": LIVE_PORTFOLIO_DAILY_LIMIT_EUR})
+        checks.append({"code": "portfolio_daily_spend", "ok": True, "today_spent_eur": live_daily_spend,
+                       "pending_eur": pending_notional, "limit_eur": LIVE_PORTFOLIO_DAILY_LIMIT_EUR})
 
         if payload.side == "buy":
-            portfolio = await self.repository.get_portfolio_intelligence_context(user_id)
-            global_ctx = portfolio.get("global") or {}
-            bots = portfolio.get("bots") or []
-            if global_ctx.get("total_equity") is None:
-                raise HTTPException(409, {
-                    "code": "LIVE_PORTFOLIO_VALUATION_UNAVAILABLE",
-                    "message": "De portefeuillewaarde in euro is niet betrouwbaar beschikbaar; een live koop kan niet op blootstelling worden gecontroleerd.",
-                })
-            total_equity = float(global_ctx.get("total_equity") or 0)
-            current_position_value = float(global_ctx.get("current_position_value") or 0)
-            symbol = str(payload.symbol or bot.get("symbol") or "").upper()
-            asset_position_value = sum(
-                float(item.get("position_value") or 0)
-                for item in bots
-                if str(item.get("symbol") or "").upper() == symbol
-            )
+            portfolio = await self._live_exchange_portfolio_context(user_id)
+            total_equity = portfolio["total_equity"]
+            current_position_value = portfolio["current_position_value"]
+            asset_position_value = portfolio["asset_values"].get(symbol, 0.0)
+            pending_asset_value = sum(float(order.get("notional_eur") or 0)
+                                      for order in pending_buys if str(order.get("symbol") or "").upper() == symbol)
             if total_equity > 0:
-                projected_portfolio_exposure_pct = round(((current_position_value + notional) / total_equity) * 100, 2)
+                projected_portfolio_exposure_pct = round(((current_position_value + pending_notional + notional) / total_equity) * 100, 2)
                 bot_limit = float(bot.get("max_asset_exposure_pct") or 100)
                 asset_limit = min(bot_limit, LIVE_MAX_ASSET_EXPOSURE_PCT)
-                projected_asset_exposure_pct = round(((asset_position_value + notional) / total_equity) * 100, 2)
+                projected_asset_exposure_pct = round(((asset_position_value + pending_asset_value + notional) / total_equity) * 100, 2)
                 asset_exposure_block = None
                 if projected_asset_exposure_pct > asset_limit:
                     asset_exposure_block = {
@@ -867,6 +1017,20 @@ class BotService:
                 "symbol": symbol,
                 "safe_next_step": "Ververs market data en doe de live preflight opnieuw.",
             })
+        if str(snapshot.get("quote_currency") or "").upper() != "EUR":
+            raise HTTPException(409, {
+                "code": "LIVE_MARKET_PRICE_QUOTE_UNVERIFIED",
+                "message": f"Geen gecontroleerde EUR-marktprijs voor {symbol}; live order wordt geblokkeerd.",
+                "symbol": symbol,
+                "safe_next_step": "Gebruik een geverifieerde EUR-koers en doe de live preflight opnieuw.",
+            })
+        price = float(snapshot["price"])
+        if not isfinite(price) or price <= 0:
+            raise HTTPException(409, {
+                "code": "LIVE_MARKET_PRICE_INVALID",
+                "message": f"Ongeldige EUR-marktprijs voor {symbol}; live order wordt geblokkeerd.",
+                "symbol": symbol,
+            })
         timestamp = self._parse_execution_timestamp(snapshot.get("timestamp"))
         if not timestamp:
             raise HTTPException(409, {
@@ -890,7 +1054,7 @@ class BotService:
             })
         return {
             "symbol": symbol,
-            "market_price": snapshot.get("price"),
+            "market_price": price,
             "market_timestamp": timestamp.isoformat(),
             "age_seconds": age_seconds,
             "stale_after_seconds": LIVE_MARKET_PRICE_STALE_AFTER_SECONDS,
@@ -923,7 +1087,39 @@ class BotService:
         decision_freshness = await self.require_fresh_live_decision_context(user_id, payload.bot_id)
         preflight_token = payload.live_preflight_token or payload.live_preflight_action_id
         preflight = await self.require_recent_live_preflight(user_id, payload.bot_id, preflight_token)
-        market_price = await self.require_fresh_live_market_price(payload.symbol)
+        try:
+            same_decision = int(preflight.get("decision_id")) == int(decision_freshness.get("decision_id"))
+        except (TypeError, ValueError):
+            same_decision = False
+        if not same_decision:
+            raise HTTPException(409, {
+                "code": "LIVE_PREFLIGHT_DECISION_MISMATCH",
+                "message": "Live preflight hoort niet bij de huidige bot-beslissing. Voer preflight opnieuw uit.",
+                "safe_next_step": "Doe live preflight voor de nieuwste bot-beslissing.",
+            })
+        try:
+            market_price = await self.require_fresh_live_market_price(payload.symbol)
+        except HTTPException as market_error:
+            try:
+                key = await self._single_live_exchange_key(user_id)
+                client = await ExchangeService.get_client(
+                    key.exchange_name, key.api_key, key.api_secret, key.api_passphrase,
+                )
+                ticker = await ExchangeService.fetch_ticker(client, payload.symbol)
+                reference = ExchangeService.verified_eur_ticker_price(ticker, payload.symbol)
+                market_price = {
+                    "symbol": payload.symbol, "market_price": reference,
+                    "source": "verified_exchange_eur_ticker",
+                }
+            except Exception:
+                raise market_error
+        reference_price = float(market_price["market_price"])
+        if not isfinite(reference_price) or reference_price <= 0 or abs(payload.price - reference_price) / reference_price > 0.03:
+            raise HTTPException(409, {
+                "code": "LIVE_ORDER_PRICE_DEVIATION",
+                "message": "De limietprijs wijkt meer dan 3% af van de recente EUR-marktprijs.",
+                "market_price": reference_price,
+            })
         live_order_guardrails = await self.require_live_order_risk_context(user_id, bot, payload, notional)
 
         return {
@@ -970,11 +1166,7 @@ class BotService:
                 current_asset_value_eur=max(float(stats.get("net_qty", 0) or 0), 0.0) * payload.price,
                 invested_eur=invested,
                 today_allocated_eur=today_spent,
-                cash_balance_eur=(
-                    max(float(paper_cash_eur or 0), 0.0)
-                    if not bot.get("is_live") else
-                    (max(total_budget - invested, 0.0) if total_budget > 0 else notional)
-                ),
+                cash_balance_eur=max(float(paper_cash_eur or 0), 0.0),
                 kill_switch=bool(bot.get("is_active", True)),
                 max_trade_risk_eur=bot.get("budget_max_order_eur"),
                 daily_allocation_eur=bot.get("budget_daily_limit_eur"),
@@ -984,8 +1176,11 @@ class BotService:
             )
             if not guardrails.get("allowed", False):
                 raise HTTPException(400, guardrails.get("reason") or "Order geblokkeerd door bot guardrails.")
-            if not bot.get("is_live") and float(guardrails.get("adjusted_amount_eur") or 0) + 0.001 < notional:
-                raise HTTPException(400, "Onvoldoende virtueel Paper-kassaldo voor het gevraagde bedrag.")
+            if float(guardrails.get("adjusted_amount_eur") or 0) + 0.001 < notional:
+                detail = ("Onvoldoende exchange-kassaldo of risicolimiet voor dit bedrag."
+                          if bot.get("is_live") else
+                          "Onvoldoende virtueel Paper-kassaldo voor het gevraagde bedrag.")
+                raise HTTPException(400, detail)
             return guardrails
 
         current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
@@ -995,6 +1190,50 @@ class BotService:
                 f"Niet genoeg positie om te verkopen. Beschikbaar: {round(current_qty, 8)} {payload.symbol}."
             )
         return None
+
+    async def _actual_cash_for_order(self, bot: Dict[str, Any], user_id: int, symbol: str) -> float:
+        if not bot.get("is_live"):
+            return float(await self.repository.get_paper_cash(user_id=user_id, bot_id=bot["id"], symbol=symbol) or 0)
+        key = await self._single_live_exchange_key(user_id)
+        currency = "EUR"
+        try:
+            client = await ExchangeService.get_client(
+                key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+            )
+            balance = await ExchangeService.fetch_balance(client)
+            available = float((balance.get("free") or {}).get(currency) or 0)
+            if not isfinite(available) or available < 0:
+                raise ValueError("invalid available exchange cash")
+            return available
+        except Exception as exc:
+            logger.warning("Live available cash unavailable for user %s", user_id)
+            raise HTTPException(503, "Beschikbaar exchange-kassaldo kan niet worden gecontroleerd.") from exc
+
+    async def _require_live_sell_balance(self, user_id: int, symbol: str, quantity: float) -> None:
+        key = await self._single_live_exchange_key(user_id)
+        try:
+            client = await ExchangeService.get_client(
+                key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
+            )
+            balance = await ExchangeService.fetch_balance(client)
+            free = balance.get("free") if isinstance(balance, dict) else None
+            if not isinstance(free, dict):
+                raise ValueError("missing free balances")
+            available = float(free.get(symbol.upper()) or 0)
+            if not isfinite(available) or available < 0:
+                raise ValueError("invalid free asset balance")
+        except Exception as exc:
+            logger.warning("Live sell balance unavailable for user %s", user_id)
+            raise HTTPException(503, {
+                "code": "LIVE_SELL_BALANCE_UNAVAILABLE",
+                "message": "Beschikbaar assetsaldo op de exchange kan niet worden gecontroleerd.",
+            }) from exc
+        if quantity > available + 1e-12:
+            raise HTTPException(409, {
+                "code": "LIVE_SELL_BALANCE_INSUFFICIENT",
+                "message": f"Onvoldoende vrij beschikbaar {symbol.upper()}-saldo op de exchange.",
+                "available_quantity": available,
+            })
 
     def _as_float(self, value: Any) -> Optional[float]:
         if value is None:
@@ -1182,6 +1421,10 @@ class BotService:
     # ==========================
     async def get_bot_today(self, user_id: int, symbol: str = "BTC", *, lean: bool = False) -> dict:
         today = date.today()
+        unresolved_orders = [] if lean else [{
+            "id": row["id"], "bot_id": row["bot_id"], "status": row["status"],
+            "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        } for row in await self.repository.get_unresolved_live_orders(user_id)]
         # The bot summary must use the same source-verified Score 2.0 view as
         # Analyse and FINN. A score stored for today can still have stale raw
         # indicator evidence and must not be displayed as current.
@@ -1202,13 +1445,14 @@ class BotService:
         
         bot_rows = await self.repository.get_active_bots_with_setups(user_id)
         if not bot_rows:
-            return {"date": str(today), "scores": daily_scores, "decisions": [], "orders": [], "executions": []}
+            return {"date": str(today), "scores": daily_scores, "decisions": [], "orders": unresolved_orders, "executions": []}
             
         bots_by_id = {
             int(r["id"]): {
                 "bot_id": int(r["id"]), "bot_name": r["name"], "symbol": r["symbol"], 
                 "timeframe": r["timeframe"], "setup_type": r["setup_type"], "setup_name": r["setup_name"],
                 "setup_id": r.get("setup_id"), "strategy_id": r.get("strategy_id"),
+                "is_live": bool(r.get("is_live")),
                 "setup_last_validated": r.get("setup_last_validated"),
                 "bot_updated_at": r.get("bot_updated_at"),
             } for r in bot_rows
@@ -1256,6 +1500,12 @@ class BotService:
                     "setup_last_validated": setup_revision.isoformat() if setup_revision else None,
                     "previous_decision_at": decision_time.isoformat() if decision_time else None,
                     "action": None, "setup_match": None, "guardrails_result": None,
+                    "safety_check": {
+                        "state": "stale", "allowed_amount_eur": 0,
+                        "checked_at": None, "reason_code": "setup_changed",
+                        "reason": "De gekoppelde bot of setup is gewijzigd na deze beslissing.",
+                        "next_step": "Laat de bot opnieuw controleren voordat je handelt.",
+                    },
                 }
                 continue
 
@@ -1296,6 +1546,8 @@ class BotService:
                 "amount_eur": scores_payload.get("amount_eur"),
                 "guardrails_result": scores_payload.get("guardrails_result"),
                 "guardrail_reason": scores_payload.get("guardrail_reason"),
+                "guardrails_checked_at": scores_payload.get("guardrails_checked_at"),
+                "strategy_reason": scores_payload.get("strategy_reason"),
                 "metrics": {
                     "position_size": scores_payload.get("position_size"),
                     "exposure_multiplier": scores_payload.get("exposure_multiplier"),
@@ -1310,12 +1562,13 @@ class BotService:
                 "trade_plan": trade_plan,
                 "watch_levels": scores_payload.get("watch_levels"),
             }
+            decisions_by_bot[bot_id]["safety_check"] = self._safety_contract(decisions_by_bot[bot_id], bool(bot.get("is_live")))
             
         return {
             "date": str(today),
             "scores": daily_scores,
             "decisions": list(decisions_by_bot.values()),
-            "orders": [], "executions": []
+            "orders": unresolved_orders, "executions": []
         }
 
     async def get_bot_history(self, user_id: int, days: int) -> List[dict]:
@@ -1362,6 +1615,9 @@ class BotService:
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden.")
+        if not bot.get("is_active", True):
+            raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order voorbereidt.")
+        self._require_manual_order_bot_symbol(bot, payload)
 
         self._validate_manual_order_payload(payload)
 
@@ -1502,10 +1758,15 @@ class BotService:
     async def create_manual_order(self, payload: BotManualOrderSchema, user_id: int, trace_id: Optional[str] = None) -> dict:
         self._validate_manual_order_payload(payload)
 
-        # 1. Fetch bot config to get limits
+        await self.repository.lock_live_account(user_id)
+        await self.repository.lock_bot_config(user_id, payload.bot_id)
+        # Read the current configuration under the same lock as deletion.
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden")
+        if not bot.get("is_active", True):
+            raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order plaatst.")
+        self._require_manual_order_bot_symbol(bot, payload)
 
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
@@ -1522,6 +1783,30 @@ class BotService:
 
         live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
 
+        if bot.get("is_live"):
+            if not payload.idempotency_key:
+                raise HTTPException(400, "Live orders vereisen een idempotency key.")
+            existing = await self.repository.get_manual_order_by_idempotency_key(
+                user_id, payload.idempotency_key
+            )
+            if existing:
+                if (int(existing["bot_id"]) != payload.bot_id
+                        or existing["symbol"] != payload.symbol or existing["side"] != payload.side
+                        or abs(float(existing["quantity"]) - payload.quantity) > 1e-8
+                        or abs(float(existing["limit_price"]) - payload.price) > 1e-8):
+                    raise HTTPException(409, "Idempotency key hoort bij een andere order.")
+                return {
+                    "ok": True, "duplicate": True, "order_id": existing["id"],
+                    "symbol": existing["symbol"], "side": existing["side"],
+                    "quantity": float(existing["quantity"]),
+                    "price": float(existing["limit_price"]),
+                    "notional_eur": float(existing["quote_amount_eur"] or 0),
+                    "mode": "manual", "status": existing["status"],
+                    "trace_id": trace_id,
+                }
+            if await self.repository.get_unresolved_live_orders(user_id):
+                raise HTTPException(409, "Er staat nog een live-order open of de exchange-status is onzeker. Controleer deze eerst.")
+
         paper_cash = None
         if not bot.get("is_live"):
             if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
@@ -1536,6 +1821,8 @@ class BotService:
             bot = await self.repository.get_bot_config(user_id, payload.bot_id)
             if not bot:
                 raise HTTPException(404, "Bot niet gevonden")
+            if not bot.get("is_active", True):
+                raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order plaatst.")
             if bot.get("is_live"):
                 raise HTTPException(409, "Botmodus is gewijzigd. Controleer het voorstel opnieuw.")
             if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
@@ -1553,157 +1840,129 @@ class BotService:
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())
         
         # 3. Guardrail check for BUY and SELL orders
-        self._validate_manual_order_budget_context(bot, stats, payload, notional, paper_cash)
+        cash_balance = await self._actual_cash_for_order(bot, user_id, payload.symbol) if bot.get("is_live") and payload.side == "buy" else paper_cash
+        self._validate_manual_order_budget_context(bot, stats, payload, notional, cash_balance)
+        if bot.get("is_live") and payload.side == "sell":
+            await self._require_live_sell_balance(user_id, payload.symbol, payload.quantity)
 
         live_keys = None
         if bot.get("is_live"):
             live_keys = await self.exchange_repo.get_active_keys(user_id)
-            if not live_keys:
-                raise HTTPException(400, "Geen actieve exchange keys gevonden voor live trading.")
+            if len(live_keys) != 1:
+                raise HTTPException(409, "Kies precies één actieve exchange-koppeling voordat je live handelt.")
 
         order_id, is_new_order = await self.repository.create_manual_order(
-            user_id,
-            payload.bot_id,
-            payload.symbol,
-            payload.side,
-            payload.quantity,
-            payload.price,
+            user_id, payload.bot_id, payload.symbol, payload.side,
+            payload.quantity, payload.price,
             idempotency_key=payload.idempotency_key,
             quote_amount_eur=notional,
-            status="sent" if bot.get("is_live") else "filled",
+            status="sending" if bot.get("is_live") else "filled",
+            is_live=bool(bot.get("is_live")),
+            exchange_name=live_keys[0].exchange_name if live_keys else None,
         )
         if not is_new_order:
-            existing = await self.repository.get_manual_order_by_idempotency_key(user_id, payload.idempotency_key)
+            existing = await self.repository.get_manual_order_by_idempotency_key(
+                user_id, payload.idempotency_key
+            )
+            if (not existing or int(existing["bot_id"]) != payload.bot_id
+                    or existing["symbol"] != payload.symbol or existing["side"] != payload.side
+                    or abs(float(existing["quantity"]) - payload.quantity) > 1e-8
+                    or abs(float(existing["limit_price"]) - payload.price) > 1e-8):
+                raise HTTPException(409, "Idempotency key hoort bij een andere order.")
             return {
-                "ok": True,
-                "duplicate": True,
-                "order_id": order_id,
-                "symbol": existing.get("symbol") if existing else payload.symbol,
-                "side": existing.get("side") if existing else payload.side,
-                "quantity": float(existing.get("quantity")) if existing and existing.get("quantity") is not None else payload.quantity,
-                "price": float(existing.get("limit_price")) if existing and existing.get("limit_price") is not None else payload.price,
-                "notional_eur": float(existing.get("quote_amount_eur")) if existing and existing.get("quote_amount_eur") is not None else notional,
-                "mode": "manual",
+                "ok": True, "duplicate": True, "order_id": order_id,
+                "symbol": existing["symbol"], "side": existing["side"],
+                "quantity": float(existing["quantity"]),
+                "price": float(existing["limit_price"]),
+                "notional_eur": float(existing["quote_amount_eur"] or 0),
+                "mode": "manual", "status": existing["status"],
                 "trace_id": trace_id,
             }
 
-        if payload.side == "buy":
-            cash_delta = -notional
-            qty_delta = payload.quantity
-        else:
-            cash_delta = notional
-            qty_delta = -payload.quantity
-            
-        # 4. Handle Live Exchange Execution
+        cash_delta = -notional if payload.side == "buy" else notional
+        qty_delta = payload.quantity if payload.side == "buy" else -payload.quantity
+
         if bot.get("is_live"):
+            # Commit a unique sending intent before contacting the exchange. The
+            # external outcome can be uncertain, so this key must never submit twice.
+            await self.session.commit()
+            key = live_keys[0]
             try:
-                # Use the first active key (assuming Bitvavo for now based on user context)
-                key = live_keys[0]
                 client = await ExchangeService.get_client(
                     key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
                 )
-                
-                # Execute on exchange
-                logger.info(f"⚡ LIVE ORDER: Sending {payload.side} {payload.quantity} {payload.symbol} to {key.exchange_name}")
-                
-                # Fetch latest price to ensure quantity is correct if value_eur is used
-                final_qty = payload.quantity
-                final_price = payload.price
-                
-                if payload.value_eur and payload.value_eur > 0:
-                    ticker = await ExchangeService.fetch_ticker(client, payload.symbol)
-                    if ticker and 'last' in ticker:
-                        live_ex_price = float(ticker['last'])
-                        # Recalculate quantity based on REAL exchange price
-                        final_qty = payload.value_eur / live_ex_price
-                        final_price = live_ex_price
-                        logger.info(f"🔄 Recalculated live qty: {final_qty} @ {final_price} (Target: {payload.value_eur} EUR)")
-                    
-                    # Re-instantiate client because fetch_ticker closes it
-                    client = await ExchangeService.get_client(
-                        key.exchange_name, key.api_key, key.api_secret, key.api_passphrase
-                    )
-
-                await ExchangeService.create_order(
-                    client, payload.symbol, payload.side, final_qty, final_price, 
-                    order_type='limit'
+                exchange_order = await ExchangeService.create_order(
+                    client, payload.symbol, payload.side, payload.quantity,
+                    payload.price, order_type="limit",
                 )
-                
-                # Update payload values for internal ledger consistency
-                payload.quantity = final_qty
-                payload.price = final_price
-            except HTTPException:
-                await self.repository.update_manual_order_status(user_id, order_id, "error")
+            except Exception:
+                logger.error("Live order outcome uncertain: local order %s", order_id)
+                await self.session.rollback()
+                await self.repository.set_exchange_order_details(
+                    user_id, order_id, key.exchange_name, None, payload.symbol,
+                    "unknown_exchange_state",
+                )
                 await self.session.commit()
-                raise
-            except Exception as e:
-                await self.repository.update_manual_order_status(user_id, order_id, "error")
-                await self.session.commit()
-                logger.error(f"❌ Exchange Order Failed: {str(e)}")
-                raise HTTPException(500, f"Order bij exchange mislukt: {str(e)}")
-
-        if bot.get("is_live"):
-            notional = round(payload.quantity * payload.price, 2)
-            if payload.side == "buy":
-                cash_delta = -notional
-                qty_delta = payload.quantity
-            else:
-                cash_delta = notional
-                qty_delta = -payload.quantity
-            await self.repository.update_manual_order_status(user_id, order_id, "filled")
+                raise HTTPException(502, {
+                    "code": "LIVE_ORDER_STATE_UNKNOWN",
+                    "message": "Exchange antwoord onzeker. Controleer de order bij de exchange; verstuur geen tweede order.",
+                    "order_id": order_id,
+                })
+            exchange_id = str((exchange_order or {}).get("id") or "")
+            await self.repository.set_exchange_order_details(
+                user_id, order_id, key.exchange_name, exchange_id or None,
+                str((exchange_order or {}).get("symbol") or f"{payload.symbol}/EUR"),
+                "sent" if exchange_id else "unknown_exchange_state",
+            )
+            await self.session.commit()
+            if exchange_id:
+                try:
+                    await asyncio.to_thread(reconcile_live_orders, user_id=user_id, order_id=order_id)
+                except Exception:
+                    logger.exception("Immediate live order reconciliation failed: local order %s", order_id)
+            current_order = await self.repository.get_manual_order_by_idempotency_key(
+                user_id, payload.idempotency_key
+            )
+            result = {
+                "ok": True, "order_id": order_id, "symbol": payload.symbol,
+                "side": payload.side, "quantity": payload.quantity,
+                "price": payload.price, "notional_eur": notional,
+                "mode": "manual", "status": current_order["status"] if current_order else
+                    ("sent" if exchange_id else "unknown_exchange_state"),
+                "duplicate": False, "trace_id": trace_id,
+            }
+            await self._record_execution_audit_event(
+                user_id, "live_manual_order_confirmed",
+                self._manual_order_audit_payload(
+                    "live_manual_order_confirmed", bot=bot, payload=payload,
+                    notional=notional, result={**result, "not_persisted": False,
+                    "exchange_order_created": bool(exchange_id)},
+                    source="manual_order_execute", trace_id=trace_id,
+                ), trace_id=trace_id,
+            )
+            return result
 
         await self.repository.create_bot_execution(user_id, order_id, payload.quantity, payload.price)
         await self.repository.insert_bot_ledger(user_id, payload.bot_id, order_id, payload.symbol, cash_delta, qty_delta, payload.price)
         
         await self.session.commit()
-        behavioral_event = None
-        if bot.get("is_live"):
-            behavioral_event = self._manual_order_pressure_event(bot, payload, notional)
-            await self._record_behavioral_risk_event(user_id, "manual_order", behavioral_event)
         await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
-        
-        result = {
-            "ok": True, "order_id": order_id, "symbol": payload.symbol, "side": payload.side,
-            "quantity": payload.quantity,
-            "price": payload.price,
-            "notional_eur": notional,
-            "mode": "manual",
-            "duplicate": False,
+        return {
+            "ok": True, "order_id": order_id, "symbol": payload.symbol,
+            "side": payload.side, "quantity": payload.quantity,
+            "price": payload.price, "notional_eur": notional,
+            "mode": "manual", "status": "filled", "duplicate": False,
             "trace_id": trace_id,
         }
-        if behavioral_event:
-            result["risk_acknowledged"] = True
-            result["behavioral_event"] = behavioral_event
-        if live_context.get("live_order_guardrails"):
-            result["live_order_guardrails"] = live_context["live_order_guardrails"]
-        if live_context.get("live_market_price"):
-            result["live_market_price"] = live_context["live_market_price"]
-        if bot.get("is_live"):
-            await self._record_execution_audit_event(
-                user_id,
-                "live_manual_order_confirmed",
-                self._manual_order_audit_payload(
-                    "live_manual_order_confirmed",
-                    bot=bot,
-                    payload=payload,
-                    notional=notional,
-                    result={
-                        **result,
-                        "not_persisted": False,
-                        "exchange_order_created": True,
-                    },
-                    source="manual_order_execute",
-                    trace_id=trace_id,
-                ),
-                trace_id=trace_id,
-            )
-        return result
 
     async def preflight_manual_order(self, payload: BotManualOrderSchema, user_id: int, trace_id: Optional[str] = None) -> dict:
         self._validate_manual_order_payload(payload)
         bot = await self.repository.get_bot_config(user_id, payload.bot_id)
         if not bot:
             raise HTTPException(404, "Bot niet gevonden")
+        if not bot.get("is_active", True):
+            raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order voorbereidt.")
+        self._require_manual_order_bot_symbol(bot, payload)
 
         notional = round(payload.quantity * payload.price, 2)
         if notional <= 0:
@@ -1728,7 +1987,10 @@ class BotService:
                 user_id=user_id, bot_id=payload.bot_id,
                 symbol=str(payload.symbol).upper(),
             )
-        bot_guardrails = self._validate_manual_order_budget_context(bot, stats, payload, notional, paper_cash)
+        cash_balance = await self._actual_cash_for_order(bot, user_id, payload.symbol) if bot.get("is_live") and payload.side == "buy" else paper_cash
+        bot_guardrails = self._validate_manual_order_budget_context(bot, stats, payload, notional, cash_balance)
+        if bot.get("is_live") and payload.side == "sell":
+            await self._require_live_sell_balance(user_id, payload.symbol, payload.quantity)
 
         result = {
             "ok": True,
@@ -1791,6 +2053,10 @@ class BotService:
                 )
         return result
 
+    def _require_manual_order_bot_symbol(self, bot: Dict[str, Any], payload: BotManualOrderSchema) -> None:
+        if str(payload.symbol or "").strip().upper() != str(bot.get("symbol") or "").strip().upper():
+            raise HTTPException(400, "Orderasset wijkt af van de gekoppelde botasset.")
+
     def _validate_manual_order_payload(self, payload: BotManualOrderSchema) -> None:
         side = str(payload.side or "").lower().strip()
         if side not in {"buy", "sell"}:
@@ -1802,11 +2068,13 @@ class BotService:
             raise HTTPException(400, "symbol is verplicht en moet 2-20 karakters lang zijn.")
         payload.symbol = symbol
 
-        if payload.quantity is None or float(payload.quantity) <= 0:
+        if payload.quantity is None or not isfinite(float(payload.quantity)) or float(payload.quantity) <= 0:
             raise HTTPException(400, "quantity moet groter zijn dan 0.")
-        if payload.price is None or float(payload.price) <= 0:
+        if payload.price is None or not isfinite(float(payload.price)) or float(payload.price) <= 0:
             raise HTTPException(400, "price moet groter zijn dan 0.")
-        if payload.value_eur is not None and float(payload.value_eur) <= 0:
+        if not isfinite(float(payload.quantity) * float(payload.price)):
+            raise HTTPException(400, "Orderwaarde moet een eindig bedrag zijn.")
+        if payload.value_eur is not None and (not isfinite(float(payload.value_eur)) or float(payload.value_eur) <= 0):
             raise HTTPException(400, "value_eur moet groter zijn dan 0 wanneer meegegeven.")
         if payload.idempotency_key is not None:
             key = str(payload.idempotency_key).strip()
@@ -1896,6 +2164,9 @@ class BotService:
                     float(b["paper_cash_eur"])
                     if not b["is_live"] and b.get("paper_cash_eur") is not None else None
                 ),
+                "paper_cash_configured": bool(
+                    not b["is_live"] and b.get("paper_cash_eur") is not None
+                ),
             }
             
             stats["remaining_budget_limit_eur"] = max(float(b["budget_total_eur"]) - stats["invested_eur"], 0)
@@ -1936,11 +2207,31 @@ class BotService:
                 "side": r["side"],
                 "qty": float(r["filled_qty"] or 0),
                 "price": float(r["avg_fill_price"]) if r["avg_fill_price"] is not None else None,
-                "amount_eur": float(r["quote_amount_eur"]) if r["quote_amount_eur"] is not None else None,
+                "amount_eur": round(float(r["filled_qty"] or 0) * float(r["avg_fill_price"] or 0), 2),
                 "executed_at": r["created_at"].isoformat() if r.get("created_at") else None,
-                "mode": "auto" if r["status"] == "filled" else "manual"
+                "mode": r.get("executed_by") or ("manual" if r.get("source") == "manual" else "unknown"),
+                "environment": r.get("execution_environment") or "unknown",
+                "status": r["status"],
             })
         return out
+
+    async def get_account_bot_trades(self, user_id: int, limit: int, offset: int) -> dict:
+        limit = max(1, min(100, limit))
+        offset = max(0, offset)
+        rows = await self.repository.get_account_bot_trades(user_id, limit + 1, offset)
+        items = [{
+            "id": r["execution_id"], "bot_id": r["bot_id"], "bot_name": r["bot_name"],
+            "symbol": r["symbol"], "side": r["side"],
+            "qty": float(r["filled_qty"] or 0),
+            "price": float(r["avg_fill_price"]) if r["avg_fill_price"] is not None else None,
+            "amount_eur": round(float(r["filled_qty"] or 0) * float(r["avg_fill_price"] or 0), 2),
+            "executed_at": r["executed_at"].isoformat() if r.get("executed_at") else None,
+            "environment": r.get("execution_environment") or "unknown",
+            "execution_mode": r.get("executed_by") or ("manual" if r.get("source") == "manual" else "unknown"),
+            "status": r["status"],
+        } for r in rows[:limit]]
+        return {"items": items, "has_more": len(rows) > limit,
+                "next_offset": offset + limit if len(rows) > limit else None}
 
     # ==========================
     # BOT TRADE PLAN CRUD
@@ -1979,9 +2270,9 @@ class BotService:
                 "equity": float(r["equity_eur"] or 0),
                 "cash": float(r["cash_eur"] or 0),
                 "btc_qty": float(r["btc_qty"] or 0),
-                "btc_value": float(r["btc_qty"] * r["price_eur"]) if r.get("btc_qty") and r.get("price_eur") else 0,
+                "btc_value": float(r["btc_value_eur"] or 0),
                 "invested": float(r["invested_eur"] or 0),
-                "unrealized_pnl": float((r["btc_qty"] * r["price_eur"]) - r["invested_eur"]) if r.get("btc_qty") and r.get("price_eur") else 0
+                "unrealized_pnl": float(r["unrealized_pnl_eur"] or 0)
             } for r in rows]
 
         rows = await self.repository.get_portfolio_balance_history(user_id, bucket, max(1, min(limit, 2000)))

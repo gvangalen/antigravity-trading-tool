@@ -35,6 +35,7 @@ ALLOWED_LEGACY_SYNC_BOUNDARIES = {
     "backend/trading-tool-backend/backend/engine/state_builder.py",
     "backend/trading-tool-backend/backend/engine/transition_detector.py",
     "backend/trading-tool-backend/backend/services/bot_service.py",
+    "backend/trading-tool-backend/backend/services/bot_live_reconciliation.py",
     "backend/trading-tool-backend/backend/services/macro_data_service.py",
     "backend/trading-tool-backend/backend/services/market_data_service.py",
     "backend/trading-tool-backend/backend/services/portfolio_snapshot_service.py",
