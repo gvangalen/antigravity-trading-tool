@@ -21,12 +21,12 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, or `auto_paper_trade_history`. |
+| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, `auto_paper_trade_history`, or `portfolio_paper_fx`. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
 | `allow_fixture_actions` | Explicit per-run permission for allowlisted QA-fixture proposals and confirmations; defaults to `false`. |
-| `allow_safe_fixture_execution` | Explicit per-run permission for the non-financial fixture-execution allowlist or the separately named virtual EUR 50 `auto_paper_trade_history` profile; defaults to `false` and requires `allow_fixture_actions=true`. |
+| `allow_safe_fixture_execution` | Explicit per-run permission for the non-financial fixture-execution allowlist or a separately named virtual Paper profile; defaults to `false` and requires `allow_fixture_actions=true`. |
 
 The profile defines only the execution class. The active QA goal remains the
 authority for scope, acceptance criteria, and whether a sealed QA manifest is
@@ -239,4 +239,42 @@ QA invocation after the candidate is live:
 FINN_QA_ALLOW_FIXTURE_ACTIONS=true FINN_QA_ALLOW_FIXTURE_EXECUTION=true \
   ./ops/qa/run_finn_production_qa.sh \
   <FULL_LIVE_SHA> auto_paper_trade_history none qa-auto-paper-history
+```
+
+## Paper Portfolio FX And Replay Probe
+
+`portfolio_paper_fx` is a separate one-shot protected QA profile. It requires
+`manifest_id=none`, an empty manifest bundle, and both fixture authorization
+inputs set to `true`. Independent QA may start it only for an explicit
+user-authorized Portfolio 2.0 Paper goal on the exact live SHA. Before writing
+anything, it requires an existing, recently observed BTC quote in USD or USDT
+and a dated, valid conversion to EUR. It never inserts or changes shared market
+or FX rows. If those sources are unavailable, the run fails without creating
+an owner or order.
+
+The probe verifies the bound QA fixture and creates one inactive, random-
+password synthetic owner with no exchange keys. It gives one auto Paper bot
+EUR 100 virtual funding and runs exactly one EUR 50-targeted Paper buy through
+the production executor. Its supplied estimated price is deliberately EUR 1;
+the fill must use the server's dated EUR-converted price instead. A replay of
+the same decision must be rejected without a second fill. The owner-scoped
+shared FINN/web portfolio adapter must show one valued non-EUR position, the
+dated source price and FX conversion, cash separated from the bot limit, and
+an internally consistent EUR total. This protected probe does not itself
+exercise an authenticated browser or FINN chat call; independent QA verifies
+those runtime surfaces separately. It does not test Live execution or the
+bot's market-scoring scheduler.
+
+The inactive owner cannot be scheduled by the regular bot dispatcher. On
+success, cleanup deactivates the bot before deleting only this exact
+run-namespace owner and its rows. On failure, it deactivates the bot and
+retains evidence for separately authorized reset. The sanitized result omits
+owner, bot, decision and order IDs.
+
+QA invocation after the candidate is live and authorized:
+
+```bash
+FINN_QA_ALLOW_FIXTURE_ACTIONS=true FINN_QA_ALLOW_FIXTURE_EXECUTION=true \
+  ./ops/qa/run_finn_production_qa.sh \
+  <FULL_LIVE_SHA> portfolio_paper_fx none qa-portfolio-paper-fx
 ```

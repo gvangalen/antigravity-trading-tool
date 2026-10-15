@@ -38,6 +38,7 @@ ALLOWED_PROFILES = {
     "latency",
     "score2_stale_paper",
     "auto_paper_trade_history",
+    "portfolio_paper_fx",
 }
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
@@ -1129,6 +1130,17 @@ def failure_summary(cases: Iterable[Dict[str, Any]]) -> Dict[str, int]:
     return summary
 
 
+def run_protected_portfolio_probe(report: Dict[str, Any], probe, namespace: str) -> None:
+    """Record an attempted protected run before its first possible fixture write."""
+    report["safety"]["read_only_profile"] = False
+    report["safety"]["execution_calls"] = 1
+    report["qa_status"] = "INCOMPLETE"
+    report["protected_profile_attempted"] = True
+    report["portfolio_paper_fx"] = probe(namespace)
+    report["outcome"] = "passed"
+    report["qa_status"] = "COMPLETED"
+
+
 def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dict[str, int | bool]:
     """Report matrix completion independently from product correctness.
 
@@ -1792,6 +1804,14 @@ def main() -> int:
                 report["auto_paper_trade_history"] = run_auto_paper_probe(fixture_namespace or "")
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
+            elif args.profile == "portfolio_paper_fx":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("portfolio_paper_fx_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE") != "1":
+                    raise ValueError("portfolio_paper_fx_fixture_not_authorized")
+                from backend.scripts.probe_protected_portfolio_paper_fx import run as run_portfolio_probe
+
+                run_protected_portfolio_probe(report, run_portfolio_probe, fixture_namespace or "")
             else:
                 if args.manifest_id == "none":
                     raise ValueError("manifest_required")
