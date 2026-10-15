@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 
 import { fetchBotTrades, fetchPortfolioSummary } from "@/lib/api/botApi";
@@ -14,7 +14,8 @@ function PortfolioPageInner() {
   const { t, locale } = useTranslation();
   const copy = t?.portfolioPage || {};
   const [environment, setEnvironment] = useState("paper");
-  const [overview, setOverview] = useState(null);
+  const [loadedOverview, setLoadedOverview] = useState(null);
+  const requestSequence = useRef(0);
   const [selectedId, setSelectedId] = useState(null);
   const [detailTab, setDetailTab] = useState("positions");
   const [trades, setTrades] = useState([]);
@@ -31,16 +32,21 @@ function PortfolioPageInner() {
     : null, [locale]);
 
   const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     setLoading(true);
     setError(null);
     try {
       const response = await fetchPortfolioSummary(environment);
-      setOverview(response?.data || null);
+      if (sequence === requestSequence.current) {
+        setLoadedOverview({ environment, data: response?.data || null });
+      }
     } catch (cause) {
-      setError(cause?.message || copy.loadError);
-      setOverview(null);
+      if (sequence === requestSequence.current) {
+        setError(cause?.message || copy.loadError);
+        setLoadedOverview({ environment, data: null });
+      }
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }, [environment, copy.loadError]);
 
@@ -51,6 +57,9 @@ function PortfolioPageInner() {
   }, [load]);
   useEffect(() => { setSelectedId(null); setTrades([]); }, [environment]);
 
+  // A render after switching tabs must never relabel the previous environment's
+  // money as the newly selected one, even before the next effect starts.
+  const overview = loadedOverview?.environment === environment ? loadedOverview.data : null;
   const bots = overview?.bots || [];
   const selected = bots.find((bot) => bot.bot_id === selectedId) || null;
   useEffect(() => {
@@ -83,6 +92,15 @@ function PortfolioPageInner() {
       symbol: bot.symbol, finn_subject_type: "bot", locale },
   });
 
+  const selectEnvironment = (nextEnvironment) => {
+    if (nextEnvironment === environment) return;
+    requestSequence.current += 1;
+    setLoading(true);
+    setError(null);
+    setSelectedId(null);
+    setEnvironment(nextEnvironment);
+  };
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-8 px-4 py-8 pb-28 text-slate-900 dark:text-slate-100 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -93,7 +111,7 @@ function PortfolioPageInner() {
         <div className="flex items-center gap-2">
           <div className="flex rounded-xl border border-slate-200 p-1 dark:border-slate-700" role="group" aria-label={copy.environment}>
             {(["paper", "live"]).map((item) => (
-              <button key={item} type="button" onClick={() => setEnvironment(item)}
+              <button key={item} type="button" onClick={() => selectEnvironment(item)}
                 aria-pressed={environment === item}
                 className={`rounded-lg px-4 py-2 text-sm font-semibold ${environment === item ? "bg-blue-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>
                 {copy[item]}
