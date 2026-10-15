@@ -1130,6 +1130,17 @@ def failure_summary(cases: Iterable[Dict[str, Any]]) -> Dict[str, int]:
     return summary
 
 
+def run_protected_portfolio_probe(report: Dict[str, Any], probe, namespace: str) -> None:
+    """Record an attempted protected run before its first possible fixture write."""
+    report["safety"]["read_only_profile"] = False
+    report["safety"]["execution_calls"] = 1
+    report["qa_status"] = "INCOMPLETE"
+    report["protected_profile_attempted"] = True
+    report["portfolio_paper_fx"] = probe(namespace)
+    report["outcome"] = "passed"
+    report["qa_status"] = "COMPLETED"
+
+
 def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dict[str, int | bool]:
     """Report matrix completion independently from product correctness.
 
@@ -1800,11 +1811,7 @@ def main() -> int:
                     raise ValueError("portfolio_paper_fx_fixture_not_authorized")
                 from backend.scripts.probe_protected_portfolio_paper_fx import run as run_portfolio_probe
 
-                report["safety"]["read_only_profile"] = False
-                report["safety"]["execution_calls"] = 1
-                report["portfolio_paper_fx"] = run_portfolio_probe(fixture_namespace or "")
-                report["outcome"] = "passed"
-                report["qa_status"] = "COMPLETED"
+                run_protected_portfolio_probe(report, run_portfolio_probe, fixture_namespace or "")
             else:
                 if args.manifest_id == "none":
                     raise ValueError("manifest_required")

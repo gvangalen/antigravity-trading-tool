@@ -287,7 +287,8 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
             "valuation_status": "available", "fx_dated": True,
             "source_price_dated": True, "order_count": 1,
             "execution_ledger_entries": 1, "replay": "rejected_without_second_fill",
-            "forged_estimate_used": False, "exchange_keys": 0, "live_trading_calls": 0,
+            "forged_estimate_used": False, "exchange_keys": 0,
+            "execution_environment": "paper",
         }
     finally:
         connection.close()

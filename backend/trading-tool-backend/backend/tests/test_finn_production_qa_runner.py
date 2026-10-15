@@ -5,6 +5,8 @@ import json
 import re
 import socket
 import ssl
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -195,6 +197,152 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
     with pytest.raises(RuntimeError, match="portfolio_paper_fx_source_unavailable"):
         probe.run("qa-123456-1-abcd1234-5678abcd")
     assert called is False
+
+
+def test_portfolio_paper_fx_attempt_is_reported_even_if_probe_fails():
+    module = _module()
+    report = {"safety": {"read_only_profile": True, "execution_calls": 0},
+              "qa_status": "NOT_STARTED", "outcome": "failed"}
+
+    def failed_probe(_namespace):
+        raise RuntimeError("portfolio_paper_fx_execution_not_filled")
+
+    with pytest.raises(RuntimeError, match="execution_not_filled"):
+        module.run_protected_portfolio_probe(report, failed_probe, "qa-test")
+    assert report["protected_profile_attempted"] is True
+    assert report["qa_status"] == "INCOMPLETE"
+    assert report["safety"]["read_only_profile"] is False
+    assert report["safety"]["execution_calls"] == 1
+
+    module.run_protected_portfolio_probe(report, lambda _: {"result": "PASS"}, "qa-test")
+    assert report["qa_status"] == "COMPLETED"
+    assert report["outcome"] == "passed"
+
+
+def test_portfolio_paper_fx_fill_replay_projection_and_quarantine(monkeypatch):
+    """Exercise the protected probe's run sequence without touching a real DB."""
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_portfolio_paper_fx.py")
+    spec = importlib.util.spec_from_file_location("protected_portfolio_fx_sequence", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+    source = {"eur_price": 2000.0, "raw_price": 2500.0, "fx_factor": 0.8,
+              "quote": "USDT", "source_at": "source-time", "fx_at": "fx-time"}
+    events = []
+    monkeypatch.setattr(probe, "_require_protected_run", lambda _: 42)
+    monkeypatch.setattr(probe, "_verified_source_price_eur", lambda: source)
+    monkeypatch.setattr(probe, "_seed", lambda *_: (101, 202, 303))
+    monkeypatch.setattr(probe, "_finish", lambda *args, **kwargs: events.append((args, kwargs)))
+
+    class Connection:
+        def commit(self):
+            events.append("commit")
+
+        def rollback(self):
+            events.append("rollback")
+
+        def close(self):
+            events.append("close")
+
+    monkeypatch.setattr(probe, "_connection", Connection)
+    calls = []
+
+    def execute(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return "filled"
+        raise RuntimeError("Decision already processing or executed")
+
+    fake_agent = types.ModuleType("backend.ai_agents.trading_bot_agent")
+    fake_agent._persist_bot_order = lambda **kwargs: events.append(("persist", kwargs["is_live"]))
+    fake_agent._auto_execute_decision = execute
+    monkeypatch.setitem(sys.modules, "backend.ai_agents.trading_bot_agent", fake_agent)
+    monkeypatch.setattr(probe, "_verify", lambda *_: {"result": "PASS"})
+    result = probe.run("qa-123456-1-abcd1234-5678abcd")
+    assert result == {"result": "PASS"}
+    assert len(calls) == 2
+    assert all(call["is_live"] is False and call["mode"] == "auto" for call in calls)
+    assert calls[0]["order"]["estimated_price"] == 1.0
+    assert "rollback" in events
+    assert events[-1][1]["passed"] is True
+
+    events.clear()
+    calls.clear()
+    monkeypatch.setattr(probe, "_verify", lambda *_: (_ for _ in ()).throw(RuntimeError("verification_failed")))
+    with pytest.raises(RuntimeError, match="verification_failed"):
+        probe.run("qa-123456-1-abcd1234-5678abcd")
+    assert events[-1][1]["passed"] is False
+
+
+def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeypatch):
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_portfolio_paper_fx.py")
+    spec = importlib.util.spec_from_file_location("protected_portfolio_fx_verification", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+    source = {"eur_price": 2000.0, "raw_price": 2500.0, "fx_factor": 0.8,
+              "quote": "USDT", "source_at": "source-time", "fx_at": "fx-time"}
+    monkeypatch.setattr(probe, "_verified_source_price_eur", lambda: source)
+
+    class Cursor:
+        def execute(self, sql, _params):
+            self.sql = sql
+
+        def fetchall(self):
+            if "FROM bot_orders" in self.sql:
+                return [("filled", "paper", 2000.0, 0.025, "filled", "executed", "auto")]
+            if "FROM bot_ledger" in self.sql:
+                return [("paper_initial_funding", 100.0, 0.0, None),
+                        ("execute", -50.0, 0.025, 2)]
+            raise AssertionError(self.sql)
+
+        def fetchone(self):
+            if "FROM bot_portfolios" in self.sql:
+                return (50.0, 0.025)
+            if "FROM exchange_keys" in self.sql:
+                return (0,)
+            if "FROM users" in self.sql:
+                return (False,)
+            raise AssertionError(self.sql)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(probe, "_connection", Connection)
+    bot = types.SimpleNamespace(
+        valuation_status="available", price_quote_currency="USDT",
+        fx_as_of="fx-time", source_price_as_of="source-time",
+        fx_eur_per_unit=0.8, cash_eur=50.0, position_value_eur=50.0,
+        equity=100.0,
+    )
+    projected = {"data": types.SimpleNamespace(bots=[bot], valuation_status="available")}
+
+    async def projection(_user_id):
+        return projected
+
+    monkeypatch.setattr(probe, "_projection", projection)
+    result = probe._verify(101, 202, 303, source)
+    assert result["result"] == "PASS"
+    assert result["order_count"] == 1
+    assert result["execution_ledger_entries"] == 1
+    assert result["execution_environment"] == "paper"
+    assert "live_trading_calls" not in result
+
+    bot.fx_eur_per_unit = 0.9
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_contract_failed"):
+        probe._verify(101, 202, 303, source)
 
 
 def test_workflow_has_only_the_manual_dispatch_trigger():
