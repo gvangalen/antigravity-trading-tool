@@ -2121,6 +2121,9 @@
       "orderSubmittedAt": "ORDER VERSTUURD",
       "lastCheck": "LAATSTE CHECK",
       "allowedOrder": "TOEGESTANE ORDER",
+      "proposedAmount": "Voorgesteld",
+      "checkedAmount": "Na limieten",
+      "adjustmentReasons": "Redenen voor aanpassing of blokkade",
       "exchangeCash": "EXCHANGE-KASSALDO",
       "paperCash": "PAPER-KASSALDO",
       "seeExchange": "Zie exchange",
@@ -2198,6 +2201,14 @@
         "observe": "Observeren"
       },
       "riskCodes": {
+        "cash_balance_trimmed": "Beperkt door beschikbaar kassaldo",
+        "total_budget_trimmed": "Beperkt door resterend botbudget",
+        "max_trade_risk_trimmed": "Beperkt door maximale ordergrootte",
+        "daily_allocation_trimmed": "Beperkt door resterende daglimiet",
+        "asset_exposure_trimmed": "Beperkt door resterende assetblootstelling",
+        "defensive_macro_override_active": "Defensief verkleind wegens lage macroscore",
+        "below_min_order_size": "Resterend bedrag is kleiner dan de minimumorder",
+        "no_allocatable_size": "Er blijft geen geldig koopbedrag over",
         "unsupported_live_currency": "Live botorders gebruiken alleen EUR; wijzig de botvaluta voordat je handelt.",
         "market_price_stale": "Geen recente EUR-marktprijs beschikbaar voor live uitvoering.",
         "insufficient_funds": "Onvoldoende beschikbaar kassaldo",
@@ -2450,15 +2461,17 @@
       "numericValidation": "Gebruik alleen geldige positieve waarden.",
       "assetExposureValidation": "Assetblootstelling mag maximaal 100% zijn.",
       "riskConservativeLabel": "Conservatief",
-      "riskConservativeDescription": "Alleen trades bij hoge confidence en lage frequentie.",
+      "riskConservativeDescription": "Profiel voor persoonlijke analyses; orderbedragen volgen de ingestelde limieten.",
       "riskBalancedLabel": "Gebalanceerd",
-      "riskBalancedDescription": "Standaard profiel met gebalanceerde trade-frequentie.",
+      "riskBalancedDescription": "Profiel voor persoonlijke analyses; orderbedragen volgen de ingestelde limieten.",
       "riskAggressiveLabel": "Agressief",
-      "riskAggressiveDescription": "Snellere trades met hogere exposure en meer risico.",
+      "riskAggressiveDescription": "Profiel voor persoonlijke analyses; orderbedragen volgen de ingestelde limieten.",
+      "riskProfileScope": "Dit profiel verandert de orderlimieten niet. Stel budget, daglimiet, ordergrootte en assetblootstelling hieronder in.",
       "lockedLabel": "Vastgezet"
     },
     "history": {
       "title": "Botgeschiedenis",
+      "reason": "Reden",
       "loading": "Geschiedenis laden…",
       "empty": "Er zijn nog geen bot-acties uitgevoerd.",
       "date": "Datum",
@@ -2467,7 +2480,9 @@
       "price": "Prijs",
       "amount": "Bedrag",
       "confidence": "Vertrouwen",
-      "status": "Status"
+      "status": "Status",
+      "statuses": { "planned": "Gepland", "failed": "Mislukt", "failed_execution": "Uitvoering mislukt" },
+      "tradeExecutedReason": "Uitgevoerde trade; de botbeslissing in deze geschiedenis toont eventuele limieten."
     },
     "budgetBar": {
       "noBudget": "Geen budget ingesteld",
@@ -2848,8 +2863,10 @@
     "guardrailsPanel": {
       "safetyCheck": "Risicolimieten",
       "goClear": "RISICOLIMIETEN IN ORDE",
+      "systemReduced": "ORDER VERKLEIND DOOR RISICOLIMIET",
       "systemBlocked": "RISICOLIMIET BLOKKEERT",
-      "maxRiskPerTrade": "Max risico / trade",
+      "maxRiskPerTrade": "Maximale ordergrootte",
+      "noProposal": "Geen koopvoorstel",
       "exposureRatio": "Blootstellingsratio",
       "adjustedPositionSize": "Aangepaste inzet",
       "scaledDown": "AFGESCHAALD",

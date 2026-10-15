@@ -703,6 +703,7 @@ const AddBotForm = forwardRef(function AddBotForm({
                ▼
             </div>
           </div>
+          <p className="px-1 text-xs text-slate-500">{copy.riskProfileScope}</p>
         </div>
 
         <div className="space-y-1.5">

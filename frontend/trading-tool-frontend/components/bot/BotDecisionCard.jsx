@@ -221,8 +221,8 @@ export default function BotTodayProposal({
     !!decisionId;
 
   const governanceStatus = (() => {
+    if (guardrails?.blocked_by || (Number(guardrails?.original_amount_eur || 0) > 0 && guardrails?.allowed === false) || status === "skipped" || status === "failed_execution") return "block";
     if (!hasTrade) return "watch";
-    if (guardrails?.blocked || guardrails?.allow === false || status === "skipped") return "block";
     if ((deviation !== null && deviation > 0.2) || (score !== null && score < 55)) return "modify";
     return "approve";
   })();

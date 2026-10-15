@@ -606,8 +606,8 @@ def run_bot_brain(
             cash_balance_eur=_safe_float(portfolio_context.get("cash_balance_eur"), 0.0) or 0.0,
             kill_switch=portfolio_context.get("kill_switch", True),
             max_trade_risk_eur=_safe_float(
-                portfolio_context.get("max_trade_risk_eur")
-                or setup.get("max_risk_per_trade"),
+                portfolio_context.get("max_trade_risk_eur") if portfolio_context.get("max_trade_risk_eur") is not None
+                else setup.get("max_risk_per_trade"),
                 None,
             ),
             daily_allocation_eur=_safe_float(portfolio_context.get("daily_allocation_eur"), None),
@@ -618,24 +618,26 @@ def run_bot_brain(
             global_macro_score=macro_score_for_guardrail,
         )
 
-    except Exception as e:
-        logger.warning("Guardrails fallback triggered: %s", e)
-        planned_dca = is_confirmed_dca_amount_rule(setup)
+    except Exception:
+        logger.exception("Guardrails failed; blocking buy proposal")
         guardrails_result = {
-            "allowed": False if planned_dca else suggested_amount > 0,
-            "adjusted_amount_eur": 0.0 if planned_dca else round(float(suggested_amount), 2),
+            "allowed": False,
+            "adjusted_amount_eur": 0.0,
             "original_amount_eur": round(float(suggested_amount), 2),
-            "warnings": [],
-            "blocked_by": None,
-            "reason": None,
-            "debug_code": "guardrails_fallback",
+            "warnings": ["guardrails_error"],
+            "blocked_by": "guardrails_error",
+            "reason": "De veiligheidscheck kon niet betrouwbaar worden uitgevoerd. De kooporder is geblokkeerd.",
+            "debug_code": "guardrails_error",
             "guardrails": {},
+            "explanations": [{"code": "guardrails_error", "message": "De veiligheidscheck kon niet betrouwbaar worden uitgevoerd. De kooporder is geblokkeerd."}],
         }
 
     adjusted_amount = _safe_float(
         guardrails_result.get("adjusted_amount_eur"),
         suggested_amount,
     ) or 0.0
+    if guardrails_result.get("allowed") is not True:
+        adjusted_amount = 0.0
     if is_confirmed_dca_amount_rule(setup):
         adjusted_amount = (
             max(0.0, min(adjusted_amount, suggested_amount))

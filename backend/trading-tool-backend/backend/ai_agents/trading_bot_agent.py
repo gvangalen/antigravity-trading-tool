@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from backend.utils.db import get_db_connection
 # ✅ Engine brain (single source of truth)
 from backend.engine.bot_brain import run_bot_brain
+from backend.engine.guardrails_engine import apply_guardrails
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights, is_confirmed_dca_amount_rule
 from backend.domain.setup_market_match import match_setup_from_daily_scores
 import asyncio
@@ -775,7 +776,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
                     "daily_limit_eur": float(budget_daily_limit_eur or 0),
                     "min_order_eur": float(budget_min_order_eur or 0),
                     "max_order_eur": float(budget_max_order_eur or 0),
-                    "max_asset_exposure_pct": float(max_asset_exposure_pct or 100),
+                    "max_asset_exposure_pct": float(100 if max_asset_exposure_pct is None else max_asset_exposure_pct),
                 },
             }
         )
@@ -1241,19 +1242,25 @@ def _mark_bot_decision_execution_failed(
     user_id: int,
     bot_id: int,
     decision_id: int,
+    reason: Optional[str] = None,
 ):
     with conn.cursor() as cur:
         cur.execute(
             """
             UPDATE bot_decisions
             SET status='failed_execution',
+                scores_json=jsonb_set(COALESCE(scores_json, '{}'::jsonb),
+                    '{execution_failure}', %s::jsonb, true),
+                reason_json=COALESCE(reason_json, '[]'::jsonb) || jsonb_build_array(%s::text),
                 updated_at=NOW()
             WHERE id=%s
               AND user_id=%s
               AND bot_id=%s
-              AND status='executing'
+              AND status IN ('executing', 'planned')
             """,
-            (decision_id, user_id, bot_id),
+            (json.dumps(reason or "De order kon niet veilig worden uitgevoerd. Controleer de bot en probeer opnieuw."),
+             reason or "De order kon niet veilig worden uitgevoerd. Controleer de bot en probeer opnieuw.",
+             decision_id, user_id, bot_id),
         )
         cur.execute("""
             UPDATE bot_orders SET status='failed', updated_at=NOW()
@@ -1640,6 +1647,16 @@ def _persist_decision_and_order(
             "applied_amount_eur": amount_eur,
         }
 
+    guardrail_result = decision.get("guardrails_result") or {}
+    reasons = [
+        item.get("message") for item in guardrail_result.get("explanations", [])
+        if isinstance(item, dict) and item.get("message")
+    ]
+    if not reasons and guardrail_result.get("blocked_by") and guardrail_result.get("reason"):
+        reasons.append(guardrail_result["reason"])
+    if decision.get("strategy_reason"):
+        reasons.append(decision["strategy_reason"])
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -1655,6 +1672,7 @@ def _persist_decision_and_order(
                 confidence,
                 amount_eur,
                 scores_json,
+                reason_json,
                 status,
                 created_at,
                 updated_at
@@ -1664,6 +1682,7 @@ def _persist_decision_and_order(
                 %s,%s,
                 NOW(),
                 %s,%s,%s,
+                %s::jsonb,
                 %s::jsonb,
                 'planned',
                 NOW(), NOW()
@@ -1677,6 +1696,7 @@ def _persist_decision_and_order(
                 confidence = EXCLUDED.confidence,
                 amount_eur = EXCLUDED.amount_eur,
                 scores_json = EXCLUDED.scores_json,
+                reason_json = EXCLUDED.reason_json,
                 status = EXCLUDED.status,
                 updated_at = NOW()
             WHERE bot_decisions.status NOT IN ('executed', 'executing')
@@ -1693,6 +1713,7 @@ def _persist_decision_and_order(
                 confidence,
                 amount_eur,
                 json.dumps(scores_payload),
+                json.dumps(reasons),
             ),
         )
 
@@ -2114,6 +2135,12 @@ def run_trading_bot_agent(
                         )
                     except Exception as e:
                         logger.exception("❌ Auto execution failed")
+                        _mark_bot_decision_execution_failed(
+                            conn=conn, user_id=user_id, bot_id=bot["bot_id"],
+                            decision_id=decision_id,
+                            reason=(str(e) if isinstance(e, BotSafetyBlock) else
+                                    "Automatische uitvoering gestopt: de actuele bot- of marktvoorwaarden konden niet veilig worden bevestigd."),
+                        )
                         execution_status = f"failed: {e}"
                 else:
                     execution_status = "pending_confirmation"
@@ -2203,6 +2230,72 @@ def _ledger_deltas(side: str, qty: float, price: float):
 # =====================================================
 # 🚀 Bot execute decision functie
 # =====================================================
+class BotSafetyBlock(RuntimeError):
+    """A safe, user-facing reason why automatic execution was stopped."""
+
+
+def _paper_buy_quantity(approved_eur: Any, current_price_eur: Any) -> float:
+    """Use the approved EUR spend at the current Paper price without rounding up."""
+    try:
+        amount = float(approved_eur)
+        price = float(current_price_eur)
+        if not all(math.isfinite(value) and value > 0 for value in (amount, price)):
+            raise ValueError("Invalid Paper amount or price")
+        qty = math.floor(amount / price * 100_000_000) / 100_000_000
+        if qty > 0:
+            return qty
+    except (TypeError, ValueError, OverflowError):
+        pass
+    raise BotSafetyBlock("Het goedgekeurde bedrag past niet bij de actuele Paper-prijs.")
+
+
+def _recheck_auto_buy_limits(
+    *, conn, user_id: int, bot_id: int, symbol: str,
+    notional: float, price: float, cash: float, current_bot: tuple,
+    require_explicit_limits: bool = True,
+) -> None:
+    """Re-read current bot limits and ledger under the bot row lock."""
+    if len(current_bot) < 8:
+        raise BotSafetyBlock("De actuele botlimieten konden niet worden gecontroleerd.")
+    total, daily, minimum, maximum = current_bot[4:8]
+    try:
+        values = [float(value) for value in (total, daily, minimum, maximum)]
+        if any(not math.isfinite(value) or value < 0 for value in values):
+            raise ValueError("Invalid limit")
+        if require_explicit_limits and any(value <= 0 for value in values):
+            raise ValueError("Missing active auto limit")
+        if values[2] > values[3] or values[1] > values[0] or values[3] > values[0]:
+            raise ValueError("Inconsistent active auto limits")
+    except (TypeError, ValueError):
+        raise BotSafetyBlock("De actuele botbudgetten zijn ongeldig. De order is geblokkeerd.") from None
+
+    portfolio = get_bot_portfolio_state(conn, user_id, bot_id, symbol)
+    today = get_today_spent_eur(conn, user_id, bot_id, date.today())
+    asset_value = float(portfolio["qty"]) * price
+    result = apply_guardrails(
+        proposed_amount_eur=notional,
+        portfolio_value_eur=cash + asset_value,
+        current_asset_value_eur=asset_value,
+        invested_eur=portfolio["invested"],
+        today_allocated_eur=today,
+        cash_balance_eur=cash,
+        kill_switch=bool(current_bot[2]),
+        max_trade_risk_eur=maximum,
+        daily_allocation_eur=daily,
+        max_asset_exposure_pct=current_bot[3],
+        total_budget_eur=total,
+        min_order_eur=minimum,
+    )
+    if not result["allowed"]:
+        raise BotSafetyBlock(result["reason"] or "De actuele botlimieten laten deze order niet toe.")
+    if notional > result["adjusted_amount_eur"] + 0.000001:
+        raise BotSafetyBlock(
+            f"De geplande order is €{notional:.2f}; de actuele limieten laten nog "
+            f"€{result['adjusted_amount_eur']:.2f} toe. {result['reason']} "
+            "Laat de bot een nieuw voorstel maken."
+        )
+
+
 def _auto_execute_decision(
     *,
     conn,
@@ -2235,7 +2328,9 @@ def _auto_execute_decision(
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT mode, is_live, is_active, max_asset_exposure_pct
+            SELECT mode, is_live, is_active, max_asset_exposure_pct,
+                   budget_total_eur, budget_daily_limit_eur,
+                   budget_min_order_eur, budget_max_order_eur
             FROM bot_configs
             WHERE id=%s AND user_id=%s
             FOR UPDATE
@@ -2259,7 +2354,12 @@ def _auto_execute_decision(
     if not is_live:
         price = _get_live_price(conn, symbol)
         if price is None:
-            raise RuntimeError("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering")
+            raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
+        if side == "buy":
+            # Preserve the approved EUR amount when the Paper market price
+            # changes between planning and execution. Quantity can shrink;
+            # spend must never grow beyond the checked proposal.
+            qty = _paper_buy_quantity(order.get("quote_amount_eur"), price)
     cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
@@ -2282,7 +2382,12 @@ def _auto_execute_decision(
                 )
                 cash_row = cur.fetchone()
             if cash_row is None or float(cash_row[0] or 0) + 0.001 < notional:
-                raise RuntimeError("Paper-bot heeft onvoldoende virtueel kassaldo")
+                raise BotSafetyBlock("De Paper-bot heeft onvoldoende virtueel kassaldo voor deze order.")
+            _recheck_auto_buy_limits(
+                conn=conn, user_id=user_id, bot_id=bot_id, symbol=symbol,
+                notional=notional, price=price, cash=float(cash_row[0]),
+                current_bot=current_bot,
+            )
         if side == "buy":
             _require_current_setup_revision_for_buy(
                 conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
@@ -2295,10 +2400,15 @@ def _auto_execute_decision(
             if side == "buy":
                 available = float((balance.get("free") or {}).get("EUR") or 0)
                 if not math.isfinite(available) or available < notional:
-                    raise RuntimeError("Insufficient live exchange cash at execution time")
+                    raise BotSafetyBlock("Het actuele exchange-kassaldo is te laag voor deze Live order.")
+                _recheck_auto_buy_limits(
+                    conn=conn, user_id=user_id, bot_id=bot_id, symbol=symbol,
+                    notional=notional, price=price, cash=available,
+                    current_bot=current_bot,
+                )
                 _validate_live_auto_order_risk(
                     conn, user_id, symbol, notional, balance,
-                    float(current_bot[3] or 100), bot_id, decision_id,
+                    float(100 if current_bot[3] is None else current_bot[3]), bot_id, decision_id,
                     exchange_name, order_price=price,
                 )
             else:
@@ -2370,7 +2480,7 @@ def _auto_execute_decision(
                 SET status='filled',
                     executed_price_eur=%s,
                     executed_qty=%s,
-                    quote_amount_eur=COALESCE(quote_amount_eur, %s),
+                    quote_amount_eur=%s,
                     updated_at=NOW()
                 WHERE user_id=%s
                   AND bot_id=%s
@@ -2436,13 +2546,14 @@ def _auto_execute_decision(
                 """,
                 (decision_id, user_id, bot_id),
             )
-    except Exception:
+    except Exception as exc:
         if not submission_started:
             _mark_bot_decision_execution_failed(
                 conn=conn,
                 user_id=user_id,
                 bot_id=bot_id,
                 decision_id=decision_id,
+                reason=str(exc) if isinstance(exc, BotSafetyBlock) else None,
             )
         raise
 
@@ -2465,7 +2576,10 @@ def execute_manual_decision(
     # a manual-versus-auto lock inversion.
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT is_live, is_active FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE",
+            """SELECT is_live, is_active, max_asset_exposure_pct,
+                      budget_total_eur, budget_daily_limit_eur,
+                      budget_min_order_eur, budget_max_order_eur
+               FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE""",
             (bot_id, user_id),
         )
         bot_row = cur.fetchone()
@@ -2493,7 +2607,8 @@ def execute_manual_decision(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT o.id, o.symbol, o.side, o.estimated_qty, o.estimated_price_eur
+                SELECT o.id, o.symbol, o.side, o.estimated_qty,
+                       o.estimated_price_eur, o.quote_amount_eur
                 FROM bot_orders o
                 WHERE o.decision_id=%s
                   AND o.user_id=%s
@@ -2508,7 +2623,8 @@ def execute_manual_decision(
         if not row:
             raise RuntimeError("No executable order")
 
-        bot_order_id, symbol, side, qty, price = row
+        bot_order_id, symbol, side, qty, price = row[:5]
+        approved_eur = row[5] if len(row) > 5 else qty * price
         symbol = (symbol or DEFAULT_SYMBOL).upper()
         side = (side or "buy").lower().strip()
         qty = float(qty or 0.0)
@@ -2520,11 +2636,16 @@ def execute_manual_decision(
         if not bot_live:
             price = _get_live_price(conn, symbol)
             if price is None:
-                raise RuntimeError("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering")
+                raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
+            if side == "buy":
+                qty = _paper_buy_quantity(approved_eur, price)
         if side == "buy":
-            _require_current_setup_revision_for_buy(
-                conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
-            )
+            try:
+                _require_current_setup_revision_for_buy(
+                    conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+                )
+            except RuntimeError as exc:
+                raise BotSafetyBlock("De gekoppelde setup is gewijzigd. Maak een nieuwe botbeslissing voordat je koopt.") from exc
 
         cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
 
@@ -2538,7 +2659,13 @@ def execute_manual_decision(
                 )
                 cash_row = cur.fetchone()
             if cash_row is None or float(cash_row[0] or 0) + 0.001 < notional:
-                raise RuntimeError("Paper-bot heeft onvoldoende virtueel kassaldo")
+                raise BotSafetyBlock("De Paper-bot heeft onvoldoende virtueel kassaldo voor deze order.")
+            _recheck_auto_buy_limits(
+                conn=conn, user_id=user_id, bot_id=bot_id, symbol=symbol,
+                notional=notional, price=price, cash=float(cash_row[0]),
+                current_bot=("manual", bot_live, bot_row[1], *bot_row[2:]),
+                require_explicit_limits=False,
+            )
         
         if bot_live:
             _execute_on_exchange_sync(conn, user_id, "bitvavo", symbol, side, qty, price)
@@ -2551,7 +2678,7 @@ def execute_manual_decision(
                 SET status='filled',
                     executed_price_eur=%s,
                     executed_qty=%s,
-                    quote_amount_eur=COALESCE(quote_amount_eur, %s),
+                    quote_amount_eur=%s,
                     updated_at=NOW()
                 WHERE id=%s AND user_id=%s AND bot_id=%s
                 """,
@@ -2609,11 +2736,12 @@ def execute_manual_decision(
                 """,
                 (decision_id, user_id, bot_id),
             )
-    except Exception:
+    except Exception as exc:
         _mark_bot_decision_execution_failed(
             conn=conn,
             user_id=user_id,
             bot_id=bot_id,
             decision_id=decision_id,
+            reason=str(exc) if isinstance(exc, BotSafetyBlock) else None,
         )
         raise
