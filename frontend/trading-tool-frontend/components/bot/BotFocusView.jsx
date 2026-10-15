@@ -47,7 +47,12 @@ export default function BotFocusView({
       : pendingOrder ? "awaiting_exchange" : null;
   const state = orderState || (activeBot?.is_active === false ? "paused" : risk.state || "missing");
   const riskTitle = copy.states?.[state] || state;
-  const riskReason = orderState ? copy.reasons?.[orderState] : copy.riskCodes?.[risk.reason_code] || risk.reason || copy.reasons?.[state] || copy.reasonUnavailable;
+  const explanations = Array.isArray(risk.explanations) ? risk.explanations : [];
+  const riskReason = orderState ? copy.reasons?.[orderState]
+    : risk.execution_failure || (state === "no_proposal" ? copy.reasons?.no_proposal : null)
+      || copy.riskCodes?.[risk.reason_code] || copy.riskCodes?.[explanations[0]?.code]
+      || ((state === "allowed" || state === "executed") && explanations.length === 0 ? copy.states?.allowed : null)
+      || risk.reason || copy.reasons?.[state] || copy.reasonUnavailable;
   const nextStepText = orderState ? copy.nextSteps?.[orderState] : copy.nextSteps?.[risk.reason_code] || copy.nextSteps?.[state] || risk.next_step || copy.nextStepFallback;
   const riskTone = state === "blocked" || state === "error" || state === "unknown_exchange_state"
     ? "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
@@ -220,9 +225,25 @@ export default function BotFocusView({
               <p className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-200">{state === "paused" ? copy.pausedReason : riskReason}</p>
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
                 <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{orderState ? copy.orderSubmittedAt : copy.lastCheck}</small><strong>{checkedAt}</strong></div>
-                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{copy.allowedOrder}</small><strong>{orderState ? "—" : money(risk.allowed_amount_eur)}</strong></div>
+                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{copy.allowedOrder}</small><strong>{orderState ? "—" : money(risk.checked_amount_eur ?? risk.allowed_amount_eur)}</strong></div>
                 <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{activeBot.is_live ? copy.exchangeCash : copy.paperCash}</small><strong>{activeBot.is_live ? copy.seeExchange : availableCash}</strong></div>
               </div>
+              {Number(risk.proposed_amount_eur || 0) > 0 && (
+                <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {copy.proposedAmount || "Voorgesteld"}: {money(risk.proposed_amount_eur)} → {copy.checkedAmount || "Na limieten"}: {money(risk.checked_amount_eur ?? risk.allowed_amount_eur)}
+                </p>
+              )}
+              {explanations.length > 0 && (
+                <ul className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200" aria-label={copy.adjustmentReasons || "Redenen voor aanpassing of blokkade"}>
+                  {explanations.map((item, index) => (
+                    <li key={`${item.code || "reason"}-${index}`}>
+                      • {copy.riskCodes?.[item.code] || item.message || copy.reasonUnavailable}
+                      {Number.isFinite(Number(item.from_amount_eur)) && Number.isFinite(Number(item.to_amount_eur))
+                        ? `: ${money(item.from_amount_eur)} → ${money(item.to_amount_eur)}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <details className="mt-3 border-t border-slate-200 pt-3"><summary className="cursor-pointer text-sm font-bold text-blue-700">{copy.allLimits}</summary>
                 <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div><dt>{copy.budgetLimit}</dt><dd>{money(activeBot.budget?.total_eur)}</dd></div><div><dt>{copy.dailyLimit}</dt><dd>{money(activeBot.budget?.daily_limit_eur)}</dd></div><div><dt>{copy.maxOrder}</dt><dd>{money(activeBot.budget?.max_order_eur)}</dd></div><div><dt>{copy.assetExposure}</dt><dd>{activeBot.budget?.max_asset_exposure_pct ?? 100}%</dd></div></dl>
               </details>

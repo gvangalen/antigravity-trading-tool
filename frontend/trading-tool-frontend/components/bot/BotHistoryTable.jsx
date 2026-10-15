@@ -12,6 +12,7 @@ export default function BotHistoryTable({
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.history || {};
+  const riskCodes = t?.botPage?.focus?.riskCodes || {};
 
   return (
     <CardWrapper
@@ -48,6 +49,7 @@ export default function BotHistoryTable({
               <th>{copy.amount}</th>
               <th>{copy.confidence}</th>
               <th>{copy.status}</th>
+              <th>{copy.reason}</th>
             </tr>
           </thead>
 
@@ -60,7 +62,7 @@ export default function BotHistoryTable({
               let statusClass = "text-[var(--text-muted)]";
 
               if (status === "executed") statusClass = "icon-success";
-              else if (status === "failed") statusClass = "icon-danger";
+              else if (status === "failed" || status === "failed_execution") statusClass = "icon-danger";
               else if (status === "skipped") statusClass = "icon-warning";
 
               /* =====================
@@ -85,6 +87,15 @@ export default function BotHistoryTable({
                   : h.amount != null
                   ? formatCurrency(Number(h.amount), locale)
                   : formatCurrency(0, locale);
+              const guardrailExplanations = Array.isArray(h.guardrails_result?.explanations)
+                ? h.guardrails_result.explanations : [];
+              const reason = h.execution_failure || (guardrailExplanations.length > 0
+                ? guardrailExplanations.map((item) => {
+                    const label = riskCodes[item.code] || item.message;
+                    const hasAmounts = Number.isFinite(Number(item.from_amount_eur)) && Number.isFinite(Number(item.to_amount_eur));
+                    return hasAmounts ? `${label}: ${formatCurrency(Number(item.from_amount_eur), locale)} → ${formatCurrency(Number(item.to_amount_eur), locale)}` : label;
+                  }).join(" · ")
+                : h.reasons?.[0] || h.guardrails_result?.reason || "—");
 
               return (
                 <tr
@@ -132,6 +143,7 @@ export default function BotHistoryTable({
                   <td className={`font-medium capitalize ${statusClass}`}>
                     {status}
                   </td>
+                  <td className="max-w-xs py-2 text-xs text-[var(--text-muted)]">{reason}</td>
                 </tr>
               );
             })}

@@ -9,6 +9,23 @@ from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSch
 from backend.services.bot_service import BotService
 
 
+def test_manual_confirmed_fill_stays_successful_if_snapshot_fails(monkeypatch):
+    calls = []
+
+    def confirmed_fill(user_id, bot_id, decision_id):
+        calls.append((user_id, bot_id, decision_id))
+
+    def failed_snapshot(_user_id):
+        raise RuntimeError("snapshot unavailable")
+
+    monkeypatch.setattr("backend.services.bot_service.sync_execute_manual_decision", confirmed_fill)
+    monkeypatch.setattr("backend.services.bot_service.sync_snapshot_all_for_user", failed_snapshot)
+    result = asyncio.run(BotService(_FakeSession()).mark_bot_executed(2, 3, 1))
+    assert calls == [(1, 2, 3)]
+    assert result["ok"] is True
+    assert result["snapshot_updated"] is False
+
+
 def test_bot_today_uses_verified_score_2_components_without_changing_decisions(monkeypatch):
     class Repo:
         async def get_active_bots_with_setups(self, user_id):
@@ -500,7 +517,7 @@ def test_paper_order_preflight_uses_virtual_cash_not_unused_budget(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(service.preflight_manual_order(payload, user_id=7))
     assert exc.value.status_code == 400
-    assert "cash" in str(exc.value.detail).lower()
+    assert "kassaldo" in str(exc.value.detail).lower()
 
 
 def test_live_manual_order_rejects_asset_outside_bot_before_exchange():

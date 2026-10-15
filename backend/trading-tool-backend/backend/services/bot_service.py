@@ -52,7 +52,7 @@ def sync_run_trading_bot_agent(user_id: int, report_date: date, bot_id: int, pap
 
 def sync_execute_manual_decision(user_id: int, bot_id: int, decision_id: int):
     from backend.utils.db import get_db_connection
-    from backend.ai_agents.trading_bot_agent import execute_manual_decision
+    from backend.ai_agents.trading_bot_agent import BotSafetyBlock, execute_manual_decision
     
     conn = get_db_connection()
     try:
@@ -61,7 +61,16 @@ def sync_execute_manual_decision(user_id: int, bot_id: int, decision_id: int):
         )
         conn.commit()
     except Exception as e:
-        conn.rollback()
+        # A safety denial occurs before any fill or ledger write. Persist its
+        # terminal reason so the owner sees why the pending order was stopped.
+        if isinstance(e, BotSafetyBlock):
+            try:
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        else:
+            conn.rollback()
         raise e
     finally:
         conn.close()
@@ -165,12 +174,15 @@ class BotService:
                 state = "reduced" if allowed < proposed - 0.01 else "allowed"
             else:
                 state = "no_proposal"
+        limit_state = state
         stale_after_minutes = 60 if is_live else 1440
         if checked_at and state not in {"missing", "error"}:
             if (datetime.now(timezone.utc) - checked_at).total_seconds() / 60 > stale_after_minutes:
                 state = "stale"
         if decision.get("status") in {"executed", "skipped"}:
             state = decision["status"]
+        if decision.get("status") == "failed_execution":
+            state = "error"
         next_steps = {
             "missing": "Laat de bot een nieuwe beslissing en veiligheidscheck maken.",
             "stale": "Ververs de beslissing en veiligheidscheck voordat je handelt.",
@@ -187,8 +199,12 @@ class BotService:
             "stale_after_minutes": stale_after_minutes,
             "proposed_amount_eur": round(proposed, 2),
             "allowed_amount_eur": round(allowed, 2) if state in {"allowed", "reduced"} else 0,
-            "reason_code": blocked_by or state,
-            "reason": (result or {}).get("reason") or decision.get("strategy_reason"),
+            "checked_amount_eur": round(allowed, 2),
+            "limit_state": limit_state,
+            "explanations": (result or {}).get("explanations") or [],
+            "execution_failure": decision.get("execution_failure"),
+            "reason_code": "failed_execution" if decision.get("status") == "failed_execution" else blocked_by or state,
+            "reason": decision.get("execution_failure") or (result or {}).get("reason") or decision.get("strategy_reason"),
             "next_step": next_steps.get(state, "Controleer de botinstellingen."),
             "decision_id": decision.get("id"),
             "bot_id": decision.get("bot_id"),
@@ -269,7 +285,7 @@ class BotService:
             "daily_limit_eur": float(bot.get("budget_daily_limit_eur") or 0),
             "min_order_eur": float(bot.get("budget_min_order_eur") or 0),
             "max_order_eur": float(bot.get("budget_max_order_eur") or 0),
-            "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+            "max_asset_exposure_pct": float(100 if bot.get("max_asset_exposure_pct") is None else bot["max_asset_exposure_pct"]),
         }
         strategy = None
         if bot.get("strategy_id"):
@@ -363,7 +379,7 @@ class BotService:
                     "daily_limit_eur": float(r["budget_daily_limit_eur"] or 0),
                     "min_order_eur": float(r["budget_min_order_eur"] or 0),
                     "max_order_eur": float(r["budget_max_order_eur"] or 0),
-                    "max_asset_exposure_pct": float(r["max_asset_exposure_pct"] or 100),
+                    "max_asset_exposure_pct": float(100 if r["max_asset_exposure_pct"] is None else r["max_asset_exposure_pct"]),
                 },
                 "strategy": strategy,
                 "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
@@ -1012,7 +1028,7 @@ class BotService:
                                       for order in pending_buys if str(order.get("symbol") or "").upper() == symbol)
             if total_equity > 0:
                 projected_portfolio_exposure_pct = round(((current_position_value + pending_notional + notional) / total_equity) * 100, 2)
-                bot_limit = float(bot.get("max_asset_exposure_pct") or 100)
+                bot_limit = float(100 if bot.get("max_asset_exposure_pct") is None else bot["max_asset_exposure_pct"])
                 asset_limit = min(bot_limit, LIVE_MAX_ASSET_EXPOSURE_PCT)
                 projected_asset_exposure_pct = round(((asset_position_value + pending_asset_value + notional) / total_equity) * 100, 2)
                 asset_exposure_block = None
@@ -1612,6 +1628,7 @@ class BotService:
                 "guardrails_result": scores_payload.get("guardrails_result"),
                 "guardrail_reason": scores_payload.get("guardrail_reason"),
                 "guardrails_checked_at": scores_payload.get("guardrails_checked_at"),
+                "execution_failure": scores_payload.get("execution_failure"),
                 "strategy_reason": scores_payload.get("strategy_reason"),
                 "metrics": {
                     "position_size": scores_payload.get("position_size"),
@@ -1663,8 +1680,11 @@ class BotService:
                 "decision_ts": r["decision_ts"].isoformat() if r.get("decision_ts") else None,
                 "action": r["action"],
                 "confidence": r["confidence"],
+                "amount_eur": r["amount_eur"],
                 "setup_match": setup_match,
                 "reasons": reasons if isinstance(reasons, list) else [str(reasons)],
+                "guardrails_result": scores.get("guardrails_result"),
+                "execution_failure": scores.get("execution_failure"),
                 "status": r["status"]
             })
         return out
@@ -2230,10 +2250,21 @@ class BotService:
     async def mark_bot_executed(self, bot_id: int, decision_id: int, user_id: int) -> dict:
         try:
             await asyncio.to_thread(sync_execute_manual_decision, user_id, bot_id, decision_id)
-            await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
-            return {"ok": True, "bot_id": bot_id, "decision_id": decision_id, "mode": "manual"}
         except Exception as e:
             raise HTTPException(409, str(e))
+        # The fill is committed by sync_execute_manual_decision. A later
+        # snapshot failure cannot turn that confirmed fill into a rejected
+        # order response, or the owner might retry an already executed trade.
+        snapshot_updated = True
+        try:
+            await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
+        except Exception:
+            logger.exception("Paper snapshot failed after confirmed manual fill: decision=%s", decision_id)
+            snapshot_updated = False
+        return {
+            "ok": True, "bot_id": bot_id, "decision_id": decision_id,
+            "mode": "manual", "snapshot_updated": snapshot_updated,
+        }
 
     # ==========================
     # BOT PORTFOLIOS

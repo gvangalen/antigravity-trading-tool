@@ -102,7 +102,7 @@ def test_paper_hold_persists_the_actual_guardrail_reason(monkeypatch):
     )
 
     assert decision_id == 42
-    saved_scores = json.loads(conn.last_cursor.params[-1])
+    saved_scores = json.loads(conn.last_cursor.params[-2])
     assert saved_scores["guardrail_reason"] == "insufficient_funds"
     assert saved_scores["guardrails_result"]["blocked_by"] == "insufficient_funds"
     assert saved_scores["strategy_reason"].startswith("Scheduled DCA blocked")

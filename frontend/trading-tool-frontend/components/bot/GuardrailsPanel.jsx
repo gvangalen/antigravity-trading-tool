@@ -39,6 +39,7 @@ export default function GuardrailsPanel({
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.guardrailsPanel || {};
+  const riskCodes = t?.botPage?.focus?.riskCodes || {};
   const behaviorLabels = copy.behaviorLabels || {};
   const telemetryKeyRef = useRef("");
 
@@ -67,6 +68,8 @@ export default function GuardrailsPanel({
 
   const blockedBy =
     result?.blocked_by ?? null;
+  const explanations = Array.isArray(result?.explanations) ? result.explanations : [];
+  const noProposal = originalAmount <= 0 && !blockedBy;
 
   const guardrailReason =
     result?.reason ||
@@ -76,6 +79,10 @@ export default function GuardrailsPanel({
     decision?.reasons?.[0];
   
   const reason =
+    riskCodes[blockedBy] ||
+    riskCodes[explanations[0]?.code] ||
+    (noProposal ? copy.noProposal : null) ||
+    (allowed && explanations.length === 0 ? copy.allSafetyParametersNormal : null) ||
     guardrailReason ||
     strategyReason ||
     warnings?.[0] ||
@@ -135,7 +142,7 @@ export default function GuardrailsPanel({
     const n = Number(v);
     if (!Number.isFinite(n)) return "€0";
     return formatCurrency(n, locale, "EUR", {
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 2,
     });
   };
 
@@ -147,7 +154,7 @@ export default function GuardrailsPanel({
 
   const tradeAdjusted =
     originalAmount !== adjustedAmount;
-  const isBuyDecision = String(decision?.action || "").toLowerCase() === "buy";
+  const isBuyDecision = originalAmount > 0;
 
   /* ============================
      UI
@@ -161,8 +168,8 @@ export default function GuardrailsPanel({
           <Shield size={14} className="text-slate-300" />
           {copy.safetyCheck}
         </div>
-        <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${allowed ? "bg-green-100 text-green-600 border border-green-200" : "bg-red-100 text-red-600 border border-red-200"}`}>
-          {allowed ? copy.goClear : copy.systemBlocked}
+        <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${noProposal ? "bg-slate-100 text-slate-600 border border-slate-200" : allowed ? "bg-green-100 text-green-600 border border-green-200" : "bg-red-100 text-red-600 border border-red-200"}`}>
+          {noProposal ? copy.noProposal : allowed ? copy.goClear : copy.systemBlocked}
         </div>
       </div>
 
@@ -183,7 +190,7 @@ export default function GuardrailsPanel({
            <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
              <div 
                className={`h-full transition-all ${currentExposure > maxExposure * 0.8 ? 'bg-orange-500' : 'bg-[var(--primary)]'}`}
-               style={{ width: `${Math.min(100, (currentExposure / maxExposure) * 100)}%` }}
+               style={{ width: `${maxExposure > 0 ? Math.min(100, (currentExposure / maxExposure) * 100) : 100}%` }}
              />
            </div>
         </div>
@@ -214,6 +221,18 @@ export default function GuardrailsPanel({
         </div>
       </div>
 
+      {explanations.length > 0 && (
+        <ul className="space-y-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+          {explanations.map((item, index) => (
+            <li key={`${item.code || "reason"}-${index}`} className="rounded-lg border border-slate-200 p-2">
+              {riskCodes[item.code] || item.message || reason}
+              {Number.isFinite(Number(item.from_amount_eur)) && Number.isFinite(Number(item.to_amount_eur))
+                ? `: ${eur(item.from_amount_eur)} → ${eur(item.to_amount_eur)}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {behavioralFriction && (
         <div className="rounded-xl border border-amber-200/70 bg-amber-50/70 p-3 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
           <div className="text-[9px] font-black uppercase tracking-widest">
@@ -233,12 +252,12 @@ export default function GuardrailsPanel({
       )}
 
       {/* WARNINGS STACK */}
-      {warnings.length > 1 && (
+      {warnings.length > 1 && explanations.length === 0 && (
         <div className="pt-2 animate-pulse">
           {warnings.slice(1).map((w, i) => (
             <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-100 text-[10px] font-black text-orange-600 uppercase tracking-tight">
               <AlertTriangle size={12} />
-              {w}
+              {riskCodes[w] || w}
             </div>
           ))}
         </div>

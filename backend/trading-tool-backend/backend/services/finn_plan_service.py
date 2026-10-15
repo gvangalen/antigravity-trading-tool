@@ -9075,7 +9075,7 @@ class FinnPlanService:
             "budget": {
                 "total_eur": float(bot.get("total_budget_eur") or 0),
                 "daily_limit_eur": float(bot.get("daily_limit_eur") or 0),
-                "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+                "max_asset_exposure_pct": float(100 if bot.get("max_asset_exposure_pct") is None else bot["max_asset_exposure_pct"]),
             },
         }
 
@@ -9230,7 +9230,7 @@ class FinnPlanService:
             "budget_daily_limit_eur": float(bot_row.get("budget_daily_limit_eur") or 0),
             "budget_min_order_eur": float(bot_row.get("budget_min_order_eur") or 0),
             "budget_max_order_eur": float(bot_row.get("budget_max_order_eur") or 0),
-            "max_asset_exposure_pct": float(bot_row.get("max_asset_exposure_pct") or 100),
+            "max_asset_exposure_pct": float(100 if bot_row.get("max_asset_exposure_pct") is None else bot_row["max_asset_exposure_pct"]),
         }
 
     def _bot_changes(self, draft: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -22327,7 +22327,7 @@ class FinnPlanService:
             "budget_daily_limit_eur": float(bot.get("daily_limit_eur") or 0),
             "budget_min_order_eur": float(bot.get("min_order_eur") or 0),
             "budget_max_order_eur": float(bot.get("max_order_eur") or 0),
-            "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+            "max_asset_exposure_pct": float(100 if bot.get("max_asset_exposure_pct") is None else bot["max_asset_exposure_pct"]),
             "cadence": "daily",
             "base_currency": "EUR",
             "symbol": draft["asset"],
@@ -22346,7 +22346,7 @@ class FinnPlanService:
             "budget_daily_limit_eur": float(bot.get("budget_daily_limit_eur") or 0),
             "budget_min_order_eur": float(bot.get("budget_min_order_eur") or 0),
             "budget_max_order_eur": float(bot.get("budget_max_order_eur") or 0),
-            "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+            "max_asset_exposure_pct": float(100 if bot.get("max_asset_exposure_pct") is None else bot["max_asset_exposure_pct"]),
             "base_currency": bot.get("base_currency") or "EUR",
             "symbol": draft.get("asset"),
         }
@@ -22363,6 +22363,6 @@ class FinnPlanService:
             "budget_daily_limit_eur": float(bot.get("budget_daily_limit_eur") or 0),
             "budget_min_order_eur": float(bot.get("budget_min_order_eur") or 0),
             "budget_max_order_eur": float(bot.get("budget_max_order_eur") or 0),
-            "max_asset_exposure_pct": float(bot.get("max_asset_exposure_pct") or 100),
+            "max_asset_exposure_pct": float(100 if bot.get("max_asset_exposure_pct") is None else bot["max_asset_exposure_pct"]),
             "base_currency": bot.get("base_currency") or "EUR",
         }

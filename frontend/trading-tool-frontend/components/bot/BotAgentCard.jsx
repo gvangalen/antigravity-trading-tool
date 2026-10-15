@@ -121,6 +121,7 @@ export default function BotAgentCard({
 
   const deriveDecisionReason = (decisionState) => {
     const directReason =
+      decisionState?.execution_failure ||
       decisionState?.reason ||
       decisionState?.guardrail_reason ||
       decisionState?.guardrails_result?.reason ||

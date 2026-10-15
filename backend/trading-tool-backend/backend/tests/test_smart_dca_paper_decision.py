@@ -422,7 +422,8 @@ def test_persisted_paper_scores_use_verified_benchmark_and_preserve_unknown(monk
             return False
 
         def execute(self, sql, params):
-            self.saved = json.loads(params[-1])
+            self.saved = json.loads(params[-2])
+            self.reasons = json.loads(params[-1])
 
         def fetchone(self):
             return (12,)
@@ -445,6 +446,7 @@ def test_persisted_paper_scores_use_verified_benchmark_and_preserve_unknown(monk
         report_date=date.today(), decision=decision, scores=scores,
     )
     assert cursor.saved["macro"] is None
+    assert isinstance(cursor.reasons, list)
     assert cursor.saved["combined"] is None
 
     # A stale numeric row must remain unknown even if a caller accidentally
