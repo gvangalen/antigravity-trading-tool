@@ -70,6 +70,8 @@ export default function BotFocusView({
   const symbol = activeBot?.strategy?.setup?.symbol || activeBot?.symbol || portfolio?.symbol || "—";
   const timeframe = activeBot?.strategy?.setup?.timeframe || activeBot?.strategy?.timeframe || "—";
   const modeLabel = copy.modes?.[activeBot?.mode] || activeBot?.mode || "—";
+  const strategyReason = decision?.strategy_reason === "Scheduled DCA amount selected from the confirmed plan"
+    ? copy.scheduledDcaReason : decision?.strategy_reason;
 
   async function saveCash(event) {
     event.preventDefault();
@@ -131,6 +133,9 @@ export default function BotFocusView({
         <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
           <h2 className="text-xl font-black text-slate-950 dark:text-white">{copy.allTrades}</h2>
           <p className="mb-4 mt-1 text-sm text-slate-500">{copy.allTradesDescription}</p>
+          {allTrades.items.some((trade) => trade.environment === "unknown") && (
+            <p className="mb-4 text-sm text-amber-800 dark:text-amber-300">{copy.legacyEnvironmentHint}</p>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[610px] text-left text-sm">
               <thead className="border-b border-slate-200 text-xs uppercase text-slate-500"><tr>
@@ -142,7 +147,7 @@ export default function BotFocusView({
                   <td className="p-3">{trade.bot_name}</td>
                   <td className="p-3">{trade.side === "buy" ? copy.buy : copy.sell} {trade.symbol}</td>
                   <td className="p-3">{money(trade.amount_eur)}</td>
-                  <td className="p-3">{copy.environments?.[trade.environment] || copy.unknown}</td>
+                  <td className="p-3">{trade.environment === "unknown" ? copy.legacyEnvironment : copy.environments?.[trade.environment] || copy.unknown}</td>
                   <td className="p-3">{copy.executionModes?.[trade.execution_mode] || copy.unknown}</td>
                   <td className="p-3">{copy.tradeStatuses?.[trade.status] || copy.unknown}</td>
                 </tr>
@@ -263,7 +268,7 @@ export default function BotFocusView({
                 <p className="mt-2 text-sm font-bold">{decision?.action ? (copy.actions?.[decision.action] || decision.action) : copy.noDecision}</p>
                 <p className="mt-1 text-sm text-slate-500">{["blocked", "reduced", "error"].includes(risk.state) || explanations.length > 0
                   ? riskReason
-                  : decision?.strategy_reason || risk.reason || copy.noDecision}</p>
+                  : strategyReason || risk.reason || copy.noDecision}</p>
               </section>
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="flex justify-between gap-3"><h3 className="font-black text-slate-950 dark:text-white">{copy.recentTrades}</h3><button type="button" onClick={() => setView("trades")} className="text-sm font-bold text-blue-700">{copy.allTrades}</button></div>
                 {trades.length ? <ul className="mt-3 space-y-2">{trades.slice(0, 3).map((trade) => <li key={trade.id} className="flex justify-between gap-3 text-sm"><span>{trade.side === "buy" ? copy.buy : copy.sell} {trade.symbol} · {money(trade.amount_eur)}</span><span className="text-slate-500">{trade.executed_at ? formatDateTime(trade.executed_at, locale, { day: "2-digit", month: "short" }) : "—"}</span></li>)}</ul>

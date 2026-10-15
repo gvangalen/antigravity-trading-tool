@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
-Phase: `DEPLOYED_AWAITING_INDEPENDENT_LIVE_QA`. De botflow is via
+Phase: `INDEPENDENT_QA_NOT_ACCEPTED_REPAIR_CANDIDATE`. De botflow is via
 [PR #358](https://github.com/gvangalen/antigravity-trading-tool/pull/358)
 van branch `codex/bot-end-to-end-paper` in `main` gemerged als product-SHA
 `23f06c38de3f097cb4a4c3858a669c538987f2f4` op 2026-10-15. Deze botflow toont de
@@ -38,8 +38,29 @@ en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/
 slaagden met alle vijf jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38771842361)
 slaagde. Beide publieke endpoints, `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json`, gaven daarna HTTP 200 met exact
-`23f06c38de3f097cb4a4c3858a669c538987f2f4`. Onafhankelijke ingelogde
-productie-QA voor deze botflow volgt op de definitieve live deployment-SHA.
+`23f06c38de3f097cb4a4c3858a669c538987f2f4`. De statusdeploy op
+`d1feaf0db685a62699d025429384d0b29ce48703` had groene
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38772479431)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38772761894);
+beide publieke endpoints gaven opnieuw HTTP 200 met die SHA.
+
+Onafhankelijke ingelogde read-only QA op die status-SHA gaf **NOT_ACCEPTED**
+voor de volledige botflowhistorie en uitleg. De officiële
+[auth-preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38772995547)
+slaagde; artifact SHA-256
+`0d37679d2870f50f808f8bf05f5c84078256730f867e732f87f9774aa29abf99`.
+Een bestaande Paper-bot toonde een echte blokkade met reden en €2,50→€0,00;
+een andere toonde een uitgevoerde Paper-koop van €1,25. Paper- en Live-
+portfolioweergaven bleven gescheiden. De 13 zichtbare oudere uitgevoerde
+trades hadden echter geen vastgelegde `execution_environment`; hun omgeving
+is niet achteraf bewijsbaar uit de huidige botconfig. Oudere botbeslissingen
+toonden letterlijk `{}` als reden en één DCA-redenzin stond ongezien in het
+Engels. De herstelkandidaat op branch `codex/bot-history-explanations`
+vervangt die twee onbegrijpelijke redenen en legt bij oude orders expliciet
+uit waarom de omgeving onbekend blijft, zonder Paper of Live te verzinnen.
+Een nieuwe automatische fill en een bestaand verlaagd bedrag konden binnen
+de read-only QA-scope niet onafhankelijk worden opgewekt. Na deze reparatie
+is opnieuw een exacte live SHA en onafhankelijk QA-verdict nodig.
 
 ## Live-brokercash per bot toewijzen
 
