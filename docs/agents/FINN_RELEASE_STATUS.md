@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
-Phase: `INDEPENDENT_QA_NOT_ACCEPTED_REPAIR_CANDIDATE`. De botflow is via
+Phase: `REPAIR_DEPLOYED_AWAITING_INDEPENDENT_LIVE_QA`. De botflow is via
 [PR #358](https://github.com/gvangalen/antigravity-trading-tool/pull/358)
 van branch `codex/bot-end-to-end-paper` in `main` gemerged als product-SHA
 `23f06c38de3f097cb4a4c3858a669c538987f2f4` op 2026-10-15. Deze botflow toont de
@@ -82,6 +82,15 @@ Onafhankelijke QA- en Security-codehercontroles van de laatste herstelcommit
 gaven beide **GO**. Zij bevestigen dat een ontbrekende historische
 `execution_environment` onbekend blijft en dat een betekenisvolle
 objectreden niet wegvalt. Dit is geen nieuw productie-QA-verdict.
+
+De herstelcode is via [PR #365](https://github.com/gvangalen/antigravity-trading-tool/pull/365)
+gemerged als product-SHA `13e6e37e37ff16c80644c6f501710bb514486b3c`.
+De [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38775975490),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38776381141)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38776699062)
+slaagden. Beide publieke build-endpoints gaven HTTP 200 met exact die SHA.
+Deze statusupdate maakt opnieuw een deployment-SHA zonder productcodewijziging;
+onafhankelijke ingelogde QA gebruikt de dan actuele publieke SHA.
 
 ## Live-brokercash per bot toewijzen
 
