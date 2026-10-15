@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const readSource = (path) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
@@ -140,10 +141,40 @@ test("reads indicator configuration copy from the shared dictionary namespace", 
 
 test("recovers a failed navigation chunk with a cache-busting reload", () => {
   assert.match(rootLayout, /ChunkLoadError\|Loading chunk\|Cannot find module/);
+  assert.match(rootLayout, /Cannot read properties of undefined/);
+  assert.match(rootLayout, /reading \['"\]call\['"\]/);
   assert.doesNotMatch(rootLayout, /\|Minified React error\|/);
   assert.match(rootLayout, /RECOVERY_COOLDOWN_MS\s*=\s*30000/);
   assert.match(rootLayout, /searchParams\.set\("__tm_recover"/);
   assert.match(rootLayout, /window\.location\.replace/);
+});
+
+test("recovers the old webpack runtime call error without reloading for ordinary React errors", async () => {
+  const inlineScript = rootLayout.match(/const script = `([\s\S]*?)`;/)?.[1]
+    .replace('${JSON.stringify(STALE_APP_RECOVERY_VERSION)}', '"test-build"');
+  assert.ok(inlineScript);
+  const listeners = {};
+  const replacements = [];
+  const storage = new Map([["tradamind_app_cache_version", "test-build"]]);
+  const context = {
+    Date,
+    URL,
+    window: {
+      location: { href: "https://tradamind.com/portfolio", replace: (url) => replacements.push(url) },
+      localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+      sessionStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+      addEventListener: (name, handler) => { listeners[name] = handler; },
+    },
+    navigator: {},
+  };
+  runInNewContext(inlineScript, context);
+  listeners.error({ message: "Minified React error #185" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(replacements.length, 0);
+  listeners.error({ message: "Cannot read properties of undefined (reading 'call')" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(replacements.length, 1);
+  assert.match(replacements[0], /__tm_recover=test-build-chunk-/);
 });
 
 test("keeps route documents fresh while caching immutable build assets", () => {

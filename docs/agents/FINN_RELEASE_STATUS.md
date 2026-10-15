@@ -4,6 +4,83 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Portfolio-overzicht met gedeelde geldbetekenis
+
+Phase: `PORTFOLIO_ENVIRONMENT_TRANSITION_ACCEPTED_BY_INDEPENDENT_QA`.
+[PR #347](https://github.com/gvangalen/antigravity-trading-tool/pull/347)
+leverde product-SHA `dcb6b80ba2607df3fc2c78dcb845574fb45891df`.
+Onafhankelijke ingelogde QA op de documentatie-SHA
+`a3fd4cac24eeed1678f13b1c8b6a69b1fdc46cc9` gaf **NOT ACCEPTED**:
+bij Paper → Live bleven de Paper-botrijen kort zichtbaar met het label Live,
+inclusief Paper-cash, totdat de lege Live-state laadde. Daarnaast faalde een
+vóór de deploy geopende tab bij de eerste navigatie met een webpack-
+`undefined.call`-fout; een harde refresh herstelde hem. De definitieve
+Paper-/Live-gegevens, botbudgetgrens, FINN-pariteit voor bekende en onbekende
+Paper-cash en NL/EN/DE-teksten slaagden in deze fixture. Native mobiel,
+niet-EUR posities, API-foutstatus en volledig gefinancierde totalen bleven
+onbewezen.
+
+De gerichte herstelkandidaat bindt geladen overzichtsgegevens aan hun
+Paper-/Live-omgeving en negeert verouderde responses na een wissel. De
+oude-tabherstelfunctie herkent nu ook precies de webpack-`undefined.call`-
+fout, zonder gewone React-fouten te herladen. Lokaal slaagden frontend
+productiebuild, typecheck, i18n-lint en -tests, command- en proposaltests,
+de 14 release-hardening-tests en high-severity audit. Onafhankelijke live
+herkeuring van deze kandidaat volgde op de live product-SHA.
+[PR #349](https://github.com/gvangalen/antigravity-trading-tool/pull/349)
+leverde product-SHA `72978701a0d61fd5dfe4e472e2d6f15042879e5c`.
+Candidate [CI run 38688451136](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38688451136)
+en main [CI run 38688645648](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38688645648)
+slaagden. [Auto Deploy run 38688821014](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38688821014)
+slaagde; publieke backend-health en frontend-buildinfo gaven ieder HTTP 200
+met die product-SHA. Onafhankelijke ingelogde QA gaf **PASS voor de gerichte
+Paper/Live-reparatie**: bij vier snelle wissels verscheen geen Paper-bot onder
+een Live-label; de zes Paper-bots en FINN bleven bij dezelfde bedragen en
+ontbrekende totale waardering; Live bleef leeg. De console bleef schoon.
+Kunstmatig trage requests en herstel van een tab met een vóór-de-fix geladen
+bundle zijn nog niet live bewezen. Dit is geen acceptatie van een volledig
+gewaardeerd Live-portfolio of historische EUR-grafiek.
+
+De nieuwe eigenaargebonden projectie scheidt Paper en Live en geeft web,
+mobiel en FINN dezelfde botrijen. Botbudget blijft een limiet en wordt niet
+als cash of portefeuillewaarde getoond. Paper-cash komt alleen uit een
+gefinancierd virtueel ledger. Posities krijgen alleen een EUR-waarde met een
+controleerbare, recente EUR-koers. Een gedeeld Live-brokersaldo wordt niet
+per bot opgeteld; Live-totaal en beschikbare cash blijven onbekend zolang
+brokerreconciliatie ontbreekt. Historische grafieken met onbekende
+koersvaluta worden niet als euroverloop gepresenteerd. Zie
+`docs/operations/portfolio-overview-v2.md` voor de veldbetekenis.
+
+Lokale Build-validatie: backend **3615 passed, 3 bestaande skips**;
+frontend productiebuild, typecheck, i18n-lint en -tests, command- en
+proposaltests en high-severity audit geslaagd. Mobile typecheck, lint en
+web/iOS/Android-bundels geslaagd; bestaande lintwaarschuwingen blokkeren niet.
+Een lokale eigenaarsscope-API-proef bevestigde dat een bot van een andere
+gebruiker niet in het Paper-overzicht verschijnt en dat een USDT-gequote
+positie geen EUR-totaal krijgt. De echte Luna/Responses-selectorproeven
+haalden **20/20 development** (SHA-256
+`a49f2b21c95d25b689b96232d401f7d8019ab9129a3439f47c4e5650ee74a511`)
+en **109/109 regression** (SHA-256
+`1ba7805fcd88d35bb4ffe06c0fcc1f7954392dc82007c0abc36deae1260bff56`).
+De finale lokale worker-actiecontractmatrix slaagde **16/16**, adaptertests
+**19/19**, zonder brokerorders, Live-bots, Live-trading calls of
+productieverbindingen (SHA-256
+`18a728b5d37e8ac3082e2e09111c9a87221e8737a2a309cd64b1b71e5dd763f8`).
+Een volledige lokale FastAPI/Celery/PostgreSQL/Responses-gespreksproef
+bevestigde dat FINN het botbudget niet als beschikbaar saldo uitlegt,
+geen marktprijs of actie verzint en het ophaalmoment onderscheidt van
+een koersbronmoment (SHA-256
+`3492471dce3822a0bd50188beae2d9c9dfbbebd89d493f9c7faecfd3cc2e5299`).
+Candidate [CI run 38686576938](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38686576938)
+en main [CI run 38686804786](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38686804786)
+slaagden; de eerste poging zonder bijgewerkte statische export faalde
+terecht bij de exportinvoercontrole en is vervangen door de geslaagde
+candidate. [Auto Deploy run 38686981931](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38686981931)
+slaagde. Op 2026-10-15 gaven de publieke backend-health en frontend-buildinfo
+ieder HTTP 200 met exact de product-SHA. Deze documentatie-update verandert
+alleen de release-aantekening; de live identiteit wordt na die update opnieuw
+via de publieke oppervlakken gecontroleerd.
+
 ## FINN Guided Name Prompt Intent
 
 Phase: `GUIDED_NAME_PROMPT_ACCEPTED_BY_INDEPENDENT_QA`.

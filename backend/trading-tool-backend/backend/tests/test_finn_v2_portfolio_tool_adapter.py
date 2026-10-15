@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 
 from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
+from backend.services.portfolio_overview_service import project_portfolio
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_json_safety import to_json_safe
@@ -99,11 +100,12 @@ def test_portfolio_adapter_keeps_owner_scope_and_filters_only_the_existing_ledge
     )
     assert facts["bots"][0]["strategy_name"] == "ETH fixed DCA"
     assert facts["bots"][0]["mode"] == "manual"
+    assert facts["valuation_status"] == "available"
     assert result["data"].covered_scopes == [
         "paper_bot_portfolio_valuation", "budget", "exposure",
     ]
     assert result["data"].excluded_scopes == [
-        "trade_transaction_history", "tax_records", "tax_calculations",
+        "broker_account_total", "trade_transaction_history", "tax_records", "tax_calculations",
     ]
 
 
@@ -139,8 +141,10 @@ def test_portfolio_repository_keeps_saved_asset_for_bot_without_linked_strategy(
         connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
         connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
         connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
-        connection.execute(text("CREATE TABLE bot_portfolios (bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
+        connection.execute(text("CREATE TABLE bot_portfolios (user_id INTEGER, bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
+        connection.execute(text("CREATE TABLE asset_catalog (symbol TEXT, quote_currency TEXT)"))
         connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'Apple Paper', 'AAPL', NULL, 1, 0, 'manual', 110, 0, 'balanced')"))
+        connection.execute(text("INSERT INTO bot_portfolios VALUES (99, 1, 'AAPL', 900, 0, 0, 0, 0)"))
 
         class _Session:
             async def execute(self, query, parameters):
@@ -155,6 +159,60 @@ def test_portfolio_repository_keeps_saved_asset_for_bot_without_linked_strategy(
     assert context["bots"][0]["symbol"] == "AAPL"
     assert context["bots"][0]["mode"] == "manual"
     assert context["bots"][0]["strategy_name"] is None
+    assert context["bots"][0]["portfolio_initialized"] is False
+    engine.dispose()
+
+
+def test_native_usdt_quote_is_not_reported_as_eur_portfolio_value():
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
+        connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
+        connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
+        connection.execute(text("CREATE TABLE bot_portfolios (user_id INTEGER, bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
+        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'ETH Paper', 'ETH', NULL, 1, 0, 'manual', 500, 0, 'balanced')"))
+        connection.execute(text("INSERT INTO bot_portfolios VALUES (17, 1, 'ETH', 100, 1, 2000, 2000, 0)"))
+
+        class _Session:
+            async def execute(self, query, parameters):
+                return connection.execute(query, parameters)
+
+        repository = BotRepository(_Session())
+        repository.get_market_prices = AsyncMock(return_value={"ETH": 2500.0})
+        repository.get_market_price_timestamps = AsyncMock(return_value={"ETH": datetime.now(timezone.utc)})
+        repository.get_asset_quote_currencies = AsyncMock(return_value={"ETH": "USDT"})
+        context = asyncio.run(repository.get_portfolio_intelligence_context(17))
+
+    assert context["bots"][0]["price_available"] is False
+    assert context["bots"][0]["price_quote_currency"] == "USDT"
+    assert context["bots"][0]["position_value"] is None
+    assert context["global"]["total_equity"] is None
+    assert project_portfolio(context, environment="paper").valuation_status == "missing_price"
+    engine.dispose()
+
+
+def test_old_eur_quote_is_not_reported_as_current_value():
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
+        connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
+        connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
+        connection.execute(text("CREATE TABLE bot_portfolios (user_id INTEGER, bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
+        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'EUR Paper', 'BTCEUR', NULL, 1, 0, 'manual', 500, 0, 'balanced')"))
+        connection.execute(text("INSERT INTO bot_portfolios VALUES (17, 1, 'BTCEUR', 100, 1, 2000, 2000, 0)"))
+
+        class _Session:
+            async def execute(self, query, parameters):
+                return connection.execute(query, parameters)
+
+        repository = BotRepository(_Session())
+        repository.get_market_prices = AsyncMock(return_value={"BTCEUR": 2500.0})
+        repository.get_market_price_timestamps = AsyncMock(return_value={"BTCEUR": datetime.now(timezone.utc) - timedelta(days=3)})
+        repository.get_asset_quote_currencies = AsyncMock(return_value={"BTCEUR": "EUR"})
+        context = asyncio.run(repository.get_portfolio_intelligence_context(17))
+
+    assert context["bots"][0]["price_available"] is False
+    assert context["global"]["total_equity"] is None
     engine.dispose()
 
 

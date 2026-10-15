@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal, List, Tuple
 
 from backend.utils.db import get_db_connection
@@ -28,16 +28,26 @@ def floor_timestamp(dt: datetime, bucket: BucketType) -> datetime:
 
 def _get_latest_price(cur, symbol: str) -> float:
     cur.execute("""
-        SELECT price
-        FROM market_data
-        WHERE symbol = %s
-          AND price IS NOT NULL
-        ORDER BY timestamp DESC
+        SELECT m.price, a.quote_currency, m.timestamp
+        FROM market_data m
+        LEFT JOIN asset_catalog a ON a.symbol = m.symbol
+        WHERE m.symbol = %s
+          AND m.price IS NOT NULL
+        ORDER BY m.timestamp DESC
         LIMIT 1
     """, (symbol.upper(),))
     row = cur.fetchone()
     if not row:
         raise RuntimeError(f"Geen {symbol.upper()} prijs gevonden")
+    if str(row[1] or "").upper() != "EUR":
+        raise RuntimeError(f"Geen gecontroleerde EUR-prijs voor {symbol.upper()}")
+    observed_at = row[2]
+    if observed_at is None:
+        raise RuntimeError(f"Geen gedateerde EUR-prijs voor {symbol.upper()}")
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=timezone.utc)
+    if not timedelta(0) <= datetime.now(timezone.utc) - observed_at <= timedelta(hours=24):
+        raise RuntimeError(f"Geen recente EUR-prijs voor {symbol.upper()}")
     return float(row[0])
 
 
@@ -101,7 +111,7 @@ def snapshot_all_for_user(
                     if symbol not in price_cache:
                         price_cache[symbol] = _get_latest_price(cur, symbol)
                 except Exception:
-                    logger.warning("Portfolio snapshot uitgesteld: koers ontbreekt voor bot=%s asset=%s", bot_id, symbol)
+                    logger.warning("Portfolio snapshot uitgesteld: gecontroleerde EUR-koers ontbreekt voor bot=%s asset=%s", bot_id, symbol)
                     return
 
             for bot_id, symbol, b_cash, b_qty, b_invested, b_avg, b_realized in portfolio_rows:

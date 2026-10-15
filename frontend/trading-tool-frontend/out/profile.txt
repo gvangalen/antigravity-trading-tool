@@ -1,8 +1,8 @@
 1:"$Sreact.fragment"
 9:I[57150,[],""]
-:HL["/_next/static/css/ff55cc8b7bd7d99c.css","style"]
+:HL["/_next/static/css/738c852bbd53d4da.css","style"]
 :HL["/_next/static/css/19c9db1a3af975a5.css","style"]
-2:Tca1,
+2:Tdcc,
 (function () {
   var VERSION = "static-export";
   var VERSION_KEY = "tradamind_app_cache_version";
@@ -13,12 +13,15 @@
     var text = String(reason || "");
     // A React runtime error is an application defect. Clearing caches and
     // reloading on every such error hides the cause and can interrupt a chat.
-    return /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Cannot find module/i.test(text);
+    // An old webpack runtime can also fail while invoking a module from the
+    // newly deployed chunk graph, before Next reports a ChunkLoadError.
+    return /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Cannot find module/i.test(text)
+      || /Cannot read properties of undefined [(]reading ['"]call['"][)]/i.test(text);
   }
 
   function recoveryKind(reason) {
     var text = String(reason || "");
-    if (/ChunkLoadError|Loading chunk|Cannot find module/i.test(text)) return "chunk";
+    if (/ChunkLoadError|Loading chunk|Cannot find module|Cannot read properties of undefined [(]reading ['"]call['"][)]/i.test(text)) return "chunk";
     if (text === "build-version-change") return "version";
     return "runtime";
   }
@@ -92,17 +95,17 @@
     var reason = value ? (value.stack || value.message || String(value)) : "";
     if (shouldRecover(reason)) clearStaleApp(reason);
   });
-})();0:{"P":null,"b":"static-export","p":"","c":["","profile"],"i":false,"f":[[["",{"children":["(protected)",{"children":["profile",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/ff55cc8b7bd7d99c.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["profile","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
-b:I[69835,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-595b461b614b3844.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","7177","static/chunks/app/layout-8002b44ba43d079f.js"],"default"]
-c:I[55038,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-595b461b614b3844.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","7177","static/chunks/app/layout-8002b44ba43d079f.js"],"default"]
+})();0:{"P":null,"b":"static-export","p":"","c":["","profile"],"i":false,"f":[[["",{"children":["(protected)",{"children":["profile",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/738c852bbd53d4da.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["profile","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
+b:I[69835,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-023f450b78d4e611.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","7177","static/chunks/app/layout-8002b44ba43d079f.js"],"default"]
+c:I[55038,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-023f450b78d4e611.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","7177","static/chunks/app/layout-8002b44ba43d079f.js"],"default"]
 d:I[9766,[],""]
 e:I[98924,[],""]
-f:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-595b461b614b3844.js","4345","static/chunks/app/not-found-865cf00ae472eba6.js"],"default"]
-10:I[11803,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-595b461b614b3844.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","7177","static/chunks/app/layout-8002b44ba43d079f.js"],"default"]
+f:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-023f450b78d4e611.js","4345","static/chunks/app/not-found-865cf00ae472eba6.js"],"default"]
+10:I[11803,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-023f450b78d4e611.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","7177","static/chunks/app/layout-8002b44ba43d079f.js"],"default"]
 11:I[17989,[],"ClientSegmentRoot"]
-12:I[16729,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","8607","static/chunks/8607-bce23f612b90da10.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","3074","static/chunks/3074-663d8252471169a3.js","8111","static/chunks/8111-595b461b614b3844.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","8843","static/chunks/8843-42ae838a171e5538.js","8923","static/chunks/8923-303d08b77488c98b.js","1317","static/chunks/1317-03db384e1f3750ab.js","7580","static/chunks/7580-c8762b149ab01484.js","9059","static/chunks/9059-de23b1c6d1ae5a9a.js","9854","static/chunks/9854-577a16c1d19b23dd.js","7584","static/chunks/7584-0594d6a8e04fb150.js","4163","static/chunks/app/(protected)/layout-cb41ff5aa961aa73.js"],"default"]
+12:I[16729,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","8607","static/chunks/8607-bce23f612b90da10.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","3074","static/chunks/3074-663d8252471169a3.js","8111","static/chunks/8111-023f450b78d4e611.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-564dee7e0b503458.js","8843","static/chunks/8843-cad4d6e1aad6b792.js","8923","static/chunks/8923-303d08b77488c98b.js","1317","static/chunks/1317-03db384e1f3750ab.js","7580","static/chunks/7580-c8762b149ab01484.js","9059","static/chunks/9059-de23b1c6d1ae5a9a.js","9854","static/chunks/9854-577a16c1d19b23dd.js","7584","static/chunks/7584-0594d6a8e04fb150.js","4163","static/chunks/app/(protected)/layout-cb41ff5aa961aa73.js"],"default"]
 14:I[81959,[],"ClientPageRoot"]
-15:I[61184,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-595b461b614b3844.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","2118","static/chunks/app/(protected)/profile/page-f9ec35774a7321a4.js"],"default"]
+15:I[61184,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-023f450b78d4e611.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","2118","static/chunks/app/(protected)/profile/page-f9ec35774a7321a4.js"],"default"]
 18:I[24431,[],"OutletBoundary"]
 1a:I[15278,[],"AsyncMetadataOutlet"]
 1c:I[24431,[],"ViewportBoundary"]

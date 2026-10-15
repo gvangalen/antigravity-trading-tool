@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -267,11 +267,12 @@ async def get_trade_plan(
 # ==========================================================
 @router.get("/portfolio/summary")
 async def get_portfolio_summary(
+    environment: Optional[Literal["paper", "live"]] = None,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Expose the same owner-scoped valuation projection that FINN reads."""
-    result = await PortfolioToolAdapter(db).execute(user_id=current_user["id"])
+    result = await PortfolioToolAdapter(db).execute(user_id=current_user["id"], environment=environment)
     return {"data": result["data"], "as_of": result["as_of"]}
 
 

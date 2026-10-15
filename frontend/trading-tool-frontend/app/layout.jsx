@@ -46,12 +46,15 @@ function StaleAppRecoveryScript() {
     var text = String(reason || "");
     // A React runtime error is an application defect. Clearing caches and
     // reloading on every such error hides the cause and can interrupt a chat.
-    return /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Cannot find module/i.test(text);
+    // An old webpack runtime can also fail while invoking a module from the
+    // newly deployed chunk graph, before Next reports a ChunkLoadError.
+    return /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Cannot find module/i.test(text)
+      || /Cannot read properties of undefined [(]reading ['"]call['"][)]/i.test(text);
   }
 
   function recoveryKind(reason) {
     var text = String(reason || "");
-    if (/ChunkLoadError|Loading chunk|Cannot find module/i.test(text)) return "chunk";
+    if (/ChunkLoadError|Loading chunk|Cannot find module|Cannot read properties of undefined [(]reading ['"]call['"][)]/i.test(text)) return "chunk";
     if (text === "build-version-change") return "version";
     return "runtime";
   }

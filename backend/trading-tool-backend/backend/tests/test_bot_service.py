@@ -1,5 +1,6 @@
 import asyncio
 import json
+from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from datetime import datetime, timedelta, timezone
@@ -1382,6 +1383,35 @@ def test_live_order_risk_context_blocks_asset_exposure(monkeypatch):
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "LIVE_ASSET_EXPOSURE_LIMIT"
     assert exc.value.detail["projected_exposure_pct"] == 75.0
+
+
+def test_live_buy_blocks_when_exchange_asset_has_no_verified_eur_price(monkeypatch):
+    service = BotService(_FakeSession())
+    repo = _ManualOrderRepo()
+    service.repository = repo
+    async def active_keys(_user_id):
+        return [SimpleNamespace(exchange_name="bitvavo", api_key="test", api_secret="test", api_passphrase=None)]
+    async def client(*_args):
+        return object()
+    async def balance(_client):
+        return {"total": {"EUR": 1000, "BTC": 0.001}}
+    async def no_market_price(_symbol):
+        raise HTTPException(409, "No verified EUR market price")
+    async def no_ticker(*_args):
+        raise RuntimeError("No verified EUR ticker")
+    service.exchange_repo = SimpleNamespace(get_active_keys=active_keys)
+    service.require_fresh_live_market_price = no_market_price
+    monkeypatch.setattr("backend.services.bot_service.ExchangeService.get_client", client)
+    monkeypatch.setattr("backend.services.bot_service.ExchangeService.fetch_balance", balance)
+    monkeypatch.setattr("backend.services.bot_service.ExchangeService.fetch_ticker", no_ticker)
+    bot = asyncio.run(repo.get_bot_config(1, 9))
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.002, price=50000)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.require_live_order_risk_context(1, bot, payload, 100))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "LIVE_EXPOSURE_PRICE_UNAVAILABLE"
 
 
 def test_live_order_portfolio_exposure_reports_asset_exposure_when_both_block(monkeypatch):
