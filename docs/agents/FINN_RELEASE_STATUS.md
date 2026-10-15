@@ -53,7 +53,11 @@ Een bestaande Paper-bot toonde een echte blokkade met reden en €2,50→€0,00
 een andere toonde een uitgevoerde Paper-koop van €1,25. Paper- en Live-
 portfolioweergaven bleven gescheiden. De 13 zichtbare oudere uitgevoerde
 trades hadden echter geen vastgelegde `execution_environment`; hun omgeving
-is niet achteraf bewijsbaar uit de huidige botconfig. Oudere botbeslissingen
+is niet achteraf bewijsbaar uit de huidige botconfig. Een gerichte read-only
+hercontrole toonde dat de nieuwste van die 13 trades
+op 2026-10-15 om 00:04:09 UTC is uitgevoerd, ruim vóór de
+`execution_environment`-writer die op 2026-10-15 om 06:39 UTC live ging.
+Deze dataset toont daarmee geen actuele writerfout. Oudere botbeslissingen
 toonden letterlijk `{}` als reden en één DCA-redenzin stond ongezien in het
 Engels. De herstelkandidaat op branch `codex/bot-history-explanations`
 vervangt die twee onbegrijpelijke redenen en legt bij oude orders expliciet
@@ -61,6 +65,23 @@ uit waarom de omgeving onbekend blijft, zonder Paper of Live te verzinnen.
 Een nieuwe automatische fill en een bestaand verlaagd bedrag konden binnen
 de read-only QA-scope niet onafhankelijk worden opgewekt. Na deze reparatie
 is opnieuw een exacte live SHA en onafhankelijk QA-verdict nodig.
+
+Op de herstelkandidaat slaagden **3739 backendtests, 3 bestaande skips**,
+frontendbuild, typecheck, i18n-, command-, proposal- en setuptests, en de
+high-severity audit met één moderate Next.js-melding. De lokale
+worker-actiecontractmatrix slaagde **16/16** en de adapters **19/19**,
+zonder brokerorders, Live-aanroepen of productieverbindingen; artifact
+SHA-256 `df68b054058aa48687a1a22d1596dad4a93301e238d79cc2cc10d798d82d8bd0`.
+De echte `gpt-6-luna`/Responses-developmentset slaagde **20/20**, zonder
+providerfouten; SHA-256
+`8dcfe5c738ac4d539940837535df432969270c7eabdaa4197ae39760d9763a0d`.
+De echte regressieset slaagde **109/109**, zonder provider-, schema- of
+validatiefouten; SHA-256
+`f5babab019d756d0743389886cfc1c6b030dcb77b14557eb752be8f88e536070`.
+Onafhankelijke QA- en Security-codehercontroles van de laatste herstelcommit
+gaven beide **GO**. Zij bevestigen dat een ontbrekende historische
+`execution_environment` onbekend blijft en dat een betekenisvolle
+objectreden niet wegvalt. Dit is geen nieuw productie-QA-verdict.
 
 ## Live-brokercash per bot toewijzen
 
