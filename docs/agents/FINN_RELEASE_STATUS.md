@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Botflow: begrijpelijke guardrails en Paper-orderhistorie
 
-Phase: `REPAIR_DEPLOYED_AWAITING_INDEPENDENT_LIVE_QA`. De botflow is via
+Phase: `REPAIR_INDEPENDENT_QA_ACCEPTED_LIMITED`. De botflow is via
 [PR #358](https://github.com/gvangalen/antigravity-trading-tool/pull/358)
 van branch `codex/bot-end-to-end-paper` in `main` gemerged als product-SHA
 `23f06c38de3f097cb4a4c3858a669c538987f2f4` op 2026-10-15. Deze botflow toont de
@@ -91,6 +91,25 @@ en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/r
 slaagden. Beide publieke build-endpoints gaven HTTP 200 met exact die SHA.
 Deze statusupdate maakt opnieuw een deployment-SHA zonder productcodewijziging;
 onafhankelijke ingelogde QA gebruikt de dan actuele publieke SHA.
+
+De statusdeploy op `a20417bf244da6e7978a8a0761a1b977fbfe89cf` had
+groene [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38777271192)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38777502272).
+Beide publieke endpoints gaven HTTP 200 met exact die SHA. Onafhankelijke
+ingelogde read-only QA op deze SHA gaf **ACCEPTED voor de beperkte historie-
+en tekst-reparatie**. De officiële
+[auth-preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38777736108)
+slaagde; artifact SHA-256
+`11f67f7e27b13b761db79db32e376ba8047a73d558beedae8d92d7c72c658da2`.
+In de browser toonden alle 13 historische trades `Niet vastgelegd` met een
+uitleg over ontbrekend Paper/Live-bewijs. Bot 82 toonde een vertaalde
+DCA-redenzin; in de uitgebreide geschiedenis van bots 82 en 77 kwam geen
+letterlijke `{}` meer voor. De bestaande Paper-blokkade met €2,50→€0,00
+en de gescheiden Paper-/Live-portfolioweergaven bleven intact. QA deed geen
+order of write. De werkelijke Paper/Live-herkomst van oude orders, een
+nieuw verlaagd bedrag en een nieuwe Paper-fill bleven buiten dit beperkte
+acceptatiebewijs. Deze verdictdocumentatie creëert opnieuw een latere
+deployment-SHA zonder productcodewijziging.
 
 ## Live-brokercash per bot toewijzen
 
