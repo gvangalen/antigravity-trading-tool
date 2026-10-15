@@ -2072,7 +2072,7 @@
       "bots": "Bots",
       "allTrades": "Alle trades",
       "allTradesDescription": "Uitgevoerde trades van al je bots, nieuwste eerst.",
-      "legacyEnvironmentHint": "Bij oudere orders is Paper of Live niet vastgelegd. We tonen dit eerlijk als onbekend; de huidige botinstelling bewijst de omgeving van een eerdere order niet.",
+      "legacyEnvironmentHint": "Voor sommige orders is Paper of Live niet vastgelegd. We tonen dit als onbekend; de huidige botinstelling bewijst de omgeving van die order niet.",
       "legacyEnvironment": "Niet vastgelegd",
       "scheduledDcaReason": "Het periodieke aankoopbedrag is gekozen volgens het bevestigde plan.",
       "date": "Datum",
@@ -2486,8 +2486,8 @@
       "status": "Status",
       "statuses": { "planned": "Gepland", "failed": "Mislukt", "failed_execution": "Uitvoering mislukt" },
       "tradeExecutedReason": "Uitgevoerde trade; de botbeslissing in deze geschiedenis toont eventuele limieten.",
-      "executedDecisionReason": "Uitgevoerd; voor deze oudere beslissing is geen nadere reden vastgelegd.",
-      "reasonNotRecorded": "Voor deze oudere beslissing is geen reden vastgelegd."
+      "executedDecisionReason": "Uitgevoerd; voor deze beslissing is geen nadere reden vastgelegd.",
+      "reasonNotRecorded": "Voor deze beslissing is geen reden vastgelegd."
     },
     "budgetBar": {
       "noBudget": "Geen budget ingesteld",

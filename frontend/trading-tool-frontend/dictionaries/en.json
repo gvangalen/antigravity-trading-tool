@@ -2071,7 +2071,7 @@
       "bots": "Bots",
       "allTrades": "All trades",
       "allTradesDescription": "Executed trades from all your bots, newest first.",
-      "legacyEnvironmentHint": "Older orders did not record whether they were Paper or Live. Their environment remains unknown; the bot's current setting cannot prove where an earlier order ran.",
+      "legacyEnvironmentHint": "Some orders did not record whether they were Paper or Live. Their environment remains unknown; the bot's current setting cannot prove where that order ran.",
       "legacyEnvironment": "Not recorded",
       "scheduledDcaReason": "The recurring purchase amount was chosen from the confirmed plan.",
       "date": "Date",
@@ -2485,8 +2485,8 @@
       "status": "Status",
       "statuses": { "planned": "Planned", "failed": "Failed", "failed_execution": "Execution failed" },
       "tradeExecutedReason": "Executed trade; the bot decision in this history shows any limits.",
-      "executedDecisionReason": "Executed; no further reason was recorded for this older decision.",
-      "reasonNotRecorded": "No reason was recorded for this older decision."
+      "executedDecisionReason": "Executed; no further reason was recorded for this decision.",
+      "reasonNotRecorded": "No reason was recorded for this decision."
     },
     "budgetBar": {
       "noBudget": "No budget configured",

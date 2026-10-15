@@ -1668,6 +1668,9 @@ class BotService:
                 reasons = [reason.strip() for reason in reasons
                            if isinstance(reason, str) and reason.strip()
                            and reason.strip() not in ("{}", "[]", "null")]
+            elif isinstance(reasons, dict):
+                reasons = [reasons[key].strip() for key in ("reason", "message", "detail")
+                           if isinstance(reasons.get(key), str) and reasons[key].strip()]
             else:
                 reasons = []
             

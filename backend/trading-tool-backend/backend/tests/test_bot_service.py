@@ -18,12 +18,19 @@ def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
                 "decision_date": end, "decision_ts": None, "action": "buy",
                 "confidence": "medium", "amount_eur": 1.25,
                 "scores_json": "{}", "reason_json": "{}", "status": "executed",
+            }, {
+                "id": 12, "bot_id": 3, "bot_name": "Paper", "symbol": "ETH",
+                "decision_date": end, "decision_ts": None, "action": "hold",
+                "confidence": "medium", "amount_eur": 0,
+                "scores_json": "{}", "reason_json": '{"reason":"Daglimiet bereikt"}',
+                "status": "blocked",
             }]
 
     service = BotService(_FakeSession())
     service.repository = Repo()
     history = asyncio.run(service.get_bot_history(7, 30))
     assert history[0]["reasons"] == []
+    assert history[1]["reasons"] == ["Daglimiet bereikt"]
 
 
 def test_manual_confirmed_fill_stays_successful_if_snapshot_fails(monkeypatch):
