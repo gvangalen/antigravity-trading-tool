@@ -15,7 +15,7 @@ TERMINAL_STATUSES = {"closed", "canceled", "cancelled", "expired", "rejected"}
 
 
 def is_expected_eur_pair(exchange_symbol: str, base_symbol: str) -> bool:
-    pair = str(exchange_symbol or "").strip().upper().replace("-", "/").split(":", 1)[0]
+    pair = str(exchange_symbol or "").strip().upper().replace("-", "/")
     return pair == f"{str(base_symbol or '').strip().upper()}/EUR"
 
 

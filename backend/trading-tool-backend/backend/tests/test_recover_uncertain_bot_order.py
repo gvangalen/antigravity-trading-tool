@@ -127,7 +127,7 @@ def test_exchange_order_id_cannot_be_attached_twice(monkeypatch):
     assert conn.commits == 0
 
 
-@pytest.mark.parametrize("symbol", ["BTC/USD", "BTC/USDT", "ETH/EUR"])
+@pytest.mark.parametrize("symbol", ["BTC/USD", "BTC/USDT", "ETH/EUR", "BTC/EUR:USD", "BTC/EUR:EUR"])
 def test_exchange_verification_rejects_wrong_pair(monkeypatch, symbol):
     conn = _Connection()
 

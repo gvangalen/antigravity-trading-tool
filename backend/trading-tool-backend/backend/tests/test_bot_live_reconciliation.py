@@ -10,6 +10,11 @@ def _exchange_order(**changes):
             **changes}
 
 
+@pytest.mark.parametrize("symbol", ["BTC/EUR:USD", "BTC/EUR:EUR", "BTC/USDT", "ETH/EUR"])
+def test_reconciliation_rejects_non_spot_or_wrong_pair(symbol):
+    assert not reconciliation.is_expected_eur_pair(symbol, "BTC")
+
+
 class _Cursor:
     def __init__(self, connection):
         self.connection = connection
