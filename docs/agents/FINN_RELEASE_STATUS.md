@@ -6,7 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Portfolio 2.0: verifieerbare waardering per bot
 
-Phase: `BUILD_LOCAL_VALIDATION`. De nieuwe portfoliolezing scheidt Live en
+Phase: `READY_FOR_INDEPENDENT_QA`. [PR #354](https://github.com/gvangalen/antigravity-trading-tool/pull/354)
+is gemerged als product-SHA `971c3ca398ccda7810b77d1502e626bc8b4c905a`.
+De [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698223064)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698745232)
+zijn groen. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/38698966645)
+slaagde. Op 2026-10-15 gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` beide HTTP 200 met exact die
+product-SHA. Deze statusupdate creëert na merge opnieuw een latere SHA;
+QA bindt uitsluitend aan de dan actuele, identieke publieke SHA.
+De nieuwe portfoliolezing scheidt Live en
 Paper, toont botbudgetten afzonderlijk van geld, en telt een bot alleen in
 waarde, cash en resultaat mee wanneer de onderliggende posities en valuta
 verifieerbaar zijn. Oudere Paper-ledgers zonder controleerbare kostprijs
@@ -24,8 +33,18 @@ bevestiging als duplicaat. Een oude Live-botbeslissingsroute die een
 exchange-order zonder bewezen afwikkeling als fill kon boeken is nu
 fail-closed; de bestaande nieuwe Live-reconciliatie blijft intact.
 
-De officiële onafhankelijke live QA volgt pas na groene PR/CI, Auto Deploy
-en identieke publieke backend- en frontend-SHA. Die QA moet vooral echte
+De volledige lokale worker-actiecontractmatrix gaf **16/16** en de
+adaptertests **19/19**. De echte Luna/Responses-selectorproef gaf **20/20**
+ontwikkelcases en **109/109** regressiecases met nul providerfouten. Een
+aparte tweebeurtige lokale FINN-runtimeproef rond botbudget versus cash
+slaagde. Gesanitiseerde lokale artifacts: actiecontractmatrix SHA-256
+`ee1ad4c53d42192ae2f106a147da19933d34339979c56e6aa540c772d724d359`,
+Luna-regressie SHA-256
+`06148f1e697debee582aaac3e5b92f6c26c0911156b1365d441c97e21dc7ef9f`,
+FINN-portfolioproef SHA-256
+`6fe509fc9207d9758ec6c0150dfa93ab2de87c1ebb9805d9fc76ad945abd9f03`.
+
+De officiële onafhankelijke live QA kan nu volgen. Die moet vooral echte
 waarderingsdekking, botrijen en totalen, Live/Paper-scheiding, fout- en
 versheidsstatus, FINN-pariteit en veilige Paper-actiegrenzen beoordelen.
 
