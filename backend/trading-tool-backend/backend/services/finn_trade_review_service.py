@@ -235,12 +235,12 @@ class FinnTradeReviewService:
                     user_id, bot_id, symbol, execution_environment, execution_sources, opening_ledger_id,
                     closing_ledger_id, entry_at, exit_at, entry_qty, entry_value_eur,
                     exit_value_eur, entry_price_eur, exit_price_eur,
-                    pnl_eur_before_fees, plan_snapshot, fills
+                    pnl_eur_before_fees, plan_snapshot, fills, base_currency
                 ) VALUES (
                     :user_id, :bot_id, :symbol, :execution_environment, CAST(:execution_sources AS JSONB), :opening_ledger_id,
                     :closing_ledger_id, :entry_at, :exit_at, :entry_qty, :entry_value_eur,
                     :exit_value_eur, :entry_price_eur, :exit_price_eur,
-                    :pnl_eur_before_fees, CAST(:plan_snapshot AS JSONB), CAST(:fills AS JSONB)
+                    :pnl_eur_before_fees, CAST(:plan_snapshot AS JSONB), CAST(:fills AS JSONB), :symbol
                 ) ON CONFLICT (user_id, opening_ledger_id) DO NOTHING
             """), {
                 **{k: v for k, v in position.items() if k not in {"fills", "plan_snapshot", "execution_sources"}},
@@ -262,7 +262,8 @@ class FinnTradeReviewService:
             SELECT id, bot_id, symbol, execution_environment, execution_sources, entry_at, exit_at,
                    entry_qty, entry_price_eur, exit_price_eur, pnl_eur_before_fees,
                    note, plan_snapshot IS NOT NULL AS has_plan, created_at,
-                   analysis_status
+                   analysis_status, origin, closure_basis, base_currency, pnl_status,
+                   cash_legs_by_currency, exchange_name, attested_at, attestation_source_ids
             FROM finn_trade_reviews WHERE user_id=:user_id
             ORDER BY exit_at DESC, id DESC LIMIT :limit OFFSET :offset
         """), {"user_id": user_id, "limit": limit, "offset": offset})
@@ -310,6 +311,14 @@ class FinnTradeReviewService:
                    closing_ledger_id, entry_at, exit_at, entry_qty, entry_value_eur,
                    exit_value_eur, entry_price_eur, exit_price_eur,
                    pnl_eur_before_fees, plan_snapshot, fills, note, created_at, updated_at,
+                   origin, closure_basis, base_currency, pnl_status, cash_legs_by_currency,
+                   exchange_name, attested_at, attestation_source_ids,
+                   (SELECT a.identity_basis FROM finn_exchange_review_attestations a
+                    WHERE a.user_id=:user_id AND a.review_id=:id) AS attestation_identity_basis,
+                   (SELECT a.same_account_confirmed FROM finn_exchange_review_attestations a
+                    WHERE a.user_id=:user_id AND a.review_id=:id) AS same_account_confirmed,
+                   (SELECT a.confirmation_version FROM finn_exchange_review_attestations a
+                    WHERE a.user_id=:user_id AND a.review_id=:id) AS attestation_version,
                    analysis_status, analysis_json, analysis_version, analysis_model,
                    analysis_reason, analysis_updated_at, input_revision,
                    candles_json, candles_status,
@@ -327,6 +336,9 @@ class FinnTradeReviewService:
 
     async def get_chart(self, user_id: int, review_id: int) -> dict:
         review = await self.get_review(user_id, review_id)
+        if review.get("origin") == "exchange_user_attested":
+            return {"status": "unavailable", "chart": None,
+                    "reason": "Uitvoeringsgrafiek voor externe beursfills nog niet verifieerbaar"}
         if review["candles_status"] in {"ready", "unavailable"} or (
             review["candles_status"] in {"failed", "loading"} and review["candles_updated_at"]
             and (datetime.now(timezone.utc) - review["candles_updated_at"]).total_seconds()

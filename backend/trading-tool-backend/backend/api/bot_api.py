@@ -15,6 +15,8 @@ from backend.services.finn_trade_screenshot import MAX_BYTES
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import trade_review_enabled, require_trade_review_access
 from backend.services.finn_exchange_import_service import FinnExchangeImportService
+from backend.services.finn_exchange_trade_review_service import FinnExchangeTradeReviewService
+from backend.schemas.finn_exchange_trade_review_schema import ExchangeTradeReviewCreate
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.services.live_portfolio_allocation_service import read_live_account, replace_allocations
 from backend.schemas.bot_schema import (
@@ -306,6 +308,22 @@ async def list_finn_exchange_import_fills(
     review_rate_limiter.check_rate_limit(f"exchange_import_fills:{current_user['id']}", limit=30)
     return await FinnExchangeImportService(db).fills(current_user["id"], source_id,
                                                      limit=limit, offset=offset)
+
+
+@router.post("/bot/exchange-trade-reviews", status_code=201)
+async def create_finn_exchange_trade_review(
+    payload: ExchangeTradeReviewCreate,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"exchange_review_create:{current_user['id']}", limit=5)
+    return await FinnExchangeTradeReviewService(db).create(
+        current_user["id"], fill_ids=payload.fill_ids,
+        closure_confirmed=payload.closure_confirmed,
+        same_account_confirmed=payload.same_account_confirmed,
+        idempotency_key=payload.idempotency_key,
+    )
 
 
 @router.get("/bot/trade-reviews")

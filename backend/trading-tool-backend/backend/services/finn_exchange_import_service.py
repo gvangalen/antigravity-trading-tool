@@ -370,9 +370,12 @@ class FinnExchangeImportService:
             WHERE user_id=:user_id AND source_id=:source_id
         """), {"user_id": user_id, "source_id": source_id})
         result = await self.session.execute(text("""
-            SELECT f.id, f.symbol, f.side, f.qty, f.price_quote, f.cost_quote,
-                   f.quote_currency, f.fee_amount, f.fee_currency, f.traded_at
+            SELECT f.id, f.source_id, f.symbol, f.side, f.qty, f.price_quote, f.cost_quote,
+                   f.quote_currency, f.fee_amount, f.fee_currency, f.traded_at,
+                   r.review_id
             FROM finn_exchange_import_fills f
+            LEFT JOIN finn_exchange_review_fill_reservations r
+              ON r.user_id=f.user_id AND r.exchange_fill_id=f.id
             WHERE f.user_id=:user_id AND f.source_id=:source_id
             ORDER BY f.traded_at DESC, f.id DESC
             LIMIT :limit OFFSET :offset
