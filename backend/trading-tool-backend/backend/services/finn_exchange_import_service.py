@@ -469,8 +469,7 @@ class FinnExchangeImportService:
             await self.session.execute(text("""
                 UPDATE finn_exchange_import_sources
                 SET cursor_json=CAST(:cursor AS JSONB), status=:status,
-                    coverage_through_at=CASE WHEN :covered_at IS NULL THEN coverage_through_at
-                                             ELSE :covered_at END,
+                    coverage_through_at=COALESCE(CAST(:covered_at AS TIMESTAMPTZ), coverage_through_at),
                     last_success_at=NOW(), last_error_code=NULL, updated_at=NOW()
                 WHERE id=:source_id AND user_id=:user_id
             """), {"source_id": source_id, "user_id": user_id,
