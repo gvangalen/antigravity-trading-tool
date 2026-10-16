@@ -94,3 +94,40 @@ def test_worker_queries_only_allowlisted_users(monkeypatch):
     assert all("ANY(CAST(:allowed AS INTEGER[]))" in sql for sql, _ in queries)
     assert all(params == {"allowed": [7]} for _, params in queries)
     assert "WHERE (analysis_status='pending' OR" in queries[1][0]
+
+
+def test_review_jobs_isolate_database_connections_across_celery_loops(monkeypatch):
+    engines = []
+    used = []
+
+    class Engine:
+        def __init__(self):
+            self.disposed = False
+
+        async def dispose(self):
+            self.disposed = True
+
+    def new_engine(*_args, **_kwargs):
+        engine = Engine()
+        engines.append(engine)
+        return engine
+
+    def new_sessions(engine, **_kwargs):
+        return lambda: engine
+
+    async def job(sessions):
+        engine = sessions()
+        assert not engine.disposed
+        used.append(engine)
+        return len(used)
+
+    monkeypatch.setattr(task, "create_async_engine", new_engine)
+    monkeypatch.setattr(task, "async_sessionmaker", new_sessions)
+    monkeypatch.setattr(task, "_project_dirty_trade_reviews", job)
+    monkeypatch.setattr(task, "_analyze_pending_trade_reviews", job)
+
+    assert task.project_dirty_trade_reviews.run() == 1
+    assert task.analyze_pending_trade_reviews.run() == 2
+    assert task.project_dirty_trade_reviews.run() == 3
+    assert len({id(engine) for engine in used}) == 3
+    assert all(engine.disposed for engine in engines)
