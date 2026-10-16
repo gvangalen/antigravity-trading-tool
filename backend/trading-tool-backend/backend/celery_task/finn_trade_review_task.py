@@ -13,6 +13,7 @@ from backend.services.finn_trade_review_service import FinnTradeReviewService
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import allowed_trade_review_users
 from backend.services.finn_exchange_import_service import FinnExchangeImportService
+from backend.services.finn_bybit_derivative_import_service import FinnBybitDerivativeImportService
 
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,42 @@ async def _sync_linked_exchange_fills(session_factory=None) -> int:
             completed += 1
         except Exception:
             logger.warning("FINN exchange import failed", extra={"exchange_name": exchange_name})
+    return completed
+
+
+@shared_task(name="backend.celery_task.finn_trade_review_task.sync_bybit_derivatives")
+def sync_bybit_derivatives() -> int:
+    return asyncio.run(_run_with_task_database(_sync_bybit_derivatives))
+
+
+async def _sync_bybit_derivatives(session_factory=None) -> int:
+    """Continue bounded history windows fairly, including after worker restarts."""
+    session_factory = session_factory or async_session_factory
+    allowed = allowed_trade_review_users()
+    if allowed == set():
+        return 0
+    owner_filter = "AND k.user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
+    async with session_factory() as session:
+        result = await session.execute(text(f"""
+            SELECT k.user_id
+            FROM exchange_keys k
+            LEFT JOIN finn_bybit_derivative_attempts attempt ON attempt.user_id=k.user_id
+            WHERE k.is_active=TRUE AND LOWER(k.exchange_name)='bybit'
+              AND (attempt.last_attempt_at IS NULL
+                   OR attempt.last_attempt_at <= NOW() - INTERVAL '5 minutes')
+              {owner_filter}
+            ORDER BY attempt.last_attempt_at NULLS FIRST, k.user_id
+            LIMIT 2
+        """), {"allowed": sorted(allowed)} if allowed is not None else {})
+        user_ids = [int(row.user_id) for row in result.fetchall()]
+    completed = 0
+    for user_id in user_ids:
+        try:
+            async with session_factory() as session:
+                await FinnBybitDerivativeImportService(session).sync(user_id)
+            completed += 1
+        except Exception:
+            logger.warning("FINN Bybit derivative import failed", extra={"user_id": user_id})
     return completed
 
 

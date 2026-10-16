@@ -246,6 +246,36 @@ export const createFinnExchangeTradeReview = (fillIds, sameAccountConfirmed, ide
   }));
 };
 
+export const fetchFinnBybitDerivatives = () => handleApi(fetchAuth('/api/bot/bybit-derivatives'));
+export const syncFinnBybitDerivatives = () => handleApi(fetchAuth('/api/bot/bybit-derivatives/sync', { method: 'POST' }));
+export const fetchFinnBybitDerivativeStreams = (sourceId, category, limit = 50, offset = 0) => {
+  if (!Number.isSafeInteger(Number(sourceId)) || Number(sourceId) <= 0 || !['linear', 'inverse'].includes(category)) {
+    throw new Error('Derivative importbron is ongeldig');
+  }
+  return handleApi(fetchAuth(`/api/bot/bybit-derivatives/${sourceId}/${category}/streams?${buildQuery({ limit, offset })}`));
+};
+export const fetchFinnBybitDerivativeEpisodes = (sourceId, category, limit = 50, offset = 0, stream = null, evidenceCursor = null) => {
+  if (!Number.isSafeInteger(Number(sourceId)) || Number(sourceId) <= 0 || !['linear', 'inverse'].includes(category)) {
+    throw new Error('Derivative importbron is ongeldig');
+  }
+  return handleApi(fetchAuth(`/api/bot/bybit-derivatives/${sourceId}/${category}/episodes?${buildQuery({ limit, offset,
+    ...(stream ? { symbol: stream.symbol, position_idx: stream.position_idx } : {}),
+    ...(evidenceCursor || {}) })}`));
+};
+export const createFinnBybitDerivativeReview = (episode, idempotencyKey) => {
+  if (!episode || !['linear', 'inverse'].includes(episode.category) || !episode.episode_key) {
+    throw new Error('Afgesloten derivative trade is ongeldig');
+  }
+  return handleApi(fetchAuth('/api/bot/bybit-derivative-reviews', {
+    method: 'POST',
+    body: JSON.stringify({ source_id: episode.source_id, category: episode.category,
+      symbol: episode.symbol, position_idx: episode.position_idx,
+      episode_key: episode.episode_key, closure_confirmed: true,
+      idempotency_key: idempotencyKey,
+      ...(episode.evidence_page_before || {}) }),
+  }));
+};
+
 export const fetchFinnTradeReview = async (reviewId) => {
   if (!reviewId) throw new Error("reviewId is verplicht");
   return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}`));

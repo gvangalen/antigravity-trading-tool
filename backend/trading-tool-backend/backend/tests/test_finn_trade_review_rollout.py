@@ -63,6 +63,7 @@ def test_disabled_api_and_coach_do_not_query_storage(monkeypatch):
         assert coach["status"] == "disabled" and coach["reviews"] == []
         assert await task._project_dirty_trade_reviews() == 0
         assert await task._analyze_pending_trade_reviews() == 0
+        assert await task._sync_bybit_derivatives() == 0
 
     asyncio.run(exercise())
 
@@ -91,12 +92,54 @@ def test_worker_queries_only_allowlisted_users(monkeypatch):
     asyncio.run(task._project_dirty_trade_reviews())
     asyncio.run(task._analyze_pending_trade_reviews())
     asyncio.run(task._sync_linked_exchange_fills())
-    assert len(queries) == 3
+    asyncio.run(task._sync_bybit_derivatives())
+    assert len(queries) == 4
     assert all("ANY(CAST(:allowed AS INTEGER[]))" in sql for sql, _ in queries)
     assert all(params == {"allowed": [7]} for _, params in queries)
     assert "WHERE (analysis_status='pending' OR" in queries[1][0]
     assert "LEFT JOIN finn_exchange_import_attempts attempt" in queries[2][0]
     assert "attempt.last_attempt_at <= NOW() - INTERVAL '5 minutes'" in queries[2][0]
+    assert "LOWER(k.exchange_name)='bybit'" in queries[3][0]
+    assert "LEFT JOIN finn_bybit_derivative_attempts attempt" in queries[3][0]
+
+
+def test_scheduled_derivative_sync_uses_owner_scoped_bounded_candidates(monkeypatch):
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
+    monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7,8")
+    called = []
+
+    class Row:
+        def __init__(self, user_id):
+            self.user_id = user_id
+
+    class Result:
+        def fetchall(self):
+            return [Row(7), Row(8)]
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def execute(self, sql, params=None):
+            statement = str(sql)
+            assert "LIMIT 2" in statement
+            assert "attempt.last_attempt_at NULLS FIRST" in statement
+            assert params == {"allowed": [7, 8]}
+            return Result()
+
+    class Importer:
+        def __init__(self, session):
+            assert isinstance(session, Session)
+
+        async def sync(self, user_id):
+            called.append(user_id)
+
+    monkeypatch.setattr(task, "FinnBybitDerivativeImportService", Importer)
+    assert asyncio.run(task._sync_bybit_derivatives(lambda: Session())) == 2
+    assert called == [7, 8]
 
 
 def test_review_jobs_isolate_database_connections_across_celery_loops(monkeypatch):
@@ -129,11 +172,13 @@ def test_review_jobs_isolate_database_connections_across_celery_loops(monkeypatc
     monkeypatch.setattr(task, "_project_dirty_trade_reviews", job)
     monkeypatch.setattr(task, "_analyze_pending_trade_reviews", job)
     monkeypatch.setattr(task, "_sync_linked_exchange_fills", job)
+    monkeypatch.setattr(task, "_sync_bybit_derivatives", job)
 
     assert task.project_dirty_trade_reviews.run() == 1
     assert task.analyze_pending_trade_reviews.run() == 2
     assert task.project_dirty_trade_reviews.run() == 3
     assert task.sync_linked_exchange_fills.run() == 4
     assert task.sync_linked_exchange_fills.run() == 5
-    assert len({id(engine) for engine in used}) == 5
+    assert task.sync_bybit_derivatives.run() == 6
+    assert len({id(engine) for engine in used}) == 6
     assert all(engine.disposed for engine in engines)

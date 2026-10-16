@@ -1,7 +1,8 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from backend.services.finn_trade_review_service import build_closed_positions, unrecorded_plan_theme
+from backend.services.finn_trade_review_service import FinnTradeReviewService, build_closed_positions, unrecorded_plan_theme
 
 
 START = datetime(2026, 10, 16, tzinfo=timezone.utc)
@@ -9,7 +10,20 @@ START = datetime(2026, 10, 16, tzinfo=timezone.utc)
 
 def test_exchange_plan_not_recorded_is_evidence_gap_not_behavioral_missing_plan():
     assert unrecorded_plan_theme("exchange_user_attested") == "plan_not_recorded"
+    assert unrecorded_plan_theme("bybit_derivative_user_attested") == "plan_not_recorded"
     assert unrecorded_plan_theme("bot_position") == "missing_plan"
+
+
+def test_derivative_review_never_enters_eur_market_chart():
+    service = FinnTradeReviewService(None)
+
+    async def derivative_review(_user_id, _review_id):
+        return {"origin": "bybit_derivative_user_attested"}
+
+    service.get_review = derivative_review
+    result = asyncio.run(service.get_chart(7, 10))
+    assert result["status"] == "unavailable"
+    assert result["chart"] is None
 
 
 def fill(index, qty, cash, *, environment="paper", status="filled", bot_id=5, symbol="BTC",

@@ -27,6 +27,7 @@ NAMED_QUEUES: List[str] = [f"{QUEUE_NAME_PREFIX}{queue_name}" for queue_name in 
 
 TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.finn_trade_review_task.sync_linked_exchange_fills": "portfolio",
+    "backend.celery_task.finn_trade_review_task.sync_bybit_derivatives": "portfolio",
     "backend.celery_task.finn_trade_review_task.project_dirty_trade_reviews": "portfolio",
     "backend.celery_task.finn_trade_review_task.analyze_pending_trade_reviews": "ai_generation",
     "backend.celery_task.market_task.fetch_market_data": "market_data",

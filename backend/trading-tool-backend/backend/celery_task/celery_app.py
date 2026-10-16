@@ -144,6 +144,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.finn_trade_review_task.sync_linked_exchange_fills",
         crontab(minute="*/5"),
     ),
+    "sync_bybit_derivatives": build_task_schedule_entry(
+        "backend.celery_task.finn_trade_review_task.sync_bybit_derivatives",
+        crontab(minute="*/5"),
+    ),
     "project_finn_trade_reviews": build_task_schedule_entry(
         "backend.celery_task.finn_trade_review_task.project_dirty_trade_reviews",
         crontab(minute="*/1"),

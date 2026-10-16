@@ -112,8 +112,19 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
     all_fills = review.get("fills") or []
     fills = (all_fills[:MAX_AI_FILLS // 2] + all_fills[-MAX_AI_FILLS // 2:]
              if len(all_fills) > MAX_AI_FILLS else all_fills)
+    derivative = review.get("origin") == "bybit_derivative_user_attested"
     exchange = review.get("origin") == "exchange_user_attested"
-    if exchange:
+    if derivative:
+        evidence = [{"id": f"derivative_exec:{fill['derivative_execution_id']}:{fill['role']}",
+                     "side": fill["side"], "role": fill["role"], "at": fill["at"],
+                     "allocated_qty": fill["qty"], "raw_exec_qty": fill["raw_exec_qty"],
+                     "price": fill["price_quote"], "quote_currency": fill["quote_currency"],
+                     "settle_currency": fill["settle_currency"],
+                     "position_idx": fill["position_idx"], "category": fill["category"],
+                     "fee_amount_raw_execution": fill.get("fee_amount_raw_execution"),
+                     "fee_currency": fill.get("fee_currency")}
+                    for fill in fills]
+    elif exchange:
         evidence = [{"id": f"exchange_fill:{fill['exchange_fill_id']}",
                      "side": fill["side"], "at": fill["at"], "qty": fill["qty"],
                      "cost_quote": fill["cost_quote"], "price_quote": fill["price_quote"],
@@ -127,7 +138,7 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
                      "cash_eur": fill["cash_eur"], "price_eur": fill["price_eur"]}
                     for fill in fills]
     allowed = {item["id"] for item in evidence}
-    if exchange:
+    if exchange or derivative:
         allowed.add("closure:user-confirmed")
     if review.get("plan_snapshot"):
         allowed.add("plan:snapshot")
@@ -147,8 +158,14 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
         "closure_evidence": {"id": "closure:user-confirmed",
                              "meaning": "User attests selected fills comprise one fully closed trade; provider closure and complete account history unverified",
                              "confirmed_at": review["attested_at"].isoformat() if review.get("attested_at") else None}
-                            if exchange else None,
+                            if exchange or derivative else None,
         "base_currency": review.get("base_currency") or review["symbol"],
+        "derivative_category": review.get("derivative_category") if derivative else None,
+        "position_idx": review.get("position_idx") if derivative else None,
+        "direction": review.get("direction") if derivative else None,
+        "settle_currency": review.get("settle_currency") if derivative else None,
+        "native_pnl_status": review.get("native_pnl_status") if derivative else None,
+        "fee_legs_by_currency": (review.get("fee_legs_by_currency") or [])[:MAX_AI_CASH_LEGS] if derivative else None,
         "pnl_status": review.get("pnl_status") or "before_fees_eur",
         "cash_legs_by_currency": (review.get("cash_legs_by_currency") or [])[:MAX_AI_CASH_LEGS] if exchange else None,
         "cash_legs_truncated": exchange and len(review.get("cash_legs_by_currency") or []) > MAX_AI_CASH_LEGS,
@@ -181,6 +198,22 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
 
 def _question_summary(theme: str, refs: list[str], context: dict) -> str:
     """Answer the selected process topic using only immutable server facts."""
+    if context.get("origin") == "bybit_derivative_user_attested":
+        if theme == "exit_process":
+            return (f"De gekozen Bybit-derivatenepisode eindigt op {context['exit_at']}. "
+                    "Volledige sluiting is door jou bevestigd; de providergegevens tonen "
+                    "de uitvoering, maar bewijzen je sluitingsmotief niet.")
+        if theme == "timing":
+            return (f"De gekozen uitvoeringen lopen van {context['entry_at']} tot "
+                    f"{context['exit_at']}. Entry- en exittiming zijn alleen als "
+                    "uitvoeringstijden vastgelegd; marktcontext ontbreekt.")
+        if theme == "risk":
+            return (f"Deze {context['direction']}-episode gebruikt Bybit-positionIdx "
+                    f"{context['position_idx']}. De uitvoeringen tonen geen vooraf "
+                    "bepaalde risicogrens of de volledige accountblootstelling.")
+        return ("De Bybit-uitvoeringen zijn aan deze handmatig bevestigde episode gekoppeld. "
+                "Native en EUR-resultaat blijven onbekend zonder sluitende providergegevens "
+                "over PnL, financiering en kosten.")
     if context.get("origin") == "exchange_user_attested":
         if theme == "exit_process":
             return (f"De geselecteerde exchange-uitvoeringen eindigen op {context['exit_at']}. "
@@ -266,10 +299,13 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
     # FINN advice. The model only chooses bounded themes and existing evidence IDs.
     pnl = (context or {}).get("pnl_eur_before_fees")
     outcome = f" Het geregistreerde resultaat vóór kosten is €{pnl}." if pnl is not None else ""
+    derivative = (context or {}).get("origin") == "bybit_derivative_user_attested"
     exchange = (context or {}).get("origin") == "exchange_user_attested"
     uncertainty_parts = (["Afsluiting bevestigd door gebruiker; volledige accountpositie en historische dekking zijn niet door de exchange bewezen.",
                           "De geselecteerde uitvoeringen tonen niet alle motieven achter de keuzes."]
-                         if exchange else ["De orderledger toont uitvoeringen, niet alle motieven achter de keuzes."])
+                         if exchange or derivative else ["De orderledger toont uitvoeringen, niet alle motieven achter de keuzes."])
+    if derivative:
+        uncertainty_parts.append("Bybit-derivaten: native PnL, financiering, nettokosten en EUR-resultaat zijn niet vastgesteld.")
     if exchange and (context or {}).get("pnl_status") == "not_comparable":
         uncertainty_parts.append("Een vergelijkbaar EUR-resultaat ontbreekt voor deze valutastromen.")
     if (context or {}).get("fills_truncated"):

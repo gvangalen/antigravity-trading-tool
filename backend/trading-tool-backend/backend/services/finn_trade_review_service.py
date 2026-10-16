@@ -40,7 +40,8 @@ def _near_zero(value: Decimal) -> bool:
 
 
 def unrecorded_plan_theme(origin: str | None) -> str:
-    return "plan_not_recorded" if origin == "exchange_user_attested" else "missing_plan"
+    return ("plan_not_recorded" if origin in {"exchange_user_attested", "bybit_derivative_user_attested"}
+            else "missing_plan")
 
 
 def build_closed_positions(
@@ -267,7 +268,9 @@ class FinnTradeReviewService:
                    entry_qty, entry_price_eur, exit_price_eur, pnl_eur_before_fees,
                    note, plan_snapshot IS NOT NULL AS has_plan, created_at,
                    analysis_status, origin, closure_basis, base_currency, pnl_status,
-                   cash_legs_by_currency, exchange_name, attested_at, attestation_source_ids
+                   cash_legs_by_currency, exchange_name, attested_at, attestation_source_ids,
+                   derivative_category, position_idx, direction, settle_currency,
+                   native_pnl, native_pnl_status, fee_legs_by_currency
             FROM finn_trade_reviews WHERE user_id=:user_id
             ORDER BY exit_at DESC, id DESC LIMIT :limit OFFSET :offset
         """), {"user_id": user_id, "limit": limit, "offset": offset})
@@ -317,6 +320,8 @@ class FinnTradeReviewService:
                    pnl_eur_before_fees, plan_snapshot, fills, note, created_at, updated_at,
                    origin, closure_basis, base_currency, pnl_status, cash_legs_by_currency,
                    exchange_name, attested_at, attestation_source_ids,
+                   derivative_category, position_idx, direction, settle_currency,
+                   native_pnl, native_pnl_status, fee_legs_by_currency,
                    (SELECT a.identity_basis FROM finn_exchange_review_attestations a
                     WHERE a.user_id=:user_id AND a.review_id=:id) AS attestation_identity_basis,
                    (SELECT a.same_account_confirmed FROM finn_exchange_review_attestations a
@@ -340,9 +345,9 @@ class FinnTradeReviewService:
 
     async def get_chart(self, user_id: int, review_id: int) -> dict:
         review = await self.get_review(user_id, review_id)
-        if review.get("origin") == "exchange_user_attested":
+        if review.get("origin") in {"exchange_user_attested", "bybit_derivative_user_attested"}:
             return {"status": "unavailable", "chart": None,
-                    "reason": "Uitvoeringsgrafiek voor externe beursfills nog niet verifieerbaar"}
+                    "reason": "Marktprijsgrafiek voor externe beursuitvoeringen nog niet verifieerbaar"}
         if review["candles_status"] in {"ready", "unavailable"} or (
             review["candles_status"] in {"failed", "loading"} and review["candles_updated_at"]
             and (datetime.now(timezone.utc) - review["candles_updated_at"]).total_seconds()

@@ -54,7 +54,13 @@ class ReviewToolAdapter:
                 }
         closed_reviews = [r for r in closed["reviews"] if not asset or r["symbol"] == asset.upper()]
         for review in closed_reviews:
-            if review.get("origin") == "exchange_user_attested":
+            if review.get("origin") == "bybit_derivative_user_attested":
+                result = "native en EUR-resultaat niet vastgesteld"
+                closure = (f"Bybit {review['derivative_category']} {review['direction']} "
+                           f"positionIdx {review['position_idx']}; afsluiting bevestigd door gebruiker, "
+                           "niet provider-bewezen")
+                quote_context = f"; settlement {review['settle_currency']}; financiering en kosten niet volledig"
+            elif review.get("origin") == "exchange_user_attested":
                 result = (f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten"
                           if review.get("pnl_eur_before_fees") is not None else
                           "EUR-resultaat niet vergelijkbaar of niet berekend")

@@ -40,6 +40,8 @@ class FinnClosedTradeReflectionService:
         rows = await self.session.execute(text("""
             SELECT id, symbol, execution_environment, execution_sources, entry_at, exit_at,
                    origin, closure_basis, pnl_status, cash_legs_by_currency,
+                   derivative_category, position_idx, direction, settle_currency,
+                   native_pnl_status,
                    pnl_eur_before_fees, plan_snapshot IS NOT NULL AS has_plan,
                    analysis_status, analysis_json, candles_status,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
@@ -74,6 +76,8 @@ class FinnClosedTradeReflectionService:
         result = await self.session.execute(text("""
             SELECT id, symbol, execution_environment, execution_sources, entry_at, exit_at,
                    origin, closure_basis, pnl_status, cash_legs_by_currency,
+                   derivative_category, position_idx, direction, settle_currency,
+                   native_pnl_status,
                    pnl_eur_before_fees, plan_snapshot IS NOT NULL AS has_plan,
                    analysis_status, analysis_json, candles_status,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
@@ -99,13 +103,19 @@ class FinnClosedTradeReflectionService:
                          if isinstance(item, dict) and item.get("theme") in THEMES})
         fills = row.get("fills") or []
         sampled_fills = fills[:10] + fills[-10:] if len(fills) > 20 else fills
+        derivative = row.get("origin") == "bybit_derivative_user_attested"
         exchange = row.get("origin") == "exchange_user_attested"
-        evidence_ids = ([f"exchange_fill:{item['exchange_fill_id']}" for item in sampled_fills
+        evidence_ids = ([f"derivative_exec:{item['derivative_execution_id']}:{item['role']}"
+                         for item in sampled_fills if isinstance(item, dict)
+                         and isinstance(item.get("derivative_execution_id"), int)
+                         and item.get("role") in {"open", "close"}]
+                        if derivative else
+                        [f"exchange_fill:{item['exchange_fill_id']}" for item in sampled_fills
                          if isinstance(item, dict) and isinstance(item.get("exchange_fill_id"), int)]
                         if exchange else
                         [f"fill:{item['ledger_id']}" for item in sampled_fills
                          if isinstance(item, dict) and isinstance(item.get("ledger_id"), int)])
-        if exchange:
+        if exchange or derivative:
             evidence_ids.append("closure:user-confirmed")
         if row.get("has_plan"):
             evidence_ids.append("plan:snapshot")
@@ -119,9 +129,14 @@ class FinnClosedTradeReflectionService:
             "environment": row["execution_environment"],
             "origin": row.get("origin") or "bot_position",
             "closure_basis": row.get("closure_basis") or "ledger_flat",
-            "closure_label": "Afsluiting bevestigd door gebruiker" if exchange else "Afgesloten positie",
+            "closure_label": "Afsluiting bevestigd door gebruiker" if exchange or derivative else "Afgesloten positie",
             "pnl_status": row.get("pnl_status") or "before_fees_eur",
             "cash_legs_by_currency": row.get("cash_legs_by_currency") if exchange else None,
+            "derivative_category": row.get("derivative_category") if derivative else None,
+            "position_idx": row.get("position_idx") if derivative else None,
+            "direction": row.get("direction") if derivative else None,
+            "settle_currency": row.get("settle_currency") if derivative else None,
+            "native_pnl_status": row.get("native_pnl_status") if derivative else None,
             "execution_sources": row.get("execution_sources") or [],
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,

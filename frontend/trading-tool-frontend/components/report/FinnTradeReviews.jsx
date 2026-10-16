@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowDownRight, ArrowUpRight, Brain, ChevronRight, FileText, Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from '@/app/providers/I18nProvider';
 import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, createFinnExchangeTradeReview, saveFinnTradeReviewNote, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
+import BybitDerivativeReviews from './BybitDerivativeReviews';
 
 const number = (value) => Number(value) || 0;
 
@@ -25,6 +26,8 @@ function sourceLabel(sources, copy) {
   const value = Array.isArray(sources) ? sources : [];
   return value.map((source) => source === 'manual' ? copy.manual : source === 'bot' ? copy.bot : String(source).replace(/^./, (letter) => letter.toUpperCase())).join(' + ');
 }
+
+const isExchangeReview = (origin) => origin === 'exchange_user_attested' || origin === 'bybit_derivative_user_attested';
 
 function PlanFacts({ plan, copy }) {
   const label = (key) => copy.planFields?.[key] || key.replaceAll('_', ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -62,6 +65,31 @@ function TradeChart({ chart, copy, locale }) {
   </div>;
 }
 
+function ExecutionTimeline({ fills, copy, locale }) {
+  const events = fills.map((fill, index) => ({
+    id: fill.exchange_fill_id ?? fill.derivative_execution_id ?? index,
+    at: new Date(fill.at).getTime(),
+    side: fill.side,
+    label: `${fill.side === 'buy' ? copy.buy : copy.sell} ${fill.qty} · ${formatDate(fill.at, locale)}`,
+  })).filter((fill) => Number.isFinite(fill.at));
+  if (events.length < 2) return null;
+  const first = Math.min(...events.map((event) => event.at));
+  const last = Math.max(...events.map((event) => event.at));
+  const sampled = events.length > 80 ? [...events.slice(0, 40), ...events.slice(-40)] : events;
+  const x = (at, index) => first === last
+    ? 35 + (index / Math.max(sampled.length - 1, 1)) * 630
+    : 35 + ((at - first) / (last - first)) * 630;
+  return <div className="mt-3 overflow-x-auto rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
+    <svg role="img" aria-label={copy.executionTimeline} viewBox="0 0 700 100" className="min-w-[460px] w-full">
+      <line x1="35" x2="665" y1="45" y2="45" stroke="#94a3b8" strokeWidth="2" />
+      {sampled.map((event, index) => <g key={`${event.id}-${index}`}><line x1={x(event.at, index)} x2={x(event.at, index)} y1="35" y2="55" stroke={event.side === 'buy' ? '#2563eb' : '#f59e0b'} strokeWidth="2" /><circle cx={x(event.at, index)} cy="45" r="5" fill={event.side === 'buy' ? '#2563eb' : '#f59e0b'} stroke="white" strokeWidth="1.5" /><title>{event.label}</title></g>)}
+      <text x="35" y="82" fill="#64748b" fontSize="10">{formatDate(first, locale)}</text>
+      <text x="665" y="82" textAnchor="end" fill="#64748b" fontSize="10">{formatDate(last, locale)}</text>
+    </svg>
+    <p className="text-xs text-slate-500">{copy.executionTimelineNote}{events.length > sampled.length ? ` ${copy.executionTimelineSampled.replace('{shown}', String(sampled.length)).replace('{total}', String(events.length))}` : ''}</p>
+  </div>;
+}
+
 function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [note, setNote] = useState(review.note || '');
   const [saving, setSaving] = useState(false);
@@ -80,9 +108,16 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [question, setQuestion] = useState('');
   const fills = Array.isArray(review.fills) ? review.fills : [];
   const plan = review.plan_snapshot && typeof review.plan_snapshot === 'object' ? review.plan_snapshot : null;
-  const isExchange = review.origin === 'exchange_user_attested';
+  const isDerivative = review.origin === 'bybit_derivative_user_attested';
+  const isExchange = review.origin === 'exchange_user_attested' || isDerivative;
   const cashLegs = Array.isArray(review.cash_legs_by_currency) ? review.cash_legs_by_currency : [];
-  const metricCards = isExchange
+  const feeLegs = Array.isArray(review.fee_legs_by_currency) ? review.fee_legs_by_currency : [];
+  const metricCards = isDerivative
+    ? [[copy.derivativePosition, `${copy.derivativeDirection?.[review.direction] || review.direction || ''} · ${copy.derivativeCategory?.[review.derivative_category] || review.derivative_category || ''}`],
+      [copy.derivativeContracts, String(review.entry_qty ?? copy.exchangeResultUnavailable)],
+      [copy.derivativeNativePnl, review.native_pnl == null ? copy.exchangeResultUnavailable : formatQuote(review.native_pnl, review.settle_currency, locale)],
+      [copy.derivativeFees, feeLegs.length ? feeLegs.map((leg) => formatQuote(leg.amount, leg.currency, locale)).join(' · ') : copy.exchangeResultUnavailable]]
+    : isExchange
     ? [[copy.quantity, String(review.entry_qty)],
       [copy.exchangeResult, review.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(review.pnl_eur_before_fees, locale)],
       [copy.exchangeCashLegs, cashLegs.length ? cashLegs.map((leg) => `${leg.currency}: ${copy.buy} ${formatQuote(leg.buy_cost, leg.currency, locale)} / ${copy.sell} ${formatQuote(leg.sell_proceeds, leg.currency, locale)}`).join(' · ') : copy.exchangeResultUnavailable]]
@@ -93,10 +128,11 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
 
   useEffect(() => {
     let active = true;
-    fetchFinnTradeChart(review.id).then((result) => { if (active) { setChart(result.chart); setChartState(result.status); } }).catch(() => { if (active) setChartState('failed'); });
+    if (!isExchange) fetchFinnTradeChart(review.id).then((result) => { if (active) { setChart(result.chart); setChartState(result.status); } }).catch(() => { if (active) setChartState('failed'); });
+    else setChartState('unavailable');
     fetchFinnTradeMessages(review.id).then((result) => { if (active) setMessages(Array.isArray(result) ? result : []); }).catch(() => {});
     return () => { active = false; };
-  }, [review.id]);
+  }, [review.id, isExchange]);
 
   useEffect(() => {
     if (!['loading', 'failed'].includes(chartState)) return undefined;
@@ -203,7 +239,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
           <div key={label} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 font-black text-slate-900 dark:text-white">{value}</p></div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-slate-500">{isExchange ? copy.exchangeResultNote : copy.resultNote}</p>
+      <p className="mt-2 text-xs text-slate-500">{isDerivative ? copy.derivativeResultNote : isExchange ? copy.exchangeResultNote : copy.resultNote}</p>
 
       <div className="mt-7 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
@@ -212,11 +248,11 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>
-          {chartState === 'ready' && chart ? <TradeChart chart={chart} copy={copy} locale={locale} /> : <p className="mt-2 text-xs leading-relaxed text-slate-500">{chartState === 'loading' ? copy.loading : copy.chartFallback}</p>}
+          {isExchange ? <ExecutionTimeline fills={fills} copy={copy} locale={locale} /> : chartState === 'ready' && chart ? <TradeChart chart={chart} copy={copy} locale={locale} /> : <p className="mt-2 text-xs leading-relaxed text-slate-500">{chartState === 'loading' ? copy.loading : copy.chartFallback}</p>}
           <ol className="mt-4 space-y-2">
-            {fills.map((fill) => <li key={isExchange ? fill.exchange_fill_id : fill.ledger_id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900">
+            {fills.map((fill, index) => <li key={isDerivative ? `${fill.derivative_execution_id}-${fill.role}-${index}` : isExchange ? fill.exchange_fill_id : fill.ledger_id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${fill.side === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{fill.side === 'buy' ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}</span>
-              <span className="min-w-0 flex-1"><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {review.symbol}</strong><br /><span className="text-slate-500">{formatDate(fill.at, locale)}</span></span>
+              <span className="min-w-0 flex-1"><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {isDerivative ? copy.derivativeContracts : review.symbol}</strong><br /><span className="text-slate-500">{formatDate(fill.at, locale)}{isDerivative && fill.role ? ` · ${copy.derivativeRole?.[fill.role] || fill.role}` : ''}</span></span>
               <span className="font-bold">{isExchange ? formatQuote(fill.price_quote, fill.quote_currency, locale) : fill.price_eur ? formatMoney(fill.price_eur, locale, 4) : formatMoney(number(fill.cash_eur) / number(fill.qty), locale, 4)}</span>
             </li>)}
           </ol>
@@ -471,6 +507,10 @@ export default function FinnTradeReviews() {
               {exchangeReviewError && <p role="alert" className="mt-2 text-red-700 dark:text-red-300">{copy.exchangeCreateError}</p>}
               <button type="button" disabled={!canConfirmExchange || creatingExchangeReview} onClick={createExchangeReview} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-bold text-white disabled:opacity-50">{creatingExchangeReview ? copy.loading : copy.exchangeCreateReview}</button>
             </div>}
+            {exchangeImports.some((source) => source.exchange_name === 'bybit') && <BybitDerivativeReviews copy={copy} locale={locale} onCreated={async (reviewId) => {
+              await load();
+              router.replace(`/report?trade_review_id=${reviewId}`, { scroll: false });
+            }} />}
           </div>
           {deepLinkLoading && <p role="status" className="mb-4 text-sm text-slate-500">{copy.loading}</p>}
           {deepLinkError && <p role="alert" className="mb-4 text-sm text-red-600">{copy.error}</p>}
@@ -479,7 +519,7 @@ export default function FinnTradeReviews() {
               <div className="mb-4 flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900 dark:text-white">{copy.all} <span className="ml-1 text-slate-400">{total}</span></h3><button type="button" onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-blue-600"><RefreshCw size={14} /> {copy.refresh}</button></div>
               {items.length === 0 ? <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">{rolloutDisabled ? copy.rolloutDisabled : copy.empty}</p> : <div className="grid gap-2">{items.map((item) => <button key={item.id} type="button" onClick={() => openReview(item.id)} className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition hover:border-blue-400 ${selected?.id === item.id ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-800'}`}>
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.pnl_eur_before_fees == null ? 'bg-blue-50 text-blue-600' : number(item.pnl_eur_before_fees) >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{item.pnl_eur_before_fees == null ? <FileText size={19} /> : number(item.pnl_eur_before_fees) >= 0 ? <ArrowUpRight size={19} /> : <ArrowDownRight size={19} />}</span>
-                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{item.origin === 'exchange_user_attested' ? item.exchange_name : sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale)}{item.origin === 'exchange_user_attested' && <><br />{copy.userConfirmedClosure}</>}</span></span>
+                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{isExchangeReview(item.origin) ? item.exchange_name : sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale)}{isExchangeReview(item.origin) && <><br />{copy.userConfirmedClosure}</>}</span></span>
                 <span className="text-right"><strong className="block text-sm text-slate-900 dark:text-white">{item.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(item.pnl_eur_before_fees, locale)}</strong><span className="text-xs text-blue-600">{copy.open}</span></span><ChevronRight size={15} className="text-slate-400" />
               </button>)}</div>}
               {items.length < total && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-blue-600 disabled:opacity-50 dark:border-slate-700">{loadingMore ? copy.loading : copy.more}</button>}

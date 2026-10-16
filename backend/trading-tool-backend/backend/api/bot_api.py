@@ -18,6 +18,9 @@ from backend.services.finn_trade_review_rollout import trade_review_enabled, req
 from backend.services.finn_exchange_import_service import FinnExchangeImportService
 from backend.services.finn_exchange_trade_review_service import FinnExchangeTradeReviewService
 from backend.schemas.finn_exchange_trade_review_schema import ExchangeTradeReviewCreate
+from backend.services.finn_bybit_derivative_import_service import FinnBybitDerivativeImportService
+from backend.services.finn_bybit_derivative_review_service import FinnBybitDerivativeReviewService
+from backend.schemas.finn_bybit_derivative_schema import BybitDerivativeReviewCreate
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.services.live_portfolio_allocation_service import read_live_account, replace_allocations
 from backend.schemas.bot_schema import (
@@ -328,6 +331,81 @@ async def create_finn_exchange_trade_review(
         same_account_confirmed=payload.same_account_confirmed,
         idempotency_key=payload.idempotency_key,
     )
+
+
+@router.get("/bot/bybit-derivatives")
+async def list_bybit_derivative_imports(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    return {"sources": await FinnBybitDerivativeImportService(db).status(current_user["id"])}
+
+
+@router.post("/bot/bybit-derivatives/sync")
+async def sync_bybit_derivatives(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"bybit_derivative_sync:{current_user['id']}", limit=3)
+    return await FinnBybitDerivativeImportService(db).sync(current_user["id"])
+
+
+@router.get("/bot/bybit-derivatives/{source_id}/{category}/executions")
+async def list_bybit_derivative_executions(
+    source_id: int, category: str, limit: int = 50, offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"bybit_derivative_evidence:{current_user['id']}", limit=30)
+    return await FinnBybitDerivativeImportService(db).executions(
+        current_user["id"], source_id, category, limit=limit, offset=offset)
+
+
+@router.get("/bot/bybit-derivatives/{source_id}/{category}/streams")
+async def list_bybit_derivative_streams(
+    source_id: int, category: str, limit: int = 50, offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"bybit_derivative_streams:{current_user['id']}", limit=30)
+    return await FinnBybitDerivativeImportService(db).streams(
+        current_user["id"], source_id, category, limit=limit, offset=offset)
+
+
+@router.get("/bot/bybit-derivatives/{source_id}/{category}/episodes")
+async def list_bybit_derivative_episodes(
+    source_id: int, category: str, symbol: str | None = None,
+    position_idx: int | None = None, limit: int = 50, offset: int = 0,
+    before_at: datetime | None = None, before_id: int | None = None,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"bybit_derivative_episodes:{current_user['id']}", limit=20)
+    return await FinnBybitDerivativeReviewService(db).candidates(
+        current_user["id"], source_id, category, symbol=symbol,
+        position_idx=position_idx, limit=limit, offset=offset,
+        before_at=before_at, before_id=before_id)
+
+
+@router.post("/bot/bybit-derivative-reviews", status_code=201)
+async def create_bybit_derivative_review(
+    payload: BybitDerivativeReviewCreate,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"bybit_derivative_create:{current_user['id']}", limit=5)
+    return await FinnBybitDerivativeReviewService(db).create(
+        current_user["id"], source_id=payload.source_id, category=payload.category,
+        symbol=payload.symbol.upper(), position_idx=payload.position_idx,
+        episode_key=payload.episode_key, closure_confirmed=payload.closure_confirmed,
+        idempotency_key=payload.idempotency_key,
+        before_at=payload.before_at, before_id=payload.before_id)
 
 
 @router.get("/bot/trade-reviews")
