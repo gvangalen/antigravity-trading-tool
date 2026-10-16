@@ -68,6 +68,122 @@ def test_ai_rejects_unbound_evidence_ids():
         validate_analysis(result, {"fill:1"})
 
 
+def test_only_server_supplied_confirmed_lesson_can_be_rendered():
+    context = {"prior_user_confirmed_lessons_untrusted": [{
+        "review_id": 12, "symbol": "BTC", "lesson_text_untrusted": "Mijn bevestigde les",
+        "confirmed_at": "2026-10-15T12:00:00+00:00",
+        "relation_to_entry": "confirmed_before_entry",
+    }]}
+    raw = _analysis("Modeltekst is geen gebruikersles")
+    raw["prior_lesson_review_id"] = 12
+    result = validate_analysis(raw, {"fill:1"}, context)
+    assert result["prior_lesson"]["lesson_text"] == "Mijn bevestigde les"
+    assert result["prior_lesson"]["source"] == "user_confirmed_prior_reflection"
+    assert "Modeltekst" not in str(result)
+    raw["prior_lesson_review_id"] = 999
+    assert "prior_lesson" not in validate_analysis(raw, {"fill:1"}, context)
+
+
+def test_prior_lesson_query_is_owner_scoped_and_before_trade_entry():
+    from types import SimpleNamespace
+
+    entry = datetime(2026, 10, 16, tzinfo=timezone.utc)
+
+    class Result:
+        def fetchall(self):
+            return [SimpleNamespace(review_id=8, symbol="BTC",
+                                    lesson_text="Ik wil een reden vastleggen",
+                                    evidence_revision=1,
+                                    confirmed_at=datetime(2026, 10, 15, tzinfo=timezone.utc))]
+
+    class Session:
+        async def execute(self, query, params):
+            sql = str(query)
+            assert "l.user_id=:user_id" in sql and "r.user_id=l.user_id" in sql
+            assert "l.confirmed_at<=:entry_at" in sql and "r.exit_at<:entry_at" in sql
+            assert "l.evidence_revision=r.input_revision" in sql
+            assert "LIMIT 5" in sql
+            assert params == {"user_id": 77, "review_id": 9, "entry_at": entry,
+                              "symbol": "BTC"}
+            return Result()
+
+    async def exercise():
+        lessons = await FinnTradeAnalysisService(Session())._prior_confirmed_lessons(
+            77, {"id": 9, "entry_at": entry, "symbol": "BTC"})
+        assert len(lessons) == 1
+        assert lessons[0]["relation_to_entry"] == "confirmed_before_entry"
+        assert lessons[0]["authority"].startswith("user_confirmed")
+
+    asyncio.run(exercise())
+
+
+def test_confirmed_lesson_retry_is_noop_but_changed_evidence_requires_reconfirmation():
+    from types import SimpleNamespace
+
+    class Session:
+        def __init__(self, evidence_revision):
+            self.evidence_revision = evidence_revision
+            self.writes = []
+
+        async def execute(self, query, params=None):
+            sql = str(query)
+            if "pg_advisory_xact_lock" in sql:
+                return _Result()
+            if "SELECT input_revision FROM finn_trade_reviews" in sql:
+                return _Result(2)
+            if "SELECT lesson_text,status,evidence_revision" in sql:
+                return _Result(SimpleNamespace(
+                    lesson_text="Ik leg mijn exitreden vast", status="active",
+                    evidence_revision=self.evidence_revision))
+            if "SELECT id,analysis_json->'prior_lesson_candidate_ids'" in sql:
+                return _Result([])
+            self.writes.append((sql, params))
+            return _Result()
+
+        async def commit(self):
+            pass
+
+    async def exercise():
+        for prior_revision, expected_writes in ((2, 0), (1, 1)):
+            session = Session(prior_revision)
+            service = FinnTradeReviewService(session)
+
+            async def detail(*_):
+                return {"id": 9}
+
+            service.get_review = detail
+            assert await service.set_lesson(77, 9, "Ik leg mijn exitreden vast") == {"id": 9}
+            assert len(session.writes) == expected_writes
+            if expected_writes:
+                assert session.writes[0][1]["revision"] == 2
+
+    asyncio.run(exercise())
+
+
+def test_prior_lesson_change_invalidates_transitive_cached_analyses():
+    from types import SimpleNamespace
+    from backend.services.finn_trade_review_service import dependent_review_ids
+
+    rows = [SimpleNamespace(id=2, candidate_ids=[1]),
+            SimpleNamespace(id=3, candidate_ids=[2]),
+            SimpleNamespace(id=4, candidate_ids=[3]),
+            SimpleNamespace(id=5, candidate_ids=[99])]
+    assert dependent_review_ids(1, rows) == [2, 3, 4]
+
+    class Session:
+        async def execute(self, query, params=None):
+            sql = str(query)
+            assert params["user_id"] == 77
+            if "SELECT id,analysis_json" in sql:
+                return _Result(rows)
+            assert "UPDATE finn_trade_reviews" in sql
+            assert params["review_ids"] == [2, 3, 4]
+            assert "id=ANY(CAST(:review_ids AS BIGINT[]))" in sql
+            return _Result()
+
+    asyncio.run(FinnTradeReviewService(Session())._invalidate_lesson_dependents(77, 1))
+
+
 @pytest.mark.parametrize("text", [
     "Koop morgen BTC met maximale leverage.",
     "Buy BTC now.",
@@ -221,6 +337,8 @@ def test_question_path_persists_only_server_rendered_answer(monkeypatch):
             saved = []
 
             async def execute(self, query, params=None):
+                if "pg_advisory_xact_lock" in str(query):
+                    return _Result()
                 if "SELECT input_revision" in str(query):
                     return _Result(0)
                 if "INSERT INTO finn_trade_review_messages" in str(query):
@@ -248,6 +366,7 @@ def test_question_path_persists_only_server_rendered_answer(monkeypatch):
 
         service.reviews.get_review = get_review
         service._reserve_user_ai_call = reserve
+        service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
         monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
         result = await service.ask(77, 4, "Wat gebeurde er bij de exit?")
         assert "verdriedubbel" not in str(result)
@@ -271,6 +390,9 @@ class _Result:
 
     def scalar_one(self):
         return self.row
+
+    def fetchall(self):
+        return self.row if isinstance(self.row, list) else []
 
 
 class _OwnerSession:
@@ -352,6 +474,7 @@ def test_stale_analysis_is_not_returned_after_input_revision_change(monkeypatch)
             return _analysis("De trade is gesloten.")
 
         service.reviews.get_review = get_review
+        service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
         monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
         result = await service.analyze(77, 4)
         assert result["status"] == "pending"
@@ -405,6 +528,7 @@ def test_question_does_not_persist_after_screenshot_revision_change(monkeypatch)
             return _analysis("De trade is gesloten.")
 
         service.reviews.get_review = get_review
+        service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
         monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
         with pytest.raises(HTTPException) as raised:
             await service.ask(77, 4, "Wat gebeurde er bij de exit?")

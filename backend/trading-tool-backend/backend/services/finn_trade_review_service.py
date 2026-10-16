@@ -44,6 +44,27 @@ def unrecorded_plan_theme(origin: str | None) -> str:
             else "missing_plan")
 
 
+def dependent_review_ids(source_review_id: int, rows: list[Any]) -> list[int]:
+    """Find every cached analysis depending directly or indirectly on a lesson."""
+    reverse_edges: dict[int, set[int]] = defaultdict(set)
+    for row in rows:
+        candidates = row.candidate_ids if hasattr(row, "candidate_ids") else row[1]
+        if not isinstance(candidates, list):
+            continue
+        target = int(row.id if hasattr(row, "id") else row[0])
+        for candidate in candidates:
+            if type(candidate) is int:
+                reverse_edges[candidate].add(target)
+    seen = {source_review_id}
+    queue = [source_review_id]
+    for source in queue:
+        for target in reverse_edges.get(source, ()):
+            if target not in seen:
+                seen.add(target)
+                queue.append(target)
+    return sorted(seen - {source_review_id})
+
+
 def build_closed_positions(
     fills: list[dict], baselines: dict[tuple[int, str], Decimal],
     current_quantities: dict[tuple[int, str], Decimal],
@@ -124,6 +145,10 @@ def build_closed_positions(
                         buy_qty > 0 and sell_qty > 0 and _near_zero(buy_qty - sell_qty)
                         and active[-1]["ts"] >= active[0]["ts"]
                     ):
+                        entry_plan = active[0].get("plan_snapshot")
+                        entry_plan_captured_at = active[0].get("plan_captured_at")
+                        if not entry_plan_captured_at or entry_plan_captured_at > active[0]["ts"]:
+                            entry_plan = None
                         positions.append({
                             "bot_id": key[0], "symbol": key[1],
                             "execution_environment": environment,
@@ -136,7 +161,14 @@ def build_closed_positions(
                             "entry_price_eur": buy_cost / buy_qty,
                             "exit_price_eur": sell_proceeds / sell_qty,
                             "pnl_eur_before_fees": sell_proceeds - buy_cost,
-                            "plan_snapshot": next((part.get("plan_snapshot") for part in active if part.get("plan_snapshot")), None),
+                            "plan_snapshot": entry_plan,
+                            "plan_provenance": ({
+                                "source": "bot_order_context",
+                                "order_id": int(active[0]["plan_order_id"]),
+                                "decision_id": active[0].get("plan_decision_id"),
+                                "captured_at": entry_plan_captured_at.isoformat(),
+                                "relation": "entry_order_before_execution",
+                            } if entry_plan is not None else None),
                             "fills": [{
                                 "ledger_id": int(part["ledger_id"]),
                                 "order_id": int(part["order_id"]),
@@ -225,7 +257,8 @@ class FinnTradeReviewService:
                         WHEN d.executed_by = 'manual' THEN 'manual'
                         WHEN d.executed_by = 'auto' THEN 'bot'
                         ELSE NULL END AS source,
-                   c.plan_snapshot
+                   c.plan_snapshot, c.captured_at AS plan_captured_at,
+                   c.order_id AS plan_order_id, c.decision_id AS plan_decision_id
             FROM bot_ledger l
             LEFT JOIN bot_orders o ON o.id=l.order_id AND o.user_id=l.user_id
             LEFT JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=l.user_id
@@ -240,18 +273,20 @@ class FinnTradeReviewService:
                     user_id, bot_id, symbol, execution_environment, execution_sources, opening_ledger_id,
                     closing_ledger_id, entry_at, exit_at, entry_qty, entry_value_eur,
                     exit_value_eur, entry_price_eur, exit_price_eur,
-                    pnl_eur_before_fees, plan_snapshot, fills, base_currency
+                    pnl_eur_before_fees, plan_snapshot, plan_provenance, fills, base_currency
                 ) VALUES (
                     :user_id, :bot_id, :symbol, :execution_environment, CAST(:execution_sources AS JSONB), :opening_ledger_id,
                     :closing_ledger_id, :entry_at, :exit_at, :entry_qty, :entry_value_eur,
                     :exit_value_eur, :entry_price_eur, :exit_price_eur,
-                    :pnl_eur_before_fees, CAST(:plan_snapshot AS JSONB), CAST(:fills AS JSONB), :symbol
+                    :pnl_eur_before_fees, CAST(:plan_snapshot AS JSONB),
+                    CAST(:plan_provenance AS JSONB), CAST(:fills AS JSONB), :symbol
                 ) ON CONFLICT (user_id, opening_ledger_id) DO NOTHING
             """), {
-                **{k: v for k, v in position.items() if k not in {"fills", "plan_snapshot", "execution_sources"}},
+                **{k: v for k, v in position.items() if k not in {"fills", "plan_snapshot", "plan_provenance", "execution_sources"}},
                 "user_id": user_id,
                 "execution_sources": json.dumps(position["execution_sources"]),
                 "plan_snapshot": json.dumps(position["plan_snapshot"], default=str) if position["plan_snapshot"] is not None else None,
+                "plan_provenance": json.dumps(position["plan_provenance"]) if position["plan_provenance"] is not None else None,
                 "fills": json.dumps(position["fills"]),
             })
         await self.session.execute(text("""
@@ -266,7 +301,7 @@ class FinnTradeReviewService:
         result = await self.session.execute(text("""
             SELECT id, bot_id, symbol, execution_environment, execution_sources, entry_at, exit_at,
                    entry_qty, entry_price_eur, exit_price_eur, pnl_eur_before_fees,
-                   note, plan_snapshot IS NOT NULL AS has_plan, created_at,
+                   note, (plan_snapshot IS NOT NULL AND plan_provenance IS NOT NULL) AS has_plan, created_at,
                    analysis_status, origin, closure_basis, base_currency, pnl_status,
                    cash_legs_by_currency, exchange_name, attested_at, attestation_source_ids,
                    derivative_category, position_idx, direction, settle_currency,
@@ -279,7 +314,7 @@ class FinnTradeReviewService:
         total = count.scalar_one()
         week = await self.session.execute(text("""
             SELECT COUNT(*) AS trades,
-                   COUNT(*) FILTER (WHERE plan_snapshot IS NOT NULL) AS plans,
+                   COUNT(*) FILTER (WHERE plan_snapshot IS NOT NULL AND plan_provenance IS NOT NULL) AS plans,
                    COUNT(*) FILTER (WHERE LENGTH(TRIM(note)) > 0) AS notes,
                    COUNT(*) FILTER (WHERE analysis_status='ready') AS analyzed,
                    COUNT(*) FILTER (WHERE analysis_status='pending') AS pending,
@@ -288,7 +323,9 @@ class FinnTradeReviewService:
             WHERE user_id=:user_id AND exit_at >= NOW() - INTERVAL '7 days'
         """), {"user_id": user_id})
         pattern_rows = await self.session.execute(text("""
-            SELECT id, origin, plan_snapshot IS NOT NULL AS has_plan, analysis_status, analysis_json
+            SELECT id, origin,
+                   (plan_snapshot IS NOT NULL AND plan_provenance IS NOT NULL) AS has_plan,
+                   analysis_status, analysis_json
             FROM finn_trade_reviews
             WHERE user_id=:user_id AND exit_at >= NOW() - INTERVAL '7 days'
             ORDER BY exit_at DESC LIMIT 500
@@ -302,6 +339,28 @@ class FinnTradeReviewService:
                     theme = observation.get("theme")
                     if theme in {"plan_followed", "risk", "timing", "exit_process", "evidence_gap"}:
                         patterns[theme].add(int(row.id))
+        lesson_rows = await self.session.execute(text("""
+            SELECT r.id, l.lesson_text
+            FROM finn_trade_review_lessons l
+            JOIN finn_trade_reviews r ON r.id=l.review_id AND r.user_id=l.user_id
+            WHERE l.user_id=:user_id AND l.status='active'
+              AND l.evidence_revision=r.input_revision
+              AND r.exit_at >= NOW() - INTERVAL '7 days'
+            ORDER BY r.exit_at DESC,r.id DESC LIMIT 500
+        """), {"user_id": user_id})
+        # Exact user-confirmed wording is the only safe equivalence here. A
+        # model theme alone cannot prove a repeated personal behavior.
+        lesson_groups: dict[str, dict] = {}
+        for row in lesson_rows.fetchall():
+            key = " ".join(row.lesson_text.casefold().split())
+            group = lesson_groups.setdefault(key, {"lesson_text": row.lesson_text, "review_ids": []})
+            group["review_ids"].append(int(row.id))
+        repeated_lessons = [
+            {**group, "review_ids": sorted(group["review_ids"]),
+             "count": len(group["review_ids"]), "basis": "user_confirmed_exact_wording",
+             "uncertainty": "Herhaalde lesformulering; dit bewijst niet dat het gedrag opnieuw voorkwam."}
+            for group in lesson_groups.values() if len(group["review_ids"]) >= 2
+        ]
         weekly_counts = dict(week.fetchone()._mapping)
         return {
             "items": items,
@@ -309,6 +368,7 @@ class FinnTradeReviewService:
             "weekly": {**weekly_counts,
                        "patterns": [{"theme": theme, "review_ids": sorted(ids), "count": len(ids)}
                                     for theme, ids in sorted(patterns.items(), key=lambda item: -len(item[1]))],
+                       "confirmed_lesson_repetitions": repeated_lessons,
                        "patterns_truncated": weekly_counts["trades"] > 500},
         }
 
@@ -317,7 +377,11 @@ class FinnTradeReviewService:
             SELECT id, bot_id, symbol, execution_environment, execution_sources, opening_ledger_id,
                    closing_ledger_id, entry_at, exit_at, entry_qty, entry_value_eur,
                    exit_value_eur, entry_price_eur, exit_price_eur,
-                   pnl_eur_before_fees, plan_snapshot, fills, note, created_at, updated_at,
+                   pnl_eur_before_fees, plan_snapshot, plan_provenance,
+                   CASE WHEN plan_snapshot IS NULL THEN 'no_original_plan_recorded'
+                        WHEN plan_provenance IS NULL THEN 'legacy_plan_provenance_unknown'
+                        ELSE 'entry_order_plan_recorded' END AS plan_status,
+                   fills, note, created_at, updated_at,
                    origin, closure_basis, base_currency, pnl_status, cash_legs_by_currency,
                    exchange_name, attested_at, attestation_source_ids,
                    derivative_category, position_idx, direction, settle_currency,
@@ -335,7 +399,14 @@ class FinnTradeReviewService:
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
                            WHERE s.user_id=:user_id AND s.review_id=:id) AS has_screenshot,
                    (SELECT s.sha256 FROM finn_trade_review_screenshots s
-                    WHERE s.user_id=:user_id AND s.review_id=:id) AS screenshot_sha256
+                    WHERE s.user_id=:user_id AND s.review_id=:id) AS screenshot_sha256,
+                   (SELECT jsonb_build_object(
+                        'lesson_text', l.lesson_text, 'status', l.status,
+                        'confirmed_at', l.confirmed_at,
+                        'evidence_revision', l.evidence_revision,
+                        'source_message_id', l.source_message_id)
+                    FROM finn_trade_review_lessons l
+                    WHERE l.user_id=:user_id AND l.review_id=:id) AS lesson
             FROM finn_trade_reviews WHERE id=:id AND user_id=:user_id
         """), {"id": review_id, "user_id": user_id})
         row = result.fetchone()
@@ -390,6 +461,19 @@ class FinnTradeReviewService:
         return {"status": status, "chart": chart, "reason": reason or None}
 
     async def update_note(self, user_id: int, review_id: int, note: str) -> dict:
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id,741068)"),
+                                   {"user_id": user_id})
+        previous = await self.session.execute(text("""
+            SELECT note FROM finn_trade_reviews
+            WHERE id=:id AND user_id=:user_id FOR UPDATE
+        """), {"id": review_id, "user_id": user_id})
+        row = previous.fetchone()
+        if row is None:
+            await self.session.rollback()
+            raise HTTPException(404, "Trade-review niet gevonden")
+        if row.note == note:
+            await self.session.commit()
+            return await self.get_review(user_id, review_id)
         result = await self.session.execute(text("""
             UPDATE finn_trade_reviews SET note=:note, updated_at=NOW(),
                 input_revision=input_revision+1,
@@ -399,16 +483,90 @@ class FinnTradeReviewService:
         if result.fetchone() is None:
             await self.session.rollback()
             raise HTTPException(404, "Trade-review niet gevonden")
-        await self.session.execute(text("""
-            DELETE FROM finn_trade_review_messages WHERE user_id=:user_id AND review_id=:review_id
-        """), {"user_id": user_id, "review_id": review_id})
+        await self._invalidate_lesson_dependents(user_id, review_id)
         await self.session.commit()
         return await self.get_review(user_id, review_id)
+
+    async def set_lesson(self, user_id: int, review_id: int, lesson_text: str) -> dict:
+        """Only an authenticated user can confirm or withdraw one lesson."""
+        if not isinstance(lesson_text, str) or len(lesson_text) > 500:
+            raise HTTPException(422, "Les mag maximaal 500 tekens bevatten")
+        clean = lesson_text.strip()
+        if clean and len(clean) < 10:
+            raise HTTPException(422, "Beschrijf de les in minstens 10 tekens")
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id,741068)"),
+                                   {"user_id": user_id})
+        current = await self.session.execute(text("""
+            SELECT input_revision FROM finn_trade_reviews
+            WHERE user_id=:user_id AND id=:review_id FOR UPDATE
+        """), {"user_id": user_id, "review_id": review_id})
+        revision = current.scalar_one_or_none()
+        if revision is None:
+            await self.session.rollback()
+            raise HTTPException(404, "Trade-review niet gevonden")
+        prior = await self.session.execute(text("""
+            SELECT lesson_text,status,evidence_revision FROM finn_trade_review_lessons
+            WHERE user_id=:user_id AND review_id=:review_id
+        """), {"user_id": user_id, "review_id": review_id})
+        old = prior.fetchone()
+        desired_status = "active" if clean else "withdrawn"
+        if (old is not None and old.lesson_text == clean and old.status == desired_status
+                and (desired_status == "withdrawn" or old.evidence_revision == revision)):
+            await self.session.commit()
+            return await self.get_review(user_id, review_id)
+        if old is None and not clean:
+            await self.session.commit()
+            return await self.get_review(user_id, review_id)
+        await self.session.execute(text("""
+            INSERT INTO finn_trade_review_lessons
+                (user_id,review_id,lesson_text,status,confirmed_at,evidence_revision,source_message_id)
+            VALUES (:user_id,:review_id,:lesson_text,:status,
+                    CASE WHEN :status='active' THEN NOW() ELSE NULL END,:revision,NULL)
+            ON CONFLICT (user_id,review_id) DO UPDATE SET
+                lesson_text=EXCLUDED.lesson_text,status=EXCLUDED.status,
+                confirmed_at=EXCLUDED.confirmed_at,
+                evidence_revision=EXCLUDED.evidence_revision,
+                source_message_id=NULL,updated_at=NOW()
+        """), {"user_id": user_id, "review_id": review_id, "lesson_text": clean,
+               "status": desired_status, "revision": revision})
+        await self._invalidate_lesson_dependents(user_id, review_id)
+        await self.session.commit()
+        return await self.get_review(user_id, review_id)
+
+    async def _invalidate_lesson_dependents(self, user_id: int, review_id: int) -> None:
+        # Caller holds the per-user lesson/analysis advisory lock. Preserve the
+        # conversation, but force new analysis when source evidence changes.
+        # A's change also makes B's confirmed lesson stale after B's revision
+        # increments, so traverse B -> C before clearing cached analyses.
+        edges = await self.session.execute(text("""
+            SELECT id,analysis_json->'prior_lesson_candidate_ids' AS candidate_ids
+            FROM finn_trade_reviews
+            WHERE user_id=:user_id AND analysis_json IS NOT NULL
+        """), {"user_id": user_id})
+        dependents = dependent_review_ids(review_id, edges.fetchall())
+        if not dependents:
+            return
+        await self.session.execute(text("""
+            UPDATE finn_trade_reviews SET input_revision=input_revision+1,
+                analysis_status='pending',analysis_json=NULL,analysis_reason=NULL,
+                updated_at=NOW()
+            WHERE user_id=:user_id AND id=ANY(CAST(:review_ids AS BIGINT[]))
+        """), {"user_id": user_id, "review_ids": dependents})
 
     async def save_screenshot(self, user_id: int, review_id: int, png_bytes: bytes) -> dict:
         await self.get_review(user_id, review_id)
         normalized, width, height, digest = validate_png(png_bytes)
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id,741068)"),
+                                   {"user_id": user_id})
         await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id, 741067)"), {"user_id": user_id})
+        prior = await self.session.execute(text("""
+            SELECT sha256 FROM finn_trade_review_screenshots
+            WHERE user_id=:user_id AND review_id=:review_id
+        """), {"user_id": user_id, "review_id": review_id})
+        row = prior.fetchone()
+        if row is not None and row.sha256 == digest:
+            await self.session.commit()
+            return {"width": width, "height": height, "sha256": digest}
         usage = await self.session.execute(text("""
             SELECT COALESCE(SUM(OCTET_LENGTH(png_bytes)), 0)
             FROM finn_trade_review_screenshots
@@ -430,9 +588,7 @@ class FinnTradeReviewService:
                 analysis_status='pending', analysis_json=NULL,
                 analysis_reason=NULL WHERE user_id=:user_id AND id=:review_id
         """), {"user_id": user_id, "review_id": review_id})
-        await self.session.execute(text("""
-            DELETE FROM finn_trade_review_messages WHERE user_id=:user_id AND review_id=:review_id
-        """), {"user_id": user_id, "review_id": review_id})
+        await self._invalidate_lesson_dependents(user_id, review_id)
         await self.session.commit()
         return {"width": width, "height": height, "sha256": digest}
 
@@ -449,16 +605,19 @@ class FinnTradeReviewService:
 
     async def delete_screenshot(self, user_id: int, review_id: int) -> None:
         await self.get_review(user_id, review_id)
-        await self.session.execute(text("""
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id,741068)"),
+                                   {"user_id": user_id})
+        removed = await self.session.execute(text("""
             DELETE FROM finn_trade_review_screenshots
             WHERE user_id=:user_id AND review_id=:review_id
         """), {"user_id": user_id, "review_id": review_id})
+        if removed.rowcount == 0:
+            await self.session.commit()
+            return
         await self.session.execute(text("""
             UPDATE finn_trade_reviews SET input_revision=input_revision+1,
                 analysis_status='pending', analysis_json=NULL,
                 analysis_reason=NULL WHERE user_id=:user_id AND id=:review_id
         """), {"user_id": user_id, "review_id": review_id})
-        await self.session.execute(text("""
-            DELETE FROM finn_trade_review_messages WHERE user_id=:user_id AND review_id=:review_id
-        """), {"user_id": user_id, "review_id": review_id})
+        await self._invalidate_lesson_dependents(user_id, review_id)
         await self.session.commit()

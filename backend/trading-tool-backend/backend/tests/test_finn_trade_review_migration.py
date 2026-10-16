@@ -47,3 +47,12 @@ def test_transactional_review_migration_does_not_build_ledger_index():
     assert "ix_finn_trade_review_ledger_user_cursor" not in sql
     assert "LOCK TABLE bot_ledger" in sql  # bounded cutover baseline lock remains
     assert "trg_finn_trade_review_decision_dirty" in sql
+
+
+def test_reflection_memory_migration_preserves_unknown_legacy_message_revision():
+    migration = Path(__file__).parents[1] / "scripts/migrations/2026_10_22_finn_trade_reflection_memory.py"
+    sql = runpy.run_path(str(migration))["SQL"]
+    assert "ADD COLUMN IF NOT EXISTS input_revision BIGINT NULL" in sql
+    assert "UPDATE finn_trade_review_messages SET input_revision" not in sql
+    assert "PRIMARY KEY (user_id,review_id)" in sql
+    assert "evidence_revision BIGINT NOT NULL" in sql

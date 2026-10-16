@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowDownRight, ArrowUpRight, Brain, ChevronRight, FileText, Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from '@/app/providers/I18nProvider';
-import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, createFinnExchangeTradeReview, saveFinnTradeReviewNote, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
+import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, createFinnExchangeTradeReview, saveFinnTradeReviewNote, saveFinnTradeReviewLesson, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
 import BybitDerivativeReviews from './BybitDerivativeReviews';
 
 const number = (value) => Number(value) || 0;
@@ -95,6 +95,10 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [noteError, setNoteError] = useState(false);
+  const [lessonText, setLessonText] = useState(review.lesson?.status === 'active' ? review.lesson.lesson_text : '');
+  const [lessonBusy, setLessonBusy] = useState(false);
+  const [lessonError, setLessonError] = useState(false);
+  const [lessonSaved, setLessonSaved] = useState(false);
   const [chart, setChart] = useState(null);
   const [chartState, setChartState] = useState('loading');
   const [imageUrl, setImageUrl] = useState(null);
@@ -105,9 +109,12 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState('');
   const [messages, setMessages] = useState([]);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [question, setQuestion] = useState('');
   const fills = Array.isArray(review.fills) ? review.fills : [];
   const plan = review.plan_snapshot && typeof review.plan_snapshot === 'object' ? review.plan_snapshot : null;
+  const originalPlanVerified = Boolean(plan) && review.plan_status === 'entry_order_plan_recorded';
   const isDerivative = review.origin === 'bybit_derivative_user_attested';
   const isExchange = review.origin === 'exchange_user_attested' || isDerivative;
   const cashLegs = Array.isArray(review.cash_legs_by_currency) ? review.cash_legs_by_currency : [];
@@ -130,9 +137,9 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
     let active = true;
     if (!isExchange) fetchFinnTradeChart(review.id).then((result) => { if (active) { setChart(result.chart); setChartState(result.status); } }).catch(() => { if (active) setChartState('failed'); });
     else setChartState('unavailable');
-    fetchFinnTradeMessages(review.id).then((result) => { if (active) setMessages(Array.isArray(result) ? result : []); }).catch(() => {});
+    fetchFinnTradeMessages(review.id).then((result) => { if (active) { const rows = Array.isArray(result) ? result : []; setMessages(rows); setHasOlderMessages(rows.length === 100); } }).catch(() => { if (active) setAiError(copy.aiHistoryError); });
     return () => { active = false; };
-  }, [review.id, isExchange]);
+  }, [review.id, isExchange, copy.aiHistoryError]);
 
   useEffect(() => {
     if (!['loading', 'failed'].includes(chartState)) return undefined;
@@ -151,15 +158,25 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   }, [review.analysis_json, review.analysis_status]);
 
   useEffect(() => {
-    if (!['pending', 'running'].includes(analysisStatus)) return undefined;
+    setLessonText(review.lesson?.status === 'active' ? review.lesson.lesson_text : '');
+  }, [review.id, review.lesson?.lesson_text, review.lesson?.status]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       fetchFinnTradeReview(review.id).then((fresh) => {
+        if (fresh.analysis_status !== analysisStatus) {
+          fetchFinnTradeMessages(review.id).then((history) => {
+            const rows = Array.isArray(history) ? history : [];
+            setMessages(rows);
+            setHasOlderMessages(rows.length === 100);
+          }).catch(() => setAiError(copy.aiHistoryError));
+        }
         setAnalysis(fresh.analysis_json || null);
         setAnalysisStatus(fresh.analysis_status);
       }).catch(() => {});
-    }, 15000);
+    }, ['pending', 'running'].includes(analysisStatus) ? 15000 : 30000);
     return () => window.clearInterval(timer);
-  }, [review.id, analysisStatus]);
+  }, [review.id, analysisStatus, copy.aiHistoryError]);
 
   useEffect(() => {
     let active = true;
@@ -169,12 +186,20 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
     return () => { active = false; if (url) URL.revokeObjectURL(url); };
   }, [review.id, review.screenshot_sha256, review.has_screenshot, copy.screenshotError]);
 
-  async function refreshReview() { const updated = await fetchFinnTradeReview(review.id); setMessages([]); onSaved(updated); }
+  async function refreshReview() {
+    const updated = await fetchFinnTradeReview(review.id);
+    onSaved(updated);
+    try {
+      const history = await fetchFinnTradeMessages(review.id);
+      const rows = Array.isArray(history) ? history : [];
+      setMessages(rows);
+      setHasOlderMessages(rows.length === 100);
+    } catch { setAiError(copy.aiHistoryError); }
+  }
 
   async function uploadScreenshot(file) {
     if (!file) return;
     if (file.type !== 'image/png' || file.size > 3 * 1024 * 1024) { setUploadError(copy.screenshotType); return; }
-    if (messages.length > 0 && !window.confirm(copy.resetConfirm)) return;
     setUploading(true); setUploadError('');
     try { await uploadFinnTradeScreenshot(review.id, file); await refreshReview(); }
     catch { setUploadError(copy.screenshotError); }
@@ -182,7 +207,6 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   }
 
   async function removeScreenshot() {
-    if (messages.length > 0 && !window.confirm(copy.resetConfirm)) return;
     setUploading(true); setUploadError('');
     try { await deleteFinnTradeScreenshot(review.id); await refreshReview(); }
     catch { setUploadError(copy.screenshotError); }
@@ -199,26 +223,62 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   async function ask() {
     if (!question.trim()) return;
     setAiBusy(true); setAiError('');
-    try { await askFinnTradeReview(review.id, question.trim()); setQuestion(''); const result = await fetchFinnTradeMessages(review.id); setMessages(Array.isArray(result) ? result : []); }
+    try { await askFinnTradeReview(review.id, question.trim()); setQuestion(''); const result = await fetchFinnTradeMessages(review.id); const rows = Array.isArray(result) ? result : []; setMessages(rows); setHasOlderMessages(rows.length === 100); }
     catch { setAiError(copy.aiError); }
     finally { setAiBusy(false); }
   }
 
   async function saveNote() {
-    if (messages.length > 0 && !window.confirm(copy.resetConfirm)) return;
     setSaving(true);
     setSaved(false);
     setNoteError(false);
     try {
       const updated = await saveFinnTradeReviewNote(review.id, note.slice(0, 2000));
       setSaved(true);
-      setMessages([]);
       onSaved(updated);
+      try {
+        const history = await fetchFinnTradeMessages(review.id);
+        const rows = Array.isArray(history) ? history : [];
+        setMessages(rows);
+        setHasOlderMessages(rows.length === 100);
+      } catch { setAiError(copy.aiHistoryError); }
     } catch (error) {
       console.error('Could not save FINN trade review note:', error);
       setNoteError(true);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (loadingOlderMessages || !hasOlderMessages || !messages.length) return;
+    setLoadingOlderMessages(true);
+    setAiError('');
+    try {
+      const older = await fetchFinnTradeMessages(review.id, messages[0].id);
+      const rows = Array.isArray(older) ? older : [];
+      setMessages((current) => {
+        const known = new Set(current.map((item) => item.id));
+        return [...rows.filter((item) => !known.has(item.id)), ...current];
+      });
+      setHasOlderMessages(rows.length === 100);
+    } catch { setAiError(copy.aiHistoryError); }
+    finally { setLoadingOlderMessages(false); }
+  }
+
+  async function saveLesson(value) {
+    setLessonBusy(true);
+    setLessonError(false);
+    setLessonSaved(false);
+    try {
+      const updated = await saveFinnTradeReviewLesson(review.id, value.trim());
+      onSaved(updated);
+      setLessonText(updated.lesson?.status === 'active' ? updated.lesson.lesson_text : '');
+      setLessonSaved(true);
+    } catch {
+      setLessonError(true);
+    } finally {
+      setLessonBusy(false);
     }
   }
 
@@ -243,8 +303,8 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
 
       <div className="mt-7 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
-          <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {copy.plan}</h4>
-          {plan ? <PlanFacts plan={plan} copy={copy} /> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
+          <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {originalPlanVerified ? copy.plan : plan ? copy.planUnverified : copy.plan}</h4>
+          {plan ? <><PlanFacts plan={plan} copy={copy} />{!originalPlanVerified && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>
@@ -274,13 +334,23 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         <div className="mt-2 flex items-center gap-3"><button type="button" onClick={saveNote} disabled={saving || note === (review.note || '')} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? copy.loading : copy.saveNote}</button>{saved && <span className="text-xs text-emerald-600">{copy.saved}</span>}{noteError && <span role="alert" className="text-xs text-red-600">{copy.noteError}</span>}</div>
       </div>
 
+      <div className="mt-5 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+        <label htmlFor={`trade-lesson-${review.id}`} className="text-sm font-black text-slate-900 dark:text-white">{copy.lessonTitle}</label>
+        <p className="mt-2 text-xs text-slate-500">{copy.lessonHint}</p>
+        <textarea id={`trade-lesson-${review.id}`} value={lessonText} onChange={(event) => { setLessonText(event.target.value); setLessonSaved(false); }} maxLength={500} rows={2} placeholder={copy.lessonPlaceholder} className="mt-3 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+        {analysis?.suggested_lesson && <div className="mt-3 rounded-xl bg-blue-50 p-3 text-xs text-blue-950 dark:bg-blue-950/40 dark:text-blue-100"><strong>{copy.lessonSuggestion}</strong><p className="mt-1">{analysis.suggested_lesson}</p><button type="button" onClick={() => { setLessonText(analysis.suggested_lesson); setLessonSaved(false); }} className="mt-2 font-bold underline">{copy.lessonUseSuggestion}</button></div>}
+        {review.lesson?.status === 'active' && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">{copy.lessonConfirmed.replace('{date}', formatDate(review.lesson.confirmed_at, locale))}</p>}
+        {review.lesson?.status === 'active' && review.lesson.evidence_revision !== review.input_revision && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{copy.lessonOlderEvidence}</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" onClick={() => saveLesson(lessonText)} disabled={lessonBusy || !lessonText.trim() || (lessonText.trim() === (review.lesson?.status === 'active' ? review.lesson.lesson_text : '') && review.lesson?.evidence_revision === review.input_revision)} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{lessonBusy ? copy.loading : copy.lessonSave}</button>{review.lesson?.status === 'active' && <button type="button" onClick={() => saveLesson('')} disabled={lessonBusy} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300">{copy.lessonWithdraw}</button>}{lessonSaved && <span className="text-xs text-emerald-600">{copy.saved}</span>}{lessonError && <span role="alert" className="text-xs text-red-600">{copy.lessonError}</span>}</div>
+      </div>
+
       <div className="mt-5 rounded-2xl bg-[#111f3c] p-5 text-white">
         <h4 className="flex items-center gap-2 text-lg font-black"><Brain size={19} /> {copy.aiTitle}</h4>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{copy.aiIntro}</p>
-        {analysis ? <div className="mt-4 space-y-3 text-sm"><p className="font-semibold">{analysis.summary}</p><ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<small className="mt-1 block text-blue-200">{copy.aiEvidence}: {item.evidence_ids?.join(', ')}</small></li>)}</ul><p className="text-blue-200">{copy.aiUncertainty}: {analysis.uncertainty}</p><p>{analysis.question}</p></div> : <p className="mt-4 text-sm text-blue-200">{analysisStatus === 'running' ? copy.aiRunning : copy.aiPending} {copy.aiQueueHint}</p>}
+        {analysis ? <div className="mt-4 space-y-3 text-sm"><p className="font-semibold">{analysis.summary}</p>{analysis.prior_lesson && <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-3"><p className="text-xs font-bold uppercase tracking-wide text-blue-200">{copy.priorLessonLabel.replace('{id}', String(analysis.prior_lesson.review_id))}</p><p className="mt-1">{analysis.prior_lesson.lesson_text}</p><p className="mt-2 text-xs text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(analysis.prior_lesson.confirmed_at, locale))}</p>{analysis.prior_lesson.comparison && <p className="mt-2 text-xs text-blue-100">{analysis.prior_lesson.comparison}</p>}</div>}<ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<small className="mt-1 block text-blue-200">{copy.aiEvidence}: {item.evidence_ids?.join(', ')}</small></li>)}</ul><p className="text-blue-200">{copy.aiUncertainty}: {analysis.uncertainty}</p><p>{analysis.question}</p></div> : <p className="mt-4 text-sm text-blue-200">{analysisStatus === 'running' ? copy.aiRunning : copy.aiPending} {copy.aiQueueHint}</p>}
         <button type="button" onClick={analyze} disabled={aiBusy || analysisStatus === 'running'} className="mt-4 rounded-xl bg-white px-4 py-2 text-xs font-bold text-blue-950 disabled:opacity-50">{aiBusy ? copy.loading : copy.aiRefresh}</button>
         {aiError && <p role="alert" className="mt-2 text-xs text-rose-200">{aiError}</p>}
-        <div className="mt-5 border-t border-white/20 pt-4"><h5 className="text-sm font-bold">{copy.aiDialogue}</h5><p className="mt-1 text-xs text-blue-200">{copy.aiDialogueHint}</p><div className="mt-3 max-h-60 space-y-2 overflow-auto">{messages.map((message) => { let structured; try { structured = message.role === 'finn' ? JSON.parse(message.content) : null; } catch { structured = null; } return <p key={message.id} className="rounded-xl border border-white/20 p-3 text-sm"><strong>{message.role === 'finn' ? 'FINN' : copy.note}:</strong> {structured ? <span className="mt-1 block space-y-2"><span className="block">{structured.summary}</span>{Array.isArray(structured.observations) && structured.observations.map((item, index) => <span key={index} className="block rounded-lg border border-white/15 p-2">{item.text}<small className="mt-1 block text-blue-200">{copy.aiEvidence}: {item.evidence_ids?.join(', ')}</small></span>)}<span className="block text-blue-200">{copy.aiUncertainty}: {structured.uncertainty}</span>{structured.question && <span className="block">{structured.question}</span>}</span> : message.content}</p>; })}</div><div className="mt-3 flex gap-2"><input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={copy.aiQuestion} className="min-w-0 flex-1 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-blue-200" /><button type="button" onClick={ask} disabled={aiBusy || !question.trim()} className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold disabled:opacity-50">{copy.aiAsk}</button></div></div>
+        <div className="mt-5 border-t border-white/20 pt-4"><h5 className="text-sm font-bold">{copy.aiDialogue}</h5><p className="mt-1 text-xs text-blue-200">{copy.aiDialogueHint}</p>{hasOlderMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlderMessages} className="mt-3 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{loadingOlderMessages ? copy.loading : copy.aiLoadOlder}</button>}<div className="mt-3 max-h-60 space-y-2 overflow-auto">{messages.map((message) => { let structured; try { structured = message.role === 'finn' ? JSON.parse(message.content) : null; } catch { structured = null; } return <div key={message.id} className="rounded-xl border border-white/20 p-3 text-sm"><div className="flex flex-wrap items-center gap-2"><strong>{message.role === 'finn' ? 'FINN' : copy.note}:</strong>{message.is_current_evidence === false && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-bold text-amber-100">{message.evidence_status === 'source_removed' ? copy.aiSourceRemoved : copy.aiOlderEvidence}</span>}</div>{structured ? <div className="mt-1 space-y-2"><span className="block">{structured.summary}</span>{structured.prior_lesson && <span className="block rounded-lg border border-blue-200/30 bg-blue-300/10 p-2"><strong>{copy.priorLessonLabel.replace('{id}', String(structured.prior_lesson.review_id))}</strong><span className="mt-1 block">{structured.prior_lesson.lesson_text}</span><small className="mt-1 block text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(structured.prior_lesson.confirmed_at, locale))}</small>{structured.prior_lesson.comparison && <small className="mt-1 block text-blue-100">{structured.prior_lesson.comparison}</small>}</span>}{Array.isArray(structured.observations) && structured.observations.map((item, index) => <span key={index} className="block rounded-lg border border-white/15 p-2">{item.text}<small className="mt-1 block text-blue-200">{copy.aiEvidence}: {item.evidence_ids?.join(', ')}</small></span>)}<span className="block text-blue-200">{copy.aiUncertainty}: {structured.uncertainty}</span>{structured.question && <span className="block">{structured.question}</span>}</div> : message.content}</div>; })}</div><div className="mt-3 flex gap-2"><input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={copy.aiQuestion} className="min-w-0 flex-1 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-blue-200" /><button type="button" onClick={ask} disabled={aiBusy || !question.trim()} className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold disabled:opacity-50">{copy.aiAsk}</button></div></div>
       </div>
     </div>
   );
@@ -524,7 +594,7 @@ export default function FinnTradeReviews() {
               </button>)}</div>}
               {items.length < total && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-blue-600 disabled:opacity-50 dark:border-slate-700">{loadingMore ? copy.loading : copy.more}</button>}
               {(number(excluded.legacy_or_ambiguous) > 0 || number(excluded.inconsistent) > 0) && <p className="mt-4 text-xs text-amber-700 dark:text-amber-300">{copy.excluded}</p>}
-              <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800"><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">{copy.weekPattern}</p><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{rolloutDisabled ? copy.rolloutDisabled : number(weekly.trades) > 0 ? weeklySummary : copy.weekNoTrades}</p>{number(weekly.trades) > 0 && <p className="mt-1 text-xs text-slate-500">{number(weekly.analyzed)} {copy.weekAnalyzed} · {number(weekly.pending)} {copy.weekPending} · {number(weekly.unavailable)} {copy.weekUnavailable}</p>}{Array.isArray(weekly.patterns) && weekly.patterns.map((pattern) => <div key={pattern.theme} className="mt-3 rounded-xl bg-slate-50 p-3 text-xs dark:bg-slate-900"><strong>{copy.themes?.[pattern.theme] || pattern.theme}</strong> · {pattern.count} {pattern.count === 1 ? copy.weekTrade : copy.weekTrades}<div className="mt-1 flex flex-wrap gap-2">{pattern.review_ids.map((id) => <button key={id} type="button" onClick={() => openReview(id)} className="font-bold text-blue-600 underline">#{id}</button>)}</div></div>)}{weekly.patterns_truncated && <p className="mt-2 text-xs text-amber-600">{copy.weekTruncated}</p>}</div>
+              <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800"><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">{copy.weekPattern}</p><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{rolloutDisabled ? copy.rolloutDisabled : number(weekly.trades) > 0 ? weeklySummary : copy.weekNoTrades}</p>{number(weekly.trades) > 0 && <p className="mt-1 text-xs text-slate-500">{number(weekly.analyzed)} {copy.weekAnalyzed} · {number(weekly.pending)} {copy.weekPending} · {number(weekly.unavailable)} {copy.weekUnavailable}</p>}{Array.isArray(weekly.patterns) && weekly.patterns.map((pattern) => <div key={pattern.theme} className="mt-3 rounded-xl bg-slate-50 p-3 text-xs dark:bg-slate-900"><strong>{copy.themes?.[pattern.theme] || pattern.theme}</strong> · {pattern.count} {pattern.count === 1 ? copy.weekTrade : copy.weekTrades}<div className="mt-1 flex flex-wrap gap-2">{pattern.review_ids.map((id) => <button key={id} type="button" onClick={() => openReview(id)} className="font-bold text-blue-600 underline">#{id}</button>)}</div></div>)}{Array.isArray(weekly.confirmed_lesson_repetitions) && weekly.confirmed_lesson_repetitions.map((pattern) => <div key={pattern.review_ids.join('-')} className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs dark:border-blue-900 dark:bg-blue-950/30"><strong>{copy.weekLessonRepeat}</strong> · {pattern.count} {pattern.count === 1 ? copy.weekTrade : copy.weekTrades}<p className="mt-1 text-slate-800 dark:text-slate-100">{pattern.lesson_text}</p><p className="mt-1 text-slate-500">{copy.weekLessonNote}</p><div className="mt-1 flex flex-wrap gap-2">{pattern.review_ids.map((id) => <button key={id} type="button" onClick={() => openReview(id)} className="font-bold text-blue-600 underline">#{id}</button>)}</div></div>)}{weekly.patterns_truncated && <p className="mt-2 text-xs text-amber-600">{copy.weekTruncated}</p>}</div>
             </>
           )}
         </div>

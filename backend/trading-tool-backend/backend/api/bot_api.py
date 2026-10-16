@@ -47,6 +47,10 @@ class FinnTradeReviewNote(BaseModel):
     note: str = Field(max_length=2000)
 
 
+class FinnTradeReviewLesson(BaseModel):
+    lesson_text: str = Field(max_length=500)
+
+
 class FinnTradeQuestion(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
 
@@ -447,6 +451,17 @@ async def save_finn_trade_review_note(
     return await FinnTradeReviewService(db).update_note(current_user["id"], review_id, payload.note)
 
 
+@router.put("/bot/trade-reviews/{review_id}/lesson")
+async def save_finn_trade_review_lesson(
+    review_id: int, payload: FinnTradeReviewLesson,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    return await FinnTradeReviewService(db).set_lesson(current_user["id"], review_id,
+                                                        payload.lesson_text)
+
+
 @router.put("/bot/trade-reviews/{review_id}/screenshot")
 async def put_finn_trade_review_screenshot(
     review_id: int, request: Request,
@@ -514,11 +529,14 @@ async def analyze_finn_trade_review(
 @router.get("/bot/trade-reviews/{review_id}/messages")
 async def get_finn_trade_review_messages(
     review_id: int,
+    before_id: int | None = None,
+    limit: int = 100,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     require_trade_review_access(current_user["id"])
-    return await FinnTradeAnalysisService(db).messages(current_user["id"], review_id)
+    return await FinnTradeAnalysisService(db).messages(current_user["id"], review_id,
+                                                       before_id=before_id, limit=limit)
 
 
 @router.post("/bot/trade-reviews/{review_id}/messages")

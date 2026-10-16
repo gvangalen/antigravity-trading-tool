@@ -289,9 +289,17 @@ export const saveFinnTradeReviewNote = async (reviewId, note) => {
   }));
 };
 
+export const saveFinnTradeReviewLesson = async (reviewId, lessonText) => {
+  if (!reviewId) throw new Error("reviewId is verplicht");
+  return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/lesson`, {
+    method: "PUT",
+    body: JSON.stringify({ lesson_text: lessonText }),
+  }));
+};
+
 export const fetchFinnTradeChart = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/chart`));
 export const analyzeFinnTradeReview = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/analyze`, { method: "POST" }));
-export const fetchFinnTradeMessages = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/messages`));
+export const fetchFinnTradeMessages = (reviewId, beforeId = null) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/messages${beforeId == null ? '' : `?before_id=${encodeURIComponent(beforeId)}&limit=100`}`));
 export const askFinnTradeReview = (reviewId, question) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/messages`, { method: "POST", body: JSON.stringify({ question }) }));
 export const uploadFinnTradeScreenshot = (reviewId, file) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { method: "PUT", headers: { "Content-Type": "image/png" }, body: file }));
 export const deleteFinnTradeScreenshot = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { method: "DELETE" }));

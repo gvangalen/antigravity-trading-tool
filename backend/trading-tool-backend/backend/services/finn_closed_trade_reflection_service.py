@@ -42,7 +42,7 @@ class FinnClosedTradeReflectionService:
                    origin, closure_basis, pnl_status, cash_legs_by_currency,
                    derivative_category, position_idx, direction, settle_currency,
                    native_pnl_status,
-                   pnl_eur_before_fees, plan_snapshot IS NOT NULL AS has_plan,
+                   pnl_eur_before_fees, plan_snapshot, plan_provenance,
                    analysis_status, analysis_json, candles_status,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
                            WHERE s.user_id=:user_id AND s.review_id=r.id) AS has_screenshot,
@@ -78,7 +78,7 @@ class FinnClosedTradeReflectionService:
                    origin, closure_basis, pnl_status, cash_legs_by_currency,
                    derivative_category, position_idx, direction, settle_currency,
                    native_pnl_status,
-                   pnl_eur_before_fees, plan_snapshot IS NOT NULL AS has_plan,
+                   pnl_eur_before_fees, plan_snapshot, plan_provenance,
                    analysis_status, analysis_json, candles_status,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
                            WHERE s.user_id=:user_id AND s.review_id=r.id) AS has_screenshot,
@@ -105,6 +105,7 @@ class FinnClosedTradeReflectionService:
         sampled_fills = fills[:10] + fills[-10:] if len(fills) > 20 else fills
         derivative = row.get("origin") == "bybit_derivative_user_attested"
         exchange = row.get("origin") == "exchange_user_attested"
+        has_proven_plan = bool(row.get("plan_snapshot") and row.get("plan_provenance"))
         evidence_ids = ([f"derivative_exec:{item['derivative_execution_id']}:{item['role']}"
                          for item in sampled_fills if isinstance(item, dict)
                          and isinstance(item.get("derivative_execution_id"), int)
@@ -117,7 +118,7 @@ class FinnClosedTradeReflectionService:
                          if isinstance(item, dict) and isinstance(item.get("ledger_id"), int)])
         if exchange or derivative:
             evidence_ids.append("closure:user-confirmed")
-        if row.get("has_plan"):
+        if has_proven_plan:
             evidence_ids.append("plan:snapshot")
         if row.get("candles_status") == "ready":
             evidence_ids.append("chart:binance-eur")
@@ -140,7 +141,7 @@ class FinnClosedTradeReflectionService:
             "execution_sources": row.get("execution_sources") or [],
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
-            "has_plan": bool(row.get("has_plan")),
+            "has_plan": has_proven_plan,
             "analysis_status": str(row["analysis_status"]),
             "chart_status": str(row["candles_status"]),
             "has_screenshot": bool(row.get("has_screenshot")),

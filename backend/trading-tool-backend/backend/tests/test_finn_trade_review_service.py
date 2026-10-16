@@ -39,6 +39,9 @@ def fill(index, qty, cash, *, environment="paper", status="filled", bot_id=5, sy
         "exchange_symbol": exchange_symbol or (f"{symbol}/EUR" if environment == "live" else None),
         "exchange_order_id": exchange_order_id or (f"exchange-{index}" if environment == "live" else None),
         "plan_snapshot": {"risk": {"max": 20}} if index == 1 else None,
+        "plan_captured_at": START if index == 1 else None,
+        "plan_order_id": index // 2 + 1,
+        "plan_decision_id": 4 if index == 1 else None,
     }
 
 
@@ -52,6 +55,17 @@ def test_partial_fills_and_partial_exits_become_one_completed_position():
     assert len(reviews[0]["fills"]) == 4
     assert reviews[0]["plan_snapshot"] == {"risk": {"max": 20}}
     assert excluded == {"legacy_or_ambiguous": 0, "inconsistent": 0}
+
+
+def test_exit_order_plan_is_not_relabelled_as_original_entry_plan():
+    rows = [fill(1, 1, -100), fill(2, -1, 110)]
+    rows[0]["plan_snapshot"] = None
+    rows[1]["plan_snapshot"] = {"entry_plan": "added after entry"}
+    rows[1]["plan_captured_at"] = rows[1]["ts"] - timedelta(seconds=1)
+    reviews, _ = build_closed_positions(rows, {}, {(5, "BTC"): Decimal(0)})
+    assert len(reviews) == 1
+    assert reviews[0]["plan_snapshot"] is None
+    assert reviews[0]["plan_provenance"] is None
 
 
 def test_open_and_legacy_positions_do_not_get_reviews():
