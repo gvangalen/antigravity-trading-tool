@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mobiele herkeuring: lege setup en verlopen sessie
 
-Phase: `CANDIDATE_READY_AWAITING_CI_DEPLOY`. Kandidaatbranch:
-`codex/finn-mobile-qa-followup`. Onafhankelijke mobiele QA op vorige live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Kandidaatbranch:
+`codex/finn-mobile-qa-followup`; productmerge
+`84f35cda05404f757a0ae676aebf59ef72b628bc`. Onafhankelijke mobiele QA op vorige live SHA
 `54fd212cdd6ef2c092cd71c83120ee67046b6c70` gaf `NOT_ACCEPTED`.
 De eerder hangende read-only vraag op Reflectie kreeg na verse login binnen
 ongeveer 15 seconden een antwoord, bleef na Expo-reload behouden en deelde
@@ -25,8 +26,14 @@ reparatiekandidaat toont een lege planstaat zonder bevestigbaar nepplan.
 Daarnaast meldt de centrale mobiele API-client een ontbrekende of vervallen
 authsessie direct aan de authlaag, die de ingelogde UI sluit; op voorgrond
 wordt de sessie opnieuw gecontroleerd. De standaard dev-autologin met vaste
-voorbeeldgegevens is verwijderd. De lokale gates zijn groen; CI, Auto Deploy
-en een nieuwe onafhankelijke live QA-run staan nog open.
+voorbeeldgegevens is verwijderd. De lokale gates zijn groen. PR #372,
+main-CI `38854326790` en Auto Deploy `38854485264` slaagden.
+Backend-health en frontend-buildinfo gaven daarna beide HTTP 200 en exact
+product-SHA `84f35cda05404f757a0ae676aebf59ef72b628bc`. Een nieuwe
+onafhankelijke ingelogde mobiele QA-run staat nog open. Een
+documentatiehandoff kan een latere, inhoudelijk identieke deployment-SHA
+krijgen; QA gebruikt de daadwerkelijk gepubliceerde backend- en
+frontendidentiteit.
 
 Lokale validatie op deze kandidaat: 11 gerichte mobiele tests, mobiele
 typecheck/lint zonder errors en web/iOS/Android Expo-bundels groen; backend
