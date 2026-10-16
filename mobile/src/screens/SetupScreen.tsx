@@ -42,6 +42,7 @@ import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
+import { extractOwnedActiveSetup } from '../services/setupSelection';
 
 type UnknownRecord = Record<string, unknown>;
 type SheetKey = 'setup' | 'strategy' | 'risk' | 'confirm' | 'plan-detail' | null;
@@ -225,7 +226,7 @@ export function SetupScreen() {
   const botMeta = useMemo(() => mapBotActionMeta(botResource.data, botDecisionSource), [botDecisionSource, botResource.data]);
   const topSetups = useMemo(() => mapTopSetups(topSetupsResource.data), [topSetupsResource.data]);
   const planItems = useMemo(() => {
-    const merged = [setup, ...topSetups];
+    const merged = [setup, ...topSetups].filter((item) => typeof item.id === 'number');
     const seen = new Set<string>();
     return merged
       .filter((item) => {
@@ -451,7 +452,9 @@ export function SetupScreen() {
             isStale={isStale}
             onAskFinn={() =>
               openFinn({
-                prefill: `Explain my current plan for ${activeAsset}. Tell me why ${setup.name} is leading, what confirms it and what should wait.`,
+                prefill: setup.id
+                  ? `Explain my current plan for ${activeAsset}. Tell me why ${setup.name} is leading, what confirms it and what should wait.`
+                  : `Help me review whether I have an existing plan for ${activeAsset}. If not, explain what I need to create one.`,
                 source: 'my-plan-workspace',
                 symbol: activeAsset,
               })
@@ -482,7 +485,7 @@ export function SetupScreen() {
               },
             ]}
           />
-          <ActivePlanWorkspaceCard
+          {setup.id ? <ActivePlanWorkspaceCard
             botDecision={botDecision}
             decisionState={decisionState}
             hasLinkedStrategy={hasLinkedStrategy}
@@ -492,7 +495,17 @@ export function SetupScreen() {
             onReviewBot={() => setSheet('confirm')}
             setup={setup}
             strategy={strategy}
-          />
+          /> : <InsightCard
+            label={translate(language, 'myPlan.yourPlans')}
+            title={translate(language, 'myPlan.emptyTitle')}
+            body={translate(language, 'myPlan.emptyBody')}
+            cta={translate(language, 'myPlan.newPlan')}
+            onPress={() => openFinn({
+              prefill: `Help me create a new trading plan for ${activeAsset}.`,
+              source: 'my-plan-empty',
+              symbol: activeAsset,
+            })}
+          />}
           <AllPlansListCard
             onCreatePlan={() =>
               openFinn({
@@ -2055,7 +2068,9 @@ function pushPrefill(type: string, symbol: string) {
 
 function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewResponse['watchlist'][number]): SetupSummary {
   const active = extractActiveSetup(source);
-  const rawScore = readOptionalNumber(active, ['score', 'match_score']) ?? overviewAsset?.setup_match_score;
+  const rawScore = active
+    ? readOptionalNumber(active, ['score', 'match_score']) ?? overviewAsset?.setup_match_score
+    : null;
   const scoreAvailable = typeof rawScore === 'number' && Number.isFinite(rawScore);
   const score = scoreAvailable ? clampScore(rawScore) : 0;
   const symbol = readString(active, ['symbol'], overviewAsset?.symbol ?? '');
@@ -2163,21 +2178,7 @@ function mapBotActionMeta(source?: BotResponse, decision?: UnknownRecord): BotAc
 }
 
 function extractActiveSetup(source?: SetupResponse) {
-  const record = firstObject(source);
-  const active = record?.active;
-  if (isRecord(active)) {
-    return {
-      ...active,
-      id: readOptionalNumber(active, ['id', 'setup_id']) ?? active.id,
-    };
-  }
-  if (isRecord(record)) {
-    return {
-      ...record,
-      id: readOptionalNumber(record, ['id', 'setup_id']) ?? record.id,
-    };
-  }
-  return record;
+  return extractOwnedActiveSetup(source);
 }
 
 function extractStrategy(source?: StrategyResponse) {

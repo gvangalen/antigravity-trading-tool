@@ -3,6 +3,7 @@ import { NativeModules, Platform } from 'react-native';
 import { getStoredAppLanguage } from '../preferences/appLocale';
 import { clearTokens, getAccessToken, getRefreshToken, saveAccessToken } from './tokenStorage';
 import { withRequestDeadline } from './requestDeadline';
+import { notifyAuthSessionInvalidated } from './authSessionEvents';
 
 declare const __DEV__: boolean;
 
@@ -113,6 +114,10 @@ class APIClient {
     try {
       const accessToken = options.skipAuth ? null : await getAccessToken();
       const refreshToken = options.skipAuth ? null : await getRefreshToken();
+      if (!options.skipAuth && !USE_COOKIE_CREDENTIALS && !accessToken && !refreshToken) {
+        notifyAuthSessionInvalidated();
+        throw new ApiError('Authentication required', 401);
+      }
       const locale = await getStoredAppLanguage();
       const response = await fetch(this.buildUrl(path, options.query), {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -136,6 +141,11 @@ class APIClient {
           if (refreshed) {
             return this.requestInternal<T>(path, options, true);
           }
+        }
+
+        if (response.status === 401 && !options.skipAuth) {
+          await clearTokens();
+          notifyAuthSessionInvalidated();
         }
 
         throw new ApiError(this.errorMessage(payload, response.status), response.status, payload);
