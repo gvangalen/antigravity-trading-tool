@@ -221,6 +221,36 @@ export const fetchAllBotTrades = async (limit = 50, offset = 0) => {
   };
 };
 
+export const fetchFinnTradeReviews = async (limit = 50, offset = 0) => {
+  const query = buildQuery({ limit, offset });
+  return handleApi(fetchAuth(`/api/bot/trade-reviews?${query}`));
+};
+
+export const fetchFinnTradeReview = async (reviewId) => {
+  if (!reviewId) throw new Error("reviewId is verplicht");
+  return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}`));
+};
+
+export const saveFinnTradeReviewNote = async (reviewId, note) => {
+  if (!reviewId) throw new Error("reviewId is verplicht");
+  return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/note`, {
+    method: "PUT",
+    body: JSON.stringify({ note }),
+  }));
+};
+
+export const fetchFinnTradeChart = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/chart`));
+export const analyzeFinnTradeReview = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/analyze`, { method: "POST" }));
+export const fetchFinnTradeMessages = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/messages`));
+export const askFinnTradeReview = (reviewId, question) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/messages`, { method: "POST", body: JSON.stringify({ question }) }));
+export const uploadFinnTradeScreenshot = (reviewId, file) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { method: "PUT", headers: { "Content-Type": "image/png" }, body: file }));
+export const deleteFinnTradeScreenshot = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { method: "DELETE" }));
+export const fetchFinnTradeScreenshot = async (reviewId) => {
+  const response = await fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { forceFresh: true });
+  if (!(response instanceof Response)) throw new Error("Screenshot response is ongeldig");
+  return response.blob();
+};
+
 /* =====================================================
    📊 9. TRADE PLAN (GET)
 ===================================================== */

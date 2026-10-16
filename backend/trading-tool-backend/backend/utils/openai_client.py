@@ -1,4 +1,5 @@
 import os
+import base64
 import json
 import logging
 import time
@@ -675,6 +676,24 @@ def _rate_limit_allows_call() -> bool:
 # ============================================================
 # ✅ GPT JSON CALL
 # ============================================================
+def _json_prompt_messages(prompt: str, system_role: str, image_png: Optional[bytes] = None,
+                          *, responses_api: bool = False) -> list[dict]:
+    user_text = prompt + "\n\nRETURN ONLY VALID JSON."
+    if image_png is None:
+        return [{"role": "system", "content": system_role},
+                {"role": "user", "content": user_text}]
+    if not isinstance(image_png, bytes) or len(image_png) > 3 * 1024 * 1024 or not image_png.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("invalid_png_image_input")
+    data_url = "data:image/png;base64," + base64.b64encode(image_png).decode("ascii")
+    if responses_api:
+        content = [{"type": "input_text", "text": user_text},
+                   {"type": "input_image", "image_url": data_url, "detail": "low"}]
+    else:
+        content = [{"type": "text", "text": user_text},
+                   {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}}]
+    return [{"role": "system", "content": system_role}, {"role": "user", "content": content}]
+
+
 def ask_gpt_json(
     *,
     prompt: str,
@@ -685,6 +704,7 @@ def ask_gpt_json(
     client_max_retries: Optional[int] = None,
     model_override: Optional[str] = None,
     reasoning_effort: Optional[str] = None,
+    image_png: Optional[bytes] = None,
 ) -> Dict[str, Any]:
     """Genereert een gestructureerde JSON response."""
     
@@ -707,10 +727,7 @@ def ask_gpt_json(
 
     _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
 
-    messages = [
-        {"role": "system", "content": system_role},
-        {"role": "user", "content": prompt + "\n\nRETURN ONLY VALID JSON."}
-    ]
+    messages = _json_prompt_messages(prompt, system_role, image_png)
 
     for attempt in range(1, retries + 1):
         try:
@@ -721,7 +738,7 @@ def ask_gpt_json(
             if model_override:
                 response = active_client.responses.create(
                     model=model_override,
-                    input=messages,
+                    input=_json_prompt_messages(prompt, system_role, image_png, responses_api=True),
                     reasoning={"effort": reasoning_effort or "none"},
                     max_output_tokens=max_tokens or MAX_TOKENS,
                     text={"format": {"type": "json_object"}},

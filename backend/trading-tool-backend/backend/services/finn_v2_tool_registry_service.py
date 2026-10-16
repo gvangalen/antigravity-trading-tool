@@ -33,7 +33,7 @@ class FinnV2ToolRegistryService:
                 ),
             ),
             ToolDefinition(name="read_latest_report", description="Read the latest saved report, including its dated Score 2.0 facts and source moments when available. Do not replace historical report facts with current scores.", depends_on=["read_active_asset"]),
-            ToolDefinition(name="read_review_history", description="Read historical reviews and decisions when available, not recently saved setup or strategy details.", depends_on=["read_active_asset"]),
+            ToolDefinition(name="read_review_history", description="Read owner-scoped confirmed closed trade reviews and separately labelled historical bot decisions. Read only; never executes an order."),
         ]
 
     def get_tool(self, tool_name: str) -> ToolDefinition:

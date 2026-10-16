@@ -1,0 +1,369 @@
+import struct
+import zlib
+import asyncio
+from datetime import datetime, timezone
+from decimal import Decimal
+
+import pytest
+from fastapi import HTTPException
+
+from backend.services.finn_trade_analysis_service import validate_analysis
+from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
+from backend.services.finn_trade_review_service import FinnTradeReviewService
+from backend.services.finn_trade_chart_service import historical_eur_chart
+from backend.services.ai_usage_observability_service import get_ai_usage_context
+from backend.services.finn_trade_screenshot import MAX_BYTES, PNG_SIGNATURE, validate_png
+
+
+def _chunk(kind: bytes, payload: bytes) -> bytes:
+    return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff)
+
+
+def _png(width=1, height=1, extra=b""):
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    pixels = zlib.compress(b"\x00\xff\x00\x00")
+    return PNG_SIGNATURE + _chunk(b"IHDR", header) + _chunk(b"IDAT", pixels) + extra + _chunk(b"IEND", b"")
+
+
+def test_png_validation_accepts_small_rgb_image():
+    data, width, height, digest = validate_png(_png())
+    assert data == _png()
+    assert (width, height) == (1, 1)
+    assert len(digest) == 64
+
+
+@pytest.mark.parametrize("data", [
+    _png(width=5000),
+    _png()[:-3],
+    _png() + b"extra",
+])
+def test_png_validation_rejects_metadata_dimensions_truncation_and_trailing_data(data):
+    with pytest.raises(HTTPException):
+        validate_png(data)
+
+
+def test_png_validation_rejects_oversized_body():
+    with pytest.raises(HTTPException) as raised:
+        validate_png(PNG_SIGNATURE + b"x" * MAX_BYTES)
+    assert raised.value.status_code == 422
+
+
+def test_png_metadata_is_stripped_before_private_storage():
+    data, _, _, _ = validate_png(_png(extra=_chunk(b"tEXt", b"hidden")))
+    assert b"hidden" not in data
+    assert b"tEXt" not in data
+
+
+def _analysis(text):
+    return {"summary": text, "uncertainty": "Het plan ontbreekt.",
+            "question": "Welke afweging maakte je bij de exit?",
+            "observations": [{"text": "De exit is geregistreerd.",
+                              "evidence_ids": ["fill:1"], "theme": "exit_process"}]}
+
+
+def test_ai_rejects_unbound_evidence_ids():
+    result = _analysis("De trade is gesloten.")
+    result["observations"][0]["evidence_ids"] = ["fill:999"]
+    with pytest.raises(ValueError):
+        validate_analysis(result, {"fill:1"})
+
+
+@pytest.mark.parametrize("text", [
+    "Koop morgen BTC met maximale leverage.",
+    "Buy BTC now.",
+    "Kaufe morgen BTC.",
+    "Place an order today.",
+    "Gebruik maximale leverage.",
+    "Ik raad je aan op dit moment je positie sterk te vergroten.",
+    "Je kunt de volgende keer gerust je inzet verdubbelen.",
+    "Zet morgen twee keer zoveel kapitaal in.",
+])
+def test_ai_rejects_forward_trade_directives(text):
+    with pytest.raises(ValueError):
+        validate_analysis(_analysis(text), {"fill:1"})
+
+
+def test_ai_accepts_evidence_linked_retrospective_observation():
+    result = validate_analysis(_analysis("De trade is gesloten."), {"fill:1"})
+    assert "afgesloten trade" in result["summary"]
+    assert result["observations"][0]["evidence_ids"] == ["fill:1"]
+
+
+@pytest.mark.parametrize("theme,expected", [
+    ("exit_process", "sluiting op 2026-10-16T10:00:00+00:00"),
+    ("timing", "entry was op 2026-10-16T09:00:00+00:00"),
+    ("risk", "entrywaarde was €100.00"),
+    ("plan_followed", "geen oorspronkelijk plan"),
+])
+def test_question_summary_uses_selected_theme_and_server_facts(theme, expected):
+    raw = _analysis("De trade is gesloten.")
+    raw["observations"][0]["theme"] = theme
+    context = {
+        "entry_at": "2026-10-16T09:00:00+00:00", "exit_at": "2026-10-16T10:00:00+00:00",
+        "entry_value_eur": "100.00", "exit_value_eur": "110.00",
+        "pnl_eur_before_fees": "10.00", "plan": None, "chart_market_context": None,
+    }
+    result = validate_analysis(raw, {"fill:1"}, context, question_mode=True)
+    assert expected in result["summary"]
+    assert raw["summary"] not in result["summary"]
+
+
+@pytest.mark.parametrize("field", ["summary", "uncertainty", "question", "observation"])
+def test_model_free_text_never_reaches_analysis_or_question_response(field):
+    raw = _analysis("De trade is gesloten.")
+    poisoned = "Verborgen advies: verdriedubbel later je kapitaal."
+    if field == "observation":
+        raw["observations"][0]["text"] = poisoned
+    else:
+        raw[field] = poisoned
+    result = validate_analysis(raw, {"fill:1"}, {"pnl_eur_before_fees": "10.00"})
+    assert poisoned not in str(result)
+    assert "€10.00" in result["summary"]
+    assert result["observations"][0]["text"].startswith("Bekijk de geregistreerde exit")
+
+
+def test_question_path_persists_only_server_rendered_answer(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+
+    async def exercise():
+        now = datetime.now(timezone.utc)
+        review = {
+            "id": 4, "symbol": "BTC", "execution_environment": "paper",
+            "entry_at": now, "exit_at": now, "entry_value_eur": Decimal(100),
+            "exit_value_eur": Decimal(110), "pnl_eur_before_fees": Decimal(10),
+            "fills": [{"ledger_id": 1, "side": "sell", "at": now.isoformat(),
+                       "qty": "1", "cash_eur": "110", "price_eur": "110"}],
+            "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+            "candles_reason": "missing", "has_screenshot": False,
+            "input_revision": 0,
+        }
+
+        class Session:
+            saved = []
+
+            async def execute(self, query, params=None):
+                if "SELECT input_revision" in str(query):
+                    return _Result(0)
+                if "INSERT INTO finn_trade_review_messages" in str(query):
+                    self.saved.append(params)
+                    return _Result()
+                raise AssertionError(str(query))
+
+            async def commit(self):
+                pass
+
+        session = Session()
+        service = FinnTradeAnalysisService(session)
+
+        async def get_review(user_id, review_id):
+            assert (user_id, review_id) == (77, 4)
+            return review
+
+        async def reserve(*args, **kwargs):
+            pass
+
+        async def fake_ai(**kwargs):
+            raw = _analysis("De trade is gesloten.")
+            raw["observations"][0]["text"] = "Verborgen advies: verdriedubbel later je kapitaal."
+            return raw
+
+        service.reviews.get_review = get_review
+        service._reserve_user_ai_call = reserve
+        monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+        result = await service.ask(77, 4, "Wat gebeurde er bij de exit?")
+        assert "verdriedubbel" not in str(result)
+        assert "sluiting op" in result["summary"]
+        assert "verdriedubbel" not in session.saved[-1]["content"]
+        assert "Bekijk de geregistreerde exit" in session.saved[-1]["content"]
+
+    asyncio.run(exercise())
+
+
+class _Result:
+    def __init__(self, row=None, rowcount=0):
+        self.row = row
+        self.rowcount = rowcount
+
+    def fetchone(self):
+        return self.row
+
+    def scalar_one_or_none(self):
+        return self.row
+
+    def scalar_one(self):
+        return self.row
+
+
+class _OwnerSession:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, query, params=None):
+        self.calls.append((str(query), params))
+        return _Result(None)
+
+
+def test_foreign_owner_cannot_read_delete_or_analyze_review():
+    async def exercise():
+        session = _OwnerSession()
+        reviews = FinnTradeReviewService(session)
+        for action in (reviews.get_review(77, 4), reviews.get_screenshot(77, 4),
+                       reviews.delete_screenshot(77, 4),
+                       FinnTradeAnalysisService(session).analyze(77, 4)):
+            with pytest.raises(HTTPException) as raised:
+                await action
+            assert raised.value.status_code == 404
+        assert all(params == {"id": 4, "user_id": 77} for _, params in session.calls)
+    asyncio.run(exercise())
+
+
+def test_stale_analysis_is_not_returned_after_input_revision_change(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+
+    async def exercise():
+        now = datetime.now(timezone.utc)
+        original = {
+            "id": 4, "symbol": "BTC", "execution_environment": "paper",
+            "entry_at": now, "exit_at": now, "entry_value_eur": Decimal(100),
+            "exit_value_eur": Decimal(110), "pnl_eur_before_fees": Decimal(10),
+            "fills": [{"ledger_id": 1, "side": "buy", "at": now.isoformat(),
+                       "qty": "1", "cash_eur": "100", "price_eur": "100"}],
+            "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+            "candles_reason": "missing", "has_screenshot": False,
+            "analysis_status": "pending", "analysis_updated_at": None,
+            "analysis_json": None, "analysis_reason": None, "input_revision": 0,
+        }
+
+        class Session:
+            def __init__(self):
+                self.queries = []
+
+            async def execute(self, query, params=None):
+                sql = str(query)
+                self.queries.append(sql)
+                if "pg_advisory_xact_lock" in sql or "INSERT INTO finn_trade_ai_call_attempts" in sql:
+                    return _Result()
+                if "SELECT input_revision" in sql:
+                    return _Result(0)
+                if "FROM finn_trade_ai_call_attempts" in sql:
+                    return _Result(0)
+                if "RETURNING analysis_updated_at" in sql:
+                    return _Result((now,))
+                if "UPDATE finn_trade_reviews SET analysis_status=:status" in sql:
+                    assert params["input_revision"] == 0
+                    return _Result(rowcount=0)
+                raise AssertionError(sql)
+
+            async def commit(self):
+                pass
+
+        session = Session()
+        service = FinnTradeAnalysisService(session)
+        calls = 0
+
+        async def get_review(user_id, review_id):
+            nonlocal calls
+            calls += 1
+            return original if calls == 1 else {**original, "input_revision": 1}
+
+        async def fake_ai(**kwargs):
+            context = get_ai_usage_context()
+            assert context["user_id"] == 77
+            assert context["entry_point"] == "finn_trade_review"
+            return _analysis("De trade is gesloten.")
+
+        service.reviews.get_review = get_review
+        monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+        result = await service.analyze(77, 4)
+        assert result["status"] == "pending"
+        assert result["analysis"] is None
+        assert next(i for i, sql in enumerate(session.queries) if "pg_advisory_xact_lock" in sql) < next(
+            i for i, sql in enumerate(session.queries) if "UPDATE finn_trade_reviews SET analysis_status='running'" in sql
+        )
+    asyncio.run(exercise())
+
+
+def test_question_does_not_persist_after_screenshot_revision_change(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+
+    async def exercise():
+        now = datetime.now(timezone.utc)
+        review = {
+            "id": 4, "symbol": "BTC", "execution_environment": "paper",
+            "entry_at": now, "exit_at": now, "entry_value_eur": Decimal(100),
+            "exit_value_eur": Decimal(110), "pnl_eur_before_fees": Decimal(10),
+            "fills": [{"ledger_id": 1, "side": "buy", "at": now.isoformat(),
+                       "qty": "1", "cash_eur": "100", "price_eur": "100"}],
+            "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+            "candles_reason": "missing", "has_screenshot": False,
+            "input_revision": 0,
+        }
+
+        class Session:
+            async def execute(self, query, params=None):
+                if "pg_advisory_xact_lock" in str(query) or "INSERT INTO finn_trade_ai_call_attempts" in str(query):
+                    return _Result()
+                if "SELECT input_revision" in str(query):
+                    return _Result(0 if not hasattr(self, "reserved") else 1)
+                if "FROM finn_trade_ai_call_attempts" in str(query):
+                    self.reserved = True
+                    return _Result(0)
+                raise AssertionError(str(query))
+
+            async def rollback(self):
+                pass
+
+            async def commit(self):
+                pass
+
+        service = FinnTradeAnalysisService(Session())
+
+        async def get_review(user_id, review_id):
+            return review
+
+        async def fake_ai(**kwargs):
+            assert get_ai_usage_context()["user_id"] == 77
+            return _analysis("De trade is gesloten.")
+
+        service.reviews.get_review = get_review
+        monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+        with pytest.raises(HTTPException) as raised:
+            await service.ask(77, 4, "Wat gebeurde er bij de exit?")
+        assert raised.value.status_code == 409
+    asyncio.run(exercise())
+
+
+def test_chart_has_explicit_fallback_without_supported_eur_market():
+    now = datetime.now(timezone.utc)
+    chart, reason = asyncio.run(historical_eur_chart({
+        "symbol": "UNKNOWN", "entry_at": now, "exit_at": now,
+        "fills": [],
+    }))
+    assert chart is None
+    assert "EUR" in reason
+
+
+def test_analysis_waits_for_parallel_chart_load_without_model_call(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+
+    async def exercise():
+        class Session:
+            async def execute(self, query, params=None):
+                raise AssertionError("No AI claim or budget reservation while chart is loading")
+
+        service = FinnTradeAnalysisService(Session())
+
+        async def get_review(user_id, review_id):
+            return {"candles_status": "loading"}
+
+        async def get_chart(user_id, review_id):
+            return {"status": "loading", "chart": None, "reason": None}
+
+        async def fake_ai(**kwargs):
+            raise AssertionError("Model called before historical chart resolved")
+
+        service.reviews.get_review = get_review
+        service.reviews.get_chart = get_chart
+        monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+        assert (await service.analyze(77, 4))["status"] == "pending"
+    asyncio.run(exercise())

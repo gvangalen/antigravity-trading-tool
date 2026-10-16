@@ -594,7 +594,12 @@ class FinnV2ReasoningContextService:
                 "score_source_snapshot", "best_setup", "top_setups",
             ] if payload.get(key) is not None}
         if tool_name == "read_review_history":
-            return {"items": payload.get("items", [])[:5]}
+            return {
+                "items": payload.get("items", [])[:10],
+                "closed_trade_status": payload.get("closed_trade_status", "no_data"),
+                "closed_trade_coverage": payload.get("closed_trade_coverage", {}),
+                "closed_trade_review_ids": payload.get("closed_trade_review_ids", [])[:5],
+            }
         return {}
 
     def _confidence_for(self, availability: str, freshness: str) -> str:

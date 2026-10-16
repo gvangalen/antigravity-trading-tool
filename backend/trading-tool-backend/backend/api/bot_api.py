@@ -1,8 +1,8 @@
 import logging
 from decimal import Decimal
 from typing import List, Literal, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, condecimal, conlist
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel, Field, condecimal, conlist
 from sqlalchemy import text
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,10 @@ from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
 from backend.services.bot_service import BotService
+from backend.services.finn_trade_review_service import FinnTradeReviewService
+from backend.services.finn_trade_screenshot import MAX_BYTES
+from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
+from backend.services.finn_trade_review_rollout import trade_review_enabled, require_trade_review_access
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.services.live_portfolio_allocation_service import read_live_account, replace_allocations
 from backend.schemas.bot_schema import (
@@ -25,10 +29,19 @@ from backend.schemas.bot_schema import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 order_rate_limiter = InMemoryRateLimiter(requests_limit=20, window_seconds=60)
+review_rate_limiter = InMemoryRateLimiter(requests_limit=30, window_seconds=60)
 allocation_rate_limiter = InMemoryRateLimiter(requests_limit=3, window_seconds=60)
 ORDER_USER_LIMIT = 20
 ORDER_IP_LIMIT = 30
 LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
+
+
+class FinnTradeReviewNote(BaseModel):
+    note: str = Field(max_length=2000)
+
+
+class FinnTradeQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
 
 
 def _apply_sensitive_order_rate_limit(*, user_id: int, request: Request, action_key: str) -> None:
@@ -254,6 +267,129 @@ async def get_bot_trades(
     service: BotService = Depends(get_bot_service)
 ):
     return await service.get_bot_trades(bot_id, limit, current_user["id"])
+
+@router.get("/bot/trade-reviews")
+async def list_finn_trade_reviews(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not (1 <= limit <= 100) or offset < 0:
+        raise HTTPException(422, "Ongeldige paginering")
+    review_rate_limiter.check_rate_limit(f"trade_review_list:{current_user['id']}", limit=30)
+    if not trade_review_enabled(current_user["id"]):
+        return {"status": "disabled", "items": [], "total": 0,
+                "weekly": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0,
+                           "patterns": []}, "excluded": {}}
+    return await FinnTradeReviewService(db).list_reviews(current_user["id"], limit, offset)
+
+
+@router.get("/bot/trade-reviews/{review_id}")
+async def get_finn_trade_review(
+    review_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    return await FinnTradeReviewService(db).get_review(current_user["id"], review_id)
+
+
+@router.put("/bot/trade-reviews/{review_id}/note")
+async def save_finn_trade_review_note(
+    review_id: int,
+    payload: FinnTradeReviewNote,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    return await FinnTradeReviewService(db).update_note(current_user["id"], review_id, payload.note)
+
+
+@router.put("/bot/trade-reviews/{review_id}/screenshot")
+async def put_finn_trade_review_screenshot(
+    review_id: int, request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"trade_review_upload:{current_user['id']}", limit=10)
+    if request.headers.get("content-type", "").split(";", 1)[0] != "image/png":
+        raise HTTPException(415, "Alleen PNG wordt ondersteund")
+    chunks = bytearray()
+    async for chunk in request.stream():
+        chunks.extend(chunk)
+        if len(chunks) > MAX_BYTES:
+            raise HTTPException(413, "Screenshot is groter dan 3 MB")
+    return await FinnTradeReviewService(db).save_screenshot(current_user["id"], review_id, bytes(chunks))
+
+
+@router.get("/bot/trade-reviews/{review_id}/screenshot")
+async def get_finn_trade_review_screenshot(
+    review_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    data = await FinnTradeReviewService(db).get_screenshot(current_user["id"], review_id)
+    return Response(data, media_type="image/png", headers={
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+    })
+
+
+@router.delete("/bot/trade-reviews/{review_id}/screenshot", status_code=204)
+async def delete_finn_trade_review_screenshot(
+    review_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    await FinnTradeReviewService(db).delete_screenshot(current_user["id"], review_id)
+    return Response(status_code=204)
+
+
+@router.get("/bot/trade-reviews/{review_id}/chart")
+async def get_finn_trade_review_chart(
+    review_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"trade_review_chart:{current_user['id']}", limit=20)
+    return await FinnTradeReviewService(db).get_chart(current_user["id"], review_id)
+
+
+@router.post("/bot/trade-reviews/{review_id}/analyze")
+async def analyze_finn_trade_review(
+    review_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"trade_review_ai:{current_user['id']}", limit=6)
+    return await FinnTradeAnalysisService(db).analyze(current_user["id"], review_id, retry=True)
+
+
+@router.get("/bot/trade-reviews/{review_id}/messages")
+async def get_finn_trade_review_messages(
+    review_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    return await FinnTradeAnalysisService(db).messages(current_user["id"], review_id)
+
+
+@router.post("/bot/trade-reviews/{review_id}/messages")
+async def ask_finn_trade_review(
+    review_id: int, payload: FinnTradeQuestion,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"trade_review_ai:{current_user['id']}", limit=6)
+    return await FinnTradeAnalysisService(db).ask(current_user["id"], review_id, payload.question)
 
 # ==========================================================
 # 💾 BOT TRADE PLAN (UPSERT & GET)

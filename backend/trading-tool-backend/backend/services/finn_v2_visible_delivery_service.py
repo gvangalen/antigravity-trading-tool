@@ -117,6 +117,19 @@ class FinnV2VisibleDeliveryService:
             ) from exc
 
     def _assistant_contract(self, response: dict[str, Any], *, trace_id: str, run_id: str, artifacts: dict[str, Any]) -> dict[str, Any]:
+        review_ids: list[int] = []
+        closed_trade_status: str | None = None
+        requested_review_id: int | None = None
+        for call in artifacts.get("tool_calls") or []:
+            if call.get("tool_name") != "read_review_history" or call.get("status") != "completed":
+                continue
+            summary = call.get("result_summary") or {}
+            closed_trade_status = summary.get("closed_trade_status") or closed_trade_status
+            if isinstance(summary.get("requested_review_id"), int):
+                requested_review_id = summary["requested_review_id"]
+            for raw_id in summary.get("closed_trade_review_ids") or []:
+                if isinstance(raw_id, int) and raw_id > 0 and raw_id not in review_ids:
+                    review_ids.append(raw_id)
         lines = [response.get("direct_answer"), response.get("main_observation")]
         lines.extend(
             [
@@ -127,7 +140,16 @@ class FinnV2VisibleDeliveryService:
         )
         if response.get("uncertainty_summary"):
             lines.append(response["uncertainty_summary"])
-        next_step = response.get("next_step") or {}
+        no_closed_trade_evidence = closed_trade_status in {"no_data", "migration_unavailable"}
+        if no_closed_trade_evidence:
+            lines = [
+                f"Trade-review #{requested_review_id} is voor jou niet beschikbaar."
+                if requested_review_id else
+                "Ik zie in de afgelopen 30 dagen geen betrouwbaar vastgelegde, volledig gesloten Tradamind-trades "
+                "voor een uitkomstpatroon. Oudere en externe trades vallen buiten deze dekking; "
+                "botbeslissingen zijn geen bevestigde trade-uitkomsten."
+            ]
+        next_step = {} if no_closed_trade_evidence else (response.get("next_step") or {})
         if next_step.get("instruction"):
             lines.append(next_step["instruction"])
         response_trace = {
@@ -160,9 +182,10 @@ class FinnV2VisibleDeliveryService:
             "reasoning": None,
             "trace_id": trace_id,
             "suggested_actions": [next_step.get("title")] if next_step.get("title") else [],
-            "summary": response.get("main_observation"),
-            "risk_summary": response.get("uncertainty_summary"),
-            "next_best_action": next_step.get("title") or response.get("follow_up_question"),
+            "review_links": [{"review_id": review_id} for review_id in review_ids[:5]],
+            "summary": None if no_closed_trade_evidence else response.get("main_observation"),
+            "risk_summary": None if no_closed_trade_evidence else response.get("uncertainty_summary"),
+            "next_best_action": None if no_closed_trade_evidence else (next_step.get("title") or response.get("follow_up_question")),
             "review_reason": None,
             "response_trace": response_trace,
             "verified_response": artifacts.get("verified_response"),

@@ -363,6 +363,7 @@ async def assistant_chat(
             state=v2_visible.get("state"),
             reasoning=v2_visible.get("reasoning"),
             suggested_actions=v2_visible.get("suggested_actions"),
+            review_links=v2_visible.get("review_links") or [],
             trace_id=trace_id,
             session_id=request.session_id,
             flow=(v2_visible.get("state") or {}).get("current_flow"),
