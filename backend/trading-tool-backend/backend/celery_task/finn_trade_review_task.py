@@ -5,8 +5,10 @@ import logging
 
 from celery import shared_task
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.database import ASYNC_DATABASE_URL, async_session_factory
 from backend.services.finn_trade_review_service import FinnTradeReviewService
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import allowed_trade_review_users
@@ -15,17 +17,34 @@ from backend.services.finn_trade_review_rollout import allowed_trade_review_user
 logger = logging.getLogger(__name__)
 
 
+async def _run_with_task_database(job) -> int:
+    """Keep review database connections inside this Celery task's event loop.
+
+    Other tasks on the same queue can use the process-wide async engine from a
+    different, already closed asyncio.run loop. A task-local NullPool avoids
+    checking out one of those connections or leaving one behind for the next
+    task.
+    """
+    engine = create_async_engine(ASYNC_DATABASE_URL, poolclass=NullPool)
+    try:
+        sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        return await job(sessions)
+    finally:
+        await engine.dispose()
+
+
 @shared_task(name="backend.celery_task.finn_trade_review_task.project_dirty_trade_reviews")
 def project_dirty_trade_reviews() -> int:
-    return asyncio.run(_project_dirty_trade_reviews())
+    return asyncio.run(_run_with_task_database(_project_dirty_trade_reviews))
 
 
-async def _project_dirty_trade_reviews() -> int:
+async def _project_dirty_trade_reviews(session_factory=None) -> int:
+    session_factory = session_factory or async_session_factory
     allowed = allowed_trade_review_users()
     if allowed == set():
         return 0
     user_filter = "WHERE user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
-    async with async_session_factory() as session:
+    async with session_factory() as session:
         result = await session.execute(text(f"""
             SELECT user_id FROM finn_trade_review_dirty_users
             {user_filter}
@@ -35,7 +54,7 @@ async def _project_dirty_trade_reviews() -> int:
     completed = 0
     for user_id in user_ids:
         try:
-            async with async_session_factory() as session:
+            async with session_factory() as session:
                 await FinnTradeReviewService(session)._project(user_id)
             completed += 1
         except Exception:
@@ -45,15 +64,16 @@ async def _project_dirty_trade_reviews() -> int:
 
 @shared_task(name="backend.celery_task.finn_trade_review_task.analyze_pending_trade_reviews")
 def analyze_pending_trade_reviews() -> int:
-    return asyncio.run(_analyze_pending_trade_reviews())
+    return asyncio.run(_run_with_task_database(_analyze_pending_trade_reviews))
 
 
-async def _analyze_pending_trade_reviews() -> int:
+async def _analyze_pending_trade_reviews(session_factory=None) -> int:
+    session_factory = session_factory or async_session_factory
     allowed = allowed_trade_review_users()
     if allowed == set():
         return 0
     user_filter = "AND user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
-    async with async_session_factory() as session:
+    async with session_factory() as session:
         result = await session.execute(text(f"""
             WITH queued AS (
               SELECT user_id, id, exit_at,
@@ -80,7 +100,7 @@ async def _analyze_pending_trade_reviews() -> int:
     completed = 0
     for user_id, review_id in targets:
         try:
-            async with async_session_factory() as session:
+            async with session_factory() as session:
                 await FinnTradeAnalysisService(session).analyze(user_id, review_id, retry=True, scheduled=True)
             completed += 1
         except Exception:
