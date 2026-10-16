@@ -27,8 +27,12 @@ SYSTEM_ROLE = (
     "uncertainty, question. Gebruik alleen de exacte meegegeven evidence_ids. "
     "De server toont uitsluitend vaste retrospectieve teksten bij jouw gekozen themes "
     "en evidence_ids; vrije tekstvelden worden niet aan de gebruiker getoond. "
+    "Als een screenshot is meegegeven, kies visual_signal uit "
+    "entry_exit_markers, risk_level_marked, upward_move, downward_move, unclear. "
+    "Kies unclear als de afbeelding niet duidelijk leesbaar is of je twijfelt. "
+    "Zonder screenshot geef je visual_signal als null. "
     "Bij een gebruikersvraag: kies als eerste observation het thema dat de vraag "
-    "het best raakt. Kies evidence_ids die werkelijk over dat thema gaan."
+    "het best raakt. Kies evidence_ids die werkelijk over dat thema gaan. "
     "Theme is een van plan_followed, risk, timing, exit_process, evidence_gap, other."
 )
 
@@ -48,6 +52,13 @@ QUESTION_TEMPLATES = {
     "exit_process": "Welke afweging maakte je toen je deze positie sloot?",
     "evidence_gap": "Welke ontbrekende context kun je aan deze trade toevoegen?",
     "other": "Welke beslissing uit deze trade wil je samen nader bekijken?",
+}
+VISUAL_SIGNAL_TEMPLATES = {
+    "entry_exit_markers": "Op de screenshot lijken entry- of exitmarkeringen zichtbaar. Controleer deze naast de werkelijke uitvoeringstijden en prijzen in de orderledger.",
+    "risk_level_marked": "Op de screenshot lijkt een risico- of stopniveau gemarkeerd. Alleen een vooraf vastgelegd plan kan onderbouwen of dit niveau vóór de trade was gekozen.",
+    "upward_move": "De screenshot lijkt een opwaartse prijsbeweging te tonen. Dit bewijst op zichzelf niet of de trade volgens plan is uitgevoerd.",
+    "downward_move": "De screenshot lijkt een neerwaartse prijsbeweging te tonen. Dit bewijst op zichzelf niet of de trade volgens plan is uitgevoerd.",
+    "unclear": "De screenshot is niet duidelijk genoeg om er een betrouwbare visuele observatie aan te verbinden.",
 }
 FORWARD_ADVICE = re.compile(
     r"^\s*(?:koop|buy|kaufe|sell|verkoop|verkaufe|open|plaats|place|ga\s+long|go\s+long)\b|"
@@ -189,6 +200,15 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
             raise ValueError("Ungrounded analysis observation")
         checked.append({"text": OBSERVATION_TEMPLATES[theme], "evidence_ids": refs,
                         "theme": theme})
+    if "screenshot:user-upload" in allowed:
+        visual_signal = raw.get("visual_signal")
+        if not isinstance(visual_signal, str) or visual_signal not in VISUAL_SIGNAL_TEMPLATES:
+            visual_signal = "unclear"
+        checked.append({
+            "text": VISUAL_SIGNAL_TEMPLATES[visual_signal],
+            "evidence_ids": ["screenshot:user-upload"],
+            "theme": "evidence_gap" if visual_signal == "unclear" else "timing",
+        })
     # Model prose, user notes and screenshot text are never rendered or stored as
     # FINN advice. The model only chooses bounded themes and existing evidence IDs.
     pnl = (context or {}).get("pnl_eur_before_fees")
@@ -198,7 +218,7 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
         uncertainty_parts.append("Een oorspronkelijk plan ontbreekt.")
     if "chart:binance-eur" not in allowed:
         uncertainty_parts.append("Historische chartcontext is niet beschikbaar.")
-    elif "screenshot:user-upload" in allowed:
+    if "screenshot:user-upload" in allowed:
         uncertainty_parts.append("De geüploade screenshot is aanvullend bewijs; de visuele context vervangt geen orderfeiten.")
     selected_summary = (
         _question_summary(checked[0]["theme"], checked[0]["evidence_ids"], context)

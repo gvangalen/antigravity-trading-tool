@@ -89,6 +89,26 @@ def test_ai_accepts_evidence_linked_retrospective_observation():
     assert result["observations"][0]["evidence_ids"] == ["fill:1"]
 
 
+def test_screenshot_signal_is_rendered_as_bounded_visual_context():
+    raw = _analysis("De trade is gesloten.")
+    raw["visual_signal"] = "risk_level_marked"
+    result = validate_analysis(raw, {"fill:1", "screenshot:user-upload"})
+    visual = result["observations"][-1]
+    assert visual["evidence_ids"] == ["screenshot:user-upload"]
+    assert "lijkt een risico- of stopniveau" in visual["text"]
+    assert "vervangt geen orderfeiten" in result["uncertainty"]
+    assert len(validate_analysis(raw, {"fill:1"})["observations"]) == 1
+
+
+@pytest.mark.parametrize("signal", ["koop morgen BTC", ["upward_move"], None])
+def test_untrusted_visual_signal_cannot_become_visible_model_text(signal):
+    raw = _analysis("De trade is gesloten.")
+    raw["visual_signal"] = signal
+    result = validate_analysis(raw, {"fill:1", "screenshot:user-upload"})
+    assert result["observations"][-1]["text"].startswith("De screenshot is niet duidelijk genoeg")
+    assert str(signal) not in str(result)
+
+
 @pytest.mark.parametrize("theme,expected", [
     ("exit_process", "sluiting op 2026-10-16T10:00:00+00:00"),
     ("timing", "entry was op 2026-10-16T09:00:00+00:00"),
