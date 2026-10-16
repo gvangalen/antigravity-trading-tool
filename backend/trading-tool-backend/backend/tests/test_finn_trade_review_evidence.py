@@ -96,7 +96,9 @@ def test_exchange_review_uses_attested_closure_and_quote_specific_evidence():
         "symbol": "BTC", "base_currency": "BTC", "execution_environment": "live",
         "entry_at": now, "exit_at": now, "attested_at": now,
         "entry_value_eur": None, "exit_value_eur": None, "pnl_eur_before_fees": None,
-        "pnl_status": "not_comparable", "cash_legs_by_currency": {"EUR": "-100", "USDT": "120"},
+        "pnl_status": "not_comparable", "cash_legs_by_currency": [
+            {"currency": "EUR", "buy_cost": "100", "sell_proceeds": "0"},
+            {"currency": "USDT", "buy_cost": "0", "sell_proceeds": "120"}],
         "fills": [{"exchange_fill_id": 11, "side": "buy", "at": now.isoformat(),
                    "qty": "1", "price_quote": "100", "cost_quote": "100",
                    "quote_currency": "EUR", "fee_amount": "0", "fee_currency": "EUR"},
@@ -109,7 +111,7 @@ def test_exchange_review_uses_attested_closure_and_quote_specific_evidence():
     context, allowed = evidence_context(review)
     assert allowed == {"exchange_fill:11", "exchange_fill:12", "closure:user-confirmed"}
     assert context["pnl_eur_before_fees"] is None
-    assert context["cash_legs_by_currency"] == {"EUR": "-100", "USDT": "120"}
+    assert context["cash_legs_by_currency"][1]["sell_proceeds"] == "120"
     raw = _analysis("De trade is gesloten.")
     raw["observations"][0]["evidence_ids"] = ["exchange_fill:12", "closure:user-confirmed"]
     result = validate_analysis(raw, allowed, context, question_mode=True)

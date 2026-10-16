@@ -81,12 +81,11 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const fills = Array.isArray(review.fills) ? review.fills : [];
   const plan = review.plan_snapshot && typeof review.plan_snapshot === 'object' ? review.plan_snapshot : null;
   const isExchange = review.origin === 'exchange_user_attested';
-  const cashLegs = review.cash_legs_by_currency && typeof review.cash_legs_by_currency === 'object'
-    ? Object.entries(review.cash_legs_by_currency) : [];
+  const cashLegs = Array.isArray(review.cash_legs_by_currency) ? review.cash_legs_by_currency : [];
   const metricCards = isExchange
     ? [[copy.quantity, String(review.entry_qty)],
       [copy.exchangeResult, review.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(review.pnl_eur_before_fees, locale)],
-      [copy.exchangeCashLegs, cashLegs.length ? cashLegs.map(([currency, value]) => formatQuote(value, currency, locale)).join(' · ') : copy.exchangeResultUnavailable]]
+      [copy.exchangeCashLegs, cashLegs.length ? cashLegs.map((leg) => `${leg.currency}: ${copy.buy} ${formatQuote(leg.buy_cost, leg.currency, locale)} / ${copy.sell} ${formatQuote(leg.sell_proceeds, leg.currency, locale)}`).join(' · ') : copy.exchangeResultUnavailable]]
     : [[copy.entry, formatMoney(review.entry_price_eur, locale, 4)],
       [copy.exit, formatMoney(review.exit_price_eur, locale, 4)],
       [copy.quantity, String(review.entry_qty)],
@@ -191,7 +190,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
     <div className="min-w-0 max-w-full overflow-hidden rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">{review.execution_environment === 'live' ? copy.live : copy.paper} · {sourceLabel(review.execution_sources, copy)} · #{review.id}</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">{review.execution_environment === 'live' ? copy.live : copy.paper} · {isExchange ? review.exchange_name : sourceLabel(review.execution_sources, copy)} · #{review.id}</p>
           <h3 className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{review.symbol}</h3>
           <p className="mt-1 text-sm text-slate-500">{formatDate(review.entry_at, locale)} → {formatDate(review.exit_at, locale)}</p>
           {isExchange && <p className="mt-2 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">{copy.userConfirmedClosure}</p>}
@@ -480,7 +479,7 @@ export default function FinnTradeReviews() {
               <div className="mb-4 flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900 dark:text-white">{copy.all} <span className="ml-1 text-slate-400">{total}</span></h3><button type="button" onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-blue-600"><RefreshCw size={14} /> {copy.refresh}</button></div>
               {items.length === 0 ? <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">{rolloutDisabled ? copy.rolloutDisabled : copy.empty}</p> : <div className="grid gap-2">{items.map((item) => <button key={item.id} type="button" onClick={() => openReview(item.id)} className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition hover:border-blue-400 ${selected?.id === item.id ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-800'}`}>
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.pnl_eur_before_fees == null ? 'bg-blue-50 text-blue-600' : number(item.pnl_eur_before_fees) >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{item.pnl_eur_before_fees == null ? <FileText size={19} /> : number(item.pnl_eur_before_fees) >= 0 ? <ArrowUpRight size={19} /> : <ArrowDownRight size={19} />}</span>
-                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale)}{item.origin === 'exchange_user_attested' && <><br />{copy.userConfirmedClosure}</>}</span></span>
+                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{item.origin === 'exchange_user_attested' ? item.exchange_name : sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale)}{item.origin === 'exchange_user_attested' && <><br />{copy.userConfirmedClosure}</>}</span></span>
                 <span className="text-right"><strong className="block text-sm text-slate-900 dark:text-white">{item.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(item.pnl_eur_before_fees, locale)}</strong><span className="text-xs text-blue-600">{copy.open}</span></span><ChevronRight size={15} className="text-slate-400" />
               </button>)}</div>}
               {items.length < total && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-blue-600 disabled:opacity-50 dark:border-slate-700">{loadingMore ? copy.loading : copy.more}</button>}

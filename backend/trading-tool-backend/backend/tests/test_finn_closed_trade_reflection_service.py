@@ -87,7 +87,8 @@ def test_user_attested_exchange_review_has_distinct_evidence_and_no_eur_claim():
         **ROW, "id": 82, "origin": "exchange_user_attested",
         "closure_basis": "user_confirmed", "execution_environment": "live",
         "execution_sources": ["bitvavo"], "pnl_status": "not_comparable",
-        "cash_legs_by_currency": {"EUR": "-100", "USDT": "120"},
+        "cash_legs_by_currency": [{"currency": "EUR", "buy_cost": "100", "sell_proceeds": "0"},
+                                  {"currency": "USDT", "buy_cost": "0", "sell_proceeds": "120"}],
         "pnl_eur_before_fees": None,
         "fills": [{"exchange_fill_id": 11}, {"exchange_fill_id": 12}],
     }
@@ -103,6 +104,7 @@ def test_user_attested_exchange_review_has_distinct_evidence_and_no_eur_claim():
     item = asyncio.run(adapter.execute(user_id=7, review_id=82))["data"].items[0]
     assert "afsluiting bevestigd door gebruiker" in item
     assert "EUR-resultaat niet vergelijkbaar" in item
+    assert "USDT: koopwaarde 0, verkoopwaarde 120" in item
     assert "resultaat EUR None" not in item
 
 

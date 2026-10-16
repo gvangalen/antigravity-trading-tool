@@ -59,13 +59,21 @@ class ReviewToolAdapter:
                           if review.get("pnl_eur_before_fees") is not None else
                           "EUR-resultaat niet vergelijkbaar of niet berekend")
                 closure = "afsluiting bevestigd door gebruiker; volledige exchange-positie niet provider-bewezen"
+                legs = review.get("cash_legs_by_currency") or []
+                flows = ", ".join(
+                    f"{leg['currency']}: koopwaarde {leg['buy_cost']}, verkoopwaarde {leg['sell_proceeds']}"
+                    for leg in legs[:8] if isinstance(leg, dict)
+                    and all(key in leg for key in ("currency", "buy_cost", "sell_proceeds"))
+                )
+                quote_context = f"; valutastromen {flows}{' (ingekort)' if len(legs) > 8 else ''}" if flows else ""
             else:
                 result = f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten"
                 closure = "positie bewezen gesloten in Tradamind-ledger"
+                quote_context = ""
             items.append(
                 f"Bevestigde gesloten trade #{review['review_id']} ({review['symbol']}, "
                 f"{review['environment']}, bronnen: {', '.join(review['execution_sources'])}): "
-                f"{closure}; {result}; "
+                f"{closure}; {result}{quote_context}; "
                 f"FINN-analyse {review['analysis_status']}; thema's "
                 f"{', '.join(review['themes']) if review['themes'] else 'geen'} "
                 f"(modelobservatie, geen bewezen oorzaak); bewijs {', '.join(review['evidence_ids'])}; "
