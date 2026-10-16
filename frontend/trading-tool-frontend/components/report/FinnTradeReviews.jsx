@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowDownRight, ArrowUpRight, Brain, ChevronRight, FileText, Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from '@/app/providers/I18nProvider';
-import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, saveFinnTradeReviewNote, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
+import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, createFinnExchangeTradeReview, saveFinnTradeReviewNote, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
 
 const number = (value) => Number(value) || 0;
 
 function formatMoney(value, locale, digits = 2) {
   return new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR', maximumFractionDigits: digits }).format(number(value));
+}
+
+function formatQuote(value, currency, locale) {
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(number(value))} ${currency || ''}`.trim();
 }
 
 function formatDate(value, locale) {
@@ -19,7 +23,7 @@ function formatDate(value, locale) {
 
 function sourceLabel(sources, copy) {
   const value = Array.isArray(sources) ? sources : [];
-  return value.map((source) => source === 'manual' ? copy.manual : copy.bot).join(' + ');
+  return value.map((source) => source === 'manual' ? copy.manual : source === 'bot' ? copy.bot : String(source).replace(/^./, (letter) => letter.toUpperCase())).join(' + ');
 }
 
 function PlanFacts({ plan, copy }) {
@@ -76,6 +80,17 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [question, setQuestion] = useState('');
   const fills = Array.isArray(review.fills) ? review.fills : [];
   const plan = review.plan_snapshot && typeof review.plan_snapshot === 'object' ? review.plan_snapshot : null;
+  const isExchange = review.origin === 'exchange_user_attested';
+  const cashLegs = review.cash_legs_by_currency && typeof review.cash_legs_by_currency === 'object'
+    ? Object.entries(review.cash_legs_by_currency) : [];
+  const metricCards = isExchange
+    ? [[copy.quantity, String(review.entry_qty)],
+      [copy.exchangeResult, review.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(review.pnl_eur_before_fees, locale)],
+      [copy.exchangeCashLegs, cashLegs.length ? cashLegs.map(([currency, value]) => formatQuote(value, currency, locale)).join(' · ') : copy.exchangeResultUnavailable]]
+    : [[copy.entry, formatMoney(review.entry_price_eur, locale, 4)],
+      [copy.exit, formatMoney(review.exit_price_eur, locale, 4)],
+      [copy.quantity, String(review.entry_qty)],
+      [copy.result, formatMoney(review.pnl_eur_before_fees, locale)]];
 
   useEffect(() => {
     let active = true;
@@ -179,16 +194,17 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
           <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">{review.execution_environment === 'live' ? copy.live : copy.paper} · {sourceLabel(review.execution_sources, copy)} · #{review.id}</p>
           <h3 className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{review.symbol}</h3>
           <p className="mt-1 text-sm text-slate-500">{formatDate(review.entry_at, locale)} → {formatDate(review.exit_at, locale)}</p>
+          {isExchange && <p className="mt-2 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">{copy.userConfirmedClosure}</p>}
         </div>
         <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300">{copy.close}</button>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-        {[[copy.entry, formatMoney(review.entry_price_eur, locale, 4)], [copy.exit, formatMoney(review.exit_price_eur, locale, 4)], [copy.quantity, String(review.entry_qty)], [copy.result, formatMoney(review.pnl_eur_before_fees, locale)]].map(([label, value]) => (
+        {metricCards.map(([label, value]) => (
           <div key={label} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 font-black text-slate-900 dark:text-white">{value}</p></div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-slate-500">{copy.resultNote}</p>
+      <p className="mt-2 text-xs text-slate-500">{isExchange ? copy.exchangeResultNote : copy.resultNote}</p>
 
       <div className="mt-7 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
@@ -199,10 +215,10 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>
           {chartState === 'ready' && chart ? <TradeChart chart={chart} copy={copy} locale={locale} /> : <p className="mt-2 text-xs leading-relaxed text-slate-500">{chartState === 'loading' ? copy.loading : copy.chartFallback}</p>}
           <ol className="mt-4 space-y-2">
-            {fills.map((fill) => <li key={fill.ledger_id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900">
+            {fills.map((fill) => <li key={isExchange ? fill.exchange_fill_id : fill.ledger_id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${fill.side === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{fill.side === 'buy' ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}</span>
               <span className="min-w-0 flex-1"><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {review.symbol}</strong><br /><span className="text-slate-500">{formatDate(fill.at, locale)}</span></span>
-              <span className="font-bold">{fill.price_eur ? formatMoney(fill.price_eur, locale, 4) : formatMoney(number(fill.cash_eur) / number(fill.qty), locale, 4)}</span>
+              <span className="font-bold">{isExchange ? formatQuote(fill.price_quote, fill.quote_currency, locale) : fill.price_eur ? formatMoney(fill.price_eur, locale, 4) : formatMoney(number(fill.cash_eur) / number(fill.qty), locale, 4)}</span>
             </li>)}
           </ol>
         </div>
@@ -254,6 +270,13 @@ export default function FinnTradeReviews() {
   const [importError, setImportError] = useState(false);
   const [syncingExchange, setSyncingExchange] = useState(null);
   const [importFillPage, setImportFillPage] = useState(null);
+  const [importFillsLoadingMore, setImportFillsLoadingMore] = useState(false);
+  const [selectedImportFills, setSelectedImportFills] = useState([]);
+  const [closureConfirmed, setClosureConfirmed] = useState(false);
+  const [sameAccountConfirmed, setSameAccountConfirmed] = useState(false);
+  const [creatingExchangeReview, setCreatingExchangeReview] = useState(false);
+  const [exchangeReviewError, setExchangeReviewError] = useState(false);
+  const pairingKey = useRef(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const openRequest = useRef(0);
   const detailRef = useRef(null);
@@ -309,6 +332,47 @@ export default function FinnTradeReviews() {
     catch { setImportError(true); }
   }
 
+  async function loadMoreImportFills() {
+    if (!importFillPage || importFillsLoadingMore) return;
+    setImportFillsLoadingMore(true);
+    try {
+      const page = await fetchFinnExchangeImportFills(importFillPage.source_id, 50, importFillPage.items?.length || 0);
+      setImportFillPage((current) => current?.source_id === page.source_id
+        ? { ...page, items: [...(current.items || []), ...(page.items || [])] } : current);
+    } catch { setImportError(true); }
+    finally { setImportFillsLoadingMore(false); }
+  }
+
+  function toggleImportFill(fill, source) {
+    if (fill.review_id) return;
+    setSelectedImportFills((current) => current.some((item) => item.id === fill.id)
+      ? current.filter((item) => item.id !== fill.id)
+      : [...current, { ...fill, source_id: source.id, exchange_name: source.exchange_name }]);
+    setClosureConfirmed(false);
+    setSameAccountConfirmed(false);
+    setExchangeReviewError(false);
+    pairingKey.current = null;
+  }
+
+  async function createExchangeReview() {
+    if (!pairingKey.current) pairingKey.current = crypto.randomUUID();
+    setCreatingExchangeReview(true);
+    setExchangeReviewError(false);
+    try {
+      const result = await createFinnExchangeTradeReview(
+        selectedImportFills.map((fill) => fill.id), sameAccountConfirmed, pairingKey.current,
+      );
+      setSelectedImportFills([]);
+      setClosureConfirmed(false);
+      setSameAccountConfirmed(false);
+      setImportFillPage(null);
+      pairingKey.current = null;
+      await Promise.all([load(), loadImports()]);
+      router.replace(`/report?trade_review_id=${result.review_id}`, { scroll: false });
+    } catch { setExchangeReviewError(true); }
+    finally { setCreatingExchangeReview(false); }
+  }
+
   useEffect(() => {
     if (selected) detailRef.current?.focus({ preventScroll: true });
   }, [selected?.id]);
@@ -335,6 +399,13 @@ export default function FinnTradeReviews() {
     .replace('{trades}', String(number(weekly.trades)))
     .replace('{plans}', String(number(weekly.plans)))
     .replace('{notes}', String(number(weekly.notes)));
+  const selectedSourceIds = new Set(selectedImportFills.map((fill) => fill.source_id));
+  const selectedExchanges = new Set(selectedImportFills.map((fill) => fill.exchange_name));
+  const hasBuy = selectedImportFills.some((fill) => fill.side === 'buy');
+  const hasSell = selectedImportFills.some((fill) => fill.side === 'sell');
+  const needsSameAccount = selectedSourceIds.size > 1;
+  const canConfirmExchange = hasBuy && hasSell && selectedExchanges.size === 1 && closureConfirmed
+    && (!needsSameAccount || sameAccountConfirmed);
 
   async function loadMore() {
     setLoadingMore(true);
@@ -382,12 +453,25 @@ export default function FinnTradeReviews() {
             {exchangeImports.map((source, index) => <div key={`${source.exchange_name}-${source.id || index}`} className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{source.exchange_name}</strong><button type="button" onClick={() => syncExchange(source.exchange_name)} disabled={Boolean(syncingExchange)} className="rounded-lg border border-blue-400 px-2 py-1 font-bold text-blue-700 disabled:opacity-50 dark:text-blue-300">{syncingExchange === source.exchange_name ? copy.loading : copy.exchangeImportSync}</button></div>
               <p className="mt-1 text-slate-600 dark:text-slate-300">{copy.exchangeImportStates?.[source.status] || source.status} · {source.imported_fills || 0} {copy.exchangeImportFills}</p>
+              {source.imported_movements > 0 && <p className="mt-1 text-slate-500">{source.imported_movements} {copy.exchangeImportMovements}{source.unsupported_movements > 0 ? ` · ${source.unsupported_movements} ${copy.exchangeImportUnsupported}` : ''}</p>}
               <p className="mt-1 text-slate-500">{copy.exchangeImportLimits?.[source.history_limit]}</p>
               {source.coverage_through_at && <p className="text-slate-500">{copy.exchangeImportThrough}: {formatDate(source.coverage_through_at, locale)}</p>}
               {source.last_error_code && <p className="text-amber-700 dark:text-amber-300">{copy.exchangeImportError}: {source.last_error_code}</p>}
               {source.id && <button type="button" onClick={() => openImportFills(source.id)} className="mt-2 font-bold text-blue-600 underline dark:text-blue-300">{importFillPage?.source_id === source.id ? copy.exchangeImportHideFills : copy.exchangeImportShowFills}</button>}
-              {importFillPage?.source_id === source.id && <div className="mt-2 max-h-56 space-y-1 overflow-auto"><p className="text-slate-500">{copy.exchangeImportEvidenceOnly}</p>{importFillPage.items?.map((fill) => <p key={fill.id} className="rounded border border-slate-200 p-2 dark:border-slate-700"><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol}</strong> · {fill.cost_quote} {fill.quote_currency}<br />{formatDate(fill.traded_at, locale)}</p>)}{importFillPage.total > importFillPage.items?.length && <p className="text-slate-500">{copy.exchangeImportLimitedPage}</p>}</div>}
+              {importFillPage?.source_id === source.id && <div className="mt-2 max-h-64 space-y-1 overflow-auto"><p className="text-slate-500">{copy.exchangeImportEvidenceOnly}</p>{importFillPage.items?.map((fill) => <label key={fill.id} className={`flex items-start gap-2 rounded border border-slate-200 p-2 dark:border-slate-700 ${fill.review_id ? 'opacity-60' : 'cursor-pointer'}`}><input type="checkbox" className="mt-0.5" checked={selectedImportFills.some((item) => item.id === fill.id)} onChange={() => toggleImportFill(fill, source)} disabled={Boolean(fill.review_id)} /><span><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol}</strong> · {formatQuote(fill.cost_quote, fill.quote_currency, locale)}<br />{formatDate(fill.traded_at, locale)}{fill.review_id && <span className="block text-slate-500">{copy.exchangeAlreadyReviewed} #{fill.review_id}</span>}</span></label>)}{importFillPage.total > importFillPage.items?.length && <button type="button" onClick={loadMoreImportFills} disabled={importFillsLoadingMore} className="font-bold text-blue-600 underline disabled:opacity-50">{importFillsLoadingMore ? copy.loading : copy.exchangeImportLoadMore}</button>}</div>}
             </div>)}
+            {selectedImportFills.length > 0 && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-100">
+              <h4 className="font-black">{copy.exchangePairTitle}</h4>
+              <p className="mt-1">{copy.exchangePairSelected.replace('{count}', String(selectedImportFills.length))}</p>
+              <p className="mt-1 text-slate-600 dark:text-slate-300">{copy.exchangePairHint}</p>
+              <div className="mt-2 flex flex-wrap gap-1">{selectedImportFills.map((fill) => <button key={fill.id} type="button" onClick={() => toggleImportFill(fill, { id: fill.source_id, exchange_name: fill.exchange_name })} className="rounded-full border border-blue-300 px-2 py-1 text-[11px] dark:border-blue-700">{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol} · {formatDate(fill.traded_at, locale)} ×</button>)}</div>
+              {needsSameAccount && <label className="mt-3 flex items-start gap-2"><input type="checkbox" className="mt-0.5" checked={sameAccountConfirmed} onChange={(event) => setSameAccountConfirmed(event.target.checked)} /><span>{copy.exchangeSameAccountConfirm}</span></label>}
+              <label className="mt-3 flex items-start gap-2"><input type="checkbox" className="mt-0.5" checked={closureConfirmed} onChange={(event) => setClosureConfirmed(event.target.checked)} /><span>{copy.exchangeClosureConfirm}</span></label>
+              {(!hasBuy || !hasSell) && <p className="mt-2 text-amber-700 dark:text-amber-300">{copy.exchangeNeedBuySell}</p>}
+              {selectedExchanges.size > 1 && <p className="mt-2 text-amber-700 dark:text-amber-300">{copy.exchangeOneExchange}</p>}
+              {exchangeReviewError && <p role="alert" className="mt-2 text-red-700 dark:text-red-300">{copy.exchangeCreateError}</p>}
+              <button type="button" disabled={!canConfirmExchange || creatingExchangeReview} onClick={createExchangeReview} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-bold text-white disabled:opacity-50">{creatingExchangeReview ? copy.loading : copy.exchangeCreateReview}</button>
+            </div>}
           </div>
           {deepLinkLoading && <p role="status" className="mb-4 text-sm text-slate-500">{copy.loading}</p>}
           {deepLinkError && <p role="alert" className="mb-4 text-sm text-red-600">{copy.error}</p>}
@@ -395,9 +479,9 @@ export default function FinnTradeReviews() {
             <>
               <div className="mb-4 flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900 dark:text-white">{copy.all} <span className="ml-1 text-slate-400">{total}</span></h3><button type="button" onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-blue-600"><RefreshCw size={14} /> {copy.refresh}</button></div>
               {items.length === 0 ? <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">{rolloutDisabled ? copy.rolloutDisabled : copy.empty}</p> : <div className="grid gap-2">{items.map((item) => <button key={item.id} type="button" onClick={() => openReview(item.id)} className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition hover:border-blue-400 ${selected?.id === item.id ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-800'}`}>
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${number(item.pnl_eur_before_fees) >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{number(item.pnl_eur_before_fees) >= 0 ? <ArrowUpRight size={19} /> : <ArrowDownRight size={19} />}</span>
-                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale)}</span></span>
-                <span className="text-right"><strong className="block text-sm text-slate-900 dark:text-white">{formatMoney(item.pnl_eur_before_fees, locale)}</strong><span className="text-xs text-blue-600">{copy.open}</span></span><ChevronRight size={15} className="text-slate-400" />
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.pnl_eur_before_fees == null ? 'bg-blue-50 text-blue-600' : number(item.pnl_eur_before_fees) >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{item.pnl_eur_before_fees == null ? <FileText size={19} /> : number(item.pnl_eur_before_fees) >= 0 ? <ArrowUpRight size={19} /> : <ArrowDownRight size={19} />}</span>
+                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale)}{item.origin === 'exchange_user_attested' && <><br />{copy.userConfirmedClosure}</>}</span></span>
+                <span className="text-right"><strong className="block text-sm text-slate-900 dark:text-white">{item.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(item.pnl_eur_before_fees, locale)}</strong><span className="text-xs text-blue-600">{copy.open}</span></span><ChevronRight size={15} className="text-slate-400" />
               </button>)}</div>}
               {items.length < total && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-blue-600 disabled:opacity-50 dark:border-slate-700">{loadingMore ? copy.loading : copy.more}</button>}
               {(number(excluded.legacy_or_ambiguous) > 0 || number(excluded.inconsistent) > 0) && <p className="mt-4 text-xs text-amber-700 dark:text-amber-300">{copy.excluded}</p>}

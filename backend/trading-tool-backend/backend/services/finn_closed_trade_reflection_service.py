@@ -39,6 +39,7 @@ class FinnClosedTradeReflectionService:
         coverage = dict(totals.fetchone()._mapping)
         rows = await self.session.execute(text("""
             SELECT id, symbol, execution_environment, execution_sources, entry_at, exit_at,
+                   origin, closure_basis, pnl_status, cash_legs_by_currency,
                    pnl_eur_before_fees, plan_snapshot IS NOT NULL AS has_plan,
                    analysis_status, analysis_json, candles_status,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
@@ -63,7 +64,7 @@ class FinnClosedTradeReflectionService:
             "patterns": [{"theme": theme, "review_ids": sorted(ids), "count": len(ids)}
                          for theme, ids in sorted(themes.items(), key=lambda item: (-len(item[1]), item[0]))],
             "patterns_limited_to_recent": coverage["trades"] > limit,
-            "legacy_notice": "Alleen bevestigde gesloten Tradamind-posities na de overgang. Externe uitvoeringen worden apart geïmporteerd; volledige sluiting en kostprijs zijn daar nog niet bewezen. Oudere trades ontbreken.",
+            "legacy_notice": "Tradamind-posities komen na bewezen sluiting in beeld. Exchange-reviews met een onvolledige positiebasis verschijnen alleen na expliciete gebruikersbevestiging; oudere of ongekoppelde uitvoeringen kunnen ontbreken.",
         }
 
     async def review(self, user_id: int, review_id: int) -> dict[str, Any]:
@@ -72,6 +73,7 @@ class FinnClosedTradeReflectionService:
             raise HTTPException(503, "Trade-reflecties nog niet beschikbaar")
         result = await self.session.execute(text("""
             SELECT id, symbol, execution_environment, execution_sources, entry_at, exit_at,
+                   origin, closure_basis, pnl_status, cash_legs_by_currency,
                    pnl_eur_before_fees, plan_snapshot IS NOT NULL AS has_plan,
                    analysis_status, analysis_json, candles_status,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
@@ -86,7 +88,7 @@ class FinnClosedTradeReflectionService:
         return {
             "contract": "closed_trade_reflection.v1", "action_class": "prepare_only",
             "allowed_side_effects": [], "status": item["analysis_status"],
-            "review": item, "legacy_notice": "Alleen bevestigde gesloten Tradamind-posities na de overgang. Externe uitvoeringen staan apart als bewijs, zonder gesloten review zolang positiebasis ontbreekt.",
+            "review": item, "legacy_notice": "Exchange-sluiting op basis van gebruikersbevestiging blijft onderscheiden van een door de administratie bewezen gesloten positie.",
         }
 
     @staticmethod
@@ -97,8 +99,14 @@ class FinnClosedTradeReflectionService:
                          if isinstance(item, dict) and item.get("theme") in THEMES})
         fills = row.get("fills") or []
         sampled_fills = fills[:10] + fills[-10:] if len(fills) > 20 else fills
-        evidence_ids = [f"fill:{item['ledger_id']}" for item in sampled_fills
-                        if isinstance(item, dict) and isinstance(item.get("ledger_id"), int)]
+        exchange = row.get("origin") == "exchange_user_attested"
+        evidence_ids = ([f"exchange_fill:{item['exchange_fill_id']}" for item in sampled_fills
+                         if isinstance(item, dict) and isinstance(item.get("exchange_fill_id"), int)]
+                        if exchange else
+                        [f"fill:{item['ledger_id']}" for item in sampled_fills
+                         if isinstance(item, dict) and isinstance(item.get("ledger_id"), int)])
+        if exchange:
+            evidence_ids.append("closure:user-confirmed")
         if row.get("has_plan"):
             evidence_ids.append("plan:snapshot")
         if row.get("candles_status") == "ready":
@@ -109,9 +117,14 @@ class FinnClosedTradeReflectionService:
             "review_id": int(row["id"]), "review_url": REVIEW_PATH.format(review_id=int(row["id"])),
             "symbol": re.sub(r"[^A-Z0-9._-]", "", str(row["symbol"]).upper())[:24],
             "environment": row["execution_environment"],
+            "origin": row.get("origin") or "bot_position",
+            "closure_basis": row.get("closure_basis") or "ledger_flat",
+            "closure_label": "Afsluiting bevestigd door gebruiker" if exchange else "Afgesloten positie",
+            "pnl_status": row.get("pnl_status") or "before_fees_eur",
+            "cash_legs_by_currency": row.get("cash_legs_by_currency") if exchange else None,
             "execution_sources": row.get("execution_sources") or [],
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
-            "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]),
+            "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
             "has_plan": bool(row.get("has_plan")),
             "analysis_status": str(row["analysis_status"]),
             "chart_status": str(row["candles_status"]),
@@ -129,5 +142,5 @@ class FinnClosedTradeReflectionService:
             "coverage": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0},
             "reviews": [], "review_ids": [], "patterns": [],
             "patterns_limited_to_recent": False,
-            "legacy_notice": "Alleen bevestigde gesloten Tradamind-posities na de overgang. Externe uitvoeringen worden apart geïmporteerd; volledige sluiting en kostprijs zijn daar nog niet bewezen. Oudere trades ontbreken.",
+            "legacy_notice": "Tradamind-posities komen na bewezen sluiting in beeld. Exchange-reviews met een onvolledige positiebasis verschijnen alleen na expliciete gebruikersbevestiging; oudere of ongekoppelde uitvoeringen kunnen ontbreken.",
         }

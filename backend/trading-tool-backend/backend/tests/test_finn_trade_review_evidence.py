@@ -7,7 +7,7 @@ from decimal import Decimal
 import pytest
 from fastapi import HTTPException
 
-from backend.services.finn_trade_analysis_service import validate_analysis
+from backend.services.finn_trade_analysis_service import evidence_context, validate_analysis
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
 from backend.services.finn_trade_review_service import FinnTradeReviewService
 from backend.services.finn_trade_chart_service import historical_eur_chart
@@ -87,6 +87,35 @@ def test_ai_accepts_evidence_linked_retrospective_observation():
     result = validate_analysis(_analysis("De trade is gesloten."), {"fill:1"})
     assert "afgesloten trade" in result["summary"]
     assert result["observations"][0]["evidence_ids"] == ["fill:1"]
+
+
+def test_exchange_review_uses_attested_closure_and_quote_specific_evidence():
+    now = datetime.now(timezone.utc)
+    review = {
+        "id": 9, "origin": "exchange_user_attested", "closure_basis": "user_confirmed",
+        "symbol": "BTC", "base_currency": "BTC", "execution_environment": "live",
+        "entry_at": now, "exit_at": now, "attested_at": now,
+        "entry_value_eur": None, "exit_value_eur": None, "pnl_eur_before_fees": None,
+        "pnl_status": "not_comparable", "cash_legs_by_currency": {"EUR": "-100", "USDT": "120"},
+        "fills": [{"exchange_fill_id": 11, "side": "buy", "at": now.isoformat(),
+                   "qty": "1", "price_quote": "100", "cost_quote": "100",
+                   "quote_currency": "EUR", "fee_amount": "0", "fee_currency": "EUR"},
+                  {"exchange_fill_id": 12, "side": "sell", "at": now.isoformat(),
+                   "qty": "1", "price_quote": "120", "cost_quote": "120",
+                   "quote_currency": "USDT", "fee_amount": "0", "fee_currency": "USDT"}],
+        "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+        "candles_reason": "mixed quote", "has_screenshot": False,
+    }
+    context, allowed = evidence_context(review)
+    assert allowed == {"exchange_fill:11", "exchange_fill:12", "closure:user-confirmed"}
+    assert context["pnl_eur_before_fees"] is None
+    assert context["cash_legs_by_currency"] == {"EUR": "-100", "USDT": "120"}
+    raw = _analysis("De trade is gesloten.")
+    raw["observations"][0]["evidence_ids"] = ["exchange_fill:12", "closure:user-confirmed"]
+    result = validate_analysis(raw, allowed, context, question_mode=True)
+    assert "Afsluiting bevestigd door gebruiker" in result["summary"]
+    assert "Afsluiting bevestigd door gebruiker" in result["uncertainty"]
+    assert "€" not in result["summary"]
 
 
 def test_screenshot_signal_is_rendered_as_bounded_visual_context():

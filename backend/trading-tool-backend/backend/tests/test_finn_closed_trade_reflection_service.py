@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.services.finn_closed_trade_reflection_service import FinnClosedTradeReflectionService
+from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
 
@@ -79,6 +80,30 @@ def test_owner_scope_and_safe_evidence_contract():
             asyncio.run(service.review(8, review_id))
         assert exc.value.status_code == 404
     assert all(params and params.get("user_id") in {7, 8} for sql, params in session.queries if "FROM finn_trade_reviews r" in sql)
+
+
+def test_user_attested_exchange_review_has_distinct_evidence_and_no_eur_claim():
+    exchange_row = {
+        **ROW, "id": 82, "origin": "exchange_user_attested",
+        "closure_basis": "user_confirmed", "execution_environment": "live",
+        "execution_sources": ["bitvavo"], "pnl_status": "not_comparable",
+        "cash_legs_by_currency": {"EUR": "-100", "USDT": "120"},
+        "pnl_eur_before_fees": None,
+        "fills": [{"exchange_fill_id": 11}, {"exchange_fill_id": 12}],
+    }
+    service = FinnClosedTradeReflectionService(Session({7: {82: exchange_row}}))
+    safe = asyncio.run(service.review(7, 82))["review"]
+    assert safe["evidence_ids"][:3] == ["exchange_fill:11", "exchange_fill:12", "closure:user-confirmed"]
+    assert safe["pnl_eur_before_fees"] is None
+    assert safe["closure_label"] == "Afsluiting bevestigd door gebruiker"
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = SimpleNamespace(get_bot_history=lambda *_: None)
+    adapter.sources = FinnV2InformationSourceRegistry()
+    adapter.closed_trades = service
+    item = asyncio.run(adapter.execute(user_id=7, review_id=82))["data"].items[0]
+    assert "afsluiting bevestigd door gebruiker" in item
+    assert "EUR-resultaat niet vergelijkbaar" in item
+    assert "resultaat EUR None" not in item
 
 
 def test_no_data_and_migration_missing_are_explicit():

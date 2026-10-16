@@ -235,6 +235,16 @@ export const syncFinnExchangeTradeImport = (exchangeName) => {
   if (!['bitvavo', 'bybit'].includes(String(exchangeName).toLowerCase())) throw new Error('Exchange is ongeldig');
   return handleApi(fetchAuth(`/api/bot/exchange-trade-imports/${exchangeName.toLowerCase()}/sync`, { method: 'POST' }));
 };
+export const createFinnExchangeTradeReview = (fillIds, sameAccountConfirmed, idempotencyKey) => {
+  if (!Array.isArray(fillIds) || fillIds.length < 2 || !fillIds.every((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0)) {
+    throw new Error('Selecteer geldige exchange-uitvoeringen');
+  }
+  return handleApi(fetchAuth('/api/bot/exchange-trade-reviews', {
+    method: 'POST',
+    body: JSON.stringify({ fill_ids: fillIds, closure_confirmed: true,
+      same_account_confirmed: Boolean(sameAccountConfirmed), idempotency_key: idempotencyKey }),
+  }));
+};
 
 export const fetchFinnTradeReview = async (reviewId) => {
   if (!reviewId) throw new Error("reviewId is verplicht");

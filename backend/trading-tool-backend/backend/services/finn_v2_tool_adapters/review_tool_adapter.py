@@ -54,10 +54,18 @@ class ReviewToolAdapter:
                 }
         closed_reviews = [r for r in closed["reviews"] if not asset or r["symbol"] == asset.upper()]
         for review in closed_reviews:
+            if review.get("origin") == "exchange_user_attested":
+                result = (f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten"
+                          if review.get("pnl_eur_before_fees") is not None else
+                          "EUR-resultaat niet vergelijkbaar of niet berekend")
+                closure = "afsluiting bevestigd door gebruiker; volledige exchange-positie niet provider-bewezen"
+            else:
+                result = f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten"
+                closure = "positie bewezen gesloten in Tradamind-ledger"
             items.append(
                 f"Bevestigde gesloten trade #{review['review_id']} ({review['symbol']}, "
                 f"{review['environment']}, bronnen: {', '.join(review['execution_sources'])}): "
-                f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten; "
+                f"{closure}; {result}; "
                 f"FINN-analyse {review['analysis_status']}; thema's "
                 f"{', '.join(review['themes']) if review['themes'] else 'geen'} "
                 f"(modelobservatie, geen bewezen oorzaak); bewijs {', '.join(review['evidence_ids'])}; "
@@ -66,7 +74,7 @@ class ReviewToolAdapter:
         items.append(
             f"Gesloten-tradedekking: {closed['status']}; {closed['coverage']['trades']} "
             f"bevestigde trades {'voor review #' + str(review_id) if review_id else 'in 30 dagen'}. "
-            "Externe uitvoeringen worden apart ingelezen maar tellen hier pas als gesloten trade na bewezen positiebasis; oudere trades ontbreken; "
+            "Exchange-uitvoeringen tellen alleen na bewezen sluiting of expliciete gebruikersbevestiging als gesloten trade; oudere trades kunnen ontbreken; "
             "botbeslissingen hierboven zijn geen trade-uitkomsten."
         )
         return {
