@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from backend.services.finn_exchange_import_service import (
     DAY_MS, FinnExchangeImportService, initial_cursor, normalize_bitvavo, normalize_bybit,
-    provider_page,
+    normalize_bitvavo_movement, provider_page,
 )
 
 
@@ -30,6 +30,55 @@ def bybit_fill(**overrides):
            "execType": "Trade"}
     row.update(overrides)
     return row
+
+
+def bitvavo_movement(**overrides):
+    row = {"transactionId": "movement-1", "type": "deposit",
+           "executedAt": datetime.fromtimestamp(NOW / 1000, tz=timezone.utc).isoformat(),
+           "receivedCurrency": "BTC", "receivedAmount": "0.25"}
+    row.update(overrides)
+    return row
+
+
+def test_bitvavo_movements_keep_original_legs_without_invented_balance_or_eur_pnl():
+    deposit = normalize_bitvavo_movement(bitvavo_movement(), 0, NOW)
+    assert deposit["received_currency"] == "BTC"
+    assert deposit["received_amount"] == Decimal("0.25")
+    assert deposit["sent_currency"] is None and deposit["sent_amount"] is None
+    assert deposit["evidence_status"] == "complete"
+    assert "balance" not in deposit and "pnl_eur" not in deposit
+
+    withdrawal = normalize_bitvavo_movement(bitvavo_movement(
+        type="withdrawal", receivedCurrency=None, receivedAmount=None,
+        sentCurrency="USDT", sentAmount="12.5", feesCurrency="USDT", feesAmount="-0.1"), 0, NOW)
+    assert withdrawal["sent_amount"] == Decimal("12.5")
+    assert withdrawal["fee_amount"] == Decimal("-0.1")
+    assert withdrawal["fee_currency"] == "USDT"
+
+    internal = normalize_bitvavo_movement(bitvavo_movement(
+        type="internal_transfer", sentCurrency="EUR", sentAmount="100",
+        receivedCurrency="EUR", receivedAmount="100"), 0, NOW)
+    assert internal["sent_amount"] == internal["received_amount"] == Decimal("100")
+
+
+def test_bitvavo_unknown_or_incomplete_movement_is_visible_gap():
+    unknown = normalize_bitvavo_movement(bitvavo_movement(type="new_provider_type"), 0, NOW)
+    assert unknown["evidence_status"] == "unsupported"
+    assert unknown["unsupported_reason"] == "unknown_transaction_type"
+    incomplete = normalize_bitvavo_movement(bitvavo_movement(receivedAmount=None), 0, NOW)
+    assert incomplete["evidence_status"] == "unsupported"
+    assert "received_leg_missing" in incomplete["unsupported_reason"]
+    assert "no_asset_leg" in incomplete["unsupported_reason"]
+
+
+@pytest.mark.parametrize("overrides", [
+    {"transactionId": ""}, {"receivedAmount": "NaN"},
+    {"executedAt": "2026-10-01T00:00:00"},
+    {"executedAt": "2020-01-01T00:00:00Z"},
+])
+def test_bitvavo_invalid_movement_cannot_advance_cursor(overrides):
+    with pytest.raises(ValueError):
+        normalize_bitvavo_movement(bitvavo_movement(**overrides), NOW - DAY_MS, NOW)
 
 
 def test_bitvavo_eur_and_bybit_non_eur_values_remain_separate():
@@ -88,9 +137,11 @@ def test_bybit_cursor_handles_same_timestamp_and_encoded_token():
         client = Client()
         cursor = initial_cursor("bybit", NOW)
         cursor["window_start_ms"] = NOW - DAY_MS
-        first, cursor, covered = await provider_page(client, "bybit", cursor, NOW)
+        first, movements, cursor, covered = await provider_page(client, "bybit", cursor, NOW)
+        assert movements == []
         assert covered is None and cursor["page_cursor"] == "a%3A2%2Cb%3A2"
-        second, cursor, covered = await provider_page(client, "bybit", cursor, NOW)
+        second, movements, cursor, covered = await provider_page(client, "bybit", cursor, NOW)
+        assert movements == []
         assert covered is not None and cursor["page_cursor"] is None
         assert {item["exchange_trade_id"] for item in first + second} == {"fill-1", "fill-2"}
         assert client.requests[1]["cursor"] == "a%3A2%2Cb%3A2"
@@ -195,14 +246,41 @@ def test_bitvavo_market_discovery_then_one_day_trade_window():
     async def exercise():
         client = Client()
         cursor = initial_cursor("bitvavo", NOW)
-        rows, cursor, coverage = await provider_page(client, "bitvavo", cursor, NOW)
+        rows, movements, cursor, coverage = await provider_page(client, "bitvavo", cursor, NOW)
+        assert movements == []
         assert rows == [] and coverage is None
         assert cursor["phase"] == "trades" and cursor["markets"] == ["BTC/EUR"]
-        rows, cursor, coverage = await provider_page(client, "bitvavo", cursor, NOW)
+        rows, movements, cursor, coverage = await provider_page(client, "bitvavo", cursor, NOW)
+        assert movements == []
         assert rows[0]["exchange_order_id"] == "order-1"
         assert coverage == NOW
         assert client.requests[-1]["end"] - client.requests[-1]["start"] < DAY_MS
         assert client.requests[-1]["start"] == NOW // DAY_MS * DAY_MS
+
+    asyncio.run(exercise())
+
+
+def test_bitvavo_account_history_pages_stage_nontrade_movements_and_keep_cursor():
+    class Client:
+        async def request(self, _path, _scope, _method, params):
+            if params["page"] == 1:
+                items = [bitvavo_movement(transactionId="deposit-1")]
+            else:
+                items = [bitvavo_movement(transactionId="withdraw-1", type="withdrawal",
+                                          receivedCurrency=None, receivedAmount=None,
+                                          sentCurrency="BTC", sentAmount="0.1")]
+            return {"currentPage": params["page"], "totalPages": 2, "items": items}
+
+    async def exercise():
+        cursor = initial_cursor("bitvavo", NOW)
+        fills, movements, cursor, covered = await provider_page(Client(), "bitvavo", cursor, NOW)
+        assert fills == [] and covered is None
+        assert [row["provider_transaction_id"] for row in movements] == ["deposit-1"]
+        assert cursor["page"] == 2 and cursor["phase"] == "discover"
+        fills, movements, cursor, covered = await provider_page(Client(), "bitvavo", cursor, NOW)
+        assert fills == [] and covered is None
+        assert [row["provider_transaction_id"] for row in movements] == ["withdraw-1"]
+        assert cursor["phase"] == "trades" and cursor["markets"] == []
 
     asyncio.run(exercise())
 
@@ -229,13 +307,13 @@ def test_bitvavo_activity_days_avoid_empty_historical_windows_and_page_all_marke
     async def exercise():
         client = Client()
         cursor = initial_cursor("bitvavo", NOW)
-        _, cursor, _ = await provider_page(client, "bitvavo", cursor, NOW)
-        _, cursor, _ = await provider_page(client, "bitvavo", cursor, NOW)
+        _, _, cursor, _ = await provider_page(client, "bitvavo", cursor, NOW)
+        _, _, cursor, _ = await provider_page(client, "bitvavo", cursor, NOW)
         assert cursor["activity_days"]["BTC/EUR"] == sorted({first // DAY_MS * DAY_MS,
                                                                second // DAY_MS * DAY_MS})
-        _, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
+        _, _, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
         assert covered is None
-        _, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
+        _, _, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
         assert covered == NOW
         trade_calls = [call for call in client.requests if "market" in call]
         assert len(trade_calls) == 2
@@ -274,10 +352,12 @@ def test_bitvavo_full_trade_page_keeps_same_day_until_cursor_advances():
         cursor = {"phase": "trades", "since_ms": 0, "snapshot_until_ms": NOW,
                   "markets": ["BTC/EUR"], "activity_days": {"BTC/EUR": [day]},
                   "market_index": 0, "day_index": 0, "trade_id_to": None}
-        rows, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
+        rows, movements, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
+        assert movements == []
         assert len(rows) == 1000 and covered is None
         assert cursor["day_index"] == 0 and cursor["trade_id_to"] == "fill-999"
-        rows, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
+        rows, movements, cursor, covered = await provider_page(client, "bitvavo", cursor, NOW)
+        assert movements == []
         assert len(rows) == 1 and covered == NOW
         assert client.calls[1]["tradeIdTo"] == "fill-999"
 

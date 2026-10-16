@@ -1,9 +1,10 @@
-"""Read-only, bounded ingestion of linked exchange execution evidence.
+"""Read-only, bounded ingestion of linked exchange evidence.
 
 Provider payloads and credentials never reach FINN. The staged rows do not
 change bot orders, ledgers or portfolios. Bybit history before its two-year
 provider window, non-trade transfers and Bitvavo Price Guarantee fills remain
-explicit gaps rather than guessed positions or EUR PnL.
+explicit gaps rather than guessed positions or EUR PnL. Bitvavo's non-trade
+account transactions retain their provider legs without inferred balances.
 """
 
 from __future__ import annotations
@@ -34,6 +35,13 @@ MAX_MARKETS = 100
 MAX_ACTIVE_DAYS = 10_000
 IDENTIFIER = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 CURRENCY = re.compile(r"^[A-Z0-9]{2,20}$")
+MOVEMENT_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+BITVAVO_NON_TRADE_TYPES = {
+    "staking", "fixed_staking", "deposit", "withdrawal", "affiliate",
+    "distribution", "internal_transfer", "withdrawal_cancelled", "rebate",
+    "loan", "external_transferred_funds", "manually_assigned",
+    "manually_assigned_bitvavo",
+}
 
 
 def _hash_identity(value: str) -> str:
@@ -140,6 +148,62 @@ def _discover_market(item: dict) -> str | None:
     return market
 
 
+def _history_timestamp(item: dict, since_ms: int, until_ms: int) -> tuple[datetime, int]:
+    try:
+        occurred_at = datetime.fromisoformat(str(item["executedAt"]).replace("Z", "+00:00"))
+        if occurred_at.tzinfo is None:
+            raise ValueError("Missing provider timezone")
+        occurred_ms = int(occurred_at.timestamp() * 1000)
+        if not since_ms <= occurred_ms <= until_ms:
+            raise ValueError("Provider timestamp outside requested range")
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Invalid Bitvavo account-history timestamp") from exc
+    return occurred_at.astimezone(timezone.utc), occurred_ms
+
+
+def normalize_bitvavo_movement(raw: dict, since_ms: int, until_ms: int) -> dict:
+    """Keep provider legs as facts; never turn them into a balance delta here."""
+    kind = str(raw.get("type") or "").lower()
+    if kind in {"buy", "sell"} or not MOVEMENT_TYPE.fullmatch(kind):
+        raise ValueError("Invalid Bitvavo movement type")
+    occurred_at, _ = _history_timestamp(raw, since_ms, until_ms)
+    incomplete = []
+
+    def leg(currency_key: str, amount_key: str, label: str,
+            *, signed: bool = False) -> tuple[str | None, Decimal | None]:
+        currency_raw = raw.get(currency_key)
+        amount_raw = raw.get(amount_key)
+        if currency_raw in (None, "") and amount_raw in (None, ""):
+            return None, None
+        if currency_raw in (None, "") or amount_raw in (None, ""):
+            incomplete.append(f"{label}_leg_missing")
+            return None, None
+        currency = str(currency_raw).upper()
+        if not CURRENCY.fullmatch(currency):
+            raise ValueError("Invalid Bitvavo movement currency")
+        return currency, _decimal(amount_raw, positive=not signed)
+
+    sent_currency, sent_amount = leg("sentCurrency", "sentAmount", "sent")
+    received_currency, received_amount = leg("receivedCurrency", "receivedAmount", "received")
+    # Provider account history may include a rebate/fee reversal. Preserve
+    # its sign without asserting which balance it changed.
+    fee_currency, fee_amount = leg("feesCurrency", "feesAmount", "fee", signed=True)
+    if not sent_currency and not received_currency:
+        incomplete.append("no_asset_leg")
+    if kind not in BITVAVO_NON_TRADE_TYPES:
+        incomplete.append("unknown_transaction_type")
+    return {
+        "provider_transaction_id": _identifier(raw.get("transactionId")),
+        "transaction_type": kind,
+        "sent_currency": sent_currency, "sent_amount": sent_amount,
+        "received_currency": received_currency, "received_amount": received_amount,
+        "fee_currency": fee_currency, "fee_amount": fee_amount,
+        "occurred_at": occurred_at,
+        "evidence_status": "unsupported" if incomplete else "complete",
+        "unsupported_reason": ",".join(sorted(set(incomplete))) if incomplete else None,
+    }
+
+
 def initial_cursor(exchange_name: str, now_ms: int) -> dict:
     since = max(0, now_ms - BYBIT_HISTORY_MS) if exchange_name == "bybit" else 0
     if exchange_name == "bybit":
@@ -150,8 +214,10 @@ def initial_cursor(exchange_name: str, now_ms: int) -> dict:
             "trade_id_to": None}
 
 
-async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -> tuple[list[dict], dict, int | None]:
-    """Return one normalized page, next persisted cursor and completed coverage."""
+async def provider_page(
+    client, exchange_name: str, cursor: dict, now_ms: int,
+) -> tuple[list[dict], list[dict], dict, int | None]:
+    """Return fills, movements, next durable cursor and covered-through time."""
     next_cursor = dict(cursor)
     if exchange_name == "bybit":
         start = int(cursor["window_start_ms"])
@@ -187,11 +253,11 @@ async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -
                 raise ValueError("Bybit pagination did not advance")
             next_cursor["page_cursor"] = next_page
             next_cursor["window_end_ms"] = end
-            return normalized, next_cursor, None
+            return normalized, [], next_cursor, None
         next_cursor["page_cursor"] = None
         next_cursor["window_end_ms"] = None
         next_cursor["window_start_ms"] = end + 1 if end < now_ms else max(now_ms - 7 * DAY_MS, start)
-        return normalized, next_cursor, end
+        return normalized, [], next_cursor, end
 
     if exchange_name != "bitvavo":
         raise ValueError("Unsupported exchange")
@@ -208,20 +274,19 @@ async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -
             raise ValueError("Invalid Bitvavo history pagination")
         markets = set(cursor.get("markets") or [])
         activity_days = {key: list(value) for key, value in (cursor.get("activity_days") or {}).items()}
+        movements = []
         for item in response["items"]:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid Bitvavo account-history transaction")
+            kind = str(item.get("type") or "").lower()
+            if kind not in {"buy", "sell"}:
+                movements.append(normalize_bitvavo_movement(
+                    item, int(cursor["since_ms"]), int(cursor["snapshot_until_ms"])))
             market = _discover_market(item)
             if market:
                 markets.add(market)
-                try:
-                    executed_at = datetime.fromisoformat(str(item["executedAt"]).replace("Z", "+00:00"))
-                    if executed_at.tzinfo is None:
-                        raise ValueError("Missing provider timezone")
-                    executed_ms = int(executed_at.timestamp() * 1000)
-                    if (executed_ms < int(cursor["since_ms"])
-                            or executed_ms > int(cursor["snapshot_until_ms"])):
-                        raise ValueError("Invalid provider timestamp")
-                except (KeyError, TypeError, ValueError) as exc:
-                    raise ValueError("Invalid Bitvavo account-history timestamp") from exc
+                _, executed_ms = _history_timestamp(
+                    item, int(cursor["since_ms"]), int(cursor["snapshot_until_ms"]))
                 day = executed_ms // DAY_MS * DAY_MS
                 days = set(activity_days.get(market, []))
                 days.add(day)
@@ -238,7 +303,7 @@ async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -
             next_cursor.update({"phase": "trades", "market_index": 0, "day_index": 0,
                                 "window_start_ms": int(activity_days[next_cursor["markets"][0]][0])
                                 if markets else int(cursor["since_ms"]), "trade_id_to": None})
-        return [], next_cursor, None
+        return [], movements, next_cursor, None
 
     markets = cursor.get("markets") or []
     index = int(cursor.get("market_index") or 0)
@@ -249,7 +314,7 @@ async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -
                             "market_index": 0, "day_index": 0,
                             "window_start_ms": max(now_ms - 2 * DAY_MS, 0),
                             "trade_id_to": None})
-        return [], next_cursor, now_ms
+        return [], [], next_cursor, now_ms
     market = _pair(markets[index])[0]
     days = (cursor.get("activity_days") or {}).get(market) or []
     day_index = int(cursor.get("day_index") or 0)
@@ -275,14 +340,14 @@ async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -
         if tail_id == cursor.get("trade_id_to"):
             raise ValueError("Bitvavo pagination did not advance")
         next_cursor["trade_id_to"] = tail_id
-        return normalized, next_cursor, None
+        return normalized, [], next_cursor, None
     next_cursor["trade_id_to"] = None
     next_cursor["day_index"] = day_index + 1
     if day_index + 1 >= len(days):
         next_cursor["market_index"] = index + 1
         next_cursor["day_index"] = 0
     complete = index + 1 >= len(markets) and day_index + 1 >= len(days)
-    return normalized, next_cursor, now_ms if complete else None
+    return normalized, [], next_cursor, now_ms if complete else None
 
 
 class FinnExchangeImportService:
@@ -323,7 +388,12 @@ class FinnExchangeImportService:
         result = await self.session.execute(text("""
             SELECT s.id, s.exchange_name, s.identity_kind, s.credential_fingerprint, s.status,
                    s.coverage_start_at, s.coverage_through_at, s.last_success_at,
-                   s.last_error_code, COUNT(f.id) AS imported_fills
+                   s.last_error_code, COUNT(f.id) AS imported_fills,
+                   (SELECT COUNT(*) FROM finn_exchange_import_movements m
+                    WHERE m.source_id=s.id AND m.user_id=s.user_id) AS imported_movements,
+                   (SELECT COUNT(*) FROM finn_exchange_import_movements m
+                    WHERE m.source_id=s.id AND m.user_id=s.user_id
+                      AND m.evidence_status='unsupported') AS unsupported_movements
             FROM finn_exchange_import_sources s
             LEFT JOIN finn_exchange_import_fills f ON f.source_id=s.id AND f.user_id=s.user_id
             WHERE s.user_id=:user_id
@@ -355,9 +425,12 @@ class FinnExchangeImportService:
                              "identity_kind": None, "coverage_start_at": None,
                              "coverage_through_at": None, "last_success_at": None,
                              "last_error_code": attempt.last_error_code if attempt else None,
-                             "imported_fills": 0})
+                             "imported_fills": 0, "imported_movements": 0,
+                             "unsupported_movements": 0})
         for row in rows:
             row["review_eligibility"] = "unverified_position_basis"
+            row["movement_coverage"] = ("bitvavo_account_history_partial" if row["exchange_name"] == "bitvavo"
+                                        else "not_collected")
             row["history_limit"] = ("two_year_provider_window" if row["exchange_name"] == "bybit"
                                     else "account_history_discovery_trades_exclude_price_guarantee")
         return rows
@@ -440,10 +513,11 @@ class FinnExchangeImportService:
                    "coverage_start": datetime.fromtimestamp(history_start_ms / 1000, tz=timezone.utc)})
             source_id, cursor, _ = source_result.fetchone()
             cursor = dict(cursor)
-            pages = inserted = 0
+            pages = inserted = movements_seen = 0
             completed_ms = None
             for _ in range(MAX_PAGES_PER_SYNC):
-                rows, next_cursor, covered_ms = await provider_page(client, exchange_name, cursor, now_ms)
+                rows, movements, next_cursor, covered_ms = await provider_page(
+                    client, exchange_name, cursor, now_ms)
                 for row in rows:
                     inserted_fill = await self.session.execute(text("""
                         INSERT INTO finn_exchange_import_fills AS existing
@@ -469,9 +543,37 @@ class FinnExchangeImportService:
                     """), {"user_id": user_id, "source_id": source_id, **row})
                     if inserted_fill.scalar_one_or_none() is None:
                         raise ValueError("Provider fill identity conflicts with recorded immutable facts")
+                for movement in movements:
+                    inserted_movement = await self.session.execute(text("""
+                        INSERT INTO finn_exchange_import_movements AS existing
+                            (user_id, source_id, provider_transaction_id, transaction_type,
+                             sent_currency, sent_amount, received_currency, received_amount,
+                             fee_currency, fee_amount, occurred_at, evidence_status,
+                             unsupported_reason)
+                        VALUES (:user_id, :source_id, :provider_transaction_id, :transaction_type,
+                                :sent_currency, :sent_amount, :received_currency, :received_amount,
+                                :fee_currency, :fee_amount, :occurred_at, :evidence_status,
+                                :unsupported_reason)
+                        ON CONFLICT (user_id, source_id, provider_transaction_id) DO UPDATE
+                        SET imported_at=existing.imported_at
+                        WHERE existing.transaction_type=EXCLUDED.transaction_type
+                          AND existing.sent_currency IS NOT DISTINCT FROM EXCLUDED.sent_currency
+                          AND existing.sent_amount IS NOT DISTINCT FROM EXCLUDED.sent_amount
+                          AND existing.received_currency IS NOT DISTINCT FROM EXCLUDED.received_currency
+                          AND existing.received_amount IS NOT DISTINCT FROM EXCLUDED.received_amount
+                          AND existing.fee_currency IS NOT DISTINCT FROM EXCLUDED.fee_currency
+                          AND existing.fee_amount IS NOT DISTINCT FROM EXCLUDED.fee_amount
+                          AND existing.occurred_at=EXCLUDED.occurred_at
+                          AND existing.evidence_status=EXCLUDED.evidence_status
+                          AND existing.unsupported_reason IS NOT DISTINCT FROM EXCLUDED.unsupported_reason
+                        RETURNING id
+                    """), {"user_id": user_id, "source_id": source_id, **movement})
+                    if inserted_movement.scalar_one_or_none() is None:
+                        raise ValueError("Provider movement identity conflicts with recorded immutable facts")
                 cursor = next_cursor
                 pages += 1
                 inserted += len(rows)
+                movements_seen += len(movements)
                 if covered_ms is not None:
                     completed_ms = covered_ms
                 if covered_ms is not None and covered_ms >= now_ms - 1000:
@@ -493,6 +595,7 @@ class FinnExchangeImportService:
                               "ready" if exchange_name == "bybit" and completed_ms is not None
                               and completed_ms >= now_ms - 1000 else "partial",
                     "source_id": source_id, "pages": pages, "fills_seen": inserted,
+                    "movements_seen": movements_seen,
                     "coverage_complete": False}
         except Exception as exc:
             await self.session.rollback()
