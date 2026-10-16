@@ -1738,6 +1738,7 @@
           "quantity": "Total bought",
           "plan": "Original recorded plan",
           "noPlan": "No plan was recorded at entry.",
+          "externalNoPlan": "No plan for this trade was recorded in Tradamind. You can tell FINN about your original reasoning.",
           "selectHint": "Select a trade on the left to open its review.",
           "planFields": {"entry_plan":"Entry plan","stop_loss":"Stop loss","targets":"Targets","risk":"Risk"},
           "executionEvidence": "Confirmed executions",

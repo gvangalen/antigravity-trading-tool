@@ -1739,6 +1739,7 @@
           "quantity": "Totaal gekocht",
           "plan": "Oorspronkelijk vastgelegd plan",
           "noPlan": "Bij de opening was geen plan vastgelegd.",
+          "externalNoPlan": "Er is geen plan voor deze trade in Tradamind vastgelegd. Je kunt je oorspronkelijke afwegingen aan FINN vertellen.",
           "selectHint": "Kies een trade links om de review te openen.",
           "planFields": {"entry_plan":"Entryplan","stop_loss":"Stop-loss","targets":"Koersdoelen","risk":"Risico"},
           "executionEvidence": "Bevestigde uitvoeringen",

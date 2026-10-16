@@ -208,7 +208,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
       <div className="mt-7 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {copy.plan}</h4>
-          {plan ? <PlanFacts plan={plan} copy={copy} /> : <p className="mt-3 text-sm text-slate-500">{copy.noPlan}</p>}
+          {plan ? <PlanFacts plan={plan} copy={copy} /> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>

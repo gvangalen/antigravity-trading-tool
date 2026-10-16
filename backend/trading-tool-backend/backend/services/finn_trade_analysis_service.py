@@ -280,7 +280,10 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
     if (context or {}).get("cash_legs_truncated"):
         uncertainty_parts.append("Niet alle valutastromen zijn in de FINN-context opgenomen.")
     if "plan:snapshot" not in allowed:
-        uncertainty_parts.append("Een oorspronkelijk plan ontbreekt.")
+        uncertainty_parts.append(
+            "Een oorspronkelijk plan is niet in Tradamind vastgelegd."
+            if exchange else "Een oorspronkelijk plan ontbreekt."
+        )
     if "chart:binance-eur" not in allowed:
         uncertainty_parts.append("Historische chartcontext is niet beschikbaar.")
     if "screenshot:user-upload" in allowed:

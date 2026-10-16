@@ -117,6 +117,8 @@ def test_exchange_review_uses_attested_closure_and_quote_specific_evidence():
     result = validate_analysis(raw, allowed, context, question_mode=True)
     assert "Afsluiting bevestigd door gebruiker" in result["summary"]
     assert "Afsluiting bevestigd door gebruiker" in result["uncertainty"]
+    assert "niet in Tradamind vastgelegd" in result["uncertainty"]
+    assert "Een oorspronkelijk plan ontbreekt" not in result["uncertainty"]
     assert "€" not in result["summary"]
 
 

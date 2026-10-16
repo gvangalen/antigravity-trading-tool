@@ -1755,6 +1755,7 @@
           "quantity": "Insgesamt gekauft",
           "plan": "Ursprünglich erfasster Plan",
           "noPlan": "Beim Einstieg wurde kein Plan erfasst.",
+          "externalNoPlan": "Für diesen Trade wurde in Tradamind kein Plan erfasst. Du kannst FINN deine ursprünglichen Überlegungen mitteilen.",
           "selectHint": "Wähle links einen Trade aus, um das Review zu öffnen.",
           "planFields": {"entry_plan":"Einstiegsplan","stop_loss":"Stop-Loss","targets":"Kursziele","risk":"Risiko"},
           "executionEvidence": "Bestätigte Ausführungen",
