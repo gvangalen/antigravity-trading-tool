@@ -21,13 +21,15 @@ class FinnClosedTradeReflectionService:
         result = await self.session.execute(text("SELECT to_regclass('public.finn_trade_reviews')"))
         return result.scalar_one_or_none() is not None
 
-    async def recent(self, user_id: int, *, days: int = 7, limit: int = 10) -> dict[str, Any]:
+    async def recent(self, user_id: int, *, days: int = 7, limit: int = 10,
+                     symbol: str | None = None) -> dict[str, Any]:
         if not 1 <= days <= 30 or not 1 <= limit <= 20:
             raise ValueError("Invalid trade-reflection window")
         if not trade_review_enabled(user_id):
             return self._empty("disabled", days)
         if not await self._available():
             return self._empty("migration_unavailable", days)
+        symbol = symbol.upper() if symbol else None
         totals = await self.session.execute(text("""
             SELECT COUNT(*) AS trades,
                    COUNT(*) FILTER (WHERE analysis_status='ready') AS analyzed,
@@ -35,7 +37,8 @@ class FinnClosedTradeReflectionService:
                    COUNT(*) FILTER (WHERE analysis_status IN ('failed','unavailable')) AS unavailable
             FROM finn_trade_reviews
             WHERE user_id=:user_id AND exit_at >= NOW() - (:days * INTERVAL '1 day')
-        """), {"user_id": user_id, "days": days})
+              AND (CAST(:symbol AS TEXT) IS NULL OR symbol=:symbol)
+        """), {"user_id": user_id, "days": days, "symbol": symbol})
         coverage = dict(totals.fetchone()._mapping)
         rows = await self.session.execute(text("""
             SELECT id, symbol, execution_environment, execution_sources, entry_at, exit_at,
@@ -44,13 +47,21 @@ class FinnClosedTradeReflectionService:
                    native_pnl_status,
                    pnl_eur_before_fees, plan_snapshot, plan_provenance,
                    analysis_status, analysis_json, candles_status,
+                   (SELECT jsonb_build_object(
+                        'lesson_text',l.lesson_text,'confirmed_at',l.confirmed_at,
+                        'evidence_revision',l.evidence_revision)
+                    FROM finn_trade_review_lessons l
+                    WHERE l.user_id=:user_id AND l.review_id=r.id
+                      AND l.status='active' AND l.evidence_revision=r.input_revision
+                   ) AS confirmed_lesson,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
                            WHERE s.user_id=:user_id AND s.review_id=r.id) AS has_screenshot,
                    fills
             FROM finn_trade_reviews r
             WHERE user_id=:user_id AND exit_at >= NOW() - (:days * INTERVAL '1 day')
+              AND (CAST(:symbol AS TEXT) IS NULL OR r.symbol=:symbol)
             ORDER BY exit_at DESC, id DESC LIMIT :limit
-        """), {"user_id": user_id, "days": days, "limit": limit})
+        """), {"user_id": user_id, "days": days, "limit": limit, "symbol": symbol})
         reviews = []
         themes: dict[str, set[int]] = defaultdict(set)
         for row in rows.fetchall():
@@ -80,6 +91,13 @@ class FinnClosedTradeReflectionService:
                    native_pnl_status,
                    pnl_eur_before_fees, plan_snapshot, plan_provenance,
                    analysis_status, analysis_json, candles_status,
+                   (SELECT jsonb_build_object(
+                        'lesson_text',l.lesson_text,'confirmed_at',l.confirmed_at,
+                        'evidence_revision',l.evidence_revision)
+                    FROM finn_trade_review_lessons l
+                    WHERE l.user_id=:user_id AND l.review_id=r.id
+                      AND l.status='active' AND l.evidence_revision=r.input_revision
+                   ) AS confirmed_lesson,
                    EXISTS (SELECT 1 FROM finn_trade_review_screenshots s
                            WHERE s.user_id=:user_id AND s.review_id=r.id) AS has_screenshot,
                    fills
@@ -106,6 +124,15 @@ class FinnClosedTradeReflectionService:
         derivative = row.get("origin") == "bybit_derivative_user_attested"
         exchange = row.get("origin") == "exchange_user_attested"
         has_proven_plan = bool(row.get("plan_snapshot") and row.get("plan_provenance"))
+        lesson = row.get("confirmed_lesson")
+        confirmed_lesson = None
+        if isinstance(lesson, dict) and isinstance(lesson.get("lesson_text"), str) and lesson.get("confirmed_at"):
+            confirmed_lesson = {
+                "lesson_text": lesson["lesson_text"][:500],
+                "confirmed_at": str(lesson["confirmed_at"]),
+                "evidence_revision": lesson.get("evidence_revision"),
+                "source": "user_confirmed_reflection_not_trade_fact_or_original_plan",
+            }
         evidence_ids = ([f"derivative_exec:{item['derivative_execution_id']}:{item['role']}"
                          for item in sampled_fills if isinstance(item, dict)
                          and isinstance(item.get("derivative_execution_id"), int)
@@ -142,6 +169,7 @@ class FinnClosedTradeReflectionService:
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
             "has_plan": has_proven_plan,
+            "confirmed_lesson": confirmed_lesson,
             "analysis_status": str(row["analysis_status"]),
             "chart_status": str(row["candles_status"]),
             "has_screenshot": bool(row.get("has_screenshot")),

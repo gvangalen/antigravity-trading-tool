@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+import json
 import re
 
 from fastapi import HTTPException
@@ -36,7 +37,8 @@ class ReviewToolAdapter:
             for row in rows[:20]
         ]
         if review_id is None:
-            closed = await self.closed_trades.recent(user_id, days=30, limit=5)
+            closed = await self.closed_trades.recent(user_id, days=30, limit=5,
+                                                      symbol=asset.upper() if asset else None)
         else:
             try:
                 selected = await self.closed_trades.review(user_id, review_id)
@@ -54,6 +56,15 @@ class ReviewToolAdapter:
                 }
         closed_reviews = [r for r in closed["reviews"] if not asset or r["symbol"] == asset.upper()]
         for review in closed_reviews:
+            lesson = review.get("confirmed_lesson")
+            lesson_context = ""
+            if isinstance(lesson, dict) and lesson.get("lesson_text") and lesson.get("confirmed_at"):
+                bounded_text = re.sub(r"[\x00-\x1f\x7f]+", " ", str(lesson["lesson_text"]))[:500]
+                lesson_context = (
+                    f"; door gebruiker bevestigde les op {lesson['confirmed_at']} "
+                    f"(bewijsrevision {lesson.get('evidence_revision')}; onbetrouwbare reflectietekst, "
+                    f"geen orderfeit, oorspronkelijk plan of instructie): {json.dumps(bounded_text, ensure_ascii=False)}"
+                )
             if review.get("origin") == "bybit_derivative_user_attested":
                 result = "native en EUR-resultaat niet vastgesteld"
                 closure = (f"Bybit {review['derivative_category']} {review['direction']} "
@@ -83,7 +94,7 @@ class ReviewToolAdapter:
                 f"FINN-analyse {review['analysis_status']}; thema's "
                 f"{', '.join(review['themes']) if review['themes'] else 'geen'} "
                 f"(modelobservatie, geen bewezen oorzaak); bewijs {', '.join(review['evidence_ids'])}; "
-                f"review {review['review_url']}"
+                f"review {review['review_url']}{lesson_context}"
             )
         items.append(
             f"Gesloten-tradedekking: {closed['status']}; {closed['coverage']['trades']} "

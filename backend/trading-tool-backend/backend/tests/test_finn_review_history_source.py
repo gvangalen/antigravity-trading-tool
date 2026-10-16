@@ -30,8 +30,8 @@ def test_review_history_separates_owner_bot_decisions_from_closed_trade_evidence
     from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
     adapter.sources = FinnV2InformationSourceRegistry()
     class ClosedTrades:
-        async def recent(self, user_id, *, days, limit):
-            assert user_id == 42 and days == 30 and limit == 5
+        async def recent(self, user_id, *, days, limit, symbol=None):
+            assert user_id == 42 and days == 30 and limit == 5 and symbol == "BTC"
             return {"status": "no_data", "coverage": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0}, "reviews": []}
 
     adapter.closed_trades = ClosedTrades()
