@@ -82,6 +82,22 @@ def test_owner_scope_and_safe_evidence_contract():
     assert all(params and params.get("user_id") in {7, 8} for sql, params in session.queries if "FROM finn_trade_reviews r" in sql)
 
 
+def test_legacy_plan_without_order_time_provenance_is_not_plan_evidence():
+    legacy = {**ROW, "plan_snapshot": {"entry": "historical"},
+              "plan_provenance": None, "has_plan": True}
+    session = Session({7: {81: legacy}})
+    service = FinnClosedTradeReflectionService(session)
+    safe = asyncio.run(service.review(7, 81))["review"]
+    assert safe["has_plan"] is False
+    assert "plan:snapshot" not in safe["evidence_ids"]
+    assert any("plan_provenance" in sql for sql, _ in session.queries)
+    proven = {**legacy, "plan_provenance": {"source": "bot_order_context", "order_id": 3}}
+    safe_proven = asyncio.run(FinnClosedTradeReflectionService(
+        Session({7: {81: proven}})).review(7, 81))["review"]
+    assert safe_proven["has_plan"] is True
+    assert "plan:snapshot" in safe_proven["evidence_ids"]
+
+
 def test_user_attested_exchange_review_has_distinct_evidence_and_no_eur_claim():
     exchange_row = {
         **ROW, "id": 82, "origin": "exchange_user_attested",
