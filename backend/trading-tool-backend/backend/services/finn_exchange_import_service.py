@@ -134,10 +134,9 @@ def _discover_market(item: dict) -> str | None:
         return None
     base = item.get("receivedCurrency") if side == "buy" else item.get("sentCurrency")
     quote = item.get("priceCurrency")
-    try:
-        market, _, _ = _pair(f"{base}/{quote}")
-    except ValueError:
-        return None
+    if not base or not quote:
+        raise ValueError("Unsupported provider spot pair")
+    market, _, _ = _pair(f"{base}/{quote}")
     return market
 
 

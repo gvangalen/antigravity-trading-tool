@@ -208,6 +208,20 @@ def test_bitvavo_activity_days_avoid_empty_historical_windows_and_page_all_marke
     asyncio.run(exercise())
 
 
+def test_bitvavo_unknown_buy_market_fails_coverage_instead_of_silent_omission():
+    class Client:
+        async def request(self, *_args):
+            return {"currentPage": 1, "totalPages": 1,
+                    "items": [{"type": "buy", "receivedCurrency": "BTC",
+                               "priceCurrency": None, "executedAt": "2026-10-01T00:00:00Z"}]}
+
+    async def exercise():
+        with pytest.raises(ValueError, match="Unsupported provider spot pair"):
+            await provider_page(Client(), "bitvavo", initial_cursor("bitvavo", NOW), NOW)
+
+    asyncio.run(exercise())
+
+
 def test_bitvavo_full_trade_page_keeps_same_day_until_cursor_advances():
     class Client:
         calls = []
