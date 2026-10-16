@@ -277,7 +277,7 @@ class FinnExchangeTradeReviewService:
                      same_account_confirmation_text)
                 VALUES (:user_id, :idempotency_key, :digest, :review_id,
                         :same_account_confirmed, TRUE, :confirmation_version,
-                        'web_checkbox', :identity_basis, :closure_confirmation_text,
+                        'authenticated_api_attestation', :identity_basis, :closure_confirmation_text,
                         :same_account_confirmation_text)
             """), {"user_id": user_id, "idempotency_key": str(idempotency_key),
                    "digest": digest, "review_id": review_id,

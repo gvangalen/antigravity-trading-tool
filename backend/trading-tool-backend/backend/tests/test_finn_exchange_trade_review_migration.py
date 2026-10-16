@@ -31,3 +31,10 @@ def test_migration_has_owner_composite_fks_and_origin_separation():
     assert "PRIMARY KEY (user_id, exchange_fill_id)" in sql
     assert "FOREIGN KEY (user_id, exchange_fill_id)" in sql
     assert "FOREIGN KEY (user_id, review_id)" in sql
+
+
+def test_attestation_method_records_authenticated_api_request():
+    root = Path(__file__).parents[1]
+    sql = runpy.run_path(str(root / "scripts/migrations/2026_10_20_finn_exchange_attestation_method.py"))["SQL"]
+    assert "SET confirmation_method='authenticated_api_attestation'" in sql
+    assert "CHECK (confirmation_method='authenticated_api_attestation')" in sql

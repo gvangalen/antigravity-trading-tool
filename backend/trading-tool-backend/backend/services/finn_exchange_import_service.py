@@ -354,10 +354,14 @@ class FinnExchangeImportService:
     def __init__(self, session):
         self.session = session
 
-    async def fills(self, user_id: int, source_id: int, *, limit: int = 50, offset: int = 0) -> dict:
+    async def fills(self, user_id: int, source_id: int, *, limit: int = 50, offset: int = 0,
+                    before_at: datetime | None = None, before_id: int | None = None) -> dict:
         require_trade_review_access(user_id)
         if not 1 <= limit <= 100 or not 0 <= offset <= 10_000:
             raise HTTPException(422, "Ongeldige importpagina")
+        if (before_at is None) != (before_id is None) or (before_at is not None and
+                (before_at.tzinfo is None or before_id <= 0 or offset != 0)):
+            raise HTTPException(422, "Ongeldige importcursor")
         source_result = await self.session.execute(text("""
             SELECT id, exchange_name, status FROM finn_exchange_import_sources
             WHERE id=:source_id AND user_id=:user_id
@@ -369,21 +373,29 @@ class FinnExchangeImportService:
             SELECT COUNT(*) FROM finn_exchange_import_fills
             WHERE user_id=:user_id AND source_id=:source_id
         """), {"user_id": user_id, "source_id": source_id})
-        result = await self.session.execute(text("""
+        cursor_condition = "AND (f.traded_at, f.id) < (:before_at, :before_id)" if before_at else ""
+        result = await self.session.execute(text(f"""
             SELECT f.id, f.source_id, f.symbol, f.side, f.qty, f.price_quote, f.cost_quote,
                    f.quote_currency, f.fee_amount, f.fee_currency, f.traded_at,
                    r.review_id
             FROM finn_exchange_import_fills f
             LEFT JOIN finn_exchange_review_fill_reservations r
               ON r.user_id=f.user_id AND r.exchange_fill_id=f.id
-            WHERE f.user_id=:user_id AND f.source_id=:source_id
+            WHERE f.user_id=:user_id AND f.source_id=:source_id {cursor_condition}
             ORDER BY f.traded_at DESC, f.id DESC
-            LIMIT :limit OFFSET :offset
+            LIMIT :fetch_limit OFFSET :offset
         """), {"user_id": user_id, "source_id": source_id,
-               "limit": limit, "offset": offset})
+               "fetch_limit": limit + 1, "offset": offset,
+               **({"before_at": before_at, "before_id": before_id} if before_at else {})})
+        rows = [dict(row._mapping) for row in result.fetchall()]
+        has_more = len(rows) > limit
+        items = rows[:limit]
+        last = items[-1] if has_more and items else None
         return {"source_id": source_id, "exchange_name": source.exchange_name,
                 "status": source.status, "total": count_result.scalar_one(),
-                "items": [dict(row._mapping) for row in result.fetchall()]}
+                "items": items, "next_cursor": {
+                    "before_at": last["traded_at"].isoformat(), "before_id": last["id"]
+                } if last else None}
 
     async def status(self, user_id: int) -> list[dict]:
         require_trade_review_access(user_id)

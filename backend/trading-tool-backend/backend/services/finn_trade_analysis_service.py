@@ -14,6 +14,8 @@ from backend.utils import openai_client
 
 
 ANALYSIS_VERSION = 1
+MAX_AI_FILLS = 50
+MAX_AI_CASH_LEGS = 16
 SYSTEM_ROLE = (
     "Je bent FINN, een retrospectieve tradecoach. Analyseer uitsluitend de afgesloten "
     "trade en het besluitproces op grond van de meegegeven serverfeiten. Doe geen "
@@ -107,7 +109,9 @@ def _reject_trade_directives(value: str) -> None:
 
 
 def evidence_context(review: dict) -> tuple[dict, set[str]]:
-    fills = review.get("fills") or []
+    all_fills = review.get("fills") or []
+    fills = (all_fills[:MAX_AI_FILLS // 2] + all_fills[-MAX_AI_FILLS // 2:]
+             if len(all_fills) > MAX_AI_FILLS else all_fills)
     exchange = review.get("origin") == "exchange_user_attested"
     if exchange:
         evidence = [{"id": f"exchange_fill:{fill['exchange_fill_id']}",
@@ -146,7 +150,10 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
                             if exchange else None,
         "base_currency": review.get("base_currency") or review["symbol"],
         "pnl_status": review.get("pnl_status") or "before_fees_eur",
-        "cash_legs_by_currency": review.get("cash_legs_by_currency") if exchange else None,
+        "cash_legs_by_currency": (review.get("cash_legs_by_currency") or [])[:MAX_AI_CASH_LEGS] if exchange else None,
+        "cash_legs_truncated": exchange and len(review.get("cash_legs_by_currency") or []) > MAX_AI_CASH_LEGS,
+        "fills_total": len(all_fills), "fills_sampled": len(fills),
+        "fills_truncated": len(all_fills) > len(fills),
         "entry_value_eur": str(review["entry_value_eur"]) if review.get("entry_value_eur") is not None else None,
         "exit_value_eur": str(review["exit_value_eur"]) if review.get("exit_value_eur") is not None else None,
         "pnl_eur_before_fees": str(review["pnl_eur_before_fees"]) if review.get("pnl_eur_before_fees") is not None else None,
@@ -265,6 +272,13 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
                          if exchange else ["De orderledger toont uitvoeringen, niet alle motieven achter de keuzes."])
     if exchange and (context or {}).get("pnl_status") == "not_comparable":
         uncertainty_parts.append("Een vergelijkbaar EUR-resultaat ontbreekt voor deze valutastromen.")
+    if (context or {}).get("fills_truncated"):
+        uncertainty_parts.append(
+            f"FINN kreeg {context['fills_sampled']} van {context['fills_total']} geselecteerde uitvoeringen als detailbewijs; "
+            "de volledige selectie is wel bij de review opgeslagen."
+        )
+    if (context or {}).get("cash_legs_truncated"):
+        uncertainty_parts.append("Niet alle valutastromen zijn in de FINN-context opgenomen.")
     if "plan:snapshot" not in allowed:
         uncertainty_parts.append("Een oorspronkelijk plan ontbreekt.")
     if "chart:binance-eur" not in allowed:

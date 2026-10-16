@@ -332,10 +332,10 @@ export default function FinnTradeReviews() {
   }
 
   async function loadMoreImportFills() {
-    if (!importFillPage || importFillsLoadingMore) return;
+    if (!importFillPage?.next_cursor || importFillsLoadingMore) return;
     setImportFillsLoadingMore(true);
     try {
-      const page = await fetchFinnExchangeImportFills(importFillPage.source_id, 50, importFillPage.items?.length || 0);
+      const page = await fetchFinnExchangeImportFills(importFillPage.source_id, 50, importFillPage.next_cursor);
       setImportFillPage((current) => current?.source_id === page.source_id
         ? { ...page, items: [...(current.items || []), ...(page.items || [])] } : current);
     } catch { setImportError(true); }
@@ -457,7 +457,7 @@ export default function FinnTradeReviews() {
               {source.coverage_through_at && <p className="text-slate-500">{copy.exchangeImportThrough}: {formatDate(source.coverage_through_at, locale)}</p>}
               {source.last_error_code && <p className="text-amber-700 dark:text-amber-300">{copy.exchangeImportError}: {source.last_error_code}</p>}
               {source.id && <button type="button" onClick={() => openImportFills(source.id)} className="mt-2 font-bold text-blue-600 underline dark:text-blue-300">{importFillPage?.source_id === source.id ? copy.exchangeImportHideFills : copy.exchangeImportShowFills}</button>}
-              {importFillPage?.source_id === source.id && <div className="mt-2 max-h-64 space-y-1 overflow-auto"><p className="text-slate-500">{copy.exchangeImportEvidenceOnly}</p>{importFillPage.items?.map((fill) => <label key={fill.id} className={`flex items-start gap-2 rounded border border-slate-200 p-2 dark:border-slate-700 ${fill.review_id ? 'opacity-60' : 'cursor-pointer'}`}><input type="checkbox" className="mt-0.5" checked={selectedImportFills.some((item) => item.id === fill.id)} onChange={() => toggleImportFill(fill, source)} disabled={Boolean(fill.review_id)} /><span><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol}</strong> · {formatQuote(fill.cost_quote, fill.quote_currency, locale)}<br />{formatDate(fill.traded_at, locale)}{fill.review_id && <span className="block text-slate-500">{copy.exchangeAlreadyReviewed} #{fill.review_id}</span>}</span></label>)}{importFillPage.total > importFillPage.items?.length && <button type="button" onClick={loadMoreImportFills} disabled={importFillsLoadingMore} className="font-bold text-blue-600 underline disabled:opacity-50">{importFillsLoadingMore ? copy.loading : copy.exchangeImportLoadMore}</button>}</div>}
+              {importFillPage?.source_id === source.id && <div className="mt-2 max-h-64 space-y-1 overflow-auto"><p className="text-slate-500">{copy.exchangeImportEvidenceOnly}</p>{importFillPage.items?.map((fill) => <label key={fill.id} className={`flex items-start gap-2 rounded border border-slate-200 p-2 dark:border-slate-700 ${fill.review_id ? 'opacity-60' : 'cursor-pointer'}`}><input type="checkbox" className="mt-0.5" checked={selectedImportFills.some((item) => item.id === fill.id)} onChange={() => toggleImportFill(fill, source)} disabled={Boolean(fill.review_id)} /><span><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol}</strong> · {formatQuote(fill.cost_quote, fill.quote_currency, locale)}<br />{formatDate(fill.traded_at, locale)}{fill.review_id && <span className="block text-slate-500">{copy.exchangeAlreadyReviewed} #{fill.review_id}</span>}</span></label>)}{importFillPage.next_cursor && <button type="button" onClick={loadMoreImportFills} disabled={importFillsLoadingMore} className="font-bold text-blue-600 underline disabled:opacity-50">{importFillsLoadingMore ? copy.loading : copy.exchangeImportLoadMore}</button>}</div>}
             </div>)}
             {selectedImportFills.length > 0 && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-100">
               <h4 className="font-black">{copy.exchangePairTitle}</h4>

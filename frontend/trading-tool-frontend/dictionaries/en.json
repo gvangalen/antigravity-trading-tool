@@ -1791,7 +1791,7 @@
           "weekTrade": "trade",
           "weekTrades": "trades",
           "weekTruncated": "Patterns cover at most the latest 500 trades this week.",
-          "themes": {"missing_plan": "No recorded plan", "plan_followed": "Plan versus execution", "risk": "Risk process", "timing": "Timing", "exit_process": "Exit process", "evidence_gap": "Evidence gap"}
+          "themes": {"missing_plan": "No recorded plan", "plan_not_recorded": "Plan not recorded in Tradamind", "plan_followed": "Plan versus execution", "risk": "Risk process", "timing": "Timing", "exit_process": "Exit process", "evidence_gap": "Evidence gap"}
         },
         "sectionEyebrow": "Finn reporting",
         "title": "Personal Finn report",

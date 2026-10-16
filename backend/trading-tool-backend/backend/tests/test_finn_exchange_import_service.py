@@ -178,6 +178,60 @@ def test_owner_scoped_fill_page_hides_foreign_source(monkeypatch):
     asyncio.run(exercise())
 
 
+def test_fill_page_cursor_scopes_and_orders_same_timestamp(monkeypatch):
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "all")
+    traded_at = datetime(2026, 10, 16, tzinfo=timezone.utc)
+
+    class Result:
+        def __init__(self, rows=(), scalar=None):
+            self.rows = rows
+            self.value = scalar
+
+        def fetchone(self):
+            return self.rows[0] if self.rows else None
+
+        def fetchall(self):
+            return self.rows
+
+        def scalar_one(self):
+            return self.value
+
+    class Source:
+        exchange_name = "bitvavo"
+        status = "complete"
+
+    class Row:
+        def __init__(self, item):
+            self._mapping = item
+
+    class Session:
+        statements = []
+
+        async def execute(self, statement, params):
+            sql = str(statement)
+            self.statements.append((sql, params))
+            if "FROM finn_exchange_import_sources" in sql:
+                return Result([Source()])
+            if "COUNT(*)" in sql:
+                return Result(scalar=12_345)
+            return Result([Row({"id": fill_id, "traded_at": traded_at})
+                           for fill_id in (9, 8, 7)])
+
+    async def exercise():
+        session = Session()
+        page = await FinnExchangeImportService(session).fills(
+            12, 88, limit=2, before_at=traded_at, before_id=10)
+        assert [item["id"] for item in page["items"]] == [9, 8]
+        assert page["next_cursor"] == {"before_at": traded_at.isoformat(), "before_id": 8}
+        sql, params = session.statements[-1]
+        assert "(f.traded_at, f.id) < (:before_at, :before_id)" in sql
+        assert "ORDER BY f.traded_at DESC, f.id DESC" in sql
+        assert params["user_id"] == 12 and params["source_id"] == 88
+        assert params["before_id"] == 10 and params["fetch_limit"] == 3
+
+    asyncio.run(exercise())
+
+
 def test_bybit_page_rejects_nonadvancing_cursor_without_checkpointing():
     class Client:
         def market(self, _symbol):

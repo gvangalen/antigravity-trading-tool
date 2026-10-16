@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -301,13 +302,16 @@ async def list_finn_exchange_import_fills(
     source_id: int,
     limit: int = 50,
     offset: int = 0,
+    before_at: datetime | None = None,
+    before_id: int | None = None,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     require_trade_review_access(current_user["id"])
     review_rate_limiter.check_rate_limit(f"exchange_import_fills:{current_user['id']}", limit=30)
     return await FinnExchangeImportService(db).fills(current_user["id"], source_id,
-                                                     limit=limit, offset=offset)
+                                                     limit=limit, offset=offset,
+                                                     before_at=before_at, before_id=before_id)
 
 
 @router.post("/bot/exchange-trade-reviews", status_code=201)

@@ -1808,7 +1808,7 @@
           "weekTrade": "Trade",
           "weekTrades": "Trades",
           "weekTruncated": "Muster zeigen höchstens die letzten 500 Trades dieser Woche.",
-          "themes": {"missing_plan": "Kein erfasster Plan", "plan_followed": "Plan versus Ausführung", "risk": "Risikoprozess", "timing": "Timing", "exit_process": "Ausstiegsprozess", "evidence_gap": "Beleglücke"}
+          "themes": {"missing_plan": "Kein erfasster Plan", "plan_not_recorded": "Plan nicht in Tradamind erfasst", "plan_followed": "Plan versus Ausführung", "risk": "Risikoprozess", "timing": "Timing", "exit_process": "Ausstiegsprozess", "evidence_gap": "Beleglücke"}
         },
         "sectionEyebrow": "Finn-Berichte",
         "title": "Persönlicher Finn-Bericht",

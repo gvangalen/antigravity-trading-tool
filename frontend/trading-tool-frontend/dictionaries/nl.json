@@ -1792,7 +1792,7 @@
           "weekTrade": "trade",
           "weekTrades": "trades",
           "weekTruncated": "Patronen tonen maximaal de laatste 500 trades deze week.",
-          "themes": {"missing_plan": "Geen vastgelegd plan", "plan_followed": "Plan versus uitvoering", "risk": "Risicoproces", "timing": "Timing", "exit_process": "Exitproces", "evidence_gap": "Ontbrekend bewijs"}
+          "themes": {"missing_plan": "Geen vastgelegd plan", "plan_not_recorded": "Plan niet in Tradamind vastgelegd", "plan_followed": "Plan versus uitvoering", "risk": "Risicoproces", "timing": "Timing", "exit_process": "Exitproces", "evidence_gap": "Ontbrekend bewijs"}
         },
         "sectionEyebrow": "Finn rapportage",
         "title": "Persoonlijke Finn rapportage",

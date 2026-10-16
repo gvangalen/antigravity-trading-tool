@@ -120,6 +120,32 @@ def test_exchange_review_uses_attested_closure_and_quote_specific_evidence():
     assert "€" not in result["summary"]
 
 
+def test_large_exchange_review_has_bounded_ai_evidence_and_explicit_truncation():
+    now = datetime.now(timezone.utc)
+    review = {
+        "id": 10, "origin": "exchange_user_attested", "closure_basis": "user_confirmed",
+        "symbol": "BTC", "base_currency": "BTC", "execution_environment": "live",
+        "entry_at": now, "exit_at": now, "attested_at": now,
+        "entry_value_eur": None, "exit_value_eur": None, "pnl_eur_before_fees": None,
+        "pnl_status": "not_comparable", "cash_legs_by_currency": [],
+        "fills": [{"exchange_fill_id": index, "side": "buy" if index < 250 else "sell",
+                   "at": now.isoformat(), "qty": "0.01", "price_quote": "100",
+                   "cost_quote": "1", "quote_currency": "USDT", "fee_amount": "0",
+                   "fee_currency": "USDT"} for index in range(500)],
+        "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+        "candles_reason": "external", "has_screenshot": False,
+    }
+    context, allowed = evidence_context(review)
+    assert context["fills_total"] == 500 and context["fills_sampled"] == 50
+    assert context["fills_truncated"] is True
+    assert len(allowed) == 51
+    assert "exchange_fill:249" not in allowed
+    raw = _analysis("Afgesloten.")
+    raw["observations"][0]["evidence_ids"] = ["exchange_fill:499"]
+    result = validate_analysis(raw, allowed, context)
+    assert "50 van 500" in result["uncertainty"]
+
+
 def test_screenshot_signal_is_rendered_as_bounded_visual_context():
     raw = _analysis("De trade is gesloten.")
     raw["visual_signal"] = "risk_level_marked"

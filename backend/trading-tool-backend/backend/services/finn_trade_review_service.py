@@ -39,6 +39,10 @@ def _near_zero(value: Decimal) -> bool:
     return abs(value) <= EPSILON
 
 
+def unrecorded_plan_theme(origin: str | None) -> str:
+    return "plan_not_recorded" if origin == "exchange_user_attested" else "missing_plan"
+
+
 def build_closed_positions(
     fills: list[dict], baselines: dict[tuple[int, str], Decimal],
     current_quantities: dict[tuple[int, str], Decimal],
@@ -281,7 +285,7 @@ class FinnTradeReviewService:
             WHERE user_id=:user_id AND exit_at >= NOW() - INTERVAL '7 days'
         """), {"user_id": user_id})
         pattern_rows = await self.session.execute(text("""
-            SELECT id, plan_snapshot IS NOT NULL AS has_plan, analysis_status, analysis_json
+            SELECT id, origin, plan_snapshot IS NOT NULL AS has_plan, analysis_status, analysis_json
             FROM finn_trade_reviews
             WHERE user_id=:user_id AND exit_at >= NOW() - INTERVAL '7 days'
             ORDER BY exit_at DESC LIMIT 500
@@ -289,7 +293,7 @@ class FinnTradeReviewService:
         patterns: dict[str, set[int]] = defaultdict(set)
         for row in pattern_rows.fetchall():
             if not row.has_plan:
-                patterns["missing_plan"].add(int(row.id))
+                patterns[unrecorded_plan_theme(row.origin)].add(int(row.id))
             if row.analysis_status == "ready" and isinstance(row.analysis_json, dict):
                 for observation in row.analysis_json.get("observations", []):
                     theme = observation.get("theme")

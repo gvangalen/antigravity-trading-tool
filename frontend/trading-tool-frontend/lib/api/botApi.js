@@ -227,9 +227,9 @@ export const fetchFinnTradeReviews = async (limit = 50, offset = 0) => {
 };
 
 export const fetchFinnExchangeTradeImports = () => handleApi(fetchAuth('/api/bot/exchange-trade-imports'));
-export const fetchFinnExchangeImportFills = (sourceId, limit = 50, offset = 0) => {
+export const fetchFinnExchangeImportFills = (sourceId, limit = 50, cursor = null) => {
   if (!Number.isSafeInteger(Number(sourceId)) || Number(sourceId) <= 0) throw new Error('Importbron is ongeldig');
-  return handleApi(fetchAuth(`/api/bot/exchange-trade-imports/${sourceId}/fills?${buildQuery({ limit, offset })}`));
+  return handleApi(fetchAuth(`/api/bot/exchange-trade-imports/${sourceId}/fills?${buildQuery({ limit, ...(cursor || {}) })}`));
 };
 export const syncFinnExchangeTradeImport = (exchangeName) => {
   if (!['bitvavo', 'bybit'].includes(String(exchangeName).toLowerCase())) throw new Error('Exchange is ongeldig');
