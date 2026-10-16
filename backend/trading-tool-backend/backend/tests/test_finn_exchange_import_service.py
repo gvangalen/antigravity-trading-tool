@@ -87,6 +87,7 @@ def test_bybit_cursor_handles_same_timestamp_and_encoded_token():
     async def exercise():
         client = Client()
         cursor = initial_cursor("bybit", NOW)
+        cursor["window_start_ms"] = NOW - DAY_MS
         first, cursor, covered = await provider_page(client, "bybit", cursor, NOW)
         assert covered is None and cursor["page_cursor"] == "a%3A2%2Cb%3A2"
         second, cursor, covered = await provider_page(client, "bybit", cursor, NOW)
@@ -137,11 +138,41 @@ def test_bybit_page_rejects_nonadvancing_cursor_without_checkpointing():
 
     async def exercise():
         cursor = initial_cursor("bybit", NOW)
+        cursor["window_start_ms"] = NOW - DAY_MS
         cursor["page_cursor"] = "same"
-        cursor["window_end_ms"] = cursor["window_start_ms"] + 7 * DAY_MS - 1
+        cursor["window_end_ms"] = NOW
         with pytest.raises(ValueError, match="did not advance"):
             await provider_page(Client(), "bybit", cursor, NOW)
         assert cursor["page_cursor"] == "same"
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("exchange_name", ["bitvavo", "bybit"])
+def test_provider_page_rejects_fill_outside_requested_window(exchange_name):
+    class Client:
+        def market(self, _symbol):
+            return {"spot": True, "symbol": "BTC/USDT"}
+
+        async def privateGetV5ExecutionList(self, _params):
+            return {"retCode": 0, "result": {"category": "spot", "list": [bybit_fill()],
+                                               "nextPageCursor": ""}}
+
+        async def privateGetTrades(self, _params):
+            return [bitvavo_fill(timestamp=NOW - 2 * DAY_MS)]
+
+    async def exercise():
+        if exchange_name == "bybit":
+            cursor = initial_cursor("bybit", NOW)
+            with pytest.raises(ValueError, match="outside requested window"):
+                await provider_page(Client(), "bybit", cursor, NOW)
+        else:
+            day = NOW // DAY_MS * DAY_MS
+            cursor = {"phase": "trades", "snapshot_until_ms": NOW,
+                      "markets": ["BTC/EUR"], "activity_days": {"BTC/EUR": [day]},
+                      "market_index": 0, "day_index": 0, "trade_id_to": None}
+            with pytest.raises(ValueError, match="outside requested window"):
+                await provider_page(Client(), "bitvavo", cursor, NOW)
 
     asyncio.run(exercise())
 

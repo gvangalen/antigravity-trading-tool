@@ -175,7 +175,11 @@ async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -
             market = client.market(row.get("symbol"))
             if not market or not market.get("spot"):
                 raise ValueError("Non-spot Bybit market in execution page")
-            normalized.append(normalize_bybit(row, market["symbol"]))
+            fill = normalize_bybit(row, market["symbol"])
+            traded_ms = round(fill["traded_at"].timestamp() * 1000)
+            if not start <= traded_ms <= end:
+                raise ValueError("Bybit execution outside requested window")
+            normalized.append(fill)
         next_page = str(result.get("nextPageCursor") or "")
         if next_page:
             if (next_page == cursor.get("page_cursor") or len(next_page) > 512
@@ -259,7 +263,13 @@ async def provider_page(client, exchange_name: str, cursor: dict, now_ms: int) -
     rows = await client.privateGetTrades(params)
     if not isinstance(rows, list) or len(rows) > 1000:
         raise ValueError("Invalid Bitvavo trade page")
-    normalized = [normalize_bitvavo(row, market) for row in rows]
+    normalized = []
+    for row in rows:
+        fill = normalize_bitvavo(row, market)
+        traded_ms = round(fill["traded_at"].timestamp() * 1000)
+        if not start <= traded_ms <= end:
+            raise ValueError("Bitvavo fill outside requested window")
+        normalized.append(fill)
     if len(rows) == 1000:
         tail_id = _identifier(rows[-1].get("id"))
         if tail_id == cursor.get("trade_id_to"):
