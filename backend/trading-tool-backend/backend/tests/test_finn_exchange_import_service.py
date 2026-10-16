@@ -41,6 +41,11 @@ def test_bitvavo_eur_and_bybit_non_eur_values_remain_separate():
     assert "pnl_eur" not in euro and "pnl_eur" not in quote
 
 
+def test_bitvavo_negative_rebate_and_bybit_signed_fee_are_preserved():
+    assert normalize_bitvavo(bitvavo_fill(fee="-0.01"), "BTC/EUR")["fee_amount"] == Decimal("-0.01")
+    assert normalize_bybit(bybit_fill(execFee="-0.02"), "BTC/USDT")["fee_amount"] == Decimal("-0.02")
+
+
 @pytest.mark.parametrize("row", [
     bitvavo_fill(settled=False),
     bitvavo_fill(market="BTC-USDT"),

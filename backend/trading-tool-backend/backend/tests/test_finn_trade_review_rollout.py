@@ -90,10 +90,13 @@ def test_worker_queries_only_allowlisted_users(monkeypatch):
     monkeypatch.setattr(task, "async_session_factory", lambda: Session())
     asyncio.run(task._project_dirty_trade_reviews())
     asyncio.run(task._analyze_pending_trade_reviews())
-    assert len(queries) == 2
+    asyncio.run(task._sync_linked_exchange_fills())
+    assert len(queries) == 3
     assert all("ANY(CAST(:allowed AS INTEGER[]))" in sql for sql, _ in queries)
     assert all(params == {"allowed": [7]} for _, params in queries)
     assert "WHERE (analysis_status='pending' OR" in queries[1][0]
+    assert "LEFT JOIN finn_exchange_import_attempts attempt" in queries[2][0]
+    assert "attempt.last_attempt_at <= NOW() - INTERVAL '5 minutes'" in queries[2][0]
 
 
 def test_review_jobs_isolate_database_connections_across_celery_loops(monkeypatch):

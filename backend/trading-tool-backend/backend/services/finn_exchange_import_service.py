@@ -48,7 +48,7 @@ def _decimal(value: Any, *, positive: bool = True) -> Decimal:
         number = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         raise ValueError("Invalid provider amount") from None
-    if not number.is_finite() or (positive and number <= 0) or (not positive and number < 0):
+    if not number.is_finite() or (positive and number <= 0):
         raise ValueError("Invalid provider amount")
     return number
 
@@ -296,20 +296,13 @@ class FinnExchangeImportService:
         """), {"user_id": user_id, "source_id": source_id})
         result = await self.session.execute(text("""
             SELECT f.id, f.symbol, f.side, f.qty, f.price_quote, f.cost_quote,
-                   f.quote_currency, f.fee_amount, f.fee_currency, f.traded_at,
-                   EXISTS (
-                       SELECT 1 FROM bot_orders o
-                       WHERE o.user_id=f.user_id
-                         AND LOWER(o.exchange_name)=:exchange_name
-                         AND UPPER(REPLACE(o.exchange_symbol, '-', '/'))=f.symbol
-                         AND o.exchange_order_id=f.exchange_order_id
-                   ) AS tradamind_order_candidate
+                   f.quote_currency, f.fee_amount, f.fee_currency, f.traded_at
             FROM finn_exchange_import_fills f
             WHERE f.user_id=:user_id AND f.source_id=:source_id
             ORDER BY f.traded_at DESC, f.id DESC
             LIMIT :limit OFFSET :offset
         """), {"user_id": user_id, "source_id": source_id,
-               "exchange_name": source.exchange_name, "limit": limit, "offset": offset})
+               "limit": limit, "offset": offset})
         return {"source_id": source_id, "exchange_name": source.exchange_name,
                 "status": source.status, "total": count_result.scalar_one(),
                 "items": [dict(row._mapping) for row in result.fetchall()]}
@@ -320,14 +313,7 @@ class FinnExchangeImportService:
         result = await self.session.execute(text("""
             SELECT s.id, s.exchange_name, s.identity_kind, s.credential_fingerprint, s.status,
                    s.coverage_start_at, s.coverage_through_at, s.last_success_at,
-                   s.last_error_code, COUNT(f.id) AS imported_fills,
-                   COUNT(f.id) FILTER (WHERE EXISTS (
-                       SELECT 1 FROM bot_orders o
-                       WHERE o.user_id=f.user_id
-                         AND LOWER(o.exchange_name)=s.exchange_name
-                         AND UPPER(REPLACE(o.exchange_symbol, '-', '/'))=f.symbol
-                         AND o.exchange_order_id=f.exchange_order_id
-                   )) AS tradamind_order_candidates
+                   s.last_error_code, COUNT(f.id) AS imported_fills
             FROM finn_exchange_import_sources s
             LEFT JOIN finn_exchange_import_fills f ON f.source_id=s.id AND f.user_id=s.user_id
             WHERE s.user_id=:user_id
@@ -359,8 +345,7 @@ class FinnExchangeImportService:
                              "identity_kind": None, "coverage_start_at": None,
                              "coverage_through_at": None, "last_success_at": None,
                              "last_error_code": attempt.last_error_code if attempt else None,
-                             "imported_fills": 0,
-                             "tradamind_order_candidates": 0})
+                             "imported_fills": 0})
         for row in rows:
             row["review_eligibility"] = "unverified_position_basis"
             row["history_limit"] = ("two_year_provider_window" if row["exchange_name"] == "bybit"

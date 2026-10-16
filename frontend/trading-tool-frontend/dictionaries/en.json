@@ -1698,7 +1698,6 @@
           "exchangeImportShowFills": "View executions",
           "exchangeImportHideFills": "Hide executions",
           "exchangeImportEvidenceOnly": "Exchange facts in their original currency; no closed trade or EUR result has been confirmed.",
-          "exchangeImportBotCandidate": "Order ID matches a Tradamind order; account identity is checked separately.",
           "exchangeImportLimitedPage": "Only the latest 50 executions are shown here.",
           "exchangeImportThrough": "Coverage through",
           "exchangeImportStates": {"not_started":"Not started","pending":"Import pending","partial":"Importing history","ready":"Provider history current; position basis unverified","error":"Import error","identity_unverified":"Account identity after key change is uncertain","credential_changed":"Different linked key; verify coverage again"},

@@ -33,14 +33,14 @@ async def _sync_linked_exchange_fills(session_factory=None) -> int:
         result = await session.execute(text(f"""
             SELECT k.user_id, LOWER(k.exchange_name) AS exchange_name
             FROM exchange_keys k
-            LEFT JOIN LATERAL (
-                SELECT MAX(s.updated_at) AS last_attempt_at
-                FROM finn_exchange_import_sources s
-                WHERE s.user_id=k.user_id AND s.exchange_name=LOWER(k.exchange_name)
-            ) latest ON TRUE
+            LEFT JOIN finn_exchange_import_attempts attempt
+              ON attempt.user_id=k.user_id
+             AND attempt.exchange_name=LOWER(k.exchange_name)
             WHERE k.is_active=TRUE AND LOWER(k.exchange_name) IN ('bitvavo','bybit')
+              AND (attempt.last_attempt_at IS NULL
+                   OR attempt.last_attempt_at <= NOW() - INTERVAL '5 minutes')
               {owner_filter}
-            ORDER BY latest.last_attempt_at NULLS FIRST, k.user_id, k.exchange_name
+            ORDER BY attempt.last_attempt_at NULLS FIRST, k.user_id, k.exchange_name
             LIMIT 2
         """), {"allowed": sorted(allowed)} if allowed is not None else {})
         targets = [(int(row.user_id), str(row.exchange_name)) for row in result.fetchall()]

@@ -1715,7 +1715,6 @@
           "exchangeImportShowFills": "Ausführungen ansehen",
           "exchangeImportHideFills": "Ausführungen ausblenden",
           "exchangeImportEvidenceOnly": "Börsenfakten in Originalwährung; kein geschlossener Trade oder EUR-Ergebnis bestätigt.",
-          "exchangeImportBotCandidate": "Order-ID stimmt mit einer Tradamind-Order überein; die Kontozuordnung wird getrennt geprüft.",
           "exchangeImportLimitedPage": "Hier erscheinen nur die letzten 50 Ausführungen.",
           "exchangeImportThrough": "Abdeckung bis",
           "exchangeImportStates": {"not_started":"Noch nicht gestartet","pending":"Import wartet","partial":"Historie wird importiert","ready":"Providerhistorie aktuell; Positionsbasis ungeprüft","error":"Importfehler","identity_unverified":"Kontoidentität nach Schlüsselwechsel unklar","credential_changed":"Anderer verknüpfter Schlüssel; Abdeckung erneut prüfen"},
