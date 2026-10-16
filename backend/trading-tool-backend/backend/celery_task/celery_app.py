@@ -140,6 +140,10 @@ def warm_finn_interactive_worker_after_ready(sender=None, **kwargs):
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)
 # =========================================================
 celery_app.conf.beat_schedule = {
+    "sync_linked_exchange_fills": build_task_schedule_entry(
+        "backend.celery_task.finn_trade_review_task.sync_linked_exchange_fills",
+        crontab(minute="*/5"),
+    ),
     "project_finn_trade_reviews": build_task_schedule_entry(
         "backend.celery_task.finn_trade_review_task.project_dirty_trade_reviews",
         crontab(minute="*/1"),

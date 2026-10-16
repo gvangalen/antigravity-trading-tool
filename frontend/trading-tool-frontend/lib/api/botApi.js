@@ -226,6 +226,16 @@ export const fetchFinnTradeReviews = async (limit = 50, offset = 0) => {
   return handleApi(fetchAuth(`/api/bot/trade-reviews?${query}`));
 };
 
+export const fetchFinnExchangeTradeImports = () => handleApi(fetchAuth('/api/bot/exchange-trade-imports'));
+export const fetchFinnExchangeImportFills = (sourceId, limit = 50, offset = 0) => {
+  if (!Number.isSafeInteger(Number(sourceId)) || Number(sourceId) <= 0) throw new Error('Importbron is ongeldig');
+  return handleApi(fetchAuth(`/api/bot/exchange-trade-imports/${sourceId}/fills?${buildQuery({ limit, offset })}`));
+};
+export const syncFinnExchangeTradeImport = (exchangeName) => {
+  if (!['bitvavo', 'bybit'].includes(String(exchangeName).toLowerCase())) throw new Error('Exchange is ongeldig');
+  return handleApi(fetchAuth(`/api/bot/exchange-trade-imports/${exchangeName.toLowerCase()}/sync`, { method: 'POST' }));
+};
+
 export const fetchFinnTradeReview = async (reviewId) => {
   if (!reviewId) throw new Error("reviewId is verplicht");
   return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}`));

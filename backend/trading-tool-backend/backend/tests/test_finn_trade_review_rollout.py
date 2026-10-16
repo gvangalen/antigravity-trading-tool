@@ -125,9 +125,12 @@ def test_review_jobs_isolate_database_connections_across_celery_loops(monkeypatc
     monkeypatch.setattr(task, "async_sessionmaker", new_sessions)
     monkeypatch.setattr(task, "_project_dirty_trade_reviews", job)
     monkeypatch.setattr(task, "_analyze_pending_trade_reviews", job)
+    monkeypatch.setattr(task, "_sync_linked_exchange_fills", job)
 
     assert task.project_dirty_trade_reviews.run() == 1
     assert task.analyze_pending_trade_reviews.run() == 2
     assert task.project_dirty_trade_reviews.run() == 3
-    assert len({id(engine) for engine in used}) == 3
+    assert task.sync_linked_exchange_fills.run() == 4
+    assert task.sync_linked_exchange_fills.run() == 5
+    assert len({id(engine) for engine in used}) == 5
     assert all(engine.disposed for engine in engines)

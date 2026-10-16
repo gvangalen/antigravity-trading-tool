@@ -14,6 +14,7 @@ from backend.services.finn_trade_review_service import FinnTradeReviewService
 from backend.services.finn_trade_screenshot import MAX_BYTES
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import trade_review_enabled, require_trade_review_access
+from backend.services.finn_exchange_import_service import FinnExchangeImportService
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.services.live_portfolio_allocation_service import read_live_account, replace_allocations
 from backend.schemas.bot_schema import (
@@ -267,6 +268,45 @@ async def get_bot_trades(
     service: BotService = Depends(get_bot_service)
 ):
     return await service.get_bot_trades(bot_id, limit, current_user["id"])
+
+@router.get("/bot/exchange-trade-imports")
+async def list_finn_exchange_imports(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    return {"sources": await FinnExchangeImportService(db).status(current_user["id"])}
+
+
+@router.post("/bot/exchange-trade-imports/{exchange_name}/sync")
+async def sync_finn_exchange_import(
+    exchange_name: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"exchange_import_sync:{current_user['id']}", limit=3)
+    try:
+        return await FinnExchangeImportService(db).sync(current_user["id"], exchange_name)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, "Exchange-import is tijdelijk niet beschikbaar") from None
+
+
+@router.get("/bot/exchange-trade-imports/{source_id}/fills")
+async def list_finn_exchange_import_fills(
+    source_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_trade_review_access(current_user["id"])
+    review_rate_limiter.check_rate_limit(f"exchange_import_fills:{current_user['id']}", limit=30)
+    return await FinnExchangeImportService(db).fills(current_user["id"], source_id,
+                                                     limit=limit, offset=offset)
+
 
 @router.get("/bot/trade-reviews")
 async def list_finn_trade_reviews(

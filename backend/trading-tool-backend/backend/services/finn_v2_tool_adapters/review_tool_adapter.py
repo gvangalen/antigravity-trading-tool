@@ -66,7 +66,7 @@ class ReviewToolAdapter:
         items.append(
             f"Gesloten-tradedekking: {closed['status']}; {closed['coverage']['trades']} "
             f"bevestigde trades {'voor review #' + str(review_id) if review_id else 'in 30 dagen'}. "
-            "Oudere of externe trades ontbreken uit de algemene lijst; "
+            "Externe uitvoeringen worden apart ingelezen maar tellen hier pas als gesloten trade na bewezen positiebasis; oudere trades ontbreken; "
             "botbeslissingen hierboven zijn geen trade-uitkomsten."
         )
         return {

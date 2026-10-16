@@ -63,7 +63,7 @@ class FinnClosedTradeReflectionService:
             "patterns": [{"theme": theme, "review_ids": sorted(ids), "count": len(ids)}
                          for theme, ids in sorted(themes.items(), key=lambda item: (-len(item[1]), item[0]))],
             "patterns_limited_to_recent": coverage["trades"] > limit,
-            "legacy_notice": "Alleen bevestigde gesloten trades binnen ondersteunde botportfolio's na de overgang; externe en oudere trades zijn niet opgenomen.",
+            "legacy_notice": "Alleen bevestigde gesloten Tradamind-posities na de overgang. Externe uitvoeringen worden apart geïmporteerd; volledige sluiting en kostprijs zijn daar nog niet bewezen. Oudere trades ontbreken.",
         }
 
     async def review(self, user_id: int, review_id: int) -> dict[str, Any]:
@@ -86,7 +86,7 @@ class FinnClosedTradeReflectionService:
         return {
             "contract": "closed_trade_reflection.v1", "action_class": "prepare_only",
             "allowed_side_effects": [], "status": item["analysis_status"],
-            "review": item, "legacy_notice": "Alleen bevestigde gesloten trades binnen ondersteunde botportfolio's na de overgang; externe trades zijn niet opgenomen.",
+            "review": item, "legacy_notice": "Alleen bevestigde gesloten Tradamind-posities na de overgang. Externe uitvoeringen staan apart als bewijs, zonder gesloten review zolang positiebasis ontbreekt.",
         }
 
     @staticmethod
@@ -129,5 +129,5 @@ class FinnClosedTradeReflectionService:
             "coverage": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0},
             "reviews": [], "review_ids": [], "patterns": [],
             "patterns_limited_to_recent": False,
-            "legacy_notice": "Alleen bevestigde gesloten trades binnen ondersteunde botportfolio's na de overgang; externe en oudere trades zijn niet opgenomen.",
+            "legacy_notice": "Alleen bevestigde gesloten Tradamind-posities na de overgang. Externe uitvoeringen worden apart geïmporteerd; volledige sluiting en kostprijs zijn daar nog niet bewezen. Oudere trades ontbreken.",
         }

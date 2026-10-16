@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowDownRight, ArrowUpRight, Brain, ChevronRight, FileText, Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from '@/app/providers/I18nProvider';
-import { fetchFinnTradeReview, fetchFinnTradeReviews, saveFinnTradeReviewNote, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
+import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, saveFinnTradeReviewNote, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
 
 const number = (value) => Number(value) || 0;
 
@@ -249,6 +249,11 @@ export default function FinnTradeReviews() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [rolloutDisabled, setRolloutDisabled] = useState(false);
+  const [exchangeImports, setExchangeImports] = useState([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState(false);
+  const [syncingExchange, setSyncingExchange] = useState(null);
+  const [importFillPage, setImportFillPage] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const openRequest = useRef(0);
   const detailRef = useRef(null);
@@ -273,6 +278,36 @@ export default function FinnTradeReviews() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadImports = useCallback(async () => {
+    setImportLoading(true);
+    try {
+      const result = await fetchFinnExchangeTradeImports();
+      setExchangeImports(Array.isArray(result?.sources) ? result.sources : []);
+      setImportError(false);
+    } catch {
+      setImportError(true);
+    } finally {
+      setImportLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadImports(); }, [loadImports]);
+
+  async function syncExchange(exchangeName) {
+    setSyncingExchange(exchangeName);
+    setImportError(false);
+    try { await syncFinnExchangeTradeImport(exchangeName); setImportFillPage(null); await loadImports(); }
+    catch { setImportError(true); }
+    finally { setSyncingExchange(null); }
+  }
+
+  async function openImportFills(sourceId) {
+    if (importFillPage?.source_id === sourceId) { setImportFillPage(null); return; }
+    setImportError(false);
+    try { setImportFillPage(await fetchFinnExchangeImportFills(sourceId)); }
+    catch { setImportError(true); }
+  }
 
   useEffect(() => {
     if (selected) detailRef.current?.focus({ preventScroll: true });
@@ -338,6 +373,22 @@ export default function FinnTradeReviews() {
         </div>
         <div className="px-6 py-6 sm:px-8">
           <div className="mb-5 rounded-xl bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-900 dark:bg-blue-950/40 dark:text-blue-100">{copy.limitedHistory}</div>
+          <div className="mb-5 rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-800">
+            <h3 className="font-black text-slate-900 dark:text-white">{copy.exchangeImportTitle}</h3>
+            <p className="mt-1 leading-relaxed text-slate-600 dark:text-slate-300">{copy.exchangeImportIntro}</p>
+            {importLoading && <p role="status" className="mt-2 text-slate-500">{copy.loading}</p>}
+            {importError && <p role="alert" className="mt-2 text-red-600">{copy.exchangeImportError}</p>}
+            {!importLoading && exchangeImports.length === 0 && <p className="mt-2 text-slate-500">{copy.exchangeImportEmpty}</p>}
+            {exchangeImports.map((source, index) => <div key={`${source.exchange_name}-${source.id || index}`} className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{source.exchange_name}</strong><button type="button" onClick={() => syncExchange(source.exchange_name)} disabled={Boolean(syncingExchange)} className="rounded-lg border border-blue-400 px-2 py-1 font-bold text-blue-700 disabled:opacity-50 dark:text-blue-300">{syncingExchange === source.exchange_name ? copy.loading : copy.exchangeImportSync}</button></div>
+              <p className="mt-1 text-slate-600 dark:text-slate-300">{copy.exchangeImportStates?.[source.status] || source.status} · {source.imported_fills || 0} {copy.exchangeImportFills}</p>
+              <p className="mt-1 text-slate-500">{copy.exchangeImportLimits?.[source.history_limit]}</p>
+              {source.coverage_through_at && <p className="text-slate-500">{copy.exchangeImportThrough}: {formatDate(source.coverage_through_at, locale)}</p>}
+              {source.last_error_code && <p className="text-amber-700 dark:text-amber-300">{copy.exchangeImportError}: {source.last_error_code}</p>}
+              {source.id && <button type="button" onClick={() => openImportFills(source.id)} className="mt-2 font-bold text-blue-600 underline dark:text-blue-300">{importFillPage?.source_id === source.id ? copy.exchangeImportHideFills : copy.exchangeImportShowFills}</button>}
+              {importFillPage?.source_id === source.id && <div className="mt-2 max-h-56 space-y-1 overflow-auto"><p className="text-slate-500">{copy.exchangeImportEvidenceOnly}</p>{importFillPage.items?.map((fill) => <p key={fill.id} className="rounded border border-slate-200 p-2 dark:border-slate-700"><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol}</strong> · {fill.cost_quote} {fill.quote_currency}<br />{formatDate(fill.traded_at, locale)}{fill.tradamind_order_candidate && <span className="block text-amber-700 dark:text-amber-300">{copy.exchangeImportBotCandidate}</span>}</p>)}{importFillPage.total > importFillPage.items?.length && <p className="text-slate-500">{copy.exchangeImportLimitedPage}</p>}</div>}
+            </div>)}
+          </div>
           {deepLinkLoading && <p role="status" className="mb-4 text-sm text-slate-500">{copy.loading}</p>}
           {deepLinkError && <p role="alert" className="mb-4 text-sm text-red-600">{copy.error}</p>}
           {loading ? <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> {copy.loading}</p> : error ? <p role="alert" className="text-sm text-red-600">{copy.error}</p> : (
