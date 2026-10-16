@@ -204,7 +204,11 @@ class FinnExchangeTradeReviewService:
                 JOIN finn_exchange_import_sources s ON s.id=f.source_id AND s.user_id=f.user_id
                 JOIN bot_orders o ON o.user_id=f.user_id
                   AND LOWER(o.exchange_name)=s.exchange_name
-                  AND UPPER(REPLACE(o.exchange_symbol, '-', '/'))=f.symbol
+                  AND (
+                    UPPER(REPLACE(o.exchange_symbol, '-', '/'))=f.symbol OR
+                    UPPER(REPLACE(REPLACE(o.exchange_symbol, '-', ''), '/', ''))=
+                      UPPER(REPLACE(f.symbol, '/', ''))
+                  )
                   AND o.exchange_order_id=f.exchange_order_id
                 WHERE f.user_id=:user_id AND f.id=ANY(CAST(:fill_ids AS BIGINT[]))
                 LIMIT 1

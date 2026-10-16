@@ -209,6 +209,7 @@ def test_cross_epoch_requires_confirmation_and_bot_order_overlap_is_blocked(
             if "FROM finn_exchange_review_attestations a" in sql:
                 return Result()
             if "JOIN bot_orders o" in sql:
+                assert "UPPER(REPLACE(f.symbol, '/', ''))" in sql
                 return Result(one=(1,) if bot_overlap else None)
             if "FROM finn_exchange_import_fills f\n" in sql and "f.id=ANY" in sql:
                 rows = []
