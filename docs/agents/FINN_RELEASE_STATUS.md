@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Mobiele herkeuring: lege setup en verlopen sessie
+
+Phase: `CANDIDATE_READY_AWAITING_CI_DEPLOY`. Kandidaatbranch:
+`codex/finn-mobile-qa-followup`. Onafhankelijke mobiele QA op vorige live SHA
+`54fd212cdd6ef2c092cd71c83120ee67046b6c70` gaf `NOT_ACCEPTED`.
+De eerder hangende read-only vraag op Reflectie kreeg na verse login binnen
+ongeveer 15 seconden een antwoord, bleef na Expo-reload behouden en deelde
+dezelfde lege feed op Analyse, Mijn Plan, Portfolio en Automatisering. QA zag
+echter een kort zichtbaar ingelogde UI na een verlopen token. Ook toonde Mijn
+Plan een zogenaamd bestaand `BTC setup`; FINN kon dat niet vinden voor een
+wijzigingsvoorstel.
+
+Een eigenaargebonden read-only API-controle van hetzelfde aparte QA-account
+gaf `/setups` als lege lijst, `/setups/top` als lege lijst en
+`/setups/active?symbol=BTC` als `{active: null, source_status:
+"missing_scores"}`. De mobiele mapper interpreteerde deze status-wrapper
+ten onrechte als setup en gaf hem de gegenereerde naam `BTC setup`. De
+reparatiekandidaat toont een lege planstaat zonder bevestigbaar nepplan.
+Daarnaast meldt de centrale mobiele API-client een ontbrekende of vervallen
+authsessie direct aan de authlaag, die de ingelogde UI sluit; op voorgrond
+wordt de sessie opnieuw gecontroleerd. De standaard dev-autologin met vaste
+voorbeeldgegevens is verwijderd. De lokale gates zijn groen; CI, Auto Deploy
+en een nieuwe onafhankelijke live QA-run staan nog open.
+
+Lokale validatie op deze kandidaat: 11 gerichte mobiele tests, mobiele
+typecheck/lint zonder errors en web/iOS/Android Expo-bundels groen; backend
+**3740 passed, 3 skipped**; webbuild, typecheck, i18n-, command-, proposal-
+en auditpoort groen. De volledige worker-gedreven API/Celery/Responses-matrix
+slaagde **37/37** met **16/16** actiecontracten, **9/9** relaties, p95
+**6,87 s** en maximaal **11,03 s**; nul Live-bots en ongeoorloofde executies.
+Artifact SHA-256:
+`7f497151d6a6dbac152a7bbab06f1a9e2e8b83e83c90612687ab4fde924ff76c`.
+De echte `gpt-6-luna`/Responses-developmentset slaagde **20/20**, zonder
+providerfout (artifact SHA-256
+`eb7371cc5b5b59c3d3e33fca915e7ca59dd845784e178ce65c46c568045b9381`).
+De volledige selectorregressie slaagde **109/109**, zonder provider-, schema-,
+timeout-, parse- of validatiefout (artifact SHA-256
+`3ff9f1bb26f989135263642bba308740b7162a0f17c50c78e24e50d603f5630b`).
+
 ## Mobiele feed en chat na onafhankelijke herkeuring
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Kandidaatbranch:

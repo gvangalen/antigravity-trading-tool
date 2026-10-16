@@ -1,9 +1,11 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { authApi, MobileUser } from '../services/authApi';
 import { clearTokens, getAccessToken, saveTokens } from '../services/tokenStorage';
 import { assistantApi } from '../services/tradamindApi';
 import { extractBackendAppLanguage, setStoredAppLanguage } from '../preferences/appLocale';
+import { subscribeAuthSessionInvalidated } from '../services/authSessionEvents';
 
 type AuthContextValue = {
   user: MobileUser | null;
@@ -16,14 +18,8 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const DEFAULT_SIMULATOR_EMAIL = 'gerrit@example.com';
-const DEFAULT_SIMULATOR_PASSWORD = 'test123';
-const DEV_AUTO_LOGIN_EMAIL =
-  process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_EMAIL?.trim() ||
-  (__DEV__ ? DEFAULT_SIMULATOR_EMAIL : undefined);
-const DEV_AUTO_LOGIN_PASSWORD =
-  process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_PASSWORD?.trim() ||
-  (__DEV__ ? DEFAULT_SIMULATOR_PASSWORD : undefined);
+const DEV_AUTO_LOGIN_EMAIL = __DEV__ ? process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_EMAIL?.trim() : undefined;
+const DEV_AUTO_LOGIN_PASSWORD = __DEV__ ? process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_PASSWORD?.trim() : undefined;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MobileUser | null>(null);
@@ -109,6 +105,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshUser().finally(() => setInitializing(false));
   }, [refreshUser]);
+
+  useEffect(() => subscribeAuthSessionInvalidated(() => {
+    setUser(null);
+    setError('Authentication required');
+  }), []);
+
+  useEffect(() => {
+    if (initializing || !user || loading) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshUser();
+    });
+    return () => subscription.remove();
+  }, [initializing, loading, refreshUser, user]);
 
   useEffect(() => {
     if (initializing || loading || devAutoLoginTried) {
