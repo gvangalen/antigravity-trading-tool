@@ -17,19 +17,23 @@ marktkaarten op desktop en 400 px zijn wel live vastgesteld. Opslag van een
 nieuwe marktkeuze, meerdere strategieën en de uitgestelde Live-botroute zijn
 in die browserproef niet afgetekend.
 
-Reparatiebranch: `codex/market-condition-design`, implementatie-SHA
-`ca74162dd5b3a20b1d3e82875573e76365dc79e3`. De gedeelde marktkeuze in
+Reparatiebranch: `codex/market-condition-design`, actuele implementatie-SHA
+`d7ddf49801c5ca0937350031fc10d96dabf87a87`. De gedeelde marktkeuze in
 onboarding en de ingelogde editor gebruikt vijf compacte regels, een
 samenvatting naast de keuze en Custom onder Geavanceerd. De vijf bestaande
 scorebereiken en opslagpayload blijven gelijk. Plan toont alleen een
 opgeslagen setup en strategie die aantoonbaar bij het gekozen asset en elkaar
-horen. De marktdata-hook levert weer de gebruikte actieve indicatornamen;
-Automation corrigeert een conflicterende assetparameter op basis van de
-gekozen strategie.
+horen. Plan vindt ook oudere opgeslagen setups die niet actief of laatst
+opgeslagen zijn. Automation ontgrendelt alleen strategieën met een setup voor
+het gekozen asset. De marktdata-hook levert weer de gebruikte actieve
+indicatornamen; Automation corrigeert een conflicterende assetparameter op
+basis van de gekozen strategie.
 
 Lokaal gemeten: frontendtypecheck, i18n-lint, productiebuild met bijgewerkte
-`out/`-export, 10 setup-scoretests, 15 i18n-tests en 18 gerichte onboarding-
-en strategietests geslaagd. Deze batch wijzigt geen FINN-actiecontract,
+`out/`-export, 10 setup-scoretests, 15 i18n-tests en 19 gerichte onboarding-
+en strategietests geslaagd. De eerste onafhankelijke code-QA vond twee
+randgevallen in de assetkoppeling; deze zijn gerepareerd en ter hercontrole
+aangeboden. Deze batch wijzigt geen FINN-actiecontract,
 workerpad of modelprovider. CI, Auto Deploy, publieke SHA-controle en
 onafhankelijke herkeuring voor deze branch zijn nog niet uitgevoerd; er is
 geen claim dat deze reparatie live werkt.
