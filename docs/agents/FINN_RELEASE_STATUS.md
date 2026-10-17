@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exchange optioneel tijdens eerste live-bot-onboarding
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. Na de eerste UI-reparatie verduidelijkte
+Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. Na de eerste UI-reparatie verduidelijkte
 de gebruiker het gewenste contract: exchange-koppeling in onboarding moet
 optioneel zijn. Op `codex/deferred-exchange-onboarding` krijgt een nieuwe live
 bot de keuze **Later koppelen** (standaard) of **Nu koppelen**. Later slaat de
@@ -23,9 +23,16 @@ backend-suite vóór de laatste extra coachfeed-regressietest slaagde met
 **3894 passed, 3 skipped**; de extra test slaagde in de gerichte set.
 Frontend typecheck, productiebuild/export, i18n-lint, i18n-/command-/
 proposaltests en high-severity audit slaagden; de laatste waarschuwingstekst
-is opgenomen in de herbouwde export en de laatste i18n-checks. CI, deploy en onafhankelijke browser-QA
-voor deze nieuwe kandidaat zijn nog niet afgerond. Er zijn geen echte
-sleutels of orders voor deze validatie gebruikt.
+is opgenomen in de herbouwde export en de laatste i18n-checks.
+[PR #381](https://github.com/gvangalen/antigravity-trading-tool/pull/381) werd
+als `0200b80774d7a74428aad5a642fc4ef4cda5ecbb` gemerged na vijf groene
+PR-checks. [Main-CI run 39022272014](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39022272014)
+en [Auto Deploy run 39022404099](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39022404099)
+slaagden. Publieke backend-health en frontend-buildinfo gaven allebei HTTP 200
+en exact deze SHA. Een status-only handoff krijgt een eigen deployment-SHA;
+QA verifieert de werkelijk publieke SHA opnieuw. De onafhankelijke browser-QA
+is nog niet uitgevoerd. Er zijn geen echte sleutels of orders voor deze
+Build-validatie gebruikt.
 
 ## Eerste live bot: exchange-koppeling in aanmaakscherm
 
