@@ -60,7 +60,7 @@ function humanizeToken(token) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export default function OnboardingBanner({ step, phaseCompleteOverride }) {
+export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
   const { t } = useTranslation();
   const bannerCopy = t?.traderProfile?.onboardingBanner || {};
   const {
@@ -77,8 +77,8 @@ export default function OnboardingBanner({ step, phaseCompleteOverride }) {
   const Icon = meta?.icon;
   const phaseOrder = ["profile", "analysis", "plan", "automation"];
   const missing = phaseMissing?.[stepPhase] || [];
-  const phaseComplete = (phase) => phase === stepPhase && phaseCompleteOverride !== undefined
-    ? phaseCompleteOverride
+  const phaseComplete = (phase) => Object.hasOwn(phaseStatusOverrides, phase)
+    ? Boolean(phaseStatusOverrides[phase])
     : Boolean(phaseStatus?.[phase]);
   const isPhaseComplete = phaseComplete(stepPhase);
   const completedPhaseCount = phaseOrder.filter(phaseComplete).length;
@@ -181,7 +181,9 @@ export default function OnboardingBanner({ step, phaseCompleteOverride }) {
           const phaseMeta = PHASE_META[phase];
           const PhaseIcon = phaseMeta.icon;
           const complete = phaseComplete(phase);
-          const unlocked = Boolean(phaseUnlocks?.[phase]);
+          const unlocked = phase === "automation" && Object.hasOwn(phaseStatusOverrides, "plan")
+            ? Boolean(phaseStatusOverrides.plan)
+            : Boolean(phaseUnlocks?.[phase]);
           const active = phase === stepPhase;
 
           return (

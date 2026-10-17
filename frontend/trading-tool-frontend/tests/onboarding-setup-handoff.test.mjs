@@ -4,7 +4,9 @@ import test from "node:test";
 
 import {
   getActiveSetupId,
+  findSavedSetupForAsset,
   getPlanCompletionForAsset,
+  getPlanStrategiesForAsset,
   getSetupId,
   normalizeSetupSaveResponse,
 } from "../lib/setup/activeSetup.js";
@@ -27,6 +29,25 @@ test("onboarding completion belongs to the selected asset and its setup", () => 
   assert.deepEqual(getPlanCompletionForAsset("ETH", null, null), {
     setupDone: false, strategyDone: false,
   });
+});
+
+test("an older saved setup remains available when it is neither active nor last", () => {
+  const btcLast = { id: 90, symbol: "BTC" };
+  const ethSaved = { id: 71, symbol: "ETH" };
+  const ethOlder = { id: 50, symbol: "ETH" };
+  assert.equal(findSavedSetupForAsset("ETH", null, btcLast, [ethOlder, btcLast, ethSaved]), ethSaved);
+  assert.equal(findSavedSetupForAsset("ETH", null, btcLast, [btcLast]), null);
+});
+
+test("Automation unlocks only strategies linked to a setup for the chosen asset", () => {
+  const setups = [{ id: 10, symbol: "BTC" }, { setup_id: 20, symbol: "ETH" }];
+  const strategies = [
+    { id: 1, symbol: "BTC", setup_id: 10 },
+    { id: 2, symbol: "ETH", setup_id: 10 },
+    { id: 3, symbol: "ETH", setup_id: 20 },
+  ];
+  assert.deepEqual(getPlanStrategiesForAsset("ETH", strategies, setups).map((item) => item.id), [3]);
+  assert.deepEqual(getPlanStrategiesForAsset("SOL", strategies, setups), []);
 });
 
 test("uses setup_id from the real active-setup response for onboarding strategy handoff", async () => {

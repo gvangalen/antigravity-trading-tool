@@ -7,12 +7,13 @@ import { ArrowRight, CheckCircle2, Lock, Sparkles } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import { fetchActiveSetup, fetchLastSetup, saveNewSetup } from "@/lib/api/setups";
+import { fetchActiveSetup, fetchLastSetup, fetchSetups, saveNewSetup } from "@/lib/api/setups";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 import { marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
 import { createStrategy, fetchLastStrategy, fetchStrategyBySetup } from "@/lib/api/strategy";
 import {
   getActiveSetupId,
+  findSavedSetupForAsset,
   getPlanCompletionForAsset,
   getSetupId,
   normalizeSetupSaveResponse,
@@ -155,12 +156,13 @@ export default function OnboardingPlanPage() {
 
         if (cancelled) return;
 
-        const setupCandidate =
-          activeSetup?.symbol === symbol
-            ? activeSetup
-            : lastSetup?.symbol === symbol
-              ? lastSetup
-              : null;
+        let setupCandidate = findSavedSetupForAsset(symbol, activeSetup, lastSetup);
+
+        if (!setupCandidate) {
+          const savedSetups = await fetchSetups();
+          if (cancelled) return;
+          setupCandidate = findSavedSetupForAsset(symbol, activeSetup, lastSetup, savedSetups);
+        }
 
         if (setupCandidate) {
           setConditionChoice(marketConditionChoiceFromSetup(setupCandidate));
@@ -297,7 +299,7 @@ export default function OnboardingPlanPage() {
   };
 
   const handleSaveStrategy = async () => {
-    if (!savedSetup) {
+    if (!setupDone) {
       setError(copy.strategyNeedsSetup || "Save the setup first.");
       return;
     }
@@ -353,7 +355,7 @@ export default function OnboardingPlanPage() {
 
   return (
     <div className="mx-auto max-w-5xl py-8">
-      <OnboardingBanner step="setup" phaseCompleteOverride={allDone} />
+      <OnboardingBanner step="setup" phaseStatusOverrides={{ plan: allDone }} />
 
       <div className="mb-10 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
@@ -638,7 +640,7 @@ export default function OnboardingPlanPage() {
                     <button
                       type="button"
                       onClick={handleSaveStrategy}
-                      disabled={!savedSetup || !strategyValid || savingStrategy || loading}
+                      disabled={!setupDone || !strategyValid || savingStrategy || loading}
                       className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {savingStrategy ? copy.strategySaving || "Saving strategy…" : copy.strategySave || "Save strategy"}
