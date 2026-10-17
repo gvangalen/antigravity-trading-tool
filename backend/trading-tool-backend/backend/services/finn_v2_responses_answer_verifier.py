@@ -2434,6 +2434,31 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "missing_setup_update":
+            for item in evidence:
+                data = item.get("data") or {}
+                asset = data.get("asset") if isinstance(data, dict) else None
+                if (
+                    item.get("scope") == "read_saved_setup_inventory"
+                    and item.get("status") == "completed"
+                    and isinstance(asset, str)
+                    and asset in mentioned_catalog_symbols(message)
+                    and data.get("matching_count") == 0
+                    and data.get("complete") is True
+                ):
+                    language = locale if locale in {"nl", "en", "de"} else "nl"
+                    answer = {
+                        "nl": f"Je hebt geen opgeslagen {asset}-setup om te wijzigen. Je kunt eerst een nieuwe maken.",
+                        "en": f"You have no saved {asset} setup to change. You can create one first.",
+                        "de": f"Du hast kein gespeichertes {asset}-Setup zum Ändern. Du kannst zuerst eines erstellen.",
+                    }[language]
+                    return FinnResponsesVerifiedAnswer(
+                        "completed", answer, "missing_setup_update", evidence,
+                    )
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                "responses_evidence_not_verified", evidence,
+            )
         if (
             result.model_led_coach and result.answer_kind == "free_text"
             and (sourced_strategy := self._source_bound_strategy_fields(

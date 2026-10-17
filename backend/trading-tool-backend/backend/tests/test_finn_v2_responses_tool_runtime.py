@@ -6973,6 +6973,70 @@ def test_owner_scoped_clarification_choice_binds_the_pending_setup_target(
     assert state["collected_inputs"]["changed_fields"] == {"timeframe": "1D"}
 
 
+def test_zero_saved_setups_rejects_update_without_false_target_question(monkeypatch):
+    class Resolver:
+        def __init__(self, _session):
+            pass
+
+        async def resolve_target_collection(self, *, user_id, entity_type, asset):
+            assert (user_id, entity_type, asset) == (21, "setup", "BTC")
+            return SimpleNamespace(result_count=0)
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    front = FinnResponsesFrontDoor(
+        client=object(), session_factory=session_factory, user_id=21, run_id="empty-setup-update",
+    )
+    result = asyncio.run(front.run(
+        message="Wijzig mijn bestaande BTC setup naar timeframe 4H. Laat eerst alleen het voorstel zien; bevestig niets.",
+        instructions="unused", verified_asset="BTC", conversation_context={},
+    ))
+    assert result.proposal_analysis is None
+    assert "geen opgeslagen BTC-setup" in result.response.text
+    assert "Welke setup" not in result.response.text
+    assert result.response.tool_trace[0]["name"] == "verified_missing_setup"
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Wijzig mijn bestaande BTC setup naar timeframe 4H.",
+        result=result.response, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "missing_setup_update"
+    assert "geen opgeslagen BTC-setup" in answer.text
+
+
+@pytest.mark.parametrize("matching_count", [1, 2])
+def test_existing_btc_setup_keeps_update_proposal_boundary(monkeypatch, matching_count):
+    class Resolver:
+        def __init__(self, _session):
+            pass
+
+        async def resolve_target_collection(self, *, user_id, entity_type, asset):
+            assert (user_id, entity_type, asset) == (21, "setup", "BTC")
+            return SimpleNamespace(result_count=matching_count)
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    front = FinnResponsesFrontDoor(
+        client=object(), session_factory=session_factory, user_id=21, run_id="present-setup-update",
+    )
+    result = asyncio.run(front.run(
+        message="Wijzig mijn bestaande BTC setup naar timeframe 4H. Laat eerst alleen het voorstel zien; bevestig niets.",
+        instructions="unused", verified_asset="BTC", conversation_context={},
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "update_setup"
+    assert result.response.tool_trace[0]["name"] == "verified_update_proposal"
+
+
 def test_irrelevant_proposal_is_retried_without_creating_draft():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "create_dca_plan_proposal", {

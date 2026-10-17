@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Mobiele FINN-herkeuring: wijzigingsverzoek zonder opgeslagen setup
+
+Phase: `LOCAL_REPAIR_READY_FOR_CI`. Onafhankelijke Expo-web-QA op live SHA
+`2dde82f498ed4dd1fe6c654391722bd6762feeda` gaf `NOT_ACCEPTED`:
+met nul opgeslagen BTC-setups vroeg FINN bij “Wijzig mijn bestaande BTC setup
+naar timeframe 4H” toch welke setup bedoeld werd. Een vervolgbeurt gaf eerst
+een generieke afrondfout. De lege planstaat, gedeelde feed, chatopslag en
+Reflectie-antwoord waren in die run wel correct. Native iPhone-QA was door
+simulatorbediening niet volledig afgerond; Expo Web is daarvoor geen vervanging.
+
+De lokale reparatie op `codex/finn-mobile-empty-setup` leest vóór het
+wijzigingsvoorstel de eigenaargebonden verzameling van opgeslagen setups voor
+de genoemde asset. Bij nul resultaten antwoordt FINN dat er niets te wijzigen
+is, zonder voorstel, bevestiging of actie; bij één of meerdere setups blijft
+de bestaande voorstel- en doelkeuzeroute intact. Een gerichte regressie dekt
+de exacte QA-zin en de gevallen met één en twee setups. De volledige
+backend-suite slaagde met **3743 passed, 3 skipped**. Een synthetische lokale
+FastAPI/Celery/PostgreSQL/Redis-proef op de exacte zin eindigde met HTTP 200,
+`completed`, antwoord “Je hebt geen opgeslagen BTC-setup om te wijzigen. Je
+kunt eerst een nieuwe maken.” en `proposal_id: null`. De volledige lokale
+actiecontractmatrix slaagde **16/16**, inclusief polling/SSE-pariteit,
+bevestiging, idempotentie en eigenaarisolatie; er waren nul brokerorders,
+live bots, live trading calls en productieverbindingen. Matrixartifact:
+`c02a2c112c448a64087a268eed446eaf04bba54c6ca33a2c30c53464d760f0e7`.
+De echte `gpt-6-luna`-developmentset slaagde **20/20** zonder provider-,
+schema-, timeout-, parse- of validatiefout; artifact SHA-256
+`f319a611d28960944aac3212f8e0c0bfeb70307c3aefd201116ffd9f714ae860`.
+De volledige echte providerregressie slaagde **109/109** zonder dezelfde
+foutcategorieën; artifact SHA-256
+`b8b5921d2e39db930438fcec68e5d72204205e01e0b8e746f7a92a16306abce2`.
+Mobiele typecheck, chatregressies en lint met nul errors slaagden;
+Expo-web-, iOS- en Android-bundels zijn gebouwd. Lint meldde 110 bestaande
+waarschuwingen. Deze exports bewijzen geen native simulatoracceptatie.
+CI, deployment en onafhankelijke live herkeuring zijn nog niet voltooid.
+De reflectie-PR #374 blijft een aparte draft.
+
 ## Mobiele herkeuring: lege setup en verlopen sessie
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Kandidaatbranch:
