@@ -3228,6 +3228,29 @@
     "portfolioOverviewCardTitle": "Übersicht"
   },
   "setups": {
+    "marketConditions": {
+      "title": "Wann möchtest du kaufen?",
+      "help": "Wähle eine Marktsituation, in der dein Setup infrage kommt. FINN prüft den Score; danach entscheiden dein Plan und die Sicherheitslimits, ob ein Kauf erfolgt.",
+      "offTitle": "Keine zusätzliche Marktbedingung",
+      "offDescription": "Für dieses Setup gilt keine zusätzliche Scoregrenze.",
+      "offRule": "Für dieses Setup ist keine Marktscoregrenze gespeichert.",
+      "ruleTitle": "Deine Regel:",
+      "selectedRule": "Dieses Setup passt, wenn {situation}.",
+      "customRule": "Dieses Setup folgt den Scoregrenzen, die du unten selbst festlegst.",
+      "advancedTitle": "Wie entscheidet FINN? Scoregrenzen ansehen",
+      "advancedHelp": "Die fünf Situationen entsprechen festen Marktscorebereichen. Sie messen weder Kursrückgänge noch RSI oder den Fear & Greed Index. Eine Standardkarte fügt keine Makro- oder Technikgrenze hinzu. Für eine verlässliche Bewertung müssen dennoch alle drei aktuellen Scores vorliegen.",
+      "scoreExplanation": "Diese Karte speichert Marktscore {min} bis einschließlich {max}.",
+      "customTitle": "Selbst festlegen",
+      "customDescription": "Lege eigene Grenzen für Markt, Makro und Technik fest.",
+      "customSelected": "Passe die drei Scorebereiche unten an.",
+      "options": {
+        "heavy_pressure": { "title": "Der Markt steht stark unter Druck", "description": "FINN sieht einen sehr niedrigen Marktscore." },
+        "pressure": { "title": "Der Markt steht unter Druck", "description": "FINN sieht einen niedrigen Marktscore." },
+        "no_direction": { "title": "Keine klare Richtung", "description": "Der Marktscore liegt etwa in der Mitte." },
+        "gaining_strength": { "title": "Der Markt gewinnt an Stärke", "description": "FINN sieht einen höheren Marktscore." },
+        "strong": { "title": "Der Markt ist stark", "description": "FINN sieht einen sehr hohen Marktscore." }
+      }
+    },
     "manager": {
       "title": "Setup management",
       "savedSuccess": "Setup saved successfully.",
