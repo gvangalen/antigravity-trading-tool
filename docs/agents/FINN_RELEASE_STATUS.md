@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mijn Plan toont alleen werkelijk opgeslagen scoregrenzen
 
-Phase: `LOCAL_REPAIR_VALIDATED_AWAITING_CI`. In de onafhankelijke ingelogde
+Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. In de onafhankelijke ingelogde
 browserherkeuring van `f1fb815ca115edd3853d57cf795c6d3590f213eb`
 bleken de vijf keuzes, Custom, opslag en teruglezing na refresh, de
 assetgebonden Plan-status, het terugvinden van een oudere BTC-setup, de
@@ -23,8 +23,20 @@ null-grenzen expliciet `geen grens` en onderscheidt ook eenzijdige grenzen en
 een geheel ongefilterde setup. De opgeslagen scorevoorwaarden veranderen
 niet. Lokaal gemeten: 24 gerichte setup-, onboarding- en regressietests,
 frontendtypecheck, i18n-lint en productiebuild met bijgewerkte `out/`-export
-geslaagd. CI, deployment, publieke SHA-controle en onafhankelijke live
-herkeuring voor deze reparatie zijn nog niet uitgevoerd.
+geslaagd. Onafhankelijke read-only code-QA op deze implementatie-SHA vond
+geen bevindingen en draaide 28 gerichte tests met 28 geslaagd.
+
+[PR #393](https://github.com/gvangalen/antigravity-trading-tool/pull/393)
+werd gemerged als `e7f3ce6d6cf98f19a5851e5bccc7fb4d0c0efc36`. Alle vijf
+PR-CI-jobs slaagden in
+[run 39042845249](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39042845249).
+[Main-CI run 39043025464](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39043025464)
+en [Auto Deploy run 39043160991](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39043160991)
+slaagden op deze SHA. Backend-health en frontend-buildinfo gaven daarna
+beide HTTP 200 en deze SHA. Deze status-only handoff krijgt een nieuwe
+deployment-SHA; QA verifieert de werkelijk publieke SHA opnieuw. De
+onafhankelijke ingelogde browserherkeuring van deze reparatie is nog niet
+uitgevoerd.
 
 ## Marktconditie-ontwerp en onboarding-herstel
 
