@@ -6,14 +6,20 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN trade-review live browser candidate
 
-Phase: `CANDIDATE_LOCAL_GREEN_AWAITING_CI_AND_DEPLOY`. De gebruiker heeft
+Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. De gebruiker heeft
 expliciet gevraagd om de complete huidige reflectiekandidaat te deployen voor
 een onafhankelijke live browserproef. Dit vervangt de voorgaande kandidaat als
 actieve FINN-release; de native mobiele `NOT_ACCEPTED`-bewijsleemte hieronder
 blijft bestaan en wordt hiermee niet tot een acceptatie verklaard.
 
 Kandidaat: [PR #374](https://github.com/gvangalen/antigravity-trading-tool/pull/374),
-branch `codex/finn-trade-review-release`. De reflectie-API en workers staan
+productmerge `f0c1a31265b4e7205d7ae89c96b6b89fd13be1ca`. Vijf PR-checks
+en [main-CI run 39019374684](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39019374684)
+slaagden. [Auto Deploy run 39019503840](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39019503840)
+slaagde. Direct daarna retourneerden backend-health en frontend-buildinfo
+allebei HTTP 200 en exact deze productmerge-SHA. Een status-only handoff krijgt
+een eigen deployment-SHA; QA verifieert altijd de dan werkelijk publieke SHA.
+De reflectie-API en workers staan
 standaard uit en worden in productie uitsluitend voor het aparte QA-account
 met `FINN_TRADE_REVIEW_ROLLOUT=allowlist` en
 `FINN_TRADE_REVIEW_USER_IDS=93` geactiveerd. De PM2-config geeft deze twee
@@ -38,8 +44,7 @@ API-secret in deze taak gebruikt. Daarom is live Bitvavo-import nog
 **onbeproefd**; geen exchange-acceptatie mag uit de browserproef worden
 afgeleid. Ook automatische providerbewezen afsluiting van alle exchange-
 posities is geen huidige productclaim: de kandidaat gebruikt expliciete
-gebruikersbevestiging bij exchange-episodes. Na deployment registreert Build
-uitsluitend Auto Deploy, HTTP 200 en de exacte publieke backend/frontend-SHA.
+gebruikersbevestiging bij exchange-episodes.
 Onafhankelijke QA beoordeelt daarna de ingelogde browserflow en rapporteert
 een afzonderlijk oordeel voor de geteste scope.
 
