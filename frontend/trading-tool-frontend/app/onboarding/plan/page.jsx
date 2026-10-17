@@ -492,8 +492,8 @@ export default function OnboardingPlanPage() {
             </div>
           ) : null}
 
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")}>
+          <div className="mt-8 border-t border-slate-200 pt-8">
+            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={symbol} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")}>
               <div className="grid gap-3 md:grid-cols-3">
                 {SCORE_CATEGORIES.map((category) => (
                   <div key={category} className="rounded-xl border border-slate-200 bg-white p-3">

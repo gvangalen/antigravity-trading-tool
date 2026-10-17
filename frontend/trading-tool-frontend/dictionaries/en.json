@@ -3212,8 +3212,13 @@
   },
   "setups": {
     "marketConditions": {
-      "title": "When do you want to buy?",
-      "help": "Choose one market situation in which your setup may qualify. FINN checks the score; your plan and safety limits then decide whether a purchase takes place.",
+      "title": "When does this setup fit?",
+      "help": "Choose the market situation in which your setup may qualify.",
+      "summaryTitle": "Your choice",
+      "summaryEmptyTitle": "Choose a market situation",
+      "summaryEmptyBody": "You'll see what your choice means for this setup here.",
+      "outcomeTitle": "What happens next?",
+      "outcomeBody": "Your trading plan and safety limits decide whether a purchase follows.",
       "required": "Choose a market situation or Set my own rules for this trade setup.",
       "offTitle": "No extra market condition",
       "offDescription": "This setup has no extra score limit.",
@@ -3224,18 +3229,20 @@
       "ruleTitle": "Your rule:",
       "selectedRule": "FINN uses this situation: {situation}.",
       "customRule": "This setup follows the score limits you set below.",
-      "advancedTitle": "How does FINN decide? View score limits",
+      "advancedTitle": "Advanced",
+      "advancedSubtitle": "Set your own score limits",
+      "explanationTitle": "How does FINN determine the market situation?",
       "advancedHelp": "The five situations are fixed market-score ranges. They do not measure price drops, RSI, or the Fear & Greed Index. A standard card adds no macro or technical limits. All three current scores must still be available for a reliable assessment.",
       "scoreExplanation": "This card saves market score {min} through {max}.",
       "customTitle": "Set my own rules",
       "customDescription": "Choose your own market, macro, and technical score limits.",
       "customSelected": "Adjust the three score ranges below.",
       "options": {
-        "heavy_pressure": { "title": "The market is under heavy pressure", "description": "FINN sees a very low market score." },
-        "pressure": { "title": "The market is under pressure", "description": "FINN sees a low market score." },
-        "no_direction": { "title": "No clear direction", "description": "The market score is around the middle." },
-        "gaining_strength": { "title": "The market is gaining strength", "description": "FINN sees a higher market score." },
-        "strong": { "title": "The market is strong", "description": "FINN sees a very high market score." }
+        "heavy_pressure": { "title": "Heavy pressure", "description": "A very low market score", "rule": "This setup may qualify when the market score is very low." },
+        "pressure": { "title": "Under pressure", "description": "A low market score", "rule": "This setup may qualify when the market score is low." },
+        "no_direction": { "title": "No clear direction", "description": "A market score near the middle", "rule": "This setup may qualify when the market score is near the middle." },
+        "gaining_strength": { "title": "Gaining strength", "description": "A higher market score", "rule": "This setup may qualify when the market score is higher." },
+        "strong": { "title": "Strong market", "description": "A very high market score", "rule": "This setup may qualify when the market score is very high." }
       }
     },
     "manager": {
