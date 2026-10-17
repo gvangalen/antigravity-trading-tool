@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Leesbare setupcondities en volledige Automation-onboarding
 
-Phase: `LOCAL_CANDIDATE_READY_FOR_DEPLOY`. De gebruiker vroeg op 2026-10-17
+Phase: `DEPLOYED_PENDING_INDEPENDENT_BROWSER_QA`. De gebruiker vroeg op 2026-10-17
 om de wijzigingen live te zetten voor browserproeven. Kandidaat:
 [PR #389](https://github.com/gvangalen/antigravity-trading-tool/pull/389),
 branch `codex/market-condition-cards`, implementatie-SHA
@@ -29,11 +29,15 @@ worker-driven action matrix en real-provider regressie hebben daarom geen
 gewijzigd contract om lokaal opnieuw te bewijzen. Dit is geen claim over
 live botuitvoering of een onafhankelijke browseracceptatie.
 
-Vóór deze kandidaat gaven publieke backend-health en frontend-buildinfo
-beide HTTP 200 met SHA `eabe64f25381dc1be18742aac4a344e79512a36c`.
-Main-CI, Auto Deploy, publieke identiteit en de ingelogde browserproef zijn
-voor deze kandidaat nog niet uitgevoerd. De oudere Trade Reviews-QA-uitkomst
-`NOT_ACCEPTED` en de native mobiele bewijsleemte blijven afzonderlijk open.
+De productmerge is `9d72a1efe3d072ad1dfbbe9f4e964f476a2db4c3`.
+[Main-CI run 39038311202](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39038311202)
+en [Auto Deploy run 39038447994](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39038447994)
+slaagden. Direct daarna gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` beide HTTP 200 en exact deze SHA.
+Deze status-only handoff krijgt zelf een nieuwe deployment-SHA; QA moet de
+werkelijk publieke SHA opnieuw vaststellen. De ingelogde browserproef is nog
+niet uitgevoerd. De oudere Trade Reviews-QA-uitkomst `NOT_ACCEPTED` en de
+native mobiele bewijsleemte blijven afzonderlijk open.
 
 ## Browser-QA reparatie: hervatfout en exchange-autofill
 
