@@ -4,11 +4,30 @@ import test from "node:test";
 
 import {
   getActiveSetupId,
+  getPlanCompletionForAsset,
   getSetupId,
   normalizeSetupSaveResponse,
 } from "../lib/setup/activeSetup.js";
 
 const readSource = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("onboarding completion belongs to the selected asset and its setup", () => {
+  const btcSetup = { setup_id: 326, symbol: "BTC" };
+  const btcStrategy = { id: 91, setup_id: 326 };
+
+  assert.deepEqual(getPlanCompletionForAsset("ETH", btcSetup, btcStrategy), {
+    setupDone: false, strategyDone: false,
+  });
+  assert.deepEqual(getPlanCompletionForAsset("BTC", btcSetup, { id: 92, setup_id: 999 }), {
+    setupDone: true, strategyDone: false,
+  });
+  assert.deepEqual(getPlanCompletionForAsset("BTC", btcSetup, btcStrategy), {
+    setupDone: true, strategyDone: true,
+  });
+  assert.deepEqual(getPlanCompletionForAsset("ETH", null, null), {
+    setupDone: false, strategyDone: false,
+  });
+});
 
 test("uses setup_id from the real active-setup response for onboarding strategy handoff", async () => {
   const activeResponse = {

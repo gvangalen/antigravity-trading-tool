@@ -115,6 +115,10 @@ export function useMarketData(symbol = "BTC", options = {}) {
       : [],
     [preferences.indicators],
   );
+  const activeMarketIndicatorNames = useMemo(
+    () => activeMarketIndicators.map((item) => item?.name).filter(Boolean),
+    [activeMarketIndicators],
+  );
   const hasUnmaterializedMarketEvidence = useMemo(() => {
     if (configuredMarketIndicatorNames.length === 0) return false;
     const rowsByName = new Map(

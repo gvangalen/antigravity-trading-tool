@@ -32,6 +32,14 @@ function AutomationStep() {
       : null,
   [requestedStrategyId, strategies]);
   const symbol = String(requestedStrategy?.symbol || searchParams.get("symbol") || status?.active_asset || "").toUpperCase();
+  useEffect(() => {
+    if (!requestedStrategy?.symbol || !requestedStrategyId || strategiesLoading) return;
+    const actualSymbol = String(requestedStrategy.symbol).toUpperCase();
+    if (String(searchParams.get("symbol") || "").toUpperCase() === actualSymbol) return;
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("symbol", actualSymbol);
+    router.replace(`/onboarding/automation?${nextParams.toString()}`);
+  }, [requestedStrategy, requestedStrategyId, router, searchParams, strategiesLoading]);
   const availableStrategies = useMemo(() =>
     symbol
       ? strategies.filter((item) => String(item.symbol || "").toUpperCase() === symbol)

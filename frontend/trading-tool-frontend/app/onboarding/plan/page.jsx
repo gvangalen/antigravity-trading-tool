@@ -13,6 +13,7 @@ import { marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/se
 import { createStrategy, fetchLastStrategy, fetchStrategyBySetup } from "@/lib/api/strategy";
 import {
   getActiveSetupId,
+  getPlanCompletionForAsset,
   getSetupId,
   normalizeSetupSaveResponse,
 } from "@/lib/setup/activeSetup";
@@ -140,6 +141,11 @@ export default function OnboardingPlanPage() {
       try {
         setLoading(true);
         setError(null);
+        setSavedSetup(null);
+        setSavedStrategy(null);
+        setSetup(DEFAULT_SETUP);
+        setStrategy(DEFAULT_STRATEGY);
+        setConditionChoice(null);
 
         const [activeSetup, lastSetup, lastStrategy] = await Promise.all([
           fetchActiveSetup(symbol).catch(() => null),
@@ -179,7 +185,7 @@ export default function OnboardingPlanPage() {
             ? await fetchStrategyBySetup(setupId).catch(() => null)
             : null;
           if (!cancelled && bySetup) {
-            setSavedStrategy(bySetup);
+            setSavedStrategy({ setup_id: setupId, ...bySetup });
             setStrategy({
               name: bySetup.name || `${symbol} Strategy`,
               executionMode: bySetup.execution_mode || "fixed",
@@ -192,7 +198,7 @@ export default function OnboardingPlanPage() {
                 : "",
               stopLoss: bySetup.stop_loss != null ? String(bySetup.stop_loss) : "",
             });
-          } else if (!cancelled && lastStrategy?.strategy?.setup_id === setupId) {
+          } else if (!cancelled && Number(lastStrategy?.strategy?.setup_id) === Number(setupId)) {
             setSavedStrategy(lastStrategy.strategy);
           }
         }
@@ -214,8 +220,7 @@ export default function OnboardingPlanPage() {
     };
   }, [copy.loadError, symbol]);
 
-  const setupDone = Boolean(status?.has_setup || savedSetup);
-  const strategyDone = Boolean(status?.has_strategy || savedStrategy);
+  const { setupDone, strategyDone } = getPlanCompletionForAsset(symbol, savedSetup, savedStrategy);
   const allDone = setupDone && strategyDone;
   const isTrade = String(setup.setupType || "").toLowerCase() === "trade";
 
@@ -274,7 +279,7 @@ export default function OnboardingPlanPage() {
       if (!nextSetup) {
         throw new Error("setup-save-response-missing-id");
       }
-      setSavedSetup(nextSetup);
+      setSavedSetup({ ...nextSetup, symbol });
 
       if (!status?.has_setup) {
         await completeStep("setup");
@@ -324,7 +329,7 @@ export default function OnboardingPlanPage() {
       }
 
       const response = await createStrategy(payload);
-      setSavedStrategy(response?.strategy ?? response ?? payload);
+      setSavedStrategy({ ...payload, ...(response?.strategy ?? response ?? {}) });
 
       if (!status?.has_strategy) {
         await completeStep("strategy");
@@ -348,7 +353,7 @@ export default function OnboardingPlanPage() {
 
   return (
     <div className="mx-auto max-w-5xl py-8">
-      <OnboardingBanner step="setup" />
+      <OnboardingBanner step="setup" phaseCompleteOverride={allDone} />
 
       <div className="mb-10 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">

@@ -13,6 +13,17 @@ export function getActiveSetupId(activeSetup) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
+export function getPlanCompletionForAsset(symbol, setup, strategy) {
+  const setupId = getSetupId(setup);
+  const setupDone = Boolean(
+    setupId && String(setup?.symbol || "").toUpperCase() === String(symbol || "").toUpperCase()
+  );
+  const strategyDone = Boolean(
+    setupDone && strategy && Number(strategy.setup_id) === setupId
+  );
+  return { setupDone, strategyDone };
+}
+
 /**
  * Create responses expose the canonical identifier at the envelope level.
  * Preserve it when a consumer needs the nested setup object for display.
