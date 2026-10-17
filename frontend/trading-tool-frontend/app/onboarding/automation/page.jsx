@@ -10,6 +10,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import useBotData from "@/hooks/useBotData";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useStrategyData } from "@/hooks/useStrategyData";
+import { getPlanStrategiesForAsset } from "@/lib/setup/activeSetup";
 
 function AutomationStep() {
   const router = useRouter();
@@ -32,11 +33,16 @@ function AutomationStep() {
       : null,
   [requestedStrategyId, strategies]);
   const symbol = String(requestedStrategy?.symbol || searchParams.get("symbol") || status?.active_asset || "").toUpperCase();
-  const availableStrategies = useMemo(() =>
-    symbol
-      ? strategies.filter((item) => String(item.symbol || "").toUpperCase() === symbol)
-      : strategies,
-  [strategies, symbol]);
+  useEffect(() => {
+    if (!requestedStrategy?.symbol || !requestedStrategyId || strategiesLoading) return;
+    const actualSymbol = String(requestedStrategy.symbol).toUpperCase();
+    if (String(searchParams.get("symbol") || "").toUpperCase() === actualSymbol) return;
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("symbol", actualSymbol);
+    router.replace(`/onboarding/automation?${nextParams.toString()}`);
+  }, [requestedStrategy, requestedStrategyId, router, searchParams, strategiesLoading]);
+  const availableStrategies = useMemo(() => getPlanStrategiesForAsset(symbol, strategies, setups), [strategies, setups, symbol]);
+  const hasAssetPlan = availableStrategies.length > 0;
   const strategy = useMemo(() => {
     if (Number.isFinite(requestedStrategyId) && requestedStrategyId > 0) {
       return requestedStrategy;
@@ -45,8 +51,9 @@ function AutomationStep() {
     return availableStrategies.find((item) => String(item.id) === selectedStrategyId) || null;
   }, [requestedStrategyId, requestedStrategy, availableStrategies, selectedStrategyId]);
   const setup = useMemo(() =>
-    setups.find((item) => Number(item.id) === Number(strategy?.setup_id)) || strategy?.setup || null,
+    setups.find((item) => Number(item.id ?? item.setup_id) === Number(strategy?.setup_id)) || strategy?.setup || null,
   [setups, strategy]);
+  const hasSelectedPlan = Boolean(strategy && availableStrategies.some((item) => Number(item.id) === Number(strategy.id)) && setup);
   const initialValues = useMemo(() => strategy ? ({
     name: searchParams.get("plan_name") || `${strategy.name} Bot`,
     symbol: symbol || strategy.symbol || "",
@@ -66,8 +73,6 @@ function AutomationStep() {
     if (statusLoading || !status) return;
     if (!status.has_asset) {
       router.replace("/onboarding/asset?onboarding=1&step=asset");
-    } else if (!status.has_strategy) {
-      router.replace(backHref);
     }
   }, [backHref, router, status, statusLoading]);
 
@@ -88,7 +93,7 @@ function AutomationStep() {
 
   return (
     <div className="mx-auto max-w-5xl py-8">
-      <OnboardingBanner step="bot" />
+      <OnboardingBanner step="bot" phaseStatusOverrides={{ plan: hasAssetPlan, automation: Boolean(completedBot && hasSelectedPlan) }} />
 
       <div className="mb-8 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">
@@ -173,7 +178,7 @@ function AutomationStep() {
             </button>
           ) : null}
         </section>
-      ) : strategy && initialValues ? (
+      ) : hasSelectedPlan && initialValues ? (
         <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <AddBotForm
             strategies={strategies}

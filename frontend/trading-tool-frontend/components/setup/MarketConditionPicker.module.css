@@ -1,0 +1,14 @@
+.container {
+  container-type: inline-size;
+}
+
+.columns {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@container (min-width: 680px) {
+  .columns {
+    grid-template-columns: minmax(0, 1.55fr) minmax(240px, 0.9fr);
+  }
+}

@@ -3229,8 +3229,13 @@
   },
   "setups": {
     "marketConditions": {
-      "title": "Wann möchtest du kaufen?",
-      "help": "Wähle eine Marktsituation, in der dein Setup infrage kommt. FINN prüft den Score; danach entscheiden dein Plan und die Sicherheitslimits, ob ein Kauf erfolgt.",
+      "title": "Wann passt dieses Setup?",
+      "help": "Wähle die Marktsituation, in der dein Setup infrage kommt.",
+      "summaryTitle": "Deine Wahl",
+      "summaryEmptyTitle": "Wähle eine Marktsituation",
+      "summaryEmptyBody": "Hier siehst du, was deine Wahl für dieses Setup bedeutet.",
+      "outcomeTitle": "Was passiert danach?",
+      "outcomeBody": "Dein Handelsplan und die Sicherheitslimits entscheiden, ob ein Kauf folgt.",
       "required": "Wähle eine Marktsituation oder Selbst festlegen für dieses Trade-Setup.",
       "offTitle": "Keine zusätzliche Marktbedingung",
       "offDescription": "Für dieses Setup gilt keine zusätzliche Scoregrenze.",
@@ -3241,18 +3246,20 @@
       "ruleTitle": "Deine Regel:",
       "selectedRule": "FINN verwendet diese Situation: {situation}.",
       "customRule": "Dieses Setup folgt den Scoregrenzen, die du unten selbst festlegst.",
-      "advancedTitle": "Wie entscheidet FINN? Scoregrenzen ansehen",
+      "advancedTitle": "Erweitert",
+      "advancedSubtitle": "Eigene Scoregrenzen festlegen",
+      "explanationTitle": "Wie bestimmt FINN die Marktsituation?",
       "advancedHelp": "Die fünf Situationen entsprechen festen Marktscorebereichen. Sie messen weder Kursrückgänge noch RSI oder den Fear & Greed Index. Eine Standardkarte fügt keine Makro- oder Technikgrenze hinzu. Für eine verlässliche Bewertung müssen dennoch alle drei aktuellen Scores vorliegen.",
       "scoreExplanation": "Diese Karte speichert Marktscore {min} bis einschließlich {max}.",
       "customTitle": "Selbst festlegen",
       "customDescription": "Lege eigene Grenzen für Markt, Makro und Technik fest.",
       "customSelected": "Passe die drei Scorebereiche unten an.",
       "options": {
-        "heavy_pressure": { "title": "Der Markt steht stark unter Druck", "description": "FINN sieht einen sehr niedrigen Marktscore." },
-        "pressure": { "title": "Der Markt steht unter Druck", "description": "FINN sieht einen niedrigen Marktscore." },
-        "no_direction": { "title": "Keine klare Richtung", "description": "Der Marktscore liegt etwa in der Mitte." },
-        "gaining_strength": { "title": "Der Markt gewinnt an Stärke", "description": "FINN sieht einen höheren Marktscore." },
-        "strong": { "title": "Der Markt ist stark", "description": "FINN sieht einen sehr hohen Marktscore." }
+        "heavy_pressure": { "title": "Stark unter Druck", "description": "Ein sehr niedriger Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore sehr niedrig ist." },
+        "pressure": { "title": "Unter Druck", "description": "Ein niedriger Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore niedrig ist." },
+        "no_direction": { "title": "Keine klare Richtung", "description": "Ein Marktscore etwa in der Mitte", "rule": "Dieses Setup kommt infrage, wenn der Marktscore etwa in der Mitte liegt." },
+        "gaining_strength": { "title": "Der Markt wird stärker", "description": "Ein höherer Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore höher ist." },
+        "strong": { "title": "Starker Markt", "description": "Ein sehr hoher Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore sehr hoch ist." }
       }
     },
     "manager": {

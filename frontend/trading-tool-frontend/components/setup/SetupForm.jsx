@@ -11,7 +11,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Settings, BarChart3, Save, Rocket, Target } from "lucide-react";
+import { Settings, Save, Rocket, Target } from "lucide-react";
 
 import { saveNewSetup, updateSetup } from "@/lib/api/setups";
 import { useModal } from "@/components/modal/ModalProvider";
@@ -491,13 +491,8 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
       </div>
 
       {/* SCORES */}
-      <div className={sectionClass}>
-        {sectionTitle(
-          <BarChart3 size={18} />,
-          copy.activationTitle
-        )}
-
-        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade}>
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
+        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={formData.symbol || selectedAsset || initialData?.symbol} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade}>
           <div className="space-y-5">
             <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
             {scoreBlock(copy.macroTitle, macroScore, (value) => updateScoreRange("macro", macroScore, setMacroScore, value), copy.macroDescription)}

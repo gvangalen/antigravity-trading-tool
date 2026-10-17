@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Marktconditie-ontwerp en onboarding-herstel
+
+Phase: `LOCAL_REPAIR_VALIDATED_AWAITING_CI`. De onafhankelijke live browser-QA
+van de vorige kandidaat gaf `NOT_ACCEPTED` op productie-SHA
+`b3699c0c06af1e91182e878d306d388aa3479900`: Plan toonde een niet-bestaand
+ETH-plan als opgeslagen door accountbrede statusvlaggen, en `/strategy` crashte
+met `ReferenceError: activeMarketIndicatorNames is not defined`. Een oude
+Automation-link kon bovendien ETH in de URL tonen bij een BTC-strategie. De
+volledige Automation-pagina, Paper-botopslag en leesbaarheid van de eerdere
+marktkaarten op desktop en 400 px zijn wel live vastgesteld. Opslag van een
+nieuwe marktkeuze, meerdere strategieën en de uitgestelde Live-botroute zijn
+in die browserproef niet afgetekend.
+
+Reparatiebranch: `codex/market-condition-design`, actuele implementatie-SHA
+`d7ddf49801c5ca0937350031fc10d96dabf87a87`. De gedeelde marktkeuze in
+onboarding en de ingelogde editor gebruikt vijf compacte regels, een
+samenvatting naast de keuze en Custom onder Geavanceerd. De vijf bestaande
+scorebereiken en opslagpayload blijven gelijk. Plan toont alleen een
+opgeslagen setup en strategie die aantoonbaar bij het gekozen asset en elkaar
+horen. Plan vindt ook oudere opgeslagen setups die niet actief of laatst
+opgeslagen zijn. Automation ontgrendelt alleen strategieën met een setup voor
+het gekozen asset. De marktdata-hook levert weer de gebruikte actieve
+indicatornamen; Automation corrigeert een conflicterende assetparameter op
+basis van de gekozen strategie.
+
+Lokaal gemeten: frontendtypecheck, i18n-lint, productiebuild met bijgewerkte
+`out/`-export, 10 setup-scoretests, 15 i18n-tests en 19 gerichte onboarding-
+en strategietests geslaagd. De eerste onafhankelijke code-QA vond twee
+randgevallen in de assetkoppeling; deze zijn gerepareerd en ter hercontrole
+aangeboden. Deze batch wijzigt geen FINN-actiecontract,
+workerpad of modelprovider. CI, Auto Deploy, publieke SHA-controle en
+onafhankelijke herkeuring voor deze branch zijn nog niet uitgevoerd; er is
+geen claim dat deze reparatie live werkt.
+
 ## Leesbare setupcondities en volledige Automation-onboarding
 
 Phase: `DEPLOYED_PENDING_INDEPENDENT_BROWSER_QA`. De gebruiker vroeg op 2026-10-17

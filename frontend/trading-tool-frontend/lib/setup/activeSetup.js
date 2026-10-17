@@ -13,6 +13,36 @@ export function getActiveSetupId(activeSetup) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
+export function getPlanCompletionForAsset(symbol, setup, strategy) {
+  const setupId = getSetupId(setup);
+  const setupDone = Boolean(
+    setupId && String(setup?.symbol || "").toUpperCase() === String(symbol || "").toUpperCase()
+  );
+  const strategyDone = Boolean(
+    setupDone && strategy && Number(strategy.setup_id) === setupId
+  );
+  return { setupDone, strategyDone };
+}
+
+export function findSavedSetupForAsset(symbol, activeSetup, lastSetup, savedSetups = []) {
+  const target = String(symbol || "").toUpperCase();
+  const matches = (setup) => setup && String(setup.symbol || "").toUpperCase() === target;
+  if (matches(activeSetup)) return activeSetup;
+  if (matches(lastSetup)) return lastSetup;
+  return savedSetups
+    .filter(matches)
+    .sort((left, right) => (getSetupId(right) || 0) - (getSetupId(left) || 0))[0] || null;
+}
+
+export function getPlanStrategiesForAsset(symbol, strategies = [], setups = []) {
+  const target = String(symbol || "").toUpperCase();
+  return strategies.filter((strategy) => {
+    if (String(strategy?.symbol || "").toUpperCase() !== target) return false;
+    const setup = setups.find((item) => getSetupId(item) === Number(strategy.setup_id)) || strategy.setup;
+    return setup && String(setup.symbol || "").toUpperCase() === target;
+  });
+}
+
 /**
  * Create responses expose the canonical identifier at the envelope level.
  * Preserve it when a consumer needs the nested setup object for display.
