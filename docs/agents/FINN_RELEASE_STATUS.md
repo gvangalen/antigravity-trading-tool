@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mobiele FINN-herkeuring: wijzigingsverzoek zonder opgeslagen setup
 
-Phase: `LOCAL_REPAIR_READY_FOR_CI`. Onafhankelijke Expo-web-QA op live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Onafhankelijke Expo-web-QA op live SHA
 `2dde82f498ed4dd1fe6c654391722bd6762feeda` gaf `NOT_ACCEPTED`:
 met nul opgeslagen BTC-setups vroeg FINN bij “Wijzig mijn bestaande BTC setup
 naar timeframe 4H” toch welke setup bedoeld werd. Een vervolgbeurt gaf eerst
@@ -37,7 +37,14 @@ foutcategorieën; artifact SHA-256
 Mobiele typecheck, chatregressies en lint met nul errors slaagden;
 Expo-web-, iOS- en Android-bundels zijn gebouwd. Lint meldde 110 bestaande
 waarschuwingen. Deze exports bewijzen geen native simulatoracceptatie.
-CI, deployment en onafhankelijke live herkeuring zijn nog niet voltooid.
+PR #375 is als product-SHA `f2657a389f84eca5100df237264c6840c7ac53e0`
+gemerged na vijf groene PR-checks. [Main-CI run 39015860698](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39015860698)
+en [Auto Deploy run 39015980824](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39015980824)
+slaagden. Backend-health en frontend-buildinfo retourneerden beide HTTP 200
+en exact die product-SHA. Onafhankelijke ingelogde live herkeuring van de
+lege-setuproute en de mobiele flow staat nog open; Build claimt geen
+QA-acceptatie. Een status-only handoff kan een latere deployment-SHA krijgen;
+QA gebruikt de werkelijk gepubliceerde backend- en frontendidentiteit.
 De reflectie-PR #374 blijft een aparte draft.
 
 ## Mobiele herkeuring: lege setup en verlopen sessie
