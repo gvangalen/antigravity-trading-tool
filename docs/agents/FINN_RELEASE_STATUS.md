@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN trade-review live browser candidate
+
+Phase: `CANDIDATE_LOCAL_GREEN_AWAITING_CI_AND_DEPLOY`. De gebruiker heeft
+expliciet gevraagd om de complete huidige reflectiekandidaat te deployen voor
+een onafhankelijke live browserproef. Dit vervangt de voorgaande kandidaat als
+actieve FINN-release; de native mobiele `NOT_ACCEPTED`-bewijsleemte hieronder
+blijft bestaan en wordt hiermee niet tot een acceptatie verklaard.
+
+Kandidaat: [PR #374](https://github.com/gvangalen/antigravity-trading-tool/pull/374),
+branch `codex/finn-trade-review-release`. De reflectie-API en workers staan
+standaard uit en worden in productie uitsluitend voor het aparte QA-account
+met `FINN_TRADE_REVIEW_ROLLOUT=allowlist` en
+`FINN_TRADE_REVIEW_USER_IDS=93` geactiveerd. De PM2-config geeft deze twee
+instellingen door aan API en alle workers; de gerichte runtimeconfiguratietest
+verifieerde ook de gesloten standaard. De volledige backend-suite op deze
+batch slaagde met **3892 passed, 3 skipped**. De frontendbuild, typecheck,
+i18n-, command- en proposalchecks en high-severity audit gate slaagden op
+dezelfde productcode vóór deze uitsluitend operationele PM2-wijziging. De
+gecombineerde lokale worker/actiecontractmatrix slaagde **16/16**, zonder
+brokerorders of productieverbindingen; artifact SHA-256
+`b523645c0c21801f8f640fb32da7a115d77ca65f0ea9f94f6ae10fbc19f68b11`.
+De echte provider-developmentset slaagde **20/20**; artifact SHA-256
+`e8aa59ce19eea3ac3b6f64f33ee1bca19a6e63509f4d9303267f8591ef205b95`.
+De echte providerregressie slaagde **109/109** zonder provider-, schema-,
+timeout-, parse- of validatiefouten; artifact SHA-256
+`c215fafba537515f0e5bacd13015f735944b7e6a0d329b12ce79540c8fbeda34`.
+
+Het aparte Tradamind-QA-account bestaat, maar heeft geen gekoppelde exchange.
+De getoonde nieuwe Bitvavo-sleutel heeft alleen leesrechten, terwijl
+gedetailleerde order- en tradehistorie ook handelsrecht vereist. Er is geen
+API-secret in deze taak gebruikt. Daarom is live Bitvavo-import nog
+**onbeproefd**; geen exchange-acceptatie mag uit de browserproef worden
+afgeleid. Ook automatische providerbewezen afsluiting van alle exchange-
+posities is geen huidige productclaim: de kandidaat gebruikt expliciete
+gebruikersbevestiging bij exchange-episodes. Na deployment registreert Build
+uitsluitend Auto Deploy, HTTP 200 en de exacte publieke backend/frontend-SHA.
+Onafhankelijke QA beoordeelt daarna de ingelogde browserflow en rapporteert
+een afzonderlijk oordeel voor de geteste scope.
+
 ## Mobiele FINN-herkeuring: wijzigingsverzoek zonder opgeslagen setup
 
 Phase: `INDEPENDENT_QA_NOT_ACCEPTED_NATIVE_EVIDENCE_GAP`. Onafhankelijke

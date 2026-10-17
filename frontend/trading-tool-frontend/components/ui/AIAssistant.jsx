@@ -240,6 +240,7 @@ function buildAssistantUiText(at) {
     consciousConfirmationNeeded: at("uiText.consciousConfirmationNeeded"),
     consciouslyContinue: at("uiText.consciouslyContinue"),
     reviewFirst: at("uiText.reviewFirst"),
+    tradeReview: at("uiText.tradeReview"),
     finnActionNeedsConfirmation: at("uiText.finnActionNeedsConfirmation"),
     context: at("uiText.context"),
     impact: at("uiText.impact"),
@@ -3935,6 +3936,7 @@ function AIAssistantContent({
             nextQuestion: indicatorModalRequest ? null : (envelope.next_question || null),
             canConfirm: indicatorModalRequest ? false : envelope.can_confirm,
             suggestedActions: indicatorModalRequest ? [] : (envelope.suggested_actions || []),
+            reviewLinks: indicatorModalRequest ? [] : (Array.isArray(envelope.review_links) ? envelope.review_links : []),
             reasoning: envelope.reasoning,
             state: indicatorModalRequest ? null : (envelope.state || null),
             summary: envelope.summary || null,
@@ -4456,6 +4458,7 @@ function AIAssistantContent({
                 nextQuestion: indicatorModalRequest ? null : (envelope.next_question || null),
                 canConfirm: indicatorModalRequest ? false : envelope.can_confirm,
                 suggestedActions: indicatorModalRequest ? [] : extractedSuggestedActions,
+                reviewLinks: indicatorModalRequest ? [] : (Array.isArray(envelope.review_links) ? envelope.review_links : []),
                 reasoning: envelope.reasoning,
                 state: indicatorModalRequest ? null : (envelope.state || null),
                 summary: envelope.summary || null,
@@ -6906,6 +6909,15 @@ function AIAssistantContent({
                       : <React.Fragment key={index}>{part.text}</React.Fragment>)
                     : m.text}
                 </p>
+                {m.role === "assistant" && m.isComplete !== false && Array.isArray(m.reviewLinks) && m.reviewLinks.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {m.reviewLinks.filter((link) => Number.isSafeInteger(link?.review_id) && link.review_id > 0).slice(0, 5).map((link) => (
+                      <button key={link.review_id} type="button" onClick={() => router.push(`/report?trade_review_id=${link.review_id}`)} className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30">
+                        {uiText.tradeReview} #{link.review_id}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {m.isError && m.retryQuery ? (
                   <button type="button" onClick={() => handleChat(m.retryQuery, false, null, i)}
                     className="mt-2 text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">

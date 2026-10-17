@@ -55,6 +55,7 @@ class AssistantChatResponse(BaseModel):
     next_best_action: Optional[str] = None
     review_reason: Optional[str] = None
     response_trace: Optional[Dict[str, Any]] = None
+    review_links: List[Dict[str, Any]] = Field(default_factory=list)
 
 class AssistantActionExecuteRequest(BaseModel):
     action: Dict[str, Any]

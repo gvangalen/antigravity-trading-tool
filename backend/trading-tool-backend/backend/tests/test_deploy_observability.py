@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -217,6 +218,38 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
         assert result in source
     assert "JSON.stringify" in source
     assert "requiredPolicy" in source
+
+
+def test_trade_review_rollout_reaches_api_and_workers_with_fail_closed_default() -> None:
+    ecosystem = REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js"
+    script = (
+        "const {createEcosystem}=require(process.argv[1]);"
+        "process.stdout.write(JSON.stringify(createEcosystem('production').apps.map("
+        "app=>({name:app.name,mode:app.env.FINN_TRADE_REVIEW_ROLLOUT,"
+        "ids:app.env.FINN_TRADE_REVIEW_USER_IDS}))));"
+    )
+
+    def process_env(mode: str | None, ids: str | None) -> list[dict]:
+        env = os.environ.copy()
+        env.pop("FINN_TRADE_REVIEW_ROLLOUT", None)
+        env.pop("FINN_TRADE_REVIEW_USER_IDS", None)
+        if mode is not None:
+            env["FINN_TRADE_REVIEW_ROLLOUT"] = mode
+        if ids is not None:
+            env["FINN_TRADE_REVIEW_USER_IDS"] = ids
+        result = subprocess.run(
+            ["node", "-e", script, str(ecosystem)],
+            env=env, check=True, capture_output=True, text=True,
+        )
+        return json.loads(result.stdout)
+
+    disabled = process_env(None, None)
+    assert len(disabled) == 5
+    assert all(app["mode"] == "off" and app["ids"] == "" for app in disabled)
+
+    allowed = process_env("allowlist", "93")
+    assert {app["name"] for app in allowed} == {app["name"] for app in disabled}
+    assert all(app["mode"] == "allowlist" and app["ids"] == "93" for app in allowed)
 
 
 def test_deploy_plan_includes_the_strategy_domain_schema_before_api_reload() -> None:

@@ -221,6 +221,94 @@ export const fetchAllBotTrades = async (limit = 50, offset = 0) => {
   };
 };
 
+export const fetchFinnTradeReviews = async (limit = 50, offset = 0) => {
+  const query = buildQuery({ limit, offset });
+  return handleApi(fetchAuth(`/api/bot/trade-reviews?${query}`));
+};
+
+export const fetchFinnExchangeTradeImports = () => handleApi(fetchAuth('/api/bot/exchange-trade-imports'));
+export const fetchFinnExchangeImportFills = (sourceId, limit = 50, cursor = null) => {
+  if (!Number.isSafeInteger(Number(sourceId)) || Number(sourceId) <= 0) throw new Error('Importbron is ongeldig');
+  return handleApi(fetchAuth(`/api/bot/exchange-trade-imports/${sourceId}/fills?${buildQuery({ limit, ...(cursor || {}) })}`));
+};
+export const syncFinnExchangeTradeImport = (exchangeName) => {
+  if (!['bitvavo', 'bybit'].includes(String(exchangeName).toLowerCase())) throw new Error('Exchange is ongeldig');
+  return handleApi(fetchAuth(`/api/bot/exchange-trade-imports/${exchangeName.toLowerCase()}/sync`, { method: 'POST' }));
+};
+export const createFinnExchangeTradeReview = (fillIds, sameAccountConfirmed, idempotencyKey) => {
+  if (!Array.isArray(fillIds) || fillIds.length < 2 || !fillIds.every((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0)) {
+    throw new Error('Selecteer geldige exchange-uitvoeringen');
+  }
+  return handleApi(fetchAuth('/api/bot/exchange-trade-reviews', {
+    method: 'POST',
+    body: JSON.stringify({ fill_ids: fillIds, closure_confirmed: true,
+      same_account_confirmed: Boolean(sameAccountConfirmed), idempotency_key: idempotencyKey }),
+  }));
+};
+
+export const fetchFinnBybitDerivatives = () => handleApi(fetchAuth('/api/bot/bybit-derivatives'));
+export const syncFinnBybitDerivatives = () => handleApi(fetchAuth('/api/bot/bybit-derivatives/sync', { method: 'POST' }));
+export const fetchFinnBybitDerivativeStreams = (sourceId, category, limit = 50, offset = 0) => {
+  if (!Number.isSafeInteger(Number(sourceId)) || Number(sourceId) <= 0 || !['linear', 'inverse'].includes(category)) {
+    throw new Error('Derivative importbron is ongeldig');
+  }
+  return handleApi(fetchAuth(`/api/bot/bybit-derivatives/${sourceId}/${category}/streams?${buildQuery({ limit, offset })}`));
+};
+export const fetchFinnBybitDerivativeEpisodes = (sourceId, category, limit = 50, offset = 0, stream = null, evidenceCursor = null) => {
+  if (!Number.isSafeInteger(Number(sourceId)) || Number(sourceId) <= 0 || !['linear', 'inverse'].includes(category)) {
+    throw new Error('Derivative importbron is ongeldig');
+  }
+  return handleApi(fetchAuth(`/api/bot/bybit-derivatives/${sourceId}/${category}/episodes?${buildQuery({ limit, offset,
+    ...(stream ? { symbol: stream.symbol, position_idx: stream.position_idx } : {}),
+    ...(evidenceCursor || {}) })}`));
+};
+export const createFinnBybitDerivativeReview = (episode, idempotencyKey) => {
+  if (!episode || !['linear', 'inverse'].includes(episode.category) || !episode.episode_key) {
+    throw new Error('Afgesloten derivative trade is ongeldig');
+  }
+  return handleApi(fetchAuth('/api/bot/bybit-derivative-reviews', {
+    method: 'POST',
+    body: JSON.stringify({ source_id: episode.source_id, category: episode.category,
+      symbol: episode.symbol, position_idx: episode.position_idx,
+      episode_key: episode.episode_key, closure_confirmed: true,
+      idempotency_key: idempotencyKey,
+      ...(episode.evidence_page_before || {}) }),
+  }));
+};
+
+export const fetchFinnTradeReview = async (reviewId) => {
+  if (!reviewId) throw new Error("reviewId is verplicht");
+  return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}`));
+};
+
+export const saveFinnTradeReviewNote = async (reviewId, note) => {
+  if (!reviewId) throw new Error("reviewId is verplicht");
+  return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/note`, {
+    method: "PUT",
+    body: JSON.stringify({ note }),
+  }));
+};
+
+export const saveFinnTradeReviewLesson = async (reviewId, lessonText) => {
+  if (!reviewId) throw new Error("reviewId is verplicht");
+  return handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/lesson`, {
+    method: "PUT",
+    body: JSON.stringify({ lesson_text: lessonText }),
+  }));
+};
+
+export const fetchFinnTradeChart = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/chart`));
+export const analyzeFinnTradeReview = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/analyze`, { method: "POST" }));
+export const fetchFinnTradeMessages = (reviewId, beforeId = null) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/messages${beforeId == null ? '' : `?before_id=${encodeURIComponent(beforeId)}&limit=100`}`));
+export const askFinnTradeReview = (reviewId, question) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/messages`, { method: "POST", body: JSON.stringify({ question }) }));
+export const uploadFinnTradeScreenshot = (reviewId, file) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { method: "PUT", headers: { "Content-Type": "image/png" }, body: file }));
+export const deleteFinnTradeScreenshot = (reviewId) => handleApi(fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { method: "DELETE" }));
+export const fetchFinnTradeScreenshot = async (reviewId) => {
+  const response = await fetchAuth(`/api/bot/trade-reviews/${encodeURIComponent(reviewId)}/screenshot`, { forceFresh: true });
+  if (!(response instanceof Response)) throw new Error("Screenshot response is ongeldig");
+  return response.blob();
+};
+
 /* =====================================================
    📊 9. TRADE PLAN (GET)
 ===================================================== */

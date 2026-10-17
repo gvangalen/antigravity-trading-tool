@@ -320,6 +320,9 @@ class LatestReportData(BaseModel):
 
 class ReviewHistoryData(BaseModel):
     items: List[str] = Field(default_factory=list)
+    closed_trade_status: str = "no_data"
+    closed_trade_coverage: Dict[str, int] = Field(default_factory=dict)
+    closed_trade_review_ids: List[int] = Field(default_factory=list)
 
 
 ToolDataUnion = Union[

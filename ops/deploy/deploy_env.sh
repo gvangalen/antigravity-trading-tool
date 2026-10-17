@@ -361,6 +361,15 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_10_12_finn_coach_feed.py
   run_migration backend/scripts/migrations/2026_10_15_portfolio_fx_rates.py
   run_migration backend/scripts/migrations/2026_10_15_live_portfolio_cash_allocations.py
+  echo \"🗃️ Building FINN review ledger index concurrently (timeout \${MIGRATION_COMMAND_TIMEOUT_SECONDS}s)...\"
+  timeout --foreground \"\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s\" python3 -m backend.scripts.create_finn_trade_review_ledger_index
+  run_migration backend/scripts/migrations/2026_10_16_finn_trade_reviews.py
+  run_migration backend/scripts/migrations/2026_10_17_finn_exchange_import.py
+  run_migration backend/scripts/migrations/2026_10_18_finn_exchange_movements.py
+  run_migration backend/scripts/migrations/2026_10_19_finn_exchange_attested_reviews.py
+  run_migration backend/scripts/migrations/2026_10_20_finn_exchange_attestation_method.py
+  run_migration backend/scripts/migrations/2026_10_21_finn_bybit_derivative_evidence.py
+  run_migration backend/scripts/migrations/2026_10_22_finn_trade_reflection_memory.py
   advance_deploy_step 'schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \

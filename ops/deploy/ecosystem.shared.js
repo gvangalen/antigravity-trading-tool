@@ -111,6 +111,8 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "FINN_V2_EXECUTE_TRADE_PLAN_CHANGES",
   "FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION",
   "FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION",
+  "FINN_TRADE_REVIEW_ROLLOUT",
+  "FINN_TRADE_REVIEW_USER_IDS",
   "FINN_V2_LIFECYCLE_DEADLINE_SECONDS",
   "FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS",
   "FINN_V2_REASONING_TIMEOUT_SECONDS",
@@ -124,6 +126,9 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
 // survive a release when the protected environment deliberately omits a key.
 // A protected value in SHARED_RUNTIME_ENV always takes precedence.
 const FINN_RUNTIME_DEFAULT_ENV = {
+  // A missing protected rollout setting must also clear a stale PM2 value.
+  FINN_TRADE_REVIEW_ROLLOUT: "off",
+  FINN_TRADE_REVIEW_USER_IDS: "",
   // Pin the default Responses route across the API and workers. PM2 merges
   // process environment on --update-env, so code defaults alone cannot
   // replace a stale model value from an earlier release.

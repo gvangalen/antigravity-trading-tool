@@ -21,7 +21,7 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, `auto_paper_trade_history`, or `portfolio_paper_fx`. |
+| `qa_profile` | `auth_preflight`, `trade_review_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, `auto_paper_trade_history`, or `portfolio_paper_fx`. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
@@ -83,6 +83,14 @@ separately reported as `ssh` by the workflow artifact.
 
 `auth_preflight` stops there. It is the only profile used to validate this
 operational provision; it does not submit a FINN content case.
+
+`trade_review_preflight` requires `manifest_id=none`, no bundle and both
+fixture-action flags off. After authentication it reads the review list, spot
+import sources and Bybit derivative sources for the bound QA fixture. Its
+sanitized report contains only HTTP status, timing and schema booleans. A
+passing result proves rollout access and basic read-route availability on the
+exact live SHA; it does not prove a closed trade, exchange sync, screenshot,
+analysis, user isolation or the full trade-review acceptance matrix.
 
 ## QA-Owned Manifest Intake
 

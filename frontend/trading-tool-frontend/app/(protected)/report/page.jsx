@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import {
   fetchDailyReportLatest,
   fetchDailyReportByDate,
@@ -30,6 +30,7 @@ import ReportTabs from '@/components/report/ReportTabs';
 import ReportContainer from '@/components/report/layout/ReportContainer';
 import ReportLayout from '@/components/report/layout/ReportLayout';
 import ReportTerminalHUD from '@/components/report/ReportTerminalHUD';
+import FinnTradeReviews from '@/components/report/FinnTradeReviews';
 import { ReportSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import DashboardErrorBoundary from '@/components/ui/DashboardErrorBoundary';
 
@@ -75,7 +76,6 @@ CONFIG
 ===================================================== */
 
 const REPORT_TYPE_KEYS = ['daily', 'weekly', 'monthly', 'quarterly'];
-const AUTO_GENERATE_IF_EMPTY = true;
 const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_ATTEMPTS = 60;
 
@@ -1853,12 +1853,6 @@ LOAD
       if (loadToken !== loadTokenRef.current) return;
       setDates(sortDatesDesc(rawDates || []));
 
-      if (!isReadyReport(data) && AUTO_GENERATE_IF_EMPTY) {
-        setLoading(false);
-        handleGenerate(true, date);
-        return;
-      }
-
       setReport(data || null);
       lastSignatureRef.current = getReportSignature(data);
     } catch {
@@ -2003,6 +1997,21 @@ RENDER
           </div>
         </div>
       </header>
+
+      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+        <Suspense fallback={<ReportSkeleton />}>
+          <FinnTradeReviews />
+        </Suspense>
+      </DashboardErrorBoundary>
+
+      {!loading && !report && !error && (
+        <section className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <ReportTabs selected={reportType} onChange={setReportType} />
+          <button type="button" onClick={() => handleGenerate(false, 'latest')} disabled={generating} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+            {reportT.new}
+          </button>
+        </section>
+      )}
 
       {/* ⚠️ ERROR MESSAGE */}
       {error && (

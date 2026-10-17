@@ -370,7 +370,6 @@ class ExchangeKey(Base):
     api_secret = Column(String, nullable=False) # Encrypted
     api_passphrase = Column(String, nullable=True) # Encrypted, optional
     is_active = Column(Boolean, default=True)
-    is_live = Column(Boolean, default=False) # False = Simulated/Paper, True = Real Exchange
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Watchlist(Base):

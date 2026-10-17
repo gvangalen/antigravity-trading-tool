@@ -140,6 +140,22 @@ def warm_finn_interactive_worker_after_ready(sender=None, **kwargs):
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)
 # =========================================================
 celery_app.conf.beat_schedule = {
+    "sync_linked_exchange_fills": build_task_schedule_entry(
+        "backend.celery_task.finn_trade_review_task.sync_linked_exchange_fills",
+        crontab(minute="*/5"),
+    ),
+    "sync_bybit_derivatives": build_task_schedule_entry(
+        "backend.celery_task.finn_trade_review_task.sync_bybit_derivatives",
+        crontab(minute="*/5"),
+    ),
+    "project_finn_trade_reviews": build_task_schedule_entry(
+        "backend.celery_task.finn_trade_review_task.project_dirty_trade_reviews",
+        crontab(minute="*/1"),
+    ),
+    "analyze_finn_trade_reviews": build_task_schedule_entry(
+        "backend.celery_task.finn_trade_review_task.analyze_pending_trade_reviews",
+        crontab(minute="*/1"),
+    ),
     "reconcile_live_bot_orders": build_task_schedule_entry(
         "backend.celery_task.bot_reconciliation_task.reconcile_live_bot_orders",
         crontab(minute="*/1"),
@@ -264,6 +280,7 @@ try:
         import backend.celery_task.regime_memory_task
         import backend.celery_task.portfolio_snapshot_task
         import backend.celery_task.portfolio_fx_task
+        import backend.celery_task.finn_trade_review_task
         import backend.celery_task.system_task
         import backend.celery_task.daily_report_task
         import backend.celery_task.weekly_report_task
