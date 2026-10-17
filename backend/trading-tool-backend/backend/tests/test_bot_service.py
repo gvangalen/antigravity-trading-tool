@@ -331,6 +331,43 @@ def test_explicit_paper_funding_is_separate_from_budget_and_atomic(monkeypatch):
     assert result["bot"]["paper_initial_cash_eur"] == 25
 
 
+def test_deferred_live_creation_persists_paused_and_notifies_finn(monkeypatch):
+    session = _FakeSession()
+    service = BotService(session)
+    events = []
+
+    async def validate(payload, _user_id, **_kwargs):
+        payload["symbol"] = "BTC"
+
+    class Repo:
+        async def create_bot_config(self, payload):
+            events.append(("create", payload["is_live"], payload["is_active"]))
+            return 77
+
+        async def get_bot_config(self, _user_id, bot_id):
+            return {"id": bot_id, "name": "BTC Live Later", "strategy_id": 5,
+                    "symbol": "BTC", "is_live": True, "is_active": False,
+                    "mode": "auto"}
+
+    async def publish(_self, **fields):
+        events.append(("feed", fields["event_type"], fields["subject_id"]))
+        assert session.commits == 0
+
+    monkeypatch.setattr(service, "validate_bot_payload", validate)
+    monkeypatch.setattr(
+        "backend.services.bot_service.FinnCoachFeedService.publish", publish,
+    )
+    service.repository = Repo()
+    result = asyncio.run(service.create_bot_config(BotConfigCreateSchema(
+        name="BTC Live Later", strategy_id=5, mode="auto",
+        is_live=True, is_active=False,
+    ), user_id=7))
+
+    assert events == [("create", True, False), ("feed", "live_bot_paused", "77")]
+    assert result["bot"]["is_active"] is False
+    assert session.commits == 1
+
+
 def test_existing_unused_paper_bot_can_receive_one_explicit_initial_credit(monkeypatch):
     session = _FakeSession()
     service = BotService(session)
@@ -1168,6 +1205,37 @@ def test_bot_payload_uses_owner_scoped_strategy_asset_over_stale_workspace_asset
     # The fake owner-scoped strategy is BTC; a caller supplied workspace value
     # may not redefine the persisted bot graph.
     assert payload["symbol"] == "BTC"
+
+
+def test_paused_live_bot_can_be_saved_without_keys_or_limits_but_activation_cannot():
+    service = BotService(_FakeSession())
+    class NoKeys:
+        async def get_active_keys(self, user_id):
+            assert user_id == 1
+            return []
+    service.exchange_repo = NoKeys()
+    payload = {
+        "name": "BTC Live Later", "strategy_id": 42, "mode": "auto",
+        "is_live": True, "is_active": False,
+    }
+
+    asyncio.run(service.validate_bot_payload(payload, user_id=1))
+    assert payload["symbol"] == "BTC"
+
+    payload["is_active"] = True
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.validate_bot_payload(payload, user_id=1))
+    assert exc.value.status_code == 400
+    assert "budget" in exc.value.detail.lower()
+
+    payload.update({
+        "budget_total_eur": 1000, "budget_daily_limit_eur": 100,
+        "budget_min_order_eur": 10, "budget_max_order_eur": 50,
+    })
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.validate_bot_payload(payload, user_id=1))
+    assert exc.value.status_code == 400
+    assert "exchange" in exc.value.detail.lower()
 
 
 def test_paper_startkapitaal_requires_whole_cents():

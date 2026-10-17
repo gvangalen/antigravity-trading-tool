@@ -4,9 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exchange optioneel tijdens eerste live-bot-onboarding
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. Na de eerste UI-reparatie verduidelijkte
+de gebruiker het gewenste contract: exchange-koppeling in onboarding moet
+optioneel zijn. Op `codex/deferred-exchange-onboarding` krijgt een nieuwe live
+bot de keuze **Later koppelen** (standaard) of **Nu koppelen**. Later slaat de
+bot gepauzeerd op; zonder koppeling mag onboarding doorgaan. FINN publiceert
+dan een eigenaargebonden feedherinnering. De detailweergave en de
+onboarding-afronding tonen expliciet dat er geen orders plaatsvinden. Bij
+activatie eist de backend nog steeds actieve exchange-keys en geldige
+budgetlimieten. Een live bot met de keuze Nu koppelen wordt pas actief
+opgeslagen wanneer de koppelstatus bevestigd is; zonder succesvolle koppeling
+wordt hij veilig gepauzeerd opgeslagen.
+
+De gerichte bot- en coachfeedtests slaagden **104/104**. De volledige
+backend-suite vóór de laatste extra coachfeed-regressietest slaagde met
+**3894 passed, 3 skipped**; de extra test slaagde in de gerichte set.
+Frontend typecheck, productiebuild/export, i18n-lint, i18n-/command-/
+proposaltests en high-severity audit slaagden; de laatste waarschuwingstekst
+is opgenomen in de herbouwde export en de laatste i18n-checks. CI, deploy en onafhankelijke browser-QA
+voor deze nieuwe kandidaat zijn nog niet afgerond. Er zijn geen echte
+sleutels of orders voor deze validatie gebruikt.
+
 ## Eerste live bot: exchange-koppeling in aanmaakscherm
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. De browsermelding van de
+Phase: `DEPLOYED_INTERIM_SUPERSEDED_BY_USER_CORRECTION`. De browsermelding van de
 gebruiker is gereproduceerd in de code: de backend eist actieve exchange-keys
 voor het opslaan van een live bot, terwijl de bestaande koppel-UI pas in de
 detailweergave van een reeds opgeslagen bot bereikbaar was. De kandidaat op
@@ -16,6 +39,14 @@ De knoppen in die stap kunnen het omringende botformulier niet indienen; na
 succes ververst de verbindingsstatus en verdwijnt een oude foutmelding. Paper
 trading blijft zonder exchange mogelijk. Er is geen backend-, actiecontract-,
 provider- of sleutelopslagcontract gewijzigd.
+
+[PR #380](https://github.com/gvangalen/antigravity-trading-tool/pull/380) werd
+als `23229cc80e6b740fdffcb8b032922f93689513de` gemerged. Vijf PR-checks,
+[main-CI run 39021664788](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39021664788)
+en [Auto Deploy run 39021809858](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39021809858)
+slaagden. Daarna retourneerden publieke backend-health en frontend-buildinfo
+allebei HTTP 200 en exact deze SHA. Deze tussenversie wordt door de
+gebruikerscorrectie hierboven opgevolgd.
 
 Lokaal geslaagd: frontend typecheck, productiebuild met bijgewerkte tracked
 `out/`-export, i18n-lint, i18n-/command-/proposaltests en high-severity
