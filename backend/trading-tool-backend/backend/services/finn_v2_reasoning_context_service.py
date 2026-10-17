@@ -515,7 +515,12 @@ class FinnV2ReasoningContextService:
         if tool_name == "read_active_setup":
             facts = {
                 key: payload.get(key)
-                for key in ["setup_id", "name", "symbol", "timeframe", "setup_type", "score"]
+                for key in [
+                    "setup_id", "name", "symbol", "timeframe", "setup_type", "description",
+                    "dca_frequency", "dca_day_name", "dca_month_day", "min_investment",
+                    "min_market_score", "max_market_score", "min_macro_score", "max_macro_score",
+                    "min_technical_score", "max_technical_score", "saved_market_condition", "score",
+                ]
                 if payload.get(key) is not None
             }
             collection = payload.get("setups")

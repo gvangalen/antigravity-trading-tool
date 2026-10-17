@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Opgeslagen marktkeuze blijft een FINN-voorwaarde
+
+Phase: `LOCAL_REPAIR_VALIDATED_AWAITING_CI`. Onafhankelijke live QA op
+`69ecb55f6f4237ec6a314d0016dd68da43118bd9` vond een inhoudelijke
+tegenstrijdigheid: de nieuwe BTC-vrijdag-DCA had de preset “Onder druk” en
+marktgrenzen 26–45 opgeslagen, maar FINN noemde die keuze later slechts
+beschrijving en geen vastgelegde voorwaarde. De ruwe grenzen waren wel in de
+setup en owner-scoped read aanwezig; de presetbetekenis werd alleen in de
+frontend afgeleid, terwijl het afzonderlijke reasoning-contextpad de grenzen
+en toelichting uit de feitenprojectie wegliet.
+
+De kandidaat `codex/finn-saved-setup-semantics` leidt de vijf presetnamen
+uitsluitend uit exacte opgeslagen grenzen af en levert die samen met de
+grenzen aan de getypeerde FINN-leestools, inventaris en reasoning-context.
+De modelgrens benoemt apart: setupgeschiktheid, vrije gebruikerstoelichting,
+DCA-weekdag en uitvoeringsregels uit de gekoppelde strategie. Er wordt geen
+actuele score of aankoop afgeleid. Scorematcher, opgeslagen payload en bot-
+uitvoering zijn niet gewijzigd. De vrije setup-toelichting blijft bewust in
+de editor en FINN-context: de bestaande producttekst noemt haar achtergrond
+voor FINN en schrijft geen weergave op de compacte Mijn Plan-kaart voor.
+
+Lokaal gemeten: 742 gerichte backendtests geslaagd; de volledige backend-suite
+3897 geslaagd, 3 bestaande skips. Een geïsoleerde lokale publieke API-route
+met synthetische ingelogde gebruiker, echte provider, persistente worker,
+polling/SSE en drie beurten slaagde. FINN las vrijdag, preset 26–45, vrije
+toelichting en €100 terug, noemde de preset een opgeslagen scorevoorwaarde en
+weigerde een gegarandeerde aankoop zonder actuele geverifieerde score te
+claimen. De nieuwe test met een tweede repositorysessie controleert ook
+owner-scoped teruglezing en scheiding van setup en strategie. Dit is Build-
+evidence, geen onafhankelijke live QA-acceptatie. Er is geen action contract
+of provideradapter gewijzigd; de volledige action-matrix is daarom voor deze
+read-only kandidaat niet van toepassing. CI en deployment zijn nog niet
+gemeten.
+
 ## Mijn Plan toont alleen werkelijk opgeslagen scoregrenzen
 
 Phase: `LIVE_TARGETED_QA_ACCEPTED_FULL_SCOPE_OPEN`. In de onafhankelijke ingelogde

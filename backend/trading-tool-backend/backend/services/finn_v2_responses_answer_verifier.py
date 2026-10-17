@@ -3603,6 +3603,13 @@ class FinnResponsesAnswerVerifier:
                 "fail it for not producing a trade recommendation; producing one would be unsafe. "
                 " A stored entry, stop-loss, target or amount establishes only its configured value. "
                 "A read_active_setup result describes a setup, never a strategy. If the "
+                "read_active_setup saved_market_condition is a preset, it is derived from "
+                "persisted score bounds and is a real setup eligibility filter, not just "
+                "description text. The free description is user background, not a score "
+                "condition or strategy execution rule. A matching DCA schedule and score "
+                "condition do not prove an actual purchase without current verified scores "
+                "and execution evidence. Reject answers contradicting these distinctions. "
+                "If the "
                 "read_linked_strategy result is unavailable, reject any answer that calls the "
                 "setup a saved strategy or claims that a linked strategy exists. "
                 "It does not establish that the trade is prudent, profitable, realistic or suitable "
@@ -4554,7 +4561,10 @@ class FinnResponsesAnswerVerifier:
                 grounded_plan = {
                     "source": "owner_scoped_persisted_read",
                     "setup": {key: saved_setup.get(key) for key in (
-                        "name", "symbol", "timeframe", "setup_type",
+                        "name", "symbol", "timeframe", "setup_type", "description",
+                        "dca_frequency", "dca_day_name", "saved_market_condition",
+                        "min_market_score", "max_market_score", "min_macro_score",
+                        "max_macro_score", "min_technical_score", "max_technical_score",
                     ) if saved_setup.get(key) is not None},
                     "strategy": {key: saved_strategy.get(key) for key in (
                         "name", "symbol", "timeframe", "entry", "stop_loss",

@@ -34,8 +34,10 @@ class FinnResponsesReadExecutor:
             return data
         saved = data.get("data") if isinstance(data.get("data"), dict) else data
         fields = (
-            "name", "symbol", "timeframe", "setup_type", "dca_frequency",
-            "dca_day_name", "dca_month_day", "min_investment",
+            "name", "symbol", "timeframe", "setup_type", "description",
+            "dca_frequency", "dca_day_name", "dca_month_day", "min_investment",
+            "min_market_score", "max_market_score", "min_macro_score", "max_macro_score",
+            "min_technical_score", "max_technical_score", "saved_market_condition",
         )
         return {
             "fields": {key: saved[key] for key in fields if saved.get(key) is not None},
@@ -160,6 +162,16 @@ class FinnResponsesReadExecutor:
                 "asset, timeframe or expected growth is safe or suitable from profile labels. "
                 "Do not promise protected returns or secure investment methods. If the profile "
                 "is empty, ask naturally for the user's goal and risk style."
+            )
+        if any(item["scope"] == "read_active_setup" and item["status"] == "completed" for item in results):
+            output["evidence_boundary"] = (
+                "saved_market_condition is derived from the owner's persisted score bounds. "
+                "A preset is a configured setup eligibility condition, not merely the user's "
+                "free-text description. The description is background, not an execution rule. "
+                "DCA schedule belongs to the setup; amount and execution rules belong to a "
+                "linked strategy. Eligibility on a scheduled day does not guarantee a purchase. "
+                "Without a fresh verified current score and execution evidence, do not assert "
+                "that the condition is met or that an order will be placed."
             )
         if call.evaluation_operation_id:
             contract = FinnV2OperationRegistry().require_supported(call.evaluation_operation_id)
