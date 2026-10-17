@@ -950,13 +950,48 @@ class FinnResponsesFrontDoor:
             and request_facts.discourse_act == "operation_request"
             and not pending_operation
             and not conversation_context.get("proposal_correction_result")
-            and re.search(r"\b(?:mijn|my|mein(?:e|en)?)\s+[A-Z]{2,8}[-\s]+setups?\b", message, re.I)
+            and re.search(
+                r"\b(?:mijn|my|mein(?:e|en)?)\s+"
+                r"(?:(?:bestaande|existing|vorhandene[nrms]?)\s+)?"
+                r"[A-Z]{2,8}[-\s]+setups?\b", message, re.I,
+            )
             and not re.search(r"\b(?:strateg\w*|bot\w*)\b", message, re.I)
         ):
             # A generic asset-scoped setup update has no named target to
-            # resolve yet. Enter its proposal contract before asking which
-            # setup; named strategy/bot requests retain their own domain
-            # guard below.
+            # resolve yet. An empty owner collection cannot be fixed by
+            # asking which setup the user means: no matching saved setup
+            # exists. Keep that response read-only and out of guided drafts.
+            symbols = mentioned_catalog_symbols(message)
+            session_factory = getattr(self.reads, "session_factory", None)
+            if len(symbols) == 1 and session_factory is not None:
+                asset = next(iter(symbols))
+                async with session_factory() as session:
+                    collection = await FinnV2EntityResolutionService(session).resolve_target_collection(
+                        user_id=self.user_id, entity_type="setup", asset=asset,
+                    )
+                if collection.result_count == 0:
+                    language = locale.split("-")[0].lower()
+                    answer = {
+                        "en": f"You have no saved {asset} setup to change. You can create one first.",
+                        "de": f"Du hast kein gespeichertes {asset}-Setup zum Ändern. Du kannst zuerst eines erstellen.",
+                    }.get(language, f"Je hebt geen opgeslagen {asset}-setup om te wijzigen. Je kunt eerst een nieuwe maken.")
+                    return FinnResponsesFrontDoorResult(
+                        FinnResponsesResult(
+                            text=answer,
+                            response_id=f"verified-missing-setup-{self.run_id}",
+                            tool_trace=({"name": "verified_missing_setup", "status": "completed",
+                                         "result": {"operation_id": "update_setup", "results": [{
+                                             "scope": "read_saved_setup_inventory", "status": "completed",
+                                             "data": {"asset": asset, "matching_count": 0,
+                                                      "complete": True},
+                                         }]}},),
+                            answer_kind="missing_setup_update",
+                            response_id_reusable=False,
+                        ),
+                        None, previous_response, locale=locale,
+                    )
+            # Otherwise enter the proposal contract and let its owner-scoped
+            # target choice keep multiple matching setups unambiguous.
             contract = self.proposals.registry.require_supported(imperative_operation)
             explicit_inputs = FinnV2OperationStateService().explicit_inputs(
                 contract=contract, message=message, explicit_asset=None,
