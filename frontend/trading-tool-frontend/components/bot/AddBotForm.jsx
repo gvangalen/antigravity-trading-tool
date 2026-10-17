@@ -32,6 +32,7 @@ import {
   getBotSaveErrorMessage,
 } from "@/lib/bot/riskAcknowledgement.mjs";
 import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
+import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 
 const RISK_PROFILE_ICONS = {
   conservative: Shield,
@@ -676,6 +677,15 @@ const AddBotForm = forwardRef(function AddBotForm({
           </div>
         </div>
       </div>
+
+      {form.is_live ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+            {copy.liveExchangeConnectionHelp}
+          </p>
+          <SystemConnectivity variant="inline" onConnectionChanged={() => setSubmitError("")} />
+        </div>
+      ) : null}
  
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">

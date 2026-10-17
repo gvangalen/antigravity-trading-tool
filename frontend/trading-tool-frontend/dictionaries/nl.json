@@ -2573,6 +2573,7 @@
       "environmentLabel": "Uitvoeringsomgeving",
       "paperTrading": "Paper trading",
       "liveExchange": "Live exchange",
+      "liveExchangeConnectionHelp": "Koppel hieronder eerst je exchange. Een live bot kan echte orders plaatsen. Voor een veilige reflectietest kun je Paper trading kiezen en de exchange later afzonderlijk koppelen.",
       "modeLabel": "Uitvoeringsmodus",
       "modeManual": "Handmatige goedkeuring",
       "modeSemiAuto": "Semi-autonoom",

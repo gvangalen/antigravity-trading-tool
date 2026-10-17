@@ -2589,6 +2589,7 @@
       "environmentLabel": "Execution environment",
       "paperTrading": "Paper trading",
       "liveExchange": "Live exchange",
+      "liveExchangeConnectionHelp": "Verbinde unten zuerst deine Börse. Ein Live-Bot kann echte Orders platzieren. Für einen sicheren Reflexionstest wähle Paper Trading und verbinde die Börse später separat.",
       "modeLabel": "Execution mode",
       "modeManual": "Manual approval",
       "modeSemiAuto": "Semi-automated",

@@ -17,7 +17,8 @@ function exchangeErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
-export default function SystemConnectivity({ variant = "default" }) {
+export default function SystemConnectivity({ variant = "default", onConnectionChanged }) {
+  const inline = variant === "inline";
   const { showSnackbar } = useModal();
   const { t, locale } = useTranslation();
   const [exchanges, setExchanges] = useState([]);
@@ -34,7 +35,7 @@ export default function SystemConnectivity({ variant = "default" }) {
       setStatusError(false);
       const statusData = await fetchAuth("/api/exchange/status", { forceFresh: true });
       setConnections(Array.isArray(statusData) ? statusData : []);
-      if (variant !== "bot") {
+      if (variant === "default") {
         try {
           const balances = await fetchAuth("/api/exchange/balances", { forceFresh: true });
           setExchanges(Array.isArray(balances) ? balances : []);
@@ -60,6 +61,7 @@ export default function SystemConnectivity({ variant = "default" }) {
       body: JSON.stringify(payload),
     }).catch((error) => { throw new Error(exchangeErrorMessage(error, copy.saveError)); });
     await fetchExchanges();
+    onConnectionChanged?.();
   };
 
   const closeDrawer = () => {
@@ -87,10 +89,33 @@ export default function SystemConnectivity({ variant = "default" }) {
   };
 
   const isConnected = connections.length > 0;
+  const settingsContent = (
+    <>
+      {connections.length > 0 && <div className="mb-5 space-y-2">
+        <p className="text-xs font-bold text-slate-600 dark:text-slate-300">{copy.connectedExchanges}</p>
+        {connections.map((connection) => <div key={connection.exchange} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+          <span className="text-sm font-bold text-slate-900 dark:text-white">{connection.exchange}</span>
+          <button type="button" disabled={Boolean(disconnecting)} onClick={() => disconnectExchange(connection.exchange)} className="text-xs font-bold text-red-700 disabled:opacity-50 dark:text-red-300">
+            {disconnecting === connection.exchange ? copy.disconnecting : copy.disconnectButton}
+          </button>
+        </div>)}
+        <p className="text-xs text-slate-500">{copy.switchExchangeHint}</p>
+      </div>}
+      <ExchangeSettingsForm
+        ref={exchangeFormRef}
+        onSave={handleSave}
+        onCancel={closeDrawer}
+        onSaved={(status) => {
+          showSnackbar(status?.message || copy.statusConnected, "success");
+          setIsDrawerOpen(false);
+        }}
+      />
+    </>
+  );
 
   return (
-    <div className={variant === "bot" ? "flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900" : "flex items-center gap-6"}>
-      {variant === "bot" && (
+    <div className={variant === "bot" || inline ? "flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900" : "flex items-center gap-6"}>
+      {(variant === "bot" || inline) && (
         <div>
           <div className="text-[10px] font-black uppercase tracking-widest text-blue-700">{t?.botPage?.focus?.exchangeTitle}</div>
           <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white">
@@ -100,6 +125,7 @@ export default function SystemConnectivity({ variant = "default" }) {
         </div>
       )}
       <button
+        type="button"
         onClick={handleOpenSettings}
         className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${
           isConnected 
@@ -111,7 +137,7 @@ export default function SystemConnectivity({ variant = "default" }) {
         {isConnected ? copy.manageButton : copy.connectButton}
       </button>
 
-      {variant !== "bot" && <div className="flex items-center gap-3">
+      {variant === "default" && <div className="flex items-center gap-3">
         {exchanges.map((ex, idx) => (
           <div key={idx} className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg">
              <span className="text-[9px] font-black text-slate-400 uppercase">{ex.exchange}</span>
@@ -125,6 +151,7 @@ export default function SystemConnectivity({ variant = "default" }) {
         
         {isConnected && (
           <button 
+            type="button"
             onClick={fetchExchanges}
             disabled={loading}
             className={`p-2 rounded-lg bg-slate-100 dark:bg-slate-900 text-secondary hover:text-blue-600 transition-all ${loading ? 'animate-spin' : ''}`}
@@ -134,7 +161,13 @@ export default function SystemConnectivity({ variant = "default" }) {
         )}
       </div>}
 
-      <Drawer
+      {inline && isDrawerOpen ? (
+        <section className="w-full rounded-2xl border border-blue-100 bg-white p-4 dark:border-blue-900 dark:bg-slate-950" role="region" aria-label={copy.manageTitle}>
+          {settingsContent}
+        </section>
+      ) : null}
+
+      {!inline && <Drawer
         isOpen={isDrawerOpen}
         onClose={closeDrawer}
         isCloseBlocked={() => Boolean(exchangeFormRef.current?.isSubmitting?.())}
@@ -142,27 +175,7 @@ export default function SystemConnectivity({ variant = "default" }) {
         subtitle={isConnected ? copy.statusConnected : copy.statusDisconnected}
         description={isConnected ? copy.contextConnected : copy.contextDisconnected}
         width="max-w-2xl"
-      >
-        {connections.length > 0 && <div className="mb-5 space-y-2">
-          <p className="text-xs font-bold text-slate-600 dark:text-slate-300">{copy.connectedExchanges}</p>
-          {connections.map((connection) => <div key={connection.exchange} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-            <span className="text-sm font-bold text-slate-900 dark:text-white">{connection.exchange}</span>
-            <button type="button" disabled={Boolean(disconnecting)} onClick={() => disconnectExchange(connection.exchange)} className="text-xs font-bold text-red-700 disabled:opacity-50 dark:text-red-300">
-              {disconnecting === connection.exchange ? copy.disconnecting : copy.disconnectButton}
-            </button>
-          </div>)}
-          <p className="text-xs text-slate-500">{copy.switchExchangeHint}</p>
-        </div>}
-        <ExchangeSettingsForm
-          ref={exchangeFormRef}
-          onSave={handleSave}
-          onCancel={closeDrawer}
-          onSaved={(status) => {
-            showSnackbar(status?.message || copy.statusConnected, "success");
-            setIsDrawerOpen(false);
-          }}
-        />
-      </Drawer>
+      >{settingsContent}</Drawer>}
     </div>
   );
 }
