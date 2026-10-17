@@ -241,7 +241,7 @@ function IndicatorSelector({
           />
 
           {showDropdown ? (
-            <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.22)]">
+            <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.22)]">
               <div className="max-h-[280px] overflow-y-auto p-2">
                 {loading ? (
                   <div className="px-3 py-3 text-sm font-semibold text-slate-500">Loading…</div>
