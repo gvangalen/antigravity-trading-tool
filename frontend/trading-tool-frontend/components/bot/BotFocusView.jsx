@@ -189,6 +189,15 @@ export default function BotFocusView({
               </div>
             </div>
 
+            {activeBot.is_live && !activeBot.is_active ? (
+              <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900" role="status">
+                <h3 className="font-black">{copy.deferredLiveTitle}</h3>
+                <p className="mt-1 text-sm">{copy.deferredLiveBody}</p>
+                <button type="button" onClick={() => onOpenSettings("portfolio", activeBot)}
+                  className="mt-2 text-sm font-bold text-blue-700 underline">{copy.deferredLiveLimits}</button>
+              </section>
+            ) : null}
+
             <section className={`rounded-xl border p-4 ${riskTone}`} aria-live="polite">
               <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider"><AlertTriangle size={16} />{copy.now}</div>
               <h3 className="mt-2 text-lg font-black">{riskTitle}</h3>

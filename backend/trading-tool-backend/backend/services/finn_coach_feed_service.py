@@ -100,6 +100,13 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             "de": f"Der Kurs von {name} hat sich stark bewegt. Prüfe die Bedeutung für deinen gespeicherten Plan; die Bewegung allein ist kein Kaufsignal.",
         }
         title = {"nl": "Marktbeweging", "en": "Market move", "de": "Marktbewegung"}
+    elif kind == "live_bot_paused":
+        body = {
+            "nl": f"Je live bot {name} is opgeslagen en staat gepauzeerd. Controleer je exchange-koppeling en limieten voordat je hem activeert. Er worden geen orders geplaatst.",
+            "en": f"Your live bot {name} was saved in a paused state. Check its exchange connection and limits before activating it. No orders will be placed.",
+            "de": f"Dein Live-Bot {name} wurde pausiert gespeichert. Prüfe die Börsenverbindung und Limits, bevor du ihn aktivierst. Es werden keine Orders platziert.",
+        }
+        title = {"nl": "Exchange later koppelen", "en": "Connect exchange later", "de": "Börse später verbinden"}
     elif kind == "bot_decision":
         body = {
             "nl": f"Voor {name} is een Paper-beslissing vastgelegd. Bekijk de botdetails; dit is geen live order.",
@@ -207,7 +214,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "data_blocked", "proposal_pending", "market_move", "bot_decision"}:
+        if not event_key or event_type not in {"plan_match", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()

@@ -870,13 +870,16 @@ function BotPageInner() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
                     <CheckCircle2 size={14} />
-                    {botGuideCopy.completedEyebrow || "Automation ready"}
+                    {activeOnboardingBot?.is_live && !activeOnboardingBot?.is_active
+                      ? botGuideCopy.deferredLiveEyebrow : botGuideCopy.completedEyebrow || "Automation ready"}
                   </div>
                   <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
-                    {botGuideCopy.completedTitle || "Your first execution flow is ready"}
+                    {activeOnboardingBot?.is_live && !activeOnboardingBot?.is_active
+                      ? botGuideCopy.deferredLiveTitle : botGuideCopy.completedTitle || "Your first execution flow is ready"}
                   </h2>
                   <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-                    {botGuideCopy.completedBody || "You now have profile, analysis, plan and one bot linked together. Continue when you are ready."}
+                    {activeOnboardingBot?.is_live && !activeOnboardingBot?.is_active
+                      ? botGuideCopy.deferredLiveBody : botGuideCopy.completedBody || "You now have profile, analysis, plan and one bot linked together. Continue when you are ready."}
                   </p>
                 </div>
               </div>

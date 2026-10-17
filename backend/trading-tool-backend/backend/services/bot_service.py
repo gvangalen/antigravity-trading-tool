@@ -23,6 +23,7 @@ from backend.infrastructure.repositories.exchange_repository import ExchangeRepo
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.services.exchange_service import ExchangeService
 from backend.services.bot_live_reconciliation import reconcile_live_orders
+from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
 logger = logging.getLogger(__name__)
 LIVE_EXECUTION_STALE_AFTER_MINUTES = 60
@@ -506,7 +507,7 @@ class BotService:
             raise HTTPException(400, "Virtueel Paper-startkapitaal vereist EUR als basisvaluta.")
         mode_value = str(raw_payload.get("mode") or "manual").lower()
         is_active = bool(raw_payload.get("is_active", True))
-        requires_budget = is_live or (is_active and mode_value in {"semi-auto", "auto"})
+        requires_budget = is_active and (is_live or mode_value in {"semi-auto", "auto"})
         if requires_budget:
             missing = [
                 label for label, value in [
@@ -523,10 +524,10 @@ class BotService:
                     f"Live of automatische bots vereisen expliciete budgetlimieten: {', '.join(missing)}."
                 )
 
-        if is_live:
+        if is_live and is_active:
             keys = await self.exchange_repo.get_active_keys(user_id)
             if not keys:
-                raise HTTPException(400, "Live bot vereist actieve exchange keys voordat hij kan worden opgeslagen.")
+                raise HTTPException(400, "Koppel eerst een exchange voordat deze live bot wordt geactiveerd.")
 
         # 4. Exposure check
         exposure = raw_payload.get("max_asset_exposure_pct")
@@ -585,6 +586,14 @@ class BotService:
             if not symbol:
                 raise HTTPException(400, "Geen gekoppelde asset voor Paper-startkapitaal gevonden.")
         bot_id = await self.repository.create_bot_config(data)
+        if data["is_live"] and not data["is_active"]:
+            await FinnCoachFeedService(self.session).publish(
+                user_id=user_id, event_key=f"live-bot-paused:{bot_id}",
+                event_type="live_bot_paused", subject_type="bot", subject_id=str(bot_id),
+                subject=data["name"], symbol=data.get("symbol"), priority=4,
+                evidence={"status": "paused", "bot_id": bot_id, "is_live": True,
+                          "is_active": False},
+            )
         if not data["is_live"] and initial_cash > 0:
             credited = await self.repository.seed_initial_paper_cash(
                 user_id=user_id, bot_id=bot_id, symbol=symbol, amount_eur=initial_cash,
@@ -656,6 +665,10 @@ class BotService:
         updated_id = await self.repository.update_bot_config(user_id, bot_id, updates)
         if not updated_id:
             raise HTTPException(404, "Bot niet gevonden")
+        if bool(merged.get("is_live")) and bool(merged.get("is_active")):
+            await FinnCoachFeedService(self.session).resolve(
+                user_id=user_id, event_key=f"live-bot-paused:{bot_id}",
+            )
 
         if funding_amount is not None:
             symbol = str(merged.get("symbol") or "").strip().upper()

@@ -24,6 +24,17 @@ def test_fallback_preserves_subject_and_never_claims_an_entry_signal():
     assert "not an entry signal" in copy["en"]["body"]
 
 
+def test_paused_live_bot_feed_explains_deferred_execution_in_each_locale():
+    copy = module._fallback("live_bot_paused", "BTC Live Later", {
+        "status": "paused", "is_live": True, "is_active": False,
+    })
+    assert set(copy) == {"nl", "en", "de"}
+    assert all("BTC Live Later" in item["body"] for item in copy.values())
+    assert "geen orders" in copy["nl"]["body"]
+    assert "No orders" in copy["en"]["body"]
+    assert "keine Orders" in copy["de"]["body"]
+
+
 def test_proposal_copy_uses_exact_typed_amount_and_budget_meaning():
     amount = module._fallback("proposal_pending", "ETH DCA", {
         "amount_kind": "base_amount", "amount_eur": "120.50",

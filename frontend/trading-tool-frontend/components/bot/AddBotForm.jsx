@@ -98,8 +98,12 @@ const AddBotForm = forwardRef(function AddBotForm({
   const [submitError, setSubmitError] = useState("");
   const [riskAcknowledgement, setRiskAcknowledgement] = useState(null);
   const [showAdvancedBudget, setShowAdvancedBudget] = useState(false);
+  const [exchangeChoice, setExchangeChoice] = useState("later");
+  const [exchangeConnected, setExchangeConnected] = useState(false);
 
-  const requiresExplicitBudget = form.is_live || form.mode !== "manual";
+  const deferredLiveCreate = form.is_live && !isEdit && (exchangeChoice === "later" || !exchangeConnected);
+  const willBeActive = isEdit ? sourceData?.is_active !== false : !deferredLiveCreate;
+  const requiresExplicitBudget = willBeActive && (form.is_live || form.mode !== "manual");
 
   /* =====================================================
      INIT / PREFILL
@@ -362,6 +366,7 @@ const AddBotForm = forwardRef(function AddBotForm({
       budget_min_order_eur: Number(form.budget_min_order_eur || 0),
       budget_max_order_eur: Number(form.budget_max_order_eur || 0),
       max_asset_exposure_pct: Number(form.max_asset_exposure_pct || 0),
+      ...(!isEdit ? { is_active: form.is_live ? !deferredLiveCreate : true } : {}),
       ...(riskAcknowledged ? { risk_acknowledged: true } : {}),
     };
 
@@ -395,8 +400,10 @@ const AddBotForm = forwardRef(function AddBotForm({
   }, [
     copy.saveFailed,
     dcaSchedule,
+    deferredLiveCreate,
     form,
     guidedMode,
+    isEdit,
     loading,
     onSaved,
     onSubmit,
@@ -683,7 +690,33 @@ const AddBotForm = forwardRef(function AddBotForm({
           <p className="text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-300">
             {copy.liveExchangeConnectionHelp}
           </p>
-          <SystemConnectivity variant="inline" onConnectionChanged={() => setSubmitError("")} />
+          {!isEdit ? (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label={copy.exchangeTimingLabel}>
+              <button type="button" aria-pressed={exchangeChoice === "later"}
+                onClick={() => setExchangeChoice("later")}
+                className={`rounded-xl border p-3 text-left text-sm font-bold ${exchangeChoice === "later" ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-600"}`}>
+                {copy.exchangeLater}
+              </button>
+              <button type="button" aria-pressed={exchangeChoice === "now"}
+                onClick={() => setExchangeChoice("now")}
+                className={`rounded-xl border p-3 text-left text-sm font-bold ${exchangeChoice === "now" ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-600"}`}>
+                {copy.exchangeNow}
+              </button>
+            </div>
+          ) : null}
+          {exchangeChoice === "later" && !isEdit ? (
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">{copy.exchangeLaterHelp}</p>
+          ) : null}
+          {(exchangeChoice === "now" || isEdit) ? (
+            <SystemConnectivity variant="inline" onConnectionChanged={() => setSubmitError("")}
+              onConnectionStatusChange={setExchangeConnected} />
+          ) : null}
+          {exchangeChoice === "now" && !exchangeConnected && !isEdit ? (
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">{copy.exchangeNotConnectedHelp}</p>
+          ) : null}
+          {exchangeChoice === "now" && exchangeConnected && !isEdit ? (
+            <p className="text-xs font-semibold text-red-700 dark:text-red-300">{copy.exchangeConnectedLiveHelp}</p>
+          ) : null}
         </div>
       ) : null}
  

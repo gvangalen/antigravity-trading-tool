@@ -17,7 +17,7 @@ function exchangeErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
-export default function SystemConnectivity({ variant = "default", onConnectionChanged }) {
+export default function SystemConnectivity({ variant = "default", onConnectionChanged, onConnectionStatusChange }) {
   const inline = variant === "inline";
   const { showSnackbar } = useModal();
   const { t, locale } = useTranslation();
@@ -34,7 +34,9 @@ export default function SystemConnectivity({ variant = "default", onConnectionCh
     try {
       setStatusError(false);
       const statusData = await fetchAuth("/api/exchange/status", { forceFresh: true });
-      setConnections(Array.isArray(statusData) ? statusData : []);
+      const nextConnections = Array.isArray(statusData) ? statusData : [];
+      setConnections(nextConnections);
+      onConnectionStatusChange?.(nextConnections.length > 0);
       if (variant === "default") {
         try {
           const balances = await fetchAuth("/api/exchange/balances", { forceFresh: true });
@@ -45,6 +47,7 @@ export default function SystemConnectivity({ variant = "default", onConnectionCh
       }
     } catch (err) {
       setStatusError(true);
+      onConnectionStatusChange?.(false);
       console.error("Failed to fetch exchange status", err);
     } finally {
       setLoading(false);

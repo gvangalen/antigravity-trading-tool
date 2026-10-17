@@ -357,11 +357,11 @@ class BotRepository:
     async def create_bot_config(self, payload: dict) -> int:
         query = text("""
             INSERT INTO bot_configs (
-                user_id, name, strategy_id, mode, is_live, risk_profile, cadence,
+                user_id, name, strategy_id, mode, is_live, is_active, risk_profile, cadence,
                 budget_total_eur, paper_initial_cash_eur, budget_daily_limit_eur, budget_min_order_eur,
                 budget_max_order_eur, max_asset_exposure_pct, base_currency, symbol, created_at, updated_at
             )
-            VALUES (:user_id, :name, :strategy_id, :mode, :is_live, :risk_profile, :cadence,
+            VALUES (:user_id, :name, :strategy_id, :mode, :is_live, :is_active, :risk_profile, :cadence,
                     :budget_total_eur, :paper_initial_cash_eur, :budget_daily_limit_eur, :budget_min_order_eur,
                     :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, :symbol, NOW(), NOW())
             RETURNING id
