@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mobiele FINN-herkeuring: wijzigingsverzoek zonder opgeslagen setup
 
-Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Onafhankelijke Expo-web-QA op live SHA
+Phase: `INDEPENDENT_QA_NOT_ACCEPTED_NATIVE_EVIDENCE_GAP`. Onafhankelijke
+Expo-web-QA op vorige live SHA
 `2dde82f498ed4dd1fe6c654391722bd6762feeda` gaf `NOT_ACCEPTED`:
 met nul opgeslagen BTC-setups vroeg FINN bij “Wijzig mijn bestaande BTC setup
 naar timeframe 4H” toch welke setup bedoeld werd. Een vervolgbeurt gaf eerst
@@ -46,6 +47,19 @@ lege-setuproute en de mobiele flow staat nog open; Build claimt geen
 QA-acceptatie. Een status-only handoff kan een latere deployment-SHA krijgen;
 QA gebruikt de werkelijk gepubliceerde backend- en frontendidentiteit.
 De reflectie-PR #374 blijft een aparte draft.
+
+Onafhankelijke QA op de werkelijk live status-handoff-SHA
+`04bc95a135bfacd5ff66ea709e9f9a88130481fa` gaf voor de **volledige
+mobiele productie-QA `NOT_ACCEPTED`**. De gerichte live Expo-webproef met nul
+opgeslagen setups slaagde: de exacte wijzigingsvraag kreeg direct het antwoord
+dat er geen BTC-setup is, zonder conceptkaart of bevestiging; na een harde
+refresh bleven sessie, lege planstaat en gesprek bestaan. De lege FINN-feed
+was zichtbaar op vijf tabs. Een productiegericht gebundelde iPhone-simulator
+logde wel in en toonde Analyse, maar iOS-wachtwoorddialoog en daarna falende
+simulatoraanrakingen verhinderden de native vervolgproef. De gerichte native
+herkeuring bleef daarom eveneens `NOT_ACCEPTED` wegens ontbrekend bewijs,
+zonder aangetoonde productfout. Geen handelsactie of productmutatie is getest.
+De native verificatie blijft open; Expo Web is geen vervanging daarvoor.
 
 ## Mobiele herkeuring: lege setup en verlopen sessie
 
