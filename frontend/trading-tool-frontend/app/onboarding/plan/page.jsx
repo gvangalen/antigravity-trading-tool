@@ -341,7 +341,7 @@ export default function OnboardingPlanPage() {
     setContinuing(true);
     const strategyId = savedStrategy?.strategy_id ?? savedStrategy?.id;
     const strategyQuery = strategyId ? `&strategy_id=${encodeURIComponent(strategyId)}` : "";
-    router.push(`/bot?onboarding=1&step=bot&action=new_bot&symbol=${encodeURIComponent(symbol)}${strategyQuery}`);
+    router.push(`/onboarding/automation?symbol=${encodeURIComponent(symbol)}${strategyQuery}`);
   };
 
   const reviewReady = setupDone && strategyDone;
