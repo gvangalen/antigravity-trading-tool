@@ -84,6 +84,14 @@ separately reported as `ssh` by the workflow artifact.
 `auth_preflight` stops there. It is the only profile used to validate this
 operational provision; it does not submit a FINN content case.
 
+`trade_review_preflight` requires `manifest_id=none`, no bundle and both
+fixture-action flags off. After authentication it reads the review list, spot
+import sources and Bybit derivative sources for the bound QA fixture. Its
+sanitized report contains only HTTP status, timing and schema booleans. A
+passing result proves rollout access and basic read-route availability on the
+exact live SHA; it does not prove a closed trade, exchange sync, screenshot,
+analysis, user isolation or the full trade-review acceptance matrix.
+
 ## QA-Owned Manifest Intake
 
 QA first runs `manifest_key` and reads the public key from its sanitized
