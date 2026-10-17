@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Browser-QA reparatie: hervatfout en exchange-autofill
 
-Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_RECHECK`. In de onafhankelijke
+Phase: `LIVE_BROWSER_QA_PASSED_WITH_EVIDENCE_GAPS`. In de onafhankelijke
 browserproef op `e0eecd7fec16b50cb1deca5e064da8a6bd58d05f` werkte de
 uitgestelde Live-botroute: zonder exchange werd een nieuwe bot gepauzeerd
 opgeslagen, bleef hij gepauzeerd na refresh en verscheen de FINN-herinnering.
@@ -34,8 +34,24 @@ en [Auto Deploy run 39023593524](https://github.com/gvangalen/antigravity-tradin
 slaagden. Publieke backend-health en frontend-buildinfo gaven daarna beide
 HTTP 200 en exact deze SHA. Deze status-only handoff krijgt zelf een nieuwe
 deployment-SHA; QA verifieert de werkelijk publieke SHA opnieuw. Onafhankelijke
-browserherkeuring van deze reparaties en een lege eerste-bot-account ontbreken
-nog.
+browserherkeuring vond plaats op de daaropvolgende status-only release
+`5d4cbe8d3d2c8bc960a3f6c9f569ccec2375d6e7` na geslaagde
+[main-CI run 39023809514](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39023809514)
+en [Auto Deploy run 39023928275](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39023928275).
+QA bevestigde zelfstandig dat productiecheckout, release-marker, publieke
+backend-health en frontend-buildinfo exact deze SHA tonen. In de ingelogde
+browser bleven de Bitvavo- en Bybit-sleutelvelden leeg ondanks browserautofill;
+een providerwissel wiste alleen ingevoerde dummywaarden en Enter/Annuleren
+verstuurden het botformulier niet. Hervatten zonder limieten werd geweigerd,
+de bot bleef gepauzeerd en de UI toonde de concrete serverreden. Na refresh
+bleven de gepauzeerde bot, ontbrekende exchange, nul trades en de FINN-
+herinnering met juiste detail-link zichtbaar. Er zijn geen echte sleutels,
+exchangeverbinding, brokerorder of live activatie gebruikt. De allereerste
+bot-onboarding op een leeg account en de afwijzing uitsluitend wegens
+ontbrekende sleutels zijn niet live bewezen; de QA-bot had al een Paper-bot
+en ontbrekende budgetlimieten blokkeerden de hervatpoging eerst. De
+serverreden bevat nog technische veldnamen. De aparte Trade Reviews- en
+native mobiele acceptatie blijven open.
 
 ## Exchange optioneel tijdens eerste live-bot-onboarding
 
