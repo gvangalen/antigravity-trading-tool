@@ -4,9 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Mijn Plan toont alleen werkelijk opgeslagen scoregrenzen
+
+Phase: `LOCAL_REPAIR_VALIDATED_AWAITING_CI`. In de onafhankelijke ingelogde
+browserherkeuring van `f1fb815ca115edd3853d57cf795c6d3590f213eb`
+bleken de vijf keuzes, Custom, opslag en teruglezing na refresh, de
+assetgebonden Plan-status, het terugvinden van een oudere BTC-setup, de
+strategiepagina, een conflicterende Automation-link, de volledige
+Automation-pagina en een 400px-onboardingweergave functioneel. QA gaf toch
+`NOT_ACCEPTED` voor volledige acceptatie: Mijn Plan toonde bij een preset met
+ontbrekende macro- en technische scoregrenzen ten onrechte `0–100` voor beide
+velden. Een nieuwe Paper-botactie, hostcheckout/release-marker en de editor
+zelf op 400px zijn in die run niet bewezen; er waren geen echte orders.
+
+Reparatiebranch `codex/setup-score-summary`, implementatie-SHA
+`7faabbd5d2a033c7857289b9c53d17650c3766c2`. Mijn Plan toont nu bij
+null-grenzen expliciet `geen grens` en onderscheidt ook eenzijdige grenzen en
+een geheel ongefilterde setup. De opgeslagen scorevoorwaarden veranderen
+niet. Lokaal gemeten: 24 gerichte setup-, onboarding- en regressietests,
+frontendtypecheck, i18n-lint en productiebuild met bijgewerkte `out/`-export
+geslaagd. CI, deployment, publieke SHA-controle en onafhankelijke live
+herkeuring voor deze reparatie zijn nog niet uitgevoerd.
+
 ## Marktconditie-ontwerp en onboarding-herstel
 
-Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. De onafhankelijke live browser-QA
+Phase: `LIVE_NOT_ACCEPTED_DISPLAY_GAP`. De onafhankelijke live browser-QA
 van de vorige kandidaat gaf `NOT_ACCEPTED` op productie-SHA
 `b3699c0c06af1e91182e878d306d388aa3479900`: Plan toonde een niet-bestaand
 ETH-plan als opgeslagen door accountbrede statusvlaggen, en `/strategy` crashte
@@ -46,9 +68,13 @@ en [Auto Deploy run 39041581382](https://github.com/gvangalen/antigravity-tradin
 slaagden op exact de merge-SHA. Daarna gaven
 `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json` beide HTTP 200 en exact deze SHA.
-Deze status-only handoff krijgt zelf een nieuwe deployment-SHA; QA stelt
-de werkelijke publieke SHA opnieuw vast. De ingelogde browserherkeuring van
-deze reparatie is nog niet uitgevoerd.
+De status-only [PR #392](https://github.com/gvangalen/antigravity-trading-tool/pull/392)
+werd daarna gemerged als `f1fb815ca115edd3853d57cf795c6d3590f213eb`.
+[Main-CI run 39041922478](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39041922478)
+en [Auto Deploy run 39042058195](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39042058195)
+slaagden; backend-health en frontend-buildinfo gaven daarna beide HTTP 200
+en deze SHA. De onafhankelijke browseruitkomst en de resterende weergavefout
+staan bovenaan.
 
 ## Leesbare setupcondities en volledige Automation-onboarding
 
