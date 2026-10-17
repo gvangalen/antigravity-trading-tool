@@ -1724,7 +1724,7 @@
           "derivativeFeeRaw": "Fee for full execution",
           "derivativeEvidenceUncertain": "These are selected executions; the complete opening position and net result are unverified. Check the full closure yourself.",
           "derivativeHistoryTruncated": "Imported history for this market is limited. Check earlier positions and missing executions on Bybit before confirming closure.",
-          "exchangeImportIntro": "Read-only import from Bitvavo and Bybit. These are evidence records, not yet closed trades or calculated profit/loss. Partial coverage or uncertain account identity remains visible.",
+          "exchangeImportIntro": "This import only reads data and never places orders. Bitvavo nevertheless requires both View and Trade permissions for detailed trade history; never grant withdrawal access. These are evidence records, not yet closed trades or calculated profit/loss. Partial coverage and uncertain account identity remain visible.",
           "exchangeImportEmpty": "No supported exchange is linked.",
           "exchangeImportError": "Exchange import is unavailable",
           "exchangeImportSync": "Sync",

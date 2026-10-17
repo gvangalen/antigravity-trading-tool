@@ -1741,7 +1741,7 @@
           "derivativeFeeRaw": "Gebühr für die gesamte Ausführung",
           "derivativeEvidenceUncertain": "Dies sind ausgewählte Ausführungen; die vollständige Anfangsposition und das Nettoergebnis sind nicht belegt. Prüfen Sie die vollständige Schließung selbst.",
           "derivativeHistoryTruncated": "Die importierte Historie für diesen Markt ist begrenzt. Prüfen Sie frühere Positionen und fehlende Ausführungen bei Bybit, bevor Sie die Schließung bestätigen.",
-          "exchangeImportIntro": "Schreibgeschützter Import von Bitvavo und Bybit. Dies sind Belege, noch keine abgeschlossenen Trades oder berechnete Gewinne/Verluste. Teilweise Abdeckung und unsichere Kontoidentität bleiben sichtbar.",
+          "exchangeImportIntro": "Dieser Import liest nur Daten und platziert keine Orders. Für die detaillierte Tradehistorie verlangt Bitvavo trotzdem Lese- und Handelsrechte; erteile niemals Auszahlungsrechte. Dies sind Belege, noch keine abgeschlossenen Trades oder berechnete Gewinne/Verluste. Teilweise Abdeckung und unsichere Kontoidentität bleiben sichtbar.",
           "exchangeImportEmpty": "Keine unterstützte Börse verknüpft.",
           "exchangeImportError": "Börsenimport nicht verfügbar",
           "exchangeImportSync": "Synchronisieren",

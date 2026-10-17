@@ -1725,7 +1725,7 @@
           "derivativeFeeRaw": "Kosten over volledige uitvoering",
           "derivativeEvidenceUncertain": "Deze gegevens tonen geselecteerde uitvoeringen; een volledige beginpositie en het nettoresultaat zijn niet bewezen. Controleer de volledige afsluiting zelf.",
           "derivativeHistoryTruncated": "De ingelezen historie voor deze markt is begrensd. Controleer eerdere posities en ontbrekende uitvoeringen op Bybit voordat je de afsluiting bevestigt.",
-          "exchangeImportIntro": "Alleen-lezen import van Bitvavo en Bybit. Dit zijn bewijsregels, nog geen afgeronde trades of berekende winst/verlies. Een gedeeltelijke dekking of onzekere accountidentiteit blijft zichtbaar.",
+          "exchangeImportIntro": "Deze import leest gegevens en plaatst geen orders. Voor gedetailleerde tradehistorie vereist Bitvavo toch een sleutel met Lezen én Handel; geef nooit opnamerechten. Dit zijn bewijsregels, nog geen afgeronde trades of berekende winst/verlies. Gedeeltelijke dekking en onzekere accountidentiteit blijven zichtbaar.",
           "exchangeImportEmpty": "Er is geen ondersteunde exchange gekoppeld.",
           "exchangeImportError": "Exchange-import is niet beschikbaar",
           "exchangeImportSync": "Synchroniseer",
