@@ -420,7 +420,7 @@ function BenchmarkStatus({ match, copy }) {
 
 export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const searchParams = useSearchParams();
-  const { locale } = useTranslation();
+  const { locale, t } = useTranslation();
   const copy = getCopy(locale);
   const activeSymbol = String(searchParams.get("symbol") || symbol || "BTC").toUpperCase();
   const requestedSetupId = String(searchParams.get("setup_id") || "").trim();
@@ -798,7 +798,9 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               eyebrow={`${copy.setupTerm} · ${copy.setupHelp}`}
               title={activePlan.setup?.name || copy.setupTerm}
               meta={`${activePlan.setup?.symbol || activeSymbol} · ${activePlan.setup?.timeframe || "–"}`}
-              detail={formatSetupScoreConditions(activePlan.setup, copy)}
+              detail={t?.setups?.marketConditions
+                ? formatSetupScoreConditions(activePlan.setup, t.setups.marketConditions)
+                : copy.notReady}
               actionLabel={copy.editSetup}
               onAction={() => setDrawer({ type: "edit-setup", setup: activePlan.setup, strategy: activePlan.strategy })}
               finnActionLabel={copy.askFinn}
