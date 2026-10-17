@@ -8,6 +8,8 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { fetchActiveSetup, fetchLastSetup, saveNewSetup } from "@/lib/api/setups";
+import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
+import { marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
 import { createStrategy, fetchLastStrategy, fetchStrategyBySetup } from "@/lib/api/strategy";
 import {
   getActiveSetupId,
@@ -126,7 +128,7 @@ export default function OnboardingPlanPage() {
   const [error, setError] = useState(null);
 
   const [setup, setSetup] = useState(DEFAULT_SETUP);
-  const [scoreBoundsConfirmed, setScoreBoundsConfirmed] = useState(false);
+  const [conditionChoice, setConditionChoice] = useState(null);
   const [strategy, setStrategy] = useState(DEFAULT_STRATEGY);
   const [savedSetup, setSavedSetup] = useState(null);
   const [savedStrategy, setSavedStrategy] = useState(null);
@@ -155,6 +157,7 @@ export default function OnboardingPlanPage() {
               : null;
 
         if (setupCandidate) {
+          setConditionChoice(marketConditionChoiceFromSetup(setupCandidate));
           const setupId = activeSetup === setupCandidate
             ? getActiveSetupId(setupCandidate)
             : getSetupId(setupCandidate);
@@ -218,13 +221,14 @@ export default function OnboardingPlanPage() {
 
   const setupValid = Boolean(
     setup.name.trim() && setup.setupType && setup.timeframe &&
-    SCORE_CATEGORIES.every((category) => {
+    conditionChoice && (conditionChoice !== "off" || !isTrade || setupDone) &&
+    (conditionChoice !== "custom" || SCORE_CATEGORIES.every((category) => {
       const minimum = Number(setup[`min_${category}_score`]);
       const maximum = Number(setup[`max_${category}_score`]);
       return setup[`min_${category}_score`] !== "" && setup[`max_${category}_score`] !== "" &&
         Number.isFinite(minimum) && Number.isFinite(maximum) &&
         minimum >= 0 && maximum <= 100 && minimum <= maximum;
-    }) &&
+    })) &&
     (isTrade || (
       setup.dcaFrequency &&
       (setup.dcaFrequency !== "weekly" || setup.dcaDay) &&
@@ -241,7 +245,7 @@ export default function OnboardingPlanPage() {
   );
 
   const handleSaveSetup = async () => {
-    if (!setupValid || !scoreBoundsConfirmed) {
+    if (!setupValid) {
       setError(copy.setupValidationError || "Complete the setup fields first.");
       return;
     }
@@ -255,10 +259,10 @@ export default function OnboardingPlanPage() {
         symbol,
         setup_type: setup.setupType,
         timeframe: setup.timeframe,
-        ...Object.fromEntries(SCORE_CATEGORIES.flatMap((category) => [
+        ...marketConditionPayload(conditionChoice, Object.fromEntries(SCORE_CATEGORIES.flatMap((category) => [
           [`min_${category}_score`, Number(setup[`min_${category}_score`])],
           [`max_${category}_score`, Number(setup[`max_${category}_score`])],
-        ])),
+        ]))),
         ...(isTrade ? {} : {
           dca_frequency: setup.dcaFrequency,
           dca_day: setup.dcaFrequency === "weekly" ? setup.dcaDay : null,
@@ -337,7 +341,7 @@ export default function OnboardingPlanPage() {
     setContinuing(true);
     const strategyId = savedStrategy?.strategy_id ?? savedStrategy?.id;
     const strategyQuery = strategyId ? `&strategy_id=${encodeURIComponent(strategyId)}` : "";
-    router.push(`/bot?onboarding=1&step=bot&action=new_bot&symbol=${encodeURIComponent(symbol)}${strategyQuery}`);
+    router.push(`/onboarding/automation?symbol=${encodeURIComponent(symbol)}${strategyQuery}`);
   };
 
   const reviewReady = setupDone && strategyDone;
@@ -435,7 +439,11 @@ export default function OnboardingPlanPage() {
             <Field label={copy.setupTypeLabel || "Type"}>
               <select
                 value={setup.setupType}
-                onChange={(event) => setSetup((current) => ({ ...current, setupType: event.target.value }))}
+                onChange={(event) => {
+                  const nextType = event.target.value;
+                  setSetup((current) => ({ ...current, setupType: nextType }));
+                  if (nextType === "trade" && conditionChoice === "off") setConditionChoice(null);
+                }}
                 disabled={setupDone || savingSetup || loading}
                 className={inputClassName}
               >
@@ -485,40 +493,33 @@ export default function OnboardingPlanPage() {
           ) : null}
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="text-sm font-black text-slate-900">{copy.scoreRangesTitle}</h3>
-            <p className="mt-1 text-xs text-slate-600">{copy.scoreRangesHelp}</p>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {SCORE_CATEGORIES.map((category) => (
-                <div key={category} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="mb-2 text-xs font-bold text-slate-700">{copy.scoreCategories?.[category]}</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {["min", "max"].map((bound) => (
-                      <Field key={bound} label={bound === "min" ? copy.scoreMinLabel : copy.scoreMaxLabel}>
-                        <input type="number" min="0" max="100" step="1"
-                          value={setup[`${bound}_${category}_score`]}
-                          onChange={(event) => setSetup((current) => ({ ...current, [`${bound}_${category}_score`]: event.target.value }))}
-                          disabled={setupDone || savingSetup || loading} className={inputClassName} />
-                      </Field>
-                    ))}
+            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")}>
+              <div className="grid gap-3 md:grid-cols-3">
+                {SCORE_CATEGORIES.map((category) => (
+                  <div key={category} className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="mb-2 text-xs font-bold text-slate-700">{copy.scoreCategories?.[category]}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {["min", "max"].map((bound) => (
+                        <Field key={bound} label={bound === "min" ? copy.scoreMinLabel : copy.scoreMaxLabel}>
+                          <input type="number" min="0" max="100" step="1"
+                            value={setup[`${bound}_${category}_score`]}
+                            onChange={(event) => setSetup((current) => ({ ...current, [`${bound}_${category}_score`]: event.target.value }))}
+                            disabled={setupDone || savingSetup || loading} className={inputClassName} />
+                        </Field>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </MarketConditionPicker>
           </div>
-
-          {!setupDone && (
-            <label className="mt-4 flex items-start gap-3 text-sm font-medium text-slate-700">
-              <input type="checkbox" checked={scoreBoundsConfirmed} onChange={(event) => setScoreBoundsConfirmed(event.target.checked)} disabled={savingSetup || loading} className="mt-1" />
-              <span>{copy.scoreRangesConfirm}</span>
-            </label>
-          )}
 
           {!setupDone ? (
             <div className="mt-5">
               <button
                 type="button"
                 onClick={handleSaveSetup}
-                disabled={!setupValid || !scoreBoundsConfirmed || savingSetup || loading}
+                disabled={!setupValid || savingSetup || loading}
                 className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {savingSetup ? copy.setupSaving || "Saving setup…" : copy.setupSave || "Save setup"}

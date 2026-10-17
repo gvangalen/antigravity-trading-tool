@@ -123,7 +123,7 @@ export default function StrategiesWorkspaceSection() {
           anchorId="strategy-new"
           guidedMode={onboardingGuidedMode}
           isComplete={strategyStepComplete}
-          nextHref="/bot?onboarding=1&step=bot"
+          nextHref="/onboarding/automation"
           assistantFlow="strategy_creation"
           assistantSuppressRestore
         />

@@ -11,7 +11,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Settings, BarChart3, Save, Info, Rocket, Target } from "lucide-react";
+import { Settings, BarChart3, Save, Rocket, Target } from "lucide-react";
 
 import { saveNewSetup, updateSetup } from "@/lib/api/setups";
 import { useModal } from "@/components/modal/ModalProvider";
@@ -19,10 +19,12 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 import { initialSetupFormState } from "@/lib/setup/setupFormState.mjs";
-import { hasSetupScoreConditions, setupScoreOriginKey, setupScorePayload } from "@/lib/setup/scoreConditions.mjs";
+import { editedCustomScorePayload, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, mayKeepUnfilteredTrade, scoreRangeTouchedFields, setupScoreOriginKey } from "@/lib/setup/scoreConditions.mjs";
+import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
+  const legacyUnfilteredTrade = mayKeepUnfilteredTrade(isEdit, initialData);
   const { t } = useTranslation();
   const copy = t?.setups?.form || {};
   const { showSnackbar } = useModal();
@@ -63,12 +65,19 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     isEdit ? initialData?.min_market_score ?? 20 : 20,
     isEdit ? initialData?.max_market_score ?? 60 : 60,
   ]);
-  const [useScoreConditions, setUseScoreConditions] = useState(() =>
-    isEdit ? hasSetupScoreConditions(initialData) : false
+  const [conditionChoice, setConditionChoice] = useState(() =>
+    isEdit ? marketConditionChoiceFromSetup(initialData) : "off"
   );
   const [scoreConditionsTouched, setScoreConditionsTouched] = useState(false);
+  const [scoreTouchedFields, setScoreTouchedFields] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    if (!legacyUnfilteredTrade && formData.setupType === "trade" && conditionChoice === "off") {
+      setConditionChoice(null);
+    }
+  }, [conditionChoice, formData.setupType, legacyUnfilteredTrade]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -90,8 +99,9 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     if (!initialData) return;
 
     setFormData(initialSetupFormState(initialData));
-    setUseScoreConditions(hasSetupScoreConditions(initialData));
+    setConditionChoice(marketConditionChoiceFromSetup(initialData));
     setScoreConditionsTouched(false);
+    setScoreTouchedFields({});
 
     setMacroScore([
       initialData.min_macro_score ?? 30,
@@ -122,6 +132,13 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
 
   const isDca = formData.setupType === "dca";
   const isTrade = formData.setupType === "trade";
+  const updateScoreRange = (category, current, setter, next) => {
+    if (Number(next[0]) !== Number(current[0]) || Number(next[1]) !== Number(current[1])) {
+      setScoreTouchedFields((previous) => scoreRangeTouchedFields(category, current, next, previous));
+      setScoreConditionsTouched(true);
+    }
+    setter(next);
+  };
   const assetOptions = Array.from(new Set([
     ...(availableAssets || []),
     selectedAsset,
@@ -139,6 +156,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
 
     if (formRef.current && !formRef.current.reportValidity()) {
       return { ok: false, reason: "validation" };
+    }
+    if (!conditionChoice || (formData.setupType === "trade" && conditionChoice === "off" && !legacyUnfilteredTrade)) {
+      setSubmitError(t?.setups?.marketConditions?.required || "Choose a market condition.");
+      return { ok: false, reason: "market_condition_required" };
     }
 
     setSubmitError("");
@@ -166,10 +187,13 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         dca_month_day: null,
       }),
 
-      ...setupScorePayload(
-        useScoreConditions, macroScore, technicalScore, marketScore,
-        isEdit && !scoreConditionsTouched ? initialData : null
-      ),
+      ...(conditionChoice === "custom" && isEdit && marketConditionChoiceFromSetup(initialData) === "custom"
+        ? editedCustomScorePayload(initialData, macroScore, technicalScore, marketScore, scoreTouchedFields)
+        : marketConditionPayload(conditionChoice, {
+            min_macro_score: macroScore[0], max_macro_score: macroScore[1],
+            min_technical_score: technicalScore[0], max_technical_score: technicalScore[1],
+            min_market_score: marketScore[0], max_market_score: marketScore[1],
+          })),
     };
 
     try {
@@ -187,8 +211,9 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         setMacroScore([30, 70]);
         setTechnicalScore([40, 80]);
         setMarketScore([20, 60]);
-        setUseScoreConditions(false);
+        setConditionChoice("off");
         setScoreConditionsTouched(false);
+        setScoreTouchedFields({});
       }
 
       const normalizedSetup = normalizeSetupSaveResponse(savedSetup);
@@ -209,6 +234,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     formData,
     isDca,
     isEdit,
+    legacyUnfilteredTrade,
     isTrade,
     loading,
     macroScore,
@@ -217,8 +243,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     selectedAsset,
     showSnackbar,
     technicalScore,
-    useScoreConditions,
+    conditionChoice,
     scoreConditionsTouched,
+    scoreTouchedFields,
+    t?.setups?.marketConditions?.required,
   ]);
 
   useImperativeHandle(ref, () => ({
@@ -469,38 +497,14 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           copy.activationTitle
         )}
 
-        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-900">
-          <input
-            type="checkbox"
-            checked={useScoreConditions}
-            onChange={(event) => {
-              setUseScoreConditions(event.target.checked);
-              setScoreConditionsTouched(true);
-            }}
-            className="mt-0.5 h-4 w-4 accent-blue-600"
-          />
-          <span>{copy.scoreConditionToggle}</span>
-        </label>
-
-        {useScoreConditions ? (
-          <>
-            <div className="flex items-start gap-2 text-sm text-[var(--text-soft)]">
-              <Info size={16} className="mt-0.5" />
-              <p>
-                {copy.scoreIntroPrefix} <strong>{copy.scoreIntroBold}</strong> {copy.scoreIntroSuffix}
-              </p>
-            </div>
-            <p className="text-xs text-[var(--text-soft)]">
-              {copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}
-            </p>
-
-            {scoreBlock(copy.macroTitle, macroScore, setMacroScore, copy.macroDescription)}
-            {scoreBlock(copy.technicalTitle, technicalScore, setTechnicalScore, copy.technicalDescription)}
-            {scoreBlock(copy.marketTitle, marketScore, setMarketScore, copy.marketDescription)}
-          </>
-        ) : (
-          <p className="text-sm text-[var(--text-soft)]">{copy.scoreConditionOff}</p>
-        )}
+        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade}>
+          <div className="space-y-5">
+            <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
+            {scoreBlock(copy.macroTitle, macroScore, (value) => updateScoreRange("macro", macroScore, setMacroScore, value), copy.macroDescription)}
+            {scoreBlock(copy.technicalTitle, technicalScore, (value) => updateScoreRange("technical", technicalScore, setTechnicalScore, value), copy.technicalDescription)}
+            {scoreBlock(copy.marketTitle, marketScore, (value) => updateScoreRange("market", marketScore, setMarketScore, value), copy.marketDescription)}
+          </div>
+        </MarketConditionPicker>
       </div>
 
       {/* SAVE */}

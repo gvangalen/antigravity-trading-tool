@@ -69,10 +69,10 @@ test("the onboarding consumer uses the real backend response without reading a l
   assert.doesNotMatch(page, /savedSetup\.id/);
 });
 
-test("keeps compact onboarding score ranges backend-owned", async () => {
+test("onboarding saves the chosen market condition through the shared score payload", async () => {
   const page = await readSource("app/onboarding/plan/page.jsx");
-  assert.doesNotMatch(page, /min_macro_score/);
-  assert.doesNotMatch(page, /max_technical_score/);
+  assert.match(page, /marketConditionPayload\(conditionChoice/);
+  assert.match(page, /<MarketConditionPicker/);
 });
 
 test("setup management duplicates through the established creation form without copying an id", async () => {
@@ -110,18 +110,22 @@ test("opening or saving a plan synchronizes its setup with the FINN workspace", 
   assert.match(workflow, /setActiveSetup\(\{ \.\.\.savedSetup, setup_id: setupId \}\)/);
 });
 
-test("onboarding hands the saved strategy to Automation and never renders a blank loading page", async () => {
-  const [planPage, botPage] = await Promise.all([
+test("onboarding opens Automation as a full page with the saved strategy", async () => {
+  const [planPage, automationPage, botPage] = await Promise.all([
     readSource("app/onboarding/plan/page.jsx"),
+    readSource("app/onboarding/automation/page.jsx"),
     readSource("app/(protected)/bot/page.jsx"),
   ]);
 
-  assert.match(planPage, /action=new_bot/);
+  assert.match(planPage, /\/onboarding\/automation\?symbol=/);
   assert.match(planPage, /strategy_id=/);
   assert.match(planPage, /savedStrategy\?\.strategy_id \?\? savedStrategy\?\.id/);
-  assert.doesNotMatch(botPage, /fallback=\{<div className="min-h-screen bg-\[#020617\]" \/>\}/);
-  assert.match(botPage, /aria-busy="true"/);
-  assert.match(botPage, /animate-pulse/);
+  assert.match(automationPage, /<AddBotForm/);
+  assert.doesNotMatch(automationPage, /<Drawer/);
+  assert.match(automationPage, /availableStrategies\.length > 1/);
+  assert.match(automationPage, /requestedStrategy\?\.symbol \|\| searchParams\.get\("symbol"\)/);
+  assert.match(botPage, /router\.replace\(`\/onboarding\/automation/);
+  assert.match(botPage, /"plan_name", "mode", "risk", "budget"/);
 });
 
 test("plan management uses setup_id for strategy, delete, and active-plan handoffs", async () => {

@@ -503,6 +503,7 @@ function getWorkflowMeta(pathname, isAnalysisV3, copy, isOnboardingRoute = false
       "/onboarding": onboardingCopy,
       "/onboarding/profile": onboardingCopy,
       "/onboarding/asset": onboardingCopy,
+      "/onboarding/automation": onboardingCopy,
       "/onboarding/complete": {
         ...onboardingCopy,
         status: copy?.pages?.onboarding?.completeStatus || "Ready",

@@ -3211,6 +3211,33 @@
     "portfolioOverviewCardTitle": "Overview"
   },
   "setups": {
+    "marketConditions": {
+      "title": "When do you want to buy?",
+      "help": "Choose one market situation in which your setup may qualify. FINN checks the score; your plan and safety limits then decide whether a purchase takes place.",
+      "required": "Choose a market situation or Set my own rules for this trade setup.",
+      "offTitle": "No extra market condition",
+      "offDescription": "This setup has no extra score limit.",
+      "offClearsTitle": "Remove all score conditions",
+      "offClearsExisting": "Saving this choice removes all existing market, macro, and technical score limits from this setup.",
+      "offRule": "No score limits are saved for this setup.",
+      "presetReplacesExisting": "Note: saving this card replaces your previous score conditions. Existing macro and technical limits will be removed.",
+      "ruleTitle": "Your rule:",
+      "selectedRule": "FINN uses this situation: {situation}.",
+      "customRule": "This setup follows the score limits you set below.",
+      "advancedTitle": "How does FINN decide? View score limits",
+      "advancedHelp": "The five situations are fixed market-score ranges. They do not measure price drops, RSI, or the Fear & Greed Index. A standard card adds no macro or technical limits. All three current scores must still be available for a reliable assessment.",
+      "scoreExplanation": "This card saves market score {min} through {max}.",
+      "customTitle": "Set my own rules",
+      "customDescription": "Choose your own market, macro, and technical score limits.",
+      "customSelected": "Adjust the three score ranges below.",
+      "options": {
+        "heavy_pressure": { "title": "The market is under heavy pressure", "description": "FINN sees a very low market score." },
+        "pressure": { "title": "The market is under pressure", "description": "FINN sees a low market score." },
+        "no_direction": { "title": "No clear direction", "description": "The market score is around the middle." },
+        "gaining_strength": { "title": "The market is gaining strength", "description": "FINN sees a higher market score." },
+        "strong": { "title": "The market is strong", "description": "FINN sees a very high market score." }
+      }
+    },
     "manager": {
       "title": "Setup management",
       "savedSuccess": "Setup saved successfully.",
@@ -3326,7 +3353,7 @@
       "scoreDefaultOrigin": "The starting bounds shown here are general product suggestions, not derived from your market data. Saving confirms the values displayed here.",
       "scoreSavedOrigin": "These are this setup's saved score limits. They may have been carried over when the setup was created or duplicated; their original source is not recorded here. Review them before saving.",
       "scoreEditedOrigin": "You changed the score limits in this form. Saving confirms the displayed values for this setup.",
-      "scorePartialOrigin": "This setup has some saved score limits and some empty fields. Only the starting values for empty fields are suggestions: without changes, those fields stay empty. Changing a slider saves all displayed limits.",
+      "scorePartialOrigin": "This setup has saved limits and empty fields. Starting values shown for empty fields are suggestions; a limit stays empty until you move that handle yourself.",
       "macroTitle": "Macro",
       "macroDescription": "Macro environment",
       "technicalTitle": "Technical",

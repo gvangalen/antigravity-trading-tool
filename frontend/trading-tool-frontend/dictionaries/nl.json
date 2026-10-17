@@ -3212,6 +3212,33 @@
     "portfolioOverviewCardTitle": "Overzicht"
   },
   "setups": {
+    "marketConditions": {
+      "title": "Wanneer wil je kopen?",
+      "help": "Kies één marktsituatie waarin jouw setup mag meedoen. FINN controleert de score; je plan en veiligheidslimieten bepalen daarna of er echt een aankoop volgt.",
+      "required": "Kies eerst een marktsituatie of Zelf bepalen voor deze trade-setup.",
+      "offTitle": "Geen extra marktvoorwaarde",
+      "offDescription": "Voor deze setup geldt geen extra scoregrens.",
+      "offClearsTitle": "Alle scorevoorwaarden verwijderen",
+      "offClearsExisting": "Hiermee verwijder je bij het opslaan alle bestaande grenzen voor markt, macro en technisch uit deze setup.",
+      "offRule": "Er worden geen scoregrenzen voor deze setup opgeslagen.",
+      "presetReplacesExisting": "Let op: deze kaart vervangt bij opslaan je eerdere scorevoorwaarden. Bestaande macro- en technische grenzen worden verwijderd.",
+      "ruleTitle": "Jouw regel:",
+      "selectedRule": "FINN gebruikt deze situatie: {situation}.",
+      "customRule": "Deze setup volgt de scoregrenzen die je hieronder zelf instelt.",
+      "advancedTitle": "Hoe bepaalt FINN dit? Bekijk scoregrenzen",
+      "advancedHelp": "De vijf situaties zijn vaste bereiken van de marktscore. Dit is geen meting van prijsdaling, RSI of de Fear & Greed Index. Macro en technisch krijgen bij een standaardkaart geen extra grens. Voor een betrouwbare beoordeling moeten wel alle drie de actuele scores beschikbaar zijn.",
+      "scoreExplanation": "Deze kaart bewaart marktscore {min} tot en met {max}.",
+      "customTitle": "Zelf bepalen",
+      "customDescription": "Stel je eigen grenzen in voor markt, macro en technisch.",
+      "customSelected": "Pas hieronder de drie scorebereiken aan.",
+      "options": {
+        "heavy_pressure": { "title": "De markt staat zwaar onder druk", "description": "FINN ziet een zeer lage marktscore." },
+        "pressure": { "title": "De markt staat onder druk", "description": "FINN ziet een lage marktscore." },
+        "no_direction": { "title": "Geen duidelijke richting", "description": "De marktscore ligt rond het midden." },
+        "gaining_strength": { "title": "De markt trekt aan", "description": "FINN ziet een hogere marktscore." },
+        "strong": { "title": "De markt is sterk", "description": "FINN ziet een zeer hoge marktscore." }
+      }
+    },
     "manager": {
       "title": "Setupbeheer",
       "savedSuccess": "Setup succesvol opgeslagen.",
@@ -3327,7 +3354,7 @@
       "scoreDefaultOrigin": "De getoonde startgrenzen zijn algemene productvoorstellen, niet uit jouw marktdata afgeleid. Met Opslaan bevestig je de waarden die hier staan.",
       "scoreSavedOrigin": "Dit zijn de opgeslagen scoregrenzen van deze setup. Ze kunnen bij aanmaak of duplicatie zijn overgenomen; hun oorspronkelijke herkomst is hier niet vastgelegd. Controleer ze voordat je opslaat.",
       "scoreEditedOrigin": "Je hebt de scoregrenzen in dit formulier aangepast. Met Opslaan bevestig je de getoonde waarden voor deze setup.",
-      "scorePartialOrigin": "Deze setup heeft enkele opgeslagen scoregrenzen en lege velden. Alleen de startwaarden voor lege velden zijn voorstellen: zonder aanpassing blijven die velden leeg. Als je een schuif wijzigt, sla je alle getoonde grenzen op.",
+      "scorePartialOrigin": "Deze setup heeft enkele opgeslagen grenzen en lege velden. Startwaarden voor lege velden zijn alleen voorstellen; ze blijven leeg totdat je die grens zelf verschuift.",
       "macroTitle": "Macro",
       "macroDescription": "Macro-omgeving",
       "technicalTitle": "Technisch",

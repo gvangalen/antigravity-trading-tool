@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Leesbare setupcondities en volledige Automation-onboarding
+
+Phase: `LOCAL_CANDIDATE_READY_FOR_DEPLOY`. De gebruiker vroeg op 2026-10-17
+om de wijzigingen live te zetten voor browserproeven. Kandidaat:
+[PR #389](https://github.com/gvangalen/antigravity-trading-tool/pull/389),
+branch `codex/market-condition-cards`, implementatie-SHA
+`9bf09be3c3d9cf6f1d0f57e32b746cdb2e66dd96`. De onboarding en de
+ingelogde setup-editor tonen vijf leesbare marktsituaties, een zesde Custom-
+keuze voor exacte scoregrenzen en een aparte ongefilterde DCA-keuze. De
+laatste onboardingstap gebruikt nu `/onboarding/automation` met het
+bestaande botformulier in de volledige onboardingomgeving. Een ontbrekende
+strategie-ID bij meerdere strategieën leidt tot expliciete selectie;
+oude onboardinglinks behouden naam, modus, risicoprofiel en budget.
+
+Gemeten vóór deployment: lokale frontendproductiebuild en typecheck,
+i18n-lint en -tests, setup-scoretests en 13 gerichte onboarding-handofftests
+geslaagd. De onafhankelijke code-QA vond op de laatste implementatie-SHA
+geen codebevindingen en draaide 16 gerichte tests opnieuw met 16 geslaagd.
+Alle vijf PR-CI-jobs op die SHA zijn geslaagd: workflow-validation,
+backend-tests, frontend-quality, mobile-quality en security-baseline. Deze
+batch wijzigt geen FINN-actiecontract, workerpad of modelprovider; de
+worker-driven action matrix en real-provider regressie hebben daarom geen
+gewijzigd contract om lokaal opnieuw te bewijzen. Dit is geen claim over
+live botuitvoering of een onafhankelijke browseracceptatie.
+
+Vóór deze kandidaat gaven publieke backend-health en frontend-buildinfo
+beide HTTP 200 met SHA `eabe64f25381dc1be18742aac4a344e79512a36c`.
+Main-CI, Auto Deploy, publieke identiteit en de ingelogde browserproef zijn
+voor deze kandidaat nog niet uitgevoerd. De oudere Trade Reviews-QA-uitkomst
+`NOT_ACCEPTED` en de native mobiele bewijsleemte blijven afzonderlijk open.
+
 ## Browser-QA reparatie: hervatfout en exchange-autofill
 
 Phase: `LIVE_BROWSER_QA_PASSED_WITH_EVIDENCE_GAPS`. In de onafhankelijke

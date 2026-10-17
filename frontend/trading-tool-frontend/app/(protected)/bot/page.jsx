@@ -570,6 +570,15 @@ function BotPageInner() {
 
   useEffect(() => {
     const action = searchParams.get("action");
+    if (searchParams.get("onboarding") === "1") {
+      const query = new URLSearchParams();
+      for (const key of ["symbol", "strategy_id", "plan_name", "mode", "risk", "budget"]) {
+        const value = searchParams.get(key);
+        if (value) query.set(key, value);
+      }
+      router.replace(`/onboarding/automation${query.size ? `?${query}` : ""}`);
+      return;
+    }
     if (action === "new_bot") {
       if (!strategies.length) return;
 
