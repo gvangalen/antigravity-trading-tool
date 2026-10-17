@@ -31,6 +31,7 @@ import { invalidateStrategyDataCaches, useStrategyData } from "@/hooks/useStrate
 import { fetchBotConfigs } from "@/lib/api/botApi";
 import { deleteSetup, fetchActiveSetup, fetchSetupMarketMatches } from "@/lib/api/setups";
 import { getSetupId } from "@/lib/setup/activeSetup";
+import { formatSetupScoreConditions } from "@/lib/setup/scoreConditionSummary.mjs";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
 const COPY = {
@@ -56,6 +57,9 @@ const COPY = {
     missingScores: "Actuele scores ontbreken",
     loadingScores: "Scores laden",
     noScoreConditions: "Geen scorevoorwaarden",
+    noLimit: "geen grens",
+    from: "vanaf",
+    through: "tot en met",
     scoreDate: "Scoredatum",
     matchHint: "Een setupmatch is geen instapsignaal.",
     selectedAsset: "Asset en ritme",
@@ -137,6 +141,9 @@ const COPY = {
     missingScores: "Current scores unavailable",
     loadingScores: "Loading scores",
     noScoreConditions: "No score conditions",
+    noLimit: "no limit",
+    from: "from",
+    through: "through",
     scoreDate: "Score date",
     matchHint: "A setup match is not an entry signal.",
     selectedAsset: "Asset and cadence",
@@ -218,6 +225,9 @@ const COPY = {
     missingScores: "Aktuelle Scores fehlen",
     loadingScores: "Scores werden geladen",
     noScoreConditions: "Keine Score-Bedingungen",
+    noLimit: "ohne Grenze",
+    from: "ab",
+    through: "bis einschließlich",
     scoreDate: "Score-Datum",
     matchHint: "Ein Setup-Abgleich ist kein Einstiegssignal.",
     selectedAsset: "Asset und Rhythmus",
@@ -788,7 +798,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               eyebrow={`${copy.setupTerm} · ${copy.setupHelp}`}
               title={activePlan.setup?.name || copy.setupTerm}
               meta={`${activePlan.setup?.symbol || activeSymbol} · ${activePlan.setup?.timeframe || "–"}`}
-              detail={activePlan.setup ? `${activePlan.setup.min_market_score ?? 0}–${activePlan.setup.max_market_score ?? 100} ${copy.market} · ${activePlan.setup.min_macro_score ?? 0}–${activePlan.setup.max_macro_score ?? 100} ${copy.macro} · ${activePlan.setup.min_technical_score ?? 0}–${activePlan.setup.max_technical_score ?? 100} ${copy.technical}` : copy.notReady}
+              detail={formatSetupScoreConditions(activePlan.setup, copy)}
               actionLabel={copy.editSetup}
               onAction={() => setDrawer({ type: "edit-setup", setup: activePlan.setup, strategy: activePlan.strategy })}
               finnActionLabel={copy.askFinn}
