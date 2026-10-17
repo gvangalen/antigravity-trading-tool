@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN trade-review live browser candidate
 
-Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. De gebruiker heeft
+Phase: `INDEPENDENT_BROWSER_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. De gebruiker heeft
 expliciet gevraagd om de complete huidige reflectiekandidaat te deployen voor
 een onafhankelijke live browserproef. Dit vervangt de voorgaande kandidaat als
 actieve FINN-release; de native mobiele `NOT_ACCEPTED`-bewijsleemte hieronder
@@ -45,8 +45,30 @@ API-secret in deze taak gebruikt. Daarom is live Bitvavo-import nog
 afgeleid. Ook automatische providerbewezen afsluiting van alle exchange-
 posities is geen huidige productclaim: de kandidaat gebruikt expliciete
 gebruikersbevestiging bij exchange-episodes.
-Onafhankelijke QA beoordeelt daarna de ingelogde browserflow en rapporteert
-een afzonderlijk oordeel voor de geteste scope.
+
+[Statushandoff PR #378](https://github.com/gvangalen/antigravity-trading-tool/pull/378)
+werd als `2bed0ecb7d48115323d5fdab8e20b28a10309b22` gedeployed na
+[main-CI run 39019771493](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39019771493)
+en [Auto Deploy run 39019900983](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39019900983),
+beide geslaagd. Publieke backend-health en frontend-buildinfo gaven HTTP 200
+en exact die SHA. Onafhankelijke QA verifieerde dezelfde identiteit opnieuw.
+Op het aparte QA-account was de onboarding eerst onvolledig; QA voltooide die
+via de zichtbare browser-UI met een synthetisch BTC-plan en een handmatige
+Paper-bot zonder startsaldo, order of live activatie. Daarna slaagden toegang
+tot `/report`, de lege Trade Reviews-staat met nul gesloten posities en geen
+exchange, behoud na refresh en een FINN-antwoord dat botbeslissingen niet als
+tradeafsluiting claimt. De Trade Reviews-kaart bleef op 390 px leesbaar.
+
+QA gaf **NOT_ACCEPTED voor de volledige Trade Reviews-acceptatie** wegens
+ontbrekend bewijs: er was geen veilig volledig afgesloten Paper-tradefixture,
+zodat gedeeltelijke/volledige sluiting, dossier, screenshot, les en
+leshergebruik niet end-to-end zijn beproefd. Bitvavo/Bybit-import,
+eigenaarisolatie met een tweede reviewfixture en geforceerde foutpaden bleven
+eveneens onbeproefd. QA meldde een P2: de aangrenzende bestaande
+Tradingrapport-sectie wordt op 390 px horizontaal afgeknipt; de nieuwe lege
+Trade Reviews-kaart zelf niet. Dit is een browser-scopeverdict en heft de
+aparte native iPhone-bewijsleemte niet op. Er zijn geen productcode of
+releaseinstellingen aangepast tijdens QA.
 
 ## Mobiele FINN-herkeuring: wijzigingsverzoek zonder opgeslagen setup
 
