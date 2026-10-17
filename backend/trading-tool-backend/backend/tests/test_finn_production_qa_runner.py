@@ -48,6 +48,47 @@ def test_workflow_is_manual_protected_and_serialized():
     assert "timeout-minutes: 90" in workflow
 
 
+def test_trade_review_preflight_reads_only_and_redacts_fixture_data(monkeypatch):
+    module = _module()
+    called = []
+    def fake_request_json(*, url, token, timeout_seconds):
+        called.append((url, token, timeout_seconds))
+        if url.endswith("/trade-reviews?limit=1"):
+            return 200, {"items": [{"id": 987, "note": "private journal"}],
+                         "total": 1, "weekly": {}, "excluded": {}}, 12.5, None
+        return 200, {"sources": [{"exchange_name": "private exchange"}]}, 8.0, None
+
+    monkeypatch.setattr(module, "request_json", fake_request_json)
+    report = module.trade_review_preflight(base_url="https://example.invalid", token="private-token")
+    assert report["precondition_passed"] is True
+    assert report["coverage"] == "authenticated_read_routes_only"
+    assert len(called) == 3
+    assert all(url.startswith("https://example.invalid/api/bot/") for url, _, _ in called)
+    assert all(token == "private-token" for _, token, _ in called)
+    assert "private journal" not in json.dumps(report)
+    assert "private exchange" not in json.dumps(report)
+    assert "987" not in json.dumps(report)
+    assert "trade_review_preflight" in module.ALLOWED_PROFILES
+    assert "trade_review_preflight" in WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "trade_review_preflight" in DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+
+
+def test_trade_review_preflight_rejects_disabled_rollout(monkeypatch):
+    module = _module()
+    def fake_request_json(*, url, token, timeout_seconds):
+        if url.endswith("/trade-reviews?limit=1"):
+            return 200, {"status": "disabled", "items": [], "total": 0,
+                         "weekly": {}, "excluded": {}}, 1.0, None
+        return 404, {}, 1.0, "server_http_response"
+
+    monkeypatch.setattr(module, "request_json", fake_request_json)
+    report = module.trade_review_preflight(base_url="https://example.invalid", token="fixture")
+    assert report["precondition_passed"] is False
+    assert report["checks"]["reviews"]["schema_valid"] is False
+    assert report["checks"]["spot_sources"]["http_status"] == 404
+    assert len(report["checks"]) == 3
+
+
 def test_stale_score_paper_profile_is_explicitly_gated_and_owner_isolated(monkeypatch):
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")

@@ -40,11 +40,13 @@ artifact hash. A case is not passed merely because its endpoint returns 200.
 
 ## Evidence boundaries
 
-The existing protected production runner has no `trade_review` profile. Its
-general FINN action matrix and `auth_preflight` do not establish the cases
-above. A manual independent QA run or a dedicated protected profile is needed
-for each live claim. Local synthetic/provider tests are Build evidence, not a
-substitute for linked-account or authenticated UI evidence.
+The protected `trade_review_preflight` profile checks only the authenticated
+list and exchange-source read routes on the bound QA fixture. It accepts no
+manifest or fixture actions, exports no trade data, and reports only HTTP
+status, schema checks and timing. A passing preflight is not acceptance of
+the cases above. Those require a manual independent QA run or additional
+dedicated protected coverage. Local synthetic/provider tests are Build
+evidence, not a substitute for linked-account or authenticated UI evidence.
 
 If an exchange test account is unavailable, QA may still report results for
 Paper, access, dossier and coach cases, but the overall linked-exchange claim

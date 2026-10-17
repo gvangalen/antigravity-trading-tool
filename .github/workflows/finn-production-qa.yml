@@ -16,6 +16,7 @@ name: FINN Production QA
         type: choice
         options:
           - auth_preflight
+          - trade_review_preflight
           - manifest_key
           - targeted_regression
           - runtime_acceptance
@@ -96,7 +97,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|auto_paper_trade_history|portfolio_paper_fx)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|auto_paper_trade_history|portfolio_paper_fx)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -106,8 +107,12 @@ jobs:
             echo "Safe fixture execution requires fixture-action authorization." >&2
             exit 1
           fi
-          if [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key)$ ]] && { [ "$ALLOW_FIXTURE_ACTIONS" = "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" = "true" ]; }; then
+          if [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key)$ ]] && { [ "$ALLOW_FIXTURE_ACTIONS" = "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" = "true" ]; }; then
             echo "Fixture actions are invalid for a non-case QA profile." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "trade_review_preflight" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ]; }; then
+            echo "Trade-review preflight does not accept a manifest." >&2
             exit 1
           fi
           if [ "$QA_PROFILE" = "score2_stale_paper" ] && { [ "$MANIFEST_ID" != "none" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then

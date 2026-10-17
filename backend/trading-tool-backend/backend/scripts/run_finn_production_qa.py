@@ -29,6 +29,7 @@ from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_
 
 ALLOWED_PROFILES = {
     "auth_preflight",
+    "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
     "runtime_acceptance",
@@ -605,6 +606,43 @@ def authenticated_preflight(*, base_url: str, token: str) -> Dict[str, Any]:
         "fixture_authenticated": status == 200,
         "attempt_count": attempts,
     }
+
+
+def trade_review_preflight(*, base_url: str, token: str) -> Dict[str, Any]:
+    """Check only owner-authenticated read routes, without exporting trade data.
+
+    This is a rollout/schema precondition, not a trade-review acceptance verdict.
+    It deliberately does not synchronize an exchange, analyze a trade, or read
+    a screenshot. The protected QA fixture may have no closed trades or keys.
+    """
+    endpoints = (
+        ("reviews", "/api/bot/trade-reviews?limit=1", {"items", "total", "weekly", "excluded"}),
+        ("spot_sources", "/api/bot/exchange-trade-imports", {"sources"}),
+        ("derivative_sources", "/api/bot/bybit-derivatives", {"sources"}),
+    )
+    checks: Dict[str, Any] = {}
+    for name, path, required in endpoints:
+        status, payload, latency, error = request_json(
+            url=f"{base_url}{path}", token=token, timeout_seconds=10.0,
+        )
+        valid = status == 200 and required.issubset(payload)
+        if name == "reviews":
+            valid = (valid and payload.get("status") != "disabled"
+                     and isinstance(payload.get("items"), list)
+                     and isinstance(payload.get("total"), int)
+                     and isinstance(payload.get("weekly"), dict)
+                     and isinstance(payload.get("excluded"), dict))
+        else:
+            valid = valid and isinstance(payload.get("sources"), list)
+        checks[name] = {
+            "http_status": status,
+            "latency_ms": round(latency, 2),
+            "error_category": error,
+            "schema_valid": bool(valid),
+        }
+    return {"checks": checks,
+            "precondition_passed": all(item["schema_valid"] for item in checks.values()),
+            "coverage": "authenticated_read_routes_only"}
 
 
 def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:
@@ -1780,6 +1818,20 @@ def main() -> int:
                 report["error_category"] = report["auth_preflight"].get("error_category") or "auth"
             elif args.profile == "auth_preflight":
                 report["outcome"] = "passed"
+            elif args.profile == "trade_review_preflight":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("trade_review_preflight_manifest_forbidden")
+                report["trade_review_preflight"] = trade_review_preflight(
+                    base_url=args.base_url.rstrip("/"), token=token,
+                )
+                report["outcome"] = (
+                    "passed" if report["trade_review_preflight"]["precondition_passed"]
+                    else "failed"
+                )
+                report["qa_status"] = (
+                    "PRECONDITION_PASSED" if report["outcome"] == "passed"
+                    else "PRECONDITION_FAILED"
+                )
             elif args.profile == "score2_stale_paper":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("stale_fixture_manifest_forbidden")
