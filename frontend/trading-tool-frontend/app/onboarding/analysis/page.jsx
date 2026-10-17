@@ -211,7 +211,7 @@ function IndicatorSelector({
   onOpen,
   disabled = false,
 }) {
-  const showDropdown = !disabled && isOpen && query.trim().length > 0 && !selected;
+  const showDropdown = !disabled && isOpen && !selected;
 
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -373,6 +373,7 @@ export default function OnboardingAnalysisPage() {
       display_name: normalizedAsset,
       asset_class: null,
     });
+    setOpenSelector("market");
   }, [selectedAsset, selectedAssetChoice, status?.has_asset]);
 
   useEffect(() => {
@@ -466,7 +467,7 @@ export default function OnboardingAnalysisPage() {
 
   const filteredMarket = useMemo(() => {
     const normalized = normalizeName(marketQuery);
-    if (!normalized) return [];
+    if (!normalized) return marketCatalog;
     return marketCatalog
       .filter(
         (option) =>
@@ -478,7 +479,7 @@ export default function OnboardingAnalysisPage() {
 
   const filteredMacro = useMemo(() => {
     const normalized = normalizeName(macroQuery);
-    if (!normalized) return [];
+    if (!normalized) return macroCatalog;
     return macroCatalog
       .filter(
         (option) =>
@@ -490,7 +491,7 @@ export default function OnboardingAnalysisPage() {
 
   const filteredTechnical = useMemo(() => {
     const normalized = normalizeName(technicalQuery);
-    if (!normalized) return [];
+    if (!normalized) return technicalCatalog;
     return technicalCatalog
       .filter(
         (option) =>
