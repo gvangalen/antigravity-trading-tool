@@ -369,7 +369,7 @@ export default function FinnTradeReviews() {
   const [deepLinkError, setDeepLinkError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [rolloutDisabled, setRolloutDisabled] = useState(false);
+  const [rolloutDisabled, setRolloutDisabled] = useState(null);
   const [exchangeImports, setExchangeImports] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState(false);
@@ -420,7 +420,14 @@ export default function FinnTradeReviews() {
     }
   }, []);
 
-  useEffect(() => { loadImports(); }, [loadImports]);
+  useEffect(() => {
+    if (rolloutDisabled === false) loadImports();
+    if (rolloutDisabled === true) {
+      setExchangeImports([]);
+      setImportFillPage(null);
+      setImportError(false);
+    }
+  }, [loadImports, rolloutDisabled]);
 
   async function syncExchange(exchangeName) {
     setSyncingExchange(exchangeName);
@@ -548,8 +555,8 @@ export default function FinnTradeReviews() {
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{copy.description}</p>
         </div>
         <div className="px-6 py-6 sm:px-8">
-          <div className="mb-5 rounded-xl bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-900 dark:bg-blue-950/40 dark:text-blue-100">{copy.limitedHistory}</div>
-          <div className="mb-5 rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-800">
+          {rolloutDisabled === false && <div className="mb-5 rounded-xl bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-900 dark:bg-blue-950/40 dark:text-blue-100">{copy.limitedHistory}</div>}
+          {rolloutDisabled === false && <div className="mb-5 rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-800">
             <h3 className="font-black text-slate-900 dark:text-white">{copy.exchangeImportTitle}</h3>
             <p className="mt-1 leading-relaxed text-slate-600 dark:text-slate-300">{copy.exchangeImportIntro}</p>
             {importLoading && <p role="status" className="mt-2 text-slate-500">{copy.loading}</p>}
@@ -581,7 +588,7 @@ export default function FinnTradeReviews() {
               await load();
               router.replace(`/report?trade_review_id=${reviewId}`, { scroll: false });
             }} />}
-          </div>
+          </div>}
           {deepLinkLoading && <p role="status" className="mb-4 text-sm text-slate-500">{copy.loading}</p>}
           {deepLinkError && <p role="alert" className="mb-4 text-sm text-red-600">{copy.error}</p>}
           {loading ? <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> {copy.loading}</p> : error ? <p role="alert" className="text-sm text-red-600">{copy.error}</p> : (
