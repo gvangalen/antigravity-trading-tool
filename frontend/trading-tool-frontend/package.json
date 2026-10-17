@@ -12,7 +12,7 @@
     "typecheck": "rm -rf .next/types && tsc --noEmit",
     "lint:i18n": "node scripts/check-i18n-literals.mjs",
     "test:i18n": "node --test tests/i18n-hardening.test.mjs tests/report-source-snapshot.test.mjs",
-    "test:commands": "node --test tests/finn-command-search.test.mjs tests/finn-workspace-shell.test.mjs tests/finn-chat-locale.test.mjs tests/bot-manual-order-currency.test.mjs",
+    "test:commands": "node --test tests/finn-command-search.test.mjs tests/finn-workspace-shell.test.mjs tests/finn-chat-locale.test.mjs tests/bot-manual-order-currency.test.mjs tests/bot-api-error-message.test.mjs",
     "test:proposals": "node --test tests/finn-proposal-card-state.test.mjs",
     "test:setups": "node --test tests/dca-weekday.test.mjs tests/setup-score-conditions.test.mjs",
     "audit:high": "npm audit --omit=dev --audit-level=high",

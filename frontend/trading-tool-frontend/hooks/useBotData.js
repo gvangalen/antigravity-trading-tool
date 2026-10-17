@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
 
 import {
   fetchBotConfigs,
@@ -348,7 +349,7 @@ export default function useBotData(options = {}) {
       } catch (err) {
 
         console.error(err);
-        setError(err.message);
+        setError(getBotApiErrorMessage(err, "Bot aanmaken mislukt."));
         throw err;
 
       } finally {
@@ -380,7 +381,7 @@ export default function useBotData(options = {}) {
       } catch (err) {
 
         console.error(err);
-        setError(err.message);
+        setError(getBotApiErrorMessage(err, "Bot bijwerken mislukt."));
         throw err;
 
       } finally {

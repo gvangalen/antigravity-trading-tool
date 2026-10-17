@@ -81,7 +81,12 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
             <button
               type="button"
               key={ex.id}
-              onClick={() => { setSelectedExchange(ex); setStep(2); }}
+              onClick={() => {
+                setSelectedExchange(ex);
+                setForm({ api_key: "", api_secret: "", api_passphrase: "" });
+                setStatus(null);
+                setStep(2);
+              }}
               className="group relative flex items-center gap-5 p-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[1.5rem] hover:border-blue-600 transition-all text-left"
             >
               <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center text-2xl shadow-sm">
@@ -118,7 +123,11 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
         </div>
         <button 
           type="button"
-          onClick={() => setStep(1)}
+          onClick={() => {
+            setForm({ api_key: "", api_secret: "", api_passphrase: "" });
+            setStatus(null);
+            setStep(1);
+          }}
           className="ml-auto text-[9px] font-black text-slate-400 uppercase tracking-tighter hover:text-slate-600 underline"
         >
           {copy.change}
@@ -129,7 +138,11 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
         <div className="space-y-2">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{copy.apiKeyLabel}</label>
           <input 
-            type="text" 
+            type="password"
+            name="exchange_api_key_new"
+            autoComplete="new-password"
+            spellCheck={false}
+            autoCapitalize="none"
             placeholder={copy.apiKeyPlaceholder}
             className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
             value={form.api_key}
@@ -140,7 +153,11 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
         <div className="space-y-2">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{copy.apiSecretLabel}</label>
           <input 
-            type="password" 
+            type="password"
+            name="exchange_api_secret_new"
+            autoComplete="new-password"
+            spellCheck={false}
+            autoCapitalize="none"
             placeholder={copy.apiSecretPlaceholder}
             className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
             value={form.api_secret}
@@ -152,7 +169,11 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{copy.passphraseLabel}</label>
             <input 
-              type="password" 
+              type="password"
+              name="exchange_api_passphrase_new"
+              autoComplete="new-password"
+              spellCheck={false}
+              autoCapitalize="none"
               placeholder={copy.passphrasePlaceholder}
               className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 outline-none transition-all"
               value={form.api_passphrase}

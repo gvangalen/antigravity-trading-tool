@@ -4,9 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Browser-QA reparatie: hervatfout en exchange-autofill
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. In de onafhankelijke
+browserproef op `e0eecd7fec16b50cb1deca5e064da8a6bd58d05f` werkte de
+uitgestelde Live-botroute: zonder exchange werd een nieuwe bot gepauzeerd
+opgeslagen, bleef hij gepauzeerd na refresh en verscheen de FINN-herinnering.
+De bestaande Paper-bot bleef intact; er waren geen orders. **Nu koppelen**
+toonde Bitvavo en Bybit met hun sleutelvelden. QA vond nog twee reparaties:
+de browser vulde opgeslagen accountgegevens automatisch in Bybit-velden, en
+een terecht met HTTP 400 geweigerde Hervatten-actie toonde alleen
+`API request failed`. De eerste-bot-onboarding is op dat QA-account niet
+bewezen omdat daar al een Paper-bot bestond. Afwijzing specifiek wegens
+ontbrekende exchange-sleutels is niet afzonderlijk live getest; ontbrekende
+budgetlimieten werden eerst geweigerd.
+
+Op `codex/deferred-exchange-qa-fixes` zijn de exchange-sleutelvelden als
+nieuwe wachtwoordvelden gemarkeerd, worden waarden bij wisselen van exchange
+gewist en staat browserautofill op het omringende formulier uit. De
+botinterface leest voor Hervatten de bruikbare `detail` uit de serverrespons
+en gebruikt bij onverwachte responses een lokale fallback. Twee gerichte
+frontendregressietests voor API-foutmeldingen en de i18n-/command-/
+proposalchecks, frontendtypecheck, productiebuild met bijgewerkte tracked
+`out/`-export en audit:high slaagden. Onafhankelijke
+browserherkeuring van deze reparaties en een lege eerste-bot-account ontbreken
+nog.
+
 ## Exchange optioneel tijdens eerste live-bot-onboarding
 
-Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. Na de eerste UI-reparatie verduidelijkte
+Phase: `LIVE_BROWSER_QA_PARTIAL_EVIDENCE_GAPS`. Na de eerste UI-reparatie verduidelijkte
 de gebruiker het gewenste contract: exchange-koppeling in onboarding moet
 optioneel zijn. Op `codex/deferred-exchange-onboarding` krijgt een nieuwe live
 bot de keuze **Later koppelen** (standaard) of **Nu koppelen**. Later slaat de
@@ -31,8 +57,14 @@ en [Auto Deploy run 39022404099](https://github.com/gvangalen/antigravity-tradin
 slaagden. Publieke backend-health en frontend-buildinfo gaven allebei HTTP 200
 en exact deze SHA. Een status-only handoff krijgt een eigen deployment-SHA;
 QA verifieert de werkelijk publieke SHA opnieuw. De onafhankelijke browser-QA
-is nog niet uitgevoerd. Er zijn geen echte sleutels of orders voor deze
-Build-validatie gebruikt.
+is uitgevoerd zoals hierboven beschreven. Een eerste QA-preflight keek naar
+`143.47.186.148`, de oude rollbackhost, en stopte terecht bij een SHA-mismatch.
+De actuele productiehost `134.98.150.125` had daarna zowel in checkout als
+`LAST_GOOD_COMMIT` dezelfde SHA als publieke backend en frontend; QA
+verifieerde dit zelfstandig vóór de browserproef. De verouderde hostverwijzing
+in `deploy_live.sh` en mogelijke QA-configuratie blijft een operationele
+follow-up. Er zijn geen echte sleutels of orders voor deze Build-validatie
+gebruikt.
 
 ## Eerste live bot: exchange-koppeling in aanmaakscherm
 
