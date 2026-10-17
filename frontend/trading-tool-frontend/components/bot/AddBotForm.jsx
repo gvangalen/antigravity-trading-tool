@@ -425,7 +425,7 @@ const AddBotForm = forwardRef(function AddBotForm({
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} autoComplete="off" className="space-y-6">
       {guidedMode ? (
         <div className="space-y-4 rounded-[28px] border border-blue-100 bg-blue-50/60 p-5">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">

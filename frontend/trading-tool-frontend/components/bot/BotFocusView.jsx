@@ -7,6 +7,7 @@ import { formatCurrency, formatDateTime } from "@/lib/i18n";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import BotAgentCard from "@/components/bot/BotAgentCard";
 import { openFinnContext } from "@/lib/finnCommandSearch";
+import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
 
 export default function BotFocusView({
   bots, activeBot, onSelectBot, decision, pendingOrder, portfolio, trades, allTrades,
@@ -103,7 +104,7 @@ export default function BotFocusView({
     try {
       await onUpdateBot(activeBot.id, { is_active: !activeBot.is_active });
     } catch (error) {
-      setActivityError(error?.message || copy.activityFailed);
+      setActivityError(getBotApiErrorMessage(error, copy.activityFailed));
     } finally {
       setChangingActivity(false);
     }
