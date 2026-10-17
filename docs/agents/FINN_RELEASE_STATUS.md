@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Browser-QA reparatie: hervatfout en exchange-autofill
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. In de onafhankelijke
+Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_RECHECK`. In de onafhankelijke
 browserproef op `e0eecd7fec16b50cb1deca5e064da8a6bd58d05f` werkte de
 uitgestelde Live-botroute: zonder exchange werd een nieuwe bot gepauzeerd
 opgeslagen, bleef hij gepauzeerd na refresh en verscheen de FINN-herinnering.
@@ -26,7 +26,14 @@ botinterface leest voor Hervatten de bruikbare `detail` uit de serverrespons
 en gebruikt bij onverwachte responses een lokale fallback. Twee gerichte
 frontendregressietests voor API-foutmeldingen en de i18n-/command-/
 proposalchecks, frontendtypecheck, productiebuild met bijgewerkte tracked
-`out/`-export en audit:high slaagden. Onafhankelijke
+`out/`-export en audit:high slaagden.
+[PR #383](https://github.com/gvangalen/antigravity-trading-tool/pull/383) werd
+als `a41992a52e94ad1463f749b87c65bff801f0ba07` gemerged na vijf groene
+PR-checks. [Main-CI run 39023454645](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39023454645)
+en [Auto Deploy run 39023593524](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39023593524)
+slaagden. Publieke backend-health en frontend-buildinfo gaven daarna beide
+HTTP 200 en exact deze SHA. Deze status-only handoff krijgt zelf een nieuwe
+deployment-SHA; QA verifieert de werkelijk publieke SHA opnieuw. Onafhankelijke
 browserherkeuring van deze reparaties en een lege eerste-bot-account ontbreken
 nog.
 
