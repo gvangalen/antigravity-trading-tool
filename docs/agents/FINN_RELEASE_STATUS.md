@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Opgeslagen marktkeuze blijft een FINN-voorwaarde
 
-Phase: `LOCAL_REPAIR_VALIDATED_AWAITING_CI`. Onafhankelijke live QA op
+Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. Onafhankelijke live QA op
 `69ecb55f6f4237ec6a314d0016dd68da43118bd9` vond een inhoudelijke
 tegenstrijdigheid: de nieuwe BTC-vrijdag-DCA had de preset “Onder druk” en
 marktgrenzen 26–45 opgeslagen, maar FINN noemde die keuze later slechts
@@ -35,8 +35,20 @@ claimen. De nieuwe test met een tweede repositorysessie controleert ook
 owner-scoped teruglezing en scheiding van setup en strategie. Dit is Build-
 evidence, geen onafhankelijke live QA-acceptatie. Er is geen action contract
 of provideradapter gewijzigd; de volledige action-matrix is daarom voor deze
-read-only kandidaat niet van toepassing. CI en deployment zijn nog niet
-gemeten.
+read-only kandidaat niet van toepassing.
+
+[PR #397](https://github.com/gvangalen/antigravity-trading-tool/pull/397)
+werd gemerged als `ce10c07a2e50ea80c3bd6935979646f300d9f722`. Alle vijf
+PR-CI-jobs slaagden in
+[run 39055755644](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39055755644).
+[Main-CI run 39055918490](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39055918490)
+en [Auto Deploy run 39056066241](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39056066241)
+slaagden op dezelfde SHA. Publieke backend-health en frontend-buildinfo gaven
+beide HTTP 200 en `ce10c07a2e50ea80c3bd6935979646f300d9f722` op
+2026-10-17. Deze documentatie-update creëert zelf een nieuw commit en kan
+een nieuwe deployment-SHA opleveren; QA verifieert daarom de actuele publieke
+SHA in haar eigen preflight. De inhoudelijke Build-kandidaat is live, maar
+onafhankelijke live QA voor de opgeslagen presetbetekenis is nog niet gedaan.
 
 ## Mijn Plan toont alleen werkelijk opgeslagen scoregrenzen
 
