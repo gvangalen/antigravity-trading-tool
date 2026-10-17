@@ -19,7 +19,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 import { initialSetupFormState } from "@/lib/setup/setupFormState.mjs";
-import { marketConditionChoiceFromSetup, marketConditionPayload, setupScoreOriginKey, setupScorePayload } from "@/lib/setup/scoreConditions.mjs";
+import { editedCustomScorePayload, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, setupScoreOriginKey } from "@/lib/setup/scoreConditions.mjs";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
@@ -167,8 +167,8 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         dca_month_day: null,
       }),
 
-      ...(conditionChoice === "custom" && isEdit && !scoreConditionsTouched && marketConditionChoiceFromSetup(initialData) === "custom"
-        ? setupScorePayload(true, macroScore, technicalScore, marketScore, initialData)
+      ...(conditionChoice === "custom" && isEdit && marketConditionChoiceFromSetup(initialData) === "custom"
+        ? editedCustomScorePayload(initialData, macroScore, technicalScore, marketScore)
         : marketConditionPayload(conditionChoice, {
             min_macro_score: macroScore[0], max_macro_score: macroScore[1],
             min_technical_score: technicalScore[0], max_technical_score: technicalScore[1],
@@ -473,7 +473,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           copy.activationTitle
         )}
 
-        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading}>
+        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null}>
           <div className="space-y-5">
             <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
             {scoreBlock(copy.macroTitle, macroScore, (value) => { setMacroScore(value); setScoreConditionsTouched(true); }, copy.macroDescription)}

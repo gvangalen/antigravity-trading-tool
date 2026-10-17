@@ -2,7 +2,7 @@
 
 import { MARKET_CONDITIONS } from "@/lib/setup/scoreConditions.mjs";
 
-export default function MarketConditionPicker({ choice, onChange, copy = {}, disabled = false, children }) {
+export default function MarketConditionPicker({ choice, onChange, copy = {}, disabled = false, existingLimits = false, previousChoice = null, children }) {
   const selected = MARKET_CONDITIONS.find((item) => item.id === choice);
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-4">
@@ -10,7 +10,7 @@ export default function MarketConditionPicker({ choice, onChange, copy = {}, dis
       <p className="text-sm leading-relaxed text-slate-600">{copy.help}</p>
       <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${choice === "off" ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
         <input type="radio" name="market-condition" checked={choice === "off"} onChange={() => onChange("off")} className="mt-1 accent-blue-600" />
-        <span><strong className="block text-sm text-slate-900">{copy.offTitle}</strong><span className="mt-1 block text-xs leading-relaxed text-slate-600">{copy.offDescription}</span></span>
+        <span><strong className="block text-sm text-slate-900">{existingLimits ? copy.offClearsTitle : copy.offTitle}</strong><span className="mt-1 block text-xs leading-relaxed text-slate-600">{existingLimits ? copy.offClearsExisting : copy.offDescription}</span></span>
       </label>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {MARKET_CONDITIONS.map((band) => (
@@ -32,9 +32,10 @@ export default function MarketConditionPicker({ choice, onChange, copy = {}, dis
       </div>
       {choice ? (
         <div aria-live="polite" className="rounded-2xl bg-blue-50 px-4 py-3 text-sm leading-relaxed text-slate-800">
-          <strong>{copy.ruleTitle}</strong> {choice === "off" ? copy.offRule : selected ? copy.selectedRule?.replace("{situation}", copy.options?.[choice]?.title?.toLowerCase() || "") : copy.customRule}
+          <strong>{copy.ruleTitle}</strong> {choice === "off" ? (existingLimits ? copy.offClearsExisting : copy.offRule) : selected ? copy.selectedRule?.replace("{situation}", copy.options?.[choice]?.title?.toLowerCase() || "") : copy.customRule}
         </div>
       ) : null}
+      {existingLimits && selected && choice !== previousChoice ? <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">{copy.presetReplacesExisting}</p> : null}
       <details key={choice === "custom" ? "custom" : "preset"} defaultOpen={choice === "custom"} className="rounded-2xl border border-slate-200 bg-white p-4">
         <summary className="cursor-pointer text-sm font-semibold text-blue-700">{copy.advancedTitle}</summary>
         <p className="mt-3 text-xs leading-relaxed text-slate-600">{copy.advancedHelp}</p>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MARKET_CONDITIONS, hasPartialSetupScoreConditions, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, setupScoreOriginKey, setupScorePayload } from "../lib/setup/scoreConditions.mjs";
+import { MARKET_CONDITIONS, editedCustomScorePayload, hasPartialSetupScoreConditions, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, setupScoreOriginKey, setupScorePayload } from "../lib/setup/scoreConditions.mjs";
 
 test("saved or duplicated score limits are not labeled as product defaults", () => {
   const copied = {
@@ -43,6 +43,20 @@ test("no condition and saved custom bounds round-trip without changing older set
     min_macro_score: 30, max_macro_score: 70,
     min_technical_score: null, max_technical_score: null,
     min_market_score: 20, max_market_score: 60,
+  });
+});
+
+test("changing one custom slider handle leaves every other absent limit absent", () => {
+  const existing = { min_market_score: 20, max_market_score: null, min_macro_score: null, max_macro_score: 70 };
+  assert.deepEqual(editedCustomScorePayload(existing, [30, 70], [40, 80], [20, 60]), {
+    min_macro_score: null, max_macro_score: 70,
+    min_technical_score: null, max_technical_score: null,
+    min_market_score: 20, max_market_score: null,
+  });
+  assert.deepEqual(editedCustomScorePayload(existing, [30, 70], [40, 80], [15, 60]), {
+    min_macro_score: null, max_macro_score: 70,
+    min_technical_score: null, max_technical_score: null,
+    min_market_score: 15, max_market_score: null,
   });
 });
 
