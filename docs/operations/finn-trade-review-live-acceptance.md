@@ -19,6 +19,16 @@ be established explicitly under the fixture contract before exchange cases
 are marked tested. Do not select an ordinary user by heuristic or put an
 exchange key, token, screenshot, note or transaction payload in QA artifacts.
 
+Bitvavo's [REST API permissions](https://docs.bitvavo.com/docs/rest-api/introduction/)
+require both View access and Trade digital assets to retrieve order and trade
+history. This importer calls the private trades endpoint, so a View-only key
+cannot prove the Bitvavo fill path. Trade permission also authorizes orders
+outside this import route. Use a new key only with explicit owner authorization
+and a bounded QA account and IP scope; never reuse a key disclosed in chat.
+Without that authorization, mark live Bitvavo import **untested** while
+continuing the other acceptance cases. The QA import route itself must make
+no broker order calls regardless of key permissions.
+
 ## Acceptance matrix
 
 QA records each case as passed, failed or untested, with the deployed SHA,
