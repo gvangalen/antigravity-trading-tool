@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.schemas.finn_v2_evidence_schema import ActiveSetupData
+from backend.domain.saved_setup_market_condition import saved_setup_market_condition
 
 
 def _dca_day_name(value: object) -> str | None:
@@ -23,6 +24,7 @@ class SetupToolAdapter:
                 "timeframe": row.get("timeframe"),
                 "setup_type": row.get("setup_type"),
                 "description": row.get("description"),
+                "saved_market_condition": saved_setup_market_condition(row),
                 "dca_frequency": row.get("dca_frequency"),
                 "dca_day": row.get("dca_day"),
                 "dca_day_name": _dca_day_name(row.get("dca_day")),
@@ -41,6 +43,7 @@ class SetupToolAdapter:
             timeframe=setup.get("timeframe"),
             setup_type=setup.get("setup_type"),
             description=setup.get("description"),
+            saved_market_condition=saved_setup_market_condition(setup),
             dca_frequency=setup.get("dca_frequency"),
             dca_day=setup.get("dca_day"),
             dca_day_name=_dca_day_name(setup.get("dca_day")),

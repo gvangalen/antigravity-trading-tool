@@ -174,6 +174,9 @@ class FinnResponsesToolCatalog:
             if name == "get_active_plan_and_strategy":
                 description += (
                     " Returns one selected saved setup and its linked strategy, not a list or assessment. "
+                    "The setup's saved_market_condition is derived from persisted score bounds: "
+                    "an exact preset is a real eligibility filter, not merely description text. "
+                    "A matching scheduled DCA day still does not guarantee a purchase. "
                     "For only a saved setup's market, macro or technical score boundaries, "
                     "use get_saved_setup: those fields are on the setup and do not require a strategy. "
                     "For a single saved DCA plan, read this tool to verify its base amount, score bands "
@@ -191,7 +194,10 @@ class FinnResponsesToolCatalog:
             if name == "get_saved_setup":
                 description += (
                     " Read one owner-scoped saved setup by its name, including its market, macro "
-                    "and technical minimum and maximum score boundaries. These are setup fields, "
+                    "and technical minimum and maximum score boundaries. The derived "
+                    "saved_market_condition identifies an exact preset such as Onder druk "
+                    "as a saved eligibility condition; description is only the user's free-text "
+                    "background. These are setup fields, "
                     "independent of how many strategies are linked. Do not read or choose a strategy "
                     "to answer a question only about these setup fields."
                 )

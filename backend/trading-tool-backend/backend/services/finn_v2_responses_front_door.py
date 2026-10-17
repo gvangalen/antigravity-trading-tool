@@ -262,6 +262,8 @@ class FinnResponsesFrontDoor:
                 "asset": row.get("symbol"),
                 "analysis_timeframe": row.get("timeframe"),
                 "setup_type": row.get("setup_type"),
+                "saved_market_condition": row.get("saved_market_condition"),
+                "user_setup_description": row.get("description"),
                 "dca_purchase_schedule": ({
                     "frequency": row.get("dca_frequency"),
                     "weekday": row.get("dca_day_name"),
@@ -332,6 +334,8 @@ class FinnResponsesFrontDoor:
                 "linked_bot_count": "Zero means no bot linked to this setup in the complete owner-scoped inventory.",
                 "linked_bot_total": "Use this exact collection count for any summary, rather than recounting prose rows.",
                 "score_conditions": "An absent bound is not configured. A literal zero is a configured bound.",
+                "saved_market_condition": "Derived from saved score bounds; a preset is a setup eligibility filter, not a guaranteed purchase.",
+                "user_setup_description": "Optional user background, not a score condition or strategy execution rule.",
                 "score_condition_groups": "These owner-scoped groups give exact setup names and counts for score-bound summaries.",
             },
         }
@@ -375,6 +379,11 @@ class FinnResponsesFrontDoor:
             "owner-scoped collection before summarizing totals. Use typed score-condition "
             "groups for exact counts; if asked how many, state each count explicitly. "
             "A missing bound is distinct from a bound of zero. "
+            "For a saved setup, saved_market_condition is derived from its persisted score "
+            "bounds. A named preset is a setup eligibility filter, while description is "
+            "free user background and a linked strategy holds execution rules. A DCA "
+            "weekday plus an eligible setup is not proof that a purchase will occur; "
+            "check fresh current scores and execution state before claiming a buy. "
             "When one strategy must be selected and several exist, ask which one. "
             "If a general boundary can be answered without the exact saved rule, answer "
             "that boundary first. For example, a rule for one asset does not automatically "
