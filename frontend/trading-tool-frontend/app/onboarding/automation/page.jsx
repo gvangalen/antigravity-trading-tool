@@ -22,28 +22,40 @@ function AutomationStep() {
   const { configs: bots, createBot, loading: botLoading, error: botError } = useBotData();
   const [savedBot, setSavedBot] = useState(null);
   const [continuing, setContinuing] = useState(false);
+  const [selectedStrategyId, setSelectedStrategyId] = useState("");
   const completionRequested = useRef(false);
 
-  const symbol = String(searchParams.get("symbol") || status?.active_asset || "").toUpperCase();
   const requestedStrategyId = Number(searchParams.get("strategy_id"));
+  const requestedStrategy = useMemo(() =>
+    Number.isFinite(requestedStrategyId) && requestedStrategyId > 0
+      ? strategies.find((item) => Number(item.id) === requestedStrategyId) || null
+      : null,
+  [requestedStrategyId, strategies]);
+  const symbol = String(requestedStrategy?.symbol || searchParams.get("symbol") || status?.active_asset || "").toUpperCase();
+  const availableStrategies = useMemo(() =>
+    symbol
+      ? strategies.filter((item) => String(item.symbol || "").toUpperCase() === symbol)
+      : strategies,
+  [strategies, symbol]);
   const strategy = useMemo(() => {
     if (Number.isFinite(requestedStrategyId) && requestedStrategyId > 0) {
-      return strategies.find((item) => Number(item.id) === requestedStrategyId) || null;
+      return requestedStrategy;
     }
-    return strategies.find((item) => String(item.symbol || "").toUpperCase() === symbol) || null;
-  }, [requestedStrategyId, strategies, symbol]);
+    if (availableStrategies.length === 1) return availableStrategies[0];
+    return availableStrategies.find((item) => String(item.id) === selectedStrategyId) || null;
+  }, [requestedStrategyId, requestedStrategy, availableStrategies, selectedStrategyId]);
   const setup = useMemo(() =>
     setups.find((item) => Number(item.id) === Number(strategy?.setup_id)) || strategy?.setup || null,
   [setups, strategy]);
   const initialValues = useMemo(() => strategy ? ({
-    name: `${strategy.name} Bot`,
+    name: searchParams.get("plan_name") || `${strategy.name} Bot`,
     symbol: symbol || strategy.symbol || "",
     strategy_id: strategy.id,
-    is_live: false,
+    is_live: searchParams.get("mode") === "live",
     mode: "manual",
-    risk_profile: "balanced",
-    budget_total_eur: 1000,
-  }) : null, [strategy, symbol]);
+    risk_profile: searchParams.get("risk") || "balanced",
+    budget_total_eur: Number(searchParams.get("budget")) || 1000,
+  }) : null, [strategy, symbol, searchParams]);
   const existingBot = useMemo(() => bots.find((item) =>
     Number(item.strategy_id || item.strategy?.id) === Number(strategy?.id)
   ) || null, [bots, strategy]);
@@ -116,6 +128,25 @@ function AutomationStep() {
         </p>
       ) : null}
 
+      {!requestedStrategyId && availableStrategies.length > 1 ? (
+        <div className="mb-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <label htmlFor="onboarding-automation-strategy" className="block text-sm font-black text-slate-900">
+            {copy.form?.strategyLabel || "Kies de strategie voor deze bot"}
+          </label>
+          <select id="onboarding-automation-strategy" value={selectedStrategyId}
+            onChange={(event) => {
+              setSelectedStrategyId(event.target.value);
+              setSavedBot(null);
+            }}
+            className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-blue-500">
+            <option value="">{copy.form?.strategyPlaceholder || "Kies een strategie"}</option>
+            {availableStrategies.map((item) => (
+              <option key={item.id} value={item.id}>{item.name} · {item.symbol}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
       {statusLoading || strategiesLoading || botLoading.configs ? (
         <div className="rounded-[28px] border border-slate-200 bg-white p-8 text-sm font-semibold text-slate-500">
           {guide.pendingLabel || "Loading…"}
@@ -161,7 +192,7 @@ function AutomationStep() {
             onSaved={handleSaved}
           />
         </section>
-      ) : (
+      ) : availableStrategies.length > 1 && !selectedStrategyId && !requestedStrategyId ? null : (
         <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
           {guide.lockedBody || "Save a strategy before creating the bot."}
           <button type="button" onClick={() => router.push(backHref)} className="mt-4 block font-black underline">
