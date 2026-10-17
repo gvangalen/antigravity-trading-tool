@@ -3238,6 +3238,13 @@
       "customTitle": "Zelf bepalen",
       "customDescription": "Stel je eigen grenzen in voor markt, macro en technisch.",
       "customSelected": "Pas hieronder de drie scorebereiken aan.",
+      "savedNotReady": "Nog niet compleet",
+      "savedNoConditions": "Geen scorevoorwaarden",
+      "savedCustomTitle": "Eigen voorwaarden",
+      "savedBetween": "tussen {min} en {max}",
+      "savedFrom": "vanaf {min}",
+      "savedThrough": "tot en met {max}",
+      "savedCategories": { "market": "markt", "macro": "macro", "technical": "technisch" },
       "options": {
         "heavy_pressure": { "title": "Zwaar onder druk", "description": "Een zeer lage marktscore", "rule": "Deze setup mag meedoen wanneer de marktscore zeer laag is." },
         "pressure": { "title": "Onder druk", "description": "Een lage marktscore", "rule": "Deze setup mag meedoen wanneer de marktscore laag is." },

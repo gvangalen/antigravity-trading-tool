@@ -1,23 +1,36 @@
+import { marketConditionChoiceFromSetup } from "./scoreConditions.mjs";
+
 const CATEGORIES = ["market", "macro", "technical"];
 
-export function formatSetupScoreConditions(setup, copy) {
-  if (!setup) return copy.notReady;
+function fillBounds(template, min, max) {
+  return String(template || "")
+    .replace("{min}", String(min))
+    .replace("{max}", String(max));
+}
 
-  const hasAnyLimit = CATEGORIES.some((category) =>
-    setup[`min_${category}_score`] != null || setup[`max_${category}_score`] != null
-  );
-  if (!hasAnyLimit) return copy.noScoreConditions;
+export function formatSetupScoreConditions(setup, copy = {}) {
+  if (!setup) return copy.savedNotReady;
 
-  return CATEGORIES.map((category) => {
+  const choice = marketConditionChoiceFromSetup(setup);
+  if (choice === "off") return copy.savedNoConditions;
+
+  if (choice !== "custom") {
+    const option = copy.options?.[choice];
+    if (option?.title && option?.rule) return `${option.title} · ${option.rule}`;
+  }
+
+  const savedLimits = CATEGORIES.flatMap((category) => {
     const min = setup[`min_${category}_score`];
     const max = setup[`max_${category}_score`];
-    const condition = min == null && max == null
-      ? copy.noLimit
-      : min == null
-        ? `${copy.through} ${max}`
-        : max == null
-          ? `${copy.from} ${min}`
-          : `${min}–${max}`;
-    return `${copy[category]} ${condition}`;
-  }).join(" · ");
+    if (min == null && max == null) return [];
+
+    const template = min == null
+      ? copy.savedThrough
+      : max == null
+        ? copy.savedFrom
+        : copy.savedBetween;
+    return [`${copy.savedCategories?.[category]} ${fillBounds(template, min, max)}`];
+  });
+
+  return `${copy.savedCustomTitle}: ${savedLimits.join("; ")}`;
 }

@@ -3254,6 +3254,13 @@
       "customTitle": "Selbst festlegen",
       "customDescription": "Lege eigene Grenzen für Markt, Makro und Technik fest.",
       "customSelected": "Passe die drei Scorebereiche unten an.",
+      "savedNotReady": "Noch nicht vollständig",
+      "savedNoConditions": "Keine Score-Bedingungen",
+      "savedCustomTitle": "Eigene Bedingungen",
+      "savedBetween": "zwischen {min} und {max}",
+      "savedFrom": "ab {min}",
+      "savedThrough": "bis einschließlich {max}",
+      "savedCategories": { "market": "Markt", "macro": "Makro", "technical": "Technik" },
       "options": {
         "heavy_pressure": { "title": "Stark unter Druck", "description": "Ein sehr niedriger Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore sehr niedrig ist." },
         "pressure": { "title": "Unter Druck", "description": "Ein niedriger Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore niedrig ist." },

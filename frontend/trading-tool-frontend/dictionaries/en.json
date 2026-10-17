@@ -3237,6 +3237,13 @@
       "customTitle": "Set my own rules",
       "customDescription": "Choose your own market, macro, and technical score limits.",
       "customSelected": "Adjust the three score ranges below.",
+      "savedNotReady": "Not complete yet",
+      "savedNoConditions": "No score conditions",
+      "savedCustomTitle": "Custom conditions",
+      "savedBetween": "between {min} and {max}",
+      "savedFrom": "from {min}",
+      "savedThrough": "through {max}",
+      "savedCategories": { "market": "market", "macro": "macro", "technical": "technical" },
       "options": {
         "heavy_pressure": { "title": "Heavy pressure", "description": "A very low market score", "rule": "This setup may qualify when the market score is very low." },
         "pressure": { "title": "Under pressure", "description": "A low market score", "rule": "This setup may qualify when the market score is low." },
