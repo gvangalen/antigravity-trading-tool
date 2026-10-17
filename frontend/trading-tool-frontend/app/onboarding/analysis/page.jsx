@@ -214,7 +214,7 @@ function IndicatorSelector({
   const showDropdown = !disabled && isOpen && !selected;
 
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="min-w-0 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-black tracking-tight text-slate-900">{title}</h2>
         {success ? (
@@ -226,19 +226,21 @@ function IndicatorSelector({
       </div>
 
       <div className="space-y-3">
-        <div className="relative">
-          <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            onFocus={() => {
-              if (!disabled) onOpen();
-            }}
-            placeholder={placeholder}
-            disabled={saving || disabled}
-            className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-300 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-          />
+        <div className="min-w-0">
+          <div className="relative">
+            <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              onFocus={() => {
+                if (!disabled) onOpen();
+              }}
+              placeholder={placeholder}
+              disabled={saving || disabled}
+              className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-300 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+            />
+          </div>
 
           {showDropdown ? (
             <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.22)]">
@@ -246,16 +248,16 @@ function IndicatorSelector({
                 {loading ? (
                   <div className="px-3 py-3 text-sm font-semibold text-slate-500">Loading…</div>
                 ) : options.length > 0 ? (
-                  <div className="grid gap-1.5">
+                  <div className="grid min-w-0 grid-cols-1 gap-1.5">
                     {options.map((option) => (
                       <button
                         key={option.name}
                         type="button"
                         onClick={() => onSelect(option)}
                         disabled={saving}
-                        className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex min-w-0 w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-black text-slate-900">
                             {getOptionLabel(option)}
                           </div>
@@ -265,7 +267,7 @@ function IndicatorSelector({
                             </div>
                           ) : null}
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">
+                        <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">
                           {selectLabel}
                         </span>
                       </button>
@@ -705,7 +707,7 @@ export default function OnboardingAnalysisPage() {
         </div>
       </section>
 
-      <div className="mt-5 grid gap-5">
+      <div className="mt-5 grid min-w-0 grid-cols-1 gap-5">
         <IndicatorSelector
           title={copy.marketTitle || "1. Market indicator"}
           placeholder={copy.marketPlaceholder || "Search a market indicator"}
