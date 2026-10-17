@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MARKET_CONDITIONS, editedCustomScorePayload, hasPartialSetupScoreConditions, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, setupScoreOriginKey, setupScorePayload } from "../lib/setup/scoreConditions.mjs";
+import { MARKET_CONDITIONS, editedCustomScorePayload, hasPartialSetupScoreConditions, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, scoreRangeTouchedFields, setupScoreOriginKey, setupScorePayload } from "../lib/setup/scoreConditions.mjs";
 
 test("saved or duplicated score limits are not labeled as product defaults", () => {
   const copied = {
@@ -53,10 +53,19 @@ test("changing one custom slider handle leaves every other absent limit absent",
     min_technical_score: null, max_technical_score: null,
     min_market_score: 20, max_market_score: null,
   });
-  assert.deepEqual(editedCustomScorePayload(existing, [30, 70], [40, 80], [15, 60]), {
+  assert.deepEqual(editedCustomScorePayload(existing, [30, 70], [40, 80], [15, 60], { min_market_score: true }), {
     min_macro_score: null, max_macro_score: 70,
     min_technical_score: null, max_technical_score: null,
     min_market_score: 15, max_market_score: null,
+  });
+  // A handle moved 30 → 31 → 30 is still intentionally set to 30.
+  const moved = scoreRangeTouchedFields("macro", [30, 70], [31, 70]);
+  const returned = scoreRangeTouchedFields("macro", [31, 70], [30, 70], moved);
+  assert.deepEqual(returned, { min_macro_score: true });
+  assert.deepEqual(editedCustomScorePayload(existing, [30, 70], [40, 80], [20, 60], returned), {
+    min_macro_score: 30, max_macro_score: 70,
+    min_technical_score: null, max_technical_score: null,
+    min_market_score: 20, max_market_score: null,
   });
 });
 

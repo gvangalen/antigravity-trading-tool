@@ -36,22 +36,25 @@ export function marketConditionPayload(choice, customBounds) {
   throw new Error("Choose a market condition before saving");
 }
 
-const CUSTOM_DEFAULTS = {
-  min_macro_score: 30, max_macro_score: 70,
-  min_technical_score: 40, max_technical_score: 80,
-  min_market_score: 20, max_market_score: 60,
-};
-
 // Existing partial setups show fallback slider values. Keep absent limits
-// absent unless the corresponding handle actually moves from its fallback.
-export function editedCustomScorePayload(existing, macro, technical, market) {
+// absent unless the corresponding handle was explicitly moved, including when
+// it was moved away and then back to the displayed fallback value.
+export function editedCustomScorePayload(existing, macro, technical, market, touchedFields = {}) {
   const visible = setupScorePayload(true, macro, technical, market);
   if (!existing) return visible;
   return Object.fromEntries(SCORE_FIELDS.map((field) => [
     field,
-    existing[field] == null && Number(visible[field]) === CUSTOM_DEFAULTS[field]
+    existing[field] == null && !touchedFields[field]
       ? null : visible[field],
   ]));
+}
+
+export function scoreRangeTouchedFields(category, previousRange, nextRange, touchedFields = {}) {
+  return {
+    ...touchedFields,
+    ...(Number(previousRange[0]) !== Number(nextRange[0]) ? { [`min_${category}_score`]: true } : {}),
+    ...(Number(previousRange[1]) !== Number(nextRange[1]) ? { [`max_${category}_score`]: true } : {}),
+  };
 }
 
 export function hasSetupScoreConditions(setup) {
