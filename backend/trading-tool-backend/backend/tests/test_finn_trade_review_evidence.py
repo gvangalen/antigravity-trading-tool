@@ -68,6 +68,54 @@ def test_ai_rejects_unbound_evidence_ids():
         validate_analysis(result, {"fill:1"})
 
 
+def test_model_cannot_assess_plan_following_from_fills_without_original_plan():
+    raw = _analysis("De trade is gesloten.")
+    raw["observations"][0]["theme"] = "plan_followed"
+    with pytest.raises(ValueError, match="Original plan"):
+        validate_analysis(raw, {"fill:1"})
+    with pytest.raises(ValueError, match="Original plan"):
+        validate_analysis(raw, {"fill:1", "plan:snapshot"})
+    raw["observations"][0]["evidence_ids"].append("plan:snapshot")
+    assert validate_analysis(raw, {"fill:1", "plan:snapshot"})["observations"][0]["theme"] == "plan_followed"
+
+
+def test_real_provider_selection_contract_retries_an_unbound_response(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+    calls = []
+
+    async def fake_ai(**kwargs):
+        calls.append(kwargs)
+        raw = _analysis("Modeltekst wordt niet getoond")
+        if len(calls) == 1:
+            raw["observations"][0]["evidence_ids"] = []
+        return raw
+
+    monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+    result = asyncio.run(module._validated_model_analysis(
+        {"pnl_eur_before_fees": "10", "plan": None}, {"fill:1"}, image=None,
+    ))
+    assert len(calls) == 2
+    assert calls[0]["model_override"] == "gpt-6-luna"
+    assert '"allowed_evidence_ids": ["fill:1"]' in calls[0]["prompt"]
+    assert '"plan_followed"' not in calls[0]["prompt"]
+    assert "repair_instruction" in calls[1]["prompt"]
+    assert result["observations"][0]["evidence_ids"] == ["fill:1"]
+
+
+def test_provider_error_does_not_trigger_an_unbounded_repair_loop(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+    calls = []
+
+    async def fake_ai(**kwargs):
+        calls.append(kwargs)
+        return {"error": "provider_unavailable"}
+
+    monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+    with pytest.raises(ValueError, match="AI unavailable"):
+        asyncio.run(module._validated_model_analysis({}, {"fill:1"}, image=None))
+    assert len(calls) == 1
+
+
 def test_only_server_supplied_confirmed_lesson_can_be_rendered():
     context = {"prior_user_confirmed_lessons_untrusted": [{
         "review_id": 12, "symbol": "BTC", "lesson_text_untrusted": "Mijn bevestigde les",
@@ -288,7 +336,6 @@ def test_untrusted_visual_signal_cannot_become_visible_model_text(signal):
     ("exit_process", "sluiting op 2026-10-16T10:00:00+00:00"),
     ("timing", "entry was op 2026-10-16T09:00:00+00:00"),
     ("risk", "entrywaarde was €100.00"),
-    ("plan_followed", "geen oorspronkelijk plan"),
 ])
 def test_question_summary_uses_selected_theme_and_server_facts(theme, expected):
     raw = _analysis("De trade is gesloten.")

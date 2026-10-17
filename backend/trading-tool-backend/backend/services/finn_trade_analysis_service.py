@@ -1,6 +1,7 @@
 """Evidence-bound retrospective FINN analysis; never dispatches trade actions."""
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 
@@ -301,6 +302,8 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
         theme = observation.get("theme")
         if theme not in THEMES or not isinstance(refs, list) or not refs or any(ref not in allowed for ref in refs):
             raise ValueError("Ungrounded analysis observation")
+        if theme == "plan_followed" and ("plan:snapshot" not in allowed or "plan:snapshot" not in refs):
+            raise ValueError("Original plan was not grounded")
         checked.append({"text": OBSERVATION_TEMPLATES[theme], "evidence_ids": refs,
                         "theme": theme})
     if "screenshot:user-upload" in allowed:
@@ -376,6 +379,50 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
             "comparison": "Deze eerdere gebruikersles is reflectiecontext, geen bewijs dat het huidige plan is gevolgd.",
         }
     return rendered
+
+
+def _review_model() -> str:
+    return os.getenv("FINN_TRADE_REVIEW_MODEL", os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna")).strip() or "gpt-6-luna"
+
+
+async def _validated_model_analysis(context: dict, allowed: set[str], *,
+                                    image: bytes | None, question: str | None = None,
+                                    model_name: str | None = None) -> dict:
+    """Keep model selection bounded to server evidence, with one repair attempt."""
+    model_name = model_name or _review_model()
+    permitted_themes = sorted(THEMES if "plan:snapshot" in allowed else THEMES - {"plan_followed"})
+    task = {
+        "facts": context,
+        "user_question_untrusted": question,
+        "output_contract": {
+            "required_fields": ["summary", "observations", "uncertainty", "question",
+                                "visual_signal", "prior_lesson_review_id"],
+            "observations": "Geef 1 tot 3 observaties. Elke observatie heeft text, theme en een niet-lege evidence_ids-array.",
+            "allowed_themes": permitted_themes,
+            "allowed_evidence_ids": sorted(allowed),
+            "evidence_rule": "Gebruik uitsluitend exacte IDs uit allowed_evidence_ids. Verzin geen IDs of thema's.",
+            "visual_signal_rule": "Gebruik unclear wanneer screenshotpixels geen betrouwbare observatie toelaten; zonder screenshot null.",
+        },
+    }
+    for attempt in range(2):
+        if attempt:
+            task["repair_instruction"] = (
+                "Je vorige selectie voldeed niet aan het bewijscontract. "
+                "Lever een nieuwe JSON-selectie met ten minste een geldige evidence_id "
+                "per observatie. Gebruik geen tekst of IDs uit je vorige antwoord."
+            )
+        raw = await openai_client.ask_gpt_json_async(
+            prompt=json.dumps(task, default=str), system_role=SYSTEM_ROLE,
+            max_tokens=900 if question is None else 650, retries=1, image_png=image,
+            model_override=model_name,
+            reasoning_effort="none" if model_name == "gpt-6-luna" else None,
+        )
+        try:
+            return validate_analysis(raw, allowed, context, question_mode=question is not None)
+        except ValueError:
+            if not isinstance(raw, dict) or raw.get("error") or attempt:
+                raise
+    raise ValueError("Invalid analysis response")
 
 
 class FinnTradeAnalysisService:
@@ -479,16 +526,14 @@ class FinnTradeAnalysisService:
         context, allowed = evidence_context(review)
         context["prior_user_confirmed_lessons_untrusted"] = await self._prior_confirmed_lessons(user_id, review)
         input_revision = review["input_revision"]
+        model_name = _review_model()
         try:
             image = await self.reviews.get_screenshot(user_id, review_id) if review.get("has_screenshot") else None
             with ai_usage_context(user_id=user_id, entry_point="finn_trade_review",
                                   purpose="finn_trade_review", symbol=str(review_id),
                                   run_kind="scheduled" if scheduled else "interactive"):
-                raw = await openai_client.ask_gpt_json_async(
-                    prompt=json.dumps(context, default=str), system_role=SYSTEM_ROLE,
-                    max_tokens=900, retries=1, image_png=image,
-                )
-            analysis = validate_analysis(raw, allowed, context)
+                analysis = await _validated_model_analysis(context, allowed, image=image,
+                                                           model_name=model_name)
             status, reason = "ready", None
         except Exception as exc:
             analysis = None
@@ -505,7 +550,7 @@ class FinnTradeAnalysisService:
             WHERE id=:id AND user_id=:user_id AND analysis_status='running'
               AND analysis_updated_at=:claim_time AND input_revision=:input_revision
         """), {"status": status, "analysis": json.dumps(analysis) if analysis else None,
-               "model": openai_client.model if analysis else None,
+               "model": model_name if analysis else None,
                "reason": reason, "id": review_id, "user_id": user_id,
                "claim_time": claim_time, "input_revision": input_revision})
         await self.session.commit()
@@ -524,16 +569,13 @@ class FinnTradeAnalysisService:
         image = await self.reviews.get_screenshot(user_id, review_id) if review.get("has_screenshot") else None
         await self._reserve_user_ai_call(user_id, review_id, "question",
                                          review["input_revision"])
-        prompt = json.dumps({"facts": context, "user_question_untrusted": question}, default=str)
+        model_name = _review_model()
         try:
             with ai_usage_context(user_id=user_id, entry_point="finn_trade_review_question",
                                   purpose="finn_trade_review_question", symbol=str(review_id),
                                   run_kind="interactive"):
-                raw = await openai_client.ask_gpt_json_async(
-                    prompt=prompt, system_role=SYSTEM_ROLE, max_tokens=650, retries=1,
-                    image_png=image,
-                )
-            result = validate_analysis(raw, allowed, context, question_mode=True)
+                result = await _validated_model_analysis(context, allowed, image=image,
+                                                         question=question, model_name=model_name)
         except Exception:
             raise HTTPException(503, "FINN kon geen controleerbaar antwoord geven") from None
         await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id,741068)"),
@@ -566,7 +608,7 @@ class FinnTradeAnalysisService:
                         CAST(:evidence_snapshot AS JSONB))
             """), {"user_id": user_id, "review_id": review_id, "role": role,
                    "content": content, "evidence_ids": json.dumps(evidence_ids),
-                   "model": openai_client.model if role == "finn" else None,
+                   "model": model_name if role == "finn" else None,
                    "input_revision": review["input_revision"],
                    "evidence_snapshot": json.dumps(snapshot)})
         await self.session.commit()
