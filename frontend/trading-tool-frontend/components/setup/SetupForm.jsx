@@ -19,11 +19,12 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 import { initialSetupFormState } from "@/lib/setup/setupFormState.mjs";
-import { editedCustomScorePayload, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, scoreRangeTouchedFields, setupScoreOriginKey } from "@/lib/setup/scoreConditions.mjs";
+import { editedCustomScorePayload, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, mayKeepUnfilteredTrade, scoreRangeTouchedFields, setupScoreOriginKey } from "@/lib/setup/scoreConditions.mjs";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
+  const legacyUnfilteredTrade = mayKeepUnfilteredTrade(isEdit, initialData);
   const { t } = useTranslation();
   const copy = t?.setups?.form || {};
   const { showSnackbar } = useModal();
@@ -73,10 +74,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
-    if (!isEdit && formData.setupType === "trade" && conditionChoice === "off") {
+    if (!legacyUnfilteredTrade && formData.setupType === "trade" && conditionChoice === "off") {
       setConditionChoice(null);
     }
-  }, [conditionChoice, formData.setupType, isEdit]);
+  }, [conditionChoice, formData.setupType, legacyUnfilteredTrade]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -156,7 +157,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     if (formRef.current && !formRef.current.reportValidity()) {
       return { ok: false, reason: "validation" };
     }
-    if (!conditionChoice || (formData.setupType === "trade" && conditionChoice === "off" && !(isEdit && marketConditionChoiceFromSetup(initialData) === "off"))) {
+    if (!conditionChoice || (formData.setupType === "trade" && conditionChoice === "off" && !legacyUnfilteredTrade)) {
       setSubmitError(t?.setups?.marketConditions?.required || "Choose a market condition.");
       return { ok: false, reason: "market_condition_required" };
     }
@@ -233,6 +234,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     formData,
     isDca,
     isEdit,
+    legacyUnfilteredTrade,
     isTrade,
     loading,
     macroScore,
@@ -495,7 +497,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           copy.activationTitle
         )}
 
-        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || (isEdit && marketConditionChoiceFromSetup(initialData) === "off")}>
+        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade}>
           <div className="space-y-5">
             <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
             {scoreBlock(copy.macroTitle, macroScore, (value) => updateScoreRange("macro", macroScore, setMacroScore, value), copy.macroDescription)}

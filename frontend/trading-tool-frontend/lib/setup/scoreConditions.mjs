@@ -24,6 +24,10 @@ export function marketConditionChoiceFromSetup(setup) {
   )?.id || "custom";
 }
 
+export function mayKeepUnfilteredTrade(isEdit, setup) {
+  return Boolean(isEdit && String(setup?.setup_type || "").toLowerCase() === "trade" && marketConditionChoiceFromSetup(setup) === "off");
+}
+
 export function marketConditionPayload(choice, customBounds) {
   if (choice === "off") return Object.fromEntries(SCORE_FIELDS.map((field) => [field, null]));
   const band = MARKET_CONDITIONS.find((item) => item.id === choice);

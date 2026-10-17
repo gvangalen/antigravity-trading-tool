@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MARKET_CONDITIONS, editedCustomScorePayload, hasPartialSetupScoreConditions, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, scoreRangeTouchedFields, setupScoreOriginKey, setupScorePayload } from "../lib/setup/scoreConditions.mjs";
+import { MARKET_CONDITIONS, editedCustomScorePayload, hasPartialSetupScoreConditions, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, mayKeepUnfilteredTrade, scoreRangeTouchedFields, setupScoreOriginKey, setupScorePayload } from "../lib/setup/scoreConditions.mjs";
 
 test("saved or duplicated score limits are not labeled as product defaults", () => {
   const copied = {
@@ -44,6 +44,13 @@ test("no condition and saved custom bounds round-trip without changing older set
     min_technical_score: null, max_technical_score: null,
     min_market_score: 20, max_market_score: 60,
   });
+});
+
+test("only an existing unfiltered trade may retain Off when editing", () => {
+  assert.equal(mayKeepUnfilteredTrade(false, { setup_type: "trade" }), false);
+  assert.equal(mayKeepUnfilteredTrade(true, { setup_type: "dca" }), false);
+  assert.equal(mayKeepUnfilteredTrade(true, { setup_type: "trade" }), true);
+  assert.equal(mayKeepUnfilteredTrade(true, { setup_type: "trade", min_market_score: 0, max_market_score: 25 }), false);
 });
 
 test("changing one custom slider handle leaves every other absent limit absent", () => {
