@@ -3214,6 +3214,7 @@
     "marketConditions": {
       "title": "When do you want to buy?",
       "help": "Choose one market situation in which your setup may qualify. FINN checks the score; your plan and safety limits then decide whether a purchase takes place.",
+      "required": "Choose a market situation or Set my own rules for this trade setup.",
       "offTitle": "No extra market condition",
       "offDescription": "This setup has no extra score limit.",
       "offClearsTitle": "Remove all score conditions",

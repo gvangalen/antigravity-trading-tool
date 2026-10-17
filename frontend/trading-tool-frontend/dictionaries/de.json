@@ -3231,6 +3231,7 @@
     "marketConditions": {
       "title": "Wann möchtest du kaufen?",
       "help": "Wähle eine Marktsituation, in der dein Setup infrage kommt. FINN prüft den Score; danach entscheiden dein Plan und die Sicherheitslimits, ob ein Kauf erfolgt.",
+      "required": "Wähle eine Marktsituation oder Selbst festlegen für dieses Trade-Setup.",
       "offTitle": "Keine zusätzliche Marktbedingung",
       "offDescription": "Für dieses Setup gilt keine zusätzliche Scoregrenze.",
       "offClearsTitle": "Alle Scorebedingungen entfernen",

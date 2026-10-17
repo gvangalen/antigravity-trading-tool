@@ -73,6 +73,12 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
+    if (!isEdit && formData.setupType === "trade" && conditionChoice === "off") {
+      setConditionChoice(null);
+    }
+  }, [conditionChoice, formData.setupType, isEdit]);
+
+  useEffect(() => {
     if (isEdit) return;
     const normalized = String(selectedAsset || "").trim().toUpperCase();
     if (!normalized) return;
@@ -149,6 +155,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
 
     if (formRef.current && !formRef.current.reportValidity()) {
       return { ok: false, reason: "validation" };
+    }
+    if (!conditionChoice || (formData.setupType === "trade" && conditionChoice === "off" && !(isEdit && marketConditionChoiceFromSetup(initialData) === "off"))) {
+      setSubmitError(t?.setups?.marketConditions?.required || "Choose a market condition.");
+      return { ok: false, reason: "market_condition_required" };
     }
 
     setSubmitError("");
@@ -234,6 +244,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     conditionChoice,
     scoreConditionsTouched,
     scoreTouchedFields,
+    t?.setups?.marketConditions?.required,
   ]);
 
   useImperativeHandle(ref, () => ({
@@ -484,7 +495,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           copy.activationTitle
         )}
 
-        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null}>
+        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || (isEdit && marketConditionChoiceFromSetup(initialData) === "off")}>
           <div className="space-y-5">
             <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
             {scoreBlock(copy.macroTitle, macroScore, (value) => updateScoreRange("macro", macroScore, setMacroScore, value), copy.macroDescription)}

@@ -2,16 +2,16 @@
 
 import { MARKET_CONDITIONS } from "@/lib/setup/scoreConditions.mjs";
 
-export default function MarketConditionPicker({ choice, onChange, copy = {}, disabled = false, existingLimits = false, previousChoice = null, children }) {
+export default function MarketConditionPicker({ choice, onChange, copy = {}, disabled = false, existingLimits = false, previousChoice = null, allowOff = true, children }) {
   const selected = MARKET_CONDITIONS.find((item) => item.id === choice);
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-4">
       <legend className="text-base font-black text-slate-900">{copy.title}</legend>
       <p className="text-sm leading-relaxed text-slate-600">{copy.help}</p>
-      <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${choice === "off" ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
+      {allowOff ? <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${choice === "off" ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
         <input type="radio" name="market-condition" checked={choice === "off"} onChange={() => onChange("off")} className="mt-1 accent-blue-600" />
         <span><strong className="block text-sm text-slate-900">{existingLimits ? copy.offClearsTitle : copy.offTitle}</strong><span className="mt-1 block text-xs leading-relaxed text-slate-600">{existingLimits ? copy.offClearsExisting : copy.offDescription}</span></span>
-      </label>
+      </label> : null}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {MARKET_CONDITIONS.map((band) => (
           <label key={band.id} className={`flex min-h-32 cursor-pointer flex-col rounded-2xl border p-4 transition ${choice === band.id ? "border-blue-600 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white hover:border-blue-300"}`}>

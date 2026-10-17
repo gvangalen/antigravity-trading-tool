@@ -3215,6 +3215,7 @@
     "marketConditions": {
       "title": "Wanneer wil je kopen?",
       "help": "Kies één marktsituatie waarin jouw setup mag meedoen. FINN controleert de score; je plan en veiligheidslimieten bepalen daarna of er echt een aankoop volgt.",
+      "required": "Kies eerst een marktsituatie of Zelf bepalen voor deze trade-setup.",
       "offTitle": "Geen extra marktvoorwaarde",
       "offDescription": "Voor deze setup geldt geen extra scoregrens.",
       "offClearsTitle": "Alle scorevoorwaarden verwijderen",

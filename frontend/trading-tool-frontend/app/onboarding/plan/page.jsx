@@ -221,7 +221,8 @@ export default function OnboardingPlanPage() {
 
   const setupValid = Boolean(
     setup.name.trim() && setup.setupType && setup.timeframe &&
-    conditionChoice && (conditionChoice !== "custom" || SCORE_CATEGORIES.every((category) => {
+    conditionChoice && (conditionChoice !== "off" || !isTrade || setupDone) &&
+    (conditionChoice !== "custom" || SCORE_CATEGORIES.every((category) => {
       const minimum = Number(setup[`min_${category}_score`]);
       const maximum = Number(setup[`max_${category}_score`]);
       return setup[`min_${category}_score`] !== "" && setup[`max_${category}_score`] !== "" &&
@@ -438,7 +439,11 @@ export default function OnboardingPlanPage() {
             <Field label={copy.setupTypeLabel || "Type"}>
               <select
                 value={setup.setupType}
-                onChange={(event) => setSetup((current) => ({ ...current, setupType: event.target.value }))}
+                onChange={(event) => {
+                  const nextType = event.target.value;
+                  setSetup((current) => ({ ...current, setupType: nextType }));
+                  if (nextType === "trade" && conditionChoice === "off") setConditionChoice(null);
+                }}
                 disabled={setupDone || savingSetup || loading}
                 className={inputClassName}
               >
@@ -488,7 +493,7 @@ export default function OnboardingPlanPage() {
           ) : null}
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={setupDone || savingSetup || loading}>
+            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")}>
               <div className="grid gap-3 md:grid-cols-3">
                 {SCORE_CATEGORIES.map((category) => (
                   <div key={category} className="rounded-xl border border-slate-200 bg-white p-3">
