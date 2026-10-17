@@ -2572,6 +2572,7 @@
       "environmentLabel": "Execution environment",
       "paperTrading": "Paper trading",
       "liveExchange": "Live exchange",
+      "liveExchangeConnectionHelp": "Connect your exchange below before saving. A live bot can place real orders. For a safe reflection test, choose Paper trading and connect the exchange separately later.",
       "modeLabel": "Execution mode",
       "modeManual": "Manual approval",
       "modeSemiAuto": "Semi-automated",

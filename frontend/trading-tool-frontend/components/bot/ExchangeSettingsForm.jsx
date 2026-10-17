@@ -79,6 +79,7 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
         <div className="grid grid-cols-1 gap-4">
           {EXCHANGES.map((ex) => (
             <button
+              type="button"
               key={ex.id}
               onClick={() => { setSelectedExchange(ex); setStep(2); }}
               className="group relative flex items-center gap-5 p-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[1.5rem] hover:border-blue-600 transition-all text-left"
@@ -101,7 +102,12 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
   }
 
   return (
-    <div className="space-y-8 p-2 animate-fade-in">
+    <div
+      className="space-y-8 p-2 animate-fade-in"
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && event.target.tagName === "INPUT") event.preventDefault();
+      }}
+    >
       <div className="flex items-center gap-4 p-4 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-blue-600/10 rounded-2xl">
         <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xl shadow-lg shadow-blue-600/20">
           {selectedExchange.logo}
@@ -111,6 +117,7 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
            <div className="text-sm font-black text-slate-900 dark:text-white uppercase">{selectedExchange.name}</div>
         </div>
         <button 
+          type="button"
           onClick={() => setStep(1)}
           className="ml-auto text-[9px] font-black text-slate-400 uppercase tracking-tighter hover:text-slate-600 underline"
         >
@@ -174,12 +181,14 @@ const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, 
 
       <div className="flex items-center gap-4">
          <button 
+           type="button"
            onClick={onCancel}
            className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
          >
            {copy.cancel}
          </button>
          <button 
+           type="button"
            onClick={() => {
              void handleConnect();
            }}

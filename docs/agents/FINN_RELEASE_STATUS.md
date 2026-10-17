@@ -4,6 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Eerste live bot: exchange-koppeling in aanmaakscherm
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. De browsermelding van de
+gebruiker is gereproduceerd in de code: de backend eist actieve exchange-keys
+voor het opslaan van een live bot, terwijl de bestaande koppel-UI pas in de
+detailweergave van een reeds opgeslagen bot bereikbaar was. De kandidaat op
+`codex/bot-onboarding-exchange-connection` toont de bestaande Bitvavo/Bybit-
+koppelstap direct binnen het aanmaakformulier wanneer Live exchange is gekozen.
+De knoppen in die stap kunnen het omringende botformulier niet indienen; na
+succes ververst de verbindingsstatus en verdwijnt een oude foutmelding. Paper
+trading blijft zonder exchange mogelijk. Er is geen backend-, actiecontract-,
+provider- of sleutelopslagcontract gewijzigd.
+
+Lokaal geslaagd: frontend typecheck, productiebuild met bijgewerkte tracked
+`out/`-export, i18n-lint, i18n-/command-/proposaltests en high-severity
+dependency-audit. De audit meldde één *moderate* Next.js-advisory en nul
+high/critical meldingen. De echte sleutelverificatie en de eerste live-bot-
+browserflow zijn nog niet getest; er zijn geen API-sleutels of live orders
+gebruikt. De aparte Trade Reviews-acceptatie hieronder blijft
+`NOT_ACCEPTED` totdat onafhankelijke QA de ontbrekende paden bewijst.
+
 ## FINN trade-review live browser candidate
 
 Phase: `INDEPENDENT_BROWSER_QA_NOT_ACCEPTED_EVIDENCE_GAPS`. De gebruiker heeft
