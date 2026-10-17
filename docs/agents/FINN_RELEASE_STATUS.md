@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Marktconditie-ontwerp en onboarding-herstel
 
-Phase: `LOCAL_REPAIR_VALIDATED_AWAITING_CI`. De onafhankelijke live browser-QA
+Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. De onafhankelijke live browser-QA
 van de vorige kandidaat gaf `NOT_ACCEPTED` op productie-SHA
 `b3699c0c06af1e91182e878d306d388aa3479900`: Plan toonde een niet-bestaand
 ETH-plan als opgeslagen door accountbrede statusvlaggen, en `/strategy` crashte
@@ -32,11 +32,23 @@ basis van de gekozen strategie.
 Lokaal gemeten: frontendtypecheck, i18n-lint, productiebuild met bijgewerkte
 `out/`-export, 10 setup-scoretests, 15 i18n-tests en 19 gerichte onboarding-
 en strategietests geslaagd. De eerste onafhankelijke code-QA vond twee
-randgevallen in de assetkoppeling; deze zijn gerepareerd en ter hercontrole
-aangeboden. Deze batch wijzigt geen FINN-actiecontract,
-workerpad of modelprovider. CI, Auto Deploy, publieke SHA-controle en
-onafhankelijke herkeuring voor deze branch zijn nog niet uitgevoerd; er is
-geen claim dat deze reparatie live werkt.
+randgevallen in de assetkoppeling; na reparatie vond de gerichte read-only
+hercontrole op `d7ddf49801c5ca0937350031fc10d96dabf87a87` geen nieuwe
+P1/P2 en slaagden 25 gerichte tests. Deze batch wijzigt geen FINN-
+actiecontract, workerpad of modelprovider.
+
+[PR #391](https://github.com/gvangalen/antigravity-trading-tool/pull/391)
+werd gemerged als `fdaea112002c071ee17d5cc64389063a03c75c0b`. Alle vijf
+PR-CI-jobs op de laatste PR-SHA slaagden in
+[run 39041274684](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39041274684).
+[Main-CI run 39041439938](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39041439938)
+en [Auto Deploy run 39041581382](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39041581382)
+slaagden op exact de merge-SHA. Daarna gaven
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` beide HTTP 200 en exact deze SHA.
+Deze status-only handoff krijgt zelf een nieuwe deployment-SHA; QA stelt
+de werkelijke publieke SHA opnieuw vast. De ingelogde browserherkeuring van
+deze reparatie is nog niet uitgevoerd.
 
 ## Leesbare setupcondities en volledige Automation-onboarding
 
