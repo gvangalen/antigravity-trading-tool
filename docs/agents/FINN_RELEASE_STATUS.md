@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mijn Plan toont alleen werkelijk opgeslagen scoregrenzen
 
-Phase: `LIVE_AWAITING_INDEPENDENT_BROWSER_QA`. In de onafhankelijke ingelogde
+Phase: `LIVE_TARGETED_QA_ACCEPTED_FULL_SCOPE_OPEN`. In de onafhankelijke ingelogde
 browserherkeuring van `f1fb815ca115edd3853d57cf795c6d3590f213eb`
 bleken de vijf keuzes, Custom, opslag en teruglezing na refresh, de
 assetgebonden Plan-status, het terugvinden van een oudere BTC-setup, de
@@ -35,8 +35,25 @@ en [Auto Deploy run 39043160991](https://github.com/gvangalen/antigravity-tradin
 slaagden op deze SHA. Backend-health en frontend-buildinfo gaven daarna
 beide HTTP 200 en deze SHA. Deze status-only handoff krijgt een nieuwe
 deployment-SHA; QA verifieert de werkelijk publieke SHA opnieuw. De
-onafhankelijke ingelogde browserherkeuring van deze reparatie is nog niet
-uitgevoerd.
+onafhankelijke ingelogde browserherkeuring van deze reparatie is uitgevoerd.
+De status-only handoff [PR #394](https://github.com/gvangalen/antigravity-trading-tool/pull/394)
+werd gemerged als `596e79b813d97b6b921334cbec0636a8733c2ad1`.
+[Main-CI run 39043473355](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39043473355)
+en [Auto Deploy run 39043618100](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39043618100)
+slaagden; backend-health en frontend-buildinfo gaven HTTP 200 en deze SHA.
+
+Onafhankelijke ingelogde QA gaf `ACCEPTED` voor de **gerichte scoreweergave-
+reparatie** op deze live SHA: na het opslaan van markt 26–45 toonde Mijn Plan
+ook na een harde refresh `markt 26–45 · macro geen grens · technisch geen grens`.
+De vijf keuzes en Custom bleven in de editor zichtbaar. QA herstelde de
+oorspronkelijke BTC Custom-grenzen 20–60 / 30–70 / 40–80 en bevestigde die na
+refresh. Er was geen bot- of orderactie. De editor op 400px kon in deze laatste
+run wegens een vergrendelde Mac niet opnieuw worden bediend. Eenzijdige en
+volledig afwezige grenzen zijn in code getest maar niet live als opgeslagen
+plan. Dit gerichte verdict is geen volledige acceptatie van alle eerdere
+FINN-releaseonderdelen. Deze vastlegging is alleen documentatie en krijgt
+zelf een nieuwe SHA; het QA-verdict hierboven blijft gekoppeld aan de
+expliciet geteste `596e79b813d97b6b921334cbec0636a8733c2ad1`.
 
 ## Marktconditie-ontwerp en onboarding-herstel
 
