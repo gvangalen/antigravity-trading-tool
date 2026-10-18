@@ -2346,6 +2346,7 @@ class BotService:
             stats = {
                 "net_cash_delta_eur": stats_raw["net_cash"],
                 "net_executed_cash_delta_eur": stats_raw["executed_cash"],
+                "gross_executed_buys_eur": stats_raw.get("gross_executed_buys_eur"),
                 "net_qty": stats_raw["net_qty"],
                 "today_spent_eur": stats_raw["today_spent"],
                 "today_reserved_eur": stats_raw["today_reserved"],
@@ -2364,6 +2365,7 @@ class BotService:
             if unverified_ledger:
                 stats["net_cash_delta_eur"] = None
                 stats["net_executed_cash_delta_eur"] = None
+                stats["gross_executed_buys_eur"] = None
                 stats["net_qty"] = None
                 stats["invested_eur"] = None
                 stats["paper_cash_eur"] = None

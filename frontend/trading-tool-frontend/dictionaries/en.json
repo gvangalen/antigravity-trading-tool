@@ -3019,7 +3019,7 @@
       "noBudgetAssigned": "No budget assigned",
       "netPositionQty": "Net position",
       "currentAssetValue": "Current asset value",
-      "costBasisExecuted": "COST BASIS (EXECUTED)",
+      "costBasisExecuted": "Executed purchases",
       "sessionPerformance": "Session performance"
     },
     "tradePlanCard": {

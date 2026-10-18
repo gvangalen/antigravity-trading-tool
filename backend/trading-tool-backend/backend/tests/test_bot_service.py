@@ -1226,6 +1226,29 @@ def test_bot_portfolios_use_each_bots_canonical_strategy_symbol():
     assert all(item["stats"]["price_currency"] == "EUR" for item in result)
 
 
+def test_closed_paper_bot_keeps_gross_purchases_distinct_from_net_cash():
+    class Repo(_MultiAssetPortfolioRepo):
+        async def get_bot_portfolios_base(self, user_id):
+            rows = await super().get_bot_portfolios_base(user_id)
+            rows[0]["paper_cash_eur"] = 999.62
+            return rows[:1]
+
+        async def get_bot_ledger_stats(self, user_id, bot_id, today):
+            return {
+                "net_cash": -0.38, "executed_cash": -0.38,
+                "gross_executed_buys_eur": 100,
+                "net_qty": 0, "today_spent": 100, "today_reserved": 0,
+            }
+
+    service = BotService.__new__(BotService)
+    service.repository = Repo()
+    stats = asyncio.run(service.get_bot_portfolios(user_id=27))[0]["stats"]
+    assert stats["gross_executed_buys_eur"] == 100
+    assert stats["net_executed_cash_delta_eur"] == -0.38
+    assert stats["position_value_eur"] == 0
+    assert stats["paper_cash_eur"] == 999.62
+
+
 def test_bot_card_does_not_value_an_unverified_legacy_paper_ledger():
     class Repo(_MultiAssetPortfolioRepo):
         async def get_bot_portfolios_base(self, user_id):

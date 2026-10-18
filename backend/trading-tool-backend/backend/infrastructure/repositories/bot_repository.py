@@ -561,9 +561,12 @@ class BotRepository:
         res1 = await self.session.execute(query1, {"user_id": user_id, "bot_id": bot_id})
         row1 = res1.fetchone()
 
-        # 2. Executed cash (Invested cost basis)
+        # 2. Net executed cash and gross buys. Net cash is not a cost basis
+        # after sells: a closed €100 round trip can have only €0.38 net cash.
         query2 = text("""
-            SELECT COALESCE(SUM(cash_delta_eur),0)
+            SELECT COALESCE(SUM(cash_delta_eur),0),
+                   COALESCE(SUM(CASE WHEN cash_delta_eur < 0
+                                     THEN -cash_delta_eur ELSE 0 END),0)
             FROM bot_ledger
             WHERE user_id=:user_id AND bot_id=:bot_id AND entry_type='execute'
         """)
@@ -598,6 +601,7 @@ class BotRepository:
             "net_cash": float(row1[0] or 0),
             "net_qty": float(row1[1] or 0),
             "executed_cash": float(row2[0] or 0),
+            "gross_executed_buys_eur": float(row2[1] or 0),
             "today_spent": float(row3[0] or 0),
             "today_reserved": float(row4[0] or 0)
         }
