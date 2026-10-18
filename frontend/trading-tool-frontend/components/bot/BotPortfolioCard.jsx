@@ -3,6 +3,7 @@
 import { Wallet, Info } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatNumber } from "@/lib/i18n";
+import { botSessionPerformance } from "@/lib/botPositionMath.mjs";
 
 import BotBudgetBar from "./BotBudgetBar";
 import BotPnLBadge from "./BotPnLBadge";
@@ -36,8 +37,12 @@ export default function BotPortfolioSection({ bot }) {
   // BACKEND-LED STATS
   // =====================================================
 
-  const netQty = stats.net_qty ?? 0;
-  const positionValue = stats.position_value_eur ?? 0;
+  const netQty = stats.net_qty;
+  const positionValue = stats.position_value_eur;
+  const executedCash = stats.net_executed_cash_delta_eur;
+  const grossBuys = stats.gross_executed_buys_eur;
+  const { pnlEur: sessionPnl, pnlPct: sessionPnlPct } =
+    botSessionPerformance(positionValue, executedCash, grossBuys);
 
   // ✔ Alleen ECHTE uitgevoerde trades
   const spentExecuted = Math.abs(
@@ -118,9 +123,9 @@ export default function BotPortfolioSection({ bot }) {
       <div className="grid grid-cols-2 gap-4 pt-1">
         <Stat label={copy.netPositionQty}>
           <span className="font-mono tracking-tighter text-slate-800">
-            {formatNumber(Number(netQty), locale, {
+            {netQty == null ? "—" : formatNumber(Number(netQty), locale, {
               minimumFractionDigits: 0,
-              maximumFractionDigits: 6,
+              maximumFractionDigits: 8,
             })}
           </span>
           <span className="ml-1.5 text-secondary font-black text-[10px]">{symbol}</span>
@@ -128,7 +133,7 @@ export default function BotPortfolioSection({ bot }) {
 
         <Stat label={copy.currentAssetValue}>
            <span className="font-mono tracking-tighter text-slate-800">
-             {formatCurrency(Number(positionValue), locale, "EUR", {
+             {positionValue == null ? "—" : formatCurrency(Number(positionValue), locale, "EUR", {
                minimumFractionDigits: 0,
                maximumFractionDigits: 0,
              })}
@@ -137,7 +142,7 @@ export default function BotPortfolioSection({ bot }) {
 
         <Stat label={copy.costBasisExecuted}>
            <span className="font-mono tracking-tighter text-slate-800">
-             {formatCurrency(Number(spentExecuted), locale, "EUR", {
+             {grossBuys == null ? "—" : formatCurrency(Number(grossBuys), locale, "EUR", {
                minimumFractionDigits: 0,
                maximumFractionDigits: 0,
              })}
@@ -145,14 +150,7 @@ export default function BotPortfolioSection({ bot }) {
         </Stat>
 
         <Stat label={copy.sessionPerformance}>
-          <BotPnLBadge
-            pnlEur={positionValue - spentExecuted}
-            pnlPct={
-              spentExecuted > 0
-                ? ((positionValue - spentExecuted) / spentExecuted) * 100
-                : 0
-            }
-          />
+          {sessionPnl == null ? "—" : <BotPnLBadge pnlEur={sessionPnl} pnlPct={sessionPnlPct} />}
         </Stat>
       </div>
     </div>

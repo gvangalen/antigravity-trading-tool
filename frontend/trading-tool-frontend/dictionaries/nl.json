@@ -3020,7 +3020,7 @@
       "noBudgetAssigned": "Geen budget toegewezen",
       "netPositionQty": "Nettopositie",
       "currentAssetValue": "Huidige assetwaarde",
-      "costBasisExecuted": "Kostprijs uitgevoerd",
+      "costBasisExecuted": "Uitgevoerde aankopen",
       "sessionPerformance": "Sessieprestatie"
     },
     "tradePlanCard": {

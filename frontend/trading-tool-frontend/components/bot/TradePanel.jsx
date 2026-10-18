@@ -5,6 +5,7 @@ import { TradingSlider } from "@/components/ui/Slider";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatNumber } from "@/lib/i18n";
+import { fullPaperPositionQuantity } from "@/lib/botPositionMath.mjs";
 import {
   ArrowUpCircle,
   ArrowDownCircle,
@@ -243,7 +244,13 @@ export default function TradePanel({
 
       if (amountBaseInput === "") {
         const q = qtyFromPct;
-        setAmountBaseInput(q > 0 ? String(Number(q.toFixed(6))) : "");
+        // Keep the complete Paper position: rounding to six decimals turns a
+        // 100% close into a partial sale (which can fall below the min order).
+        setAmountBaseInput(q > 0 ? (
+          paperMarketOnly && side === "sell" && amountPct === 100
+            ? fullPaperPositionQuantity(maxQtyBase)
+            : String(Number(q.toFixed(8)))
+        ) : "");
       }
 
     } else {
@@ -261,6 +268,8 @@ export default function TradePanel({
     sizeMode,
     maxQtyBase,
     amountPct,
+    side,
+    paperMarketOnly,
     amountBaseInput,
     amountQuoteInput
   ]);
@@ -322,7 +331,7 @@ export default function TradePanel({
                     )}
                  </div>
                )
-               : <div className="text-lg font-black text-emerald-600 tracking-tighter">{fmt(balanceBase, locale, 6)} <span className="text-[10px] opacity-60 ml-0.5">{baseSymbol}</span></div>
+               : <div className="text-lg font-black text-emerald-600 tracking-tighter">{fmt(balanceBase, locale, 8)} <span className="text-[10px] opacity-60 ml-0.5">{baseSymbol}</span></div>
              }
           </div>
           {side === "buy" ? <div className="mt-1 max-w-48 text-[10px] text-slate-500">{copy.budgetIsNotCash}</div> : null}
@@ -406,7 +415,12 @@ export default function TradePanel({
               if (!hasBalance) return;
               setAmountPct(v);
               setAmountQuoteInput("");
-              setAmountBaseInput("");
+              if (paperMarketOnly && side === "sell" && v === 100) {
+                setSizeMode("base");
+                setAmountBaseInput(fullPaperPositionQuantity(maxQtyBase));
+              } else {
+                setAmountBaseInput("");
+              }
             }}
           />
         </div>
@@ -414,11 +428,11 @@ export default function TradePanel({
         <div className="flex justify-between items-center bg-white/50 p-3 rounded-xl border border-slate-100/50">
            <div className="flex flex-col">
               <span className="text-[9px] font-black text-secondary uppercase">{copy.expected}</span>
-              <span className="text-xs font-black text-slate-900">{fmt(qtyBase, locale, 6)} <span className="opacity-40">{baseSymbol}</span></span>
+              <span className="text-xs font-black text-slate-900">{fmt(qtyBase, locale, 8)} <span className="opacity-40">{baseSymbol}</span></span>
            </div>
            <div className="text-right">
               <span className="text-[9px] font-black text-secondary uppercase">{copy.max}</span>
-              <div className="text-xs font-bold text-slate-600">{fmt(maxQtyBase, locale, 6)}</div>
+              <div className="text-xs font-bold text-slate-600">{fmt(maxQtyBase, locale, 8)}</div>
            </div>
         </div>
 

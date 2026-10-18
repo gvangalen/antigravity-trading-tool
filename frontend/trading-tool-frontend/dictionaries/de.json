@@ -3036,7 +3036,7 @@
       "noBudgetAssigned": "Kein Budget zugewiesen",
       "netPositionQty": "Nettoposition",
       "currentAssetValue": "Aktueller Assetwert",
-      "costBasisExecuted": "Kostengrundlage ausgeführt",
+      "costBasisExecuted": "Ausgeführte Käufe",
       "sessionPerformance": "Sitzungsperformance"
     },
     "tradePlanCard": {
