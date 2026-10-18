@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Score 2.0 Paper- en Trade Review-QA-herstel
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. De beschermde onafhankelijke QA op
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De beschermde onafhankelijke QA op
 productie-SHA `5ff556adbb8236dc3b627e76a96bc3cbc320bf9b` gaf
 `NOT_ACCEPTED`: de stale-score-Paper-proef en de automatische Paper-historieproef
 faalden op samengestelde verificatiecodes, de Trade Review-preflight kreeg
@@ -52,9 +52,16 @@ typecheck, lint zonder errors en iOS/Android Expo-bundels slaagden. Native
 iPhone-bediening en de volledige gesloten-trade/linked-exchange-acceptatie
 blijven voor onafhankelijke QA; er is geen Live-order uitgevoerd.
 
-De kandidaat heeft nog geen CI-, deploy- of nieuw QA-verdict. Build start de
-beschermde QA-workflow niet zelf; na Auto Deploy en SHA-pariteit vraagt Build
-de bestaande QA-agent om dezelfde drie sporen opnieuw onafhankelijk te testen.
+Kandidaat [PR #405](https://github.com/gvangalen/antigravity-trading-tool/pull/405)
+is gemerged als `44455447be3d814896b50efd518157595a112267`. Alle vijf PR- en
+main-CI-checks slaagden; [main-CI run 39138094482](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39138094482)
+en [Auto Deploy run 39138235896](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39138235896)
+zijn geslaagd. Daarna gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` ieder HTTP 200 en exact de merge-SHA.
+Deze statuswijziging krijgt zelf een nieuwe SHA; QA controleert de feitelijk
+gedeployde SHA in haar eigen preflight. De nieuwe onafhankelijke QA-uitkomst
+ontbreekt nog. Build start de beschermde QA-workflow niet zelf en vraagt de
+bestaande QA-agent dezelfde drie sporen opnieuw te testen.
 
 ## S&P 500 Macro-score en bronactualiteit
 
