@@ -375,6 +375,7 @@ export const previewManualOrder = async ({
   price,
   price_currency,
   value_eur,
+  idempotency_key,
 }) => {
   if (!bot_id) throw new Error("bot_id is verplicht");
   if (!side) throw new Error("side is verplicht");
@@ -389,6 +390,7 @@ export const previewManualOrder = async ({
       price: toNumber(price, 0),
       price_currency,
       value_eur: toNumber(value_eur, 0),
+      idempotency_key,
     }),
   });
   // A setup-match refusal is an expected, structured preview. Keep its

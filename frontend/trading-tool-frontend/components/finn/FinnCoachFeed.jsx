@@ -69,7 +69,14 @@ export default function FinnCoachFeed({ onDiscuss }) {
         method: "POST", body: JSON.stringify({}),
       });
       await refresh();
-    } catch {
+    } catch (error) {
+      if (error?.status === 404) {
+        // A score refresh or expired proposal can close an item between the
+        // list request and the click. Reload the owner's active feed instead
+        // of leaving an obsolete action and a generic error on screen.
+        await refresh();
+        return;
+      }
       setError(true);
     }
   };
