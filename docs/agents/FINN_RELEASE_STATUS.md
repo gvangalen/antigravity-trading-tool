@@ -6,7 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Desktopbrowser: zichtbare Paper-ordergrens
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. Onafhankelijke QA gaf op live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De grensuitleg is gemerged via
+[PR #415](https://github.com/gvangalen/antigravity-trading-tool/pull/415)
+als `3c231aa4e3e2559cae64fc3f24b7fe30febdeae6`. Alle vijf PR-controles,
+[main-CI run 39152228707](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39152228707)
+en [Auto Deploy run 39152381530](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39152381530)
+slaagden. De publieke backend-health en frontend-buildinfo gaven daarna
+ieder HTTP 200 en exact die SHA. Deze statuscommit krijgt opnieuw een SHA;
+QA controleert de uiteindelijke live-identiteit rechtstreeks. Onafhankelijke
+QA gaf op eerdere live SHA
 `204b76afe3b1d8aca8b323acabec328dabd8f67f` `NOT_ACCEPTED` voor de
 volledige desktop-scope. De ontbrekende orderreferentie-400 is opgelost; de
 handmatige Paper-preview blokkeerde €10 en €50 met de brede melding dat cash
