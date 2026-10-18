@@ -6,6 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade: Reflectie en FINN-vervolgvragen
 
+Vervolg na onafhankelijke QA op `cd0e6ea05ee905f969369f29cd599a16c99c0e99`:
+de oude Paper-analysetekst en het label voor een gebruikersvraag zijn hersteld,
+maar de FINN-hoofdchat meldde dat de reviewleesroute niet beschikbaar was. De
+leesadapter combineerde het tijdstip van een botbeslissing (oude UTC-waarde
+zonder tijdzone) met de tijdzonebewuste uitstap van een gesloten dossier via
+`max(...)`. Python kan die twee typen niet vergelijken; dan faalt de complete
+toollezing. De nieuwe kandidaat normaliseert beide tot UTC en test expliciet
+een eigenaar met zowel een botbeslissing als een gesloten Paper-dossier.
+Deze codeoorzaak past bij de live uitkomst; de exacte productie-exceptie is
+zonder runtrace niet zelfstandig vastgesteld. Een nieuwe live hertest blijft
+vereist vóór coachacceptatie.
+
 Update na onafhankelijke browser-QA op `c2d2c532c260e9f8fc77906d2696f730674ce363`:
 het dossierantwoord blijft na refresh staan en het zevendaagse overzicht toont
 twee gesloten, geanalyseerde Paper-trades. De hoofdchat noemde wel beide

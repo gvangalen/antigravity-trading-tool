@@ -238,6 +238,25 @@ def test_v2_adapter_keeps_closed_trades_separate_from_bot_decisions():
     assert ReviewToolAdapter.requested_review_id("Review mijn setup") is None
 
 
+def test_review_read_combines_legacy_naive_decision_time_and_aware_trade_exit():
+    class Decisions:
+        async def get_bot_history(self, user_id, start, end):
+            assert user_id == 7
+            return [{"decision_ts": datetime(2026, 10, 17), "bot_name": "BTC Paper Bot",
+                     "symbol": "BTC", "action": "HOLD", "status": "completed"}]
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = Decisions()
+    adapter.sources = FinnV2InformationSourceRegistry()
+    adapter.closed_trades = FinnClosedTradeReflectionService(Session({7: {81: ROW}}))
+
+    result = asyncio.run(adapter.execute(user_id=7, asset="BTC"))
+    assert result["data"].closed_trade_status == "ready"
+    assert result["data"].closed_trades[0].review_id == 81
+    assert result["as_of"] == datetime(2026, 10, 17, tzinfo=timezone.utc)
+    assert "Botbeslissing, geen bevestigde gesloten trade" in result["data"].items[1]
+
+
 def test_v2_visible_delivery_exposes_only_server_review_ids_and_no_data_guard():
     service = FinnV2VisibleDeliveryService(object())
     response = {
