@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Eén benchmarkscore en een afzonderlijke setupstatus
+
+Phase: `LIVE_AWAITING_INDEPENDENT_AUTHENTICATED_QA`. De kandidaat
+`codex/benchmark-setup-match` is via
+[PR #399](https://github.com/gvangalen/antigravity-trading-tool/pull/399)
+samengevoegd als `f3bec5c2984e08dbe0e92822f379fd70c39d30ed`.
+De gewogen, geverifieerde Markt-, Macro- en Technisch-scores vormen één
+benchmarkscore per asset. De vijf leesbare marktsituaties en de opgeslagen
+setupvoorwaarden gebruiken dezelfde afgeronde hele score, ook op de vier
+decimale grensovergangen. De setupstatus bepaalt of voorwaarden passen;
+de nabijheidsscore is alleen weergave en nooit een uitvoeringsvoorwaarde.
+Een passende setup garandeert geen aankoop: strategie en veiligheidslimieten
+beslissen afzonderlijk. Web, onboarding, Mijn Plan en mobiel leggen dit
+met dezelfde begrippen uit. Mobiel leest de owner-scoped marktvergelijking
+en noemt een opgeslagen plan zonder actuele match geen concept meer. FINN
+meldt bij uitvoering geen planafwijking louter omdat een geldige setup op
+de grens een nabijheid van 60/100 heeft.
+
+Lokaal gemeten: volledige backend-suite 3904 geslaagd, 3 bestaande skips;
+frontend productiebuild, typecheck, i18n- en gerichte setup/onboarding/FINN-
+tests geslaagd; mobiele typecheck, lint met 0 fouten, 13 tests en web-, iOS-
+en Android Expo-export geslaagd. Onafhankelijke lokale code-QA vond twee
+grens- en statuslabelproblemen. Beide zijn gerepareerd en herkeurd zonder
+nieuwe lokale blokkade. Dit is geen ingelogde live QA-acceptatie.
+
+Alle vijf jobs van [PR-CI run 39108878510](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39108878510)
+en [Main-CI run 39109046064](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39109046064)
+slaagden. [Auto Deploy run 39109163097](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39109163097)
+slaagde. Op 2026-10-18 gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` ieder HTTP 200 met exact deze SHA.
+Deze statusupdate creëert zelf een nieuwe commit en kan opnieuw deployen;
+de onafhankelijke QA moet daarom in haar preflight de actuele publieke SHA
+vaststellen. De ingelogde browserflow en live setupvergelijking zijn nog
+niet onafhankelijk geaccepteerd.
+
 ## Opgeslagen marktkeuze blijft een FINN-voorwaarde
 
 Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. Onafhankelijke live QA op
