@@ -30,6 +30,8 @@ class SetupToolAdapter:
                 "dca_day_name": _dca_day_name(row.get("dca_day")),
                 "dca_month_day": row.get("dca_month_day"),
                 "min_investment": row.get("min_investment"),
+                "min_benchmark_score": row.get("min_benchmark_score"),
+                "max_benchmark_score": row.get("max_benchmark_score"),
                 **{f"{bound}_{component}_score": row.get(f"{bound}_{component}_score")
                    for component in ("market", "macro", "technical")
                    for bound in ("min", "max")},
@@ -49,6 +51,8 @@ class SetupToolAdapter:
             dca_day_name=_dca_day_name(setup.get("dca_day")),
             dca_month_day=setup.get("dca_month_day"),
             min_investment=setup.get("min_investment"),
+            min_benchmark_score=setup.get("min_benchmark_score"),
+            max_benchmark_score=setup.get("max_benchmark_score"),
             **{f"{bound}_{component}_score": setup.get(f"{bound}_{component}_score")
                for component in ("market", "macro", "technical")
                for bound in ("min", "max")},

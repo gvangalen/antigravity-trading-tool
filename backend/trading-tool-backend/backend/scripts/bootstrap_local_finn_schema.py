@@ -209,6 +209,8 @@ ALTER TABLE setups
     ADD COLUMN IF NOT EXISTS max_technical_score NUMERIC,
     ADD COLUMN IF NOT EXISTS min_market_score NUMERIC,
     ADD COLUMN IF NOT EXISTS max_market_score NUMERIC,
+    ADD COLUMN IF NOT EXISTS min_benchmark_score NUMERIC,
+    ADD COLUMN IF NOT EXISTS max_benchmark_score NUMERIC,
     ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS last_validated TIMESTAMP;
 

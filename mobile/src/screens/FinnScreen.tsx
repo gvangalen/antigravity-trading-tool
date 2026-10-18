@@ -267,7 +267,7 @@ export function FinnScreen({
   const getMetricTitle = (metric: string) => {
     const titles: Record<string, string> = {
       transition_risk: 'Transition Risk Analysis',
-      setup_quality: 'Setup Quality Assessment',
+      setup_quality: 'Setupmatch',
       market_pressure: 'Market Pressure Analysis',
       structural_cycle: 'Structural Cycle Phase',
       position_size: 'Position Size Telemetry',
@@ -283,7 +283,7 @@ export function FinnScreen({
       case 'transition_risk':
         return `FINN detecteert toenemende regime-instabiliteit door afnemende trend strength en hogere volatiliteit voor ${assetLabel}. Nieuwe agressieve entries worden momenteel niet aanbevolen op ${timeframeLabel}.`;
       case 'setup_quality':
-        return `De setup quality score weerspiegelt robuuste confluences en gunstige risk/reward verhoudingen voor ${assetLabel}. Voldoet momenteel aan alle institutionele instapeisen.`;
+        return `De setupmatch laat zien hoe dicht de actuele samengestelde benchmarkscore bij de opgeslagen voorwaarde voor ${assetLabel} ligt. Alleen de matchstatus bepaalt of de setup mag meedoen; de strategie en veiligheidslimieten bepalen een eventuele trade.`;
       case 'market_pressure':
         return `De verkoopdruk neemt toe in de orderboeken van ${assetLabel} met dalend volume op stijgingen. FINN adviseert strakkere stop-loss niveaus op ${timeframeLabel}.`;
       case 'structural_cycle':

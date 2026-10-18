@@ -43,9 +43,8 @@ def test_legacy_report_metadata_cannot_restore_retired_setup_score():
 def test_rank_only_marks_a_matching_setup_as_best():
     scores = {"macro": 50, "technical": 75, "market": 70}
     rows = rank_matches([
-        setup(1, min_macro_score=80),
-        setup(2, min_macro_score=40, max_macro_score=60,
-              min_technical_score=70, max_technical_score=90),
+        setup(1, min_benchmark_score=80),
+        setup(2, min_benchmark_score=60, max_benchmark_score=70),
     ], scores)
     assert [row["setup_id"] for row in rows] == [2, 1]
     assert rows[0]["status"] == "matches"
@@ -54,25 +53,35 @@ def test_rank_only_marks_a_matching_setup_as_best():
     assert rows[1]["is_active"] is False
 
 
+def test_preset_uses_combined_benchmark_not_market_component_alone():
+    pressure = setup(1, min_benchmark_score=26, max_benchmark_score=45)
+    matching = match_setup(pressure, {"market": 50, "macro": 20, "technical": 50})
+    outside = match_setup(pressure, {"market": 33, "macro": 80, "technical": 80})
+    assert matching["components"]["benchmark"]["score"] == 40
+    assert matching["status"] == "matches"
+    assert outside["components"]["benchmark"]["score"] > 45
+    assert outside["status"] == "outside_conditions"
+
+
 def test_weakest_setup_is_not_automatically_active():
-    rows = rank_matches([setup(1, min_market_score=90), setup(2, min_macro_score=90)],
+    rows = rank_matches([setup(1, min_benchmark_score=90), setup(2, min_macro_score=90)],
                         {"macro": 20, "technical": 50, "market": 20})
     assert all(row["is_best"] is False and row["is_active"] is False for row in rows)
 
 
 def test_a_valid_boundary_is_not_displayed_as_zero_percent_match():
-    matched = match_setup(setup(1, min_market_score=40, max_market_score=60),
-                          {"macro": 50, "technical": 50, "market": 40})
-    outside = match_setup(setup(2, min_market_score=40, max_market_score=60),
-                          {"macro": 50, "technical": 50, "market": 39.9})
+    matched = match_setup(setup(1, min_benchmark_score=40, max_benchmark_score=60),
+                          {"macro": 40, "technical": 40, "market": 40})
+    outside = match_setup(setup(2, min_benchmark_score=40, max_benchmark_score=60),
+                          {"macro": 39.9, "technical": 39.9, "market": 39.9})
     assert matched["status"] == "matches" and matched["score"] == 60
     assert outside["status"] == "outside_conditions" and outside["score"] <= 59
 
 
 def test_missing_data_and_unconfigured_conditions_have_no_match_score():
-    configured = setup(1, min_market_score=40)
+    configured = setup(1, min_benchmark_score=40)
     assert match_setup(configured, None)["status"] == "insufficient_data"
-    assert match_setup(configured, None)["conditions"]["market"] == {
+    assert match_setup(configured, None)["conditions"]["benchmark"] == {
         "minimum": 40.0, "maximum": None,
     }
     assert match_setup(configured, {"macro": 50, "technical": None, "market": 60})["score"] is None
@@ -81,17 +90,17 @@ def test_missing_data_and_unconfigured_conditions_have_no_match_score():
 
 def test_finn_setup_reads_preserve_boundaries_without_selecting_a_strategy():
     async def run():
-        saved = setup(9, min_market_score=20, max_market_score=60,
+        saved = setup(9, min_benchmark_score=20, max_benchmark_score=60,
                       min_macro_score=30, max_macro_score=70,
                       min_technical_score=40, max_technical_score=80)
         active = (await SetupToolAdapter().execute(
             setup=saved, resolution_source="explicit_name",
         ))["data"]
         listed = (await SetupInventoryToolAdapter().execute(setups=[saved]))["data"].setups[0]
-        assert (active.min_market_score, active.max_market_score) == (20, 60)
+        assert (active.min_benchmark_score, active.max_benchmark_score) == (20, 60)
         assert (active.min_macro_score, active.max_macro_score) == (30, 70)
         assert (active.min_technical_score, active.max_technical_score) == (40, 80)
-        assert listed["min_market_score"] == 20
+        assert listed["min_benchmark_score"] == 20
         assert listed["max_technical_score"] == 80
 
     asyncio.run(run())
@@ -106,10 +115,10 @@ def test_finn_current_score_read_matches_analyse_and_market_snapshot_has_no_scor
             mappings=lambda: SimpleNamespace(first=lambda: row))))
         service = SetupMarketMatchService(session)
         service._source_is_fresh = AsyncMock(return_value=True)
-        result = await service.for_asset(7, "BTC", setups=[setup(9, min_market_score=20)])
+        result = await service.for_asset(7, "BTC", setups=[setup(9, min_benchmark_score=20)])
         assert result["reported_scores"]["market_score"] == 100
         assert result["benchmark_score"] is None
-        assert result["matches"][0]["conditions"]["market"]["minimum"] == 20
+        assert result["matches"][0]["conditions"]["benchmark"]["minimum"] == 20
 
         adapter = MarketToolAdapter(SimpleNamespace())
         adapter.repository.get_latest_snapshot = AsyncMock(return_value=SimpleNamespace(
@@ -176,16 +185,16 @@ def test_recent_price_reading_can_need_score_rebuild_without_being_stale():
 
 
 def test_setup_fit_uses_current_benchmark_weights_but_preserves_hard_conditions():
-    conditions = setup(1, min_macro_score=40, max_macro_score=60,
-                       min_market_score=40, max_market_score=80)
+    conditions = setup(1, min_benchmark_score=55, max_benchmark_score=60)
     scores = {"macro": 50, "technical": 50, "market": 80}
     weights = {"macro_score": 0.8, "market_score": 0.2, "technical_score": 0.0}
     weighted = match_setup(conditions, scores, weights)
     equal = match_setup(conditions, scores)
-    assert weighted["score"] == 92
-    assert equal["score"] == 80
+    assert weighted["components"]["benchmark"]["score"] == 56
+    assert equal["components"]["benchmark"]["score"] == 60
+    assert weighted["score"] != equal["score"]
     assert weighted["status"] == "matches"
-    outside = match_setup(conditions, {**scores, "market": 81}, weights)
+    outside = match_setup(conditions, {**scores, "macro": 20}, weights)
     assert outside["status"] == "outside_conditions"
     assert outside["is_active"] is False
 
@@ -204,7 +213,7 @@ def test_total_benchmark_is_distinct_from_setup_fit():
         service._source_is_fresh = AsyncMock(return_value=True)
         assessment = await service.for_asset(7, "BTC", setups=[
             setup(1, min_macro_score=40, max_macro_score=60,
-                  min_market_score=40, max_market_score=80)])
+                  min_benchmark_score=40, max_benchmark_score=80)])
         assert assessment["benchmark_score"] == 56.0
         assert assessment["matches"][0]["score"] == 92
         assert assessment["matches"][0]["benchmark_weights"]["macro_score"] == 0.8
@@ -222,7 +231,7 @@ def test_batch_reader_does_not_relabel_yesterdays_score_as_current():
                     "macro_score": 70, "technical_score": 70, "market_score": 70},
         })
         service._source_is_fresh = AsyncMock(return_value=True)
-        result = await service.for_asset(7, "BTC", setups=[setup(1, min_market_score=60)])
+        result = await service.for_asset(7, "BTC", setups=[setup(1, min_benchmark_score=60)])
         assert result["source_status"] == "stale_scores"
         assert result["benchmark_score"] is None
         assert result["matches"][0]["status"] == "insufficient_data"
@@ -232,7 +241,7 @@ def test_batch_reader_does_not_relabel_yesterdays_score_as_current():
 
 
 def test_bot_and_report_score_adapter_requires_fresh_complete_sources():
-    conditions = setup(9, min_market_score=40, max_market_score=80)
+    conditions = setup(9, min_benchmark_score=40, max_benchmark_score=80)
     values = {"market": 70, "macro": 50, "technical": 60,
               "_source_available": {"market_score": True, "macro_score": True,
                                     "technical_score": True}}
@@ -269,7 +278,7 @@ def test_sync_report_adapter_uses_same_owner_scoped_match_and_weights(monkeypatc
             elif "FROM setups" in sql:
                 assert params == (7, "BTC")
                 self.rows = [tuple(setup(1, min_macro_score=40, max_macro_score=60,
-                                         min_market_score=40, max_market_score=80).get(key)
+                                         min_benchmark_score=40, max_benchmark_score=80).get(key)
                                    for key in setup_market_match_sync.SETUP_COLUMNS)]
             else:
                 raise AssertionError(sql)
@@ -376,8 +385,8 @@ def test_asset_match_is_owner_scoped_and_requires_fresh_sources():
             mappings=lambda: SimpleNamespace(first=lambda: row))))
         service = SetupMarketMatchService(session)
         service._source_is_fresh = AsyncMock(return_value=True)
-        owned = [setup(1, "BTC", min_market_score=60),
-                 setup(2, "AAPL", min_market_score=60)]
+        owned = [setup(1, "BTC", min_benchmark_score=60),
+                 setup(2, "AAPL", min_benchmark_score=60)]
 
         result = await service.for_asset(7, "BTC", setups=owned)
         assert result["source_status"] == "available"
@@ -421,8 +430,8 @@ def test_positive_match_uses_saved_evidence_for_each_selected_source():
         service = SetupMarketMatchService(SimpleNamespace(execute=execute), daily_rows={"BTC": row})
         service._weights_by_user[7] = {"market_score": 1 / 3, "macro_score": 1 / 3,
                                        "technical_score": 1 / 3}
-        owned = [setup(1, "BTC", min_market_score=60, max_market_score=80),
-                 setup(2, "AAPL", min_market_score=60)]
+        owned = [setup(1, "BTC", min_benchmark_score=60, max_benchmark_score=80),
+                 setup(2, "AAPL", min_benchmark_score=60)]
         result = await service.for_asset(7, "BTC", setups=owned)
         assert result["source_status"] == "available"
         assert result["benchmark_score"] == 65
@@ -470,7 +479,7 @@ def test_all_asset_match_keeps_each_asset_and_source_status():
 
 def test_twenty_assets_keep_distinct_owner_setup_ids():
     async def run():
-        owned = [setup(index, f"ASSET{index}", min_market_score=50)
+        owned = [setup(index, f"ASSET{index}", min_benchmark_score=50)
                  for index in range(1, 21)]
         service = SetupMarketMatchService(SimpleNamespace(), daily_rows={})
         service.setups.get_all_setups = AsyncMock(return_value=owned)
@@ -544,7 +553,7 @@ def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
 
         async def assessment(_user_id, _symbol):
             return {"symbol": "BTC", "as_of": date.today(), "source_status": "available",
-                    "matches": [match_setup(setup(1, min_market_score=50),
+                    "matches": [match_setup(setup(1, min_benchmark_score=50),
                                             {"macro": 50, "technical": 50, "market": 70})]}
 
         service._ensure_asset = asset

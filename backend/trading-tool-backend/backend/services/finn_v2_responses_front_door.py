@@ -271,8 +271,7 @@ class FinnResponsesFrontDoor:
                 } if row.get("setup_type") == "dca" else None),
                 "score_conditions": {
                     field: row[field] for field in (
-                        "min_market_score", "max_market_score", "min_macro_score",
-                        "max_macro_score", "min_technical_score", "max_technical_score",
+                        "min_benchmark_score", "max_benchmark_score",
                     ) if row.get(field) is not None
                 },
                 "linked_strategy_read_status": linked.get("status", "unavailable"),
@@ -284,8 +283,7 @@ class FinnResponsesFrontDoor:
         score_data = (score_item or {}).get("data") or {}
         condition_groups = {}
         for field in (
-            "min_market_score", "max_market_score", "min_macro_score",
-            "max_macro_score", "min_technical_score", "max_technical_score",
+            "min_benchmark_score", "max_benchmark_score",
         ):
             configured = {}
             without = []

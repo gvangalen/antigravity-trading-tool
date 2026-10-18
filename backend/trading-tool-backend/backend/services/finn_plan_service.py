@@ -29,6 +29,7 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.models import OnboardingStep
 from backend.domain.indicator_display import indicator_display_name
+from backend.domain.setup_market_match import benchmark_proximity
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.ai_availability_service import get_ai_availability
@@ -308,54 +309,25 @@ INDICATOR_FIXED_BUCKETS = [
 ]
 
 SETUP_MARKET_CONDITION_PRESETS = {
-    "confirmed_strength": {
-        "label": "Bevestigd sterk",
-        "scores": {
-            "macro_score_range": [40, 100],
-            "technical_score_range": [55, 100],
-            "market_score_range": [35, 100],
-        },
-        "aliases": [
-            "bevestigd sterk",
-            "confirmed strength",
-            "sterke bevestiging",
-            "trend bevestigd",
-            "alleen sterk",
-        ],
+    "heavy_pressure": {
+        "label": "Zwaar onder druk", "scores": {"benchmark_score_range": [0, 25]},
+        "aliases": ["zwaar onder druk", "zeer lage benchmark", "extreme zwakte"],
     },
-    "balanced_pullback": {
-        "label": "Normale pullback",
-        "scores": {
-            "macro_score_range": [30, 70],
-            "technical_score_range": [40, 80],
-            "market_score_range": [20, 60],
-        },
-        "aliases": [
-            "normale pullback",
-            "pullback",
-            "gebalanceerd",
-            "balanced",
-            "balanced pullback",
-            "normale markt",
-            "standaard",
-        ],
+    "pressure": {
+        "label": "Onder druk", "scores": {"benchmark_score_range": [26, 45]},
+        "aliases": ["onder druk", "lage benchmark"],
     },
-    "early_dip": {
-        "label": "Vroege dip",
-        "scores": {
-            "macro_score_range": [15, 60],
-            "technical_score_range": [25, 75],
-            "market_score_range": [0, 55],
-        },
-        "aliases": [
-            "vroege dip",
-            "early dip",
-            "grote daling",
-            "correctie",
-            "alleen tijdens correcties",
-            "zwakke markt",
-            "dip kopen",
-        ],
+    "no_direction": {
+        "label": "Geen duidelijke richting", "scores": {"benchmark_score_range": [46, 60]},
+        "aliases": ["geen duidelijke richting", "rond het midden"],
+    },
+    "gaining_strength": {
+        "label": "De markt trekt aan", "scores": {"benchmark_score_range": [61, 75]},
+        "aliases": ["markt trekt aan", "hogere benchmark"],
+    },
+    "strong": {
+        "label": "Sterke markt", "scores": {"benchmark_score_range": [76, 100]},
+        "aliases": ["sterke markt", "zeer hoge benchmark"],
     },
 }
 
@@ -368,9 +340,7 @@ def empty_plan_draft() -> Dict[str, Any]:
             "name": None,
             "timeframe": None,
             "market_condition": None,
-            "macro_score_range": None,
-            "technical_score_range": None,
-            "market_score_range": None,
+            "benchmark_score_range": None,
         },
         "strategy": {
             "base_amount_eur": None,
@@ -413,9 +383,7 @@ def empty_plan_patch() -> Dict[str, Any]:
             "name": None,
             "timeframe": None,
             "market_condition": None,
-            "macro_score_range": None,
-            "technical_score_range": None,
-            "market_score_range": None,
+            "benchmark_score_range": None,
         },
         "strategy": {
             "base_amount_eur": None,
@@ -580,15 +548,11 @@ def _resolve_setup_market_condition(query: str) -> Optional[str]:
         return None
 
     numeric_choice_map = {
-        "1": "confirmed_strength",
-        "optie 1": "confirmed_strength",
-        "eerste": "confirmed_strength",
-        "2": "balanced_pullback",
-        "optie 2": "balanced_pullback",
-        "tweede": "balanced_pullback",
-        "3": "early_dip",
-        "optie 3": "early_dip",
-        "derde": "early_dip",
+        "1": "heavy_pressure", "optie 1": "heavy_pressure", "eerste": "heavy_pressure",
+        "2": "pressure", "optie 2": "pressure", "tweede": "pressure",
+        "3": "no_direction", "optie 3": "no_direction", "derde": "no_direction",
+        "4": "gaining_strength", "optie 4": "gaining_strength", "vierde": "gaining_strength",
+        "5": "strong", "optie 5": "strong", "vijfde": "strong",
     }
     for phrase, key in numeric_choice_map.items():
         if q == phrase or q.startswith(f"{phrase} "):
@@ -8981,16 +8945,9 @@ class FinnPlanService:
         if targets:
             patch["strategy"]["targets"] = targets
 
-        macro = _extract_score_range(query, "macro")
-        technical = _extract_score_range(query, "technical")
-        market = _extract_score_range(query, "market")
-        if macro:
-            patch["setup"]["macro_score_range"] = macro
-        if technical:
-            patch["setup"]["technical_score_range"] = technical
-        if market:
-            patch["setup"]["market_score_range"] = market
-        if macro or technical or market:
+        benchmark = _extract_score_range(query, "benchmark")
+        if benchmark:
+            patch["setup"]["benchmark_score_range"] = benchmark
             patch["setup"]["market_condition"] = patch["setup"].get("market_condition") or "custom_manual"
 
         quoted_name = re.search(r"(?:noem|naam|heet)\s+(?:hem|haar|deze)?\s*[\"']?([^\"'.]+)[\"']?", q, re.IGNORECASE)
@@ -9047,12 +9004,8 @@ class FinnPlanService:
             return
         if draft["bot"].get("automation") is None and draft["bot"].get("create_bot") is not None:
             draft["bot"]["automation"] = "bot_assisted" if draft["bot"].get("create_bot") else "manual_only"
-        if draft["setup"].get("macro_score_range") is None:
-            draft["setup"]["macro_score_range"] = [30, 70]
-        if draft["setup"].get("technical_score_range") is None:
-            draft["setup"]["technical_score_range"] = [40, 80]
-        if draft["setup"].get("market_score_range") is None:
-            draft["setup"]["market_score_range"] = [20, 60]
+        if draft["setup"].get("benchmark_score_range") is None:
+            draft["setup"]["benchmark_score_range"] = [46, 60]
 
     def _action_id(self, payload: Dict[str, Any]) -> str:
         normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
@@ -10858,7 +10811,7 @@ class FinnPlanService:
         if not timeframe:
             missing.append("setup.timeframe")
 
-        for field in ("macro_score_range", "technical_score_range", "market_score_range"):
+        for field in ("benchmark_score_range",):
             value = draft["setup"].get(field)
             if value is not None:
                 self._validate_range(f"setup.{field}", value, invalid)
@@ -10914,7 +10867,7 @@ class FinnPlanService:
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
         if next_question == "setup.market_condition":
-            return "Wanneer wil je vooral instappen? Kies bijvoorbeeld: bevestigd sterk, normale pullback, of vroege dip. Ik vertaal dat daarna zelf naar de juiste filters."
+            return "Bij welke benchmarkstand mag deze setup meedoen: zwaar onder druk, onder druk, geen duidelijke richting, de markt trekt aan of sterke markt? Je kunt ook zelf een benchmarkbereik kiezen."
         if next_question == "strategy.entry":
             return "Welke entry-prijs hoort bij deze trade?"
         if next_question == "strategy.stop_loss":
@@ -10947,7 +10900,7 @@ class FinnPlanService:
         if next_question == "dca.month_day":
             return "Op welke dag van de maand wil je kopen? Gebruik dag 1 t/m 28."
         if next_question == "setup.market_condition":
-            return "Wanneer wil je dat deze setup vooral mag instappen? Kies bijvoorbeeld: bevestigd sterk, normale pullback, of vroege dip."
+            return "Bij welke benchmarkstand mag deze setup meedoen: zwaar onder druk, onder druk, geen duidelijke richting, de markt trekt aan of sterke markt? Je kunt ook zelf een benchmarkbereik kiezen."
 
         summary = self._setup_only_summary(draft)
         return f"Ik heb je setup klaarstaan. Controleer dit even en bevestig als het klopt:\n\n{summary}"
@@ -11142,16 +11095,30 @@ class FinnPlanService:
         score_repo = ScoreRepository(self.session)
         scores = await score_repo.fetch_daily_scores(user_id, asset)
         if scores or not allow_refresh:
-            return scores
+            return await self._with_current_benchmark(user_id, asset, scores)
         try:
             await ScoreService(score_repo).get_daily_scores(
                 user_id,
                 asset,
                 refresh_if_incomplete=True,
             )
-            return await score_repo.fetch_daily_scores(user_id, asset)
+            return await self._with_current_benchmark(
+                user_id, asset, await score_repo.fetch_daily_scores(user_id, asset)
+            )
         except Exception:
             return scores
+
+    async def _with_current_benchmark(self, user_id: int, asset: str, scores):
+        if not scores:
+            return scores
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+        try:
+            assessment = await SetupMarketMatchService(self.session).for_asset(user_id, asset)
+        except Exception:
+            # Raw daily scores may still be shown, but are not proof of a
+            # current benchmark until the owner-scoped sources are verified.
+            return {**scores, "benchmark_score": None}
+        return {**scores, "benchmark_score": assessment.get("benchmark_score")}
 
     async def _build_indicator_analysis_fast(
         self,
@@ -11548,7 +11515,7 @@ class FinnPlanService:
             onboarding_status=onboarding_status or {},
         )
 
-        if not daily_scores:
+        if not daily_scores or daily_scores.get("benchmark_score") is None:
             stance = "wait_for_scores"
         elif setup_analysis.get("is_active"):
             stance = "plan_is_active"
@@ -11556,15 +11523,17 @@ class FinnPlanService:
             stance = "wait_for_plan"
 
         reasons = []
-        if not daily_scores:
-            reasons.append(data_readiness.get("message") or "Geen daily scores beschikbaar; Finn mag geen actief/inactief oordeel verzinnen.")
+        if not daily_scores or daily_scores.get("benchmark_score") is None:
+            reasons.append("Geen actuele, geverifieerde samengestelde benchmarkscore; FINN mag geen setupmatch verzinnen.")
         elif blockers:
             reasons.extend([
                 f"{b.get('category')}: {b.get('score')} buiten range {b.get('range')}"
                 for b in blockers[:3]
             ])
+        elif setup_analysis.get("is_active"):
+            reasons.append("De samengestelde benchmarkscore valt binnen de setupvoorwaarde.")
         else:
-            reasons.append("Macro, technical en market vallen binnen de setup-ranges.")
+            reasons.append("De actuele benchmarkscore of setupvoorwaarde ontbreekt.")
 
         if active_strategy.get("active"):
             strategy = active_strategy.get("strategy") or {}
@@ -11581,9 +11550,12 @@ class FinnPlanService:
         if stance == "plan_is_active":
             suggested_actions.append("Volg je plan en check eventuele bot-proposal voordat je uitvoert.")
         elif stance == "wait_for_scores":
-            suggested_actions.extend(data_readiness.get("suggested_actions") or [
-                "Haal of genereer eerst daily scores voordat je een planbeslissing neemt."
-            ])
+            suggested_actions.extend(
+                ["Controleer de brongegevens en ververs de benchmark voordat je de setup beoordeelt."]
+                if daily_scores else data_readiness.get("suggested_actions") or [
+                    "Haal of genereer eerst daily scores voordat je een planbeslissing neemt."
+                ]
+            )
         else:
             suggested_actions.append("Niet forceren: wacht tot de blocker-scores binnen je ranges vallen.")
         if indicator_suggestions:
@@ -20079,6 +20051,8 @@ class FinnPlanService:
             "interpretation": interpretation,
             "top_contributors": contributors,
         }
+        if label == "benchmark" and score is not None and score_range is not None:
+            check["match"] = benchmark_proximity(score, score_range[0], score_range[1])
         if passed is False:
             check["blocker_reason"] = f"{label} score {score} valt buiten je range {score_range}"
         if passed is None:
@@ -20110,7 +20084,11 @@ class FinnPlanService:
         analysis["blockers"] = failed
         analysis["passed_checks"] = passed
         analysis["missing_checks"] = missing
-        analysis["match_percentage"] = round((len(passed) / len(checks)) * 100, 1) if checks else 0.0
+        benchmark_check = checks.get("benchmark") if isinstance(checks, dict) else None
+        analysis["match_percentage"] = (
+            benchmark_check.get("match") if benchmark_check is not None
+            else round((len(passed) / len(checks)) * 100, 1) if checks else 0.0
+        )
         analysis["is_active"] = bool(known) and len(known) == len(checks) and not failed
         analysis["confidence"] = "medium" if len(known) == len(checks) and analysis.get("has_scores") else "low"
         return analysis
@@ -20121,26 +20099,11 @@ class FinnPlanService:
         daily_scores: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         setup = draft.get("setup") or {}
-        checks = {
-            "macro": self._score_check(
-                "macro",
-                self._score_value(daily_scores, "macro"),
-                self._draft_score_range(setup, "macro_score_range", [30, 70]),
-                daily_scores,
-            ),
-            "technical": self._score_check(
-                "technical",
-                self._score_value(daily_scores, "technical"),
-                self._draft_score_range(setup, "technical_score_range", [40, 80]),
-                daily_scores,
-            ),
-            "market": self._score_check(
-                "market",
-                self._score_value(daily_scores, "market"),
-                self._draft_score_range(setup, "market_score_range", [20, 60]),
-                daily_scores,
-            ),
-        }
+        checks = {"benchmark": self._score_check(
+            "benchmark", self._score_value(daily_scores, "benchmark"),
+            self._draft_score_range(setup, "benchmark_score_range", [46, 60]),
+            daily_scores,
+        )}
         return self._finalize_score_analysis({
             "checks": checks,
             "has_scores": bool(daily_scores),
@@ -20160,26 +20123,11 @@ class FinnPlanService:
                 "has_scores": bool(daily_scores),
                 "reason": "Ik vond nog geen opgeslagen setup voor dit asset.",
             }
-        checks = {
-            "macro": self._score_check(
-                "macro",
-                self._score_value(daily_scores, "macro"),
-                self._score_range_from_values(setup.get("min_macro_score"), setup.get("max_macro_score")),
-                daily_scores,
-            ),
-            "technical": self._score_check(
-                "technical",
-                self._score_value(daily_scores, "technical"),
-                self._score_range_from_values(setup.get("min_technical_score"), setup.get("max_technical_score")),
-                daily_scores,
-            ),
-            "market": self._score_check(
-                "market",
-                self._score_value(daily_scores, "market"),
-                self._score_range_from_values(setup.get("min_market_score"), setup.get("max_market_score")),
-                daily_scores,
-            ),
-        }
+        checks = {"benchmark": self._score_check(
+            "benchmark", self._score_value(daily_scores, "benchmark"),
+            self._score_range_from_values(setup.get("min_benchmark_score"), setup.get("max_benchmark_score")),
+            daily_scores,
+        )}
         return self._finalize_score_analysis({
             "checks": checks,
             "has_scores": bool(daily_scores),
@@ -20204,13 +20152,12 @@ class FinnPlanService:
                 for blocker in blockers
             ]
         checks = analysis.get("checks") or {}
-        if isinstance(checks, dict) and all(label in checks for label in ["macro", "technical", "market"]):
-            reasons = []
-            for label in ["macro", "technical", "market"]:
-                check = checks.get(label) or {}
-                status = "binnen range" if check.get("pass") else "buiten range"
-                reasons.append(f"{label}: {check.get('score')} is {status}")
-            return reasons
+        if isinstance(checks, dict) and "benchmark" in checks:
+            check = checks["benchmark"] or {}
+            if check.get("pass") is None:
+                return ["De actuele, geverifieerde benchmarkscore ontbreekt."]
+            status = "binnen range" if check.get("pass") else "buiten range"
+            return [f"benchmark: {check.get('score')} is {status}"]
         setup = analysis.get("setup")
         if setup:
             return [f"Setup-score: {setup.get('score')}"]
@@ -20459,10 +20406,10 @@ class FinnPlanService:
 
 
     def _status_message(self, asset: str, analysis: Dict[str, Any], source: str) -> str:
-        if not analysis.get("has_scores"):
+        if not analysis.get("has_scores") or (analysis.get("checks") or {}).get("benchmark", {}).get("pass") is None:
             lines = [
-                f"Ik kan nog niet betrouwbaar zeggen of {asset} actief is, omdat ik geen scores van vandaag vind. "
-                "Zodra macro, technical en market scores beschikbaar zijn kan ik dit onderbouwen."
+                f"Ik kan nog niet betrouwbaar zeggen of de setup voor {asset} mag meedoen. "
+                "Daarvoor zijn een opgeslagen benchmarkvoorwaarde en een actuele, geverifieerde samengestelde benchmarkscore nodig."
             ]
             return "\n".join(lines)
 
@@ -20484,17 +20431,11 @@ class FinnPlanService:
                         f"- {blocker.get('category')}: score {blocker.get('score')} moet binnen {blocker.get('range')} vallen"
                     )
             else:
-                lines.append("Geen score-blockers: macro, technical en market vallen binnen je ingestelde ranges.")
+                lines.append("De samengestelde benchmarkscore valt binnen je ingestelde band.")
             if passed_checks:
                 lines.append("Binnen plan:")
                 for check in passed_checks:
                     lines.append(f"- {check.get('category')}: {check.get('score')} binnen {check.get('range')}")
-            for label in ["macro", "technical", "market"]:
-                check = checks.get(label) or {}
-                contributors = check.get("top_contributors") or []
-                if contributors:
-                    preview = ", ".join(str(item) for item in contributors[:2])
-                    lines.append(f"- Belangrijkste {label}-signalen: {preview}")
             return "\n".join(lines)
 
         setup = analysis.get("setup")
@@ -20503,7 +20444,7 @@ class FinnPlanService:
         lines = [
             f"Je opgeslagen setup '{setup.get('name')}' voor {asset} is nu {active_text} op basis van je eigen ranges.",
             f"Setup #{setup.get('id')} - {setup.get('type') or 'setup'} - timeframe {setup.get('timeframe') or 'n.v.t.'}.",
-            f"Match met je plan: {match_percentage}%. Setup-score: {setup.get('score')}.",
+            f"Setupvoorwaarde: samengestelde benchmarkscore binnen de opgeslagen band.",
         ]
         if blockers:
             lines.append("Blokkeert nu:")
@@ -20512,12 +20453,12 @@ class FinnPlanService:
                     f"- {blocker.get('category')}: score {blocker.get('score')} moet binnen {blocker.get('range')} vallen"
                 )
         else:
-            lines.append("Geen score-blockers: macro, technical en market vallen binnen je setup-ranges.")
+            lines.append("De samengestelde benchmarkscore valt binnen je opgeslagen band.")
         if passed_checks:
             lines.append("Binnen plan:")
             for check in passed_checks:
                 lines.append(f"- {check.get('category')}: {check.get('score')} binnen {check.get('range')}")
-        lines.append("Gebruik dit als plan-check, niet als losse emotionele trigger.")
+        lines.append("De setup mag meedoen; je strategie en veiligheidslimieten bepalen of er een aankoop volgt.")
         return "\n".join(lines)
 
     def _summary(self, draft: Dict[str, Any]) -> str:
@@ -22209,9 +22150,7 @@ class FinnPlanService:
         dca = draft["dca"]
         plan_type = draft["plan_type"]
         setup_name = setup.get("name") or f"{draft['asset']} {'Smart DCA' if plan_type == 'dca' else 'Trade Plan'}"
-        macro_range = setup.get("macro_score_range") or [30, 70]
-        technical_range = setup.get("technical_score_range") or [40, 80]
-        market_range = setup.get("market_score_range") or [20, 60]
+        benchmark_range = setup.get("benchmark_score_range") or [20, 60]
         return {
             "name": setup_name,
             "symbol": draft["asset"],
@@ -22220,12 +22159,8 @@ class FinnPlanService:
             "dca_frequency": dca.get("frequency") if plan_type == "dca" else None,
             "dca_day": str(WEEKDAY_NUMBERS.get(str(dca.get("day") or "").lower(), dca.get("day"))) if plan_type == "dca" and dca.get("frequency") == "weekly" and dca.get("day") is not None else None,
             "dca_month_day": dca.get("month_day") if plan_type == "dca" and dca.get("frequency") == "monthly" else None,
-            "min_macro_score": macro_range[0],
-            "max_macro_score": macro_range[1],
-            "min_technical_score": technical_range[0],
-            "max_technical_score": technical_range[1],
-            "min_market_score": market_range[0],
-            "max_market_score": market_range[1],
+            "min_benchmark_score": benchmark_range[0],
+            "max_benchmark_score": benchmark_range[1],
             "description": "Aangemaakt via Finn",
             "category": "finn_plan",
         }

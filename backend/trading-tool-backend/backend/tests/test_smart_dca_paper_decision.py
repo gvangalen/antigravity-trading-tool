@@ -507,7 +507,7 @@ def test_worker_records_score_2_decision_for_missing_and_complete_sources(monkey
     ))
     monkeypatch.setattr(worker, "_get_saved_setup_conditions", lambda *args: {
         "id": 10, "name": "BTC Plan", "symbol": "BTC", "setup_type": "trade",
-        "min_market_score": 40,
+        "min_benchmark_score": 40,
     })
     monkeypatch.setattr(worker, "_get_saved_strategy_plan", lambda *args: (
         {"entry": 100, "stop_loss": 90, "targets": [120],

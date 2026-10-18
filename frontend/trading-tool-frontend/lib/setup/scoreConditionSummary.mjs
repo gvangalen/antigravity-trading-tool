@@ -1,7 +1,5 @@
 import { marketConditionChoiceFromSetup } from "./scoreConditions.mjs";
 
-const CATEGORIES = ["market", "macro", "technical"];
-
 function fillBounds(template, min, max) {
   return String(template || "")
     .replace("{min}", String(min))
@@ -19,18 +17,13 @@ export function formatSetupScoreConditions(setup, copy = {}) {
     if (option?.title && option?.rule) return `${option.title} · ${option.rule}`;
   }
 
-  const savedLimits = CATEGORIES.flatMap((category) => {
-    const min = setup[`min_${category}_score`];
-    const max = setup[`max_${category}_score`];
-    if (min == null && max == null) return [];
-
-    const template = min == null
-      ? copy.savedThrough
-      : max == null
-        ? copy.savedFrom
-        : copy.savedBetween;
-    return [`${copy.savedCategories?.[category]} ${fillBounds(template, min, max)}`];
-  });
-
-  return `${copy.savedCustomTitle}: ${savedLimits.join("; ")}`;
+  const min = setup.min_benchmark_score;
+  const max = setup.max_benchmark_score;
+  if (min == null && max == null) return copy.savedNoConditions;
+  const template = min == null
+    ? copy.savedThrough
+    : max == null
+      ? copy.savedFrom
+      : copy.savedBetween;
+  return `${copy.savedCustomTitle}: ${copy.savedBenchmark || "benchmark"} ${fillBounds(template, min, max)}`;
 }

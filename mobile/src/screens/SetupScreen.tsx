@@ -2081,7 +2081,7 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
     explanation:
       readString(active, ['setup_explanation', 'ai_explanation', 'explanation'], '') ||
       (active
-        ? 'De backend heeft deze setup geselecteerd op basis van overlap met de huidige macro-, technical- en market-scores.'
+        ? 'Deze setup wordt vergeleken met de actuele samengestelde benchmarkscore van Markt, Macro en Technisch.'
         : 'Er is nog geen actieve setup beschikbaar voor deze asset. Gebruik dit scherm als read-only context.'),
     id: readOptionalNumber(active, ['id', 'setup_id']),
     name,
@@ -2089,7 +2089,7 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
     scoreAvailable,
     symbol,
     timeframe: readString(active, ['timeframe'], ''),
-    tone: toneForScore(score),
+    tone: scoreAvailable ? toneForScore(score) : 'neutral',
     trend: readString(active, ['trend'], ''),
     type: readString(active, ['setup_type', 'type'], ''),
     status: readString(active, ['status', 'state'], ''),
@@ -2110,7 +2110,7 @@ function mapTopSetups(source?: SetupResponse): SetupSummary[] {
       scoreAvailable,
       symbol: readString(item, ['symbol'], ''),
       timeframe: readString(item, ['timeframe'], ''),
-      tone: toneForScore(score),
+      tone: scoreAvailable ? toneForScore(score) : 'neutral',
       trend: readString(item, ['trend'], ''),
       type: readString(item, ['setup_type', 'type'], ''),
       status: readString(item, ['status', 'state'], ''),
@@ -2131,9 +2131,9 @@ function mapDecisionState(
   const benchmarkAvailable = asset?.benchmark_score != null;
   const tone: StatusTone = benchmarkAvailable ? toneForScore(score) : 'neutral';
   const action = botAction.toLowerCase();
-  const status =
-    !benchmarkAvailable ? 'Unknown' :
-    score >= 70 ? 'Constructive' : score >= 50 ? 'Selective' : action.includes('hold') ? 'Hold' : 'Defensive';
+  const status = !benchmarkAvailable ? 'Unknown' :
+    setup.status === 'matches' ? 'Setup matches' :
+    setup.status === 'outside_conditions' ? 'Setup outside condition' : 'Plan review';
 
   return {
     nextStep:
@@ -2150,8 +2150,9 @@ function mapDecisionState(
       { label: 'Setup', value: setupScore ?? '—' },
     ],
     status,
-    title: !benchmarkAvailable ? 'Benchmark unavailable' :
-      score >= 70 ? 'Setup valid, stay selective' : score >= 50 ? 'Review before action' : 'Defensive posture',
+    title: !benchmarkAvailable ? 'Benchmark niet beschikbaar' :
+      setup.status === 'matches' ? 'Setup mag meedoen; strategie beslist' :
+      setup.status === 'outside_conditions' ? 'Setupvoorwaarde niet bereikt' : 'Controleer je setup',
     tone,
   };
 }

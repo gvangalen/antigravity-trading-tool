@@ -925,8 +925,7 @@ def _get_saved_setup_conditions(conn, user_id: int, setup_id: int | None) -> dic
         return None
     columns = (
         "id", "name", "symbol", "timeframe", "setup_type",
-        "min_macro_score", "max_macro_score", "min_technical_score",
-        "max_technical_score", "min_market_score", "max_market_score",
+        "min_benchmark_score", "max_benchmark_score",
     )
     with conn.cursor() as cur:
         cur.execute(
@@ -1042,10 +1041,9 @@ def _get_saved_strategy_plan(conn, user_id: int, strategy_id: int, match_score: 
         "entry": entry_value,
         "targets": targets,
         "stop_loss": stop_value,
-        "confidence": float(match_score) if match_score is not None else None,
+        "confidence": None,
         "reason": (
-            "saved_strategy_and_measured_setup_match"
-            if match_score is not None else "saved_strategy_setup_match_unavailable"
+            "saved_strategy_setup_match_is_eligibility_only"
         ),
     }
 

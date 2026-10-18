@@ -146,6 +146,8 @@ class ActiveSetupData(BaseModel):
     dca_day_name: Optional[str] = None
     dca_month_day: Optional[int] = None
     min_investment: Optional[float] = None
+    min_benchmark_score: Optional[float] = None
+    max_benchmark_score: Optional[float] = None
     min_market_score: Optional[float] = None
     max_market_score: Optional[float] = None
     min_macro_score: Optional[float] = None

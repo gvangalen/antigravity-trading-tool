@@ -24,12 +24,8 @@ def _weekly_payload(day):
         "setup_type": "dca",
         "dca_frequency": "weekly",
         "dca_day": day,
-        "min_macro_score": 0,
-        "max_macro_score": 100,
-        "min_technical_score": 0,
-        "max_technical_score": 100,
-        "min_market_score": 0,
-        "max_market_score": 100,
+        "min_benchmark_score": 0,
+        "max_benchmark_score": 100,
     }
 
 
@@ -150,8 +146,8 @@ def test_save_setup_applies_default_timeframe_for_trade_payload():
 
     assert result["status"] == "success"
     assert result["setup"]["timeframe"] == "4H"
-    assert result["field_sources"]["min_macro_score"] == "absent"
-    assert "min_market_score" not in raw_payload
+    assert result["field_sources"]["min_benchmark_score"] == "absent"
+    assert "min_benchmark_score" not in raw_payload
 
 
 @pytest.mark.parametrize("raw_day", ["monday", "maandag", "1", 1])
@@ -175,8 +171,8 @@ def test_get_active_setup_filters_candidates_by_symbol(monkeypatch):
                     "max_macro_score": 100,
                     "min_technical_score": 0,
                     "max_technical_score": 100,
-                    "min_market_score": 0,
-                    "max_market_score": 100,
+                    "min_benchmark_score": 0,
+                    "max_benchmark_score": 100,
                 },
                 {
                     "id": 2,
@@ -188,8 +184,8 @@ def test_get_active_setup_filters_candidates_by_symbol(monkeypatch):
                     "max_macro_score": 100,
                     "min_technical_score": 0,
                     "max_technical_score": 100,
-                    "min_market_score": 0,
-                    "max_market_score": 100,
+                    "min_benchmark_score": 0,
+                    "max_benchmark_score": 100,
                 },
             ]
 

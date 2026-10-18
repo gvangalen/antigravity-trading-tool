@@ -5358,13 +5358,12 @@ def test_draft_status_analysis_explains_score_ranges():
             "macro_score": 50,
             "technical_score": 90,
             "market_score": 40,
+            "benchmark_score": 61,
         },
     )
 
     assert analysis["is_active"] is False
-    assert analysis["checks"]["macro"]["pass"] is True
-    assert analysis["checks"]["technical"]["pass"] is False
-    assert analysis["checks"]["market"]["pass"] is True
+    assert analysis["checks"]["benchmark"]["pass"] is False
 
 
 def test_plan_response_includes_state_reasoning_and_guardrails():
@@ -5395,13 +5394,14 @@ def test_draft_status_analysis_keeps_top_contributors():
             "macro_score": 50,
             "technical_score": 60,
             "market_score": 40,
+            "benchmark_score": 50,
             "macro_top_contributors": '["DXY", "Liquidity"]',
         },
     )
 
     assert analysis["is_active"] is True
-    assert analysis["checks"]["macro"]["top_contributors"] == ["DXY", "Liquidity"]
-    assert "macro: 50.0 is binnen range" in service._analysis_reasons(analysis)
+    assert analysis["checks"]["benchmark"]["pass"] is True
+    assert "benchmark: 50.0 is binnen range" in service._analysis_reasons(analysis)
 
 
 def test_saved_setup_status_uses_setup_score_ranges_for_blockers():
@@ -5415,24 +5415,21 @@ def test_saved_setup_status_uses_setup_score_ranges_for_blockers():
             "timeframe": "1W",
             "score": 55,
             "is_active": True,
-            "min_macro_score": 30,
-            "max_macro_score": 70,
-            "min_technical_score": 40,
-            "max_technical_score": 60,
-            "min_market_score": 20,
-            "max_market_score": 80,
+            "min_benchmark_score": 26,
+            "max_benchmark_score": 45,
         },
         {
             "macro_score": 50,
             "technical_score": 90,
             "market_score": 40,
+            "benchmark_score": 60,
         },
     )
 
     assert analysis["is_active"] is False
-    assert analysis["match_percentage"] == 66.7
-    assert analysis["blockers"][0]["category"] == "technical"
-    assert analysis["blockers"][0]["score"] == 90.0
+    assert analysis["match_percentage"] == 30
+    assert analysis["blockers"][0]["category"] == "benchmark"
+    assert analysis["blockers"][0]["score"] == 60.0
     assert analysis["setup"]["stored_is_active"] is True
 
 
@@ -5447,24 +5444,33 @@ def test_saved_setup_status_is_active_when_all_ranges_match():
             "timeframe": "4H",
             "score": 72,
             "is_active": False,
-            "min_macro_score": 30,
-            "max_macro_score": 70,
-            "min_technical_score": 40,
-            "max_technical_score": 80,
-            "min_market_score": 20,
-            "max_market_score": 80,
+            "min_benchmark_score": 40,
+            "max_benchmark_score": 80,
         },
         {
             "macro_score": 50,
             "technical_score": 65,
             "market_score": 40,
+            "benchmark_score": 51.7,
         },
     )
 
     assert analysis["is_active"] is True
     assert analysis["blockers"] == []
-    assert analysis["match_percentage"] == 100.0
+    assert analysis["match_percentage"] == 83
     assert analysis["setup"]["stored_is_active"] is False
+
+
+def test_saved_setup_does_not_infer_benchmark_from_unverified_component_scores():
+    service = _service()
+    analysis = service._evaluate_setup_row(
+        {"id": 14, "name": "BTC Onder druk", "setup_type": "dca",
+         "min_benchmark_score": 26, "max_benchmark_score": 45},
+        {"market_score": 50, "macro_score": 20, "technical_score": 50},
+    )
+    assert analysis["is_active"] is False
+    assert analysis["checks"]["benchmark"]["pass"] is None
+    assert "geverifieerde" in service._status_message("BTC", analysis, source="saved_setup")
 
 
 def test_status_message_lists_blocking_scores_for_saved_setup():
@@ -5477,25 +5483,22 @@ def test_status_message_lists_blocking_scores_for_saved_setup():
             "timeframe": "1W",
             "score": 55,
             "is_active": False,
-            "min_macro_score": 30,
-            "max_macro_score": 70,
-            "min_technical_score": 40,
-            "max_technical_score": 60,
-            "min_market_score": 20,
-            "max_market_score": 80,
+            "min_benchmark_score": 26,
+            "max_benchmark_score": 45,
         },
         {
             "macro_score": 50,
             "technical_score": 90,
             "market_score": 40,
+            "benchmark_score": 60,
         },
     )
 
     message = service._status_message("BTC", analysis, source="saved_setup")
 
     assert "Blokkeert nu:" in message
-    assert "technical: score 90.0 moet binnen [40.0, 60.0] vallen" in message
-    assert "Gebruik dit als plan-check" in message
+    assert "benchmark: score 60.0 moet binnen [26.0, 45.0] vallen" in message
+    assert "strategie en veiligheidslimieten" in message
 
 
 
@@ -10533,19 +10536,15 @@ def test_daily_coach_analysis_waits_when_setup_has_blockers():
             "timeframe": "1W",
             "score": 55,
             "is_active": False,
-            "min_macro_score": 30,
-            "max_macro_score": 70,
-            "min_technical_score": 40,
-            "max_technical_score": 60,
-            "min_market_score": 20,
-            "max_market_score": 80,
+            "min_benchmark_score": 26,
+            "max_benchmark_score": 45,
         },
-        {"macro_score": 50, "technical_score": 90, "market_score": 40},
+        {"macro_score": 50, "technical_score": 90, "market_score": 40, "benchmark_score": 60},
     )
 
     analysis = service._build_daily_coach_analysis(
         asset="BTC",
-        daily_scores={"macro_score": 50, "technical_score": 90, "market_score": 40},
+        daily_scores={"macro_score": 50, "technical_score": 90, "market_score": 40, "benchmark_score": 60},
         setup_analysis=setup_analysis,
         active_strategy={"active": False},
         bot_today={"decisions": []},
@@ -10558,7 +10557,7 @@ def test_daily_coach_analysis_waits_when_setup_has_blockers():
 
     assert analysis["stance"] == "wait_for_plan"
     assert analysis["setup_active"] is False
-    assert analysis["blockers"][0]["category"] == "technical"
+    assert analysis["blockers"][0]["category"] == "benchmark"
     assert "agent_verdicts" not in analysis
     assert "agent_controller" not in analysis
     assert "Niet forceren" in analysis["suggested_actions"][0]

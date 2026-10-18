@@ -23,7 +23,7 @@ export default function MarketDecisionCard({ data, symbol = "BTC", compact = fal
 
   const pressure = Number(metrics?.market_pressure ?? 50);
   const transitionRisk = Number(metrics?.transition_risk ?? 50);
-  const health = Number(metrics?.setup_quality ?? 50);
+  const health = metrics?.setup_quality == null ? null : Number(metrics.setup_quality);
   const volatility = Number(metrics?.volatility ?? 50);
   const trendStrength = Number(metrics?.trend_strength ?? 50);
 

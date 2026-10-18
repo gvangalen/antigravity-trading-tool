@@ -2001,7 +2001,7 @@ function deriveSuggestedPlan(source: unknown, asset: MobileOverviewAsset) {
     action: String(match.action ?? 'Review'),
     name: String(match.setup_name ?? match.name ?? 'Best matching plan'),
     score,
-    summary: `Setup score ${score}. Review setup, strategy and bot readiness before execution.`,
+    summary: `Setupmatch ${score}. Controleer setup, strategie en bot voordat je uitvoert.`,
   };
 }
 

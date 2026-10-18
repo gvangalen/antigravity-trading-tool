@@ -17,8 +17,7 @@ from backend.utils.scoring_utils import score_snapshot_is_current
 
 SETUP_COLUMNS = (
     "id", "name", "symbol", "timeframe", "setup_type",
-    "min_macro_score", "max_macro_score", "min_technical_score",
-    "max_technical_score", "min_market_score", "max_market_score",
+    "min_benchmark_score", "max_benchmark_score",
 )
 
 

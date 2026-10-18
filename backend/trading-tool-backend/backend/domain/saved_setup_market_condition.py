@@ -1,8 +1,7 @@
-"""Recover the UI market choice from the canonical saved score bounds.
+"""Recover the UI market choice from the saved combined benchmark bounds.
 
-The choice label is not a separate database field. Only an exact market band
-with no macro or technical limits is a preset; every other bounded setup is
-Custom. This mirrors the five inclusive bands in the web setup picker.
+The choice label is not a separate database field. An exact benchmark band is
+a preset; every other bounded setup is Custom.
 """
 
 from __future__ import annotations
@@ -18,11 +17,7 @@ _BANDS = (
     ("gaining_strength", 61, 75, ("De markt trekt aan", "Gaining strength", "Der Markt wird stärker")),
     ("strong", 76, 100, ("Sterke markt", "Strong market", "Starker Markt")),
 )
-_FIELDS = tuple(
-    f"{bound}_{category}_score"
-    for category in ("market", "macro", "technical")
-    for bound in ("min", "max")
-)
+_FIELDS = ("min_benchmark_score", "max_benchmark_score")
 
 
 def _number(value: Any) -> Decimal | None:
@@ -47,12 +42,8 @@ def saved_setup_market_condition(setup: Mapping[str, Any]) -> dict[str, Any]:
     }
     if result["kind"] == "none":
         return result
-    if any(bounds[field] is not None for field in (
-        "min_macro_score", "max_macro_score", "min_technical_score", "max_technical_score",
-    )):
-        return result
-    minimum = _number(bounds["min_market_score"])
-    maximum = _number(bounds["max_market_score"])
+    minimum = _number(bounds["min_benchmark_score"])
+    maximum = _number(bounds["max_benchmark_score"])
     for key, band_min, band_max, labels in _BANDS:
         if minimum == band_min and maximum == band_max:
             return {
@@ -60,7 +51,11 @@ def saved_setup_market_condition(setup: Mapping[str, Any]) -> dict[str, Any]:
                 "kind": "preset",
                 "key": key,
                 "labels": dict(zip(("nl", "en", "de"), labels)),
-                "market_score_min": band_min,
-                "market_score_max": band_max,
+                "benchmark_score_min": band_min,
+                "benchmark_score_max": band_max,
             }
-    return result
+    return {
+        **result,
+        "benchmark_score_min": float(minimum) if minimum is not None else None,
+        "benchmark_score_max": float(maximum) if maximum is not None else None,
+    }

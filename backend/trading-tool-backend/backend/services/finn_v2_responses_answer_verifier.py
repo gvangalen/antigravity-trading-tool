@@ -4563,8 +4563,7 @@ class FinnResponsesAnswerVerifier:
                     "setup": {key: saved_setup.get(key) for key in (
                         "name", "symbol", "timeframe", "setup_type", "description",
                         "dca_frequency", "dca_day_name", "saved_market_condition",
-                        "min_market_score", "max_market_score", "min_macro_score",
-                        "max_macro_score", "min_technical_score", "max_technical_score",
+                        "min_benchmark_score", "max_benchmark_score",
                     ) if saved_setup.get(key) is not None},
                     "strategy": {key: saved_strategy.get(key) for key in (
                         "name", "symbol", "timeframe", "entry", "stop_loss",
