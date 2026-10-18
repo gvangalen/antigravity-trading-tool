@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema, BotManualOrderSchema
 from backend.services.bot_service import BotService
@@ -719,6 +719,63 @@ def test_paper_manual_preview_explains_saved_minimum_order(monkeypatch):
     assert result["guardrails"]["blocked_by"] == "below_min_order"
     assert "€100.00" in result["message"]
     assert "€50.00" in result["message"]
+
+
+def test_paper_full_position_close_below_buy_minimum_is_consistent_in_preview_and_confirmation(monkeypatch):
+    service = BotService(_FakeSession())
+    quantity = 0.001995
+
+    class Repo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual", budget_min_order_eur=100)
+            return bot
+
+        async def get_bot_ledger_stats(self, user_id, bot_id, day):
+            return {"executed_cash": -100, "today_spent": 100, "net_qty": quantity}
+
+        async def get_paper_cash(self, **_fields):
+            return 900.0
+
+        async def get_asset_quote_currencies(self, _symbols):
+            return {"BTC": "EUR"}
+
+        async def get_portfolio_fx_rates(self):
+            return {}
+
+        async def get_valuatable_market_prices(self, _symbols):
+            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc)}}
+
+    service.repository = Repo()
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="sell", quantity=quantity, price=50000,
+                                   idempotency_key="paper-full-close")
+    result = asyncio.run(service.preview_manual_order(payload, user_id=7))
+    assert result["ok"] is True
+    assert result["gross_eur"] == 99.75
+    assert result["paper_preview_token"]
+
+    bot = asyncio.run(service.repository.get_bot_config(7, 9))
+    stats = asyncio.run(service.repository.get_bot_ledger_stats(7, 9, date.today()))
+    service._validate_manual_order_budget_context(bot, stats, payload, result["gross_eur"])
+
+    partial = BotManualOrderSchema(bot_id=9, symbol="BTC", side="sell", quantity=quantity / 2,
+                                   price=50000, idempotency_key="paper-partial-close")
+    partial_preview = asyncio.run(service.preview_manual_order(partial, user_id=7))
+    assert partial_preview["blocked"] is True
+    assert partial_preview["guardrails"]["blocked_by"] == "below_min_order"
+    with pytest.raises(HTTPException) as exc:
+        service._validate_manual_order_budget_context(bot, stats, partial, partial.quantity * 50000)
+    assert exc.value.status_code == 400
+
+    live_bot = {**bot, "is_live": True}
+    with pytest.raises(HTTPException) as exc:
+        service._validate_manual_order_budget_context(live_bot, stats, payload, result["gross_eur"])
+    assert exc.value.status_code == 400
 
 
 def test_paper_manual_preview_converts_usdt_price_to_eur(monkeypatch):

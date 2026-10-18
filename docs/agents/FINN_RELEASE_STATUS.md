@@ -4,6 +4,29 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Desktopbrowser: volledige virtuele Paper-positie sluiten
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. Onafhankelijke QA op live SHA
+`dddbe4a88ce1f8a0312822291a1c936e16c55d65` bevestigde nu dat de
+minimumorder **€100** was, een €50-preview terecht werd geweigerd en een
+€100-Paper-koop na expliciete bevestiging slaagde. De virtuele positie bleef
+zichtbaar. De volledige verkoop kreeg wel een toegestane preview van circa
+€99,74, maar de bevestiging gaf HTTP 400 omdat de minimumorder opnieuw op de
+verkoop werd toegepast. De aankoopkosten maken de volledige positie net
+kleiner dan €100. De positie bleef open; er is geen Live-order. De gesloten
+Trade Review is daarom nog niet afgetekend.
+
+De lokale kandidaat behandelt een volledige sluiting van een bestaande
+virtuele Paper-positie als uitzondering op de minimumorder. Een gedeeltelijke
+Paper-verkoop onder het minimum wordt al in de preview geweigerd. Voor Live
+blijft de bestaande minimumcontrole gelden. Preview en bevestiging gebruiken
+dezelfde eigenaargebonden positiehoeveelheid; de gerichte regressie voor
+Paper-volledige sluiting, Paper-gedeeltelijke verkoop en Live-grens slaagt.
+De volledige backend-suite slaagt met **3916 passed, 3 bestaande skips**.
+Frontend, FINN-action contracts en Luna/Responses zijn niet gewijzigd; hun
+laatste gemeten lokale checks blijven voor die paden van toepassing. CI,
+deployment en onafhankelijke browserherkeuring volgen.
+
 ## Desktopbrowser: zichtbare Paper-ordergrens
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De grensuitleg is gemerged via

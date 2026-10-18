@@ -1227,6 +1227,16 @@ class BotService:
             "live_order_guardrails": live_order_guardrails,
         }
 
+    @staticmethod
+    def _paper_full_position_close(
+        bot: Dict[str, Any], stats: Dict[str, Any], payload: BotManualOrderSchema,
+    ) -> bool:
+        if bot.get("is_live") or payload.side != "sell":
+            return False
+        current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
+        return (current_qty > 0 and 0 < payload.quantity <= current_qty
+                and current_qty - payload.quantity <= 1e-8)
+
     def _validate_manual_order_budget_context(
         self,
         bot: Dict[str, Any],
@@ -1236,7 +1246,8 @@ class BotService:
         paper_cash_eur: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         min_order = float(bot.get("budget_min_order_eur", 0) or 0)
-        if min_order > 0 and notional < (min_order - 0.01):
+        if (min_order > 0 and notional < (min_order - 0.01)
+                and not self._paper_full_position_close(bot, stats, payload)):
             raise HTTPException(400, f"Minimale ordergrootte niet gehaald (Min {min_order} EUR)")
 
         if payload.side == "buy":
@@ -1840,14 +1851,21 @@ class BotService:
         if payload.side == "sell":
             current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
             sell_allowed = payload.quantity > 0 and payload.quantity <= current_qty
+            minimum = float(bot.get("budget_min_order_eur", 0) or 0)
+            below_minimum = (sell_allowed and minimum > 0 and gross_eur < minimum - 0.01
+                             and not self._paper_full_position_close(bot, stats, payload))
+            if below_minimum:
+                sell_allowed = False
+            sell_reason = (f"Een gedeeltelijke verkoop onder de minimumorder van €{minimum:.2f} is niet toegestaan."
+                           if below_minimum else "Niet genoeg positie om dit aantal te verkopen")
             guardrails = {
                 "allowed": sell_allowed,
                 "adjusted_amount_eur": round(gross_eur if sell_allowed else 0.0, 2),
                 "original_amount_eur": round(gross_eur, 2),
-                "warnings": [] if sell_allowed else ["insufficient_position"],
-                "blocked_by": None if sell_allowed else "insufficient_position",
-                "reason": None if sell_allowed else "Niet genoeg positie om dit aantal te verkopen",
-                "debug_code": None if sell_allowed else "insufficient_position",
+                "warnings": [] if sell_allowed else ["below_min_order" if below_minimum else "insufficient_position"],
+                "blocked_by": None if sell_allowed else ("below_min_order" if below_minimum else "insufficient_position"),
+                "reason": None if sell_allowed else sell_reason,
+                "debug_code": None if sell_allowed else ("below_min_order" if below_minimum else "insufficient_position"),
                 "guardrails": {
                     "current_qty": round(current_qty, 8),
                     "requested_qty": round(payload.quantity, 8),
