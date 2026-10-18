@@ -37,6 +37,14 @@ type FinnOverlaySheetProps = {
   onNewConversation: () => void;
 };
 
+function renderAssistantText(value: string) {
+  return value.split(/(\*\*[^*\n]+\*\*)/g).map((part, index) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <Text key={index} style={styles.emphasis}>{part.slice(2, -2)}</Text>
+      : part,
+  );
+}
+
 export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, source, symbol, query, onQueryChange: setQuery, messages, onMessagesChange: setMessages, sessionId, onSessionIdChange: setSessionId, onNewConversation }: FinnOverlaySheetProps) {
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
@@ -235,7 +243,9 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                           },
                         ]}
                       >
-                        <Text style={[styles.messageText, { color: colors.text }]}>{item.text}</Text>
+                        <Text style={[styles.messageText, { color: colors.text }]}>
+                          {isUser ? item.text : renderAssistantText(item.text)}
+                        </Text>
                       </View>
                     );
                   })}
@@ -407,6 +417,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 20,
+  },
+  emphasis: {
+    fontWeight: '700',
   },
   pressed: {
     opacity: 0.86,

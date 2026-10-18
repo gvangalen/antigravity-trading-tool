@@ -6,7 +6,26 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Volledige Score 2.0-Paper- en Trade Review-acceptatie
 
-Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Op eerdere live SHA
+Phase: `LOCAL_REPAIR_VALIDATED`. De onafhankelijke QA op productie-SHA
+`38f5829f70975c6027aeb97b02af72044e8d1ac2` heeft de positieve
+setupmatch met een gevulde Paper-order, buiten-grenzen-Hold zonder order,
+stale-source-Hold zonder order en de gesloten Paper-roundtrip met dossier en
+les bevestigd. Het verdict voor de volledige opdracht bleef `NOT_ACCEPTED`:
+de native iPhone-flow was niet onafhankelijk herkeurd en een geautoriseerde,
+begrensde linked-exchange-koppeling ontbreekt. Er is geen Live-order uitgevoerd.
+
+Build vond bij een diagnose op de iPhone-simulator dat FINN-chat letterlijke
+`**` rond nadruk toonde. De mobiele antwoordweergave rendert die nadruk nu
+als vetgedrukte tekst. Op de lokale simulator met de productie-API bleven
+chat, sluiten/heropenen en navigeren naar Mijn Plan werken; de statusbalk werd
+niet meer door de chatkop overlapt. De volledige backend-suite slaagde lokaal
+met 3914 tests en 3 bestaande skips; mobiele typecheck, lint zonder errors,
+chat-tests en iOS/Android Expo-bundels slaagden. Dit is Build-diagnose en
+geen onafhankelijke mobiele QA. De bestaande QA-agent wordt na deployment
+opnieuw voor dezelfde native scope gevraagd; de linked-exchange-import blijft
+zonder geautoriseerde QA-koppeling onbewezen.
+
+Op eerdere live SHA
 `25281a6e31accd14c4076f1ecbe38b78b4f714f5` slaagden de drie bestaande
 beschermde QA-profielen: verouderde score gaf Paper Hold zonder order of
 cashwijziging ([run 39138883127](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39138883127));
