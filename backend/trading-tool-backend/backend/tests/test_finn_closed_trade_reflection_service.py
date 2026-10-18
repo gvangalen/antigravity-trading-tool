@@ -18,7 +18,7 @@ def enable_review_rollout_for_contract_tests(monkeypatch):
 
 
 ROW = {
-    "id": 81, "symbol": "BTC", "execution_environment": "paper",
+    "id": 81, "bot_id": 12, "bot_name": "BTC Paper Bot", "symbol": "BTC", "execution_environment": "paper",
     "entry_at": datetime(2026, 10, 15, tzinfo=timezone.utc),
     "exit_at": datetime(2026, 10, 16, tzinfo=timezone.utc),
     "pnl_eur_before_fees": Decimal("-9.50"), "has_plan": False,
@@ -76,6 +76,8 @@ def test_owner_scope_and_safe_evidence_contract():
     safe = own["review"]
     assert own["allowed_side_effects"] == []
     assert safe["review_url"] == "/report?trade_review_id=81"
+    assert (safe["bot_id"], safe["bot_name"]) == (12, "BTC Paper Bot")
+    assert safe["pnl_status"] == "paper_cash_flow_including_simulated_costs"
     assert safe["evidence_ids"] == ["fill:10", "chart:binance-eur", "screenshot:user-upload"]
     assert safe["themes"] == ["risk"]
     assert not any(key in safe for key in ("note", "png_bytes", "analysis_json", "fills", "user_id"))
@@ -156,6 +158,7 @@ def test_asset_filter_is_applied_before_recent_limit_for_coach_lessons():
     result = asyncio.run(adapter.execute(user_id=7, asset="BTC"))["data"]
     assert result.closed_trade_review_ids == [81]
     assert any("Ik noteer de reden voor de exit" in item for item in result.items)
+    assert any('bot: "BTC Paper Bot (id 12)"' in item for item in result.items)
     assert any("r.symbol=:symbol" in sql and params["symbol"] == "BTC"
                for sql, params in session.queries if "ORDER BY exit_at" in sql)
 

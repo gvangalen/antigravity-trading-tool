@@ -41,7 +41,9 @@ class FinnClosedTradeReflectionService:
         """), {"user_id": user_id, "days": days, "symbol": symbol})
         coverage = dict(totals.fetchone()._mapping)
         rows = await self.session.execute(text("""
-            SELECT id, symbol, execution_environment, execution_sources, entry_at, exit_at,
+            SELECT id, bot_id,
+                   (SELECT b.name FROM bot_configs b WHERE b.id=r.bot_id AND b.user_id=r.user_id) AS bot_name,
+                   symbol, execution_environment, execution_sources, entry_at, exit_at,
                    origin, closure_basis, pnl_status, cash_legs_by_currency,
                    derivative_category, position_idx, direction, settle_currency,
                    native_pnl_status,
@@ -85,7 +87,9 @@ class FinnClosedTradeReflectionService:
         if not await self._available():
             raise HTTPException(503, "Trade-reflecties nog niet beschikbaar")
         result = await self.session.execute(text("""
-            SELECT id, symbol, execution_environment, execution_sources, entry_at, exit_at,
+            SELECT id, bot_id,
+                   (SELECT b.name FROM bot_configs b WHERE b.id=r.bot_id AND b.user_id=r.user_id) AS bot_name,
+                   symbol, execution_environment, execution_sources, entry_at, exit_at,
                    origin, closure_basis, pnl_status, cash_legs_by_currency,
                    derivative_category, position_idx, direction, settle_currency,
                    native_pnl_status,
@@ -155,10 +159,14 @@ class FinnClosedTradeReflectionService:
             "review_id": int(row["id"]), "review_url": REVIEW_PATH.format(review_id=int(row["id"])),
             "symbol": re.sub(r"[^A-Z0-9._-]", "", str(row["symbol"]).upper())[:24],
             "environment": row["execution_environment"],
+            "bot_id": row.get("bot_id"),
+            "bot_name": row.get("bot_name"),
             "origin": row.get("origin") or "bot_position",
             "closure_basis": row.get("closure_basis") or "ledger_flat",
             "closure_label": "Afsluiting bevestigd door gebruiker" if exchange or derivative else "Afgesloten positie",
-            "pnl_status": row.get("pnl_status") or "before_fees_eur",
+            "pnl_status": ("paper_cash_flow_including_simulated_costs"
+                           if str(row.get("execution_environment")).lower() == "paper"
+                           else row.get("pnl_status") or "before_fees_eur"),
             "cash_legs_by_currency": row.get("cash_legs_by_currency") if exchange else None,
             "derivative_category": row.get("derivative_category") if derivative else None,
             "position_idx": row.get("position_idx") if derivative else None,

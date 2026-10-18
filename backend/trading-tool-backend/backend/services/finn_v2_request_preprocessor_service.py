@@ -110,6 +110,12 @@ class FinnV2RequestPreprocessorService:
             "score overzicht", "bewertung", "bewertungen", "punktzahl",
         ),
         "bot": ("bot", "robot", "automation", "automatisering"),
+        "review": (
+            "gesloten trade", "gesloten trades", "afgesloten trade", "afgesloten trades",
+            "papertrade", "papertrades", "paper-trade", "paper-trades", "trade-review", "tradereview", "trade-reflectie",
+            "trade reflection", "closed trade", "closed trades", "trade review",
+            "tradehistorie", "trade history",
+        ),
         "plan": (
             "plan",
             "plaatje",
@@ -843,7 +849,10 @@ class FinnV2RequestPreprocessorService:
         # reinterpreted as a request to explain previous evidence.
         support_terms = r"\b(?:hulp|ondersteuning|hilfe|unterst[üu]tzung|help|support)\b"
         availability_terms = r"\b(?:beschikbaar|available|verf[üu]gbar)\b"
-        if action == "read" and (
+        if action == "read" and not (
+            "review" in entities
+            and re.search(r"\b(?:mijn|my|mein(?:e|en|er|es)?)\b", text)
+        ) and (
             any(
                 phrase in text
                 for phrase in (

@@ -1,6 +1,7 @@
 """Evidence-bound retrospective FINN analysis; never dispatches trade actions."""
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -12,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.services.finn_trade_review_service import FinnTradeReviewService
 from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils import openai_client
+
+logger = logging.getLogger(__name__)
 
 
 ANALYSIS_VERSION = 1
@@ -40,6 +43,8 @@ SYSTEM_ROLE = (
     "Zonder screenshot geef je visual_signal als null. "
     "Bij een gebruikersvraag: kies als eerste observation het thema dat de vraag "
     "het best raakt. Kies evidence_ids die werkelijk over dat thema gaan. "
+    "Voor een gebruikersvraag volstaan observation-thema's met evidence_ids; "
+    "summary, uncertainty, question en vrije observation-tekst zijn dan optioneel. "
     "Als een eerder bevestigde gebruikersles relevant is, geef prior_lesson_review_id "
     "als exact een van de meegegeven review_id waarden; anders null. "
     "Theme is een van plan_followed, risk, timing, exit_process, evidence_gap, other."
@@ -179,7 +184,9 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
         "settle_currency": review.get("settle_currency") if derivative else None,
         "native_pnl_status": review.get("native_pnl_status") if derivative else None,
         "fee_legs_by_currency": (review.get("fee_legs_by_currency") or [])[:MAX_AI_CASH_LEGS] if derivative else None,
-        "pnl_status": review.get("pnl_status") or "before_fees_eur",
+        "pnl_status": ("paper_cash_flow_including_simulated_costs"
+                       if str(review.get("execution_environment")).lower() == "paper"
+                       else review.get("pnl_status") or "before_fees_eur"),
         "cash_legs_by_currency": (review.get("cash_legs_by_currency") or [])[:MAX_AI_CASH_LEGS] if exchange else None,
         "cash_legs_truncated": exchange and len(review.get("cash_legs_by_currency") or []) > MAX_AI_CASH_LEGS,
         "fills_total": len(all_fills), "fills_sampled": len(fills),
@@ -187,7 +194,7 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
         "entry_value_eur": str(review["entry_value_eur"]) if review.get("entry_value_eur") is not None else None,
         "exit_value_eur": str(review["exit_value_eur"]) if review.get("exit_value_eur") is not None else None,
         "pnl_eur_before_fees": str(review["pnl_eur_before_fees"]) if review.get("pnl_eur_before_fees") is not None else None,
-        "fees_unknown": True, "fills": evidence,
+        "fees_unknown": not (str(review.get("execution_environment")).lower() == "paper"), "fills": evidence,
         "plan": {"id": "plan:snapshot", "data": review["plan_snapshot"],
                  "provenance": review["plan_provenance"]}
                 if review.get("plan_snapshot") and review.get("plan_provenance") else None,
@@ -287,17 +294,22 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
     uncertainty = raw.get("uncertainty")
     question = raw.get("question")
     observations = raw.get("observations")
-    if not all(isinstance(v, str) and 1 <= len(v) <= 1500 for v in (summary, uncertainty, question)):
+    # These prose fields are never shown. A follow-up only needs a grounded
+    # theme/evidence selection; rejecting it for discarded wording caused
+    # otherwise answerable questions to fail with HTTP 503.
+    if not question_mode and not all(isinstance(v, str) and 1 <= len(v) <= 1500 for v in (summary, uncertainty, question)):
         raise ValueError("Invalid analysis response")
-    for value in (summary, uncertainty, question):
-        _reject_trade_directives(value)
+    if not question_mode:
+        for value in (summary, uncertainty, question):
+            _reject_trade_directives(value)
     if not isinstance(observations, list) or not observations or len(observations) > 6:
         raise ValueError("Invalid analysis observations")
     checked = []
     for observation in observations:
-        if not isinstance(observation, dict) or not isinstance(observation.get("text"), str):
+        if not isinstance(observation, dict) or (not question_mode and not isinstance(observation.get("text"), str)):
             raise ValueError("Invalid analysis observation")
-        _reject_trade_directives(observation["text"])
+        if not question_mode:
+            _reject_trade_directives(observation["text"])
         refs = observation.get("evidence_ids")
         theme = observation.get("theme")
         if theme not in THEMES or not isinstance(refs, list) or not refs or any(ref not in allowed for ref in refs):
@@ -318,7 +330,9 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
     # Model prose, user notes and screenshot text are never rendered or stored as
     # FINN advice. The model only chooses bounded themes and existing evidence IDs.
     pnl = (context or {}).get("pnl_eur_before_fees")
-    outcome = f" Het geregistreerde resultaat vóór kosten is €{pnl}." if pnl is not None else ""
+    paper = (context or {}).get("environment", "").lower() == "paper"
+    outcome_label = "op basis van virtuele kassastromen" if paper else "vóór kosten"
+    outcome = f" Het geregistreerde resultaat {outcome_label} is €{pnl}." if pnl is not None else ""
     derivative = (context or {}).get("origin") == "bybit_derivative_user_attested"
     exchange = (context or {}).get("origin") == "exchange_user_attested"
     uncertainty_parts = (["Afsluiting bevestigd door gebruiker; volledige accountpositie en historische dekking zijn niet door de exchange bewezen.",
@@ -395,9 +409,13 @@ async def _validated_model_analysis(context: dict, allowed: set[str], *,
         "facts": context,
         "user_question_untrusted": question,
         "output_contract": {
-            "required_fields": ["summary", "observations", "uncertainty", "question",
-                                "visual_signal", "prior_lesson_review_id"],
-            "observations": "Geef 1 tot 3 observaties. Elke observatie heeft text, theme en een niet-lege evidence_ids-array.",
+            "required_fields": (["observations", "visual_signal", "prior_lesson_review_id"]
+                                if question is not None else
+                                ["summary", "observations", "uncertainty", "question",
+                                 "visual_signal", "prior_lesson_review_id"]),
+            "observations": ("Kies 1 tot 3 thema's. Elke observatie heeft theme en een niet-lege evidence_ids-array. Vrije tekst is niet nodig."
+                             if question is not None else
+                             "Geef 1 tot 3 observaties. Elke observatie heeft text, theme en een niet-lege evidence_ids-array."),
             "allowed_themes": permitted_themes,
             "allowed_evidence_ids": sorted(allowed),
             "evidence_rule": "Gebruik uitsluitend exacte IDs uit allowed_evidence_ids. Verzin geen IDs of thema's.",
@@ -576,8 +594,18 @@ class FinnTradeAnalysisService:
                                   run_kind="interactive"):
                 result = await _validated_model_analysis(context, allowed, image=image,
                                                          question=question, model_name=model_name)
-        except Exception:
-            raise HTTPException(503, "FINN kon geen controleerbaar antwoord geven") from None
+        except Exception as exc:
+            # A closed trade already has immutable ledger evidence. If the
+            # model is unavailable or cannot select a valid ID, answer only
+            # with the bounded evidence-gap template and mark its source.
+            logger.warning("trade_review_question_model_failed review_id=%s error=%s", review_id, type(exc).__name__)
+            if not allowed:
+                raise HTTPException(503, "FINN kon geen controleerbaar antwoord geven") from None
+            evidence_id = next((ref for ref in sorted(allowed) if ref.startswith(("fill:", "exchange_fill:", "derivative_exec:"))), sorted(allowed)[0])
+            result = validate_analysis({
+                "observations": [{"theme": "evidence_gap", "evidence_ids": [evidence_id]}],
+            }, allowed, context, question_mode=True)
+            result["analysis_source"] = "factual_fallback"
         await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id,741068)"),
                                    {"user_id": user_id})
         if await self._prior_confirmed_lessons(user_id, review) != context["prior_user_confirmed_lessons_untrusted"]:
@@ -608,7 +636,7 @@ class FinnTradeAnalysisService:
                         CAST(:evidence_snapshot AS JSONB))
             """), {"user_id": user_id, "review_id": review_id, "role": role,
                    "content": content, "evidence_ids": json.dumps(evidence_ids),
-                   "model": model_name if role == "finn" else None,
+                   "model": model_name if role == "finn" and result.get("analysis_source") != "factual_fallback" else None,
                    "input_revision": review["input_revision"],
                    "evidence_snapshot": json.dumps(snapshot)})
         await self.session.commit()

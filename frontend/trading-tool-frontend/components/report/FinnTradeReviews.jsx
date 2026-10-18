@@ -117,6 +117,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const originalPlanVerified = Boolean(plan) && review.plan_status === 'entry_order_plan_recorded';
   const isDerivative = review.origin === 'bybit_derivative_user_attested';
   const isExchange = review.origin === 'exchange_user_attested' || isDerivative;
+  const isPaper = !isExchange && String(review.execution_environment).toLowerCase() === 'paper';
   const cashLegs = Array.isArray(review.cash_legs_by_currency) ? review.cash_legs_by_currency : [];
   const feeLegs = Array.isArray(review.fee_legs_by_currency) ? review.fee_legs_by_currency : [];
   const metricCards = isDerivative
@@ -128,10 +129,10 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
     ? [[copy.quantity, String(review.entry_qty)],
       [copy.exchangeResult, review.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(review.pnl_eur_before_fees, locale)],
       [copy.exchangeCashLegs, cashLegs.length ? cashLegs.map((leg) => `${leg.currency}: ${copy.buy} ${formatQuote(leg.buy_cost, leg.currency, locale)} / ${copy.sell} ${formatQuote(leg.sell_proceeds, leg.currency, locale)}`).join(' · ') : copy.exchangeResultUnavailable]]
-    : [[copy.entry, formatMoney(review.entry_price_eur, locale, 4)],
-      [copy.exit, formatMoney(review.exit_price_eur, locale, 4)],
+    : [[isPaper ? copy.paperEntry : copy.entry, formatMoney(review.entry_price_eur, locale, 4)],
+      [isPaper ? copy.paperExit : copy.exit, formatMoney(review.exit_price_eur, locale, 4)],
       [copy.quantity, String(review.entry_qty)],
-      [copy.result, formatMoney(review.pnl_eur_before_fees, locale)]];
+      [isPaper ? copy.paperResult : copy.result, formatMoney(review.pnl_eur_before_fees, locale)]];
 
   useEffect(() => {
     let active = true;
@@ -299,7 +300,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
           <div key={label} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 font-black text-slate-900 dark:text-white">{value}</p></div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-slate-500">{isDerivative ? copy.derivativeResultNote : isExchange ? copy.exchangeResultNote : copy.resultNote}</p>
+      <p className="mt-2 text-xs text-slate-500">{isDerivative ? copy.derivativeResultNote : isExchange ? copy.exchangeResultNote : isPaper ? copy.paperResultNote : copy.resultNote}</p>
 
       <div className="mt-7 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">

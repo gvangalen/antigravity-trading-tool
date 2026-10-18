@@ -512,6 +512,8 @@ class FinnV2OperationClassificationService:
             facts.normalized_text.casefold(),
         ):
             return None
+        if "review" in entities and entities <= {"review", "asset", "bot", "portfolio"}:
+            return "read_review_history"
         if "bot_status" in entities and facts.discourse_act == "information_request":
             return "read_bot_status"
         if "portfolio" in entities:
