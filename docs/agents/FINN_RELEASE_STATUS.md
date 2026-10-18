@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Volledige Score 2.0-Paper- en Trade Review-acceptatie
 
-Phase: `LOCAL_VALIDATION_COMPLETE`. Op live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Op eerdere live SHA
 `25281a6e31accd14c4076f1ecbe38b78b4f714f5` slaagden de drie bestaande
 beschermde QA-profielen: verouderde score gaf Paper Hold zonder order of
 cashwijziging ([run 39138883127](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39138883127));
@@ -45,8 +45,17 @@ en echte-providerselectie slaagde **20/20** in development (log-SHA-256
 `fa3740a8164194c78921d89bd501c899bf2dbb7f83427a9937036b61258090d3`)
 en **109/109** in regression (log-SHA-256
 `8ad44e568a23c196fcbe22a140e247676e74a6265b36560e385d726c4543096f`).
-Dit is geen CI-, productie-deploy- of onafhankelijke QA-uitkomst voor de
-nieuwe kandidaat.
+Kandidaat [PR #407](https://github.com/gvangalen/antigravity-trading-tool/pull/407)
+is gemerged als `920ca6d1f58d2aa4988d4ac8e02ea320fc4fee24`. Alle vijf
+PR-controles, [main-CI run 39141819315](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39141819315)
+en [Auto Deploy run 39141946235](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39141946235)
+slaagden. Backend-health en frontend-buildinfo gaven daarna ieder HTTP 200
+en exact de merge-SHA. Een wijziging van dit statusdocument krijgt zelf een
+nieuwe SHA; onafhankelijke QA verifieert daarom de uiteindelijke productie-SHA
+via haar preflight. De beschermde positieve/buiten-grenzen/gesloten-Paper-
+profielen en de native iPhone-correctie zijn nog niet onafhankelijk live
+geaccepteerd. Linked-exchange-import blijft zonder geautoriseerde begrensde
+koppeling onbewezen; geen Live-order is uitgevoerd.
 
 ## Score 2.0 Paper- en Trade Review-QA-herstel
 
