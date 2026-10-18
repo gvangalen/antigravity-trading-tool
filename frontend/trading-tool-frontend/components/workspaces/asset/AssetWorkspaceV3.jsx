@@ -138,11 +138,14 @@ function getUiCopy(locale = "nl") {
       updated: "Updated",
       combinedScore: "Combined score",
       benchmarkTitle: "Market conditions",
-      benchmarkScore: "Your benchmark",
+      benchmarkScore: "Your benchmark score",
       selectedPeriodScore: "Selected period score",
       benchmarkExplanation: "A weighted average of your Market, Macro and Technical indicators. Your setup is compared with it; the strategy decides whether a trade follows.",
       benchmarkDetails: "See indicators and weights",
       marketSituation: "Market situation",
+      benchmarkCompositionTitle: "How your benchmark is built",
+      periodCompositionTitle: "Scores for the selected periods",
+      benchmarkComposition: "Market, Macro and Technical are the three parts. Their weighted average is shown on the right.",
       confidence: "Confidence",
       bias: "Bias",
       watchlist: "Watchlist",
@@ -298,11 +301,14 @@ function getUiCopy(locale = "nl") {
       updated: "Aktualisiert",
       combinedScore: "Kombinierter score",
       benchmarkTitle: "Marktbedingungen",
-      benchmarkScore: "Dein Benchmark",
+      benchmarkScore: "Dein Benchmark-Score",
       selectedPeriodScore: "Score des gewählten Zeitraums",
       benchmarkExplanation: "Gewichteter Durchschnitt deiner Markt-, Makro- und technischen Indikatoren. Dein Setup wird damit verglichen; die Strategie entscheidet über einen Trade.",
       benchmarkDetails: "Indikatoren und Gewichtung ansehen",
       marketSituation: "Marktlage",
+      benchmarkCompositionTitle: "So entsteht dein Benchmark",
+      periodCompositionTitle: "Scores der gewählten Zeiträume",
+      benchmarkComposition: "Markt, Makro und Technik sind die drei Bestandteile. Ihr gewichteter Durchschnitt steht rechts.",
       confidence: "Vertrauen",
       bias: "Bias",
       watchlist: "Watchlist",
@@ -457,11 +463,14 @@ function getUiCopy(locale = "nl") {
     updated: "Bijgewerkt",
     combinedScore: "Gecombineerde score",
     benchmarkTitle: "Marktomstandigheden",
-    benchmarkScore: "Jouw benchmark",
+    benchmarkScore: "Jouw benchmarkscore",
     selectedPeriodScore: "Score gekozen periode",
     benchmarkExplanation: "Gewogen gemiddelde van jouw Markt-, Macro- en Technisch-indicatoren. Je setup wordt hiermee vergeleken; de strategie bepaalt of er een trade volgt.",
     benchmarkDetails: "Bekijk indicatoren en weging",
     marketSituation: "Marktsituatie",
+    benchmarkCompositionTitle: "Zo is jouw benchmark opgebouwd",
+    periodCompositionTitle: "Scores voor de gekozen perioden",
+    benchmarkComposition: "Markt, Macro en Technisch zijn de drie onderdelen. Rechts staat hun gewogen gemiddelde.",
     confidence: "Vertrouwen",
     bias: "Bias",
     watchlist: "Watchlist",
@@ -1521,7 +1530,7 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
     <section id="benchmark-uitleg" className="scroll-mt-6 rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-          {ui.contextScores}
+          {isDailyBenchmark ? ui.benchmarkCompositionTitle : ui.periodCompositionTitle}
         </div>
         <button
           type="button"
@@ -1536,6 +1545,7 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
           {isEditing ? ui.closeTuning : ui.tuneEngine}
         </button>
       </div>
+      <p className="px-4 pt-2.5 text-[11px] leading-relaxed text-slate-500">{ui.benchmarkComposition}</p>
 
       <div className="grid gap-2.5 px-4 py-2.5 lg:grid-cols-4">
         {items.map((item) => {
