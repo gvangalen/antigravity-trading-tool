@@ -184,12 +184,9 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
           ...initialSetupFormState(),
           symbol: selectedAsset || "BTC",
         });
-        setMacroScore([30, 70]);
-        setTechnicalScore([40, 80]);
-        setMarketScore([20, 60]);
+        setBenchmarkScore([46, 60]);
         setConditionChoice("off");
         setScoreConditionsTouched(false);
-        setScoreTouchedFields({});
       }
 
       const normalizedSetup = normalizeSetupSaveResponse(savedSetup);
