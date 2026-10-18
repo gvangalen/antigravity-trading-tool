@@ -6,7 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Volledige Score 2.0-Paper- en Trade Review-acceptatie
 
-Phase: `LOCAL_REPAIR_VALIDATED`. De onafhankelijke QA op productie-SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De mobiele opmaakreparatie is via
+[PR #409](https://github.com/gvangalen/antigravity-trading-tool/pull/409)
+gemerged als `87321aa4962b600fe7d1cf92cf87d4a5016f58a6`.
+Alle vijf PR-controles, [main-CI run 39144967224](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39144967224)
+en [Auto Deploy run 39145119006](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39145119006)
+slaagden. Backend-health en frontend-buildinfo gaven daarna beide HTTP 200
+met exact die SHA. Deze statuswijziging krijgt zelf een nieuwe commit-SHA;
+QA controleert de uiteindelijke productie-SHA rechtstreeks via haar preflight.
+
+De onafhankelijke QA op eerdere productie-SHA
 `38f5829f70975c6027aeb97b02af72044e8d1ac2` heeft de positieve
 setupmatch met een gevulde Paper-order, buiten-grenzen-Hold zonder order,
 stale-source-Hold zonder order en de gesloten Paper-roundtrip met dossier en
