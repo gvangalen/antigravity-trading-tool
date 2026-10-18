@@ -41,6 +41,19 @@ function StaleAppRecoveryScript() {
   var VERSION_KEY = "tradamind_app_cache_version";
   var RECOVERY_PREFIX = "tradamind_app_cache_recovered_" + VERSION + "_";
   var RECOVERY_COOLDOWN_MS = 30000;
+  var loadedDeploySha = null;
+
+  function readDeploySha() {
+    if (typeof fetch !== "function") return Promise.resolve(null);
+    return fetch("/build-info.json?__tm_version=" + Date.now(), { cache: "no-store" })
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (info) { return info && typeof info.commit_sha === "string" ? info.commit_sha : null; })
+      .catch(function () { return null; });
+  }
+
+  // Remember which deployment this tab loaded. A tab left open across a
+  // deployment can later combine its old webpack runtime with a new route chunk.
+  readDeploySha().then(function (sha) { loadedDeploySha = sha; });
 
   function shouldRecover(reason) {
     var text = String(reason || "");
@@ -57,6 +70,15 @@ function StaleAppRecoveryScript() {
     if (/ChunkLoadError|Loading chunk|Cannot find module|Cannot read properties of undefined [(]reading ['"]call['"][)]/i.test(text)) return "chunk";
     if (text === "build-version-change") return "version";
     return "runtime";
+  }
+
+  function recoverMixedDeploy(reason) {
+    var text = String(reason || "");
+    var looksLikeWebpackExport = /[(]0[ ]*,[ ]*[A-Za-z_$][A-Za-z0-9_$]*[.][A-Za-z_$][A-Za-z0-9_$]*[)][ ]+is not a function/i.test(text);
+    if (!looksLikeWebpackExport || text.indexOf("/_next/static/chunks/") === -1 || !loadedDeploySha) return;
+    readDeploySha().then(function (currentSha) {
+      if (currentSha && currentSha !== loadedDeploySha) clearStaleApp("mixed-deploy");
+    });
   }
 
   async function clearStaleApp(reason) {
@@ -121,12 +143,14 @@ function StaleAppRecoveryScript() {
     ].filter(Boolean).join(" ");
 
     if (shouldRecover(reason)) clearStaleApp(reason);
+    else recoverMixedDeploy(reason);
   }, true);
 
   window.addEventListener("unhandledrejection", function (event) {
     var value = event && event.reason;
     var reason = value ? (value.stack || value.message || String(value)) : "";
     if (shouldRecover(reason)) clearStaleApp(reason);
+    else recoverMixedDeploy(reason);
   });
 })();`;
 
