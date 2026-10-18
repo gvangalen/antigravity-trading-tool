@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-trade: Reflectie en FINN-vervolgvragen
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De vorige onafhankelijke desktopproef op
+`d4a50a52d12bf84350945017faab3c84da83baae` zag twee blijvende gesloten
+Paper-dossiers en het zevendaagse overzicht. Een vraag binnen een dossier gaf
+echter HTTP 503; de hoofdchat kon de laatst gesloten BTC-Papertrade niet lezen.
+Ook werd het virtuele kasstroomresultaat ten onrechte als “vóór kosten” gelabeld.
+
+De kandidaat laat een dossiervervolgvraag alleen een bewijsgebonden thema en
+uitvoeringsreferenties kiezen. Als de modelselectie faalt, geeft de service
+een beperkte feitelijke reactie uit het vastgelegde dossier, met aparte
+bronmarkering. De hoofdchat kan gesloten trades, hun eigenaargebonden botnaam
+en resultaat lezen. Reflectie en chat noemen het Paper-resultaat voortaan
+virtuele kasstromen inclusief eventuele gesimuleerde kosten. Het bestaande
+dagrapport blijft een afzonderlijk product; per-trade analyse hoort in
+Reflectie en het zevendaagse overzicht.
+
+Lokale validatie: **3924 backendtests geslaagd, 3 bestaande skips**; webbuild,
+typecheck, i18n-, command- en proposalchecks geslaagd. De lokale
+actiecontractmatrix slaagde **16/16**. Echte Luna/Responses-proeven voor twee
+gesloten-tradevragen slaagden; de ontwikkel- en regressieselector slaagden
+respectievelijk **20/20** en **109/109** zonder provider-, schema- of
+validatiefout. `audit:high` slaagde met één bestaande moderate Next.js-melding.
+Deploymentidentiteit en onafhankelijke ingelogde QA ontbreken nog. De algemene
+Trade Review-uitrol blijft beperkt tot de bestaande QA-allowlist; exchange-
+import en mobiel vallen buiten deze desktopherkeuring.
+
 ## Desktopbrowser: 100% Paper-sluiting en Trade Review-toegang
 
 Phase: `INDEPENDENT_DESKTOP_QA_ACCEPTED` voor de gerichte Paper-sluitingsflow. De samenhangende

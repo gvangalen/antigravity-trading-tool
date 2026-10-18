@@ -116,6 +116,32 @@ def test_provider_error_does_not_trigger_an_unbounded_repair_loop(monkeypatch):
     assert len(calls) == 1
 
 
+def test_question_accepts_grounded_theme_without_discarded_model_prose():
+    context = {"origin": "bot_position", "environment": "paper", "entry_at": "2026-10-18T10:00:00Z",
+               "exit_at": "2026-10-18T12:00:00Z", "entry_value_eur": "100.00",
+               "exit_value_eur": "99.75", "pnl_eur_before_fees": "-0.25", "plan": None}
+    result = validate_analysis({"observations": [{"theme": "evidence_gap", "evidence_ids": ["fill:1"]}]},
+                               {"fill:1"}, context, question_mode=True)
+    assert result["summary"]
+    assert "vóór kosten" not in str(result)
+
+
+def test_question_still_rejects_unbound_evidence_without_model_prose():
+    with pytest.raises(ValueError, match="Ungrounded"):
+        validate_analysis({"observations": [{"theme": "evidence_gap", "evidence_ids": ["fill:999"]}]},
+                          {"fill:1"}, {}, question_mode=True)
+
+
+def test_paper_review_status_describes_cash_flow_including_simulated_costs():
+    row = {"execution_environment": "paper", "pnl_status": "before_fees_eur",
+           "pnl_eur_before_fees": Decimal("-0.25")}
+    presented = FinnTradeReviewService._presented_review(row)
+    assert presented["pnl_status"] == "paper_cash_flow_including_simulated_costs"
+    assert presented["pnl_eur_before_fees"] == Decimal("-0.25")
+    assert row["pnl_status"] == "before_fees_eur"
+    assert FinnTradeReviewService._presented_review({**row, "execution_environment": "live"})["pnl_status"] == "before_fees_eur"
+
+
 def test_only_server_supplied_confirmed_lesson_can_be_rendered():
     context = {"prior_user_confirmed_lessons_untrusted": [{
         "review_id": 12, "symbol": "BTC", "lesson_text_untrusted": "Mijn bevestigde les",
@@ -420,6 +446,53 @@ def test_question_path_persists_only_server_rendered_answer(monkeypatch):
         assert "sluiting op" in result["summary"]
         assert "verdriedubbel" not in session.saved[-1]["content"]
         assert "Bekijk de geregistreerde exit" in session.saved[-1]["content"]
+
+    asyncio.run(exercise())
+
+
+def test_review_question_uses_bounded_ledger_fallback_when_provider_fails(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+
+    async def exercise():
+        now = datetime.now(timezone.utc)
+        review = {
+            "id": 4, "symbol": "BTC", "execution_environment": "paper",
+            "entry_at": now, "exit_at": now, "entry_value_eur": Decimal("100"),
+            "exit_value_eur": Decimal("99.75"), "pnl_eur_before_fees": Decimal("-0.25"),
+            "fills": [{"ledger_id": 1, "side": "sell", "at": now.isoformat(),
+                       "qty": "1", "cash_eur": "99.75", "price_eur": "100"}],
+            "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+            "has_screenshot": False, "input_revision": 0,
+        }
+
+        class Session:
+            saved = []
+
+            async def execute(self, query, params=None):
+                sql = str(query)
+                if "SELECT input_revision" in sql:
+                    return _Result(0)
+                if "INSERT INTO finn_trade_review_messages" in sql:
+                    self.saved.append(params)
+                elif "pg_advisory_xact_lock" not in sql:
+                    raise AssertionError(sql)
+                return _Result()
+
+            async def commit(self):
+                pass
+
+        service = FinnTradeAnalysisService(Session())
+        service.reviews.get_review = lambda *_: asyncio.sleep(0, result=review)
+        service._reserve_user_ai_call = lambda *_: asyncio.sleep(0)
+        service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
+        monkeypatch.setattr(module.openai_client, "ask_gpt_json_async",
+                            lambda **_: asyncio.sleep(0, result={"error": "provider_unavailable"}))
+
+        result = await service.ask(77, 4, "Wat kan ik van deze gesloten Paper-trade leren?")
+        assert result["analysis_source"] == "factual_fallback"
+        assert result["observations"][0]["evidence_ids"] == ["fill:1"]
+        assert service.session.saved[-1]["model"] is None
+        assert "factual_fallback" in service.session.saved[-1]["content"]
 
     asyncio.run(exercise())
 

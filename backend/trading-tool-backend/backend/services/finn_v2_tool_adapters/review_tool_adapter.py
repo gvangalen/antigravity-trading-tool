@@ -31,7 +31,7 @@ class ReviewToolAdapter:
         )
         if asset:
             rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset.upper()]
-        items = [
+        decision_items = [
             f"Botbeslissing, geen bevestigde gesloten trade: {row['decision_ts']}: "
             f"bot {row['bot_name']} ({row['symbol']}) {row['action']} (status: {row['status']})"
             for row in rows[:20]
@@ -55,7 +55,11 @@ class ReviewToolAdapter:
                                  "unavailable": int(item["analysis_status"] in {"failed", "unavailable"})},
                 }
         closed_reviews = [r for r in closed["reviews"] if not asset or r["symbol"] == asset.upper()]
+        items = []
         for review in closed_reviews:
+            bot_label = re.sub(r"[\x00-\x1f\x7f]+", " ", str(review.get("bot_name") or "onbekend"))[:100]
+            if review.get("bot_id") is not None:
+                bot_label += f" (id {review['bot_id']})"
             lesson = review.get("confirmed_lesson")
             lesson_context = ""
             if isinstance(lesson, dict) and lesson.get("lesson_text") and lesson.get("confirmed_at"):
@@ -84,18 +88,23 @@ class ReviewToolAdapter:
                 )
                 quote_context = f"; valutastromen {flows}{' (ingekort)' if len(legs) > 8 else ''}" if flows else ""
             else:
-                result = f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten"
+                result = (f"Paper-resultaat EUR {review['pnl_eur_before_fees']} op basis van virtuele kassastromen, "
+                          "inclusief eventuele gesimuleerde kosten"
+                          if str(review.get("environment")).lower() == "paper" else
+                          f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten")
                 closure = "positie bewezen gesloten in Tradamind-ledger"
                 quote_context = ""
             items.append(
                 f"Bevestigde gesloten trade #{review['review_id']} ({review['symbol']}, "
-                f"{review['environment']}, bronnen: {', '.join(review['execution_sources'])}): "
+                f"{review['environment']}, bot: {json.dumps(bot_label, ensure_ascii=False)}, "
+                f"bronnen: {', '.join(review['execution_sources'])}): "
                 f"{closure}; {result}{quote_context}; "
                 f"FINN-analyse {review['analysis_status']}; thema's "
                 f"{', '.join(review['themes']) if review['themes'] else 'geen'} "
                 f"(modelobservatie, geen bewezen oorzaak); bewijs {', '.join(review['evidence_ids'])}; "
                 f"review {review['review_url']}{lesson_context}"
             )
+        items.extend(decision_items)
         items.append(
             f"Gesloten-tradedekking: {closed['status']}; {closed['coverage']['trades']} "
             f"bevestigde trades {'voor review #' + str(review_id) if review_id else 'in 30 dagen'}. "

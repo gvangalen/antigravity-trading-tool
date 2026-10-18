@@ -16,6 +16,15 @@ from backend.services.finn_v2_structured_operation_selector_service import FinnV
 CLASSIFIER = FinnV2OperationClassificationService()
 
 
+@pytest.mark.parametrize("question", [
+    "Wat was mijn laatst gesloten BTC-Papertrade, bij welke bot hoort die en welk resultaat staat er opgeslagen? Verander niets.",
+    "Welke gesloten Paper-trades staan in Reflectie?",
+    "Wat kan ik leren van mijn laatste gesloten trade?",
+])
+def test_closed_trade_questions_read_the_owner_scoped_review_history(question):
+    assert CLASSIFIER.classify(message=question).operation_id == "read_review_history"
+
+
 def test_objectless_mutation_clarifies_without_recasting_it_as_plan_evaluation():
     class Selector:
         def select(self, **_kwargs):

@@ -199,6 +199,12 @@ def build_closed_positions(
 
 
 class FinnTradeReviewService:
+    @staticmethod
+    def _presented_review(row: dict) -> dict:
+        if str(row.get("execution_environment")).lower() == "paper":
+            return {**row, "pnl_status": "paper_cash_flow_including_simulated_costs"}
+        return row
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -314,7 +320,7 @@ class FinnTradeReviewService:
             FROM finn_trade_reviews WHERE user_id=:user_id
             ORDER BY exit_at DESC, id DESC LIMIT :limit OFFSET :offset
         """), {"user_id": user_id, "limit": limit, "offset": offset})
-        items = [dict(r._mapping) for r in result.fetchall()]
+        items = [self._presented_review(dict(r._mapping)) for r in result.fetchall()]
         count = await self.session.execute(text("SELECT COUNT(*) FROM finn_trade_reviews WHERE user_id=:user_id"), {"user_id": user_id})
         total = count.scalar_one()
         week = await self.session.execute(text("""
@@ -417,7 +423,7 @@ class FinnTradeReviewService:
         row = result.fetchone()
         if row is None:
             raise HTTPException(404, "Trade-review niet gevonden")
-        return dict(row._mapping)
+        return self._presented_review(dict(row._mapping))
 
     async def get_chart(self, user_id: int, review_id: int) -> dict:
         review = await self.get_review(user_id, review_id)
