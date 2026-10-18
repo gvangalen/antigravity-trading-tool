@@ -6,6 +6,19 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade: Reflectie en FINN-vervolgvragen
 
+Update na onafhankelijke browser-QA op `c2d2c532c260e9f8fc77906d2696f730674ce363`:
+het dossierantwoord blijft na refresh staan en het zevendaagse overzicht toont
+twee gesloten, geanalyseerde Paper-trades. De hoofdchat noemde wel beide
+resultaten, maar kon de nieuwste trade niet aanwijzen en beweerde ten onrechte
+dat de transactiegeschiedenis ontbrak. Ook bleef een oude, reeds opgeslagen
+analysetekst “vóór kosten” zeggen. De vervolgkandidaat geeft de hoofdchat een
+getypeerde, op uitstapmoment gesorteerde gesloten-tradelijst met eigenaargebonden
+bot, instap, uitstap, resultaatbasis en bewijsreferenties. Alleen de bekende
+oude Paper-samenvattingszin wordt bij uitlezing gecorrigeerd. De gebruikersvraag
+in het dossier krijgt een eigen label, los van de vrije observatienotitie.
+Deze vervolgkandidaat wacht op CI, deployment en een nieuwe onafhankelijke
+live herkeuring; de volledige coachflow is nog niet geaccepteerd.
+
 Phase: `LOCAL_VALIDATED_AWAITING_CI`. De vorige onafhankelijke desktopproef op
 `d4a50a52d12bf84350945017faab3c84da83baae` zag twee blijvende gesloten
 Paper-dossiers en het zevendaagse overzicht. Een vraag binnen een dossier gaf

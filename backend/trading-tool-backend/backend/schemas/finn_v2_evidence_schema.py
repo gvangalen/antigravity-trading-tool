@@ -321,11 +321,26 @@ class LatestReportData(BaseModel):
     top_setups: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class ClosedTradeEvidenceData(BaseModel):
+    review_id: int
+    symbol: str
+    environment: str
+    bot_id: Optional[int] = None
+    bot_name: Optional[str] = None
+    entry_at: datetime
+    exit_at: datetime
+    pnl_eur: Optional[str] = None
+    pnl_basis: str
+    has_original_plan: bool
+    evidence_ids: List[str] = Field(default_factory=list)
+
+
 class ReviewHistoryData(BaseModel):
     items: List[str] = Field(default_factory=list)
     closed_trade_status: str = "no_data"
     closed_trade_coverage: Dict[str, int] = Field(default_factory=dict)
     closed_trade_review_ids: List[int] = Field(default_factory=list)
+    closed_trades: List[ClosedTradeEvidenceData] = Field(default_factory=list)
 
 
 ToolDataUnion = Union[

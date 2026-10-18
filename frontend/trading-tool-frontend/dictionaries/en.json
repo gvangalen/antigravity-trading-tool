@@ -1790,6 +1790,7 @@
           "buy": "Buy",
           "sell": "Sell",
           "note": "Your observation",
+          "aiUserQuestion": "Your question",
           "notePlaceholder": "What were you thinking at entry and exit? Which rule did you follow?",
           "saveNote": "Save observation",
           "saved": "Saved",

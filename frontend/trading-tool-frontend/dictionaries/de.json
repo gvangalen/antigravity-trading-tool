@@ -1807,6 +1807,7 @@
           "buy": "Kauf",
           "sell": "Verkauf",
           "note": "Deine Beobachtung",
+          "aiUserQuestion": "Deine Frage",
           "notePlaceholder": "Was dachtest du beim Einstieg und Ausstieg? Welche Regel hast du befolgt?",
           "saveNote": "Beobachtung speichern",
           "saved": "Gespeichert",
