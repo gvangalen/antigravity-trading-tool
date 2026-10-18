@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Desktopbrowser: 100% Paper-sluiting en Trade Review-toegang
 
-Phase: `LIVE_AWAITING_INDEPENDENT_DESKTOP_QA`. De samenhangende
+Phase: `INDEPENDENT_DESKTOP_QA_ACCEPTED` voor de gerichte Paper-sluitingsflow. De samenhangende
 desktopreparatie is gemerged via [PR #419](https://github.com/gvangalen/antigravity-trading-tool/pull/419)
 als `f226d5574102c8aa64440416d3b010233d44f82a`. Alle vijf PR-controles,
 [main-CI run 39155573979](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39155573979)
@@ -37,10 +37,22 @@ De handmatige [QA-toegangsrun 39155820001](https://github.com/gvangalen/antigrav
 slaagde: uitsluitend het gebruikte browser-QA-account is aan de bestaande
 Trade Review-allowlist toegevoegd. De algemene rollout blijft uit. Na de
 PM2-herstart meldden backend en frontend nog steeds HTTP 200 en dezelfde
-product-SHA. De onafhankelijke QA-agent herkeurt nu de exacte 100%-hoeveelheid,
-de percentageweergave en de eigenaargebonden gesloten Trade Review in de
-desktopbrowser. Mobiele simulator en gekoppelde exchange-import zijn
-uitgesteld volgens de huidige desktopprioriteit; er is geen Live-order.
+product-SHA. Onafhankelijke QA controleerde backend en frontend op
+`593fb7e92f54e837a1c179f82ae015980d143ae4`. Na refresh toonde de
+botkaart voor een gesloten virtuele positie `−€0,38 (−0,38%)` op €100
+uitgevoerde aankopen. Reflectie toonde één gesloten, eigenaargebonden
+Paper-dossier met koop, verkoop en FINN-analyse; het dossier bleef na een
+harde refresh bestaan. Er waren geen browser-errors of warnings.
+
+Een aparte Paper-testbot kocht virtueel `0,00138088 BTC`. De knop **100%
+verkopen** selecteerde precies die opgeslagen hoeveelheid; de bevestigde
+verkoop bracht de positie op `0 BTC`. Na refresh waren beide uitgevoerde
+trades aanwezig en bleef de bot gepauzeerd. De test gebruikte geen exchange
+en deed geen Live-order. De oorspronkelijke botlimieten werden niet verruimd.
+Dit accepteert de gerichte desktop-Paper-sluiting en Trade Review-weergave;
+het bewijst geen plantrouw wanneer bij de trade geen oorspronkelijk plan is
+vastgelegd. Mobiele simulator en gekoppelde exchange-import blijven
+uitgesteld volgens de huidige desktopprioriteit.
 
 ## Desktopbrowser: volledige virtuele Paper-positie sluiten
 
