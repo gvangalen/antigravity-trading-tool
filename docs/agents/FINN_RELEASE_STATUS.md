@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## S&P 500 Macro-score en bronactualiteit
 
-Phase: `LOCAL_CANDIDATE_PENDING_CI`. De live browser-QA zag op 2026-10-18
+Phase: `LIVE_AWAITING_INDEPENDENT_AUTHENTICATED_QA`. De live browser-QA zag op 2026-10-18
 een actuele S&P 500-bronmeting met 63 gedateerde dagen (minimum 5), maar geen
 indicatorscore. In code is S&P 500 wel selecteerbaar en heeft het een
 90-daagse normalisatie; de automatische Score 2.0-template-installatie bevatte
@@ -30,9 +30,16 @@ Lokaal gemeten op de bijgewerkte PR-commit: volledige backend-suite 3907 geslaag
 presentatietests geslaagd. Een aanvullende regressie met 63 gedateerde
 S&P 500-brondagen bewees eerst `missing_rule` en daarna een geverifieerde
 Macro-score via de nieuwe template; 26 gerichte tests geslaagd. De vijf
-eerste PR-CI-jobs slaagden. De aanvullende regressie en deze status moeten nog
-door de finale CI. Er is nog geen deployment of onafhankelijke ingelogde QA
-van deze kandidaat.
+eerste PR-CI-jobs en de vijf finale PR-CI-jobs in
+[run 39116996590](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39116996590)
+slaagden. [Main-CI run 39117146178](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39117146178)
+en [Auto Deploy run 39117269095](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39117269095)
+slaagden op merge-SHA `2b5def026fb310af0660ed7d7ab21deb46ed8976`.
+Daarna gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` ieder HTTP 200 en exact die SHA.
+De status-only merge hieronder creëert zelf een nieuwe SHA; QA verifieert
+de actuele publieke SHA in haar eigen preflight. Ingelogde live QA van de
+S&P 500-score, Macro/benchmark en setupmatch is nog niet uitgevoerd.
 
 ## Eén benchmarkscore en een afzonderlijke setupstatus
 
