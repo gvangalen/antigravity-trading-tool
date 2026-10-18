@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Desktopbrowser: zichtbare Paper-ordergrens
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. Onafhankelijke QA gaf op live SHA
+`204b76afe3b1d8aca8b323acabec328dabd8f67f` `NOT_ACCEPTED` voor de
+volledige desktop-scope. De ontbrekende orderreferentie-400 is opgelost; de
+handmatige Paper-preview blokkeerde €10 en €50 met de brede melding dat cash
+of een botlimiet tekortschiet. De UI toonde €1.000 virtueel kassaldo, €100
+daglimiet en €100 maximum per order, maar geen minimumorder. De automatische
+botbeslissing gaf apart `Geen voorstel`/€0 toegestane order bij confidence 0;
+QA voerde daarom geen €100-preview of order uit. Geen gesloten positie of
+Trade Review kon in deze account worden bevestigd. De lege feed, navigatie en
+gesprekbehoud slaagden; een werkelijk verlopen feeditem was in die run niet
+beschikbaar. De bot bleef Paper en is door QA gepauzeerd achtergelaten.
+
+Build heeft de Paper-voorvertoning lokaal aangepast om de specifieke
+guardrailreden te bewaren, inclusief het opgeslagen minimumorderbedrag als
+dat de blokkade veroorzaakt. De botdetails tonen nu de minimumorder naast
+de overige limieten in NL/EN/DE. Veiligheidsgrenzen en orderuitvoering worden
+niet versoepeld. Een gerichte serviceproef voor het specifieke minimum en een
+voor het lege kassaldo slagen. De volledige backend-suite slaagt met
+**3915 passed, 3 bestaande skips**. Frontend build, typecheck, i18n-lint en
+-tests, command-, voorstel- en setuptests slagen; de high-severity audit slaagt
+met één bestaande moderate Next.js-melding. Luna/Responses, FINN-operaties
+en de automatische botbeslissing zijn niet gewijzigd. Na deployment moet
+onafhankelijke QA de zichtbare minimumorder en precieze previewreden toetsen;
+een Paper-open/-close en Trade Review vereisen daarnaast een geldig
+eigenaargebonden Paper-scenario met passende voorwaarden.
+
 ## Desktopbrowser: Paper-voorvertoning en verlopen feeditem
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De reparatie is gemerged via

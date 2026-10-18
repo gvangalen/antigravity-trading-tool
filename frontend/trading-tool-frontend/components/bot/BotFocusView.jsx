@@ -260,7 +260,7 @@ export default function BotFocusView({
                 </ul>
               )}
               <details className="mt-3 border-t border-slate-200 pt-3"><summary className="cursor-pointer text-sm font-bold text-blue-700">{copy.allLimits}</summary>
-                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div><dt>{copy.budgetLimit}</dt><dd>{money(activeBot.budget?.total_eur)}</dd></div><div><dt>{copy.dailyLimit}</dt><dd>{money(activeBot.budget?.daily_limit_eur)}</dd></div><div><dt>{copy.maxOrder}</dt><dd>{money(activeBot.budget?.max_order_eur)}</dd></div><div><dt>{copy.assetExposure}</dt><dd>{activeBot.budget?.max_asset_exposure_pct ?? 100}%</dd></div></dl>
+                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div><dt>{copy.budgetLimit}</dt><dd>{money(activeBot.budget?.total_eur)}</dd></div><div><dt>{copy.dailyLimit}</dt><dd>{money(activeBot.budget?.daily_limit_eur)}</dd></div><div><dt>{copy.minOrder}</dt><dd>{activeBot.budget?.min_order_eur == null ? "—" : money(activeBot.budget.min_order_eur)}</dd></div><div><dt>{copy.maxOrder}</dt><dd>{money(activeBot.budget?.max_order_eur)}</dd></div><div><dt>{copy.assetExposure}</dt><dd>{activeBot.budget?.max_asset_exposure_pct ?? 100}%</dd></div></dl>
               </details>
             </section>
 

@@ -2321,6 +2321,7 @@
       "allLimits": "Alle Risikolimits anzeigen",
       "budgetLimit": "Bot-Budgetgrenze",
       "dailyLimit": "Tageslimit",
+      "minOrder": "Min. pro Order",
       "maxOrder": "Max. pro Order",
       "assetExposure": "Asset-Exposition",
       "exchangeTitle": "EXCHANGE-VERBINDUNG",

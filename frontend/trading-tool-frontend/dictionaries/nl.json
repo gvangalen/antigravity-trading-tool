@@ -2305,6 +2305,7 @@
       "allLimits": "Toon alle risicolimieten",
       "budgetLimit": "Botbudgetlimiet",
       "dailyLimit": "Daglimiet",
+      "minOrder": "Min. per order",
       "maxOrder": "Max. per order",
       "assetExposure": "Assetblootstelling",
       "exchangeTitle": "EXCHANGE-KOPPELING",
