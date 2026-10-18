@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import json
 import re
 
@@ -22,6 +22,14 @@ class ReviewToolAdapter:
     def requested_review_id(message: str) -> int | None:
         match = re.search(r"\b(?:trade[ -]?review|trade[ -]?reflectie|review)\s*#\s*(\d{1,12})\b", str(message or ""), re.I)
         return int(match.group(1)) if match else None
+
+    @staticmethod
+    def _utc_instant(value: datetime | str) -> datetime:
+        instant = datetime.fromisoformat(value) if isinstance(value, str) else value
+        # Legacy bot_decisions.decision_ts is TIMESTAMP WITHOUT TIME ZONE and
+        # is written in UTC. Review exits are TIMESTAMPTZ. Normalize before
+        # combining them; max(naive, aware) otherwise fails the whole read.
+        return instant.replace(tzinfo=timezone.utc) if instant.tzinfo is None else instant.astimezone(timezone.utc)
 
     async def execute(self, *, user_id: int, asset: str | None = None, selector: dict | None = None,
                       review_id: int | None = None, **_kwargs):
@@ -137,8 +145,8 @@ class ReviewToolAdapter:
                         "closed_trade_review_ids": [r["review_id"] for r in closed_reviews],
                         "requested_review_id": review_id},
             "as_of": max(
-                [row["decision_ts"] for row in rows if row.get("decision_ts") is not None]
-                + [datetime.fromisoformat(review["exit_at"]) for review in closed_reviews],
+                [self._utc_instant(row["decision_ts"]) for row in rows if row.get("decision_ts") is not None]
+                + [self._utc_instant(review["exit_at"]) for review in closed_reviews],
                 default=None,
             ),
             "source": "bot_decisions_and_finn_trade_reviews",
