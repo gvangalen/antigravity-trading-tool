@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Desktopbrowser: Paper-voorvertoning en verlopen feeditem
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. Op live SHA
+`19c6fdf7e4c0ca86f8cda0c760eba0f36e7230fe` vond onafhankelijke QA in
+een nieuw, via de browser geregistreerd account twee blokkades. De handmatige
+Paper-ordervoorvertoning gaf HTTP 400 (`Een unieke orderreferentie is vereist
+voor Paper`), waardoor geen order of Trade Review kon worden gemaakt. Een
+zichtbare feedmelding die door gewijzigde scoretoestand niet langer actief
+was, gaf bij `Afhandelen` HTTP 404 en bleef als verouderde actie staan. Een
+andere actuele melding kon wel worden afgehandeld; de lege feed bleef na
+refresh leeg. De bot had afzonderlijk virtueel Paper-startkapitaal en een
+budgetlimiet; er was geen Live-order.
+
+Build traceerde de Paper-fout tot de frontend-API-adapter: het orderpaneel
+maakte een unieke `idempotency_key`, maar `previewManualOrder` liet die weg uit
+de POST-body. De adapter stuurt hem nu mee. Bij een feedstatus-404 haalt de
+webfeed opnieuw de actieve eigenaargebonden lijst op, zodat het verlopen item
+verdwijnt. De gerichte regressies voor de orderreferentie en 404-herstel
+slagen; frontend build, typecheck, i18n-, command-, voorstel- en setuptests
+slagen. De volledige backend-suite is **3914 passed, 3 bestaande skips**.
+De high-severity audit slaagt met één bestaande moderate Next.js-melding.
+Backendactiecontracten, Score 2.0, botuitvoering en Luna/Responses zijn in
+deze kandidaat niet gewijzigd; eerdere lokale worker- en providerbewijzen
+blijven voor die paden van toepassing. De browser-QA voor een daadwerkelijke
+Paper-voorvertoning, bevestigde virtuele fill en Trade Review moet op de
+nieuwe live SHA opnieuw worden uitgevoerd. De mobiele eindacceptatie en een
+geautoriseerde linked-exchange-import blijven buiten deze desktopronde open.
+
 ## Desktopbrowser-herkeuring en gemengde frontendbundle
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De herstelkandidaat is via

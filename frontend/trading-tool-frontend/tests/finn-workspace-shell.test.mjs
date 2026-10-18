@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { readFinnComposerDraft, writeFinnComposerDraft } from "../lib/finnComposerDraft.mjs";
 
 const shellSource = await readFile(
@@ -40,6 +41,22 @@ test("feed discussion enters the persistent FINN panel with its event identity",
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
   assert.match(assistantSource, /resolveFeedDraftQuery\(/);
   assert.match(assistantSource, /aria-label=\{closeLabel \|\| at\("uiText\.closeChat"\)\}/);
+});
+
+test("a feed item closed between listing and handling reloads the current feed", async () => {
+  const statusHandler = feedSource.match(/  const setStatus = async \(id, action\) => \{[\s\S]*?\n  \};/);
+  assert.ok(statusHandler);
+  const events = [];
+  const context = {
+    fetchAuth: async () => { throw Object.assign(new Error("closed"), { status: 404 }); },
+    refresh: async () => { events.push("refresh"); },
+    setError: () => { events.push("error"); },
+    encodeURIComponent,
+    JSON,
+  };
+  runInNewContext(`${statusHandler[0]}\nglobalThis.handleStatus = setStatus;`, context);
+  await context.handleStatus("expired-item", "handled");
+  assert.deepEqual(events, ["refresh"]);
 });
 
 test("ordinary questions submit directly and chat stays beside the workspace", () => {
