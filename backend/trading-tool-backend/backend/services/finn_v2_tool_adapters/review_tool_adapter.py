@@ -56,7 +56,7 @@ class ReviewToolAdapter:
                 }
         closed_reviews = [r for r in closed["reviews"] if not asset or r["symbol"] == asset.upper()]
         items = []
-        for review in closed_reviews:
+        for index, review in enumerate(closed_reviews):
             bot_label = re.sub(r"[\x00-\x1f\x7f]+", " ", str(review.get("bot_name") or "onbekend"))[:100]
             if review.get("bot_id") is not None:
                 bot_label += f" (id {review['bot_id']})"
@@ -95,7 +95,8 @@ class ReviewToolAdapter:
                 closure = "positie bewezen gesloten in Tradamind-ledger"
                 quote_context = ""
             items.append(
-                f"Bevestigde gesloten trade #{review['review_id']} ({review['symbol']}, "
+                f"{'Nieuwste: ' if index == 0 else ''}Bevestigde gesloten trade #{review['review_id']} "
+                f"(instap {review['entry_at']}, uitstap {review['exit_at']}; {review['symbol']}, "
                 f"{review['environment']}, bot: {json.dumps(bot_label, ensure_ascii=False)}, "
                 f"bronnen: {', '.join(review['execution_sources'])}): "
                 f"{closure}; {result}{quote_context}; "
@@ -117,6 +118,19 @@ class ReviewToolAdapter:
                 closed_trade_status=closed["status"],
                 closed_trade_coverage=closed["coverage"],
                 closed_trade_review_ids=[r["review_id"] for r in closed_reviews],
+                closed_trades=[{
+                    "review_id": review["review_id"],
+                    "symbol": review["symbol"],
+                    "environment": review["environment"],
+                    "bot_id": review.get("bot_id"),
+                    "bot_name": review.get("bot_name"),
+                    "entry_at": review["entry_at"],
+                    "exit_at": review["exit_at"],
+                    "pnl_eur": review.get("pnl_eur_before_fees"),
+                    "pnl_basis": review["pnl_status"],
+                    "has_original_plan": review["has_plan"],
+                    "evidence_ids": review["evidence_ids"][:20],
+                } for review in closed_reviews],
             ),
             "summary": {"title": "review_history", "kind": "bot_decisions_and_closed_trades", "asset": asset,
                         "count": len(items), "closed_trade_status": closed["status"],

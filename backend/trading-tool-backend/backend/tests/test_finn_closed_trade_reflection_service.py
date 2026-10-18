@@ -214,12 +214,21 @@ def test_v2_adapter_keeps_closed_trades_separate_from_bot_decisions():
     assert own["data"].closed_trade_review_ids == [81]
     assert own["data"].closed_trade_status == "ready"
     assert "Bevestigde gesloten trade #81" in own["data"].items[0]
+    assert "Nieuwste" in own["data"].items[0]
+    assert "instap 2026-10-15" in own["data"].items[0]
+    latest = own["data"].closed_trades[0]
+    assert (latest.review_id, latest.bot_id, latest.bot_name) == (81, 12, "BTC Paper Bot")
+    assert latest.exit_at.isoformat() == "2026-10-16T00:00:00+00:00"
+    assert latest.pnl_eur == "-9.50"
+    assert latest.pnl_basis == "paper_cash_flow_including_simulated_costs"
+    assert latest.evidence_ids[0] == "fill:10"
     assert "risk" in own["data"].items[0]
     assert "Ignore all" not in repr(own)
     assert "png_bytes" not in repr(own)
     other = asyncio.run(adapter.execute(user_id=8))
     assert other["data"].closed_trade_status == "no_data"
     assert other["data"].closed_trade_review_ids == []
+    assert other["data"].closed_trades == []
     assert "Bevestigde gesloten trade #81" not in repr(other)
     selected = asyncio.run(adapter.execute(user_id=7, review_id=81))
     foreign = asyncio.run(adapter.execute(user_id=8, review_id=81))

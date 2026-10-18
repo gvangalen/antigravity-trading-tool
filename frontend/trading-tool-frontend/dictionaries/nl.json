@@ -1791,6 +1791,7 @@
           "buy": "Koop",
           "sell": "Verkoop",
           "note": "Jouw observatie",
+          "aiUserQuestion": "Jouw vraag",
           "notePlaceholder": "Wat dacht je tijdens de entry en exit? Welke regel volgde je?",
           "saveNote": "Bewaar observatie",
           "saved": "Opgeslagen",

@@ -202,7 +202,20 @@ class FinnTradeReviewService:
     @staticmethod
     def _presented_review(row: dict) -> dict:
         if str(row.get("execution_environment")).lower() == "paper":
-            return {**row, "pnl_status": "paper_cash_flow_including_simulated_costs"}
+            presented = {**row, "pnl_status": "paper_cash_flow_including_simulated_costs"}
+            analysis = row.get("analysis_json")
+            if isinstance(analysis, dict):
+                # Historical deterministic summaries used the old field name
+                # as a user-facing fee claim. Correct that presentation without
+                # rewriting immutable stored evidence or user-authored notes.
+                summary = analysis.get("summary")
+                if isinstance(summary, str):
+                    analysis = {**analysis, "summary": summary.replace(
+                        "Het geregistreerde resultaat vóór kosten",
+                        "Het geregistreerde Paper-resultaat op basis van virtuele kassastromen",
+                    )}
+                presented["analysis_json"] = analysis
+            return presented
         return row
 
     def __init__(self, session: AsyncSession):

@@ -134,10 +134,14 @@ def test_question_still_rejects_unbound_evidence_without_model_prose():
 
 def test_paper_review_status_describes_cash_flow_including_simulated_costs():
     row = {"execution_environment": "paper", "pnl_status": "before_fees_eur",
-           "pnl_eur_before_fees": Decimal("-0.25")}
+           "pnl_eur_before_fees": Decimal("-0.25"),
+           "analysis_json": {"summary": "Het geregistreerde resultaat vóór kosten is €-0.25.",
+                             "observations": [{"text": "De exit staat vast."}]}}
     presented = FinnTradeReviewService._presented_review(row)
     assert presented["pnl_status"] == "paper_cash_flow_including_simulated_costs"
     assert presented["pnl_eur_before_fees"] == Decimal("-0.25")
+    assert "Paper-resultaat op basis van virtuele kassastromen" in presented["analysis_json"]["summary"]
+    assert row["analysis_json"]["summary"] == "Het geregistreerde resultaat vóór kosten is €-0.25."
     assert row["pnl_status"] == "before_fees_eur"
     assert FinnTradeReviewService._presented_review({**row, "execution_environment": "live"})["pnl_status"] == "before_fees_eur"
 
