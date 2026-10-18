@@ -6,7 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Desktopbrowser-herkeuring en gemengde frontendbundle
 
-Phase: `LOCAL_REPAIR_VALIDATED`. Onafhankelijke ingelogde browser-QA op live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De herstelkandidaat is via
+[PR #411](https://github.com/gvangalen/antigravity-trading-tool/pull/411)
+gemerged als `43933d77f208d73608a633833e9be2951a2a2df1`. Alle vijf
+PR-controles, [main-CI run 39148728004](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39148728004)
+en [Auto Deploy run 39148892306](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39148892306)
+slaagden. Backend-health en frontend-buildinfo gaven daarna ieder HTTP 200
+met exact die SHA. Deze statuscommit creëert opnieuw een SHA; QA verifieert
+de uiteindelijke live-identiteit via haar preflight.
+
+Onafhankelijke ingelogde browser-QA op eerdere live SHA
 `85ed755aa13c4b18c6571949328adc40373e32b3` zag een gevulde FINN-feed
 die bij paginawissel en refresh gelijk bleef, twee onderscheiden BTC-plannen,
 een contextvaste read-only chat en een Paper-bot met €1.000 budgetlimiet maar
