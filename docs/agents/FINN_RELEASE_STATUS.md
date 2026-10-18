@@ -4,9 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Desktopbrowser: 100% Paper-sluiting en Trade Review-toegang
+
+Phase: `LIVE_AWAITING_INDEPENDENT_DESKTOP_QA`. De samenhangende
+desktopreparatie is gemerged via [PR #419](https://github.com/gvangalen/antigravity-trading-tool/pull/419)
+als `f226d5574102c8aa64440416d3b010233d44f82a`. Alle vijf PR-controles,
+[main-CI run 39155573979](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39155573979)
+en [Auto Deploy run 39155727175](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39155727175)
+slaagden. Backend-health en frontend-buildinfo gaven daarna ieder HTTP 200
+en exact die SHA. De statuscommit krijgt een nieuwe SHA; QA controleert de
+uiteindelijke publieke identiteit opnieuw.
+
+De vorige onafhankelijke browsertest op `7bf7b748d34db2f8de6f1c91cb2a0f4f63f33de0`
+sloot wel een volledige virtuele BTC-positie en bevestigde na refresh
+`0 BTC`, Paper-cash `€999,62` en resultaat `−€0,38`. De 100%-knop vulde echter
+`0,00138 BTC` in plaats van de volledige `0,00138012 BTC`; het resultaatbadge
+toonde ten onrechte `−100,00%`; en Reflectie was voor het gebruikte nieuwe
+browser-QA-account uitgeschakeld. Die desktopflow kreeg `NOT_ACCEPTED`.
+
+De nieuwe code bewaart bij 100% Paper-verkoop de exacte opgeslagen hoeveelheid.
+De botkaart berekent het euroresultaat uit positie plus netto uitvoeringskasstroom
+en gebruikt bruto uitgevoerde aankopen als noemer voor het resultaatpercentage;
+bij ontbrekende bewijsvelden toont zij geen verzonnen percentage. Lokale
+gerichte regressies, **3917 backendtests** met 3 bestaande skips, webbuild,
+typecheck, i18n-, command- en proposalchecks slaagden. `audit:high` slaagde
+met één moderate Next.js-advisory. De FINN-chat-, actiecontract- en
+Responses-selectorroutes zijn in deze batch niet gewijzigd; er is geen nieuwe
+echte-providerproef of geïsoleerde actiecontractmatrix voor deze batch
+geclaimd.
+
+De handmatige [QA-toegangsrun 39155820001](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39155820001)
+slaagde: uitsluitend het gebruikte browser-QA-account is aan de bestaande
+Trade Review-allowlist toegevoegd. De algemene rollout blijft uit. Na de
+PM2-herstart meldden backend en frontend nog steeds HTTP 200 en dezelfde
+product-SHA. De onafhankelijke QA-agent herkeurt nu de exacte 100%-hoeveelheid,
+de percentageweergave en de eigenaargebonden gesloten Trade Review in de
+desktopbrowser. Mobiele simulator en gekoppelde exchange-import zijn
+uitgesteld volgens de huidige desktopprioriteit; er is geen Live-order.
+
 ## Desktopbrowser: volledige virtuele Paper-positie sluiten
 
-Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De sluitingsfix is gemerged via
+Phase: `INDEPENDENT_BROWSER_QA_NOT_ACCEPTED`. De sluitingsfix is gemerged via
 [PR #417](https://github.com/gvangalen/antigravity-trading-tool/pull/417)
 als `7cf786ef611e78483e99e873d3cf28eb679bb318`. Alle vijf PR-controles,
 [main-CI run 39153467115](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39153467115)
