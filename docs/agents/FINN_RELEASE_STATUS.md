@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Volledige Score 2.0-Paper- en Trade Review-acceptatie
+
+Phase: `LOCAL_VALIDATION_COMPLETE`. Op live SHA
+`25281a6e31accd14c4076f1ecbe38b78b4f714f5` slaagden de drie bestaande
+beschermde QA-profielen: verouderde score gaf Paper Hold zonder order of
+cashwijziging ([run 39138883127](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39138883127));
+automatische Paper-uitvoering gaf een gevulde order en tradehistorie zonder
+Live-call ([run 39139096449](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39139096449));
+Trade Review-lijst en bronroutes gaven een geldig schema
+([run 39139188234](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39139188234)).
+Onafhankelijke QA gaf voor de volledige opdracht toch `NOT_ACCEPTED`, omdat
+deze profielen geen positieve of buiten-grenzen setupmatch en geen gesloten
+Paper-dossier met les bewezen. Native iPhone-navigatie was op dat moment niet
+bedienbaar; een aanvullende mobiele herkeuring is aangevraagd bij dezelfde
+QA-agent. Linked-exchange-import blijft afhankelijk van een geautoriseerde
+QA-koppeling en er is geen Live-order uitgevoerd.
+
+De volgende kandidaat voegt drie afzonderlijk beveiligde QA-profielen toe:
+Score 2.0 binnen grenzen met Paper-fill, buiten grenzen met Hold op een nog
+actieve automatische Paper-bot en een
+gesloten Paper-roundtrip met dossier en bevestigde les. Bij een lokale
+gesloten-trade-proef bleek bovendien een echte projectiefout: het
+planbronmoment had een tijdzone en het ledgerbronmoment niet. De vergelijking
+is nu naar UTC genormaliseerd met een regressietest. Op een aparte lokale
+PostgreSQL/Redis-stack slaagden de positieve, buiten-grenzen en
+gesloten-Paper-proeven. De closed-review-proef controleert twee werkelijke
+virtuele fills, projectie, dossierlezing en een bevestigde les via de service;
+zij bewijst nog geen volledige mobiele UI. Onafhankelijke mobiele QA kon
+inmiddels wel navigeren tussen vijf tabs, maar zag een chatkop tegen de
+iOS-statusbalk en had geen gevulde feed of opgeslagen plan in dat QA-account.
+De chatmodal heeft daarom nu een eigen SafeAreaProvider; die presentatie moet
+nog native worden herkeurd. De volledige backend-suite is lokaal groen met
+**3914 passed, 3 skipped** (log-SHA-256
+`351e7f8a057c5c4380cb3e20e3a7fddfc8e179ee1593d2f99e694e999fb08bba`).
+Frontend- en mobiele build/typecheck/lint- en bundelcontroles slaagden. De
+lokale API/Celery/Responses-actiecontractmatrix slaagde **16/16** (artifact
+SHA-256 `f683b47698c4d9f4ec08e3a1960b856375620c1700752fb98af69ec15c89948c`)
+en echte-providerselectie slaagde **20/20** in development (log-SHA-256
+`fa3740a8164194c78921d89bd501c899bf2dbb7f83427a9937036b61258090d3`)
+en **109/109** in regression (log-SHA-256
+`8ad44e568a23c196fcbe22a140e247676e74a6265b36560e385d726c4543096f`).
+Dit is geen CI-, productie-deploy- of onafhankelijke QA-uitkomst voor de
+nieuwe kandidaat.
+
 ## Score 2.0 Paper- en Trade Review-QA-herstel
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De beschermde onafhankelijke QA op

@@ -25,6 +25,9 @@ name: FINN Production QA
           - safety
           - latency
           - score2_stale_paper
+          - score2_positive_paper
+          - score2_outside_paper
+          - closed_paper_trade_review
           - auto_paper_trade_history
           - portfolio_paper_fx
       manifest_id:
@@ -47,7 +50,7 @@ name: FINN Production QA
         default: false
         type: boolean
       allow_safe_fixture_execution:
-        description: Permit allowlisted fixture execution; named Paper profiles make one virtual buy only
+        description: Permit bounded Paper fixture execution; closed review makes one virtual buy and sell
         required: true
         default: false
         type: boolean
@@ -97,7 +100,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|auto_paper_trade_history|portfolio_paper_fx)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|closed_paper_trade_review|auto_paper_trade_history|portfolio_paper_fx)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -117,6 +120,14 @@ jobs:
           fi
           if [ "$QA_PROFILE" = "score2_stale_paper" ] && { [ "$MANIFEST_ID" != "none" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
             echo "The stale Paper probe requires no manifest and explicit fixture and execution authorization." >&2
+            exit 1
+          fi
+          if [[ "$QA_PROFILE" =~ ^(score2_positive_paper|score2_outside_paper)$ ]] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+            echo "The Score 2.0 match Paper probes require no manifest and explicit fixture and execution authorization." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "closed_paper_trade_review" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+            echo "The closed Paper review probe requires no manifest and explicit fixture and execution authorization." >&2
             exit 1
           fi
           if [ "$QA_PROFILE" = "auto_paper_trade_history" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
@@ -236,6 +247,8 @@ jobs:
           export FINN_QA_ALLOW_FIXTURE_ACTIONS=0
           export FINN_QA_ALLOW_FIXTURE_EXECUTION=0
           export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=0
+          export FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE=0
+          export FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE=0
           export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=0
           export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=0
           if [ "$allow_fixture_actions" = "true" ]; then
@@ -247,8 +260,16 @@ jobs:
           if [ "$qa_profile" = "score2_stale_paper" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=1
           fi
+          if [[ "$qa_profile" =~ ^(score2_positive_paper|score2_outside_paper)$ ]] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
+            export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=1
+            export FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE=1
+          fi
           if [ "$qa_profile" = "auto_paper_trade_history" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=1
+          fi
+          if [ "$qa_profile" = "closed_paper_trade_review" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
+            export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=1
+            export FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE=1
           fi
           if [ "$qa_profile" = "portfolio_paper_fx" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=1

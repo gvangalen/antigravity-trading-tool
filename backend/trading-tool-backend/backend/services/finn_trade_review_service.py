@@ -39,6 +39,11 @@ def _near_zero(value: Decimal) -> bool:
     return abs(value) <= EPSILON
 
 
+def _utc_instant(value: datetime) -> datetime:
+    """Compare legacy UTC timestamps and timezone-aware capture timestamps."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def unrecorded_plan_theme(origin: str | None) -> str:
     return ("plan_not_recorded" if origin in {"exchange_user_attested", "bybit_derivative_user_attested"}
             else "missing_plan")
@@ -147,7 +152,7 @@ def build_closed_positions(
                     ):
                         entry_plan = active[0].get("plan_snapshot")
                         entry_plan_captured_at = active[0].get("plan_captured_at")
-                        if not entry_plan_captured_at or entry_plan_captured_at > active[0]["ts"]:
+                        if not entry_plan_captured_at or _utc_instant(entry_plan_captured_at) > _utc_instant(active[0]["ts"]):
                             entry_plan = None
                         positions.append({
                             "bot_id": key[0], "symbol": key[1],

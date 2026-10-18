@@ -1,5 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { FinnOverlaySheet } from '../components/assistant/FinnOverlaySheet';
 import { useAuth } from '../auth/AuthProvider';
@@ -119,21 +120,23 @@ function ScopedFinnOverlayProvider({ children, accountKey }: { children: ReactNo
         transparent={true}
         visible={isOpen}
       >
-        <FinnOverlaySheet
-          prefill={params?.prefill}
-          source={params?.source}
-          contextMetric={params?.contextMetric}
-          feedItemId={params?.feedItemId}
-          symbol={params?.symbol}
-          onClose={closeFinn}
-          query={draft}
-          onQueryChange={setDraft}
-          messages={messages}
-          onMessagesChange={setMessages}
-          sessionId={sessionId}
-          onSessionIdChange={persistSessionId}
-          onNewConversation={newConversation}
-        />
+        <SafeAreaProvider>
+          <FinnOverlaySheet
+            prefill={params?.prefill}
+            source={params?.source}
+            contextMetric={params?.contextMetric}
+            feedItemId={params?.feedItemId}
+            symbol={params?.symbol}
+            onClose={closeFinn}
+            query={draft}
+            onQueryChange={setDraft}
+            messages={messages}
+            onMessagesChange={setMessages}
+            sessionId={sessionId}
+            onSessionIdChange={persistSessionId}
+            onNewConversation={newConversation}
+          />
+        </SafeAreaProvider>
       </Modal>
     </FinnOverlayContext.Provider>
   );
