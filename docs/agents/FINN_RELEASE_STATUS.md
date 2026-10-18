@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## S&P 500 Macro-score en bronactualiteit
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI`. De live browser-QA zag op 2026-10-18
+een actuele S&P 500-bronmeting met 63 gedateerde dagen (minimum 5), maar geen
+indicatorscore. In code is S&P 500 wel selecteerbaar en heeft het een
+90-daagse normalisatie; de automatische Score 2.0-template-installatie bevatte
+echter geen expliciete S&P 500-scoreregel. De engine laat bij een ontbrekende
+regel bewust de score en daardoor Macro en de gecombineerde benchmark leeg.
+De exacte regelstatus in de productie-DB is nog niet rechtstreeks vastgesteld.
+
+Kandidaat [PR #402](https://github.com/gvangalen/antigravity-trading-tool/pull/402)
+voegt vijf expliciete scorebanden voor de positie van S&P 500 in het eigen
+90-daagse bereik toe: 0–20→20, 20–40→35, 40–60→50, 60–80→65 en
+80–100→80. Dit volgt het bestaande principe dat hogere S&P 500-positie een
+sterker algemeen risicoklimaat betekent; het is geen zelfstandig koopsignaal.
+Gebruikersregels blijven intact. De indicator wordt niet geforceerd bij
+ontbrekende, te oude of onvoldoende gedateerde brondata. De UI maakt nu
+onderscheid tussen bronactualiteit en scorebeschikbaarheid en kan een
+ontbrekende regel apart toelichten. De bestaande periodieke refresh scoort een
+ongewijzigde bronmeting opnieuw nadat de regel beschikbaar is.
+
+Lokaal gemeten op de bijgewerkte PR-commit: volledige backend-suite 3907 geslaagd,
+3 bestaande skips; frontend productiebuild, typecheck, i18n-lint en gerichte
+presentatietests geslaagd. Een aanvullende regressie met 63 gedateerde
+S&P 500-brondagen bewees eerst `missing_rule` en daarna een geverifieerde
+Macro-score via de nieuwe template; 26 gerichte tests geslaagd. De vijf
+eerste PR-CI-jobs slaagden. De aanvullende regressie en deze status moeten nog
+door de finale CI. Er is nog geen deployment of onafhankelijke ingelogde QA
+van deze kandidaat.
+
 ## Eén benchmarkscore en een afzonderlijke setupstatus
 
 Phase: `LIVE_AWAITING_INDEPENDENT_AUTHENTICATED_QA`. De kandidaat
