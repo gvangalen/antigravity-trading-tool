@@ -72,8 +72,8 @@ def _seed(namespace: str, bound_qa_owner: int) -> tuple[int, int, str]:
             cur.execute(
                 """INSERT INTO setups
                    (user_id,name,symbol,timeframe,setup_type,dca_frequency,
-                    min_macro_score,min_technical_score,min_market_score,created_at,last_validated)
-                   VALUES (%s,%s,'ETH','1D','dca','daily',0,0,0,%s,%s) RETURNING id""",
+                    min_benchmark_score,max_benchmark_score,created_at,last_validated)
+                   VALUES (%s,%s,'ETH','1D','dca','daily',0,100,%s,%s) RETURNING id""",
                 (user_id, namespace, now, now),
             )
             setup_id = int(cur.fetchone()[0])
@@ -196,15 +196,10 @@ def _verify(user_id: int, bot_id: int, report_date: str) -> dict:
         if not decision:
             raise RuntimeError("paper_decision_missing")
         action, amount, payload, status = decision
-        if not (action == "hold" and float(amount) == 0
-                and payload["setup_match"]["status"] == "insufficient_data"
-                and payload["dca_policy"]["source_available"] is False
-                and payload["dca_policy"]["source_score"] is None
-                and orders == 0 and ledger == 0 and keys == 0
-                and owner_active is False
-                and state and float(state[0]) == 100
-                and state[1] is True and state[2] is False and state[3] == "manual"):
-            raise RuntimeError("stale_paper_contract_failed")
+        _assert_stale_paper_contract(
+            action=action, amount=amount, payload=payload, orders=orders,
+            ledger=ledger, keys=keys, owner_active=owner_active, state=state,
+        )
         return {
             "result": "PASS", "score_components": "macro_and_technical_only",
             "stale_component": "market_change_24h", "setup_match": "insufficient_data",
@@ -214,6 +209,24 @@ def _verify(user_id: int, bot_id: int, report_date: str) -> dict:
         }
     finally:
         conn.close()
+
+
+def _assert_stale_paper_contract(*, action, amount, payload, orders, ledger,
+                                 keys, owner_active, state) -> None:
+    """Emit only a failed invariant code, never protected fixture contents."""
+    if action != "hold" or amount is None or float(amount) != 0:
+        raise RuntimeError("stale_paper_decision_not_hold_zero")
+    if not isinstance(payload, dict) or (payload.get("setup_match") or {}).get("status") != "insufficient_data":
+        raise RuntimeError("stale_paper_setup_match_not_insufficient")
+    policy = payload.get("dca_policy") or {}
+    if policy.get("source_available") is not False or policy.get("source_score") is not None:
+        raise RuntimeError("stale_paper_dca_policy_not_unavailable")
+    if orders != 0 or ledger != 0:
+        raise RuntimeError("stale_paper_execution_side_effect")
+    if keys != 0 or owner_active is not False:
+        raise RuntimeError("stale_paper_fixture_safety_breach")
+    if not state or float(state[0]) != 100 or state[1] is not True or state[2] is not False or state[3] != "manual":
+        raise RuntimeError("stale_paper_bot_state_changed")
 
 
 def _age_market_reading(user_id: int) -> None:

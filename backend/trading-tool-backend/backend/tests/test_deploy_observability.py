@@ -224,21 +224,25 @@ def test_trade_review_rollout_reaches_api_and_workers_with_fail_closed_default()
     ecosystem = REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js"
     script = (
         "const {createEcosystem}=require(process.argv[1]);"
-        "process.stdout.write(JSON.stringify(createEcosystem('production').apps.map("
+        "process.stdout.write(JSON.stringify(createEcosystem(process.argv[2]).apps.map("
         "app=>({name:app.name,mode:app.env.FINN_TRADE_REVIEW_ROLLOUT,"
         "ids:app.env.FINN_TRADE_REVIEW_USER_IDS}))));"
     )
 
-    def process_env(mode: str | None, ids: str | None) -> list[dict]:
+    def process_env(mode: str | None, ids: str | None, qa_id: str | None = None,
+                    environment: str = "production") -> list[dict]:
         env = os.environ.copy()
         env.pop("FINN_TRADE_REVIEW_ROLLOUT", None)
         env.pop("FINN_TRADE_REVIEW_USER_IDS", None)
+        env.pop("FINN_QA_USER_ID", None)
         if mode is not None:
             env["FINN_TRADE_REVIEW_ROLLOUT"] = mode
         if ids is not None:
             env["FINN_TRADE_REVIEW_USER_IDS"] = ids
+        if qa_id is not None:
+            env["FINN_QA_USER_ID"] = qa_id
         result = subprocess.run(
-            ["node", "-e", script, str(ecosystem)],
+            ["node", "-e", script, str(ecosystem), environment],
             env=env, check=True, capture_output=True, text=True,
         )
         return json.loads(result.stdout)
@@ -250,6 +254,15 @@ def test_trade_review_rollout_reaches_api_and_workers_with_fail_closed_default()
     allowed = process_env("allowlist", "93")
     assert {app["name"] for app in allowed} == {app["name"] for app in disabled}
     assert all(app["mode"] == "allowlist" and app["ids"] == "93" for app in allowed)
+
+    protected_qa = process_env("allowlist", "93", "71")
+    assert next(app for app in protected_qa if app["name"] == "frontend")["ids"] == "93"
+    assert all(app["ids"] == "93,71" for app in protected_qa if app["name"] != "frontend")
+    assert all(app["ids"] == "93,71" for app in process_env("ALLOWLIST", "93", "71") if app["name"] != "frontend")
+    assert all(app["ids"] == "93" for app in process_env("allowlist", "93", "invalid"))
+    assert all(app["ids"] == "93,invalid" for app in process_env("allowlist", "93,invalid", "71"))
+    assert all(app["mode"] == "off" and app["ids"] == "" for app in process_env(None, None, "71"))
+    assert all(app["ids"] == "93" for app in process_env("allowlist", "93", "71", "staging"))
 
 
 def test_deploy_plan_includes_the_strategy_domain_schema_before_api_reload() -> None:

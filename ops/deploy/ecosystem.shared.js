@@ -121,6 +121,24 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "TRADAMIND_BUILD_COMMIT_SHA",
   "TRADAMIND_BUILD_TIME",
 ]);
+
+function withProtectedQaTradeReviewAccess(shared) {
+  // The protected QA owner is a deliberately bound test account. Include it
+  // only in an otherwise valid, explicit allowlist rollout; never expose the
+  // binding to the frontend or turn an invalid list into a permissive one.
+  if ((shared.FINN_TRADE_REVIEW_ROLLOUT || "").trim().toLowerCase() !== "allowlist") return shared;
+  const qaId = process.env.FINN_QA_USER_ID || "";
+  const validId = (value) => /^[0-9]{1,10}$/.test(value) &&
+    Number(value) >= 1 && Number(value) <= 2147483647;
+  if (!validId(qaId)) return shared;
+  const raw = shared.FINN_TRADE_REVIEW_USER_IDS || "";
+  const ids = raw ? raw.split(",").map((part) => part.trim()) : [];
+  if (ids.length > 100 || ids.some((id) => !validId(id))) return shared;
+  if (!ids.includes(qaId)) ids.push(qaId);
+  if (ids.length > 100) return shared;
+  return { ...shared, FINN_TRADE_REVIEW_USER_IDS: ids.join(",") };
+}
+
 // PM2's --update-env merges with an existing process environment.  Define the
 // safe FINN defaults explicitly so an obsolete process-only false value cannot
 // survive a release when the protected environment deliberately omits a key.
@@ -168,6 +186,9 @@ function createEcosystem(environmentName) {
   if (!environment) {
     throw new Error(`Unknown ecosystem environment: ${environmentName}`);
   }
+  const backendRuntimeEnv = environmentName === "production"
+    ? withProtectedQaTradeReviewAccess(SHARED_RUNTIME_ENV)
+    : SHARED_RUNTIME_ENV;
 
   const projectDir = BASE_REMOTE_DIR;
   const frontendDir = path.join(projectDir, "frontend", "trading-tool-frontend");
@@ -204,7 +225,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...backendRuntimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "backend",
@@ -225,7 +246,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...backendRuntimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-default",
@@ -244,7 +265,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...backendRuntimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-finn-interactive",
@@ -260,7 +281,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...backendRuntimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-beat",

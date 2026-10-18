@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import re
 import secrets
@@ -188,26 +189,59 @@ def _verify(user_id: int, bot_id: int, decision_id: int) -> dict:
             owner_active = cursor.fetchone()[0]
         history = asyncio.run(_history(user_id))
         items = history.get("items") or []
-        if not (len(rows) == 1 and rows[0][:5] == ("filled", "paper", "buy", ORDER_EUR, "filled")
-                and float(rows[0][5]) == ORDER_QTY and float(rows[0][6]) == PRICE_EUR
-                and rows[0][7:] == ("executed", "auto")
-                and portfolio and round(float(portfolio[0]), 2) == 50
-                and float(portfolio[1]) == ORDER_QTY
-                and len(ledger) == 2
-                and ledger[0][0] == "paper_initial_funding" and float(ledger[0][1]) == START_CASH_EUR
-                and ledger[1][0] == "execute" and float(ledger[1][1]) == -ORDER_EUR
-                and float(ledger[1][2]) == ORDER_QTY
-                and keys == 0 and owner_active is False
-                and len(items) == 1 and items[0]["bot_id"] == bot_id
-                and items[0]["environment"] == "paper" and items[0]["execution_mode"] == "auto"
-                and items[0]["status"] == "filled" and items[0]["amount_eur"] == ORDER_EUR):
-            raise RuntimeError("auto_paper_history_contract_failed")
+        spent = _assert_auto_paper_contract(
+            rows=rows, portfolio=portfolio, ledger=ledger, keys=keys,
+            owner_active=owner_active, items=items, bot_id=bot_id,
+        )
         return {"result": "PASS", "order_status": "filled", "environment": "paper",
                 "execution_mode": "auto", "trade_history_status": "filled",
-                "amount_eur": ORDER_EUR, "cash_eur": 50, "execution_ledger_entries": 1,
+                "amount_eur": spent, "cash_eur": round(START_CASH_EUR - spent, 2),
+                "execution_ledger_entries": 1,
                 "exchange_keys": 0, "live_trading_calls": 0}
     finally:
         connection.close()
+
+
+def _assert_auto_paper_contract(*, rows, portfolio, ledger, keys,
+                                owner_active, items, bot_id: int) -> float:
+    """Check the actual EUR fill, without assuming the planning price held.
+
+    Production Paper execution reprices at the current validated EUR quote and
+    rounds quantity down. The approved EUR spend remains an upper bound.
+    Failure codes reveal only the broken invariant, not fixture row contents.
+    """
+    if len(rows) != 1 or rows[0][:3] != ("filled", "paper", "buy") or rows[0][4] != "filled":
+        raise RuntimeError("auto_paper_order_or_execution_not_filled")
+    row = rows[0]
+    if row[7:] != ("executed", "auto"):
+        raise RuntimeError("auto_paper_decision_not_executed_auto")
+    try:
+        qty, price, spent = float(row[5]), float(row[6]), float(row[3])
+    except (TypeError, ValueError, OverflowError):
+        raise RuntimeError("auto_paper_fill_invalid") from None
+    if not all(math.isfinite(value) and value > 0 for value in (qty, price, spent)):
+        raise RuntimeError("auto_paper_fill_invalid")
+    if spent > ORDER_EUR or round(qty * price, 2) != spent or qty > ORDER_EUR / price + 1e-8:
+        raise RuntimeError("auto_paper_approved_spend_exceeded")
+    if not portfolio or round(float(portfolio[0]), 2) != round(START_CASH_EUR - spent, 2) or not math.isclose(float(portfolio[1]), qty, abs_tol=1e-8):
+        raise RuntimeError("auto_paper_portfolio_not_reconciled")
+    if (len(ledger) != 2 or ledger[0][0] != "paper_initial_funding"
+            or float(ledger[0][1]) != START_CASH_EUR
+            or ledger[1][0] != "execute" or float(ledger[1][1]) != -spent
+            or not math.isclose(float(ledger[1][2]), qty, abs_tol=1e-8)):
+        raise RuntimeError("auto_paper_ledger_not_reconciled")
+    if keys != 0 or owner_active is not False:
+        raise RuntimeError("auto_paper_fixture_safety_breach")
+    if (len(items) != 1 or items[0]["bot_id"] != bot_id
+            or items[0]["environment"] != "paper"
+            or items[0]["execution_mode"] != "auto"
+            or items[0]["status"] != "filled"
+            or items[0]["side"] != "buy"
+            or not math.isclose(float(items[0]["qty"]), qty, abs_tol=1e-8)
+            or not math.isclose(float(items[0]["price"]), price, rel_tol=1e-9)
+            or float(items[0]["amount_eur"]) != spent):
+        raise RuntimeError("auto_paper_history_not_reconciled")
+    return spent
 
 
 def _finish(namespace: str, user_id: int, bot_id: int, *, passed: bool) -> None:
