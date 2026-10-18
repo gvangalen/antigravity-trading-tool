@@ -6,7 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Desktopbrowser: volledige virtuele Paper-positie sluiten
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. Onafhankelijke QA op live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De sluitingsfix is gemerged via
+[PR #417](https://github.com/gvangalen/antigravity-trading-tool/pull/417)
+als `7cf786ef611e78483e99e873d3cf28eb679bb318`. Alle vijf PR-controles,
+[main-CI run 39153467115](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39153467115)
+en [Auto Deploy run 39153614555](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39153614555)
+slaagden. Daarna gaven de publieke backend-health en frontend-buildinfo
+ieder HTTP 200 en exact die SHA. Deze statuscommit verandert zelf de SHA;
+QA bindt de herkeuring aan de uiteindelijke publieke identiteit.
+Onafhankelijke QA op eerdere live SHA
 `dddbe4a88ce1f8a0312822291a1c936e16c55d65` bevestigde nu dat de
 minimumorder **€100** was, een €50-preview terecht werd geweigerd en een
 €100-Paper-koop na expliciete bevestiging slaagde. De virtuele positie bleef
