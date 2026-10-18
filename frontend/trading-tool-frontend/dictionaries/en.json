@@ -2304,6 +2304,7 @@
       "allLimits": "Show all risk limits",
       "budgetLimit": "Bot budget limit",
       "dailyLimit": "Daily limit",
+      "minOrder": "Min. per order",
       "maxOrder": "Max. per order",
       "assetExposure": "Asset exposure",
       "exchangeTitle": "EXCHANGE CONNECTION",

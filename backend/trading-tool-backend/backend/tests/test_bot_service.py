@@ -681,7 +681,44 @@ def test_paper_manual_preview_uses_actual_cash(monkeypatch):
                                    idempotency_key="paper-cash-empty-test")
     result = asyncio.run(service.preview_manual_order(payload, user_id=7))
     assert result["guardrails"]["allowed"] is False
-    assert result["guardrails"]["blocked_by"] == "paper_order_exceeds_limits"
+    assert result["guardrails"]["blocked_by"] == "insufficient_funds"
+    assert "kassaldo" in result["message"].lower()
+
+
+def test_paper_manual_preview_explains_saved_minimum_order(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class Repo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual", budget_min_order_eur=100)
+            return bot
+
+        async def get_paper_cash(self, **_fields):
+            return 1000.0
+
+        async def get_asset_quote_currencies(self, _symbols):
+            return {"BTC": "EUR"}
+
+        async def get_portfolio_fx_rates(self):
+            return {}
+
+        async def get_valuatable_market_prices(self, _symbols):
+            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc)}}
+
+    service.repository = Repo()
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000,
+                                   value_eur=50, idempotency_key="paper-minimum-preview")
+    result = asyncio.run(service.preview_manual_order(payload, user_id=7))
+    assert result["blocked"] is True
+    assert result["guardrails"]["blocked_by"] == "below_min_order"
+    assert "€100.00" in result["message"]
+    assert "€50.00" in result["message"]
 
 
 def test_paper_manual_preview_converts_usdt_price_to_eur(monkeypatch):

@@ -1827,8 +1827,15 @@ class BotService:
             min_order_eur=bot.get("budget_min_order_eur"),
         )
         if payload.side == "buy" and not bot.get("is_live") and float(guardrails.get("adjusted_amount_eur") or 0) + 0.001 < gross_eur:
-            guardrails.update(allowed=False, blocked_by="paper_order_exceeds_limits",
-                              reason="Het Paper-bedrag overschrijdt het kassaldo of een botlimiet.")
+            if guardrails.get("allowed"):
+                # A partial allocation must not silently turn an explicitly
+                # requested Paper order into a smaller fill.
+                guardrails.update(allowed=False, blocked_by="paper_order_exceeds_limits",
+                                  reason="De volledige Paper-order past niet binnen de ingestelde limieten. "
+                                         + str(guardrails.get("reason") or ""))
+            # Keep a specific refusal such as below_min_order or
+            # insufficient_funds. Replacing it with a generic limit message
+            # obscures the actual stored constraint from the user.
 
         if payload.side == "sell":
             current_qty = max(float(stats.get("net_qty", 0) or 0), 0.0)
@@ -1858,10 +1865,17 @@ class BotService:
             "not_persisted": True,
         }
 
+        block_reason = guardrails.get("reason")
+        if guardrails.get("blocked_by") == "below_min_order":
+            block_reason = next(
+                (item.get("message") for item in guardrails.get("explanations", [])
+                 if item.get("code") == "below_min_order_size"), block_reason,
+            )
+
         return {
             "ok": bool(guardrails.get("allowed")),
             "blocked": not bool(guardrails.get("allowed")),
-            "message": guardrails.get("reason") if not guardrails.get("allowed") else None,
+            "message": block_reason if not guardrails.get("allowed") else None,
             "symbol": payload.symbol,
             "side": payload.side,
             "price": price,
