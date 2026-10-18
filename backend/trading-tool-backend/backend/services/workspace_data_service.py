@@ -174,6 +174,14 @@ def _current_indicator_rows(rows: list[dict[str, Any]], category: str,
     for row in rows:
         item = {**row, "score": None, "trend": None,
                 "interpretation": None, "action": None}
+        # The persisted reading may explain why it was not scored. Keep only
+        # this diagnostic, never its unverified score or stale interpretation.
+        detail = str(row.get("interpretation") or "").lower()
+        if row.get("score") is None and any(marker in detail for marker in (
+            "geen scoreregel match", "geen vastgelegde scoreregel",
+            "geen gevalideerde scoreregel", "fallback bucket rule",
+        )):
+            item["score_issue"] = "missing_rule"
         saved = evidence.get(_indicator_key(row.get("name")))
         if isinstance(saved, dict) and saved.get("rule_origin") in {"custom", "system_template"}:
             try:
@@ -281,7 +289,7 @@ def _enrich_indicator_rows(
             score_reason = "insufficient_dated_history"
         elif freshness["stale"]:
             score_reason = "stale_source"
-        elif any(marker in str(row.get("interpretation") or "").lower()
+        elif row.get("score_issue") == "missing_rule" or any(marker in str(row.get("interpretation") or "").lower()
                  for marker in ("geen vastgelegde scoreregel", "geen gevalideerde scoreregel", "fallback")):
             score_reason = "missing_rule"
         else:

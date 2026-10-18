@@ -96,6 +96,24 @@ def test_day_macro_freshness_uses_dxy_source_window_instead_of_generic_day_windo
     assert rows[0]["score_unavailable_reason"] is None
 
 
+def test_sp500_can_have_fresh_source_and_enough_history_but_missing_score_rule():
+    observed = (datetime.now(timezone.utc) - timedelta(hours=60)).isoformat()
+    raw = [{"name": "sp500", "value": 5800.0, "score": None,
+            "interpretation": "Geen scoreregel match (fallback).",
+            "source_observed_at": observed,
+            "score_history_coverage": {"observed_days": 63, "required_days": 5,
+                                       "window_days": 90}}]
+    rows = _current_indicator_rows(raw, "macro", None)
+    enriched = _enrich_indicator_rows(
+        rows, period="day", threshold=36 * 60 * 60,
+        source="macro_data", symbol="BTC",
+    )
+    assert enriched[0]["score"] is None
+    assert enriched[0]["freshness"]["stale"] is False
+    assert enriched[0]["score_unavailable_reason"] == "missing_rule"
+    assert enriched[0]["score_history_coverage"]["observed_days"] == 63
+
+
 def test_missing_indicator_data_never_becomes_an_artificial_score():
     summary = _score_summary(
         [{"name": "volume", "value": None, "score": 10}],
