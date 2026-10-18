@@ -47,6 +47,7 @@ import {
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT, openFinnContext } from "@/lib/finnCommandSearch";
 import { validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -136,6 +137,12 @@ function getUiCopy(locale = "nl") {
       activeAnalysis: "Active analysis",
       updated: "Updated",
       combinedScore: "Combined score",
+      benchmarkTitle: "Market conditions",
+      benchmarkScore: "Your benchmark",
+      selectedPeriodScore: "Selected period score",
+      benchmarkExplanation: "A weighted average of your Market, Macro and Technical indicators. Your setup is compared with it; the strategy decides whether a trade follows.",
+      benchmarkDetails: "See indicators and weights",
+      marketSituation: "Market situation",
       confidence: "Confidence",
       bias: "Bias",
       watchlist: "Watchlist",
@@ -290,6 +297,12 @@ function getUiCopy(locale = "nl") {
       activeAnalysis: "Aktive analyse",
       updated: "Aktualisiert",
       combinedScore: "Kombinierter score",
+      benchmarkTitle: "Marktbedingungen",
+      benchmarkScore: "Dein Benchmark",
+      selectedPeriodScore: "Score des gewählten Zeitraums",
+      benchmarkExplanation: "Gewichteter Durchschnitt deiner Markt-, Makro- und technischen Indikatoren. Dein Setup wird damit verglichen; die Strategie entscheidet über einen Trade.",
+      benchmarkDetails: "Indikatoren und Gewichtung ansehen",
+      marketSituation: "Marktlage",
       confidence: "Vertrauen",
       bias: "Bias",
       watchlist: "Watchlist",
@@ -443,6 +456,12 @@ function getUiCopy(locale = "nl") {
     activeAnalysis: "Actieve analyse",
     updated: "Bijgewerkt",
     combinedScore: "Gecombineerde score",
+    benchmarkTitle: "Marktomstandigheden",
+    benchmarkScore: "Jouw benchmark",
+    selectedPeriodScore: "Score gekozen periode",
+    benchmarkExplanation: "Gewogen gemiddelde van jouw Markt-, Macro- en Technisch-indicatoren. Je setup wordt hiermee vergeleken; de strategie bepaalt of er een trade volgt.",
+    benchmarkDetails: "Bekijk indicatoren en weging",
+    marketSituation: "Marktsituatie",
     confidence: "Vertrouwen",
     bias: "Bias",
     watchlist: "Watchlist",
@@ -1419,7 +1438,7 @@ function buildSectionInsight(sectionId, sectionScore, ui) {
   return copy.technicalNeutral;
 }
 
-function ScoreOverview({ market, macro, technical, combined, sections, weights, loading, onSaveWeights, ui, locale }) {
+function ScoreOverview({ market, macro, technical, combined, sections, weights, loading, onSaveWeights, ui, locale, conditionOptions, isDailyBenchmark }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
@@ -1451,7 +1470,7 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
     },
     {
       id: "combined",
-      label: ui.combined,
+      label: isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore,
       score: normalizeScore(combined?.score),
     },
   ];
@@ -1499,7 +1518,7 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
   const isBalanced = Math.abs(totalWeight - 1) < 0.01;
 
   return (
-    <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+    <section id="benchmark-uitleg" className="scroll-mt-6 rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
           {ui.contextScores}
@@ -1521,7 +1540,10 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
       <div className="grid gap-2.5 px-4 py-2.5 lg:grid-cols-4">
         {items.map((item) => {
           const tone = scoreTone(item.score, ui);
-          const summary = item.id === "combined" ? combined?.bias || tone.label : tone.label;
+          const benchmarkCondition = item.id === "combined" ? marketConditionForScore(item.score) : null;
+          const summary = item.id === "combined"
+            ? (benchmarkCondition ? conditionOptions?.[benchmarkCondition.id]?.title : ui.unavailable)
+            : tone.label;
           const sourceAt = item.id === "combined" ? combinedSource : sectionSource(item.id);
           return (
             <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
@@ -1711,6 +1733,8 @@ function ActiveAssetCard({
   updatedAt,
   statusLabel,
   combinedSummary,
+  conditionOptions,
+  isDailyBenchmark,
   onSelectAsset,
   ui,
 }) {
@@ -1720,26 +1744,8 @@ function ActiveAssetCard({
       ? "text-emerald-600"
       : "text-red-600"
     : "text-slate-400";
-  const biasToneClass =
-    combinedSummary.tone.label === ui.positive
-      ? "text-emerald-700"
-      : combinedSummary.tone.label === ui.negative
-      ? "text-red-700"
-      : "text-slate-700";
-
-  const summaryItems = [
-    {
-      label: ui.combinedScore,
-      value: combinedSummary.score === null ? "—" : `${combinedSummary.score}/100`,
-      className: "text-slate-950",
-    },
-    { label: ui.bias, value: combinedSummary.bias, className: biasToneClass },
-    {
-      label: ui.confidence,
-      value: combinedSummary.confidence === null ? "—" : `${combinedSummary.confidence}%`,
-      className: "text-slate-950",
-    },
-  ].filter((item) => item.value !== "—");
+  const condition = marketConditionForScore(combinedSummary.score);
+  const situation = condition ? conditionOptions?.[condition.id]?.title : ui.unavailable;
 
   return (
     <section className="relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white px-4 py-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -1759,7 +1765,7 @@ function ActiveAssetCard({
         </div>
       </div>
 
-      <div className="mt-2.5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(350px,auto)] lg:items-end">
+      <div className="mt-2.5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(350px,0.9fr)] lg:items-center">
         <div className="flex min-w-0 items-center gap-3 overflow-hidden">
             <button
               type="button"
@@ -1787,17 +1793,18 @@ function ActiveAssetCard({
             <span className="shrink-0 text-[12px] font-black uppercase tracking-[0.14em] text-slate-400">1D</span>
         </div>
 
-        <div className="grid grid-cols-3 divide-x divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70">
-          {summaryItems.map((item) => (
-            <div key={item.label} className="min-w-0 px-3 py-2 text-center">
-              <div className="truncate text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">
-                {item.label}
-              </div>
-              <div className={`mt-0.5 truncate text-[12px] font-black ${item.className}`}>
-                {item.value}
-              </div>
-            </div>
-          ))}
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">{ui.benchmarkTitle}</div>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <strong className="text-lg font-black text-slate-950">{situation}</strong>
+            <span className="text-xs font-bold text-slate-600">
+              {isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore}: {combinedSummary.score === null ? "—" : `${Math.round(combinedSummary.score)}/100`}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{ui.benchmarkExplanation}</p>
+          <a href="#benchmark-uitleg" className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:underline">
+            {ui.benchmarkDetails} <ArrowRight size={12} aria-hidden="true" />
+          </a>
         </div>
       </div>
     </section>
@@ -1812,6 +1819,7 @@ function AssetList({
   onRemove,
   onGroupChange,
   onAddAsset,
+  conditionOptions,
   ui,
 }) {
   return (
@@ -1850,17 +1858,18 @@ function AssetList({
       </div>
 
       <div className="mt-3 overflow-hidden rounded-[18px] border border-slate-200 bg-white">
-        <div className="grid grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px_48px] gap-3 border-b border-slate-100 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+        <div className="grid grid-cols-[minmax(0,1.5fr)_120px_100px_minmax(150px,1fr)_48px] gap-3 border-b border-slate-100 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
           <div>Asset</div>
           <div className="text-right">{ui.latest}</div>
           <div className="text-right">24u</div>
-          <div className="text-right">Score</div>
-          <div className="text-right">{ui.bias}</div>
+          <div className="text-right">{ui.marketSituation}</div>
           <div className="text-right">{ui.watchlistActions}</div>
         </div>
         <div>
           {rows.length ? rows.map((row) => {
             const active = row.symbol === activeSymbol;
+            const condition = marketConditionForScore(row.rawScore);
+            const situation = condition ? conditionOptions?.[condition.id]?.title : ui.unavailable;
             return (
               <div
                 key={row.symbol}
@@ -1873,7 +1882,7 @@ function AssetList({
                     onSelect(row.symbol);
                   }
                 }}
-                className={`grid w-full cursor-pointer grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px_48px] items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition last:border-b-0 ${
+                className={`grid w-full cursor-pointer grid-cols-[minmax(0,1.5fr)_120px_100px_minmax(150px,1fr)_48px] items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition last:border-b-0 ${
                   active ? "bg-blue-50/70" : "hover:bg-slate-50/80"
                 }`}
               >
@@ -1900,11 +1909,9 @@ function AssetList({
                 <div className={`text-right text-[15px] font-black ${row.changeTone}`}>
                   {row.change24h}
                 </div>
-                <div className="text-right text-[15px] font-black text-slate-950">{row.score}</div>
                 <div className="text-right">
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] ${row.biasTone}`}>
-                    {row.bias}
-                  </span>
+                  <div className="text-[12px] font-black text-slate-900">{situation}</div>
+                  <div className="text-[10px] font-semibold text-slate-500">{ui.benchmarkScore}: {condition ? `${row.score}/100` : "—"}</div>
                 </div>
                 <div className="flex justify-end">
                   <button
@@ -2354,7 +2361,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const searchParams = useSearchParams();
   const { selectedAsset, setSelectedAsset } = useAsset();
   const { symbols: persistedWatchlistSymbols = [] } = useWatchlist();
-  const { locale } = useTranslation();
+  const { locale, t } = useTranslation();
   const { openConfirm, showSnackbar } = useModal();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
@@ -2647,7 +2654,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     async function loadWatchlistRows() {
         const nextRows = (watchlistData || []).map((row) => {
           const changeValue = Number(row?.change_24h);
-          const tone = scoreTone(row?.score, ui);
           const assetClass = String(row?.asset_class || "").toLowerCase();
           return {
             symbol: row.symbol,
@@ -2662,8 +2668,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
             : "text-slate-400",
           score: formatScore(row?.score),
-          bias: row?.score === null ? ui.unavailable : tone.label,
-          biasTone: tone.pill,
+          rawScore: row?.score,
         };
       });
 
@@ -2880,6 +2885,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         updatedAt={formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)}
         statusLabel={isFallbackWorkspace ? ui.fallbackData : assetLive?.stale ? ui.staleData : null}
         combinedSummary={combinedSummary}
+        conditionOptions={t?.setups?.marketConditions?.options}
+        isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
         onSelectAsset={() => openSearch()}
         ui={ui}
       />
@@ -2892,6 +2899,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         activeGroup={activeAssetGroup}
         onGroupChange={handleAssetGroupChange}
         onAddAsset={() => openSearch()}
+        conditionOptions={t?.setups?.marketConditions?.options}
         ui={ui}
       />
 
@@ -2937,6 +2945,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         loading={scoresLoading}
         onSaveWeights={saveWeights}
         ui={ui}
+        conditionOptions={t?.setups?.marketConditions?.options}
+        isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
       />
 
       <section className="space-y-3">

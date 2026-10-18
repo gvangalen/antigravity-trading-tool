@@ -15,6 +15,14 @@ export const MARKET_CONDITIONS = Object.freeze([
   { id: "strong", min: 76, max: 100 },
 ]);
 
+export function marketConditionForScore(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const score = Number(value);
+  if (!Number.isFinite(score) || score < 0 || score > 100) return null;
+  const displayedScore = Math.round(score);
+  return MARKET_CONDITIONS.find(({ min, max }) => displayedScore >= min && displayedScore <= max) || null;
+}
+
 export function marketConditionChoiceFromSetup(setup) {
   if (!hasSetupScoreConditions(setup)) return "off";
   if (LEGACY_SCORE_FIELDS.some((field) => setup?.[field] != null)) return "custom";

@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { formatSetupScoreConditions } from "../lib/setup/scoreConditionSummary.mjs";
-import { MARKET_CONDITIONS } from "../lib/setup/scoreConditions.mjs";
+import { MARKET_CONDITIONS, marketConditionForScore } from "../lib/setup/scoreConditions.mjs";
+
+test("asset benchmark uses the same five score bands as setup conditions", () => {
+  for (const band of MARKET_CONDITIONS) {
+    assert.equal(marketConditionForScore(band.min)?.id, band.id);
+    assert.equal(marketConditionForScore(band.max)?.id, band.id);
+  }
+  for (const missing of [null, undefined, "", NaN, -1, 101]) {
+    assert.equal(marketConditionForScore(missing), null);
+  }
+});
 
 for (const locale of ["nl", "en", "de"]) {
   const dictionary = JSON.parse(await readFile(new URL(`../dictionaries/${locale}.json`, import.meta.url), "utf8"));
