@@ -18,3 +18,8 @@ export function validatedDayEvidence(categoryScore, evidence, name) {
   const row = evidence?.[evidenceKey(name)] || null;
   return row && ["custom", "system_template"].includes(row.rule_origin) ? row : null;
 }
+
+export function indicatorSourceFreshness(freshness) {
+  if (freshness?.status !== "available") return "unavailable";
+  return freshness.stale ? "stale" : "current";
+}

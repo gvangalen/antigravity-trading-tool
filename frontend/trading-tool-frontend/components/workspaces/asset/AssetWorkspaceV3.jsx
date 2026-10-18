@@ -46,7 +46,7 @@ import {
 } from "../../../../../shared/tradingViewConfig";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT, openFinnContext } from "@/lib/finnCommandSearch";
-import { validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
@@ -2027,12 +2027,11 @@ function EvidenceRow({
       ? `${Math.round(Number(contribution.weight || 0) * 100)}% · ${Number(contribution.weighted_points || 0).toFixed(1)} pt`
       : ui.unavailable;
   const freshness = row.raw?.freshness;
-  const freshnessText =
-    row.score === null || freshness?.status !== "available"
-      ? ui.unavailable
-      : freshness.stale
-      ? ui.staleData
-      : ui.currentData;
+  const freshnessText = {
+    unavailable: ui.unavailable,
+    stale: ui.staleData,
+    current: ui.currentData,
+  }[indicatorSourceFreshness(freshness)];
 
   return (
     <div className="border-t border-slate-100">
