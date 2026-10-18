@@ -1,8 +1,9 @@
-const SCORE_FIELDS = [
+const LEGACY_SCORE_FIELDS = [
   "min_macro_score", "max_macro_score",
   "min_technical_score", "max_technical_score",
   "min_market_score", "max_market_score",
 ];
+const SCORE_FIELDS = ["min_benchmark_score", "max_benchmark_score", ...LEGACY_SCORE_FIELDS];
 
 // Inclusive, non-overlapping bands. The same bounds are sent to the setup
 // matcher; labels are presentation only and make no claim about RSI or price.
@@ -14,16 +15,21 @@ export const MARKET_CONDITIONS = Object.freeze([
   { id: "strong", min: 76, max: 100 },
 ]);
 
-export function marketConditionChoiceFromSetup(setup) {
-  if (!hasSetupScoreConditions(setup)) return "off";
-  if (["macro", "technical"].some((component) =>
-    setup?.[`min_${component}_score`] != null || setup?.[`max_${component}_score`] != null
-  )) return "custom";
-  return MARKET_CONDITIONS.find(({ min, max }) =>
-    Number(setup?.min_market_score) === min && Number(setup?.max_market_score) === max
-  )?.id || "custom";
+export function marketConditionForScore(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const score = Number(value);
+  if (!Number.isFinite(score) || score < 0 || score > 100) return null;
+  const displayedScore = Math.round(score);
+  return MARKET_CONDITIONS.find(({ min, max }) => displayedScore >= min && displayedScore <= max) || null;
 }
 
+export function marketConditionChoiceFromSetup(setup) {
+  if (!hasSetupScoreConditions(setup)) return "off";
+  if (LEGACY_SCORE_FIELDS.some((field) => setup?.[field] != null)) return "custom";
+  return MARKET_CONDITIONS.find(({ min, max }) =>
+    Number(setup?.min_benchmark_score) === min && Number(setup?.max_benchmark_score) === max
+  )?.id || "custom";
+}
 export function mayKeepUnfilteredTrade(isEdit, setup) {
   return Boolean(isEdit && String(setup?.setup_type || "").toLowerCase() === "trade" && marketConditionChoiceFromSetup(setup) === "off");
 }
@@ -32,33 +38,24 @@ export function marketConditionPayload(choice, customBounds) {
   if (choice === "off") return Object.fromEntries(SCORE_FIELDS.map((field) => [field, null]));
   const band = MARKET_CONDITIONS.find((item) => item.id === choice);
   if (band) return {
-    min_market_score: band.min, max_market_score: band.max,
-    min_macro_score: null, max_macro_score: null,
-    min_technical_score: null, max_technical_score: null,
+    ...Object.fromEntries(LEGACY_SCORE_FIELDS.map((field) => [field, null])),
+    min_benchmark_score: band.min, max_benchmark_score: band.max,
   };
-  if (choice === "custom") return Object.fromEntries(SCORE_FIELDS.map((field) => [field, customBounds?.[field] ?? null]));
+  if (choice === "custom") return {
+    ...Object.fromEntries(LEGACY_SCORE_FIELDS.map((field) => [field, null])),
+    min_benchmark_score: customBounds?.min_benchmark_score ?? null,
+    max_benchmark_score: customBounds?.max_benchmark_score ?? null,
+  };
   throw new Error("Choose a market condition before saving");
 }
 
 // Existing partial setups show fallback slider values. Keep absent limits
 // absent unless the corresponding handle was explicitly moved, including when
 // it was moved away and then back to the displayed fallback value.
-export function editedCustomScorePayload(existing, macro, technical, market, touchedFields = {}) {
-  const visible = setupScorePayload(true, macro, technical, market);
-  if (!existing) return visible;
-  return Object.fromEntries(SCORE_FIELDS.map((field) => [
-    field,
-    existing[field] == null && !touchedFields[field]
-      ? null : visible[field],
-  ]));
-}
-
-export function scoreRangeTouchedFields(category, previousRange, nextRange, touchedFields = {}) {
-  return {
-    ...touchedFields,
-    ...(Number(previousRange[0]) !== Number(nextRange[0]) ? { [`min_${category}_score`]: true } : {}),
-    ...(Number(previousRange[1]) !== Number(nextRange[1]) ? { [`max_${category}_score`]: true } : {}),
-  };
+export function editedCustomScorePayload(existing, benchmark) {
+  return marketConditionPayload("custom", {
+    min_benchmark_score: benchmark[0], max_benchmark_score: benchmark[1],
+  });
 }
 
 export function hasSetupScoreConditions(setup) {
@@ -66,7 +63,8 @@ export function hasSetupScoreConditions(setup) {
 }
 
 export function hasPartialSetupScoreConditions(setup) {
-  return hasSetupScoreConditions(setup) && SCORE_FIELDS.some((field) => setup?.[field] == null);
+  return hasSetupScoreConditions(setup) &&
+    (setup?.min_benchmark_score == null || setup?.max_benchmark_score == null);
 }
 
 export function setupScoreOriginKey(isEdit, setup, touched) {
@@ -75,18 +73,4 @@ export function setupScoreOriginKey(isEdit, setup, touched) {
   return hasPartialSetupScoreConditions(setup)
     ? "scorePartialOrigin"
     : "scoreSavedOrigin";
-}
-
-export function setupScorePayload(enabled, macro, technical, market, untouchedExistingSetup = null) {
-  if (!enabled) {
-    return Object.fromEntries(SCORE_FIELDS.map((field) => [field, null]));
-  }
-  if (untouchedExistingSetup) {
-    return Object.fromEntries(SCORE_FIELDS.map((field) => [field, untouchedExistingSetup[field] ?? null]));
-  }
-  return {
-    min_macro_score: macro[0], max_macro_score: macro[1],
-    min_technical_score: technical[0], max_technical_score: technical[1],
-    min_market_score: market[0], max_market_score: market[1],
-  };
 }

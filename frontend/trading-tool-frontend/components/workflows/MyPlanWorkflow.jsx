@@ -52,7 +52,8 @@ const COPY = {
     bestForMarket: "Beste match voor huidige markt",
     matchScore: "Setupmatch",
     conditionsMatch: "Voorwaarden passen",
-    benchmarkScore: "Benchmark",
+    benchmarkScore: "Jouw benchmarkscore",
+    proximityScore: "Nabijheid",
     outsideConditions: "Voorwaarden passen niet",
     missingScores: "Actuele scores ontbreken",
     loadingScores: "Scores laden",
@@ -61,7 +62,7 @@ const COPY = {
     from: "vanaf",
     through: "tot en met",
     scoreDate: "Scoredatum",
-    matchHint: "Een setupmatch is geen instapsignaal.",
+    matchHint: "De nabijheidsscore laat zien hoe dicht de benchmarkscore bij de opgeslagen setupvoorwaarden ligt. Alleen 'Voorwaarden passen' betekent dat het scorebereik is bereikt. De strategie en veiligheidslimieten bepalen of er een trade volgt.",
     selectedAsset: "Asset en ritme",
     execution: "Uitvoering",
     readyForAutomation: "Klaar voor Automation",
@@ -78,7 +79,7 @@ const COPY = {
     strategyQuestion: "Beoordeel deze strategie en leg uit of deze goed bij de gekoppelde setup past.",
     planQuestion: "Beoordeel dit volledige plan en geef één concreet advies voor de volgende stap.",
     plansTitle: "Mijn plannen",
-    plansIntro: "Alle plannen blijven zichtbaar. Passende setups staan bovenaan; de score is geen instapsignaal.",
+    plansIntro: "Jouw benchmarkscore vergelijkt FINN met de voorwaarden van iedere setup. De nabijheidsscore is alleen een maat voor hoe dicht de score bij die voorwaarden ligt. Ook bij passende voorwaarden bepaalt de strategie of er een trade volgt.",
     allPlans: "Alle plannen",
     plans: "plannen",
     plan: "plan",
@@ -136,7 +137,8 @@ const COPY = {
     bestForMarket: "Best match for current market",
     matchScore: "Setup match",
     conditionsMatch: "Conditions match",
-    benchmarkScore: "Benchmark",
+    benchmarkScore: "Your benchmark score",
+    proximityScore: "Closeness",
     outsideConditions: "Conditions do not match",
     missingScores: "Current scores unavailable",
     loadingScores: "Loading scores",
@@ -145,7 +147,7 @@ const COPY = {
     from: "from",
     through: "through",
     scoreDate: "Score date",
-    matchHint: "A setup match is not an entry signal.",
+    matchHint: "Closeness shows how near the benchmark score is to the saved setup conditions. Only 'Conditions match' means the score is inside the range. The strategy and safety limits decide whether a trade follows.",
     selectedAsset: "Asset and cadence",
     execution: "Execution",
     readyForAutomation: "Ready for Automation",
@@ -162,7 +164,7 @@ const COPY = {
     strategyQuestion: "Review this strategy and explain whether it fits the linked setup.",
     planQuestion: "Review this complete plan and give one concrete recommendation for the next step.",
     plansTitle: "My plans",
-    plansIntro: "All plans remain visible. Matching setups come first; the score is not an entry signal.",
+    plansIntro: "FINN compares your benchmark score with each setup's conditions. Closeness only shows how near the score is to those conditions. Even when conditions match, the strategy decides whether a trade follows.",
     allPlans: "All plans",
     plans: "plans",
     plan: "plan",
@@ -220,7 +222,8 @@ const COPY = {
     bestForMarket: "Beste Uebereinstimmung fuer den aktuellen Markt",
     matchScore: "Setup-Abgleich",
     conditionsMatch: "Bedingungen passen",
-    benchmarkScore: "Benchmark",
+    benchmarkScore: "Dein Benchmark-Score",
+    proximityScore: "Nähe",
     outsideConditions: "Bedingungen passen nicht",
     missingScores: "Aktuelle Scores fehlen",
     loadingScores: "Scores werden geladen",
@@ -229,7 +232,7 @@ const COPY = {
     from: "ab",
     through: "bis einschließlich",
     scoreDate: "Score-Datum",
-    matchHint: "Ein Setup-Abgleich ist kein Einstiegssignal.",
+    matchHint: "Die Nähe zeigt, wie dicht der Benchmark-Score an den gespeicherten Setup-Bedingungen liegt. Nur 'Bedingungen passen' bedeutet, dass der Score im Bereich liegt. Strategie und Sicherheitsgrenzen entscheiden über einen Trade.",
     selectedAsset: "Asset und Rhythmus",
     execution: "Ausführung",
     readyForAutomation: "Bereit für Automation",
@@ -246,7 +249,7 @@ const COPY = {
     strategyQuestion: "Bewerte diese Strategie und erkläre, ob sie zum verknüpften Setup passt.",
     planQuestion: "Bewerte diesen vollständigen Plan und gib eine konkrete Empfehlung für den nächsten Schritt.",
     plansTitle: "Meine Pläne",
-    plansIntro: "Alle Pläne bleiben sichtbar. Passende Setups stehen oben; der Score ist kein Einstiegssignal.",
+    plansIntro: "FINN vergleicht deinen Benchmark-Score mit den Bedingungen jedes Setups. Die Nähe zeigt nur den Abstand zu diesen Bedingungen. Auch bei passenden Bedingungen entscheidet die Strategie über einen Trade.",
     allPlans: "Alle Pläne",
     plans: "Pläne",
     plan: "Plan",
@@ -388,13 +391,15 @@ function PlanStatus({ plan, copy }) {
 }
 
 function SetupMatchStatus({ match, copy, loading = false }) {
-  const hasScore = match?.score !== null && match?.score !== undefined;
+  const proximityScore = Number(match?.score);
+  const hasScore = match?.score !== null && match?.score !== undefined && Number.isFinite(proximityScore);
+  const proximity = hasScore ? ` · ${copy.proximityScore} ${Math.round(proximityScore)}/100` : "";
   const label = loading
     ? copy.loadingScores
     : match?.status === "matches"
-      ? hasScore ? `${copy.matchScore} ${match.score}%` : copy.conditionsMatch
+      ? `${copy.conditionsMatch}${proximity}`
       : match?.status === "outside_conditions"
-        ? hasScore ? `${copy.matchScore} ${match.score}% · ${copy.outsideConditions}` : copy.outsideConditions
+        ? `${copy.outsideConditions}${proximity}`
         : match?.status === "unconfigured"
           ? copy.noScoreConditions
           : copy.missingScores;
@@ -411,9 +416,11 @@ function SetupMatchStatus({ match, copy, loading = false }) {
 
 function BenchmarkStatus({ match, copy }) {
   if (match?.benchmark_score === null || match?.benchmark_score === undefined) return null;
+  const score = Number(match.benchmark_score);
+  if (!Number.isFinite(score)) return null;
   return (
     <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300">
-      {copy.benchmarkScore} {match.benchmark_score}
+      {copy.benchmarkScore} {Math.round(score)}/100
     </span>
   );
 }
@@ -781,6 +788,9 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                   <SetupMatchStatus match={activePlan.match} copy={copy} loading={setupMatches === null} />
                   <BenchmarkStatus match={activePlan.match} copy={copy} />
                 </div>
+                {activePlan.match?.score !== null && activePlan.match?.score !== undefined ? (
+                  <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">{copy.matchHint}</p>
+                ) : null}
                 {marketBestPlan && activePlan?.key === marketBestPlan.key ? (
                   <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />

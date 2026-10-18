@@ -1,6 +1,7 @@
 import { StatusTone } from '../constants/theme';
 import { DomainScore } from '../types/scores';
 import { MobileOverviewResponse } from './tradamindApi';
+import { benchmarkSituationId } from './benchmarkSituation';
 
 type UnknownRecord = Record<string, unknown>;
 const EMPTY_VALUE = '—';
@@ -49,13 +50,13 @@ export function mapMobileOverviewDecision(overview?: MobileOverviewResponse) {
   }
 
   const score = asset.benchmark_score == null ? null : clampScore(asset.benchmark_score);
-  const state =
-    asset.macro_label ||
-    (score !== null && score >= 70
-      ? 'Constructive, selective'
-      : score !== null && score >= 50
-        ? 'Neutral, wait for confirmation'
-        : score === null ? 'Benchmark unavailable' : 'Defensive, review risk');
+  const situation = benchmarkSituationId(score);
+  const state = situation === 'heavy_pressure' ? 'Markt staat zwaar onder druk'
+    : situation === 'pressure' ? 'Markt staat onder druk'
+    : situation === 'no_direction' ? 'Geen duidelijke richting'
+    : situation === 'gaining_strength' ? 'Markt trekt aan'
+    : situation === 'strong' ? 'Sterke markt'
+    : 'Benchmarkscore niet beschikbaar';
 
   return {
     reason: '',

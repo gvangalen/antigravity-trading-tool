@@ -303,7 +303,7 @@
       "labels": {
         "pressure": "Market pressure",
         "transitionRisk": "Transition risk",
-        "setupQuality": "Setup quality",
+        "setupQuality": "Setup-Passung",
         "volatility": "Market volatility",
         "trendStrength": "Trend strength",
         "positionSize": "Position size"
@@ -323,11 +323,11 @@
         "Regime change risk"
       ],
       "setupQualityStates": [
-        "Weak setups",
-        "Mixed setups",
-        "Reasonable setups",
-        "High quality",
-        "Very strong setups"
+        "Weit von der Bedingung entfernt",
+        "Außerhalb der Bedingung",
+        "Knapp innerhalb der Bedingung",
+        "Gute Passung",
+        "Sehr gute Passung"
       ],
       "volatilityStates": [
         "Very calm",
@@ -958,6 +958,7 @@
         "technical": "Technisch"
       },
       "scoreMinLabel": "Ab",
+      "benchmarkScoreLabel": "Dein Benchmark-Score",
       "scoreMaxLabel": "Bis einschließlich",
       "stepNumber": "Mein Plan · 3 von 4",
       "title": "Erstelle ein Setup und eine Strategie",
@@ -2923,7 +2924,7 @@
       "diagnosticsReady": "Diagnostik",
       "amountLabel": "Betrag",
       "setupLabel": "Setup",
-      "setupScoreLabel": "Setup-Score bei letzter Entscheidung",
+      "setupScoreLabel": "Setup-Passung bei letzter Entscheidung",
       "stopLossLabel": "Stop-Loss",
       "targetCountLabel": "Ziele",
       "notAvailable": "n. v.",
@@ -3230,7 +3231,7 @@
   "setups": {
     "marketConditions": {
       "title": "Wann passt dieses Setup?",
-      "help": "Wähle die Marktsituation, in der dein Setup infrage kommt.",
+      "help": "Wähle, bei welchen Werten deines Benchmark-Scores dieses Setup infrage kommt.",
       "summaryTitle": "Deine Wahl",
       "summaryEmptyTitle": "Wähle eine Marktsituation",
       "summaryEmptyBody": "Hier siehst du, was deine Wahl für dieses Setup bedeutet.",
@@ -3240,20 +3241,21 @@
       "offTitle": "Keine zusätzliche Marktbedingung",
       "offDescription": "Für dieses Setup gilt keine zusätzliche Scoregrenze.",
       "offClearsTitle": "Alle Scorebedingungen entfernen",
-      "offClearsExisting": "Wenn du diese Wahl speicherst, entfernst du alle bestehenden Grenzen für Markt, Makro und Technik aus diesem Setup.",
+      "offClearsExisting": "Beim Speichern entfernst du die Benchmark-Grenzen aus diesem Setup.",
       "offRule": "Für dieses Setup werden keine Scoregrenzen gespeichert.",
-      "presetReplacesExisting": "Hinweis: Beim Speichern ersetzt diese Karte deine bisherigen Scorebedingungen. Bestehende Makro- und Technikgrenzen werden entfernt.",
+      "presetReplacesExisting": "Beim Speichern ersetzt diese Karte deine bisherigen Benchmark-Grenzen.",
       "ruleTitle": "Deine Regel:",
       "selectedRule": "FINN verwendet diese Situation: {situation}.",
       "customRule": "Dieses Setup folgt den Scoregrenzen, die du unten selbst festlegst.",
       "advancedTitle": "Erweitert",
       "advancedSubtitle": "Eigene Scoregrenzen festlegen",
       "explanationTitle": "Wie bestimmt FINN die Marktsituation?",
-      "advancedHelp": "Die fünf Situationen entsprechen festen Marktscorebereichen. Sie messen weder Kursrückgänge noch RSI oder den Fear & Greed Index. Eine Standardkarte fügt keine Makro- oder Technikgrenze hinzu. Für eine verlässliche Bewertung müssen dennoch alle drei aktuellen Scores vorliegen.",
-      "scoreExplanation": "Diese Karte speichert Marktscore {min} bis einschließlich {max}.",
+      "advancedHelp": "Die fünf Situationen sind feste Bereiche deines Benchmark-Scores, eines gewichteten Durchschnitts aus Markt, Makro und Technik. Sie messen weder Kursrückgänge noch RSI oder den Fear & Greed Index. Alle drei aktuellen Teilscores müssen vorliegen.",
+      "scoreExplanation": "Diese Karte speichert Benchmark-Score {min} bis einschließlich {max}.",
       "customTitle": "Selbst festlegen",
-      "customDescription": "Lege eigene Grenzen für Markt, Makro und Technik fest.",
-      "customSelected": "Passe die drei Scorebereiche unten an.",
+      "customDescription": "Lege einen eigenen Bereich für deinen Benchmark-Score fest.",
+      "customSelected": "Passe den Benchmark-Bereich unten an.",
+      "savedBenchmark": "Benchmark-Score",
       "savedNotReady": "Noch nicht vollständig",
       "savedNoConditions": "Keine Score-Bedingungen",
       "savedCustomTitle": "Eigene Bedingungen",
@@ -3262,11 +3264,11 @@
       "savedThrough": "bis einschließlich {max}",
       "savedCategories": { "market": "Markt", "macro": "Makro", "technical": "Technik" },
       "options": {
-        "heavy_pressure": { "title": "Stark unter Druck", "description": "Ein sehr niedriger Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore sehr niedrig ist." },
-        "pressure": { "title": "Unter Druck", "description": "Ein niedriger Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore niedrig ist." },
-        "no_direction": { "title": "Keine klare Richtung", "description": "Ein Marktscore etwa in der Mitte", "rule": "Dieses Setup kommt infrage, wenn der Marktscore etwa in der Mitte liegt." },
-        "gaining_strength": { "title": "Der Markt wird stärker", "description": "Ein höherer Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore höher ist." },
-        "strong": { "title": "Starker Markt", "description": "Ein sehr hoher Marktscore", "rule": "Dieses Setup kommt infrage, wenn der Marktscore sehr hoch ist." }
+        "heavy_pressure": { "title": "Stark unter Druck", "description": "Ein sehr niedriger Benchmark-Score", "rule": "Dieses Setup kommt infrage, wenn der Benchmark-Score sehr niedrig ist." },
+        "pressure": { "title": "Unter Druck", "description": "Ein niedriger Benchmark-Score", "rule": "Dieses Setup kommt infrage, wenn der Benchmark-Score niedrig ist." },
+        "no_direction": { "title": "Keine klare Richtung", "description": "Ein Benchmark-Score etwa in der Mitte", "rule": "Dieses Setup kommt infrage, wenn der Benchmark-Score etwa in der Mitte liegt." },
+        "gaining_strength": { "title": "Der Markt wird stärker", "description": "Ein höherer Benchmark-Score", "rule": "Dieses Setup kommt infrage, wenn der Benchmark-Score höher ist." },
+        "strong": { "title": "Starker Markt", "description": "Ein sehr hoher Benchmark-Score", "rule": "Dieses Setup kommt infrage, wenn der Benchmark-Score sehr hoch ist." }
       }
     },
     "manager": {
@@ -3385,6 +3387,8 @@
       "scoreSavedOrigin": "Dies sind die gespeicherten Score-Grenzen dieses Setups. Sie können beim Erstellen oder Duplizieren übernommen worden sein; ihre ursprüngliche Herkunft ist hier nicht erfasst. Prüfe sie vor dem Speichern.",
       "scoreEditedOrigin": "Du hast die Score-Grenzen in diesem Formular geändert. Beim Speichern bestätigst du die angezeigten Werte für dieses Setup.",
       "scorePartialOrigin": "Dieses Setup enthält gespeicherte Grenzen und leere Felder. Startwerte für leere Felder sind nur Vorschläge; eine Grenze bleibt leer, bis du den entsprechenden Regler selbst verschiebst.",
+      "benchmarkTitle": "Dein Benchmark-Score",
+      "benchmarkDescription": "Gewichteter Durchschnitt aus Markt, Makro und Technik",
       "macroTitle": "Macro",
       "macroDescription": "Macro environment",
       "technicalTitle": "Technical",

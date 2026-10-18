@@ -17,6 +17,8 @@ class ActiveSetupResponse(BaseModel):
     max_technical_score: Optional[float] = None
     min_market_score: Optional[float] = None
     max_market_score: Optional[float] = None
+    min_benchmark_score: Optional[float] = None
+    max_benchmark_score: Optional[float] = None
     explanation: str
     timestamp: Optional[datetime] = None
     score: Optional[float] = None

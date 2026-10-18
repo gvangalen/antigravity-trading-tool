@@ -359,6 +359,8 @@ function buildIndicatorModalRequest(envelope, fallbackSymbol) {
 }
 
 function getSetupMarketConditionLabel(condition, uiText) {
+  const current = uiText?.marketConditionOptions?.[condition]?.title;
+  if (current) return current;
   switch (condition) {
     case "confirmed_strength":
       return uiText.marketConditionConfirmedStrength;
@@ -372,28 +374,15 @@ function getSetupMarketConditionLabel(condition, uiText) {
 }
 
 function inferSetupMarketConditionFromScores(payload = {}) {
-  const minMacro = Number(payload?.min_macro_score);
-  const maxMacro = Number(payload?.max_macro_score);
-  const minTechnical = Number(payload?.min_technical_score);
-  const maxTechnical = Number(payload?.max_technical_score);
-  const minMarket = Number(payload?.min_market_score);
-  const maxMarket = Number(payload?.max_market_score);
-
-  if ([minMacro, maxMacro, minTechnical, maxTechnical, minMarket, maxMarket].some((value) => Number.isNaN(value))) {
-    return null;
-  }
-
-  if (minMacro === 40 && maxMacro === 100 && minTechnical === 55 && maxTechnical === 100 && minMarket === 35 && maxMarket === 100) {
-    return "confirmed_strength";
-  }
-  if (minMacro === 30 && maxMacro === 70 && minTechnical === 40 && maxTechnical === 80 && minMarket === 20 && maxMarket === 60) {
-    return "balanced_pullback";
-  }
-  if (minMacro === 10 && maxMacro === 65 && minTechnical === 20 && maxTechnical === 75 && minMarket === 10 && maxMarket === 55) {
-    return "early_dip";
-  }
-
-  return null;
+  const minimum = payload?.min_benchmark_score;
+  const maximum = payload?.max_benchmark_score;
+  if (minimum == null || maximum == null) return null;
+  const bands = [
+    [0, 25, "heavy_pressure"], [26, 45, "pressure"],
+    [46, 60, "no_direction"], [61, 75, "gaining_strength"],
+    [76, 100, "strong"],
+  ];
+  return bands.find(([min, max]) => Number(minimum) === min && Number(maximum) === max)?.[2] || "custom";
 }
 
 function humanizeFinnContextValue(value, fallback = "") {
@@ -1200,12 +1189,8 @@ function AIAssistantContent({
     if (
       declaredNext &&
       [
-        "min_macro_score",
-        "max_macro_score",
-        "min_technical_score",
-        "max_technical_score",
-        "min_market_score",
-        "max_market_score",
+        "min_benchmark_score",
+        "max_benchmark_score",
       ].includes(declaredNext) &&
       missing.includes("market_condition")
     ) {
@@ -1466,10 +1451,11 @@ function AIAssistantContent({
 
     const setupType = String(slots.setup_type || "").toLowerCase();
     const marketConditionActions = [
-      { label: uiText.followUpConfirmedStrength, prompt: uiText.followUpConfirmedStrengthPrompt.replace("{symbol}", symbol) },
-      { label: uiText.followUpBalancedPullback, prompt: uiText.followUpBalancedPullbackPrompt.replace("{symbol}", symbol) },
-      { label: uiText.followUpEarlyDip, prompt: uiText.followUpEarlyDipPrompt.replace("{symbol}", symbol) },
-    ];
+      "heavy_pressure", "pressure", "no_direction", "gaining_strength", "strong",
+    ].map((condition) => {
+      const label = t?.setups?.marketConditions?.options?.[condition]?.title || condition;
+      return { label, prompt: `Voor ${symbol} kies ik: ${label}.` };
+    });
 
     const bySlot = {
       setup_type: [
@@ -1510,12 +1496,8 @@ function AIAssistantContent({
         },
       ],
       market_condition: marketConditionActions,
-      min_macro_score: marketConditionActions,
-      max_macro_score: marketConditionActions,
-      min_technical_score: marketConditionActions,
-      max_technical_score: marketConditionActions,
-      min_market_score: marketConditionActions,
-      max_market_score: [
+      min_benchmark_score: marketConditionActions,
+      max_benchmark_score: [
         { label: uiText.followUpFinalizeSetup, prompt: uiText.followUpFinalizeSetupPrompt },
       ],
     };
@@ -5283,9 +5265,7 @@ function AIAssistantContent({
       !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideDefaultPlanName ? [draftRowsText.name, setup.name] : null,
       !isFinnIndicator && !hideDefaultTimeframe ? [draftRowsText.timeframe, isFinnStrategy || isFinnBot ? draft.timeframe : setup.timeframe] : null,
       !isFinnIndicator ? [draftRowsText.amount, isFinnBot ? formatCurrency(bot.budget_total_eur) : formatCurrency(strategy.base_amount_eur)] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [fieldLabel("setup.macro_score_range", "Macro"), formatRange(setup.macro_score_range)] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.technical, formatRange(setup.technical_score_range)] : null,
-      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? [draftRowsText.market, formatRange(setup.market_score_range)] : null,
+      !isFinnStrategy && !isFinnBot && !isFinnIndicator && !hideScoreRanges ? ["Benchmark", formatRange(setup.benchmark_score_range)] : null,
       isDca && !isFinnStrategy && !isFinnBot ? [valueLabel("dca", "DCA"), dcaScheduleParts.join(" · ")] : null,
       isTrade && !isFinnBot ? [draftRowsText.execution, strategy.entry_type || strategy.trade_execution_mode ? valueLabel(strategy.entry_type || strategy.trade_execution_mode) : null] : null,
       isTrade && !isFinnBot && strategy.entry_type === "market" ? [draftRowsText.marketConfirmation, strategy.market_execution_ack ? yesLabel : noLabel] : null,
@@ -7325,6 +7305,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
     actionLabel: at("uiText.actionLabel"),
     asset: at("uiText.asset"),
     setupType: at("uiText.setupType"),
+    marketConditionOptions: t?.setups?.marketConditions?.options || {},
     dcaParameters: at("uiText.dcaParameters"),
     scoreThresholds: at("uiText.scoreThresholds"),
     scoreThresholdsMissing: at("uiText.scoreThresholdsMissing"),
@@ -7487,7 +7468,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">{payload.timeframe || "—"}</span>
               </div>
-              {(payload.market_condition || payload.min_macro_score !== undefined) && (
+              {(payload.market_condition || payload.min_benchmark_score != null) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
@@ -7503,26 +7484,16 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
                   </span>
                 </div>
               )}
-              {["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
+              {(payload.min_benchmark_score != null || payload.max_benchmark_score != null) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
-                  <div className="grid grid-cols-3 gap-2 mt-1">
-                    <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
-                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
-                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? "—"}-{payload.max_macro_score ?? "—"}</div>
-                    </div>
-                    <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
-                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
-                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? "—"}-{payload.max_technical_score ?? "—"}</div>
-                    </div>
-                    <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 text-center border border-slate-100 dark:border-slate-800">
-                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
-                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? "—"}-{payload.max_market_score ?? "—"}</div>
-                    </div>
+                  <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 border border-slate-100 dark:border-slate-800">
+                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Benchmark</div>
+                    <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_benchmark_score ?? "—"}-{payload.max_benchmark_score ?? "—"}</div>
                   </div>
                 </div>
               )}
-              {!["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
+              {payload.min_benchmark_score == null && payload.max_benchmark_score == null && (
                 <div className="col-span-2 text-xs text-slate-500">{uiText.scoreThresholdsMissing}</div>
               )}
             </div>
@@ -7980,7 +7951,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
                 <span className="text-xs text-foreground dark:text-slate-200">{payload.timeframe || uiText.required}</span>
               </div>
-              {(payload.market_condition || payload.min_macro_score !== undefined) && (
+              {(payload.market_condition || payload.min_benchmark_score != null) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">
@@ -7996,26 +7967,16 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
                   </span>
                 </div>
               )}
-              {["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
+              {(payload.min_benchmark_score != null || payload.max_benchmark_score != null) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
-                  <div className="grid grid-cols-3 gap-2 mt-1">
-                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Macro</div>
-                      <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_macro_score ?? "—"}-{payload.max_macro_score ?? "—"}</div>
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Tech</div>
-                      <div className="text-[10px] font-mono font-black text-amber-500">{payload.min_technical_score ?? "—"}-{payload.max_technical_score ?? "—"}</div>
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5 text-center">
-                      <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Market</div>
-                      <div className="text-[10px] font-mono font-black text-emerald-500">{payload.min_market_score ?? "—"}-{payload.max_market_score ?? "—"}</div>
-                    </div>
+                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5">
+                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Benchmark</div>
+                    <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_benchmark_score ?? "—"}-{payload.max_benchmark_score ?? "—"}</div>
                   </div>
                 </div>
               )}
-              {!["macro", "technical", "market"].some((category) => payload[`min_${category}_score`] != null || payload[`max_${category}_score`] != null) && (
+              {payload.min_benchmark_score == null && payload.max_benchmark_score == null && (
                 <div className="col-span-2 text-xs text-slate-500">{uiText.scoreThresholdsMissing}</div>
               )}
             </div>
@@ -8212,7 +8173,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
                 </div>
               )}
 
-              {(slots?.market_condition || slots?.min_macro_score !== undefined) && (
+              {(slots?.market_condition || slots?.min_benchmark_score != null) && (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
                   <span className="text-xs text-foreground dark:text-slate-200">

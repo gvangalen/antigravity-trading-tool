@@ -64,6 +64,18 @@ type SetupSummary = {
 
 const setupScoreLabel = (setup: SetupSummary) => setup.scoreAvailable ? String(setup.score) : '—';
 
+function setupConditionLabel(status: string | undefined, language: ReturnType<typeof useAppPreferences>['language']) {
+  if (status === 'matches') return translate(language, 'myPlan.conditionsMatch');
+  if (status === 'outside_conditions') return translate(language, 'myPlan.conditionsOutside');
+  return translate(language, 'myPlan.conditionsUnavailable');
+}
+
+function setupClosenessLabel(setup: SetupSummary, language: ReturnType<typeof useAppPreferences>['language']) {
+  return setup.scoreAvailable
+    ? `${translate(language, 'myPlan.closeness')} ${setupScoreLabel(setup)}/100`
+    : translate(language, 'myPlan.closenessUnavailable');
+}
+
 type BotActionMeta = {
   botId?: number;
   decisionId?: number;
@@ -138,7 +150,7 @@ export function SetupScreen() {
     fetcher: fetchActiveSetup,
   });
 
-  const fetchTopSetups = useCallback(() => intelligenceApi.topSetups(), []);
+  const fetchTopSetups = useCallback(() => intelligenceApi.marketMatches(activeAsset), [activeAsset]);
   const topSetupsResource = useApiResource<SetupResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchTopSetups,
@@ -497,8 +509,8 @@ export function SetupScreen() {
             strategy={strategy}
           /> : <InsightCard
             label={translate(language, 'myPlan.yourPlans')}
-            title={translate(language, 'myPlan.emptyTitle')}
-            body={translate(language, 'myPlan.emptyBody')}
+            title={translate(language, planItems.length > 0 ? 'myPlan.noActiveTitle' : 'myPlan.emptyTitle')}
+            body={translate(language, planItems.length > 0 ? 'myPlan.noActiveBody' : 'myPlan.emptyBody')}
             cta={translate(language, 'myPlan.newPlan')}
             onPress={() => openFinn({
               prefill: `Help me create a new trading plan for ${activeAsset}.`,
@@ -661,12 +673,18 @@ function FinnSetupBriefingCard({
   topSetups: SetupSummary[];
 }) {
   const { language } = useAppPreferences();
-  const reviewCount = topSetups.filter((item) => item.scoreAvailable && item.score < 70).length + (setup.scoreAvailable && setup.score < 70 ? 1 : 0);
+  const seenSetupIds = new Set<number>();
+  const distinctSetups = [setup, ...topSetups].filter((item) => {
+    if (item.id === undefined || seenSetupIds.has(item.id)) return false;
+    seenSetupIds.add(item.id);
+    return true;
+  });
+  const reviewCount = distinctSetups.filter((item) => item.status !== 'matches').length;
   const queueItems = [
     {
       key: 'tasks',
       label: translate(language, 'queue.label.tasks'),
-      value: topSetups.length + 1,
+      value: distinctSetups.length,
       body: translate(language, 'queue.body.plansInCurrentWorkspace'),
     },
     {
@@ -678,7 +696,7 @@ function FinnSetupBriefingCard({
     {
       key: 'risks',
       label: translate(language, 'queue.label.risks'),
-      value: topSetups.filter((item) => item.scoreAvailable && item.score < 50).length + (setup.scoreAvailable && setup.score < 50 ? 1 : 0),
+      value: distinctSetups.filter((item) => item.status === 'outside_conditions').length,
       body: translate(language, 'queue.body.weakPlansSlowing'),
     },
     {
@@ -701,7 +719,7 @@ function FinnSetupBriefingCard({
       : decisionState.score >= 50
         ? translate(language, 'myPlan.selective')
         : translate(language, 'myPlan.defensive'),
-    setup.scoreAvailable ? `${setup.score}% match` : 'Match niet beschikbaar',
+    `${setupConditionLabel(setup.status, language)} · ${setupClosenessLabel(setup, language)}`,
     translate(language, 'myPlan.reviewPoints', { count: reviewCount }),
   ];
 
@@ -766,9 +784,9 @@ function ActivePlanWorkspaceCard({
           icon="layers"
           title={translate(language, 'myPlan.setupLabel')}
           description={setup.name}
-          summary={setup.scoreAvailable ? `${setup.score}% match` : 'Match niet beschikbaar'}
-          statusLabel={setup.scoreAvailable && setup.score >= 70 ? translate(language, 'myPlan.active') : translate(language, 'common.monitor')}
-          statusTone={setup.scoreAvailable && setup.score >= 70 ? 'success' : 'warning'}
+          summary={setupClosenessLabel(setup, language)}
+          statusLabel={setupConditionLabel(setup.status, language)}
+          statusTone={setup.status === 'matches' ? 'success' : setup.status === 'outside_conditions' ? 'warning' : 'neutral'}
           onPress={onOpenSetup}
         />
         <PlanOverviewRow
@@ -839,8 +857,8 @@ function AllPlansListCard({
 
       <View style={styles.planListCompact}>
         {plans.map((plan, index) => {
-          const planStatus = plan.isActive ? translate(language, 'myPlan.active') : translate(language, 'myPlan.concept');
-          const planTone: StatusTone = plan.isActive ? 'success' : 'warning';
+          const planStatus = setupConditionLabel(plan.status, language);
+          const planTone: StatusTone = plan.status === 'matches' ? 'success' : plan.status === 'outside_conditions' ? 'warning' : 'neutral';
 
           return (
             <SwipeActionRow
@@ -1079,7 +1097,7 @@ function PlanStaleBanner({ onRefresh }: { onRefresh: () => void }) {
 }
 
 function BestMatchingSetupCard({ setup, onPress }: { setup: SetupSummary; onPress: () => void }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
@@ -1100,7 +1118,7 @@ function BestMatchingSetupCard({ setup, onPress }: { setup: SetupSummary; onPres
         </View>
         <View style={styles.matchBadge}>
           <Text style={styles.matchBadgeScore}>{setupScoreLabel(setup)}</Text>
-          <Text style={styles.matchBadgeLabel}>MATCH</Text>
+          <Text style={styles.matchBadgeLabel}>{translate(language, 'myPlan.closeness')}</Text>
         </View>
       </View>
       
@@ -1111,7 +1129,7 @@ function BestMatchingSetupCard({ setup, onPress }: { setup: SetupSummary; onPres
       <View style={styles.setupFactsRow}>
         <SetupFact label="TREND" value={setup.trend || 'neutral'} />
         <SetupFact label="ACTION" value={setup.action || 'Monitor'} />
-        <SetupFact label="STATUS" value={!setup.scoreAvailable ? 'Geen actuele match' : setup.score >= 65 ? 'Active...' : 'Wait...'} />
+        <SetupFact label="STATUS" value={setupConditionLabel(setup.status, language)} />
       </View>
     </Pressable>
   );
@@ -1166,7 +1184,7 @@ function WhyFinnSelectedCard({
 }
 
 function NextBestMatchesCard({ setups }: { setups: SetupSummary[] }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   if (setups.length === 0) return null;
@@ -1184,7 +1202,7 @@ function NextBestMatchesCard({ setups }: { setups: SetupSummary[] }) {
                 {setup.timeframe} · {setup.type}
               </Text>
             </View>
-            <Text style={[styles.setupScoreOrange]}>{setupScoreLabel(setup)}</Text>
+            <Text style={[styles.setupScoreOrange]}>{setupConditionLabel(setup.status, language)}</Text>
           </View>
         ))}
       </View>
@@ -1273,7 +1291,7 @@ function DecisionStateCard({ state, stale }: { state: ReturnType<typeof mapDecis
 }
 
 function ActiveSetupCard({ setup, onPress }: { setup: SetupSummary; onPress: () => void }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const palette = statusTones[setup.tone];
 
@@ -1296,7 +1314,7 @@ function ActiveSetupCard({ setup, onPress }: { setup: SetupSummary; onPress: () 
           </View>
           <View style={[styles.scoreBadge, { backgroundColor: palette.background, borderColor: palette.border }]}>
             <Text style={[styles.scoreBadgeValue, { color: palette.color }]}>{setupScoreLabel(setup)}</Text>
-            <Text style={styles.scoreBadgeLabel}>match</Text>
+            <Text style={styles.scoreBadgeLabel}>{translate(language, 'myPlan.closeness')}</Text>
           </View>
         </View>
         <View style={styles.progressTrack}>
@@ -1313,7 +1331,7 @@ function ActiveSetupCard({ setup, onPress }: { setup: SetupSummary; onPress: () 
 }
 
 function TopSetupsCard({ setups }: { setups: SetupSummary[] }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   if (setups.length === 0) {
@@ -1346,7 +1364,7 @@ function TopSetupsCard({ setups }: { setups: SetupSummary[] }) {
                 {setup.symbol} · {setup.timeframe} · {setup.type}
               </Text>
             </View>
-            <Text style={[styles.setupScore, { color: colorForScore(setup.score) }]}>{setupScoreLabel(setup)}</Text>
+            <Text style={[styles.setupScore, { color: setup.status === 'matches' ? theme.colors.success : colors.textDim }]}>{setupConditionLabel(setup.status, language)}</Text>
           </View>
         ))}
       </View>
@@ -1355,7 +1373,7 @@ function TopSetupsCard({ setups }: { setups: SetupSummary[] }) {
 }
 
 function SetupSheet({ setup }: { setup: SetupSummary }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
@@ -1366,7 +1384,7 @@ function SetupSheet({ setup }: { setup: SetupSummary }) {
         <MiniMetric label="Symbol" value={setup.symbol} />
         <MiniMetric label="Timeframe" value={setup.timeframe} />
         <MiniMetric label="Type" value={setup.type} />
-        <MiniMetric label="Match score" value={setupScoreLabel(setup)} />
+        <MiniMetric label={translate(language, 'myPlan.closeness')} value={setup.scoreAvailable ? `${setupScoreLabel(setup)}/100` : '—'} />
       </View>
     </View>
   );
@@ -1448,7 +1466,7 @@ function PlanDetailSheet({
   plan?: PlanListItem | null;
   strategy?: StrategyResponse;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   if (loading) {
@@ -1487,10 +1505,10 @@ function PlanDetailSheet({
               {plan.symbol} · {plan.timeframe} · {plan.type || 'Setup'}
             </Text>
           </View>
-          <StatusChip compact label={plan.isActive ? 'Actief' : 'Concept'} tone={plan.isActive ? 'success' : 'warning'} />
+          <StatusChip compact label={setupConditionLabel(plan.status, language)} tone={plan.status === 'matches' ? 'success' : plan.status === 'outside_conditions' ? 'warning' : 'neutral'} />
         </View>
         <View style={styles.compactGrid}>
-          <MiniMetric label="Match" value={`${plan.score}`} />
+          <MiniMetric label={translate(language, 'myPlan.closeness')} value={plan.scoreAvailable ? `${plan.score}/100` : '—'} />
           <MiniMetric label="Trend" value={plan.trend || '—'} />
           <MiniMetric label="Actie" value={plan.action || '—'} />
           <MiniMetric label="Status" value={plan.hasStrategy ? 'Strategy linked' : 'No strategy'} />
@@ -1823,8 +1841,8 @@ function RiskSheet({
     <View style={styles.sheetStack}>
       <Text style={[styles.sheetTitle, { color: colors.text }]}>{riskTitle(decisionState.score, '')}</Text>
       <Text style={[styles.bodyText, { color: colors.textMuted }]}>
-        De benchmarkscore is {decisionState.benchmarkAvailable ? decisionState.score : 'niet beschikbaar'}. Setup match is {setupScoreLabel(setup)}. Mobile toont context en
-        status; uitvoering blijft expliciet en review-first.
+        De benchmarkscore is {decisionState.benchmarkAvailable ? decisionState.score : 'niet beschikbaar'}. {setupConditionLabel(setup.status, 'nl')}.
+        {' '}{setupClosenessLabel(setup, 'nl')} geeft alleen nabijheid aan; de strategie bepaalt of er een trade volgt.
       </Text>
       <View style={styles.ruleList}>
         {(botReasons.length > 0 ? botReasons : [decisionState.reason, setup.explanation]).slice(0, 4).map((item, index) => (
@@ -2068,20 +2086,18 @@ function pushPrefill(type: string, symbol: string) {
 
 function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewResponse['watchlist'][number]): SetupSummary {
   const active = extractActiveSetup(source);
-  const rawScore = active
-    ? readOptionalNumber(active, ['score', 'match_score']) ?? overviewAsset?.setup_match_score
-    : null;
+  const rawScore = active ? readOptionalNumber(active, ['score', 'match_score']) : null;
   const scoreAvailable = typeof rawScore === 'number' && Number.isFinite(rawScore);
   const score = scoreAvailable ? clampScore(rawScore) : 0;
   const symbol = readString(active, ['symbol'], overviewAsset?.symbol ?? '');
   const name = readString(active, ['name', 'setup_name'], active ? (symbol ? `${symbol} setup` : 'Actieve setup') : 'Geen actieve setup');
 
   return {
-    action: readString(active, ['action'], score >= 65 ? 'Monitor' : 'Wait'),
+    action: readString(active, ['action'], 'Monitor'),
     explanation:
       readString(active, ['setup_explanation', 'ai_explanation', 'explanation'], '') ||
       (active
-        ? 'De backend heeft deze setup geselecteerd op basis van overlap met de huidige macro-, technical- en market-scores.'
+        ? 'Deze setup wordt vergeleken met de actuele samengestelde benchmarkscore van Markt, Macro en Technisch.'
         : 'Er is nog geen actieve setup beschikbaar voor deze asset. Gebruik dit scherm als read-only context.'),
     id: readOptionalNumber(active, ['id', 'setup_id']),
     name,
@@ -2089,7 +2105,7 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
     scoreAvailable,
     symbol,
     timeframe: readString(active, ['timeframe'], ''),
-    tone: toneForScore(score),
+    tone: readString(active, ['status', 'state'], '') === 'matches' ? 'success' : scoreAvailable ? 'warning' : 'neutral',
     trend: readString(active, ['trend'], ''),
     type: readString(active, ['setup_type', 'type'], ''),
     status: readString(active, ['status', 'state'], ''),
@@ -2110,7 +2126,7 @@ function mapTopSetups(source?: SetupResponse): SetupSummary[] {
       scoreAvailable,
       symbol: readString(item, ['symbol'], ''),
       timeframe: readString(item, ['timeframe'], ''),
-      tone: toneForScore(score),
+      tone: readString(item, ['status', 'state'], '') === 'matches' ? 'success' : scoreAvailable ? 'warning' : 'neutral',
       trend: readString(item, ['trend'], ''),
       type: readString(item, ['setup_type', 'type'], ''),
       status: readString(item, ['status', 'state'], ''),
@@ -2131,16 +2147,16 @@ function mapDecisionState(
   const benchmarkAvailable = asset?.benchmark_score != null;
   const tone: StatusTone = benchmarkAvailable ? toneForScore(score) : 'neutral';
   const action = botAction.toLowerCase();
-  const status =
-    !benchmarkAvailable ? 'Unknown' :
-    score >= 70 ? 'Constructive' : score >= 50 ? 'Selective' : action.includes('hold') ? 'Hold' : 'Defensive';
+  const status = !benchmarkAvailable ? 'Benchmark niet beschikbaar' :
+    setup.status === 'matches' ? 'Setupvoorwaarden passen' :
+    setup.status === 'outside_conditions' ? 'Setupvoorwaarden passen niet' : 'Plan controleren';
 
   return {
     nextStep:
       action.includes('buy') || action.includes('sell')
         ? 'Open de bot review sheet en bevestig pas na risk check.'
         : 'Wacht op betere bevestiging of vraag FINN om de blokkade uit te leggen.',
-    reason: `${asset?.symbol ?? setup.symbol} heeft benchmark ${benchmarkAvailable ? score : 'niet beschikbaar'} en setupmatch ${setupScore ?? 'niet beschikbaar'}. Botactie: ${botAction}.`,
+    reason: `${asset?.symbol ?? setup.symbol}: benchmark ${benchmarkAvailable ? score : 'niet beschikbaar'}, ${setupConditionLabel(setup.status, 'nl').toLowerCase()}, nabijheid ${setupScore ?? 'niet beschikbaar'}. Botactie: ${botAction}.`,
     score,
     benchmarkAvailable,
     scores: [
@@ -2150,8 +2166,9 @@ function mapDecisionState(
       { label: 'Setup', value: setupScore ?? '—' },
     ],
     status,
-    title: !benchmarkAvailable ? 'Benchmark unavailable' :
-      score >= 70 ? 'Setup valid, stay selective' : score >= 50 ? 'Review before action' : 'Defensive posture',
+    title: !benchmarkAvailable ? 'Benchmark niet beschikbaar' :
+      setup.status === 'matches' ? 'Setup mag meedoen; strategie beslist' :
+      setup.status === 'outside_conditions' ? 'Setupvoorwaarde niet bereikt' : 'Controleer je setup',
     tone,
   };
 }
@@ -2223,7 +2240,7 @@ function riskTitle(score: number, action: string) {
 }
 
 function riskBody(setup: SetupSummary, strategyStatus: string, botReason: string) {
-  return `${setup.name} heeft match ${setupScoreLabel(setup)}. Strategy status: ${strategyStatus}. Bot rationale: ${botReason}`;
+  return `${setup.name}: ${setupConditionLabel(setup.status, 'nl')}; ${setupClosenessLabel(setup, 'nl')}. Strategie: ${strategyStatus}. Bot: ${botReason}`;
 }
 
 function riskLabelForScore(score: number) {

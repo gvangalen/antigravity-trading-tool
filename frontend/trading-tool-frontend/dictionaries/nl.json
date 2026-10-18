@@ -303,7 +303,7 @@
       "labels": {
         "pressure": "Marktdruk",
         "transitionRisk": "Transitierisico",
-        "setupQuality": "Setupkwaliteit",
+        "setupQuality": "Setupmatch",
         "volatility": "Marktvolatiliteit",
         "trendStrength": "Trendsterkte",
         "positionSize": "Positiegrootte"
@@ -323,11 +323,11 @@
         "Risico op regimewissel"
       ],
       "setupQualityStates": [
-        "Zwakke setups",
-        "Gemengde setups",
-        "Redelijke setups",
-        "Hoge kwaliteit",
-        "Zeer sterke setups"
+        "Ver van de voorwaarde",
+        "Nog buiten de voorwaarde",
+        "Net binnen de voorwaarde",
+        "Past goed",
+        "Past zeer goed"
       ],
       "volatilityStates": [
         "Zeer rustig",
@@ -953,6 +953,7 @@
       "scoreRangesHelp": "Dit zijn algemene productvoorstellen, niet berekend uit jouw marktdata of handelsstijl. Ze bepalen of de setup bij scores past; controleer ze vóór opslag.",
       "scoreRangesConfirm": "Ik heb de markt-, macro- en technische scoregrenzen bekeken en wil deze als voorwaarden voor mijn setup opslaan.",
       "scoreCategories": { "market": "Markt", "macro": "Macro", "technical": "Technisch" },
+      "benchmarkScoreLabel": "Jouw benchmarkscore",
       "scoreMinLabel": "Vanaf",
       "scoreMaxLabel": "Tot en met",
       "stepNumber": "Mijn Plan · 3 van 4",
@@ -2907,7 +2908,7 @@
       "diagnosticsReady": "Diagnostiek",
       "amountLabel": "Bedrag",
       "setupLabel": "Setup",
-      "setupScoreLabel": "Setupscore bij laatste beslissing",
+      "setupScoreLabel": "Setupmatch bij laatste beslissing",
       "stopLossLabel": "Stop loss",
       "targetCountLabel": "Targets",
       "notAvailable": "n.v.t.",
@@ -3214,7 +3215,7 @@
   "setups": {
     "marketConditions": {
       "title": "Wanneer past deze setup?",
-      "help": "Kies de marktsituatie waarin je setup mag meedoen.",
+      "help": "Kies bij welke waarde van jouw benchmarkscore deze setup mag meedoen.",
       "summaryTitle": "Jouw keuze",
       "summaryEmptyTitle": "Kies een marktsituatie",
       "summaryEmptyBody": "Je ziet hier wat jouw keuze voor deze setup betekent.",
@@ -3224,20 +3225,21 @@
       "offTitle": "Geen extra marktvoorwaarde",
       "offDescription": "Voor deze setup geldt geen extra scoregrens.",
       "offClearsTitle": "Alle scorevoorwaarden verwijderen",
-      "offClearsExisting": "Hiermee verwijder je bij het opslaan alle bestaande grenzen voor markt, macro en technisch uit deze setup.",
+      "offClearsExisting": "Hiermee verwijder je bij het opslaan de benchmarkgrenzen uit deze setup.",
       "offRule": "Er worden geen scoregrenzen voor deze setup opgeslagen.",
-      "presetReplacesExisting": "Let op: deze kaart vervangt bij opslaan je eerdere scorevoorwaarden. Bestaande macro- en technische grenzen worden verwijderd.",
+      "presetReplacesExisting": "Deze kaart vervangt bij opslaan je eerdere benchmarkgrenzen.",
       "ruleTitle": "Jouw regel:",
       "selectedRule": "FINN gebruikt deze situatie: {situation}.",
       "customRule": "Deze setup volgt de scoregrenzen die je hieronder zelf instelt.",
       "advancedTitle": "Geavanceerd",
       "advancedSubtitle": "Zelf scoregrenzen instellen",
       "explanationTitle": "Hoe bepaalt FINN de marktsituatie?",
-      "advancedHelp": "De vijf situaties zijn vaste bereiken van de marktscore. Dit is geen meting van prijsdaling, RSI of de Fear & Greed Index. Macro en technisch krijgen bij een standaardkaart geen extra grens. Voor een betrouwbare beoordeling moeten wel alle drie de actuele scores beschikbaar zijn.",
-      "scoreExplanation": "Deze kaart bewaart marktscore {min} tot en met {max}.",
+      "advancedHelp": "De vijf situaties zijn vaste bereiken van jouw benchmarkscore: het gewogen gemiddelde van Markt, Macro en Technisch. Dit is geen meting van prijsdaling, RSI of de Fear & Greed Index. Alle drie de actuele deelscores moeten beschikbaar zijn.",
+      "scoreExplanation": "Deze kaart bewaart benchmarkscore {min} tot en met {max}.",
       "customTitle": "Zelf bepalen",
-      "customDescription": "Stel je eigen grenzen in voor markt, macro en technisch.",
-      "customSelected": "Pas hieronder de drie scorebereiken aan.",
+      "customDescription": "Stel je eigen bereik voor jouw benchmarkscore in.",
+      "customSelected": "Pas hieronder het benchmarkbereik aan.",
+      "savedBenchmark": "benchmarkscore",
       "savedNotReady": "Nog niet compleet",
       "savedNoConditions": "Geen scorevoorwaarden",
       "savedCustomTitle": "Eigen voorwaarden",
@@ -3246,11 +3248,11 @@
       "savedThrough": "tot en met {max}",
       "savedCategories": { "market": "markt", "macro": "macro", "technical": "technisch" },
       "options": {
-        "heavy_pressure": { "title": "Zwaar onder druk", "description": "Een zeer lage marktscore", "rule": "Deze setup mag meedoen wanneer de marktscore zeer laag is." },
-        "pressure": { "title": "Onder druk", "description": "Een lage marktscore", "rule": "Deze setup mag meedoen wanneer de marktscore laag is." },
-        "no_direction": { "title": "Geen duidelijke richting", "description": "Een marktscore rond het midden", "rule": "Deze setup mag meedoen wanneer de marktscore rond het midden ligt." },
-        "gaining_strength": { "title": "De markt trekt aan", "description": "Een hogere marktscore", "rule": "Deze setup mag meedoen wanneer de marktscore hoger is." },
-        "strong": { "title": "Sterke markt", "description": "Een zeer hoge marktscore", "rule": "Deze setup mag meedoen wanneer de marktscore zeer hoog is." }
+        "heavy_pressure": { "title": "Zwaar onder druk", "description": "Een zeer lage benchmarkscore", "rule": "Deze setup mag meedoen wanneer de benchmarkscore zeer laag is." },
+        "pressure": { "title": "Onder druk", "description": "Een lage benchmarkscore", "rule": "Deze setup mag meedoen wanneer de benchmarkscore laag is." },
+        "no_direction": { "title": "Geen duidelijke richting", "description": "Een benchmarkscore rond het midden", "rule": "Deze setup mag meedoen wanneer de benchmarkscore rond het midden ligt." },
+        "gaining_strength": { "title": "De markt trekt aan", "description": "Een hogere benchmarkscore", "rule": "Deze setup mag meedoen wanneer de benchmarkscore hoger is." },
+        "strong": { "title": "Sterke markt", "description": "Een zeer hoge benchmarkscore", "rule": "Deze setup mag meedoen wanneer de benchmarkscore zeer hoog is." }
       }
     },
     "manager": {
@@ -3369,6 +3371,8 @@
       "scoreSavedOrigin": "Dit zijn de opgeslagen scoregrenzen van deze setup. Ze kunnen bij aanmaak of duplicatie zijn overgenomen; hun oorspronkelijke herkomst is hier niet vastgelegd. Controleer ze voordat je opslaat.",
       "scoreEditedOrigin": "Je hebt de scoregrenzen in dit formulier aangepast. Met Opslaan bevestig je de getoonde waarden voor deze setup.",
       "scorePartialOrigin": "Deze setup heeft enkele opgeslagen grenzen en lege velden. Startwaarden voor lege velden zijn alleen voorstellen; ze blijven leeg totdat je die grens zelf verschuift.",
+      "benchmarkTitle": "Jouw benchmarkscore",
+      "benchmarkDescription": "Gewogen gemiddelde van Markt, Macro en Technisch",
       "macroTitle": "Macro",
       "macroDescription": "Macro-omgeving",
       "technicalTitle": "Technisch",

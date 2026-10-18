@@ -31,8 +31,8 @@ def test_bot_reads_confirmed_strategy_and_measured_match_without_ai_snapshot():
     assert "st.user_id = s.user_id" in cursor.query
     assert plan == {
         "entry": 76000.0, "targets": [82000.0, 86000.0],
-        "stop_loss": 72000.0, "confidence": 72.0,
-        "reason": "saved_strategy_and_measured_setup_match",
+        "stop_loss": 72000.0, "confidence": None,
+        "reason": "saved_strategy_setup_match_is_eligibility_only",
     }
 
 
@@ -50,4 +50,4 @@ def test_bot_keeps_saved_strategy_but_does_not_invent_match_confidence():
 
     assert plan["entry"] == 76000.0
     assert plan["confidence"] is None
-    assert plan["reason"] == "saved_strategy_setup_match_unavailable"
+    assert plan["reason"] == "saved_strategy_setup_match_is_eligibility_only"

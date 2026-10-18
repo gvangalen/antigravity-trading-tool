@@ -24,7 +24,7 @@ def test_all_five_presets_are_exact_saved_bounds_and_custom_is_not_mislabeled():
     german = ("Stark unter Druck", "Unter Druck", "Keine klare Richtung", "Der Markt wird stärker", "Starker Markt")
     for index, (key, minimum, maximum, label) in enumerate(bands):
         condition = saved_setup_market_condition({
-            "min_market_score": minimum, "max_market_score": maximum,
+            "min_benchmark_score": minimum, "max_benchmark_score": maximum,
         })
         assert condition.pop("labels") == {
             "nl": label,
@@ -35,12 +35,15 @@ def test_all_five_presets_are_exact_saved_bounds_and_custom_is_not_mislabeled():
             "kind": "preset", "source": "saved_score_bounds",
             "effect": "setup_eligibility_only", "purchase_guaranteed": False,
             "key": key,
-            "market_score_min": minimum, "market_score_max": maximum,
+            "benchmark_score_min": minimum, "benchmark_score_max": maximum,
         }
-    assert saved_setup_market_condition({"min_market_score": 26})["kind"] == "custom"
+    custom = saved_setup_market_condition({"min_benchmark_score": 26})
+    assert custom["kind"] == "custom"
+    assert custom["benchmark_score_min"] == 26
+    assert custom["benchmark_score_max"] is None
     assert saved_setup_market_condition({
-        "min_market_score": 26, "max_market_score": 45, "min_macro_score": 30,
-    })["kind"] == "custom"
+        "min_benchmark_score": 26, "max_benchmark_score": 45, "min_macro_score": 30,
+    })["kind"] == "preset"
     assert saved_setup_market_condition({})["kind"] == "none"
 
 
@@ -74,7 +77,7 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
             "name": "Vrijdag BTC", "symbol": "BTC", "timeframe": "1D",
             "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "5",
             "description": "Ik wil geduldig opbouwen; dit is mijn toelichting.",
-            "min_market_score": 26, "max_market_score": 45,
+            "min_benchmark_score": 26, "max_benchmark_score": 45,
         }, user_id=7, tags=[])
         assert saved_id == 41
         # A fresh repository/session represents a refresh or a new login.
@@ -90,8 +93,8 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
         assert listed["saved_market_condition"] == active["saved_market_condition"]
         assert active["description"] == reread["description"]
         assert active["dca_day_name"] == "friday"
-        assert active["min_market_score"] == 26
-        assert active["max_market_score"] == 45
+        assert active["min_benchmark_score"] == 26
+        assert active["max_benchmark_score"] == 45
         assert match_setup(reread, {"market": 30, "macro": 50, "technical": 50})["status"] == "matches"
         assert match_setup(reread, {"market": 50, "macro": 50, "technical": 50})["status"] == "outside_conditions"
         assert match_setup(reread, None)["status"] == "insufficient_data"

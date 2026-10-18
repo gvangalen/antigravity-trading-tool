@@ -1477,7 +1477,7 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
                      "linked_bots": ([{"name": "Paper Bot 2", "mode": "manual", "is_live": False,
                                       "strategy_id": 102}]
                                      if index == 2 else []),
-                     "min_macro_score": (0 if index in {1, 2, 3} else None if index == 4 else 30)}
+                     "min_benchmark_score": (0 if index in {1, 2, 3} else None if index == 4 else 30)}
                     for index in range(1, 8)
                 ] + [{"setup_id": 99, "name": "BTC Other", "symbol": "BTC"}]},
             }]}
@@ -1536,9 +1536,9 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
     assert model_evidence["linked_bot_total"] == 1
     assert model_evidence["setups_with_linked_bots_count"] == 1
     assert model_evidence["paper_bot_total"] == 1
-    macro_groups = model_evidence["score_condition_groups"]["min_macro_score"]
-    assert {group["value"]: group["setup_count"] for group in macro_groups["configured"]} == {0: 3, 30: 3}
-    assert macro_groups["not_configured_setup_names"] == ["ETH Setup 4"]
+    benchmark_groups = model_evidence["score_condition_groups"]["min_benchmark_score"]
+    assert {group["value"]: group["setup_count"] for group in benchmark_groups["configured"]} == {0: 3, 30: 3}
+    assert benchmark_groups["not_configured_setup_names"] == ["ETH Setup 4"]
     assert by_name["ETH Setup 4"]["score_conditions"] == {}
     assert "as_of" not in json.dumps(model_evidence)
 

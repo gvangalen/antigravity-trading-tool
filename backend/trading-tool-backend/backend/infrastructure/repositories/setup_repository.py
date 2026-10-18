@@ -40,6 +40,7 @@ class SetupRepository:
                 min_macro_score, max_macro_score,
                 min_technical_score, max_technical_score,
                 min_market_score, max_market_score,
+                min_benchmark_score, max_benchmark_score,
                 created_at, user_id
             )
             VALUES (
@@ -51,6 +52,7 @@ class SetupRepository:
                 :min_macro_score, :max_macro_score,
                 :min_technical_score, :max_technical_score,
                 :min_market_score, :max_market_score,
+                :min_benchmark_score, :max_benchmark_score,
                 :created_at, :user_id
             )
             RETURNING id
@@ -87,6 +89,8 @@ class SetupRepository:
             "max_technical_score": payload.get("max_technical_score"),
             "min_market_score": payload.get("min_market_score"),
             "max_market_score": payload.get("max_market_score"),
+            "min_benchmark_score": payload.get("min_benchmark_score"),
+            "max_benchmark_score": payload.get("max_benchmark_score"),
             
             "created_at": datetime.utcnow(),
             "user_id": user_id

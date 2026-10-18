@@ -87,7 +87,7 @@ export default function BotScores({
   const missingSetup = !setup;
   const missingStrategy = !strategy;
   const chainIncomplete = missingSetup || missingStrategy;
-  const hasSetupMismatch = setupScore !== null && setupScore < 40;
+  const hasSetupMismatch = bot?.decision?.setup_match?.status === "outside_conditions";
   const canAssessDecision = isComplete;
   const decisionLabel = canAssessDecision
     ? presentation?.action || copy.insufficientData

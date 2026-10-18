@@ -54,7 +54,7 @@ def test_fixed_dca_missing_macro_follows_saved_score_conditions(
 ):
     setup = {"name": "ETH fixed", "symbol": "ETH", "setup_type": "dca"}
     if minimum is not None:
-        setup["min_macro_score"] = minimum
+        setup["min_benchmark_score"] = minimum
     match = match_setup_from_daily_scores(
         setup, {"market": 40, "macro": None, "technical": 40},
         {"market_score": 1 / 3, "macro_score": 1 / 3, "technical_score": 1 / 3},
@@ -270,8 +270,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     verified = paper_worker._get_daily_scores(store, 7, date.today(), "ETH")
     weights = {key: 1 / 3 for key in ("market_score", "macro_score", "technical_score")}
     setup = {"id": 9, "name": "ETH Smart", "symbol": "ETH", "setup_type": "dca",
-             "min_market_score": 90 if unavailable == "outside" else 70,
-             "min_macro_score": 60, "min_technical_score": 50}
+             "min_benchmark_score": 90 if unavailable == "outside" else 70}
     match = match_setup_from_daily_scores(setup, verified, weights)
     expected_match_status = (
         "insufficient_data" if unavailable in {"missing", "stale"}

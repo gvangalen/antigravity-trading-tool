@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from fastapi import HTTPException
 from datetime import datetime
+from math import isfinite
 import logging
 
 from backend.infrastructure.repositories.setup_repository import SetupRepository
@@ -38,14 +39,7 @@ logger = logging.getLogger(__name__)
 class SetupService:
     # Suggested ranges for explicit forms only. They are never applied to an
     # omitted field in save_setup: a score limit changes trading eligibility.
-    SETUP_SCORE_DEFAULTS = {
-        "min_macro_score": 30,
-        "max_macro_score": 70,
-        "min_technical_score": 40,
-        "max_technical_score": 80,
-        "min_market_score": 20,
-        "max_market_score": 60,
-    }
+    SETUP_SCORE_DEFAULTS = {"min_benchmark_score": 46, "max_benchmark_score": 60}
     # The domain service, not FINN, owns which persisted setup fields can be
     # changed. V2 adapters pass a typed proposal through this same boundary.
     UPDATE_ALLOWED_FIELDS = frozenset({
@@ -54,7 +48,7 @@ class SetupService:
         "trend", "score_logic", "favorite", "description", "action",
         "category", "min_macro_score", "max_macro_score",
         "min_technical_score", "max_technical_score", "min_market_score",
-        "max_market_score", "explanation", "tags",
+        "max_market_score", "min_benchmark_score", "max_benchmark_score", "explanation", "tags",
     })
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
@@ -155,6 +149,8 @@ class SetupService:
             "max_technical_score": item.get("max_technical_score"),
             "min_market_score": item.get("min_market_score"),
             "max_market_score": item.get("max_market_score"),
+            "min_benchmark_score": item.get("min_benchmark_score"),
+            "max_benchmark_score": item.get("max_benchmark_score"),
             
             "created_at": created_at,
             "user_id": item.get("user_id"),
@@ -252,14 +248,14 @@ class SetupService:
                         raise HTTPException(400, "dca_month_day moet een getal tussen 1 en 31 zijn voor maandelijkse DCA.")
 
         # 4. Score Limit range validations
-        for cat in ["macro", "technical", "market"]:
+        for cat in ["macro", "technical", "market", "benchmark"]:
             mn = raw_payload.get(f"min_{cat}_score")
             mx = raw_payload.get(f"max_{cat}_score")
             
             if mn is not None:
                 try:
                     mn_val = float(mn)
-                    if mn_val < 0 or mn_val > 100:
+                    if not isfinite(mn_val) or mn_val < 0 or mn_val > 100:
                         raise ValueError()
                 except (ValueError, TypeError):
                     raise HTTPException(400, f"min_{cat}_score moet een getal tussen 0 en 100 zijn.")
@@ -267,7 +263,7 @@ class SetupService:
             if mx is not None:
                 try:
                     mx_val = float(mx)
-                    if mx_val < 0 or mx_val > 100:
+                    if not isfinite(mx_val) or mx_val < 0 or mx_val > 100:
                         raise ValueError()
                 except (ValueError, TypeError):
                     raise HTTPException(400, f"max_{cat}_score moet een getal tussen 0 en 100 zijn.")
@@ -275,6 +271,11 @@ class SetupService:
             if mn is not None and mx is not None:
                 if float(mn) > float(mx):
                     raise HTTPException(400, f"min_{cat}_score mag niet hoger zijn dan max_{cat}_score.")
+
+        legacy_bounds = ("min_market_score", "max_market_score", "min_macro_score",
+                         "max_macro_score", "min_technical_score", "max_technical_score")
+        if any(raw_payload.get(field) is not None for field in legacy_bounds):
+            raise HTTPException(400, "Gebruik de samengestelde benchmarkscore voor setupvoorwaarden.")
 
         # 5. Min investment validation
         min_invest = raw_payload.get("min_investment")

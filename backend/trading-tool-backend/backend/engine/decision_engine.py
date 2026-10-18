@@ -92,25 +92,15 @@ def decide_amount(
         )
 
     # =================================================
-    # 1.5️⃣ Setup Influence (Conviction Layer)
+    # Setup match is eligibility only. Proximity inside a saved score band is
+    # not conviction and must never silently change the order amount.
     # =================================================
-
-    setup_score = scores.get("setup_score", scores.get("setup"))
 
     exact_dca_amount = is_confirmed_dca_amount_rule(setup)
     if exact_dca_amount:
         setup_reason = "DCA planned amount; setup conviction cannot raise or lower its score band"
-    elif isinstance(setup_score, (int, float)):
-        if setup_score < 40:
-            sized_amount *= 0.5
-            setup_reason = "Weak setup → reduced size"
-        elif setup_score > 70:
-            sized_amount *= 1.2
-            setup_reason = "Strong setup → increased size"
-        else:
-            setup_reason = "Neutral setup"
     else:
-        setup_reason = "No setup score"
+        setup_reason = "Setup match is an eligibility check, not a size multiplier"
 
     # 🔥 FIX: clamp sized_amount (voorkomt extremes)
     max_planned_multiplier = (

@@ -19,7 +19,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 import { initialSetupFormState } from "@/lib/setup/setupFormState.mjs";
-import { editedCustomScorePayload, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, mayKeepUnfilteredTrade, scoreRangeTouchedFields, setupScoreOriginKey } from "@/lib/setup/scoreConditions.mjs";
+import { editedCustomScorePayload, hasSetupScoreConditions, marketConditionChoiceFromSetup, marketConditionPayload, mayKeepUnfilteredTrade, setupScoreOriginKey } from "@/lib/setup/scoreConditions.mjs";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
@@ -35,12 +35,12 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   // SCORE MEANING
   // ----------------------------------------------------
   const scoreLabel = (v) => {
-    if (v <= 25) return copy.scoreVeryBearish;
-    if (v <= 45) return copy.scoreBearish;
-    if (v <= 60) return copy.scoreNeutral;
-    if (v <= 75) return copy.scoreNeutralBullish;
-    if (v <= 90) return copy.scoreBullish;
-    return copy.scoreEuphoric;
+    const options = t?.setups?.marketConditions?.options || {};
+    if (v <= 25) return options.heavy_pressure?.title;
+    if (v <= 45) return options.pressure?.title;
+    if (v <= 60) return options.no_direction?.title;
+    if (v <= 75) return options.gaining_strength?.title;
+    return options.strong?.title;
   };
 
   const rangeText = (min, max) => `${scoreLabel(min)} → ${scoreLabel(max)}`;
@@ -53,23 +53,14 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   const [formData, setFormData] = useState(() =>
     initialSetupFormState(isEdit ? initialData : null)
   );
-  const [macroScore, setMacroScore] = useState(() => [
-    isEdit ? initialData?.min_macro_score ?? 30 : 30,
-    isEdit ? initialData?.max_macro_score ?? 70 : 70,
-  ]);
-  const [technicalScore, setTechnicalScore] = useState(() => [
-    isEdit ? initialData?.min_technical_score ?? 40 : 40,
-    isEdit ? initialData?.max_technical_score ?? 80 : 80,
-  ]);
-  const [marketScore, setMarketScore] = useState(() => [
-    isEdit ? initialData?.min_market_score ?? 20 : 20,
-    isEdit ? initialData?.max_market_score ?? 60 : 60,
+  const [benchmarkScore, setBenchmarkScore] = useState(() => [
+    isEdit ? initialData?.min_benchmark_score ?? 46 : 46,
+    isEdit ? initialData?.max_benchmark_score ?? 60 : 60,
   ]);
   const [conditionChoice, setConditionChoice] = useState(() =>
     isEdit ? marketConditionChoiceFromSetup(initialData) : "off"
   );
   const [scoreConditionsTouched, setScoreConditionsTouched] = useState(false);
-  const [scoreTouchedFields, setScoreTouchedFields] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -101,21 +92,9 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     setFormData(initialSetupFormState(initialData));
     setConditionChoice(marketConditionChoiceFromSetup(initialData));
     setScoreConditionsTouched(false);
-    setScoreTouchedFields({});
-
-    setMacroScore([
-      initialData.min_macro_score ?? 30,
-      initialData.max_macro_score ?? 70,
-    ]);
-
-    setTechnicalScore([
-      initialData.min_technical_score ?? 40,
-      initialData.max_technical_score ?? 80,
-    ]);
-
-    setMarketScore([
-      initialData.min_market_score ?? 20,
-      initialData.max_market_score ?? 60,
+    setBenchmarkScore([
+      initialData.min_benchmark_score ?? 46,
+      initialData.max_benchmark_score ?? 60,
     ]);
   }, [initialData]);
 
@@ -132,12 +111,11 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
 
   const isDca = formData.setupType === "dca";
   const isTrade = formData.setupType === "trade";
-  const updateScoreRange = (category, current, setter, next) => {
-    if (Number(next[0]) !== Number(current[0]) || Number(next[1]) !== Number(current[1])) {
-      setScoreTouchedFields((previous) => scoreRangeTouchedFields(category, current, next, previous));
+  const updateScoreRange = (next) => {
+    if (Number(next[0]) !== Number(benchmarkScore[0]) || Number(next[1]) !== Number(benchmarkScore[1])) {
       setScoreConditionsTouched(true);
     }
-    setter(next);
+    setBenchmarkScore(next);
   };
   const assetOptions = Array.from(new Set([
     ...(availableAssets || []),
@@ -188,11 +166,9 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
       }),
 
       ...(conditionChoice === "custom" && isEdit && marketConditionChoiceFromSetup(initialData) === "custom"
-        ? editedCustomScorePayload(initialData, macroScore, technicalScore, marketScore, scoreTouchedFields)
+        ? editedCustomScorePayload(initialData, benchmarkScore)
         : marketConditionPayload(conditionChoice, {
-            min_macro_score: macroScore[0], max_macro_score: macroScore[1],
-            min_technical_score: technicalScore[0], max_technical_score: technicalScore[1],
-            min_market_score: marketScore[0], max_market_score: marketScore[1],
+            min_benchmark_score: benchmarkScore[0], max_benchmark_score: benchmarkScore[1],
           })),
     };
 
@@ -237,15 +213,12 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     legacyUnfilteredTrade,
     isTrade,
     loading,
-    macroScore,
-    marketScore,
+    benchmarkScore,
     onSaved,
     selectedAsset,
     showSnackbar,
-    technicalScore,
     conditionChoice,
     scoreConditionsTouched,
-    scoreTouchedFields,
     t?.setups?.marketConditions?.required,
   ]);
 
@@ -495,9 +468,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={formData.symbol || selectedAsset || initialData?.symbol} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade}>
           <div className="space-y-5">
             <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
-            {scoreBlock(copy.macroTitle, macroScore, (value) => updateScoreRange("macro", macroScore, setMacroScore, value), copy.macroDescription)}
-            {scoreBlock(copy.technicalTitle, technicalScore, (value) => updateScoreRange("technical", technicalScore, setTechnicalScore, value), copy.technicalDescription)}
-            {scoreBlock(copy.marketTitle, marketScore, (value) => updateScoreRange("market", marketScore, setMarketScore, value), copy.marketDescription)}
+            {scoreBlock(copy.benchmarkTitle || "Jouw benchmarkscore", benchmarkScore, updateScoreRange, copy.benchmarkDescription || "Het gewogen gemiddelde van Markt, Macro en Technisch.")}
           </div>
         </MarketConditionPicker>
       </div>

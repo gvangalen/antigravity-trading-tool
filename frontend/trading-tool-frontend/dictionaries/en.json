@@ -302,7 +302,7 @@
       "labels": {
         "pressure": "Market pressure",
         "transitionRisk": "Transition risk",
-        "setupQuality": "Setup quality",
+        "setupQuality": "Setup match",
         "volatility": "Market volatility",
         "trendStrength": "Trend strength",
         "positionSize": "Position size"
@@ -322,11 +322,11 @@
         "Regime change risk"
       ],
       "setupQualityStates": [
-        "Weak setups",
-        "Mixed setups",
-        "Reasonable setups",
-        "High quality",
-        "Very strong setups"
+        "Far from the condition",
+        "Outside the condition",
+        "Just inside the condition",
+        "Good match",
+        "Very good match"
       ],
       "volatilityStates": [
         "Very calm",
@@ -952,6 +952,7 @@
       "scoreRangesHelp": "These are general product suggestions, not calculated from your market data or trading style. They determine the setup match; review them before saving.",
       "scoreRangesConfirm": "I have reviewed the market, macro and technical score bounds and want to save them as conditions for my setup.",
       "scoreCategories": { "market": "Market", "macro": "Macro", "technical": "Technical" },
+      "benchmarkScoreLabel": "Your benchmark score",
       "scoreMinLabel": "From",
       "scoreMaxLabel": "Through",
       "stepNumber": "My Plan · 3 of 4",
@@ -2906,7 +2907,7 @@
       "diagnosticsReady": "Diagnostics",
       "amountLabel": "Amount",
       "setupLabel": "Setup",
-      "setupScoreLabel": "Setup score at last decision",
+      "setupScoreLabel": "Setup match at last decision",
       "stopLossLabel": "Stop loss",
       "targetCountLabel": "Targets",
       "notAvailable": "n/a",
@@ -3213,7 +3214,7 @@
   "setups": {
     "marketConditions": {
       "title": "When does this setup fit?",
-      "help": "Choose the market situation in which your setup may qualify.",
+      "help": "Choose which values of your benchmark score allow this setup to qualify.",
       "summaryTitle": "Your choice",
       "summaryEmptyTitle": "Choose a market situation",
       "summaryEmptyBody": "You'll see what your choice means for this setup here.",
@@ -3223,20 +3224,21 @@
       "offTitle": "No extra market condition",
       "offDescription": "This setup has no extra score limit.",
       "offClearsTitle": "Remove all score conditions",
-      "offClearsExisting": "Saving this choice removes all existing market, macro, and technical score limits from this setup.",
+      "offClearsExisting": "Saving this choice removes the benchmark score limits from this setup.",
       "offRule": "No score limits are saved for this setup.",
-      "presetReplacesExisting": "Note: saving this card replaces your previous score conditions. Existing macro and technical limits will be removed.",
+      "presetReplacesExisting": "Saving this card replaces your previous benchmark score limits.",
       "ruleTitle": "Your rule:",
       "selectedRule": "FINN uses this situation: {situation}.",
       "customRule": "This setup follows the score limits you set below.",
       "advancedTitle": "Advanced",
       "advancedSubtitle": "Set your own score limits",
       "explanationTitle": "How does FINN determine the market situation?",
-      "advancedHelp": "The five situations are fixed market-score ranges. They do not measure price drops, RSI, or the Fear & Greed Index. A standard card adds no macro or technical limits. All three current scores must still be available for a reliable assessment.",
-      "scoreExplanation": "This card saves market score {min} through {max}.",
+      "advancedHelp": "The five situations are fixed ranges of your benchmark score, a weighted average of Market, Macro, and Technical. They do not measure price drops, RSI, or the Fear & Greed Index. All three current component scores must be available.",
+      "scoreExplanation": "This card saves benchmark score {min} through {max}.",
       "customTitle": "Set my own rules",
-      "customDescription": "Choose your own market, macro, and technical score limits.",
-      "customSelected": "Adjust the three score ranges below.",
+      "customDescription": "Choose your own range for your benchmark score.",
+      "customSelected": "Adjust the benchmark score range below.",
+      "savedBenchmark": "benchmark score",
       "savedNotReady": "Not complete yet",
       "savedNoConditions": "No score conditions",
       "savedCustomTitle": "Custom conditions",
@@ -3245,11 +3247,11 @@
       "savedThrough": "through {max}",
       "savedCategories": { "market": "market", "macro": "macro", "technical": "technical" },
       "options": {
-        "heavy_pressure": { "title": "Heavy pressure", "description": "A very low market score", "rule": "This setup may qualify when the market score is very low." },
-        "pressure": { "title": "Under pressure", "description": "A low market score", "rule": "This setup may qualify when the market score is low." },
-        "no_direction": { "title": "No clear direction", "description": "A market score near the middle", "rule": "This setup may qualify when the market score is near the middle." },
-        "gaining_strength": { "title": "Gaining strength", "description": "A higher market score", "rule": "This setup may qualify when the market score is higher." },
-        "strong": { "title": "Strong market", "description": "A very high market score", "rule": "This setup may qualify when the market score is very high." }
+        "heavy_pressure": { "title": "Heavy pressure", "description": "A very low benchmark score", "rule": "This setup may qualify when the benchmark score is very low." },
+        "pressure": { "title": "Under pressure", "description": "A low benchmark score", "rule": "This setup may qualify when the benchmark score is low." },
+        "no_direction": { "title": "No clear direction", "description": "A benchmark score near the middle", "rule": "This setup may qualify when the benchmark score is near the middle." },
+        "gaining_strength": { "title": "Gaining strength", "description": "A higher benchmark score", "rule": "This setup may qualify when the benchmark score is higher." },
+        "strong": { "title": "Strong market", "description": "A very high benchmark score", "rule": "This setup may qualify when the benchmark score is very high." }
       }
     },
     "manager": {
@@ -3368,6 +3370,8 @@
       "scoreSavedOrigin": "These are this setup's saved score limits. They may have been carried over when the setup was created or duplicated; their original source is not recorded here. Review them before saving.",
       "scoreEditedOrigin": "You changed the score limits in this form. Saving confirms the displayed values for this setup.",
       "scorePartialOrigin": "This setup has saved limits and empty fields. Starting values shown for empty fields are suggestions; a limit stays empty until you move that handle yourself.",
+      "benchmarkTitle": "Your benchmark score",
+      "benchmarkDescription": "Weighted average of Market, Macro, and Technical",
       "macroTitle": "Macro",
       "macroDescription": "Macro environment",
       "technicalTitle": "Technical",

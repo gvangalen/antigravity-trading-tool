@@ -36,8 +36,7 @@ class FinnResponsesReadExecutor:
         fields = (
             "name", "symbol", "timeframe", "setup_type", "description",
             "dca_frequency", "dca_day_name", "dca_month_day", "min_investment",
-            "min_market_score", "max_market_score", "min_macro_score", "max_macro_score",
-            "min_technical_score", "max_technical_score", "saved_market_condition",
+            "min_benchmark_score", "max_benchmark_score", "saved_market_condition",
         )
         return {
             "fields": {key: saved[key] for key in fields if saved.get(key) is not None},

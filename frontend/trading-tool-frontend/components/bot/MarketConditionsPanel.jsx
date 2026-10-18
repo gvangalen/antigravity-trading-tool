@@ -180,7 +180,7 @@ export default function MarketConditionsInline({
   const trendStrengthStates = copy.trendStrengthStates || [];
   const exposureStates = copy.exposureStates || [];
 
-  const safeHealth = clamp(health);
+  const safeHealth = health == null ? null : clamp(health);
   const safeRisk = clamp(transitionRisk);
   const safePressure = clamp(pressure);
   const safeVolatility = clamp(volatility);
