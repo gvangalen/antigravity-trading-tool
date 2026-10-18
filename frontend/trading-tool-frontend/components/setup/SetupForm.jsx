@@ -468,7 +468,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={formData.symbol || selectedAsset || initialData?.symbol} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade}>
           <div className="space-y-5">
             <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
-            {scoreBlock(copy.benchmarkTitle || "Samengestelde benchmarkscore", benchmarkScore, updateScoreRange, copy.benchmarkDescription || "Het gewogen gemiddelde van Markt, Macro en Technisch.")}
+            {scoreBlock(copy.benchmarkTitle || "Jouw benchmarkscore", benchmarkScore, updateScoreRange, copy.benchmarkDescription || "Het gewogen gemiddelde van Markt, Macro en Technisch.")}
           </div>
         </MarketConditionPicker>
       </div>

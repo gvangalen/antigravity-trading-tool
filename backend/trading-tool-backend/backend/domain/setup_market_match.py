@@ -93,14 +93,17 @@ def match_setup(
         result["status"] = "insufficient_data"
         result["reasons"].append("De samengestelde benchmarkscore kan niet worden berekend.")
         return result
-    within = (minimum is None or value >= minimum) and (maximum is None or value <= maximum)
-    result["score"] = benchmark_proximity(value, minimum, maximum)
+    # Setup bands and the product UI use whole points. Compare the same rounded
+    # point that the user sees; otherwise 25.5 looks like 26 but misses 26–45.
+    displayed_value = int(value + 0.5)
+    within = (minimum is None or displayed_value >= minimum) and (maximum is None or displayed_value <= maximum)
+    result["score"] = benchmark_proximity(displayed_value, minimum, maximum)
     result["components"]["benchmark"] = {
-        "score": value, "minimum": minimum, "maximum": maximum,
+        "score": displayed_value, "minimum": minimum, "maximum": maximum,
         "within_range": within, "match": result["score"],
     }
     if not within:
-        result["reasons"].append(f"benchmark: {value:g} valt buiten de opgeslagen voorwaarden.")
+        result["reasons"].append(f"benchmark: {displayed_value:g} valt buiten de opgeslagen voorwaarden.")
     result["is_active"] = within
     result["status"] = "matches" if result["is_active"] else "outside_conditions"
     return result

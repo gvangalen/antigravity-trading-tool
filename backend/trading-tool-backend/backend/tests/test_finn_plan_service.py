@@ -10187,7 +10187,7 @@ def test_behavioral_event_from_risky_execution_is_auditable():
             "risk_level": "high",
             "confidence": 0.48,
             "guardrail_reason": "Daglimiet overschreden",
-            "setup_match": {"status": "partial", "score": 62},
+            "setup_match": {"status": "outside_conditions", "score": 62},
         },
         is_live=False,
     )
@@ -10196,8 +10196,27 @@ def test_behavioral_event_from_risky_execution_is_auditable():
     assert event["type"] == "plan_deviation_attempt"
     assert event["decision_id"] == 22
     assert any("confidence" in reason for reason in event["reasons"])
-    assert any("setup match" in reason for reason in event["reasons"])
+    assert any("setupvoorwaarden" in reason for reason in event["reasons"])
     assert any("guardrail" in reason for reason in event["reasons"])
+
+
+def test_behavioral_event_does_not_treat_matching_boundary_proximity_as_deviation():
+    service = _service()
+    action = service._bot_execution_action(
+        "paper_execute_bot_decision",
+        {
+            "decision_id": 23,
+            "bot_id": 9,
+            "asset": "BTC",
+            "action": "buy",
+            "risk_level": "low",
+            "confidence": 0.85,
+            "setup_match": {"status": "matches", "score": 60},
+        },
+        is_live=False,
+    )
+
+    assert service._behavioral_event_from_execution_action(action, result_status="executed") is None
 
 
 def test_behavioral_insight_counts_override_events():

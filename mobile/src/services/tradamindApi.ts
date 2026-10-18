@@ -520,6 +520,13 @@ export const intelligenceApi = {
     });
   },
 
+  marketMatches(symbol: string) {
+    return apiClient.request<SetupResponse>('/api/setups/market-matches', {
+      query: { symbol },
+      timeoutMs: 25000,
+    });
+  },
+
   activeStrategyToday() {
     return apiClient.get<StrategyResponse>('/api/strategies/active-today');
   },

@@ -21185,12 +21185,12 @@ class FinnPlanService:
         context = payload.get("behavioral_context") if isinstance(payload.get("behavioral_context"), dict) else {}
         reasons = []
         confidence = self._to_float(context.get("confidence"))
-        setup_match_score = self._to_float(context.get("setup_match_score"))
+        setup_match_status = context.get("setup_match_status")
         guardrail_reason = context.get("guardrail_reason")
         if confidence is not None and confidence < 0.55:
             reasons.append(f"confidence {confidence:g} onder 0.55")
-        if setup_match_score is not None and setup_match_score < 70:
-            reasons.append(f"setup match {setup_match_score:g} onder 70")
+        if setup_match_status in {"outside_conditions", "insufficient_data", "unconfigured"}:
+            reasons.append(f"setupvoorwaarden: {setup_match_status}")
         if guardrail_reason:
             reasons.append(f"guardrail: {guardrail_reason}")
         if action.get("type") == "live_preflight_bot_decision":

@@ -498,7 +498,7 @@ export default function OnboardingPlanPage() {
             <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={symbol} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")}>
               <div className="grid gap-3">
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="mb-2 text-xs font-bold text-slate-700">{copy.benchmarkScoreLabel || "Samengestelde benchmarkscore"}</div>
+                    <div className="mb-2 text-xs font-bold text-slate-700">{copy.benchmarkScoreLabel || "Jouw benchmarkscore"}</div>
                     <div className="grid grid-cols-2 gap-2">
                       {["min", "max"].map((bound) => (
                         <Field key={bound} label={bound === "min" ? copy.scoreMinLabel : copy.scoreMaxLabel}>

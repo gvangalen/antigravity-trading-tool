@@ -163,6 +163,12 @@ function getUiCopy(locale = "nl") {
       positive: "Positive",
       negative: "Negative",
       neutral: "Neutral",
+      componentStates: {
+        market: { low: "Market signals weak", mixed: "Market signals mixed", high: "Market signals strong" },
+        macro: { low: "Macro headwinds", mixed: "Macro mixed", high: "Macro supportive" },
+        technical: { low: "Technical signals weak", mixed: "Technical signals mixed", high: "Technical signals strong" },
+      },
+      indicatorStates: { low: "Little support", mixed: "Mixed", high: "Strong support" },
       unavailable: "Insufficient data",
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
@@ -185,12 +191,13 @@ function getUiCopy(locale = "nl") {
       planBridgeTitle: "Best matching plan for current market conditions",
       planBridgeDescription: "Open My Plan to review the linked plan, setup and strategy before bot execution.",
       openMyPlan: "Open My Plan",
-      setupScore: "Setup match",
+      setupScore: "Setup closeness",
+      planBridgeScoreHelp: "The setup conditions match. Closeness is not a buy signal; the strategy decides whether a trade follows.",
       setup: "Setup",
       tuneEngine: "Tune engine",
       closeTuning: "Close tuning",
       weight: "Weight",
-      weightInfluence: "Influence on the combined score",
+      weightInfluence: "Influence on your benchmark score",
       balancedWeights: "The weights add up to 100%.",
       unbalancedWeights: "The weights must add up to 100%.",
       applyWeights: "Apply weights",
@@ -326,6 +333,12 @@ function getUiCopy(locale = "nl") {
       positive: "Positiv",
       negative: "Negativ",
       neutral: "Neutral",
+      componentStates: {
+        market: { low: "Marktsignale schwach", mixed: "Marktsignale gemischt", high: "Marktsignale stark" },
+        macro: { low: "Makro-Gegenwind", mixed: "Makro gemischt", high: "Makro unterstützt" },
+        technical: { low: "Technische Signale schwach", mixed: "Technische Signale gemischt", high: "Technische Signale stark" },
+      },
+      indicatorStates: { low: "Wenig Unterstützung", mixed: "Gemischt", high: "Starke Unterstützung" },
       unavailable: "Unzureichende Daten",
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
@@ -348,12 +361,13 @@ function getUiCopy(locale = "nl") {
       planBridgeTitle: "Bester Plan für die aktuellen Marktbedingungen",
       planBridgeDescription: "Öffne Mein Plan, um den verknüpften Plan, das Setup und die Strategie vor der Bot-Ausführung zu prüfen.",
       openMyPlan: "Mein Plan öffnen",
-      setupScore: "Setup-Passung",
+      setupScore: "Setup-Nähe",
+      planBridgeScoreHelp: "Die Setup-Bedingungen passen. Nähe ist kein Kaufsignal; die Strategie entscheidet über einen Trade.",
       setup: "Setup",
       tuneEngine: "Engine abstimmen",
       closeTuning: "Abstimmung schließen",
       weight: "Gewichtung",
-      weightInfluence: "Einfluss auf den kombinierten Score",
+      weightInfluence: "Einfluss auf deinen Benchmark-Score",
       balancedWeights: "Die Gewichtungen ergeben zusammen 100 %.",
       unbalancedWeights: "Die Gewichtungen müssen zusammen 100 % ergeben.",
       applyWeights: "Gewichtungen anwenden",
@@ -488,6 +502,12 @@ function getUiCopy(locale = "nl") {
     positive: "Positief",
     negative: "Negatief",
     neutral: "Neutraal",
+    componentStates: {
+      market: { low: "Marktsignalen zwak", mixed: "Marktsignalen gemengd", high: "Marktsignalen sterk" },
+      macro: { low: "Macro werkt tegen", mixed: "Macro is gemengd", high: "Macro ondersteunt" },
+      technical: { low: "Technische signalen zwak", mixed: "Technische signalen gemengd", high: "Technische signalen sterk" },
+    },
+    indicatorStates: { low: "Weinig steun", mixed: "Gemengd", high: "Veel steun" },
     unavailable: "Onvoldoende data",
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
@@ -510,12 +530,13 @@ function getUiCopy(locale = "nl") {
     planBridgeTitle: "Best passende plan voor de huidige marktomstandigheden",
     planBridgeDescription: "Open Mijn Plan om het gekoppelde plan, de setup en strategie te beoordelen voordat de bot uitvoert.",
     openMyPlan: "Open Mijn Plan",
-    setupScore: "Setupmatch",
+    setupScore: "Nabijheid setup",
+    planBridgeScoreHelp: "De setupvoorwaarden passen. Nabijheid is geen koopsignaal; de strategie bepaalt of er een trade volgt.",
     setup: "Setup",
     tuneEngine: "Engine afstemmen",
     closeTuning: "Afstemmen sluiten",
     weight: "Weging",
-    weightInfluence: "Invloed op de gecombineerde score",
+    weightInfluence: "Invloed op jouw benchmarkscore",
     balancedWeights: "De wegingen komen samen uit op 100%.",
     unbalancedWeights: "De wegingen moeten samen op 100% uitkomen.",
     applyWeights: "Wegingen toepassen",
@@ -1172,6 +1193,20 @@ function scoreTone(value, ui = getUiCopy("nl")) {
   };
 }
 
+function componentScoreLabel(category, value, ui) {
+  const score = normalizeScore(value);
+  if (score === null) return ui.unavailable;
+  const band = score <= 35 ? "low" : score >= 70 ? "high" : "mixed";
+  return ui.componentStates?.[category]?.[band] || ui.unavailable;
+}
+
+function indicatorScoreLabel(value, ui) {
+  const score = normalizeScore(value);
+  if (score === null) return ui.unavailable;
+  const band = score <= 35 ? "low" : score >= 70 ? "high" : "mixed";
+  return ui.indicatorStates?.[band] || ui.unavailable;
+}
+
 function explainIndicatorAssessment({
   name,
   label,
@@ -1414,7 +1449,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       direction,
       score,
       signalTone: tone,
-      scoreLabel: score === null ? tone.label : `${tone.label} · ${Math.round(score)}`,
+      scoreLabel: score === null ? ui.unavailable : `${indicatorScoreLabel(score, ui)} · ${Math.round(score)}`,
       detail,
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
       ruleOrigin,
@@ -1553,7 +1588,7 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
           const benchmarkCondition = item.id === "combined" ? marketConditionForScore(item.score) : null;
           const summary = item.id === "combined"
             ? (benchmarkCondition ? conditionOptions?.[benchmarkCondition.id]?.title : ui.unavailable)
-            : tone.label;
+            : componentScoreLabel(item.id, item.score, ui);
           const sourceAt = item.id === "combined" ? combinedSource : sectionSource(item.id);
           return (
             <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
@@ -1719,6 +1754,7 @@ function PlanBridge({ candidate, onOpenPlan, ui }) {
                 style={{ width: `${setupScore ?? 0}%` }}
               />
             </div>
+            <p className="mt-1.5 max-w-52 text-[10px] leading-relaxed text-slate-500">{ui.planBridgeScoreHelp}</p>
           </div>
           <button
             type="button"

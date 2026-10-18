@@ -73,9 +73,25 @@ def test_a_valid_boundary_is_not_displayed_as_zero_percent_match():
     matched = match_setup(setup(1, min_benchmark_score=40, max_benchmark_score=60),
                           {"macro": 40, "technical": 40, "market": 40})
     outside = match_setup(setup(2, min_benchmark_score=40, max_benchmark_score=60),
-                          {"macro": 39.9, "technical": 39.9, "market": 39.9})
+                          {"macro": 39.4, "technical": 39.4, "market": 39.4})
     assert matched["status"] == "matches" and matched["score"] == 60
     assert outside["status"] == "outside_conditions" and outside["score"] <= 59
+
+
+@pytest.mark.parametrize("boundary", [25, 45, 60, 75])
+def test_decimal_benchmark_uses_the_same_rounded_band_as_the_visible_score(boundary):
+    lower = setup(1, min_benchmark_score=0, max_benchmark_score=boundary)
+    upper = setup(2, min_benchmark_score=boundary + 1, max_benchmark_score=100)
+    for measured, displayed, expected in (
+        (boundary + 0.4, boundary, 1),
+        (boundary + 0.5, boundary + 1, 2),
+        (boundary + 0.9, boundary + 1, 2),
+    ):
+        scores = {"macro": measured, "technical": measured, "market": measured}
+        rows = rank_matches([lower, upper], scores)
+        assert sum(item["status"] == "matches" for item in rows) == 1
+        assert next(item for item in rows if item["is_best"])["setup_id"] == expected
+        assert all(item["components"]["benchmark"]["score"] == displayed for item in rows)
 
 
 def test_missing_data_and_unconfigured_conditions_have_no_match_score():
