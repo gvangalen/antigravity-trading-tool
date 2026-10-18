@@ -3,12 +3,25 @@ a:I[57150,[],""]
 :HL["/_next/static/css/6711fafbd5653fc9.css","style"]
 :HL["/_next/static/css/19c9db1a3af975a5.css","style"]
 :HL["/_next/static/css/7eb42ea66a98a600.css","style"]
-2:Tdcc,
+2:T1293,
 (function () {
   var VERSION = "static-export";
   var VERSION_KEY = "tradamind_app_cache_version";
   var RECOVERY_PREFIX = "tradamind_app_cache_recovered_" + VERSION + "_";
   var RECOVERY_COOLDOWN_MS = 30000;
+  var loadedDeploySha = null;
+
+  function readDeploySha() {
+    if (typeof fetch !== "function") return Promise.resolve(null);
+    return fetch("/build-info.json?__tm_version=" + Date.now(), { cache: "no-store" })
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (info) { return info && typeof info.commit_sha === "string" ? info.commit_sha : null; })
+      .catch(function () { return null; });
+  }
+
+  // Remember which deployment this tab loaded. A tab left open across a
+  // deployment can later combine its old webpack runtime with a new route chunk.
+  readDeploySha().then(function (sha) { loadedDeploySha = sha; });
 
   function shouldRecover(reason) {
     var text = String(reason || "");
@@ -25,6 +38,15 @@ a:I[57150,[],""]
     if (/ChunkLoadError|Loading chunk|Cannot find module|Cannot read properties of undefined [(]reading ['"]call['"][)]/i.test(text)) return "chunk";
     if (text === "build-version-change") return "version";
     return "runtime";
+  }
+
+  function recoverMixedDeploy(reason) {
+    var text = String(reason || "");
+    var looksLikeWebpackExport = /[(]0[ ]*,[ ]*[A-Za-z_$][A-Za-z0-9_$]*[.][A-Za-z_$][A-Za-z0-9_$]*[)][ ]+is not a function/i.test(text);
+    if (!looksLikeWebpackExport || text.indexOf("/_next/static/chunks/") === -1 || !loadedDeploySha) return;
+    readDeploySha().then(function (currentSha) {
+      if (currentSha && currentSha !== loadedDeploySha) clearStaleApp("mixed-deploy");
+    });
   }
 
   async function clearStaleApp(reason) {
@@ -89,12 +111,14 @@ a:I[57150,[],""]
     ].filter(Boolean).join(" ");
 
     if (shouldRecover(reason)) clearStaleApp(reason);
+    else recoverMixedDeploy(reason);
   }, true);
 
   window.addEventListener("unhandledrejection", function (event) {
     var value = event && event.reason;
     var reason = value ? (value.stack || value.message || String(value)) : "";
     if (shouldRecover(reason)) clearStaleApp(reason);
+    else recoverMixedDeploy(reason);
   });
 })();0:{"P":null,"b":"static-export","p":"","c":["","admin","ai"],"i":false,"f":[[["",{"children":["(protected)",{"children":["admin",{"children":["ai",{"children":["__PAGE__",{}]}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/6711fafbd5653fc9.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["admin","$L6",{"children":["ai","$L7",{"children":["__PAGE__","$L8",{},null,false]},null,false]},null,false]},null,false]},null,false],"$L9",false]],"m":"$undefined","G":["$a",[]],"s":false,"S":true}
 c:I[69835,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-b5f6bfdd65a41376.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9495","static/chunks/9495-7299d89a053939c9.js","7177","static/chunks/app/layout-03e6bbf073ac0b63.js"],"default"]

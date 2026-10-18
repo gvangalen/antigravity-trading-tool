@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Desktopbrowser-herkeuring en gemengde frontendbundle
+
+Phase: `LOCAL_REPAIR_VALIDATED`. Onafhankelijke ingelogde browser-QA op live SHA
+`85ed755aa13c4b18c6571949328adc40373e32b3` zag een gevulde FINN-feed
+die bij paginawissel en refresh gelijk bleef, twee onderscheiden BTC-plannen,
+een contextvaste read-only chat en een Paper-bot met €1.000 budgetlimiet maar
+zonder ingesteld virtueel kassaldo. Analyse en Mijn Plan toonden daarna
+dezelfde gecombineerde benchmarkscore 30. De eerste navigatie van Mijn Plan
+naar Analyse crashte echter met `TypeError: (0 , tz.bF) is not a function` in
+een Next.js-chunk; een volledige refresh herstelde Analyse. Het betrokken
+productiechunk roept `bF` aan en de huidige gekoppelde chunk exporteert die
+functie. Dit past bij een tab met een gemengde oude en nieuwe chunkgraph, maar
+de oorspronkelijke clientbundle van de QA-tab is niet vastgelegd.
+
+De kandidaat `codex/web-stale-chunk-recovery` laat een browser-tab zijn
+oorspronkelijke deploy-SHA onthouden. Alleen bij dit specifieke type
+webpack-exportfout in een Next.js-chunk vergelijkt hij die met de huidige
+frontend-buildinfo; bij een daadwerkelijke deploywissel herlaadt hij eenmaal
+met cacheverversing. Een identieke SHA of een gewone React-fout wordt niet
+automatisch herladen. De gerichte regressieproef slaagde 3/3; webbuild,
+typecheck, i18n-, chat-, voorstel- en setupcontroles en de volledige
+backend-suite (3914 passed, 3 bestaande skips) slaagden. De bestaande losse
+`release-hardening.test.mjs` heeft drie oudere bot-assertions die niet in de
+canonieke webgate zitten; de drie hersteltests in dat bestand zijn groen.
+Dit is lokale Build-evidence, geen live herkeuring van de nieuwe kandidaat.
+Het QA-account had geen gesloten Paper-trade, dus de Trade Review-browserkaart
+is nog niet afgetekend. De eerdere beschermde Paper-/dossierproeven blijven
+afzonderlijk bewijs voor de backendketen.
+
 ## Volledige Score 2.0-Paper- en Trade Review-acceptatie
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De mobiele opmaakreparatie is via

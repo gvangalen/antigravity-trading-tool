@@ -177,6 +177,39 @@ test("recovers the old webpack runtime call error without reloading for ordinary
   assert.match(replacements[0], /__tm_recover=test-build-chunk-/);
 });
 
+test("recovers a mixed route chunk only when the deployment changed after this tab loaded", async () => {
+  const inlineScript = rootLayout.match(/const script = `([\s\S]*?)`;/)?.[1]
+    .replace('${JSON.stringify(STALE_APP_RECOVERY_VERSION)}', '"test-build"');
+  assert.ok(inlineScript);
+
+  for (const currentSha of ["old-sha", "new-sha"]) {
+    const listeners = {};
+    const replacements = [];
+    const storage = new Map([["tradamind_app_cache_version", "test-build"]]);
+    let reads = 0;
+    const context = {
+      Date,
+      Promise,
+      URL,
+      fetch: async () => ({ ok: true, json: async () => ({ commit_sha: ++reads === 1 ? "old-sha" : currentSha }) }),
+      window: {
+        location: { href: "https://tradamind.com/asset?symbol=BTC", replace: (url) => replacements.push(url) },
+        localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+        sessionStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+        addEventListener: (name, handler) => { listeners[name] = handler; },
+      },
+      navigator: {},
+    };
+    runInNewContext(inlineScript, context);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    listeners.error({ message: "(0 , tz.bF) is not a function", filename: "https://tradamind.com/_next/static/chunks/3822-old.js" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(replacements.length, currentSha === "new-sha" ? 1 : 0);
+    if (currentSha === "new-sha") assert.match(replacements[0], /__tm_recover=test-build-runtime-/);
+  }
+});
+
 test("keeps route documents fresh while caching immutable build assets", () => {
   assert.match(staticServer, /relativePath\.startsWith\('_next\/static\/'\)/);
   assert.match(staticServer, /max-age=31536000, immutable/);
