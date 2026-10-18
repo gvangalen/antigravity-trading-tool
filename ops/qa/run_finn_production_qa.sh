@@ -17,7 +17,7 @@ allow_fixture_actions="${FINN_QA_ALLOW_FIXTURE_ACTIONS:-false}"
 allow_safe_fixture_execution="${FINN_QA_ALLOW_FIXTURE_EXECUTION:-false}"
 
 [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || usage
-[[ "$qa_profile" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|auto_paper_trade_history|portfolio_paper_fx)$ ]] || usage
+[[ "$qa_profile" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|closed_paper_trade_review|auto_paper_trade_history|portfolio_paper_fx)$ ]] || usage
 [[ "$manifest_id" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]] || usage
 [[ "$run_label" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]] || usage
 [[ "$allow_fixture_actions" =~ ^(true|false)$ ]] || usage
@@ -29,6 +29,12 @@ if [[ "$qa_profile" == "trade_review_preflight" && ( "$manifest_id" != "none" ||
   usage
 fi
 if [[ "$qa_profile" == "score2_stale_paper" && ( "$manifest_id" != "none" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "true" ) ]]; then
+  usage
+fi
+if [[ "$qa_profile" =~ ^(score2_positive_paper|score2_outside_paper)$ && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "true" ) ]]; then
+  usage
+fi
+if [[ "$qa_profile" == "closed_paper_trade_review" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "true" ) ]]; then
   usage
 fi
 if [[ "$qa_profile" == "auto_paper_trade_history" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "true" ) ]]; then

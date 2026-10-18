@@ -38,6 +38,9 @@ ALLOWED_PROFILES = {
     "safety",
     "latency",
     "score2_stale_paper",
+    "score2_positive_paper",
+    "score2_outside_paper",
+    "closed_paper_trade_review",
     "auto_paper_trade_history",
     "portfolio_paper_fx",
 }
@@ -1842,6 +1845,32 @@ def main() -> int:
                 report["safety"]["read_only_profile"] = False
                 report["safety"]["execution_calls"] = 1
                 report["score2_stale_paper"] = run_stale_probe(fixture_namespace or "")
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile in {"score2_positive_paper", "score2_outside_paper"}:
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("score2_match_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE") != "1":
+                    raise ValueError("score2_match_fixture_not_authorized")
+                from backend.scripts.probe_protected_score2_match_paper import run as run_match_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 1
+                report[args.profile] = run_match_probe(
+                    fixture_namespace or "", outside=args.profile == "score2_outside_paper",
+                )
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "closed_paper_trade_review":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("closed_paper_review_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE") != "1":
+                    raise ValueError("closed_paper_review_fixture_not_authorized")
+                from backend.scripts.probe_protected_closed_paper_review import run as run_review_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 2
+                report["closed_paper_trade_review"] = run_review_probe(fixture_namespace or "")
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "auto_paper_trade_history":

@@ -155,6 +155,54 @@ def test_auto_paper_history_profile_is_explicitly_gated_and_owner_isolated(monke
         probe._require_protected_run("../unsafe")
 
 
+def test_score2_match_paper_profiles_are_separately_gated(monkeypatch):
+    from backend.scripts import probe_protected_score2_match_paper as probe
+
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    for profile in ("score2_positive_paper", "score2_outside_paper"):
+        assert profile in module.ALLOWED_PROFILES
+        assert profile in workflow and profile in dispatch
+    assert "FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE=0" in workflow
+    assert "FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE=1" in workflow
+    monkeypatch.delenv("FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE", raising=False)
+    with pytest.raises(RuntimeError, match="score2_match_fixture_not_authorized"):
+        probe.run("qa-123456-1-abcd1234-5678abcd", outside=False)
+
+
+def test_score2_match_paper_result_checks_match_before_execution():
+    from backend.scripts import probe_protected_score2_match_paper as probe
+
+    source = Path(probe.__file__).read_text(encoding="utf-8")
+    assert "run_trading_bot_agent(" in source
+    assert "paper_only=True" in source
+    assert "max_benchmark_score" in source
+    assert "fixture._quarantine" in source
+    assert "score2_positive_match_wrong" in source
+    assert "score2_outside_match_wrong" in source
+
+
+def test_closed_paper_review_profile_requires_authorization_and_preserves_evidence(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "closed_paper_trade_review" in module.ALLOWED_PROFILES
+    assert "closed_paper_trade_review" in workflow and "closed_paper_trade_review" in dispatch
+    assert "FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE=0" in workflow
+    assert "FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE=1" in workflow
+    monkeypatch.delenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE", raising=False)
+    with pytest.raises(RuntimeError, match="closed_paper_review_fixture_not_authorized"):
+        probe.run("qa-123456-1-abcd1234-5678abcd")
+    source = Path(probe.__file__).read_text(encoding="utf-8")
+    assert "is_live=False" in source
+    assert "_close_paper_position" in source
+    assert "list_reviews" in source and "set_lesson" in source and "get_review" in source
+    assert "passed=False" in source
+
+
 def test_protected_stale_paper_contract_identifies_the_failed_safety_boundary():
     path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_protected_score2_stale_paper.py"
     spec = importlib.util.spec_from_file_location("protected_stale_probe_contract", path)

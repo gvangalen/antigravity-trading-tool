@@ -57,6 +57,18 @@ def test_partial_fills_and_partial_exits_become_one_completed_position():
     assert excluded == {"legacy_or_ambiguous": 0, "inconsistent": 0}
 
 
+def test_utc_plan_capture_and_naive_utc_ledger_timestamp_keep_entry_plan():
+    rows = [fill(1, 1, -100), fill(2, -1, 110)]
+    for row in rows:
+        row["ts"] = row["ts"].replace(tzinfo=None)
+    rows[0]["plan_captured_at"] = START
+    reviews, excluded = build_closed_positions(rows, {}, {(5, "BTC"): Decimal(0)})
+    assert excluded == {"legacy_or_ambiguous": 0, "inconsistent": 0}
+    assert len(reviews) == 1
+    assert reviews[0]["plan_snapshot"] == {"risk": {"max": 20}}
+    assert reviews[0]["plan_provenance"]["source"] == "bot_order_context"
+
+
 def test_exit_order_plan_is_not_relabelled_as_original_entry_plan():
     rows = [fill(1, 1, -100), fill(2, -1, 110)]
     rows[0]["plan_snapshot"] = None
