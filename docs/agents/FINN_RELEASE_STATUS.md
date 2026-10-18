@@ -6,55 +6,43 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade: Reflectie en FINN-vervolgvragen
 
-Vervolg na onafhankelijke QA op `cd0e6ea05ee905f969369f29cd599a16c99c0e99`:
-de oude Paper-analysetekst en het label voor een gebruikersvraag zijn hersteld,
-maar de FINN-hoofdchat meldde dat de reviewleesroute niet beschikbaar was. De
-leesadapter combineerde het tijdstip van een botbeslissing (oude UTC-waarde
-zonder tijdzone) met de tijdzonebewuste uitstap van een gesloten dossier via
-`max(...)`. Python kan die twee typen niet vergelijken; dan faalt de complete
-toollezing. De nieuwe kandidaat normaliseert beide tot UTC en test expliciet
-een eigenaar met zowel een botbeslissing als een gesloten Paper-dossier.
-Deze codeoorzaak past bij de live uitkomst; de exacte productie-exceptie is
-zonder runtrace niet zelfstandig vastgesteld. Een nieuwe live hertest blijft
-vereist vóór coachacceptatie.
+Phase: `INDEPENDENT_DESKTOP_QA_ACCEPTED` voor de gerichte Paper-reflectie- en
+coachflow. De drie reparaties zijn gemerged via [PR #422](https://github.com/gvangalen/antigravity-trading-tool/pull/422),
+[PR #423](https://github.com/gvangalen/antigravity-trading-tool/pull/423) en
+[PR #424](https://github.com/gvangalen/antigravity-trading-tool/pull/424).
+Op product-SHA `8dea1147cf6112355bf599e9b7d8b7d6979b3f8b` slaagden alle
+vijf PR-controles, [main-CI run 39164257770](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39164257770)
+en [Auto Deploy run 39164419460](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39164419460).
+Backend-health en frontend-buildinfo gaven voor en na onafhankelijke QA beide
+HTTP 200 met dezelfde SHA.
 
-Update na onafhankelijke browser-QA op `c2d2c532c260e9f8fc77906d2696f730674ce363`:
-het dossierantwoord blijft na refresh staan en het zevendaagse overzicht toont
-twee gesloten, geanalyseerde Paper-trades. De hoofdchat noemde wel beide
-resultaten, maar kon de nieuwste trade niet aanwijzen en beweerde ten onrechte
-dat de transactiegeschiedenis ontbrak. Ook bleef een oude, reeds opgeslagen
-analysetekst “vóór kosten” zeggen. De vervolgkandidaat geeft de hoofdchat een
-getypeerde, op uitstapmoment gesorteerde gesloten-tradelijst met eigenaargebonden
-bot, instap, uitstap, resultaatbasis en bewijsreferenties. Alleen de bekende
-oude Paper-samenvattingszin wordt bij uitlezing gecorrigeerd. De gebruikersvraag
-in het dossier krijgt een eigen label, los van de vrije observatienotitie.
-Deze vervolgkandidaat wacht op CI, deployment en een nieuwe onafhankelijke
-live herkeuring; de volledige coachflow is nog niet geaccepteerd.
+De eerste live herkeuring bevestigde twee blijvende gesloten BTC-Paper-dossiers,
+het zevendaagse overzicht, een werkende en na refresh bewaarde dossiervraag,
+en een Paper-resultaatlabel voor virtuele kasstromen. De tweede reparatie maakte
+ook de oude opgeslagen analysetekst en het label “Jouw vraag” correct. De
+hoofdchat kon de reviews toen nog niet lezen. De oorzaak in code was een
+`max(...)` van een botbeslissing zonder tijdzone en een gesloten trade met
+tijdzone. De derde reparatie normaliseert die tijdstippen naar UTC en heeft een
+regressietest met beide soorten records. De exacte productie-exceptie is zonder
+runtrace niet onafhankelijk vastgelegd.
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. De vorige onafhankelijke desktopproef op
-`d4a50a52d12bf84350945017faab3c84da83baae` zag twee blijvende gesloten
-Paper-dossiers en het zevendaagse overzicht. Een vraag binnen een dossier gaf
-echter HTTP 503; de hoofdchat kon de laatst gesloten BTC-Papertrade niet lezen.
-Ook werd het virtuele kasstroomresultaat ten onrechte als “vóór kosten” gelabeld.
+De laatste onafhankelijke ingelogde browserproef op dezelfde product-SHA
+beantwoordde de exacte vraag naar de laatst gesloten BTC-Papertrade met bot
+“QA Paper Full Close 1810”, sluitdatum 18 oktober en opgeslagen resultaat
+`−€0,25` uit virtuele kasstromen. De veilige leervraag gebruikte het
+vastgelegde instap- en uitstapmoment en maakte geen plantrouw of motivatie op.
+Er verscheen geen voorstel of order, geen HTTP- of consolefout. FINN noemde het
+reviewnummer niet zelf; de bot en het resultaat kwamen overeen met dossier #4.
+De QA-allowlisttoegang voor dit browseraccount is na afloop weer verwijderd via
+[run 39164622128](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39164622128).
 
-De kandidaat laat een dossiervervolgvraag alleen een bewijsgebonden thema en
-uitvoeringsreferenties kiezen. Als de modelselectie faalt, geeft de service
-een beperkte feitelijke reactie uit het vastgelegde dossier, met aparte
-bronmarkering. De hoofdchat kan gesloten trades, hun eigenaargebonden botnaam
-en resultaat lezen. Reflectie en chat noemen het Paper-resultaat voortaan
-virtuele kasstromen inclusief eventuele gesimuleerde kosten. Het bestaande
-dagrapport blijft een afzonderlijk product; per-trade analyse hoort in
-Reflectie en het zevendaagse overzicht.
-
-Lokale validatie: **3924 backendtests geslaagd, 3 bestaande skips**; webbuild,
-typecheck, i18n-, command- en proposalchecks geslaagd. De lokale
-actiecontractmatrix slaagde **16/16**. Echte Luna/Responses-proeven voor twee
-gesloten-tradevragen slaagden; de ontwikkel- en regressieselector slaagden
-respectievelijk **20/20** en **109/109** zonder provider-, schema- of
-validatiefout. `audit:high` slaagde met één bestaande moderate Next.js-melding.
-Deploymentidentiteit en onafhankelijke ingelogde QA ontbreken nog. De algemene
-Trade Review-uitrol blijft beperkt tot de bestaande QA-allowlist; exchange-
-import en mobiel vallen buiten deze desktopherkeuring.
+Lokale validatie: **3925 backendtests geslaagd, 3 bestaande skips**; webbuild,
+typecheck, i18n-, command- en proposalchecks geslaagd; actiecontractmatrix
+**16/16** zonder Live-order. Echte Luna/Responses-proeven voor twee
+dossiervragen en de selectorevaluaties **20/20** en **109/109** slaagden.
+Het afzonderlijke dagelijkse rapport is niet de plek voor per-tradereflectie.
+Algemene Trade Review-uitrol, gekoppelde exchange-import en de mobiele flow
+blijven buiten deze geaccepteerde desktop-Paper-scope.
 
 ## Desktopbrowser: 100% Paper-sluiting en Trade Review-toegang
 
