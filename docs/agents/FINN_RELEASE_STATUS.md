@@ -4,6 +4,58 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Score 2.0 Paper- en Trade Review-QA-herstel
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De beschermde onafhankelijke QA op
+productie-SHA `5ff556adbb8236dc3b627e76a96bc3cbc320bf9b` gaf
+`NOT_ACCEPTED`: de stale-score-Paper-proef en de automatische Paper-historieproef
+faalden op samengestelde verificatiecodes, de Trade Review-preflight kreeg
+geen toegang tot de beschermde QA-eigenaar en de native iPhone-proef bleef
+achter een iOS-wachtwoorddialoog. Productie-health en frontend-buildinfo gaven
+op 2026-10-18 opnieuw HTTP 200 met exact die SHA. Dit is geen bewijs dat de
+nieuwe reparatie live staat of door QA is geaccepteerd.
+
+De nieuwe kandidaat `codex/paper-qa-diagnostics` maakt de Paper-invarianten
+afzonderlijk herkenbaar zonder fixturewaarden of eigenaar-ID's te exporteren.
+De stale-scorefixture gebruikt de huidige opgeslagen gecombineerde
+benchmarkgrenzen; de oude losse categoriegrenzen werden door Score 2.0 terecht
+als ongeconfigureerd behandeld. De automatische Paper-proef vergelijkt de
+daadwerkelijke gevalideerde EUR-fill, het maximaal goedgekeurde bedrag,
+portfolio, grootboek en tradehistorie; zij verwacht niet langer dat de
+planningprijs bij uitvoering onveranderd is. De productie-PM2-config voegt
+alleen in een expliciete `allowlist`-rollout de bestaande beschermde QA-binding
+toe aan de backend- en worker-allowlist, nooit aan de frontend of staging.
+Een ongeldig bindingnummer of ongeldige bestaande allowlist blijft gesloten.
+
+Op een aparte wegwerp-PostgreSQL/Redis-stack zijn de actuele Score 2.0-paden
+doorlopen: een verouderde bron gaf `insufficient_data` en Paper `hold` zonder
+order; een volledige score binnen de setupgrenzen gaf één Paper-buy, een
+gevulde order en bijpassende ledger/portfolio; een score buiten de grenzen gaf
+`outside_conditions`, Paper `hold`, geen order en ongewijzigd virtueel cash.
+De beschermde automatische Paper-proef slaagde lokaal ook bij een EUR-fillprijs
+van €60.000 in plaats van de €50.000-planningprijs. Dit is lokale Build-evidence,
+geen beschermde productie-QA.
+
+De volledige backend-suite slaagde met **3910 passed, 3 skipped**; log-SHA-256
+`c6add19bcf85b304afb00816a06120c7687442789f0e3907c79357a4032dac32`.
+De lokale
+API/Celery/Responses-actiecontractmatrix slaagde **16/16**, zonder Live- of
+brokerorder; artifact SHA-256
+`7acea9b3a744e82a94a30c21ad3ac79b7bba94a67938988ecbd3625a51c5d71f`.
+Echte-providerselectie slaagde **20/20** in development (SHA-256
+`d9e4f3fdcdc505a418b8b34623c05a23286e5cffae81e2ff65fceab29ab96a49`)
+en **109/109** in regression (SHA-256
+`fe3e992d30d15f89889535cf9d30529fed79a731755c75faa2338286c047b316`).
+Frontend productiebuild, typecheck, i18n, command/proposal-tests en audit op
+high/critical slaagden; de audit meldt één moderate Next.js-advisory. Mobiele
+typecheck, lint zonder errors en iOS/Android Expo-bundels slaagden. Native
+iPhone-bediening en de volledige gesloten-trade/linked-exchange-acceptatie
+blijven voor onafhankelijke QA; er is geen Live-order uitgevoerd.
+
+De kandidaat heeft nog geen CI-, deploy- of nieuw QA-verdict. Build start de
+beschermde QA-workflow niet zelf; na Auto Deploy en SHA-pariteit vraagt Build
+de bestaande QA-agent om dezelfde drie sporen opnieuw onafhankelijk te testen.
+
 ## S&P 500 Macro-score en bronactualiteit
 
 Phase: `LIVE_TARGETED_QA_ACCEPTED`. De live browser-QA zag op 2026-10-18

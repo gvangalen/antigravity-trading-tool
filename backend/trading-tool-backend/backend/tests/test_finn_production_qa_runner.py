@@ -107,6 +107,8 @@ def test_stale_score_paper_profile_is_explicitly_gated_and_owner_isolated(monkey
     assert '"$allow_safe_fixture_execution" = "true"' in workflow
     assert "INSERT INTO market_data\n" not in probe_source
     assert "VALUES (%s,%s,'user',FALSE,%s::jsonb)" in probe_source
+    assert "min_benchmark_score,max_benchmark_score" in probe_source
+    assert "min_macro_score,min_technical_score,min_market_score" not in probe_source
     dispatcher = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "celery_task" / "dispatcher.py").read_text(encoding="utf-8")
     assert "SELECT id FROM users WHERE is_active = true;" in dispatcher
     assert "run_trading_bot_agent(" in probe_source
@@ -151,6 +153,82 @@ def test_auto_paper_history_profile_is_explicitly_gated_and_owner_isolated(monke
     assert probe._require_protected_run("qa-123456-1-abcd1234-5678abcd") == 42
     with pytest.raises(RuntimeError, match="auto_paper_fixture_namespace_invalid"):
         probe._require_protected_run("../unsafe")
+
+
+def test_protected_stale_paper_contract_identifies_the_failed_safety_boundary():
+    path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_protected_score2_stale_paper.py"
+    spec = importlib.util.spec_from_file_location("protected_stale_probe_contract", path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+    valid = dict(
+        action="hold", amount=0,
+        payload={"setup_match": {"status": "insufficient_data"},
+                 "dca_policy": {"source_available": False, "source_score": None}},
+        orders=0, ledger=0, keys=0, owner_active=False,
+        state=(100, True, False, "manual"),
+    )
+    probe._assert_stale_paper_contract(**valid)
+    for change, error in (
+        ({"action": "buy"}, "stale_paper_decision_not_hold_zero"),
+        ({"payload": {"setup_match": {"status": "matches"}, "dca_policy": valid["payload"]["dca_policy"]}},
+         "stale_paper_setup_match_not_insufficient"),
+        ({"orders": 1}, "stale_paper_execution_side_effect"),
+        ({"state": (99, True, False, "manual")}, "stale_paper_bot_state_changed"),
+    ):
+        with pytest.raises(RuntimeError, match=f"^{error}$"):
+            probe._assert_stale_paper_contract(**(valid | change))
+
+
+def test_protected_auto_paper_contract_reconciles_repriced_fill_and_history():
+    path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_protected_auto_paper_history.py"
+    spec = importlib.util.spec_from_file_location("protected_auto_paper_probe_contract", path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+    # The EUR execution price can change after the €50 proposal is saved.
+    quantity, price, spent = 0.00083333, 60000.0, 50.0
+    valid = dict(
+        rows=[("filled", "paper", "buy", spent, "filled", quantity, price, "executed", "auto")],
+        portfolio=(50.0, quantity),
+        ledger=[("paper_initial_funding", 100.0, 0), ("execute", -spent, quantity)],
+        keys=0, owner_active=False, bot_id=12,
+        items=[{"bot_id": 12, "environment": "paper", "execution_mode": "auto",
+                "status": "filled", "side": "buy", "qty": quantity,
+                "price": price, "amount_eur": spent}],
+    )
+    assert probe._assert_auto_paper_contract(**valid) == spent
+    with pytest.raises(RuntimeError, match="^auto_paper_approved_spend_exceeded$"):
+        probe._assert_auto_paper_contract(**(valid | {"rows": [
+            ("filled", "paper", "buy", 51.0, "filled", 0.00085, price, "executed", "auto")]}))
+    with pytest.raises(RuntimeError, match="^auto_paper_history_not_reconciled$"):
+        probe._assert_auto_paper_contract(**(valid | {"items": [valid["items"][0] | {"amount_eur": 49.0}]}))
+
+
+def test_local_positive_paper_probe_accepts_only_named_loopback_stacks(monkeypatch):
+    path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_local_score2_positive_paper.py"
+    spec = importlib.util.spec_from_file_location("local_positive_paper_probe", path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+    source = path.read_text(encoding="utf-8")
+    assert "min_benchmark_score,max_benchmark_score" in source
+    for name, value in (
+        ("APP_ENV", "local_finn"), ("DB_HOST", "127.0.0.1"),
+        ("DB_NAME", "finn_local"), ("DB_PORT", "55440"),
+        ("CELERY_BROKER_URL", "redis://127.0.0.1:56390/0"),
+        ("CELERY_RESULT_BACKEND", "redis://127.0.0.1:56390/1"),
+        ("FINN_LOCAL_PROBE_API_PORT", "18002"),
+    ):
+        monkeypatch.setenv(name, value)
+    probe._assert_local_only()
+    monkeypatch.setenv("FINN_LOCAL_PROBE_API_PORT", "18000")
+    with pytest.raises(RuntimeError, match="local_only_environment_required:isolated_endpoints"):
+        probe._assert_local_only()
+    monkeypatch.setenv("FINN_LOCAL_PROBE_API_PORT", "18002")
+    monkeypatch.setenv("DB_HOST", "tradamind.com")
+    with pytest.raises(RuntimeError, match="local_only_environment_required:DB_HOST"):
+        probe._assert_local_only()
 
 
 def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sources(monkeypatch):

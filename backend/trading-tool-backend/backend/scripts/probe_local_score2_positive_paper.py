@@ -17,14 +17,19 @@ def _assert_local_only() -> None:
     expected = {
         "APP_ENV": "local_finn",
         "DB_HOST": "127.0.0.1",
-        "DB_PORT": "55432",
         "DB_NAME": "finn_local",
-        "CELERY_BROKER_URL": "redis://127.0.0.1:56379/0",
-        "CELERY_RESULT_BACKEND": "redis://127.0.0.1:56379/1",
     }
     for key, value in expected.items():
         if os.getenv(key) != value:
             raise RuntimeError(f"local_only_environment_required:{key}")
+    local_endpoints = {
+        ("55432", "redis://127.0.0.1:56379/0", "redis://127.0.0.1:56379/1", "18000"),
+        ("55440", "redis://127.0.0.1:56390/0", "redis://127.0.0.1:56390/1", "18002"),
+    }
+    actual = (os.getenv("DB_PORT"), os.getenv("CELERY_BROKER_URL"),
+              os.getenv("CELERY_RESULT_BACKEND"), os.getenv("FINN_LOCAL_PROBE_API_PORT", "18000"))
+    if actual not in local_endpoints:
+        raise RuntimeError("local_only_environment_required:isolated_endpoints")
 
 
 def _seed_fixture() -> tuple[int, int, str]:
@@ -62,10 +67,10 @@ def _seed_fixture() -> tuple[int, int, str]:
             cur.execute(
                 """INSERT INTO setups (
                     user_id,name,symbol,timeframe,setup_type,dca_frequency,
-                    min_macro_score,min_technical_score,min_market_score,
+                    min_benchmark_score,max_benchmark_score,
                     created_at,last_validated)
                    VALUES (%s,'Local positive Smart DCA','ETH','1D','dca','daily',
-                           0,0,0,%s,%s) RETURNING id""",
+                           0,100,%s,%s) RETURNING id""",
                 (user_id, now, now),
             )
             setup_id = int(cur.fetchone()[0])
@@ -237,7 +242,7 @@ def _verify(user_id: int, bot_id: int, report_date: str) -> dict:
         token = create_access_token({"sub": str(user_id), "role": "user"})
         def read_api(path: str) -> tuple[int, dict]:
             request = Request(
-                f"http://127.0.0.1:18000{path}",
+                f"http://127.0.0.1:{os.getenv('FINN_LOCAL_PROBE_API_PORT', '18000')}{path}",
                 headers={"Authorization": f"Bearer {token}"},
             )
             with urlopen(request, timeout=5) as response:
