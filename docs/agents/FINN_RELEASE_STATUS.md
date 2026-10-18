@@ -6,7 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Desktopbrowser: Paper-voorvertoning en verlopen feeditem
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. Op live SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De reparatie is gemerged via
+[PR #413](https://github.com/gvangalen/antigravity-trading-tool/pull/413)
+als `04cf7142a9a0b7a810091ff2683611ec898a457c`. Alle vijf PR-controles,
+[main-CI run 39150489286](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39150489286)
+en [Auto Deploy run 39150638924](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39150638924)
+slaagden. Daarna gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` ieder HTTP 200 en exact die SHA.
+Deze statuscommit maakt weer een nieuwe SHA; QA bindt haar test aan de
+uiteindelijke publieke backend- en frontendidentiteit. Op eerdere live SHA
 `19c6fdf7e4c0ca86f8cda0c760eba0f36e7230fe` vond onafhankelijke QA in
 een nieuw, via de browser geregistreerd account twee blokkades. De handmatige
 Paper-ordervoorvertoning gaf HTTP 400 (`Een unieke orderreferentie is vereist
