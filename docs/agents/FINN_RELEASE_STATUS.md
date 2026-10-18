@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## S&P 500 Macro-score en bronactualiteit
 
-Phase: `LIVE_AWAITING_INDEPENDENT_AUTHENTICATED_QA`. De live browser-QA zag op 2026-10-18
+Phase: `LIVE_TARGETED_QA_ACCEPTED`. De live browser-QA zag op 2026-10-18
 een actuele S&P 500-bronmeting met 63 gedateerde dagen (minimum 5), maar geen
 indicatorscore. In code is S&P 500 wel selecteerbaar en heeft het een
 90-daagse normalisatie; de automatische Score 2.0-template-installatie bevatte
@@ -38,8 +38,29 @@ slaagden op merge-SHA `2b5def026fb310af0660ed7d7ab21deb46ed8976`.
 Daarna gaven `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json` ieder HTTP 200 en exact die SHA.
 De status-only merge hieronder creëert zelf een nieuwe SHA; QA verifieert
-de actuele publieke SHA in haar eigen preflight. Ingelogde live QA van de
-S&P 500-score, Macro/benchmark en setupmatch is nog niet uitgevoerd.
+de actuele publieke SHA in haar eigen preflight. De status-only merge
+[PR #403](https://github.com/gvangalen/antigravity-trading-tool/pull/403)
+werd gedeployed als `237b39676ea35522faf8f8b0410e709cf2a3ac04`.
+[Main-CI run 39117523123](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39117523123)
+en [Auto Deploy run 39117662448](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39117662448)
+slaagden; publieke backend-health en frontend-buildinfo gaven beide HTTP 200
+met exact die SHA.
+
+Onafhankelijke QA gaf `ACCEPTED` voor de **gerichte ingelogde browserproef**
+op die SHA. De [beschermde preflight run 39118221051](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39118221051)
+bevestigde checkout, release marker, beide publieke SHA's en QA-authenticatie
+(HTTP 200); rapporthash
+`4409d4635e2778fac53806ecf740e7296a431b45e6e4457961066184555ba2e4`.
+In de browser gaf S&P 500 63/5 gedateerde brondagen, genormaliseerde positie
+68/100 en score 65 via de systeemregel. Markt 30, Macro 65 en Technisch 40
+leverden benchmark 45. De opgeslagen vrijdag-setup “Onder druk” (26–45)
+toonde “Voorwaarden passen”; FINN bevestigde de bovengrensmatch en beloofde
+geen aankoop. Verversen, nieuwe tab en leesbaarheid op 390 px slaagden; er
+waren geen orders of botacties. Een nieuwe login en een live overgang naar
+ontbrekende of te oude bron werden niet getest. Een oudere feedkaart met
+ontbrekende-scoretekst was historisch en is niet als actueel defect vastgesteld.
+Deze QA-vastlegging is alleen documentatie en krijgt zelf weer een andere
+deployment-SHA; het QA-verdict blijft gekoppeld aan de expliciet geteste SHA.
 
 ## Eén benchmarkscore en een afzonderlijke setupstatus
 
