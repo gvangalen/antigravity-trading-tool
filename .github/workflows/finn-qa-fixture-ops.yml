@@ -89,6 +89,12 @@ jobs:
               )))
               exchange = (row['state_json'] or {}).get('responses_exchange') or {}
               print('tool_names=' + ','.join(str(call.get('name') or '') for call in exchange.get('tool_trace') or []))
+              print('response_shape=' + ' '.join((
+                  'text_present=' + str(bool(str(exchange.get('answer') or '').strip())).lower(),
+                  'answer_chars=' + str(len(str(exchange.get('answer') or ''))),
+                  'response_id_present=' + str(bool(exchange.get('response_id'))).lower(),
+                  'uses_previous_response=' + str(bool(exchange.get('uses_previous_response'))).lower(),
+              )))
           PY
             exit
           fi
