@@ -67,15 +67,15 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
   );
 
   return (
-    <div className="card p-10 mb-12 animate-fade-in relative overflow-hidden">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10 relative z-10">
+    <div className="card relative mb-12 min-w-0 overflow-hidden p-4 animate-fade-in sm:p-10">
+      <div className="relative z-10 flex min-w-0 flex-col justify-between gap-6 lg:flex-row lg:items-center lg:gap-10">
         
-        <div className="border-l-4 border-blue-600 pl-8">
+        <div className="min-w-0 border-l-4 border-blue-600 pl-4 sm:pl-8">
            <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
               {reportT.hudEyebrow}
            </div>
-           <h1 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-none">
+           <h1 className="break-words text-2xl font-black uppercase leading-tight tracking-tighter text-foreground sm:text-4xl sm:leading-none">
              {reportT.types[type] || reportT.hudDefaultTitle}
            </h1>
            <div className="flex items-center gap-3 mt-4 text-slate-400">
@@ -98,7 +98,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
             </div>
           </div>
         ) : (
-          <div className="bg-blue-50/20 border-2 border-blue-600/5 rounded-[2rem] p-6 flex flex-wrap items-center gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-4 rounded-[2rem] border-2 border-blue-600/5 bg-blue-50/20 p-4 sm:p-6">
             <ScoreItem label={reportT.hudMacro} value={macro_score} icon={Globe} colorClass="bg-blue-600" />
             <ScoreItem label={reportT.hudTechnical} value={technical_score} icon={Zap} colorClass="bg-amber-500" />
             <ScoreItem label={reportT.hudMarket} value={market_score} icon={Activity} colorClass="bg-indigo-600" />
@@ -142,15 +142,15 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
         )}
       </div>
 
-      <footer className="mt-10 pt-6 border-t-2 border-slate-50 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
-         <div className="flex items-center gap-2">
+      <footer className="mt-10 flex min-w-0 flex-col items-start gap-3 border-t-2 border-slate-50 pt-6 text-[9px] font-black uppercase tracking-widest text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+         <div className="flex min-w-0 items-start gap-2 break-words">
             <Info size={12} className="text-blue-600" />
             {reportT.hudValidated}
          </div>
-         <div className="flex items-center gap-4">
-            <span>{reportT.hudUser}: {user?.name || reportT.hudSystem}</span>
-            <span className="w-1 h-1 rounded-full bg-slate-300" />
-            <span>{reportT.hudGeneratedTitle}: {formatUtc(generated_at) || "—"}</span>
+         <div className="flex min-w-0 flex-wrap items-center gap-2 break-words sm:gap-4">
+            <span className="min-w-0 break-words">{reportT.hudUser}: {user?.name || reportT.hudSystem}</span>
+            <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-300 sm:block" />
+            <span className="min-w-0 break-words">{reportT.hudGeneratedTitle}: {formatUtc(generated_at) || "—"}</span>
          </div>
       </footer>
     </div>
