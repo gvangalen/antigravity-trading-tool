@@ -11,7 +11,6 @@ import {
   Plus,
   Save,
   Sliders,
-  Target,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -176,6 +175,8 @@ function getUiCopy(locale = "nl") {
       scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
       missingScoreRule: "A source reading is available, but no scoring rule is configured. This indicator has no score yet.",
       scoringRule: "Scoring rule",
+      scoreCalculationTitle: "How was this score calculated?",
+      scoreWeight: "Weight in group score",
       systemScoringRule: "System rule",
       personalScoringRule: "Your curve",
       priceRangeMethod: (position) => `Measured price position in its recent 30-day range: ${position}/100. This is not an entry signal.`,
@@ -275,6 +276,7 @@ function getUiCopy(locale = "nl") {
       aboveMa50: "Above MA50",
       belowMa50: "Below MA50",
       indicatorLabels: {
+        sp500: "S&P 500",
         change_24h: "24-hour price change",
         volume: "Volume",
         market_volume: "Volume",
@@ -347,6 +349,8 @@ function getUiCopy(locale = "nl") {
       scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
       missingScoreRule: "Ein Quellwert ist vorhanden, aber keine Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
       scoringRule: "Scoreregel",
+      scoreCalculationTitle: "Wie wurde dieser Score berechnet?",
+      scoreWeight: "Gewicht im Gruppenscore",
       systemScoringRule: "Systemregel",
       personalScoringRule: "Deine Kurve",
       priceRangeMethod: (position) => `Gemessene Preisposition im jüngsten 30-Tage-Bereich: ${position}/100. Das ist kein Einstiegssignal.`,
@@ -446,6 +450,7 @@ function getUiCopy(locale = "nl") {
       aboveMa50: "Über MA50",
       belowMa50: "Unter MA50",
       indicatorLabels: {
+        sp500: "S&P 500",
         change_24h: "24-Stunden-Preisänderung",
         volume: "Volumen",
         market_volume: "Volumen",
@@ -517,6 +522,8 @@ function getUiCopy(locale = "nl") {
     scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
     missingScoreRule: "Er is een bronmeting, maar geen scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
     scoringRule: "Scoreregel",
+    scoreCalculationTitle: "Hoe is deze score berekend?",
+    scoreWeight: "Gewicht in groepsscore",
     systemScoringRule: "Systeemregel",
     personalScoringRule: "Jouw curve",
     priceRangeMethod: (position) => `Gemeten prijspositie in het recente 30-daagse bereik: ${position}/100. Dit is geen instapsignaal.`,
@@ -616,6 +623,7 @@ function getUiCopy(locale = "nl") {
     aboveMa50: "Boven MA50",
     belowMa50: "Onder MA50",
     indicatorLabels: {
+      sp500: "S&P 500",
       change_24h: "Prijsverandering 24 uur",
       volume: "Volume",
       market_volume: "Volume",
@@ -652,7 +660,6 @@ const DEFAULT_INTELLIGENCE_WEIGHTS = {
 };
 
 const ANALYSIS_TIMEFRAMES = ["day", "week", "month", "quarter"];
-const ANALYSIS_HIDDEN_INDICATORS_KEY = "analysis_hidden_indicators";
 const ACTIVE_SETUP_CACHE_TTL_MS = 60_000;
 const ASSISTANT_PREFERENCES_CACHE_TTL_MS = 300_000;
 const activeSetupCache = new Map();
@@ -787,23 +794,6 @@ function normalizeScore(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return Math.max(0, Math.min(100, parsed));
-}
-
-function normalizeHiddenIndicatorKeys(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
-    .filter(Boolean);
-}
-
-function buildHiddenIndicatorKey(symbol, sectionId, label) {
-  return `${String(symbol || "").toUpperCase()}:${sectionId}:${label}`.toLowerCase();
-}
-
-function filterVisibleRows(rows, symbol, sectionId, hiddenIndicatorKeys) {
-  return (Array.isArray(rows) ? rows : []).filter(
-    (row) => !hiddenIndicatorKeys.includes(buildHiddenIndicatorKey(symbol, sectionId, row.label || row.name))
-  );
 }
 
 function averageVisibleSectionScore(rows) {
@@ -1203,13 +1193,6 @@ function componentScoreLabel(category, value, ui) {
   return ui.componentStates?.[category]?.[band] || ui.unavailable;
 }
 
-function indicatorScoreLabel(value, ui) {
-  const score = normalizeScore(value);
-  if (score === null) return ui.unavailable;
-  const band = score <= 35 ? "low" : score >= 70 ? "high" : "mixed";
-  return ui.indicatorStates?.[band] || ui.unavailable;
-}
-
 function explainIndicatorAssessment({
   name,
   label,
@@ -1401,7 +1384,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       localizedDetail !== ui.unavailable &&
       !isGenericIndicatorExplanation(rawDetail) &&
       !isGenericIndicatorExplanation(localizedDetail) &&
-      !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()];
+      (String(name || "").trim().toLowerCase() === "sp500" ||
+        !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()]);
     const unavailableReason = item?.score_unavailable_reason;
     const historyCoverage = item?.score_history_coverage;
     const generatedDetail = score !== null
@@ -1441,7 +1425,9 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       : methodDetail
         ? methodDetail
       : shouldUseBackendDetail
-        ? localizedDetail
+        ? String(name).trim().toLowerCase() === "sp500"
+          ? localizedDetail.replace(/;\s*dit is macrocontext[^.]*\.?$/i, ".")
+          : localizedDetail
         : generatedDetail;
 
     return {
@@ -1452,7 +1438,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       direction,
       score,
       signalTone: tone,
-      scoreLabel: score === null ? ui.unavailable : `${indicatorScoreLabel(score, ui)} · ${Math.round(score)}`,
+      scoreLabel: score === null ? ui.unavailable : `${Math.round(score)}/100`,
       detail,
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
       ruleOrigin,
@@ -2002,7 +1988,6 @@ function EvidenceRow({
   row,
   expanded,
   onToggle,
-  renderExpandedActions,
   category,
   symbol,
   period,
@@ -2025,10 +2010,9 @@ function EvidenceRow({
   };
 
   const contribution = row.raw?.score_contribution;
-  const contributionText =
-    row.score !== null && contribution?.status === "available"
-      ? `${Math.round(Number(contribution.weight || 0) * 100)}% · ${Number(contribution.weighted_points || 0).toFixed(1)} pt`
-      : ui.unavailable;
+  const weightText = row.score !== null && contribution?.status === "available"
+    ? `${Math.round(Number(contribution.weight || 0) * 100)}%`
+    : ui.unavailable;
   const freshness = row.raw?.freshness;
   const freshnessText = {
     unavailable: ui.unavailable,
@@ -2093,44 +2077,25 @@ function EvidenceRow({
 
       {expanded ? (
         <div className="bg-slate-50/70 px-4 py-3">
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                {ui.details}
+          <div className="text-[12px] font-bold text-slate-700">{ui.scoreCalculationTitle}</div>
+          <dl className="mt-2 grid gap-x-6 gap-y-2 text-[12px] sm:grid-cols-2">
+            {[
+              [ui.value, row.value],
+              [ui.scoringRule, row.ruleOrigin === "custom" ? ui.personalScoringRule : row.ruleOrigin ? ui.systemScoringRule : ui.unavailable],
+              [ui.scoreWeight, weightText],
+              [ui.freshness, freshnessText],
+            ].map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3 border-b border-slate-200/70 py-1">
+                <dt className="text-slate-500">{label}</dt>
+                <dd className="font-semibold text-slate-700">{value}</dd>
               </div>
-              <p className="mt-1.5 text-[13px] font-medium leading-6 text-slate-600">
-                {row.detail}
-              </p>
-            </div>
+            ))}
+          </dl>
+          <p className="mt-2 text-[11px] text-slate-500">
+            {ui.dataSource}: {String(row.raw?.source || "—").replaceAll("_", " ")} · {ui.latestSignal}: {row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.missingSourceMoment}
+          </p>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {[
-                [ui.dataSource, String(row.raw?.source || "—").replaceAll("_", " ")],
-                [ui.periodLabel, ui[row.raw?.period || period] || row.raw?.period || period],
-                [ui.freshness, freshnessText],
-                [ui.latestSignal, row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.missingSourceMoment],
-                [ui.scoreContribution, contributionText],
-                ...(row.ruleOrigin ? [[ui.scoringRule, row.ruleOrigin === "custom" ? ui.personalScoringRule : ui.systemScoringRule]] : []),
-                ...(row.normalizedPosition !== null ? [[ui.normalizedInput, `${row.normalizedPosition}/100`]] : []),
-                [ui.sampleSize, row.raw?.sample_size ?? 1],
-                ...(row.raw?.score_history_coverage ? [[
-                  ui.scoreHistory,
-                  ui.scoreHistoryValue(
-                    row.raw.score_history_coverage.observed_days,
-                    row.raw.score_history_coverage.required_days,
-                    row.raw.score_history_coverage.window_days,
-                  ),
-                ]] : []),
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</div>
-                  <div className="mt-1 text-[12px] font-bold capitalize text-slate-800">{value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
             <button
               type="button"
               onClick={requestFinnContext}
@@ -2139,7 +2104,6 @@ function EvidenceRow({
               <Brain size={13} />
               {ui.askFinnContext}
             </button>
-            {renderExpandedActions ? renderExpandedActions(row) : null}
           </div>
 
         </div>
@@ -2188,7 +2152,6 @@ function EvidenceSection({
   onToggleRow,
   action,
   toolbar,
-  renderExpandedActions,
   emptyState,
   emptyAction,
   symbol,
@@ -2244,7 +2207,6 @@ function EvidenceSection({
                 row={row}
                 expanded={expandedRowKey === rowKey}
                 onToggle={() => onToggleRow(rowKey)}
-                renderExpandedActions={renderExpandedActions}
                 category={id}
                 symbol={symbol}
                 period={period}
@@ -2424,7 +2386,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [removedWatchlistSymbols, setRemovedWatchlistSymbols] = useState([]);
   const [showChart, setShowChart] = useState(true);
   const [analysisChartInterval, setAnalysisChartInterval] = useState(DEFAULT_TRADINGVIEW_INTERVAL);
-  const [hiddenIndicatorKeys, setHiddenIndicatorKeys] = useState([]);
   const appliedIndicatorsRef = useRef(new Set());
   const previousActiveSymbolRef = useRef(null);
 
@@ -2585,49 +2546,25 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   useEffect(() => {
     let cancelled = false;
 
-    async function loadHiddenIndicators() {
+    async function loadAnalysisPreferences() {
       try {
         const response = await loadAssistantPreferencesShared();
         if (cancelled) return;
-        setHiddenIndicatorKeys(
-          normalizeHiddenIndicatorKeys(response?.preferences?.[ANALYSIS_HIDDEN_INDICATORS_KEY])
-        );
         setAnalysisChartInterval(
           normalizeTradingViewInterval(response?.preferences?.[ANALYSIS_CHART_INTERVAL_KEY])
         );
       } catch (error) {
         if (!cancelled) {
-          console.error("Failed to load hidden analysis indicators:", error);
+          console.error("Failed to load analysis preferences:", error);
         }
       }
     }
 
-    void loadHiddenIndicators();
+    void loadAnalysisPreferences();
     return () => {
       cancelled = true;
     };
   }, []);
-
-  const hideAnalysisIndicator = async (sectionId, row) => {
-    const nextKey = buildHiddenIndicatorKey(activeSymbol, sectionId, row?.label || row?.name);
-    const nextHiddenIndicatorKeys = hiddenIndicatorKeys.includes(nextKey)
-      ? hiddenIndicatorKeys
-      : [...hiddenIndicatorKeys, nextKey];
-
-    setHiddenIndicatorKeys(nextHiddenIndicatorKeys);
-    setExpandedRowKey(null);
-
-    try {
-      await updateAssistantPreferences({
-        [ANALYSIS_HIDDEN_INDICATORS_KEY]: nextHiddenIndicatorKeys,
-      });
-      mergeAssistantPreferences({
-        [ANALYSIS_HIDDEN_INDICATORS_KEY]: nextHiddenIndicatorKeys,
-      });
-    } catch (error) {
-      console.error("Failed to persist hidden analysis indicators:", error);
-    }
-  };
 
   const handleAnalysisChartIntervalChange = async (nextInterval) => {
     const normalized = normalizeTradingViewInterval(nextInterval);
@@ -2842,9 +2779,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const sections = useMemo(() => {
     const evidence = workspace?.daily?.indicator_evidence || {};
     const dayEvidence = (category, period, score) => period === "day" ? (normalizeScore(score) === null ? {} : evidence[category] || {}) : null;
-    const marketRows = filterVisibleRows(buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score), activeSymbol, "market", hiddenIndicatorKeys);
-    const macroRows = filterVisibleRows(buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe, macro?.score), macro?.score), activeSymbol, "macro", hiddenIndicatorKeys);
-    const technicalRows = filterVisibleRows(buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe, technical?.score), technical?.score), activeSymbol, "technical", hiddenIndicatorKeys);
+    const marketRows = buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score);
+    const macroRows = buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe, macro?.score), macro?.score);
+    const technicalRows = buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe, technical?.score), technical?.score);
     const visibleScore = (rows) => averageVisibleSectionScore(rows);
     const fallbackEmptyState = (score, rows, loadingState, defaultEmptyState) =>
       loadingState
@@ -2900,7 +2837,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         emptyAction: showEmptyAction(technical?.score, technicalRows, technicalLoading) ? emptyActionButton("technical") : null,
       },
     ];
-  }, [activeSymbol, hiddenIndicatorKeys, isFallbackWorkspace, locale, macro?.score, macroData, macroLoading, macroTimeframe, market?.score, marketDayData, marketLoading, marketTimeframe, technical?.score, technicalData, technicalLoading, technicalTimeframe, ui, workspace?.daily?.indicator_evidence]);
+  }, [isFallbackWorkspace, locale, macro?.score, macroData, macroLoading, macroTimeframe, market?.score, marketDayData, marketLoading, marketTimeframe, technical?.score, technicalData, technicalLoading, technicalTimeframe, ui, workspace?.daily?.indicator_evidence]);
 
   const combinedSummary = useMemo(() => {
     if (Object.values(periods).every((period) => period === "day")) {
@@ -3090,21 +3027,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                   {ui.addIndicator}
                 </button>
               ) : null
-            }
-            renderExpandedActions={
-              (row) => (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void hideAnalysisIndicator(section.id, row);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-red-200 hover:text-red-600"
-                >
-                  <Target size={12} />
-                  {locale?.startsWith("en") ? "Hide" : locale?.startsWith("de") ? "Ausblenden" : "Verbergen"}
-                </button>
-              )
             }
           />
         ))}
