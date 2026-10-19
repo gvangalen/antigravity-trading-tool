@@ -54,6 +54,7 @@ jobs:
           import subprocess
           from sqlalchemy import text
           from backend.infrastructure.database import sync_engine
+          from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 
           print('minimal_read_answers=' + ('enabled' if os.getenv('FINN_MINIMAL_READ_ANSWERS') == '1' else 'disabled_or_unset'))
           pm2_bin = os.path.join(os.path.expanduser('~'), '.nvm/versions/node/v20.19.5/bin/pm2')
@@ -71,7 +72,7 @@ jobs:
           end = datetime(2026, 10, 19, 4, 51, tzinfo=timezone.utc)
           with sync_engine.connect() as connection:
               rows = connection.execute(text("""
-                  SELECT r.id, r.created_at, r.completed_at, r.status, r.error_code,
+                  SELECT r.id, r.user_id, r.message, r.created_at, r.completed_at, r.status, r.error_code,
                          c.state_json->'responses_exchange'->>'answer_kind' AS answer_kind,
                          c.state_json->>'terminal_response_type' AS response_type,
                          c.state_json AS state_json
@@ -83,6 +84,7 @@ jobs:
                   LIMIT 20
               """), {"start": start, "end": end}).mappings().all()
           print('coach_failure_count=' + str(len(rows)))
+          print('distinct_owner_count=' + str(len({row['user_id'] for row in rows})))
           for row in rows:
               print(' '.join(f'{key}={row[key]}' for key in (
                   'id', 'created_at', 'completed_at', 'status', 'error_code',
@@ -99,6 +101,14 @@ jobs:
                       exchange.get('answer') == 'Ik kan hier geen aankoop uitvoeren. We kunnen eerst je plan en risico bespreken; ondersteunde acties vragen een apart voorstel en bevestiging.'
                   ).lower(),
                   'answer_sha256=' + hashlib.sha256(str(exchange.get('answer') or '').encode()).hexdigest()[:12],
+              )))
+              message = str(row['message'] or '')
+              facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+              print('request_shape=' + ' '.join((
+                  'polarity=' + facts.action_polarity,
+                  'fomo=' + str('fomo' in message.casefold()).lower(),
+                  'dca_day=' + str('welke dag' in message.casefold() and 'dca' in message.casefold()).lower(),
+                  'message_sha256=' + hashlib.sha256(message.encode()).hexdigest()[:12],
               )))
           with sync_engine.connect() as connection:
               completed = connection.execute(text("""
