@@ -362,8 +362,9 @@ class FinnTradeReviewService:
     async def list_reviews(self, user_id: int, limit: int = 50, offset: int = 0,
                            week_start: date | None = None) -> dict:
         excluded = await self._project(user_id)
-        _, _, start, end = completed_reflection_week(selected=week_start)
-        params = {"user_id": user_id, "start": start, "end": end, "limit": limit, "offset": offset}
+        # Individual dossiers remain available as soon as a trade closes.
+        # The selected completed week applies only to the saved weekly report.
+        params = {"user_id": user_id, "limit": limit, "offset": offset}
         result = await self.session.execute(text("""
             SELECT id, bot_id, symbol, execution_environment, execution_sources, entry_at, exit_at,
                    entry_qty, entry_price_eur, exit_price_eur, pnl_eur_before_fees,
@@ -373,13 +374,13 @@ class FinnTradeReviewService:
                    derivative_category, position_idx, direction, settle_currency,
                    native_pnl, native_pnl_status, fee_legs_by_currency
             FROM finn_trade_reviews
-            WHERE user_id=:user_id AND exit_at >= :start AND exit_at < :end
+            WHERE user_id=:user_id
             ORDER BY exit_at DESC, id DESC LIMIT :limit OFFSET :offset
         """), params)
         items = [self._presented_review(dict(r._mapping)) for r in result.fetchall()]
         count = await self.session.execute(text("""
             SELECT COUNT(*) FROM finn_trade_reviews
-            WHERE user_id=:user_id AND exit_at >= :start AND exit_at < :end
+            WHERE user_id=:user_id
         """), params)
         total = count.scalar_one()
         weekly = await self.weekly_report(user_id, week_start)

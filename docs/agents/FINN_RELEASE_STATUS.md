@@ -9,7 +9,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 Phase: `LOCAL_READY_FOR_CANDIDATE`. De nieuwe kandidaat vervangt het rollende
 zevendaagse trade-overzicht door een per gebruiker opgeslagen reflectie voor
 een afgeronde kalenderweek (maandag tot maandag, Europe/Amsterdam). De
-weekselector toont de bijbehorende afgesloten trades; een maandagtaak legt de
+weekselector toont de samenvatting van die week; individuele afgesloten trades
+blijven direct beschikbaar in de volledige dossierlijst. Een maandagtaak legt de
 voorgaande week vast en een eigenaargebonden leesactie kan gemiste of oude
 weken alsnog materialiseren. Later toegevoegd bewijs werkt dezelfde opgeslagen
 week bij. De productieconfiguratie schakelt Trade Reviews voor alle accounts

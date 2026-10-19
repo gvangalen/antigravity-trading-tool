@@ -77,6 +77,38 @@ def test_weekly_reflection_is_owner_scoped_and_persisted():
     assert calls[3][1]["week_start"] == date(2026, 10, 12)
 
 
+def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
+    calls = []
+
+    class Result:
+        def fetchall(self):
+            return []
+
+        def scalar_one(self):
+            return 0
+
+    class Session:
+        async def execute(self, statement, params):
+            calls.append((str(statement), params))
+            return Result()
+
+    service = FinnTradeReviewService(Session())
+
+    async def no_projection(_user_id):
+        return {}
+
+    async def prior_week(_user_id, _week_start):
+        return {"week_start": "2026-10-12"}
+
+    service._project = no_projection
+    service.weekly_report = prior_week
+    asyncio.run(service.list_reviews(7, week_start=date(2026, 10, 12)))
+    for sql, params in calls[:2]:
+        assert "WHERE user_id=:user_id" in sql
+        assert "exit_at >= :start" not in sql
+        assert params["user_id"] == 7
+
+
 def test_exchange_plan_not_recorded_is_evidence_gap_not_behavioral_missing_plan():
     assert unrecorded_plan_theme("exchange_user_attested") == "plan_not_recorded"
     assert unrecorded_plan_theme("bybit_derivative_user_attested") == "plan_not_recorded"
