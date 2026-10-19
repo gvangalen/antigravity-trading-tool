@@ -174,6 +174,8 @@ function getUiCopy(locale = "nl") {
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
       indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
       scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
+      scoreRebuilding: "Your indicator choices changed. The score is being recalculated; previous readings have not been erased.",
+      scoreIncomplete: "One or more selected indicators do not have a usable score yet. The group score will return when their evidence is complete.",
       missingScoreRule: "A source reading is available, but no scoring rule is configured. This indicator has no score yet.",
       scoringRule: "Scoring rule",
       scoreCalculationTitle: "How was this score calculated?",
@@ -353,6 +355,8 @@ function getUiCopy(locale = "nl") {
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
       indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
       scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
+      scoreRebuilding: "Deine Indikatorauswahl hat sich geändert. Der Score wird neu berechnet; frühere Messwerte wurden nicht gelöscht.",
+      scoreIncomplete: "Mindestens ein gewählter Indikator hat noch keinen nutzbaren Score. Der Gruppenscore erscheint wieder, sobald die Daten vollständig sind.",
       missingScoreRule: "Ein Quellwert ist vorhanden, aber keine Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
       scoringRule: "Scoreregel",
       scoreCalculationTitle: "Wie wurde dieser Score berechnet?",
@@ -531,6 +535,8 @@ function getUiCopy(locale = "nl") {
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
     indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
     scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
+    scoreRebuilding: "Je indicatoren zijn gewijzigd. De score wordt opnieuw berekend; eerdere metingen zijn niet gewist.",
+    scoreIncomplete: "Een of meer gekozen indicatoren hebben nog geen bruikbare score. De groepsscore komt terug zodra hun gegevens compleet zijn.",
     missingScoreRule: "Er is een bronmeting, maar geen scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
     scoringRule: "Scoreregel",
     scoreCalculationTitle: "Hoe is deze score berekend?",
@@ -1468,11 +1474,15 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
   });
 }
 
-function buildSectionInsight(sectionId, sectionScore, ui) {
+function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, rows = []) {
   const score = normalizeScore(sectionScore);
   const copy = ui.sectionInsights;
 
-  if (score === null) return copy.missing;
+  if (score === null) {
+    if (sourceStatus === "score_rebuild_pending") return ui.scoreRebuilding;
+    if (rows.some((row) => row?.raw?.configured || row?.raw?.value != null)) return ui.scoreIncomplete;
+    return copy.missing;
+  }
 
   if (sectionId === "market") {
     if (score <= 35) return copy.marketNegative;
@@ -2446,6 +2456,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const { strategies = [] } = useStrategyData({ includeSetups: false });
   const [marketBestSetup, setMarketBestSetup] = useState(null);
   const lastWorkspaceReloadAtRef = useRef(0);
+  const scoreRefreshTimersRef = useRef([]);
 
   const categoryData = workspace?.categories || {};
   const marketDayData = categoryData.market?.rows || [];
@@ -2473,6 +2484,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     lastWorkspaceReloadAtRef.current = now;
     await reloadWorkspace({ forceNetwork: true });
   }, [reloadWorkspace]);
+
+  const scheduleScoreRefresh = useCallback(() => {
+    scoreRefreshTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    scoreRefreshTimersRef.current = [3000, 8000, 15000].map((delay) =>
+      window.setTimeout(() => { void reloadWorkspace({ forceNetwork: true }); }, delay)
+    );
+  }, [reloadWorkspace]);
+
+  useEffect(() => () => {
+    scoreRefreshTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    scoreRefreshTimersRef.current = [];
+  }, [activeSymbol]);
 
   useEffect(() => {
     const activeRow = watchlistRows.find((row) => row.symbol === activeSymbol);
@@ -2538,14 +2561,17 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const addMarket = async (name) => {
     await marketIndicatorAdd(name, activeSymbol);
     await refreshWorkspaceOnce();
+    scheduleScoreRefresh();
   };
   const addMacroIndicator = async (name) => {
     await macroDataAdd(name, activeSymbol);
     await refreshWorkspaceOnce();
+    scheduleScoreRefresh();
   };
   const addTechnicalIndicator = async (name) => {
     const result = await technicalDataAdd(name, activeSymbol);
     await refreshWorkspaceOnce();
+    scheduleScoreRefresh();
     if (result?.status === "pending_source") {
       showSnackbar(`${name} is ingesteld. De meetwaarde wacht op de databron; er is nog geen score.`, "info");
     }
@@ -2639,13 +2665,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       const detail = event?.detail || {};
       if (String(detail.assetSymbol || "").toUpperCase() !== activeSymbol) return;
 
-      if (["market", "macro", "technical"].includes(detail.category)) void refreshWorkspaceOnce();
+      if (["market", "macro", "technical"].includes(detail.category)) {
+        void refreshWorkspaceOnce();
+        scheduleScoreRefresh();
+      }
     };
 
     window.addEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
     return () =>
       window.removeEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
-  }, [activeSymbol, refreshWorkspaceOnce]);
+  }, [activeSymbol, refreshWorkspaceOnce, scheduleScoreRefresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2822,7 +2851,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
         score: marketTimeframe === "day" ? normalizeScore(market?.score) : visibleScore(marketRows),
-        insight: buildSectionInsight("market", marketTimeframe === "day" ? market?.score : visibleScore(marketRows), ui),
+        insight: buildSectionInsight("market", marketTimeframe === "day" ? market?.score : visibleScore(marketRows), ui, workspace?.daily?.market?.source_status, marketRows),
         rows: marketRows,
         emptyState: fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
         emptyAction: showEmptyAction(market?.score, marketRows, marketLoading) ? emptyActionButton("market") : null,
@@ -2833,7 +2862,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
         score: macroTimeframe === "day" ? normalizeScore(macro?.score) : visibleScore(macroRows),
-        insight: buildSectionInsight("macro", macroTimeframe === "day" ? macro?.score : visibleScore(macroRows), ui),
+        insight: buildSectionInsight("macro", macroTimeframe === "day" ? macro?.score : visibleScore(macroRows), ui, workspace?.daily?.macro?.source_status, macroRows),
         rows: macroRows,
         emptyState: fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
         emptyAction: showEmptyAction(macro?.score, macroRows, macroLoading) ? emptyActionButton("macro") : null,
@@ -2844,7 +2873,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
         score: technicalTimeframe === "day" ? normalizeScore(technical?.score) : visibleScore(technicalRows),
-        insight: buildSectionInsight("technical", technicalTimeframe === "day" ? technical?.score : visibleScore(technicalRows), ui),
+        insight: buildSectionInsight("technical", technicalTimeframe === "day" ? technical?.score : visibleScore(technicalRows), ui, workspace?.daily?.technical?.source_status, technicalRows),
         rows: technicalRows,
         emptyState: fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
         emptyAction: showEmptyAction(technical?.score, technicalRows, technicalLoading) ? emptyActionButton("technical") : null,

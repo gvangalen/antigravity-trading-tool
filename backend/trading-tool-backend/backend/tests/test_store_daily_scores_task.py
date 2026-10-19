@@ -2,6 +2,26 @@ from backend.celery_task.store_daily_scores_task import run_rule_based_daily_sco
 import threading
 
 
+def test_indicator_change_rebuilds_only_its_asset(monkeypatch):
+    from backend.celery_task import store_daily_scores_task as task_module
+    from backend.celery_task.celery_app import celery_app
+    from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
+
+    queued = []
+    built = []
+    monkeypatch.setattr(celery_app, "send_task", lambda name, kwargs: queued.append((name, kwargs)))
+    monkeypatch.setattr(task_module, "build_daily_scores_for_user",
+                        lambda user_id, symbols=None: built.append((user_id, symbols)))
+
+    assert queue_indicator_score_refresh(7, "eth") is True
+    assert queued == [(
+        "backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+        {"user_id": 7, "symbol": "ETH"},
+    )]
+    task_module.store_daily_scores_task.run(**queued[0][1])
+    assert built == [(7, ["ETH"])]
+
+
 def test_run_rule_based_daily_scores_skips_when_previous_run_is_active(monkeypatch):
     import backend.celery_task.store_daily_scores_task as task_module
 

@@ -1,6 +1,7 @@
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.schemas.indicator_config_schema import IndicatorConfigResponse, IndicatorBucketRule
+from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
 
 FIXED_BUCKETS = [
     (0.0, 20.0),
@@ -117,6 +118,7 @@ class IndicatorConfigService:
             config_json=metadata,
         )
         await self.repository.db.commit()
+        queue_indicator_score_refresh(user_id, symbol)
 
     async def save_custom_rules(self, category: str, indicator: str, user_id: int, symbol: str, rules: list, weight: float):
         weight = _clamp_weight(weight)
@@ -143,6 +145,7 @@ class IndicatorConfigService:
             config_json={"score_mode": "custom", "weight": weight, "rules": rules_to_insert},
         )
         await self.repository.db.commit()
+        queue_indicator_score_refresh(user_id, symbol)
 
     async def reset_indicator_rules(self, category: str, indicator: str, user_id: int, symbol: str):
         await self.product_repository.remove_user_config(
@@ -152,3 +155,4 @@ class IndicatorConfigService:
             symbol=symbol,
         )
         await self.repository.db.commit()
+        queue_indicator_score_refresh(user_id, symbol)

@@ -68,6 +68,10 @@ def test_preference_save_dispatches_owner_scoped_history_after_commit(
     assert events == [
         "commit",
         (
+            "backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+            {"kwargs": {"user_id": 17, "symbol": "ETH"}},
+        ),
+        (
             "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
             {"kwargs": {
                 "user_id": 17, "symbol": "ETH",
@@ -112,6 +116,10 @@ def test_direct_rsi_add_also_recovers_history_after_save(monkeypatch):
     assert result["status"] == "pending_source"
     assert events == [
         "commit",
+        (
+            "backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+            {"kwargs": {"user_id": 17, "symbol": "ETH"}},
+        ),
         (
             "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
             {"kwargs": {

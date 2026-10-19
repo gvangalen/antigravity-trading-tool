@@ -18,6 +18,7 @@ from backend.schemas.technical_data_schema import (
 from backend.services.technical_data_service import TechnicalDataService
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ async def add_technical_indicator(
         result = await service.add_technical_indicator(name_raw, user_id, symbol=symbol)
         # Commit manually if auto-commit not configured in router middleware properly
         await session.commit()
+        queue_indicator_score_refresh(int(user_id), symbol)
         if str(name_raw or "").strip().lower() == "rsi":
             try:
                 from backend.celery_task.celery_app import celery_app
@@ -229,6 +231,7 @@ async def delete_technical_indicator(
     service = TechnicalDataService(session)
     deleted = await service.delete_indicator(indicator, user_id, symbol=symbol)
     await session.commit()
+    queue_indicator_score_refresh(int(user_id), symbol)
 
     return {
         "message": f"Indicator '{indicator}' verwijderd.",
@@ -342,6 +345,7 @@ async def put_technical_preferences(
         asset_class=asset_class,
     )
     await session.commit()
+    queue_indicator_score_refresh(int(user_id), normalized_symbol)
 
     if "rsi" in {name for name, _ in normalized_items}:
         try:
