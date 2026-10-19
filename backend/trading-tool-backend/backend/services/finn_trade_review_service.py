@@ -49,6 +49,30 @@ def unrecorded_plan_theme(origin: str | None) -> str:
             else "missing_plan")
 
 
+def build_weekly_review_patterns(rows: list[Any]) -> list[dict]:
+    """Summarize owner-scoped review evidence without inferring repeated behavior."""
+    patterns: dict[str, set[int]] = defaultdict(set)
+    pattern_examples: dict[str, str] = {}
+    for row in rows:
+        if not row.has_plan:
+            patterns[unrecorded_plan_theme(row.origin)].add(int(row.id))
+        if row.analysis_status == "ready" and isinstance(row.analysis_json, dict):
+            observations = row.analysis_json.get("observations")
+            for observation in (observations if isinstance(observations, list) else []):
+                if not isinstance(observation, dict):
+                    continue
+                theme = observation.get("theme")
+                if theme in {"plan_followed", "risk", "timing", "exit_process", "evidence_gap"}:
+                    patterns[theme].add(int(row.id))
+                    example = observation.get("text")
+                    if theme not in pattern_examples and isinstance(example, str) and example.strip():
+                        pattern_examples[theme] = example.strip()[:280]
+    return [{"theme": theme, "review_ids": sorted(ids), "count": len(ids),
+             "basis": "plan_record" if theme in {"missing_plan", "plan_not_recorded"} else "finn_analysis",
+             "example": pattern_examples.get(theme)}
+            for theme, ids in sorted(patterns.items(), key=lambda item: -len(item[1]))]
+
+
 def dependent_review_ids(source_review_id: int, rows: list[Any]) -> list[int]:
     """Find every cached analysis depending directly or indirectly on a lesson."""
     reverse_edges: dict[int, set[int]] = defaultdict(set)
@@ -354,15 +378,7 @@ class FinnTradeReviewService:
             WHERE user_id=:user_id AND exit_at >= NOW() - INTERVAL '7 days'
             ORDER BY exit_at DESC LIMIT 500
         """), {"user_id": user_id})
-        patterns: dict[str, set[int]] = defaultdict(set)
-        for row in pattern_rows.fetchall():
-            if not row.has_plan:
-                patterns[unrecorded_plan_theme(row.origin)].add(int(row.id))
-            if row.analysis_status == "ready" and isinstance(row.analysis_json, dict):
-                for observation in row.analysis_json.get("observations", []):
-                    theme = observation.get("theme")
-                    if theme in {"plan_followed", "risk", "timing", "exit_process", "evidence_gap"}:
-                        patterns[theme].add(int(row.id))
+        patterns = build_weekly_review_patterns(pattern_rows.fetchall())
         lesson_rows = await self.session.execute(text("""
             SELECT r.id, l.lesson_text
             FROM finn_trade_review_lessons l
@@ -390,8 +406,7 @@ class FinnTradeReviewService:
             "items": items,
             "total": total, "excluded": excluded,
             "weekly": {**weekly_counts,
-                       "patterns": [{"theme": theme, "review_ids": sorted(ids), "count": len(ids)}
-                                    for theme, ids in sorted(patterns.items(), key=lambda item: -len(item[1]))],
+                       "patterns": patterns,
                        "confirmed_lesson_repetitions": repeated_lessons,
                        "patterns_truncated": weekly_counts["trades"] > 500},
         }

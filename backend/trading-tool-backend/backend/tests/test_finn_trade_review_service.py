@@ -1,8 +1,9 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
-from backend.services.finn_trade_review_service import FinnTradeReviewService, build_closed_positions, unrecorded_plan_theme
+from backend.services.finn_trade_review_service import FinnTradeReviewService, build_closed_positions, build_weekly_review_patterns, unrecorded_plan_theme
 
 
 START = datetime(2026, 10, 16, tzinfo=timezone.utc)
@@ -12,6 +13,29 @@ def test_exchange_plan_not_recorded_is_evidence_gap_not_behavioral_missing_plan(
     assert unrecorded_plan_theme("exchange_user_attested") == "plan_not_recorded"
     assert unrecorded_plan_theme("bybit_derivative_user_attested") == "plan_not_recorded"
     assert unrecorded_plan_theme("bot_position") == "missing_plan"
+
+
+def test_weekly_reflection_keeps_plan_facts_separate_from_finn_observations():
+    rows = [
+        SimpleNamespace(id=8, origin="exchange_user_attested", has_plan=False,
+                        analysis_status="pending", analysis_json=None),
+        SimpleNamespace(id=9, origin="bot_position", has_plan=True,
+                        analysis_status="ready", analysis_json={"observations": [
+                            {"theme": "timing", "text": "De instap kwam later dan gepland."}]}),
+        SimpleNamespace(id=10, origin="bot_position", has_plan=True,
+                        analysis_status="ready", analysis_json={"observations": [
+                            {"theme": "timing", "text": "Ook hier volgde een late instap."}]}),
+    ]
+    result = {item["theme"]: item for item in build_weekly_review_patterns(rows)}
+
+    assert result["plan_not_recorded"] == {
+        "theme": "plan_not_recorded", "review_ids": [8], "count": 1,
+        "basis": "plan_record", "example": None,
+    }
+    assert result["timing"] == {
+        "theme": "timing", "review_ids": [9, 10], "count": 2,
+        "basis": "finn_analysis", "example": "De instap kwam later dan gepland.",
+    }
 
 
 def test_derivative_review_never_enters_eur_market_chart():

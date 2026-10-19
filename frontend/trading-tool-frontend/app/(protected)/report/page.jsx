@@ -455,34 +455,37 @@ function getTradingReportSummary(report, fallbackText) {
   return cleaned.length > 190 ? `${cleaned.slice(0, 190).trim()}...` : cleaned;
 }
 
-function getTradingReportPanelCopy(locale = 'nl') {
+function getTradingReportPanelCopy(locale = 'nl', description = '') {
   const normalized = String(locale || 'nl').toLowerCase();
   if (normalized.startsWith('en')) {
     return {
-      eyebrow: 'Trading report',
-      sectionTitle: 'Trading Report',
-      collapsedCta: 'View full trading report',
-      expandedCta: 'Hide full trading report',
-      summaryFallback: 'Open the full trading report for the latest market context and setup guidance.',
+      eyebrow: 'Market context',
+      sectionTitle: 'Market report',
+      description,
+      collapsedCta: 'View full market report',
+      expandedCta: 'Hide full market report',
+      summaryFallback: 'Open the full market report for the latest market context and setup guidance.',
       statusReady: 'Ready',
     };
   }
   if (normalized.startsWith('de')) {
     return {
-      eyebrow: 'Trading-Bericht',
-      sectionTitle: 'Trading-Bericht',
-      collapsedCta: 'Vollständigen Trading-Bericht ansehen',
-      expandedCta: 'Vollständigen Trading-Bericht ausblenden',
-      summaryFallback: 'Öffne den vollständigen Trading-Bericht für den aktuellen Marktkontext und Setup-Hinweise.',
+      eyebrow: 'Marktkontext',
+      sectionTitle: 'Marktbericht',
+      description,
+      collapsedCta: 'Vollständigen Marktbericht ansehen',
+      expandedCta: 'Vollständigen Marktbericht ausblenden',
+      summaryFallback: 'Öffne den vollständigen Marktbericht für den aktuellen Marktkontext und Setup-Hinweise.',
       statusReady: 'Bereit',
     };
   }
   return {
-    eyebrow: 'Tradingrapport',
-    sectionTitle: 'Tradingrapport',
-    collapsedCta: 'Bekijk volledig tradingrapport',
-    expandedCta: 'Verberg volledig tradingrapport',
-    summaryFallback: 'Open het volledige tradingrapport voor de laatste marktcontext en setup-richting.',
+    eyebrow: 'Marktcontext',
+    sectionTitle: 'Marktrapport',
+    description,
+    collapsedCta: 'Bekijk volledig marktrapport',
+    expandedCta: 'Verberg volledig marktrapport',
+    summaryFallback: 'Open het volledige marktrapport voor de laatste marktcontext en setup-richting.',
     statusReady: 'Klaar',
   };
 }
@@ -1761,7 +1764,7 @@ export default function ReportPage() {
   const { t, locale } = useTranslation();
   const { selectedAsset } = useAsset();
   const reportT = t.pages.report;
-  const tradingPanelCopy = useMemo(() => getTradingReportPanelCopy(locale), [locale]);
+  const tradingPanelCopy = useMemo(() => getTradingReportPanelCopy(locale, reportT.marketReportDescription), [locale, reportT.marketReportDescription]);
 
   const [reportType, setReportType] = useState('daily');
   const [report, setReport] = useState(null);
@@ -2034,10 +2037,6 @@ RENDER
         report && (
           <div className="animate-fade-slide pb-24">
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-              <FinnReportsPanel report={report} />
-            </DashboardErrorBoundary>
-
-            <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
               <section className="mt-10 rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
                 <div className="border-b border-slate-100 px-6 py-6 md:px-8">
                   <div className="max-w-3xl">
@@ -2047,6 +2046,7 @@ RENDER
                       <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
                         {tradingPanelCopy.sectionTitle}
                       </h2>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-600">{tradingPanelCopy.description}</p>
                       <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
                         <span>{reportT.hudPeriod}: {report?.report_date || '—'}</span>
                         <span className="h-1 w-1 rounded-full bg-slate-300" />
