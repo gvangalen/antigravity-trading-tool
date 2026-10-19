@@ -3448,6 +3448,8 @@
       "targetsPlaceholder": "Targets (comma separated)",
       "stopLossPlaceholder": "Stop-loss",
       "amountPlaceholder": "Amount (€)",
+      "amountPerExecutionLabel": "Basisbetrag pro Ausführung (€)",
+      "amountPerExecutionHelp": "Bei einem festen Betrag wird dies jedes Mal eingesetzt. Bei einer Kurve ist dies die 100-%-Basis.",
       "executionLabel": "Execution",
       "fixedAmount": "Fixed amount",
       "curveBased": "Based on curve",

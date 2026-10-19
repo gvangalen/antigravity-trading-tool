@@ -3432,6 +3432,8 @@
       "targetsPlaceholder": "Doelen (komma gescheiden)",
       "stopLossPlaceholder": "Stop-loss",
       "amountPlaceholder": "Bedrag (€)",
+      "amountPerExecutionLabel": "Basisbedrag per uitvoering (€)",
+      "amountPerExecutionHelp": "Bij vast bedrag betaal je dit per uitvoering. Bij een curve is dit de 100%-basis.",
       "executionLabel": "Uitvoering",
       "fixedAmount": "Vast bedrag",
       "curveBased": "Op basis van curve",
