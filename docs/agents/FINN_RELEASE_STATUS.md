@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Hervatte onboarding: opgeslagen setup en watchlist
 
-Phase: `LOCAL_VALIDATED`. Onafhankelijke browser-QA op productie-SHA
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Onafhankelijke browser-QA op productie-SHA
 `7a63c824fd321023effc12b0b7756ee1b3b37ed4` vond dat de hervatte
 onboarding maandag en geen scorevoorwaarde toonde, terwijl dezelfde opgeslagen
 setup in Mijn Plan vrijdag en de band Onder druk had. De onboarding gebruikte
@@ -22,9 +22,16 @@ Build-bewijs: 16 gerichte onboarding-handofftests, 9 setupchecks, 15
 i18n-tests en 26 commandchecks geslaagd; webbuild, typecheck en i18n-lint
 geslaagd. `audit:high` slaagde met alleen een bestaande moderate
 Next.js-advisory. Er zijn geen backend-, actiecontract- of modelpaden gewijzigd.
-Deze wijziging is nog niet live en de ingelogde vrijdag-plus-Onder-druk-
-herkeuring, verse registratie, tweede eigenaar en mobiele runtime zijn niet
-afgetekend.
+[PR #435](https://github.com/gvangalen/antigravity-trading-tool/pull/435)
+is gemerged als `0ea6ffd1c9f0cc5f9f0f91d51b85cf6ba197c2d8`. Alle vijf
+PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39291827965)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39292092235)
+slaagde; daarna gaven `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` ieder HTTP 200 en exact die SHA.
+Deze documentcorrectie krijgt zelf een nieuwe SHA; QA controleert de
+uiteindelijke runtime-identiteit opnieuw. De ingelogde vrijdag-plus-Onder-druk-
+herkeuring, verse registratie, tweede eigenaar en mobiele runtime zijn nog
+niet afgetekend.
 
 ## Coachvervolg: gekozen setup bij scorevergelijking
 
