@@ -221,8 +221,8 @@ export const fetchAllBotTrades = async (limit = 50, offset = 0) => {
   };
 };
 
-export const fetchFinnTradeReviews = async (limit = 50, offset = 0) => {
-  const query = buildQuery({ limit, offset });
+export const fetchFinnTradeReviews = async (limit = 50, offset = 0, weekStart = null) => {
+  const query = buildQuery({ limit, offset, ...(weekStart ? { week_start: weekStart } : {}) });
   return handleApi(fetchAuth(`/api/bot/trade-reviews?${query}`));
 };
 

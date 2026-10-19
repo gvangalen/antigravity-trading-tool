@@ -357,7 +357,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   );
 }
 
-function ReflectionOverview({ weekly, copy, weeklySummary, rolloutDisabled, loading, error, openReview }) {
+function ReflectionOverview({ weekly, weeks, selectedWeek, onWeekChange, locale, copy, weeklySummary, rolloutDisabled, loading, error, openReview }) {
   const trades = number(weekly.trades);
   const analyzed = number(weekly.analyzed);
   const patterns = Array.isArray(weekly.patterns) ? weekly.patterns : [];
@@ -372,7 +372,13 @@ function ReflectionOverview({ weekly, copy, weeklySummary, rolloutDisabled, load
           <h3 className="mt-2 text-xl font-black text-slate-950 dark:text-white">{copy.overviewTitle}</h3>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">{copy.overviewDescription}</p>
         </div>
-        {!loading && !error && !rolloutDisabled && <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-200">{weeklySummary}</span>}
+        {!loading && !error && !rolloutDisabled && <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-bold text-slate-600 dark:text-slate-300" htmlFor="reflection-week">{copy.weekSelect}</label>
+          <select id="reflection-week" value={selectedWeek || weekly.week_start || ''} onChange={(event) => onWeekChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+            {weeks.map((start) => <option key={start} value={start}>{copy.weekOf.replace('{date}', new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${start}T12:00:00Z`)))}</option>)}
+          </select>
+          <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-200">{weeklySummary}</span>
+        </div>}
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         {[[copy.overviewClosed, trades], [copy.overviewAnalyzed, analyzed], [copy.overviewWithPlan, number(weekly.plans)]].map(([label, value]) => (
@@ -383,6 +389,7 @@ function ReflectionOverview({ weekly, copy, weeklySummary, rolloutDisabled, load
         ))}
       </div>
       <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+        {weekly.generated_at && <p className="mb-3 text-xs text-slate-500">{copy.weekSaved.replace('{date}', formatDate(weekly.generated_at, locale))}</p>}
         <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.overviewFindings}</h4>
         <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
           {loading ? copy.loading : error ? copy.error : rolloutDisabled ? copy.rolloutDisabled : trades === 0 ? copy.weekNoTrades : !hasFindings ? copy.overviewNoFindings : copy.overviewEvidence}
@@ -415,6 +422,8 @@ export default function FinnTradeReviews() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [weekly, setWeekly] = useState({ trades: 0, plans: 0, notes: 0 });
+  const [weeks, setWeeks] = useState([]);
+  const [selectedWeek, setSelectedWeek] = useState(null);
   const [excluded, setExcluded] = useState({});
   const [selected, setSelected] = useState(null);
   const [deepLinkLoading, setDeepLinkLoading] = useState(false);
@@ -443,11 +452,12 @@ export default function FinnTradeReviews() {
     setLoading(true);
     setError(false);
     try {
-      const result = await fetchFinnTradeReviews(50, 0);
+      const result = await fetchFinnTradeReviews(50, 0, selectedWeek);
       setRolloutDisabled(result?.status === 'disabled');
       setItems(Array.isArray(result?.items) ? result.items : []);
       setTotal(number(result?.total));
       setWeekly(result?.weekly || { trades: 0, plans: 0, notes: 0 });
+      setWeeks(Array.isArray(result?.weeks) ? result.weeks : []);
       setExcluded(result?.excluded || {});
     } catch (loadError) {
       console.error('FINN trade reviews could not load:', loadError);
@@ -455,7 +465,7 @@ export default function FinnTradeReviews() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedWeek]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -574,7 +584,7 @@ export default function FinnTradeReviews() {
   async function loadMore() {
     setLoadingMore(true);
     try {
-      const result = await fetchFinnTradeReviews(50, items.length);
+      const result = await fetchFinnTradeReviews(50, items.length, selectedWeek);
       setItems((current) => [...current, ...(Array.isArray(result?.items) ? result.items : [])]);
       setTotal(number(result?.total));
       setWeekly(result?.weekly || weekly);
@@ -605,7 +615,7 @@ export default function FinnTradeReviews() {
         <h2 id="finn-trades-title" className="mt-2 text-3xl font-black tracking-tight">{copy.title}</h2>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-blue-100">{copy.description}</p>
       </div>
-      <ReflectionOverview weekly={weekly} copy={copy} weeklySummary={weeklySummary} rolloutDisabled={rolloutDisabled} loading={loading} error={error} openReview={openReview} />
+      <ReflectionOverview weekly={weekly} weeks={weeks} selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} locale={locale} copy={copy} weeklySummary={weeklySummary} rolloutDisabled={rolloutDisabled} loading={loading} error={error} openReview={openReview} />
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
       <div className="min-w-0 overflow-hidden rounded-[28px] border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-800 sm:px-8">

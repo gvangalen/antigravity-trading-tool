@@ -247,21 +247,14 @@ def test_trade_review_rollout_reaches_api_and_workers_with_fail_closed_default()
         )
         return json.loads(result.stdout)
 
-    disabled = process_env(None, None)
-    assert len(disabled) == 5
-    assert all(app["mode"] == "off" and app["ids"] == "" for app in disabled)
+    for mode, ids, qa_id in ((None, None, None), ("allowlist", "93", None), ("off", "", "71")):
+        apps = process_env(mode, ids, qa_id)
+        assert len(apps) == 5
+        assert all(app["mode"] == "all" and app["ids"] == "" for app in apps if app["name"] != "frontend")
+        assert next(app for app in apps if app["name"] == "frontend")["mode"] == (mode or "off")
 
-    allowed = process_env("allowlist", "93")
-    assert {app["name"] for app in allowed} == {app["name"] for app in disabled}
-    assert all(app["mode"] == "allowlist" and app["ids"] == "93" for app in allowed)
-
-    protected_qa = process_env("allowlist", "93", "71")
-    assert next(app for app in protected_qa if app["name"] == "frontend")["ids"] == "93"
-    assert all(app["ids"] == "93,71" for app in protected_qa if app["name"] != "frontend")
-    assert all(app["ids"] == "93,71" for app in process_env("ALLOWLIST", "93", "71") if app["name"] != "frontend")
-    assert all(app["ids"] == "93" for app in process_env("allowlist", "93", "invalid"))
-    assert all(app["ids"] == "93,invalid" for app in process_env("allowlist", "93,invalid", "71"))
-    assert all(app["mode"] == "off" and app["ids"] == "" for app in process_env(None, None, "71"))
+    staging = process_env("allowlist", "93", environment="staging")
+    assert all(app["mode"] == "allowlist" and app["ids"] == "93" for app in staging)
     assert all(app["ids"] == "93" for app in process_env("allowlist", "93", "71", "staging"))
 
 

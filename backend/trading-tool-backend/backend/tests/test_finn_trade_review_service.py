@@ -1,12 +1,112 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from backend.services.finn_trade_review_service import FinnTradeReviewService, build_closed_positions, build_weekly_review_patterns, unrecorded_plan_theme
+from backend.services.finn_trade_review_service import FinnTradeReviewService, build_closed_positions, build_weekly_review_patterns, completed_reflection_week, unrecorded_plan_theme
 
 
 START = datetime(2026, 10, 16, tzinfo=timezone.utc)
+
+
+def test_reflection_uses_completed_amsterdam_calendar_weeks_across_dst():
+    # 19 October starts a new local week; the one ending on 26 October is
+    # 169 UTC hours because Amsterdam returns to winter time on the Sunday.
+    monday, end_date, start, end = completed_reflection_week(
+        datetime(2026, 10, 26, 5, tzinfo=timezone.utc), date(2026, 10, 19))
+    assert (monday, end_date) == (date(2026, 10, 19), date(2026, 10, 26))
+    assert start == datetime(2026, 10, 18, 22, tzinfo=timezone.utc)
+    assert end == datetime(2026, 10, 25, 23, tzinfo=timezone.utc)
+    assert end - start == timedelta(hours=169)
+    _, _, spring_start, spring_end = completed_reflection_week(
+        datetime(2026, 3, 30, 5, tzinfo=timezone.utc), date(2026, 3, 23))
+    assert spring_end - spring_start == timedelta(hours=167)
+    assert completed_reflection_week(datetime(2026, 10, 18, 21, 59, tzinfo=timezone.utc))[0] == date(2026, 10, 5)
+    assert completed_reflection_week(datetime(2026, 10, 18, 22, tzinfo=timezone.utc))[0] == date(2026, 10, 12)
+    for invalid in (date(2026, 10, 13), date(2026, 10, 19)):
+        try:
+            completed_reflection_week(datetime(2026, 10, 19, 5, tzinfo=timezone.utc), invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Only completed Monday–Sunday weeks may be selected")
+
+
+def test_weekly_reflection_is_owner_scoped_and_persisted():
+    calls = []
+
+    class Result:
+        def __init__(self, row=None, rows=None):
+            self.row = row
+            self.rows = rows or []
+
+        def fetchone(self):
+            return SimpleNamespace(_mapping=self.row)
+
+        def fetchall(self):
+            return self.rows
+
+        def scalar_one(self):
+            return datetime(2026, 10, 19, 6, tzinfo=timezone.utc)
+
+    class Session:
+        async def execute(self, statement, params):
+            calls.append((str(statement), params))
+            index = len(calls)
+            if index == 1:
+                return Result({"trades": 1, "plans": 1, "notes": 0,
+                               "analyzed": 1, "pending": 0, "unavailable": 0})
+            if index == 2:
+                return Result(rows=[SimpleNamespace(id=9, origin="bot_position", has_plan=True,
+                                                    analysis_status="ready", analysis_json={"observations": [
+                                                        {"theme": "plan_followed", "text": "Volgens plan uitgevoerd."}]})])
+            return Result()
+
+        async def commit(self):
+            pass
+
+    result = asyncio.run(FinnTradeReviewService(Session()).weekly_report(7, date(2026, 10, 12)))
+    assert result["week_start"] == "2026-10-12" and result["week_end"] == "2026-10-19"
+    assert result["trades"] == 1 and result["patterns"][0]["review_ids"] == [9]
+    assert len(calls) == 5
+    for sql, params in calls[:3]:
+        assert "user_id=:user_id" in sql or "l.user_id=:user_id" in sql
+        assert "exit_at >= :start" in sql and "exit_at < :end" in sql
+        assert params["user_id"] == 7
+    assert "ON CONFLICT (user_id, week_start) DO UPDATE" in calls[3][0]
+    assert calls[3][1]["week_start"] == date(2026, 10, 12)
+
+
+def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
+    calls = []
+
+    class Result:
+        def fetchall(self):
+            return []
+
+        def scalar_one(self):
+            return 0
+
+    class Session:
+        async def execute(self, statement, params):
+            calls.append((str(statement), params))
+            return Result()
+
+    service = FinnTradeReviewService(Session())
+
+    async def no_projection(_user_id):
+        return {}
+
+    async def prior_week(_user_id, _week_start):
+        return {"week_start": "2026-10-12"}
+
+    service._project = no_projection
+    service.weekly_report = prior_week
+    asyncio.run(service.list_reviews(7, week_start=date(2026, 10, 12)))
+    for sql, params in calls[:2]:
+        assert "WHERE user_id=:user_id" in sql
+        assert "exit_at >= :start" not in sql
+        assert params["user_id"] == 7
 
 
 def test_exchange_plan_not_recorded_is_evidence_gap_not_behavioral_missing_plan():

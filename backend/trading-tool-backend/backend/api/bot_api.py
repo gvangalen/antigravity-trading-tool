@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -11,7 +11,7 @@ from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
 from backend.services.bot_service import BotService
-from backend.services.finn_trade_review_service import FinnTradeReviewService
+from backend.services.finn_trade_review_service import FinnTradeReviewService, completed_reflection_week
 from backend.services.finn_trade_screenshot import MAX_BYTES
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import trade_review_enabled, require_trade_review_access
@@ -417,17 +417,22 @@ async def list_finn_trade_reviews(
     request: Request,
     limit: int = 50,
     offset: int = 0,
+    week_start: date | None = None,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     if not (1 <= limit <= 100) or offset < 0:
         raise HTTPException(422, "Ongeldige paginering")
+    try:
+        completed_reflection_week(selected=week_start)
+    except ValueError:
+        raise HTTPException(422, "Kies een afgeronde kalenderweek vanaf maandag") from None
     review_rate_limiter.check_rate_limit(f"trade_review_list:{current_user['id']}", limit=30)
     if not trade_review_enabled(current_user["id"]):
         return {"status": "disabled", "items": [], "total": 0,
                 "weekly": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0,
                            "patterns": []}, "excluded": {}}
-    return await FinnTradeReviewService(db).list_reviews(current_user["id"], limit, offset)
+    return await FinnTradeReviewService(db).list_reviews(current_user["id"], limit, offset, week_start)
 
 
 @router.get("/bot/trade-reviews/{review_id}")

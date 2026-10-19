@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -22,6 +23,7 @@ from backend.services.finn_trade_chart_service import historical_eur_chart
 
 
 EPSILON = Decimal("0.00000001")
+REFLECTION_ZONE = ZoneInfo("Europe/Amsterdam")
 TERMINAL_ORDER_STATUSES = {"filled", "partial", "cancelled", "rejected", "error", "failed"}
 
 
@@ -47,6 +49,19 @@ def _utc_instant(value: datetime) -> datetime:
 def unrecorded_plan_theme(origin: str | None) -> str:
     return ("plan_not_recorded" if origin in {"exchange_user_attested", "bybit_derivative_user_attested"}
             else "missing_plan")
+
+
+def completed_reflection_week(now: datetime | None = None, selected: date | None = None) -> tuple[date, date, datetime, datetime]:
+    """Return one closed Monday–Sunday week, with DST-safe UTC query bounds."""
+    local_today = (now or datetime.now(timezone.utc)).astimezone(REFLECTION_ZONE).date()
+    current_monday = local_today - timedelta(days=local_today.weekday())
+    monday = selected or current_monday - timedelta(days=7)
+    if monday.weekday() != 0 or monday >= current_monday:
+        raise ValueError("Week must be a completed Monday–Sunday period")
+    next_monday = monday + timedelta(days=7)
+    start = datetime.combine(monday, datetime.min.time(), REFLECTION_ZONE).astimezone(timezone.utc)
+    end = datetime.combine(next_monday, datetime.min.time(), REFLECTION_ZONE).astimezone(timezone.utc)
+    return monday, next_monday, start, end
 
 
 def build_weekly_review_patterns(rows: list[Any]) -> list[dict]:
@@ -344,8 +359,12 @@ class FinnTradeReviewService:
         await self.session.commit()
         return excluded
 
-    async def list_reviews(self, user_id: int, limit: int = 50, offset: int = 0) -> dict:
+    async def list_reviews(self, user_id: int, limit: int = 50, offset: int = 0,
+                           week_start: date | None = None) -> dict:
         excluded = await self._project(user_id)
+        # Individual dossiers remain available as soon as a trade closes.
+        # The selected completed week applies only to the saved weekly report.
+        params = {"user_id": user_id, "limit": limit, "offset": offset}
         result = await self.session.execute(text("""
             SELECT id, bot_id, symbol, execution_environment, execution_sources, entry_at, exit_at,
                    entry_qty, entry_price_eur, exit_price_eur, pnl_eur_before_fees,
@@ -354,12 +373,30 @@ class FinnTradeReviewService:
                    cash_legs_by_currency, exchange_name, attested_at, attestation_source_ids,
                    derivative_category, position_idx, direction, settle_currency,
                    native_pnl, native_pnl_status, fee_legs_by_currency
-            FROM finn_trade_reviews WHERE user_id=:user_id
+            FROM finn_trade_reviews
+            WHERE user_id=:user_id
             ORDER BY exit_at DESC, id DESC LIMIT :limit OFFSET :offset
-        """), {"user_id": user_id, "limit": limit, "offset": offset})
+        """), params)
         items = [self._presented_review(dict(r._mapping)) for r in result.fetchall()]
-        count = await self.session.execute(text("SELECT COUNT(*) FROM finn_trade_reviews WHERE user_id=:user_id"), {"user_id": user_id})
+        count = await self.session.execute(text("""
+            SELECT COUNT(*) FROM finn_trade_reviews
+            WHERE user_id=:user_id
+        """), params)
         total = count.scalar_one()
+        weekly = await self.weekly_report(user_id, week_start)
+        week_options = await self.session.execute(text("""
+            SELECT DISTINCT date_trunc('week', exit_at AT TIME ZONE 'Europe/Amsterdam')::date AS week_start
+            FROM finn_trade_reviews
+            WHERE user_id=:user_id AND exit_at < :closed_before
+            ORDER BY week_start DESC LIMIT 52
+        """), {"user_id": user_id, "closed_before": completed_reflection_week()[3]})
+        weeks = sorted({weekly["week_start"], *(row.week_start.isoformat() for row in week_options.fetchall())}, reverse=True)
+        return {"items": items, "total": total, "excluded": excluded,
+                "weekly": weekly, "weeks": weeks}
+
+    async def weekly_report(self, user_id: int, selected: date | None = None) -> dict:
+        monday, next_monday, start, end = completed_reflection_week(selected=selected)
+        params = {"user_id": user_id, "start": start, "end": end}
         week = await self.session.execute(text("""
             SELECT COUNT(*) AS trades,
                    COUNT(*) FILTER (WHERE plan_snapshot IS NOT NULL AND plan_provenance IS NOT NULL) AS plans,
@@ -368,16 +405,16 @@ class FinnTradeReviewService:
                    COUNT(*) FILTER (WHERE analysis_status='pending') AS pending,
                    COUNT(*) FILTER (WHERE analysis_status IN ('failed','unavailable')) AS unavailable
             FROM finn_trade_reviews
-            WHERE user_id=:user_id AND exit_at >= NOW() - INTERVAL '7 days'
-        """), {"user_id": user_id})
+            WHERE user_id=:user_id AND exit_at >= :start AND exit_at < :end
+        """), params)
         pattern_rows = await self.session.execute(text("""
             SELECT id, origin,
                    (plan_snapshot IS NOT NULL AND plan_provenance IS NOT NULL) AS has_plan,
                    analysis_status, analysis_json
             FROM finn_trade_reviews
-            WHERE user_id=:user_id AND exit_at >= NOW() - INTERVAL '7 days'
+            WHERE user_id=:user_id AND exit_at >= :start AND exit_at < :end
             ORDER BY exit_at DESC LIMIT 500
-        """), {"user_id": user_id})
+        """), params)
         patterns = build_weekly_review_patterns(pattern_rows.fetchall())
         lesson_rows = await self.session.execute(text("""
             SELECT r.id, l.lesson_text
@@ -385,9 +422,9 @@ class FinnTradeReviewService:
             JOIN finn_trade_reviews r ON r.id=l.review_id AND r.user_id=l.user_id
             WHERE l.user_id=:user_id AND l.status='active'
               AND l.evidence_revision=r.input_revision
-              AND r.exit_at >= NOW() - INTERVAL '7 days'
+              AND r.exit_at >= :start AND r.exit_at < :end
             ORDER BY r.exit_at DESC,r.id DESC LIMIT 500
-        """), {"user_id": user_id})
+        """), params)
         # Exact user-confirmed wording is the only safe equivalence here. A
         # model theme alone cannot prove a repeated personal behavior.
         lesson_groups: dict[str, dict] = {}
@@ -402,14 +439,25 @@ class FinnTradeReviewService:
             for group in lesson_groups.values() if len(group["review_ids"]) >= 2
         ]
         weekly_counts = dict(week.fetchone()._mapping)
-        return {
-            "items": items,
-            "total": total, "excluded": excluded,
-            "weekly": {**weekly_counts,
-                       "patterns": patterns,
-                       "confirmed_lesson_repetitions": repeated_lessons,
-                       "patterns_truncated": weekly_counts["trades"] > 500},
-        }
+        summary = {**weekly_counts, "patterns": patterns,
+                   "confirmed_lesson_repetitions": repeated_lessons,
+                   "patterns_truncated": weekly_counts["trades"] > 500}
+        await self.session.execute(text("""
+            INSERT INTO finn_weekly_trade_reflections
+              (user_id, week_start, week_end, summary)
+            VALUES (:user_id, :week_start, :week_end, CAST(:summary AS JSONB))
+            ON CONFLICT (user_id, week_start) DO UPDATE
+              SET summary=EXCLUDED.summary, generated_at=NOW()
+            WHERE finn_weekly_trade_reflections.summary IS DISTINCT FROM EXCLUDED.summary
+        """), {"user_id": user_id, "week_start": monday, "week_end": next_monday,
+                "summary": json.dumps(summary, default=str)})
+        await self.session.commit()
+        stored = await self.session.execute(text("""
+            SELECT generated_at FROM finn_weekly_trade_reflections
+            WHERE user_id=:user_id AND week_start=:week_start
+        """), {"user_id": user_id, "week_start": monday})
+        return {**summary, "week_start": monday.isoformat(), "week_end": next_monday.isoformat(),
+                "generated_at": stored.scalar_one().isoformat(), "status": "complete"}
 
     async def get_review(self, user_id: int, review_id: int) -> dict:
         result = await self.session.execute(text("""
