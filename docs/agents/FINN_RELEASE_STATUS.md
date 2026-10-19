@@ -6,9 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Weekreflectie voor alle gebruikers
 
-Phase: `LOCAL_READY_FOR_CANDIDATE`. De nieuwe kandidaat vervangt het rollende
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #442](https://github.com/gvangalen/antigravity-trading-tool/pull/442) vervangt het rollende
 zevendaagse trade-overzicht door een per gebruiker opgeslagen reflectie voor
-een afgeronde kalenderweek (maandag tot maandag, Europe/Amsterdam). De
+een afgeronde kalenderweek (maandag tot en met zondag, Europe/Amsterdam). De
 weekselector toont de samenvatting van die week; individuele afgesloten trades
 blijven direct beschikbaar in de volledige dossierlijst. Een maandagtaak legt de
 voorgaande week vast en een eigenaargebonden leesactie kan gemiste of oude
@@ -18,12 +18,15 @@ in, ook als een oude beschermde allowlist of PM2-omgeving is achtergebleven.
 De individuele trade-analyse en het Marktrapport behouden hun eigen functie.
 
 Build-bewijs vóór kandidaat: **3937 backendtests geslaagd, 3 bestaande skips**;
-35 gerichte tests voor trade-review, uitrol en deployobservatie geslaagd.
+na de laatste dossierlijstcorrectie slaagden 30 gerichte tests voor trade-review
+en deployobservatie. De vijf [PR-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39308251149)
+en vijf [main-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39308720335) slaagden.
 Frontend productiebuild, typecheck, i18n-lint, 15 i18n-tests en 26
 commandchecks geslaagd. `audit:high` slaagde met alleen een bestaande moderate
-Next.js-advisory. De laatste frontend-copywijziging krijgt nog een nieuwe
-productiebuild en CI. Er is nog geen nieuwe deployment of onafhankelijke
-ingelogde browser-QA van deze weekrelease geclaimd.
+Next.js-advisory. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39309089818)
+slaagde. Daarna gaven backend-health en frontend-buildinfo HTTP 200 met
+dezelfde product-SHA `f11ffdfd4823ff32c4e7e50daac92673c058aaf3`.
+Er is nog geen onafhankelijke ingelogde browser-QA van deze weekrelease.
 
 ## Reflectie-indeling: afgesloten trades en Marktrapport
 
