@@ -149,7 +149,7 @@ class BotRepository:
             return []
         query = text("""
             SELECT
-              d.id, d.bot_id, b.name AS bot_name, d.symbol, d.decision_ts, d.decision_date,
+              d.id, d.bot_id, b.name AS bot_name, b.is_live, d.symbol, d.decision_ts, d.decision_date,
               d.action, d.confidence, d.amount_eur, d.scores_json, d.reason_json, d.status
             FROM bot_decisions d
             JOIN bot_configs b ON b.id = d.bot_id

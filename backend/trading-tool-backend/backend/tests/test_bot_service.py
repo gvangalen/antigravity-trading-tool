@@ -33,6 +33,57 @@ def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
     assert history[1]["reasons"] == ["Daglimiet bereikt"]
 
 
+def test_history_keeps_saved_reduction_and_check_time_without_marking_it_stale():
+    checked = datetime.now(timezone.utc) - timedelta(days=3)
+
+    class Repo:
+        async def get_bot_history(self, user_id, start, end):
+            return [{
+                "id": 25, "bot_id": 3, "bot_name": "Paper", "is_live": False,
+                "symbol": "ETH", "decision_date": checked.date(), "decision_ts": checked,
+                "action": "buy", "confidence": "medium", "amount_eur": 40,
+                "scores_json": json.dumps({
+                    "guardrails_checked_at": checked.isoformat(),
+                    "guardrails_result": {
+                        "allowed": True, "original_amount_eur": 100,
+                        "adjusted_amount_eur": 40, "blocked_by": None,
+                        "explanations": [{"code": "daily_allocation_trimmed", "from_amount_eur": 100, "to_amount_eur": 40}],
+                    },
+                }),
+                "reason_json": "[]", "status": "planned",
+            }]
+
+    service = BotService(_FakeSession())
+    service.repository = Repo()
+    row = asyncio.run(service.get_bot_history(7, 30))[0]
+    assert row["safety_check"]["state"] == "reduced"
+    assert row["safety_check"]["reason_code"] == "daily_allocation_trimmed"
+    assert row["safety_check"]["proposed_amount_eur"] == 100
+    assert row["safety_check"]["allowed_amount_eur"] == 40
+    assert row["safety_check"]["checked_at"] == checked.isoformat()
+
+
+def test_removing_optional_paper_limit_requires_risk_acknowledgement():
+    service = BotService.__new__(BotService)
+    existing = {"id": 3, "is_live": False, "mode": "manual", "budget_daily_limit_eur": 50}
+    merged = {**existing, "budget_daily_limit_eur": 0}
+    event = service._bot_update_pressure_event(existing, merged, {"budget_daily_limit_eur": 0})
+    assert event and "uitgeschakeld" in event["reasons"][0]
+
+
+def test_legacy_reduced_safety_without_explanations_stays_readable():
+    service = BotService.__new__(BotService)
+    safety = service._safety_contract({
+        "id": 30, "bot_id": 3, "status": "planned",
+        "guardrails_result": {
+            "allowed": True, "original_amount_eur": 100,
+            "adjusted_amount_eur": 50,
+        },
+    }, is_live=False, historical=True)
+    assert safety["state"] == "reduced"
+    assert safety["reason_code"] == "reduced"
+
+
 def test_manual_confirmed_fill_stays_successful_if_snapshot_fails(monkeypatch):
     calls = []
 

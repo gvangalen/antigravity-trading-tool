@@ -19,6 +19,8 @@ async def start_bot_backtest(
     Endpoint to run a backtest for a specific bot with optional scenario.
     """
     user_id = current_user["id"]
+    if scenario not in {"default", "conservative", "aggressive"}:
+        raise HTTPException(status_code=400, detail="Onbekend testscenario.")
     
     # Run backtest (sync engine)
     result = run_bot_backtest(user_id=user_id, bot_id=bot_id, days=30, scenario=scenario)

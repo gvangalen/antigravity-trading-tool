@@ -10,7 +10,6 @@ import { useModal } from "@/components/modal/ModalProvider";
 import Drawer from "@/components/ui/Drawer";
 
 import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
-import BotAgentCard from "@/components/bot/BotAgentCard";
 import BotFocusView from "@/components/bot/BotFocusView";
 import AddBotForm from "@/components/bot/AddBotForm";
 import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";

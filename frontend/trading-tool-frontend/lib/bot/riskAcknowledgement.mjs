@@ -28,7 +28,8 @@ export function increasesBotBudgetRisk(next, previous) {
   return BUDGET_RISK_FIELDS.some((field) => {
     const before = Number(previous?.[field] ?? 0);
     const after = Number(next?.[field] ?? 0);
-    return Number.isFinite(before) && Number.isFinite(after) && after > before;
+    const disablesLimit = field !== "max_asset_exposure_pct" && before > 0 && after === 0;
+    return Number.isFinite(before) && Number.isFinite(after) && (after > before || disablesLimit);
   });
 }
 

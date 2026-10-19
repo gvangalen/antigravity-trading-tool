@@ -292,6 +292,7 @@ const BotBudgetForm = forwardRef(function BotBudgetForm({
           />
         </div>
       </div>
+      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">{copy.zeroLimitMeaning}</p>
 
       {/* Asset exposure slider */}
       <div className="space-y-4 pt-4 border-t border-slate-100">
