@@ -95,6 +95,20 @@ jobs:
                   'response_id_present=' + str(bool(exchange.get('response_id'))).lower(),
                   'uses_previous_response=' + str(bool(exchange.get('uses_previous_response'))).lower(),
               )))
+          with sync_engine.connect() as connection:
+              completed = connection.execute(text("""
+                  SELECT r.response_json->'reasoning_provenance'->>'answer_boundary' AS boundary,
+                         c.state_json->'responses_exchange'->>'answer_kind' AS answer_kind
+                  FROM finn_v2_runs r
+                  LEFT JOIN finn_v2_runtime_contracts c ON c.run_id = r.id
+                  WHERE r.created_at >= :start AND r.created_at < :end
+                    AND r.status = 'completed'
+                  ORDER BY r.created_at LIMIT 20
+              """), {"start": start, "end": end}).mappings().all()
+          print('completed_run_boundaries=' + ','.join(
+              str(row['answer_kind'] or 'none') + ':' + str(row['boundary'] or 'none')
+              for row in completed
+          ))
           PY
             exit
           fi
