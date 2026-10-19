@@ -912,7 +912,7 @@
       "saveError": "Dein erstes Asset konnte nicht gespeichert werden. Bitte versuche es erneut."
     },
     "analysisOnboardingStep": {
-      "indicatorNames": {"price": "Preis", "volume": "Handelsvolumen", "change_24h": "Kursänderung in 24 Stunden", "dxy": "US-Dollar-Index (DXY)", "rsi": "Relative-Stärke-Index (RSI)"},
+      "indicatorNames": {"price": "Preis", "volume": "Handelsvolumen", "change_24h": "Kursänderung in 24 Stunden", "dxy": "US-Dollar-Index (DXY)", "sp500": "S&P-500-Index", "vix": "Volatilitätsindex (VIX)", "gold_price": "Goldpreis", "oil_price": "Ölpreis (WTI)", "us10y": "US-Zehnjahresrendite", "us02y": "US-Zweijahresrendite", "interest_rate": "US-Leitzins", "inflation_rate": "US-Inflation (CPI)", "etf_bitcoin_inflow": "Zuflüsse in Bitcoin-ETFs", "rsi": "Relative-Stärke-Index (RSI)", "ma_50": "Gleitender Durchschnitt (50 Tage)", "ma_200": "Gleitender Durchschnitt (200 Tage)", "ema_20_gap_pct": "Abstand zum EMA 20", "ema_50_gap_pct": "Abstand zum EMA 50", "macd_hist_pct": "MACD-Histogramm", "atr_pct": "Durchschnittliche Schwankungsbreite (ATR)", "adx": "Trendstärke (ADX)"},
       "stepNumber": "Analyse · 2 von 4",
       "title": "Lege deine erste Analysebasis an",
       "description": "Füge für {symbol} genau einen Markt-, einen Makro- und einen technischen Indikator hinzu. Danach gehst du direkt weiter zu Mein Plan.",

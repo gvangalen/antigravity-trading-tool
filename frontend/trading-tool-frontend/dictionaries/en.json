@@ -911,7 +911,7 @@
       "saveError": "Saving your onboarding asset failed. Please try again."
     },
     "analysisOnboardingStep": {
-      "indicatorNames": {"price": "Price", "volume": "Trading volume", "change_24h": "24-hour price change", "dxy": "US Dollar Index (DXY)", "rsi": "Relative Strength Index (RSI)"},
+      "indicatorNames": {"price": "Price", "volume": "Trading volume", "change_24h": "24-hour price change", "dxy": "US dollar index (DXY)", "sp500": "S&P 500 index", "vix": "Volatility index (VIX)", "gold_price": "Gold price", "oil_price": "Oil price (WTI)", "us10y": "US 10-year yield", "us02y": "US 2-year yield", "interest_rate": "US policy rate", "inflation_rate": "US inflation (CPI)", "etf_bitcoin_inflow": "Bitcoin ETF inflows", "rsi": "Relative strength index (RSI)", "ma_50": "50-day moving average", "ma_200": "200-day moving average", "ema_20_gap_pct": "Distance from EMA 20", "ema_50_gap_pct": "Distance from EMA 50", "macd_hist_pct": "MACD histogram", "atr_pct": "Average true range (ATR)", "adx": "Trend strength (ADX)"},
       "stepNumber": "Analysis · 2 of 4",
       "title": "Add your first analysis base",
       "description": "For {symbol}, add exactly one market, one macro, and one technical indicator. Then review the base first and continue into My Plan yourself.",

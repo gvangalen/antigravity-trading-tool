@@ -912,7 +912,7 @@
       "saveError": "Opslaan van je onboarding-asset is mislukt. Probeer het nog eens."
     },
     "analysisOnboardingStep": {
-      "indicatorNames": {"price": "Prijs", "volume": "Handelsvolume", "change_24h": "Koersverandering 24 uur", "dxy": "Amerikaanse dollarindex (DXY)", "rsi": "Relatieve sterkte-index (RSI)"},
+      "indicatorNames": {"price": "Prijs", "volume": "Handelsvolume", "change_24h": "Koersverandering 24 uur", "dxy": "Amerikaanse dollarindex (DXY)", "sp500": "S&P 500-index", "vix": "Volatiliteitsindex (VIX)", "gold_price": "Goudprijs", "oil_price": "Olieprijs (WTI)", "us10y": "Amerikaanse tienjaarsrente", "us02y": "Amerikaanse tweejaarsrente", "interest_rate": "Amerikaanse beleidsrente", "inflation_rate": "Amerikaanse inflatie (CPI)", "etf_bitcoin_inflow": "Instroom in Bitcoin-ETF's", "rsi": "Relatieve sterkte-index (RSI)", "ma_50": "Voortschrijdend gemiddelde (50 dagen)", "ma_200": "Voortschrijdend gemiddelde (200 dagen)", "ema_20_gap_pct": "Afstand tot EMA 20", "ema_50_gap_pct": "Afstand tot EMA 50", "macd_hist_pct": "MACD-histogram", "atr_pct": "Gemiddelde koersuitslag (ATR)", "adx": "Trendsterkte (ADX)"},
       "stepNumber": "Analyse · 2 van 4",
       "title": "Voeg je eerste analysebasis toe",
       "description": "Voeg voor {symbol} exact één markt-, één macro- en één technische indicator toe. Daarna controleer je eerst je basis en ga je zelf door naar Mijn Plan.",
