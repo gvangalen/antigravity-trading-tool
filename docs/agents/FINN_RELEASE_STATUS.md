@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Reflectie-indeling: afgesloten trades en Marktrapport
+
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #440](https://github.com/gvangalen/antigravity-trading-tool/pull/440)
+is gemerged als product-SHA `be031a73572bc3b6c2a1119630ab3fe6a29778b2`.
+De Reflectiepagina toont bovenaan één FINN-reflectie met een rollend overzicht
+van afgesloten trades uit de afgelopen zeven dagen en toegang tot de
+trade-dossiers. Het bestaande marktgerichte rapport staat daaronder als
+Marktrapport. Dit is nog geen vast opgeslagen wekelijks reflectierapport.
+
+Build-bewijs: **3935 backendtests geslaagd, 3 bestaande skips**; de gerichte
+trade-reviewtest **18/18**; frontend productiebuild, typecheck, i18n-lint en
+15 i18n-tests geslaagd. Alle vijf [PR-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39301553867)
+en [main-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39302204450)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39302438495)
+slaagde; daarna gaven backend-health en frontend-buildinfo ieder HTTP 200 met
+exact die product-SHA. Deze documentcorrectie krijgt zelf een nieuwe SHA;
+controleer de uiteindelijke runtime-identiteit opnieuw. Onafhankelijke
+ingelogde browser-QA van de nieuwe pagina ontbreekt nog; de eerdere
+Trade Reviews-verdicts gelden niet automatisch voor deze indeling.
+
 ## Hervatte onboarding: opgeslagen setup en watchlist
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. Onafhankelijke browser-QA op productie-SHA
