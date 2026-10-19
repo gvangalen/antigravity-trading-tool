@@ -45,7 +45,7 @@ import {
   toTradingViewSymbol,
 } from "../../../../../shared/tradingViewConfig";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
-import { FINN_INDICATOR_MODAL_COMPLETED_EVENT, openFinnContext } from "@/lib/finnCommandSearch";
+import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 
@@ -244,8 +244,6 @@ function getUiCopy(locale = "nl") {
       sampleSize: "Readings in period",
       scoreHistory: "Dated source days for score",
       scoreHistoryValue: (observed, required, window) => `${observed}/${required} in the last ${window} days`,
-      askFinnContext: "Discuss with FINN",
-      indicatorQuestion: (indicator, symbol, category, period) => `Explain my saved ${indicator} indicator for ${symbol} (${category}, ${period}). Read its configuration, source observation and score. Distinguish missing or stale data from a zero score. Do not change anything.`,
       finnContextUnavailable: "Extra AI context is currently unavailable. The current data and rule-based explanation above remain available.",
       live: "Live",
       edit: "Edit",
@@ -425,8 +423,6 @@ function getUiCopy(locale = "nl") {
       sampleSize: "Messungen im Zeitraum",
       scoreHistory: "Datierte Quelltage für den Score",
       scoreHistoryValue: (observed, required, window) => `${observed}/${required} in den letzten ${window} Tagen`,
-    askFinnContext: "Mit FINN besprechen",
-    indicatorQuestion: (indicator, symbol, category, period) => `Erkläre meinen gespeicherten Indikator ${indicator} für ${symbol} (${category}, ${period}). Lies Konfiguration, Quellmessung und Score. Unterscheide fehlende oder veraltete Daten von einem Score von null. Ändere nichts.`,
       finnContextUnavailable: "Zusätzlicher AI-Kontext ist derzeit nicht verfügbar. Die aktuellen Daten und die regelbasierte Erklärung oben bleiben verfügbar.",
       live: "Live",
       edit: "Bearbeiten",
@@ -605,8 +601,6 @@ function getUiCopy(locale = "nl") {
     sampleSize: "Metingen in periode",
     scoreHistory: "Gedateerde brondagen voor score",
     scoreHistoryValue: (observed, required, window) => `${observed}/${required} in de laatste ${window} dagen`,
-    askFinnContext: "Bespreek met FINN",
-    indicatorQuestion: (indicator, symbol, category, period) => `Leg mijn opgeslagen indicator ${indicator} voor ${symbol} uit (${category}, ${period}). Lees de configuratie, bronmeting en score. Maak onderscheid tussen ontbrekende of verouderde data en een score van nul. Wijzig niets.`,
     finnContextUnavailable: "Extra AI-context is nu niet beschikbaar. De actuele data en regeluitleg hierboven blijven wel beschikbaar.",
     live: "Live",
     edit: "Bewerken",
@@ -2014,27 +2008,10 @@ function EvidenceRow({
   row,
   expanded,
   onToggle,
-  category,
-  symbol,
   period,
   locale,
   ui,
 }) {
-  const requestFinnContext = () => {
-    openFinnContext({
-      query: ui.indicatorQuestion(row.name, symbol, category, period),
-      context: {
-        page: "/asset",
-        symbol,
-        category,
-        indicator: row.name,
-        period,
-        timeframe: period === "day" ? "1D" : period,
-        locale,
-      },
-    });
-  };
-
   const contribution = row.raw?.score_contribution;
   const weightText = row.score !== null && contribution?.status === "available"
     ? `${Math.round(Number(contribution.weight || 0) * 100)}%`
@@ -2145,17 +2122,6 @@ function EvidenceRow({
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={requestFinnContext}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-blue-600"
-            >
-              <Brain size={13} />
-              {ui.askFinnContext}
-            </button>
-          </div>
-
         </div>
       ) : null}
     </div>
@@ -2204,7 +2170,6 @@ function EvidenceSection({
   toolbar,
   emptyState,
   emptyAction,
-  symbol,
   period,
   locale,
   ui,
@@ -2257,8 +2222,6 @@ function EvidenceSection({
                 row={row}
                 expanded={expandedRowKey === rowKey}
                 onToggle={() => onToggleRow(rowKey)}
-                category={id}
-                symbol={symbol}
                 period={period}
                 locale={locale}
                 ui={ui}
@@ -3011,7 +2974,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             emptyState={section.emptyState}
             emptyAction={section.emptyAction}
-            symbol={activeSymbol}
             period={
               section.id === "market"
                 ? marketTimeframe
