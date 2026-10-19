@@ -11,6 +11,7 @@ import {
   Plus,
   Save,
   Sliders,
+  Target,
   TrendingUp,
   X,
 } from "lucide-react";
