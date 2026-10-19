@@ -412,14 +412,18 @@ const StrategyForm = forwardRef(function StrategyForm({
       )}
 
       {/* AMOUNT */}
-      <input
-        type="number"
-        name="base_amount"
-        value={form.base_amount}
-        onChange={handleChange}
-        placeholder={copy.amountPlaceholder}
-        className="input"
-      />
+      <label className="block space-y-1.5 text-sm font-semibold">
+        <span>{copy.amountPerExecutionLabel}</span>
+        <input
+          type="number"
+          name="base_amount"
+          value={form.base_amount}
+          onChange={handleChange}
+          placeholder={copy.amountPlaceholder}
+          className="input"
+        />
+        <span className="block text-xs font-normal text-secondary">{copy.amountPerExecutionHelp}</span>
+      </label>
 
       {/* EXECUTION LOGIC */}
       <div className="space-y-3">
