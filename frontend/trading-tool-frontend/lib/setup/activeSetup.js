@@ -24,10 +24,11 @@ export function getPlanCompletionForAsset(symbol, setup, strategy) {
   return { setupDone, strategyDone };
 }
 
-export function findSavedSetupForAsset(symbol, activeSetup, lastSetup, savedSetups = []) {
+// Onboarding must use full saved records. The active-match endpoint is a
+// projection without DCA cadence or score limits and cannot hydrate this form.
+export function findSavedSetupForAsset(symbol, lastSetup, savedSetups = []) {
   const target = String(symbol || "").toUpperCase();
   const matches = (setup) => setup && String(setup.symbol || "").toUpperCase() === target;
-  if (matches(activeSetup)) return activeSetup;
   if (matches(lastSetup)) return lastSetup;
   return savedSetups
     .filter(matches)

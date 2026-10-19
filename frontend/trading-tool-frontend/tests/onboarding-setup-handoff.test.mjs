@@ -10,6 +10,7 @@ import {
   getSetupId,
   normalizeSetupSaveResponse,
 } from "../lib/setup/activeSetup.js";
+import { marketConditionChoiceFromSetup } from "../lib/setup/scoreConditions.mjs";
 
 const readSource = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -31,12 +32,17 @@ test("onboarding completion belongs to the selected asset and its setup", () => 
   });
 });
 
-test("an older saved setup remains available when it is neither active nor last", () => {
+test("onboarding selects a full saved setup for its asset", () => {
   const btcLast = { id: 90, symbol: "BTC" };
-  const ethSaved = { id: 71, symbol: "ETH" };
+  const ethSaved = {
+    id: 71, symbol: "ETH", setup_type: "dca", dca_frequency: "weekly",
+    dca_day: "5", min_benchmark_score: 26, max_benchmark_score: 45,
+  };
   const ethOlder = { id: 50, symbol: "ETH" };
-  assert.equal(findSavedSetupForAsset("ETH", null, btcLast, [ethOlder, btcLast, ethSaved]), ethSaved);
-  assert.equal(findSavedSetupForAsset("ETH", null, btcLast, [btcLast]), null);
+  assert.equal(findSavedSetupForAsset("ETH", btcLast, [ethOlder, btcLast, ethSaved]), ethSaved);
+  assert.equal(findSavedSetupForAsset("ETH", btcLast, [btcLast]), null);
+  assert.equal(marketConditionChoiceFromSetup(ethSaved), "pressure");
+  assert.equal(ethSaved.dca_day, "5");
 });
 
 test("Automation unlocks only strategies linked to a setup for the chosen asset", () => {
@@ -50,7 +56,7 @@ test("Automation unlocks only strategies linked to a setup for the chosen asset"
   assert.deepEqual(getPlanStrategiesForAsset("SOL", strategies, setups), []);
 });
 
-test("uses setup_id from the real active-setup response for onboarding strategy handoff", async () => {
+test("onboarding reopens the full saved setup instead of an active-match projection", async () => {
   const activeResponse = {
     setup_id: 326,
     name: "BTC 4H Trade",
@@ -64,7 +70,11 @@ test("uses setup_id from the real active-setup response for onboarding strategy 
   assert.equal(getActiveSetupId({ id: 326 }), null);
 
   const page = await readSource("app/onboarding/plan/page.jsx");
-  assert.match(page, /getActiveSetupId\(setupCandidate\)/);
+  assert.doesNotMatch(page, /fetchActiveSetup/);
+  assert.match(page, /findSavedSetupForAsset\(symbol, lastSetup, savedSetups\)/);
+  assert.match(page, /marketConditionChoiceFromSetup\(setupCandidate\)/);
+  assert.match(page, /DCA_WEEKDAYS\[Number\(setupCandidate\.dca_day\) - 1\]/);
+  assert.match(page, /scoreConditionLabel/);
   assert.match(page, /setup_id:\s*getSetupId\(savedSetup\)/);
   assert.match(page, /normalizeSetupSaveResponse\(response\)/);
   assert.doesNotMatch(page, /setupCandidate\.id/);

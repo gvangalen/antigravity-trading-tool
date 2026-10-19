@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Hervatte onboarding: opgeslagen setup en watchlist
+
+Phase: `LOCAL_VALIDATED`. Onafhankelijke browser-QA op productie-SHA
+`7a63c824fd321023effc12b0b7756ee1b3b37ed4` vond dat de hervatte
+onboarding maandag en geen scorevoorwaarde toonde, terwijl dezelfde opgeslagen
+setup in Mijn Plan vrijdag en de band Onder druk had. De onboarding gebruikte
+de actieve setupmatch als formulierbron; die projectie bevat geen DCA-weekdag
+of scoregrenzen. De lokale reparatie leest volledige eigenaargebonden
+setuprecords en toont het opgeslagen ritme en de scorevoorwaarde in de
+controlekaart. Watchlist-verwijdering wacht op een geslaagde serveractie en
+ververst de gedeelde cache; de Nederlandse bevestiging heeft nu Annuleren.
+Asset toevoegen opent meteen de assetkeuze. Onboarding-copy onderscheidt een
+opgeslagen plan of bot van een uitgevoerde Paper-beslissing.
+
+Build-bewijs: 16 gerichte onboarding-handofftests, 9 setupchecks, 15
+i18n-tests en 26 commandchecks geslaagd; webbuild, typecheck en i18n-lint
+geslaagd. `audit:high` slaagde met alleen een bestaande moderate
+Next.js-advisory. Er zijn geen backend-, actiecontract- of modelpaden gewijzigd.
+Deze wijziging is nog niet live en de ingelogde vrijdag-plus-Onder-druk-
+herkeuring, verse registratie, tweede eigenaar en mobiele runtime zijn niet
+afgetekend.
+
 ## Coachvervolg: gekozen setup bij scorevergelijking
 
 Phase: `LOCAL_READY_FOR_CANDIDATE`. Onafhankelijke ingelogde browser-QA op
