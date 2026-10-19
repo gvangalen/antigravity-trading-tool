@@ -10,6 +10,7 @@ on:
         options:
           - diagnose
           - diagnose-manifest
+          - diagnose-coach-runs
           - provision
 
 permissions:
@@ -40,6 +41,41 @@ jobs:
           set -euo pipefail
           set +x
           mode="$1"
+          if [ "$mode" = diagnose-coach-runs ]; then
+            cd /home/ubuntu/antigravity-trading-tool
+            set -a
+            source "$HOME/.secrets/trading.env"
+            set +a
+            PYTHONPATH=backend/trading-tool-backend python3 - <<'PY'
+          from datetime import datetime, timezone
+          import os
+          from sqlalchemy import text
+          from backend.infrastructure.database import sync_engine
+
+          print('minimal_read_answers=' + ('enabled' if os.getenv('FINN_MINIMAL_READ_ANSWERS') == '1' else 'disabled_or_unset'))
+          start = datetime(2026, 10, 19, 4, 45, tzinfo=timezone.utc)
+          end = datetime(2026, 10, 19, 4, 51, tzinfo=timezone.utc)
+          with sync_engine.connect() as connection:
+              rows = connection.execute(text("""
+                  SELECT r.id, r.created_at, r.completed_at, r.status, r.error_code,
+                         c.state_json->'responses_exchange'->>'answer_kind' AS answer_kind,
+                         c.state_json->>'terminal_response_type' AS response_type
+                  FROM finn_v2_runs r
+                  LEFT JOIN finn_v2_runtime_contracts c ON c.run_id = r.id
+                  WHERE r.created_at >= :start AND r.created_at < :end
+                    AND r.status IN ('failed', 'unavailable', 'downgraded')
+                  ORDER BY r.created_at
+                  LIMIT 20
+              """), {"start": start, "end": end}).mappings().all()
+          print('coach_failure_count=' + str(len(rows)))
+          for row in rows:
+              print(' '.join(f'{key}={row[key]}' for key in (
+                  'id', 'created_at', 'completed_at', 'status', 'error_code',
+                  'answer_kind', 'response_type',
+              )))
+          PY
+            exit
+          fi
           if [ "$mode" = provision ]; then
             cd /home/ubuntu/antigravity-trading-tool
             set -a
