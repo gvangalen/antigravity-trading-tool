@@ -89,10 +89,9 @@ test("explicit contextual requests still reach ordinary FINN chat", () => {
   assert.match(assistantSource, /\.\.\.\(commandRequest\?\.context\s*\|\|\s*\{\}\)/);
 });
 
-test("indicator questions use FINN chat rather than the retired specialist", () => {
-  assert.match(analysisSource, /query: ui\.indicatorQuestion\(row\.name, symbol, category, period\)/);
-  assert.match(analysisSource, /openFinnContext\(\{/);
-  assert.doesNotMatch(analysisSource, /requestIndicatorContext|finnResult/);
+test("indicator details rely on the persistent FINN chat without a second discussion button", () => {
+  assert.match(shellSource, /data-testid="finn-chat-panel"/);
+  assert.doesNotMatch(analysisSource, /askFinnContext|indicatorQuestion|openFinnContext|requestIndicatorContext|finnResult/);
 });
 
 test("plan actions use FINN chat rather than inline specialist cards", () => {
