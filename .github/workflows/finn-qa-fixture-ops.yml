@@ -56,7 +56,10 @@ jobs:
 
           print('minimal_read_answers=' + ('enabled' if os.getenv('FINN_MINIMAL_READ_ANSWERS') == '1' else 'disabled_or_unset'))
           pm2_bin = os.path.join(os.path.expanduser('~'), '.nvm/versions/node/v20.19.5/bin/pm2')
-          processes = subprocess.run([pm2_bin, 'jlist'], capture_output=True, text=True, check=True)
+          processes = subprocess.run(
+              [pm2_bin, 'jlist'], capture_output=True, text=True, check=True,
+              env={**os.environ, 'PATH': os.path.dirname(pm2_bin) + ':' + os.environ.get('PATH', '')},
+          )
           for process in json.loads(processes.stdout):
               name = str(process.get('name') or '')
               if 'backend' in name or 'finn' in name:
