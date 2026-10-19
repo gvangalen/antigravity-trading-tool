@@ -17,6 +17,7 @@ from backend.schemas.technical_data_schema import (
 )
 from backend.utils.auth_utils import get_current_user
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ async def add_macro_indicator(
         service = MacroDataService(db)
         result = await service.add_macro_indicator(int(user_id), raw_name, value, symbol=symbol)
         await db.commit()
+        queue_indicator_score_refresh(int(user_id), symbol or "BTC")
         if str(raw_name or "").strip().lower() in {"dxy", "sp500", "gold_price", "oil_price"}:
             try:
                 from backend.celery_task.celery_app import celery_app
@@ -81,7 +83,10 @@ async def delete_macro_indicator(
 ):
     try:
         service = MacroDataService(db)
-        return await service.delete_macro_indicator(name, int(current_user["id"]), symbol=symbol)
+        result = await service.delete_macro_indicator(name, int(current_user["id"]), symbol=symbol)
+        await db.commit()
+        queue_indicator_score_refresh(int(current_user["id"]), symbol)
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -261,6 +266,7 @@ async def put_macro_preferences(
         asset_class=asset_class,
     )
     await db.commit()
+    queue_indicator_score_refresh(int(user_id), normalized_symbol)
 
     for name in {name for name, _ in normalized_items} & {"dxy", "sp500", "gold_price", "oil_price"}:
         try:
