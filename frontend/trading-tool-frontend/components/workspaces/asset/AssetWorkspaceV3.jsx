@@ -176,7 +176,14 @@ function getUiCopy(locale = "nl") {
       missingScoreRule: "A source reading is available, but no scoring rule is configured. This indicator has no score yet.",
       scoringRule: "Scoring rule",
       scoreCalculationTitle: "How was this score calculated?",
+      scoreTitle: "Score",
+      scorePoints: "points",
       scoreWeight: "Weight in group score",
+      calculation: "Calculation",
+      usedData: "Data used",
+      scaledReading: "Reading on a 0–100 scale",
+      groupContribution: "Contribution to group score",
+      coverageValue: (observed, required, window) => `${observed} source days / at least ${required} in the last ${window} days`,
       systemScoringRule: "System rule",
       personalScoringRule: "Your curve",
       priceRangeMethod: (position) => `Measured price position in its recent 30-day range: ${position}/100. This is not an entry signal.`,
@@ -350,7 +357,14 @@ function getUiCopy(locale = "nl") {
       missingScoreRule: "Ein Quellwert ist vorhanden, aber keine Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
       scoringRule: "Scoreregel",
       scoreCalculationTitle: "Wie wurde dieser Score berechnet?",
+      scoreTitle: "Score",
+      scorePoints: "Punkte",
       scoreWeight: "Gewicht im Gruppenscore",
+      calculation: "Berechnung",
+      usedData: "Verwendete Daten",
+      scaledReading: "Messwert auf einer Skala von 0–100",
+      groupContribution: "Beitrag zum Gruppenscore",
+      coverageValue: (observed, required, window) => `${observed} Quelltage / mindestens ${required} in den letzten ${window} Tagen`,
       systemScoringRule: "Systemregel",
       personalScoringRule: "Deine Kurve",
       priceRangeMethod: (position) => `Gemessene Preisposition im jüngsten 30-Tage-Bereich: ${position}/100. Das ist kein Einstiegssignal.`,
@@ -523,7 +537,14 @@ function getUiCopy(locale = "nl") {
     missingScoreRule: "Er is een bronmeting, maar geen scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
     scoringRule: "Scoreregel",
     scoreCalculationTitle: "Hoe is deze score berekend?",
+    scoreTitle: "Score",
+    scorePoints: "punten",
     scoreWeight: "Gewicht in groepsscore",
+    calculation: "Berekening",
+    usedData: "Gebruikte gegevens",
+    scaledReading: "Meting op schaal 0–100",
+    groupContribution: "Bijdrage aan groepsscore",
+    coverageValue: (observed, required, window) => `${observed} brondagen / minimaal ${required} in de laatste ${window} dagen`,
     systemScoringRule: "Systeemregel",
     personalScoringRule: "Jouw curve",
     priceRangeMethod: (position) => `Gemeten prijspositie in het recente 30-daagse bereik: ${position}/100. Dit is geen instapsignaal.`,
@@ -1426,7 +1447,11 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
         ? methodDetail
       : shouldUseBackendDetail
         ? String(name).trim().toLowerCase() === "sp500"
-          ? localizedDetail.replace(/;\s*dit is macrocontext[^.]*\.?$/i, ".")
+          ? locale?.startsWith("nl")
+            ? localizedDetail
+                .replace(/^S&P 500 ligt boven het midden van het eigen recente 90-daagse bereik[.;].*$/i, "De S&P 500 staat boven het midden van zijn koersbereik over de afgelopen 90 dagen.")
+                .replace(/;\s*dit is macrocontext[^.]*\.?$/i, ".")
+            : localizedDetail
           : localizedDetail
         : generatedDetail;
 
@@ -2013,6 +2038,10 @@ function EvidenceRow({
   const weightText = row.score !== null && contribution?.status === "available"
     ? `${Math.round(Number(contribution.weight || 0) * 100)}%`
     : ui.unavailable;
+  const contributionText = row.score !== null && contribution?.status === "available"
+    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(Number(contribution.weighted_points || 0))} ${ui.scorePoints} · ${weightText}`
+    : ui.unavailable;
+  const historyCoverage = row.raw?.score_history_coverage;
   const freshness = row.raw?.freshness;
   const freshnessText = {
     unavailable: ui.unavailable,
@@ -2025,7 +2054,7 @@ function EvidenceRow({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-2.5 text-left transition hover:bg-slate-50/80"
+        className="w-full px-4 py-3 text-left transition hover:bg-slate-50/80"
       >
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(120px,0.45fr)_minmax(150px,0.5fr)_minmax(220px,0.8fr)] lg:items-center">
           <div className="flex items-start gap-3">
@@ -2038,7 +2067,7 @@ function EvidenceRow({
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
                 {ui.indicator}
               </div>
-              <div className="text-[14px] font-black leading-tight text-slate-950">{row.label}</div>
+              <div className="text-[16px] font-bold leading-tight text-slate-950">{row.label}</div>
             </div>
           </div>
 
@@ -2046,7 +2075,7 @@ function EvidenceRow({
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
               {ui.value}
             </div>
-            <div className="text-[14px] font-black text-slate-950">{row.value}</div>
+            <div className="text-[16px] font-bold text-slate-950">{row.value}</div>
           </div>
 
           <div>
@@ -2064,38 +2093,58 @@ function EvidenceRow({
               {ui.assessment}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${row.signalTone.pill}`}>
-                {row.scoreLabel}
+              <span className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-[12px] font-semibold text-slate-900">
+                {ui.scoreTitle} {row.scoreLabel}
               </span>
             </div>
-            <p className="mt-1 text-[12px] font-medium leading-5 text-slate-500">
-              {row.detail}
-            </p>
           </div>
         </div>
+        <p className="mt-3 text-[13px] leading-5 text-slate-700">{row.detail}</p>
       </button>
 
       {expanded ? (
-        <div className="bg-slate-50/70 px-4 py-3">
-          <div className="text-[12px] font-bold text-slate-700">{ui.scoreCalculationTitle}</div>
-          <dl className="mt-2 grid gap-x-6 gap-y-2 text-[12px] sm:grid-cols-2">
-            {[
-              [ui.value, row.value],
-              [ui.scoringRule, row.ruleOrigin === "custom" ? ui.personalScoringRule : row.ruleOrigin ? ui.systemScoringRule : ui.unavailable],
-              [ui.scoreWeight, weightText],
-              [ui.freshness, freshnessText],
-            ].map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-3 border-b border-slate-200/70 py-1">
-                <dt className="text-slate-500">{label}</dt>
-                <dd className="font-semibold text-slate-700">{value}</dd>
+        <div className="border-t border-slate-100 px-4 py-4">
+          <h3 className="text-[14px] font-bold text-slate-900">{ui.scoreCalculationTitle}</h3>
+          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
+            <div className="grid md:grid-cols-2">
+              <div className="p-4 md:border-r md:border-slate-200">
+                <h4 className="text-[13px] font-bold text-slate-900">{ui.calculation}</h4>
+                <dl className="mt-2 text-[12px]">
+                  {[
+                    [ui.scaledReading, row.normalizedPosition !== null ? `${row.normalizedPosition}/100` : ui.unavailable],
+                    [ui.scoringRule, row.ruleOrigin === "custom" ? ui.personalScoringRule : row.ruleOrigin ? ui.systemScoringRule : ui.unavailable],
+                    [ui.groupContribution, contributionText],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-3 border-b border-slate-200 py-2 last:border-0">
+                      <dt className="text-slate-500">{label}</dt>
+                      <dd className="text-right font-semibold text-slate-800">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
-            ))}
-          </dl>
-          <p className="mt-2 text-[11px] text-slate-500">
-            {ui.dataSource}: {String(row.raw?.source || "—").replaceAll("_", " ")} · {ui.latestSignal}: {row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.missingSourceMoment}
-          </p>
+              <div className="border-t border-slate-200 p-4 md:border-t-0">
+                <h4 className="text-[13px] font-bold text-slate-900">{ui.usedData}</h4>
+                <dl className="mt-2 text-[12px]">
+                  {[
+                    [ui.periodLabel, ui[row.raw?.period || period] || row.raw?.period || period],
+                    [ui.sampleSize, row.raw?.sample_size ?? ui.unavailable],
+                    [ui.scoreHistory, historyCoverage ? ui.coverageValue(historyCoverage.observed_days, historyCoverage.required_days, historyCoverage.window_days) : ui.unavailable],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-3 border-b border-slate-200 py-2 last:border-0">
+                      <dt className="text-slate-500">{label}</dt>
+                      <dd className="text-right font-semibold text-slate-800">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500">
+              <span>{ui.dataSource}: {String(row.raw?.source || "—").replaceAll("_", " ")} · {ui.latestSignal}: {row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.missingSourceMoment}</span>
+              <span>{ui.freshness}: {freshnessText}</span>
+            </div>
+          </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={requestFinnContext}
