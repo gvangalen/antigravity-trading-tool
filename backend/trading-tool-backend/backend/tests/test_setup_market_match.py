@@ -586,6 +586,44 @@ def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
     asyncio.run(run())
 
 
+def test_finn_match_tool_limits_a_verified_setup_reference_to_one_owner_match(monkeypatch):
+    async def run():
+        service = object.__new__(execution_module.FinnV2ToolExecutionService)
+        service.session = object()
+        service.resolver = SimpleNamespace(_coerce_int=lambda value: int(value) if value else None)
+
+        async def asset(**_kwargs):
+            return {"asset": "BTC"}
+
+        async def assessment(_user_id, _symbol):
+            return {
+                "symbol": "BTC", "as_of": date.today(), "source_status": "available",
+                "matches": [
+                    match_setup(setup(1, min_benchmark_score=26, max_benchmark_score=45),
+                                {"macro": 65, "technical": 40, "market": 40}),
+                    match_setup(setup(2, min_benchmark_score=34, max_benchmark_score=55),
+                                {"macro": 65, "technical": 40, "market": 40}),
+                ],
+            }
+
+        service._ensure_asset = asset
+        monkeypatch.setattr(execution_module, "FinnSharedContextService",
+                            lambda _session: SimpleNamespace(benchmark_for_asset=assessment))
+        payload = await service._dispatch_tool(
+            tool_name="read_setup_market_matches", user_id=7,
+            selector={"asset": "BTC", "setup_id": 1}, run=SimpleNamespace(), shared_state={},
+        )
+        assert [row["setup_id"] for row in payload["data"].matches] == [1]
+        assert payload["summary"]["count"] == 1
+        with pytest.raises(LookupError, match="setup_not_resolved"):
+            await service._dispatch_tool(
+                tool_name="read_setup_market_matches", user_id=7,
+                selector={"asset": "BTC", "setup_id": 99}, run=SimpleNamespace(), shared_state={},
+            )
+
+    asyncio.run(run())
+
+
 def test_finn_match_tool_can_read_all_owned_setup_assets(monkeypatch):
     async def run():
         service = object.__new__(execution_module.FinnV2ToolExecutionService)

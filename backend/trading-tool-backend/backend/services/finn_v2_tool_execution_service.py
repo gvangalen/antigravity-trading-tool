@@ -562,6 +562,18 @@ class FinnV2ToolExecutionService:
                 assessment = await context_service.benchmark_for_asset(user_id, asset_state["asset"])
             else:
                 assessment = await context_service.matches.for_all_assets(user_id)
+            selected_setup_id = (
+                self.resolver._coerce_int(selector.get("setup_id"))
+                if selector.get("setup_id") is not None else None
+            )
+            if selected_setup_id:
+                selected_matches = [
+                    match for match in assessment["matches"]
+                    if self.resolver._coerce_int(match.get("setup_id")) == selected_setup_id
+                ]
+                if len(selected_matches) != 1:
+                    raise LookupError("setup_not_resolved")
+                assessment = {**assessment, "matches": selected_matches}
             payload = SetupMarketMatchesData(**assessment)
             return {
                 "data": payload,

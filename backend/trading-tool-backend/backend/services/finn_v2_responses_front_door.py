@@ -2069,6 +2069,35 @@ class FinnResponsesFrontDoor:
                     call = replace(call, inputs={
                         **call.inputs, "asset": next(iter(mentioned_assets)),
                     })
+                if call.name == "get_setup_market_matches" and not collection_cue:
+                    # The model chooses the score read, while the server binds
+                    # the requested setup from owner-scoped names or the last
+                    # verified conversational reference. A score read for an
+                    # asset alone includes sibling setups and is insufficient
+                    # evidence for a question about one selected plan.
+                    selected_score_setup = None
+                    named = []
+                    session_factory = getattr(self.reads, "session_factory", None)
+                    if session_factory is not None:
+                        async with session_factory() as session:
+                            resolver = FinnV2EntityResolutionService(session)
+                            named = [
+                                row for row in await resolver.setups.get_user_setups(self.user_id)
+                                if resolver._message_mentions_name(message, row.get("name"))
+                            ]
+                        if len(named) == 1:
+                            selected_score_setup = (
+                                int(named[0].get("setup_id") or named[0]["id"]),
+                                str(named[0].get("symbol") or "").upper(),
+                            )
+                    if not named and subject_reference and verified_subject and subject_asset:
+                        selected_score_setup = (verified_subject[0], subject_asset)
+                    if selected_score_setup is not None and selected_score_setup[1]:
+                        call = replace(call, inputs={
+                            **call.inputs,
+                            "asset": selected_score_setup[1],
+                            "setup_id": selected_score_setup[0],
+                        })
                 read_result = await self.reads(call)
                 if call.name == "get_saved_setup_inventory":
                     # Match explicit names against the owner-scoped result. The
@@ -2091,6 +2120,20 @@ class FinnResponsesFrontDoor:
                             rows=available_rows,
                             previous_contract=previous_turn_contract,
                         )
+                        if (
+                            subject_reference and verified_subject and not collection_cue
+                            and not any(
+                                FinnV2EntityResolutionService._message_mentions_name(
+                                    message, row.get("name"),
+                                ) for row in available_rows
+                            )
+                        ):
+                            focused_rows = [
+                                row for row in available_rows
+                                if row.get("setup_id") == verified_subject[0]
+                            ]
+                            if focused_rows:
+                                referenced_rows = focused_rows
                         comparison_verb = re.search(
                             r"\b(?:vergelijk\w*|compare\w*|vergleich\w*)\b",
                             message, re.I,

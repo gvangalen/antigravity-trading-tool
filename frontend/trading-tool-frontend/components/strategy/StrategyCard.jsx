@@ -153,6 +153,10 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
     if (v === null || v === undefined || isNaN(v)) return "---";
     return new Intl.NumberFormat(getIntlLocale(locale), { style: "currency", currency: "USD" }).format(v);
   };
+  const formatAmountEur = (value) => {
+    if (value === null || value === undefined || isNaN(value)) return "---";
+    return new Intl.NumberFormat(getIntlLocale(locale), { style: "currency", currency: "EUR" }).format(value);
+  };
 
   return (
     <div className="bg-card border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all overflow-hidden">
@@ -266,7 +270,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 text-xs sm:grid-cols-3">
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Setup</dt><dd className="mt-1 font-semibold text-foreground">{strategy.setup_name || "-"}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Mode</dt><dd className="mt-1 font-semibold text-foreground">{formatExecutionMode(strategy.execution_mode, locale) || "-"}</dd></div>
-            <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Bedrag</dt><dd className="mt-1 font-semibold text-foreground">{formatCurrency(base_amount)}</dd></div>
+            <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">{copy.amountPerExecution}</dt><dd className="mt-1 font-semibold text-foreground">{formatAmountEur(base_amount)}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Invalidatie</dt><dd className="mt-1 font-semibold text-foreground">{formatCurrency(stop_loss)}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Targets</dt><dd className="mt-1 font-semibold text-foreground">{targets.length ? targets.join(", ") : "-"}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Risico</dt><dd className="mt-1 font-semibold text-foreground">{strategy.risk_profile || strategy.risk_reward || "-"}</dd></div>
