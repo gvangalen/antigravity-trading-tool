@@ -349,12 +349,29 @@ class FinnV2RequestPreprocessorService:
                 r"place\w*|plaats\w*|submit\w*)\b", normalized,
             )
         )
+        direct_market_order = market_mention and self._is_direct_market_order_request(normalized)
         financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
-            market_mention and (
-                self._is_direct_market_order_request(normalized)
-                or not self._is_hypothetical_market_mention(normalized)
-            )
+            direct_market_order
         )
+        # A first question about a plan remains a question when a later
+        # clause mentions buying or automation. A market verb is not itself
+        # an instruction to FINN. Still retain a direct order anywhere in
+        # the turn, including after an introductory question.
+        first_clause = re.split(r"[.!?;]", normalized, maxsplit=1)[0].strip()
+        if (
+            first_clause
+            and self._action_polarity(first_clause) in {"read", "evaluate"}
+            and not direct_market_order
+            and not re.search(
+                r"(?:^|[.!?;]\s*)(?:please\s+|bitte\s+)?"
+                r"(?:move|transfer|verplaats\w*|stort\w*|laat\s+(?:de\s+)?assistent|"
+                r"let\s+the\s+assistant|neem\s+voortaan)\b",
+                normalized,
+            )
+        ):
+            financial_execution_intent = False
+            if action == "execute":
+                action = "evaluate" if self._is_plan_assessment(normalized) else "read"
         # In a create-setup request, "buy on Monday" describes the setup's
         # schedule; it is not an instruction to place a market order now.
         if primary_entity == "setup" and action == "create":
@@ -778,8 +795,9 @@ class FinnV2RequestPreprocessorService:
         explicitly address FINN remain inside the execution boundary.
         """
         market_verb = r"(?:koop\w*|kopen|verkoop\w*|verkopen|buy\w*|sell\w*|kaufe\w*|kaufen|verkaufe\w*|verkaufen|plaats\w*|place\w*|submit\w*)"
+        imperative_verb = r"(?:koop|verkoop|buy|sell|kaufe|verkaufe|plaats|place|submit)"
         return bool(
-            re.search(rf"(?:^|[,;.!?]\s*)(?:please\s+|bitte\s+)?{market_verb}\b", text)
+            re.search(rf"(?:^|[,;.!?]\s*)(?:please\s+|bitte\s+)?{imperative_verb}\b", text)
             or re.search(
                 rf"\b(?:kun|kan|kunt|could|can|wil|would|laat|let)\s+"
                 rf"(?:je|jij|you|du|finn|de assistent|the assistant)\b"

@@ -9209,6 +9209,7 @@ def test_unsupported_execution_cannot_turn_into_unrelated_asset_proposal():
     ))
     assert result.proposal_analysis is None
     assert "geen aankoop uitvoeren" in result.response.text
+    assert result.response.answer_kind == "unsupported_execution"
     front.client.responses.create.assert_not_awaited()
 
 

@@ -116,6 +116,25 @@ def test_direct_market_order_stays_inside_execution_boundary(message):
     assert facts.financial_execution_intent is True
 
 
+@pytest.mark.parametrize("message", [
+    "Ik ben bang de boot te missen en wil vandaag €100 extra kopen. Hoe zou je me als coach helpen dit tegen mijn plan en risico af te wegen? Doe geen aankoop of wijziging.",
+    "Welke dag staat mijn BTC DCA gepland? Koopt de bot dan automatisch op die dag?",
+    "Ik voel FOMO en denk eraan vandaag BTC bij te kopen. Wat zegt mijn plan hierover?",
+])
+def test_read_only_coach_and_schedule_questions_are_not_execution_requests(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity in {"read", "evaluate"}
+    assert facts.financial_execution_intent is False
+
+
+def test_direct_order_after_a_plan_question_remains_execution_request():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Welke dag staat mijn BTC DCA gepland? Koop vandaag BTC voor mij."
+    )
+    assert facts.action_polarity == "execute"
+    assert facts.financial_execution_intent is True
+
+
 def test_autonomous_financial_decision_authority_is_an_execution_fact_without_trade_verb():
     service = FinnV2RequestPreprocessorService()
 

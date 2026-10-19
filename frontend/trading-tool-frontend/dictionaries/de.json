@@ -912,6 +912,7 @@
       "saveError": "Dein erstes Asset konnte nicht gespeichert werden. Bitte versuche es erneut."
     },
     "analysisOnboardingStep": {
+      "indicatorNames": {"price": "Preis", "volume": "Handelsvolumen", "change_24h": "Kursänderung in 24 Stunden", "dxy": "US-Dollar-Index (DXY)", "sp500": "S&P-500-Index", "vix": "Volatilitätsindex (VIX)", "gold_price": "Goldpreis", "oil_price": "Ölpreis (WTI)", "us10y": "US-Zehnjahresrendite", "us02y": "US-Zweijahresrendite", "interest_rate": "US-Leitzins", "inflation_rate": "US-Inflation (CPI)", "etf_bitcoin_inflow": "Zuflüsse in Bitcoin-ETFs", "rsi": "Relative-Stärke-Index (RSI)", "ma_50": "Gleitender Durchschnitt (50 Tage)", "ma_200": "Gleitender Durchschnitt (200 Tage)", "ema_20_gap_pct": "Abstand zum EMA 20", "ema_50_gap_pct": "Abstand zum EMA 50", "macd_hist_pct": "MACD-Histogramm", "atr_pct": "Durchschnittliche Schwankungsbreite (ATR)", "adx": "Trendstärke (ADX)"},
       "stepNumber": "Analyse · 2 von 4",
       "title": "Lege deine erste Analysebasis an",
       "description": "Füge für {symbol} genau einen Markt-, einen Makro- und einen technischen Indikator hinzu. Danach gehst du direkt weiter zu Mein Plan.",
@@ -949,6 +950,13 @@
       "saveError": "Das Speichern dieses Analyseschritts ist fehlgeschlagen. Bitte versuche es erneut."
     },
     "planOnboardingStep": {
+      "dcaScoreExplanation": "Der DCA-Rhythmus bestimmt, wann ein Kauf geprüft wird. Score-Grenzen sind optional: Außerhalb dieser Grenzen wartet ein verknüpfter Bot. Ohne Grenzen bleibt der Rhythmus bestehen, aber andere Prüfungen können einen Kauf verhindern. Ein fehlender Score ist kein Kaufsignal.",
+      "strategyDcaAmountLabel": "Betrag pro Ausführung (€)",
+      "strategyReviewBeforeSave": "Vor dem Speichern prüfen",
+      "strategyDcaExecutionSummary": "Fester Betrag: €{amount} pro geplanter Ausführung ({cadence}).",
+      "strategyDcaRiskSummary": "Dieser Betrag ist weder verfügbares Guthaben noch Bot-Budget. Speichern erstellt nur eine Strategie; es startet kein Bot und kein Kauf.",
+      "strategyTradeExecutionSummary": "Fester Basisbetrag für diese Trading-Strategie. Prüfe Einstieg, Stop-Loss und Kursziele oben.",
+      "strategyTradeRiskSummary": "Speichern startet keinen Bot und keine Order. Prüfe maximalen Verlust und Positionsgröße separat vor dem Handel.",
       "scoreRangesTitle": "Wann passt dieses Setup zu den Scores?",
       "scoreRangesHelp": "Dies sind allgemeine Produktvorschläge, nicht aus deinen Marktdaten oder deinem Handelsstil berechnet. Sie bestimmen den Setup-Abgleich; prüfe sie vor dem Speichern.",
       "scoreRangesConfirm": "Ich habe die Markt-, Makro- und technischen Score-Grenzen geprüft und möchte sie als Bedingungen für mein Setup speichern.",

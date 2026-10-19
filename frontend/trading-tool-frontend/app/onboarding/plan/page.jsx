@@ -445,6 +445,7 @@ export default function OnboardingPlanPage() {
                   const nextType = event.target.value;
                   setSetup((current) => ({ ...current, setupType: nextType }));
                   if (nextType === "trade" && conditionChoice === "off") setConditionChoice(null);
+                  if (nextType === "dca" && !conditionChoice) setConditionChoice("off");
                 }}
                 disabled={setupDone || savingSetup || loading}
                 className={inputClassName}
@@ -495,6 +496,11 @@ export default function OnboardingPlanPage() {
           ) : null}
 
           <div className="mt-8 border-t border-slate-200 pt-8">
+            {!isTrade ? (
+              <p className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-relaxed text-slate-700">
+                {copy.dcaScoreExplanation}
+              </p>
+            ) : null}
             <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={symbol} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")}>
               <div className="grid gap-3">
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -578,7 +584,7 @@ export default function OnboardingPlanPage() {
                     />
                   </Field>
 
-                  <Field label={copy.strategyAmountLabel || "Base amount"}>
+                  <Field label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel}>
                     <input
                       type="number"
                       min="1"
@@ -630,6 +636,17 @@ export default function OnboardingPlanPage() {
 
                 {!strategyDone ? (
                   <div className="mt-5">
+                    <div className="mb-5 space-y-2 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-slate-800">
+                      <p className="font-bold">{copy.strategyReviewBeforeSave}</p>
+                      <p>{isTrade ? copy.strategyTradeExecutionSummary : copy.strategyDcaExecutionSummary
+                        ?.replace("{amount}", String(strategy.baseAmount || "—"))
+                        ?.replace("{cadence}", [
+                          copy[`dca${setup.dcaFrequency?.[0]?.toUpperCase()}${setup.dcaFrequency?.slice(1)}`] || setup.dcaFrequency,
+                          setup.dcaFrequency === "weekly" ? copy.dcaWeekdays?.[setup.dcaDay] : null,
+                          setup.dcaFrequency === "monthly" ? setup.dcaMonthDay : null,
+                        ].filter(Boolean).join(" · "))}</p>
+                      <p>{isTrade ? copy.strategyTradeRiskSummary : copy.strategyDcaRiskSummary}</p>
+                    </div>
                     <button
                       type="button"
                       onClick={handleSaveStrategy}
@@ -646,8 +663,8 @@ export default function OnboardingPlanPage() {
                       value={strategy.name.trim() || `${symbol} Strategy`}
                     />
                     <SummaryRow
-                      label={copy.strategyAmountLabel || "Base amount"}
-                      value={String(strategy.baseAmount || "100")}
+                      label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel}
+                      value={`€${String(strategy.baseAmount || "100")}`}
                     />
                   </div>
                 )}

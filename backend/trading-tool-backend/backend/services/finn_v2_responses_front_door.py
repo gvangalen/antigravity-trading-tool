@@ -813,7 +813,8 @@ class FinnResponsesFrontDoor:
                         "de": "Ich kann hier keinen Kauf ausführen. Wir können zuerst deinen Plan und das Risiko besprechen; unterstützte Aktionen brauchen einen eigenen Vorschlag und eine Bestätigung.",
                     }.get(language, "Ik kan hier geen aankoop uitvoeren. We kunnen eerst je plan en risico bespreken; ondersteunde acties vragen een apart voorstel en bevestiging."),
                     response_id=f"unsupported-execution-{self.run_id}",
-                    tool_trace=(), response_id_reusable=False,
+                    tool_trace=(), answer_kind="unsupported_execution",
+                    model_led_coach=True, response_id_reusable=False,
                 ),
                 None, previous_response, locale=locale,
             )
