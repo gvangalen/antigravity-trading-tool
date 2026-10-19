@@ -412,17 +412,17 @@ const StrategyForm = forwardRef(function StrategyForm({
       )}
 
       {/* AMOUNT */}
-      <label className="block space-y-1.5 text-sm font-semibold">
-        <span>{copy.amountPerExecutionLabel}</span>
+      <label className="block text-sm font-semibold">
+        <span className="mb-3 block">{copy.amountPerExecutionLabel}</span>
         <input
           type="number"
           name="base_amount"
           value={form.base_amount}
           onChange={handleChange}
           placeholder={copy.amountPlaceholder}
-          className="input"
+          className="input block w-full"
         />
-        <span className="block text-xs font-normal text-secondary">{copy.amountPerExecutionHelp}</span>
+        <span className="mt-2 block text-xs font-normal text-secondary">{copy.amountPerExecutionHelp}</span>
       </label>
 
       {/* EXECUTION LOGIC */}
