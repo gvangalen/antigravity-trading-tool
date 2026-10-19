@@ -1,8 +1,6 @@
 "use client";
 
-import CardWrapper from "@/components/ui/CardWrapper";
 import CardLoader from "@/components/ui/CardLoader";
-import { Clock } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 
@@ -17,10 +15,7 @@ export default function BotHistoryTable({
   const confidenceLabels = t?.botPage?.agentCard?.confidenceLabels || {};
 
   return (
-    <CardWrapper
-      title={copy.title}
-      icon={<Clock className="icon icon-muted" />}
-    >
+    <>
       {/* ===================== */}
       {/* LOADING STATE */}
       {/* ===================== */}
@@ -41,7 +36,7 @@ export default function BotHistoryTable({
       {/* TABLE */}
       {/* ===================== */}
       {!loading && history.length > 0 && (
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
               <th className="py-2">{copy.date}</th>
@@ -164,6 +159,6 @@ export default function BotHistoryTable({
           </tbody>
         </table>
       )}
-    </CardWrapper>
+    </>
   );
 }

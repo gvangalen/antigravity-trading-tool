@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, ShieldCheck } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime } from "@/lib/i18n";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import BotAgentCard from "@/components/bot/BotAgentCard";
+import BotHistoryTable from "@/components/bot/BotHistoryTable";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
 
@@ -71,6 +72,25 @@ export default function BotFocusView({
   const symbol = activeBot?.strategy?.setup?.symbol || activeBot?.symbol || portfolio?.symbol || "—";
   const timeframe = activeBot?.strategy?.setup?.timeframe || activeBot?.strategy?.timeframe || "—";
   const modeLabel = copy.modes?.[activeBot?.mode] || activeBot?.mode || "—";
+  const recentActivity = useMemo(() => {
+    const decisions = (history || [])
+      .filter((item) => item.bot_id === activeBot?.id)
+      .map((item) => ({ ...item, id: `decision-${item.decision_id}` }));
+    const executions = (trades || []).map((trade) => ({
+      id: `trade-${trade.id}`,
+      bot_id: activeBot?.id,
+      created_at: trade.executed_at,
+      action: trade.side,
+      qty: trade.qty,
+      price: trade.price,
+      amount_eur: trade.amount_eur,
+      status: "executed",
+      symbol: trade.symbol,
+      is_trade: true,
+    }));
+    return [...executions, ...decisions].sort((a, b) =>
+      new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0));
+  }, [activeBot?.id, history, trades]);
   const strategyReason = decision?.strategy_reason === "Scheduled DCA amount selected from the confirmed plan"
     ? copy.scheduledDcaReason : decision?.strategy_reason;
 
@@ -274,20 +294,26 @@ export default function BotFocusView({
                 <p className="mt-3 text-sm">{money(portfolio?.stats?.invested_eur)} {copy.usedOf} {money(activeBot.budget?.total_eur)} {copy.limit}</p>
                 <p className="mt-2 text-xs text-slate-500">{copy.budgetNotCash}</p>
               </section>
-              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><h3 className="font-black text-slate-950 dark:text-white">{copy.lastDecision}</h3>
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 lg:col-span-2"><h3 className="font-black text-slate-950 dark:text-white">{copy.lastDecision}</h3>
                 <p className="mt-2 text-sm font-bold">{decision?.action ? (copy.actions?.[decision.action] || decision.action) : copy.noDecision}</p>
                 <p className="mt-1 text-sm text-slate-500">{["blocked", "reduced", "error"].includes(risk.state) || explanations.length > 0
                   ? riskReason
                   : strategyReason || risk.reason || copy.noDecision}</p>
               </section>
-              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="flex justify-between gap-3"><h3 className="font-black text-slate-950 dark:text-white">{copy.recentTrades}</h3><button type="button" onClick={() => setView("trades")} className="text-sm font-bold text-blue-700">{copy.allTrades}</button></div>
-                {trades.length ? <ul className="mt-3 space-y-2">{trades.slice(0, 3).map((trade) => <li key={trade.id} className="flex justify-between gap-3 text-sm"><span>{trade.side === "buy" ? copy.buy : copy.sell} {trade.symbol} · {money(trade.amount_eur)}</span><span className="text-slate-500">{trade.executed_at ? formatDateTime(trade.executed_at, locale, { day: "2-digit", month: "short" }) : "—"}</span></li>)}</ul>
-                  : <p className="mt-3 text-sm text-slate-500">{copy.noTrades}</p>}
-              </section>
             </div>
 
+            <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800" aria-label={copy.recentTrades}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-black text-slate-950 dark:text-white">{copy.recentTrades}</h3>
+                <button type="button" onClick={() => setView("trades")} className="text-sm font-bold text-blue-700">{copy.allTrades}</button>
+              </div>
+              <div className="mt-3 max-h-80 overflow-auto">
+                <BotHistoryTable history={recentActivity} />
+              </div>
+            </section>
+
             <details className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><summary className="cursor-pointer text-sm font-bold text-blue-700">{copy.advanced}</summary>
-              <BotAgentCard bot={activeBot} decision={decision} portfolio={portfolio} trades={trades} history={history} onOpenSettings={onOpenSettings} onBacktest={onBacktest} compact />
+              <BotAgentCard bot={activeBot} decision={decision} portfolio={portfolio} onOpenSettings={onOpenSettings} onBacktest={onBacktest} compact />
             </details>
           </article>}
         </>
