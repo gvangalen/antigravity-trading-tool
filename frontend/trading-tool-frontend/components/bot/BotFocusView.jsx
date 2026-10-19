@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronRight, ShieldCheck } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime } from "@/lib/i18n";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
-import BotAgentCard from "@/components/bot/BotAgentCard";
+import StrategyTestPanel from "@/components/bot/StrategyTestPanel";
 import BotHistoryTable from "@/components/bot/BotHistoryTable";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
@@ -19,6 +19,8 @@ export default function BotFocusView({
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.focus || {};
   const [view, setView] = useState("bots");
+  const [activityView, setActivityView] = useState("decisions");
+  const [showStrategyTest, setShowStrategyTest] = useState(false);
   const [cashInput, setCashInput] = useState("");
   const [cashAcknowledged, setCashAcknowledged] = useState(false);
   const [editingCash, setEditingCash] = useState(false);
@@ -41,6 +43,8 @@ export default function BotFocusView({
     setEditingCash(false);
     setCashError("");
     setActivityError("");
+    setActivityView("decisions");
+    setShowStrategyTest(false);
   }, [activeBot?.id]);
 
   const risk = decision?.safety_check || { state: "missing", allowed_amount_eur: 0 };
@@ -75,7 +79,7 @@ export default function BotFocusView({
   const recentActivity = useMemo(() => {
     const decisions = (history || [])
       .filter((item) => item.bot_id === activeBot?.id)
-      .map((item) => ({ ...item, id: `decision-${item.decision_id}` }));
+      .map((item) => ({ ...item, id: `decision-${item.decision_id}`, created_at: item.decision_ts || item.created_at || item.date }));
     const executions = (trades || []).map((trade) => ({
       id: `trade-${trade.id}`,
       bot_id: activeBot?.id,
@@ -84,7 +88,7 @@ export default function BotFocusView({
       qty: trade.qty,
       price: trade.price,
       amount_eur: trade.amount_eur,
-      status: "executed",
+      status: trade.status || "executed",
       symbol: trade.symbol,
       is_trade: true,
     }));
@@ -259,11 +263,11 @@ export default function BotFocusView({
               <div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-base font-black text-slate-950 dark:text-white"><ShieldCheck size={18} className="text-blue-700" />{copy.safetyTitle}</h3><span className="text-xs font-bold text-slate-600 dark:text-slate-300">{riskTitle}</span></div>
               <p className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-200">{state === "paused" ? copy.pausedReason : riskReason}</p>
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{orderState ? copy.orderSubmittedAt : copy.lastCheck}</small><strong>{checkedAt}</strong></div>
-                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{copy.allowedOrder}</small><strong>{orderState ? "—" : money(risk.checked_amount_eur ?? risk.allowed_amount_eur)}</strong></div>
+                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{orderState ? copy.orderSubmittedAt : state === "paused" ? copy.lastKnownCheck : copy.lastCheck}</small><strong>{checkedAt}</strong></div>
+                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{copy.allowedOrder}</small><strong>{orderState || !Number(risk.proposed_amount_eur) || ["paused", "stale", "missing", "error"].includes(state) ? "—" : money(risk.checked_amount_eur ?? risk.allowed_amount_eur)}</strong></div>
                 <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900"><small className="block text-slate-500">{activeBot.is_live ? copy.exchangeCash : copy.paperCash}</small><strong>{activeBot.is_live ? copy.seeExchange : availableCash}</strong></div>
               </div>
-              {Number(risk.proposed_amount_eur || 0) > 0 && (
+              {Number(risk.proposed_amount_eur || 0) > 0 && state !== "paused" && (
                 <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
                   {copy.proposedAmount || "Voorgesteld"}: {money(risk.proposed_amount_eur)} → {copy.checkedAmount || "Na limieten"}: {money(risk.checked_amount_eur ?? risk.allowed_amount_eur)}
                 </p>
@@ -281,13 +285,14 @@ export default function BotFocusView({
               )}
               <details className="mt-3 border-t border-slate-200 pt-3"><summary className="cursor-pointer text-sm font-bold text-blue-700">{copy.allLimits}</summary>
                 <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div><dt>{copy.budgetLimit}</dt><dd>{money(activeBot.budget?.total_eur)}</dd></div><div><dt>{copy.dailyLimit}</dt><dd>{money(activeBot.budget?.daily_limit_eur)}</dd></div><div><dt>{copy.minOrder}</dt><dd>{activeBot.budget?.min_order_eur == null ? "—" : money(activeBot.budget.min_order_eur)}</dd></div><div><dt>{copy.maxOrder}</dt><dd>{money(activeBot.budget?.max_order_eur)}</dd></div><div><dt>{copy.assetExposure}</dt><dd>{activeBot.budget?.max_asset_exposure_pct ?? 100}%</dd></div></dl>
+                <p className="mt-3 text-xs text-slate-500">{copy.zeroLimitMeaning}</p>
               </details>
             </section>
 
             <SystemConnectivity variant="bot" />
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><h3 className="font-black text-slate-950 dark:text-white">{copy.planExecution}</h3>
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-black text-slate-950 dark:text-white">{copy.planExecution}</h3><button type="button" onClick={() => setShowStrategyTest((value) => !value)} aria-expanded={showStrategyTest} className="text-sm font-bold text-blue-700">{copy.strategyTest?.title}</button></div>
                 <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between gap-3"><dt>{copy.strategy}</dt><dd className="font-bold">{activeBot.strategy?.name || "—"}</dd></div><div className="flex justify-between gap-3"><dt>{copy.execution}</dt><dd className="font-bold">{modeLabel}</dd></div><div className="flex justify-between gap-3"><dt>{copy.environment}</dt><dd className="font-bold">{activeBot.is_live ? copy.live : copy.paper}</dd></div></dl>
               </section>
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><div className="flex justify-between gap-3"><h3 className="font-black text-slate-950 dark:text-white">{copy.budgetLimits}</h3><button type="button" onClick={() => onOpenSettings("portfolio", activeBot)} className="text-sm font-bold text-blue-700">{copy.adjust}</button></div>
@@ -302,19 +307,21 @@ export default function BotFocusView({
               </section>
             </div>
 
+            {showStrategyTest && <StrategyTestPanel key={activeBot.id} bot={activeBot} onBacktest={onBacktest} />}
+
             <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800" aria-label={copy.recentTrades}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-black text-slate-950 dark:text-white">{copy.recentTrades}</h3>
                 <button type="button" onClick={() => setView("trades")} className="text-sm font-bold text-blue-700">{copy.allTrades}</button>
               </div>
+              <div className="mt-3 flex gap-3 border-b border-slate-200" role="tablist" aria-label={copy.recentTrades}>
+                <button type="button" role="tab" aria-selected={activityView === "trades"} onClick={() => setActivityView("trades")} className={`pb-2 text-sm font-bold ${activityView === "trades" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500"}`}>{copy.activityTrades}</button>
+                <button type="button" role="tab" aria-selected={activityView === "decisions"} onClick={() => setActivityView("decisions")} className={`pb-2 text-sm font-bold ${activityView === "decisions" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500"}`}>{copy.activityDecisions}</button>
+              </div>
               <div className="mt-3 max-h-80 overflow-auto">
-                <BotHistoryTable history={recentActivity} />
+                <BotHistoryTable history={recentActivity.filter((item) => activityView === "trades" ? item.is_trade : !item.is_trade)} emptyMessage={activityView === "trades" ? copy.noTrades : copy.noDecisions} />
               </div>
             </section>
-
-            <details className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><summary className="cursor-pointer text-sm font-bold text-blue-700">{copy.advanced}</summary>
-              <BotAgentCard bot={activeBot} decision={decision} portfolio={portfolio} onOpenSettings={onOpenSettings} onBacktest={onBacktest} compact />
-            </details>
           </article>}
         </>
       )}

@@ -12,6 +12,9 @@ test("budget increases ask for confirmation before contacting the server", () =>
   assert.equal(increasesBotBudgetRisk({ ...saved, total_eur: 110 }, saved), true);
   assert.equal(increasesBotBudgetRisk({ ...saved, max_asset_exposure_pct: 75 }, saved), true);
   assert.equal(increasesBotBudgetRisk({ ...saved, total_eur: 90 }, saved), false);
+  assert.equal(increasesBotBudgetRisk({ ...saved, daily_limit_eur: 0 }, saved), true);
+  assert.equal(increasesBotBudgetRisk({ ...saved, max_order_eur: 0 }, saved), true);
+  assert.equal(increasesBotBudgetRisk({ ...saved, max_asset_exposure_pct: 0 }, saved), false);
   assert.equal(increasesBotBudgetRisk(saved, saved), false);
 });
 

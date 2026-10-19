@@ -891,6 +891,8 @@ const AddBotForm = forwardRef(function AddBotForm({
         )
       )}
 
+      <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{pageCopy.focus?.zeroLimitMeaning}</p>
+
       {!form.is_live && (
         <div className="space-y-1.5 rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
           <label className="text-[10px] font-black text-blue-700 uppercase tracking-widest" htmlFor="paper_initial_cash_eur">

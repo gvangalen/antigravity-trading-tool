@@ -156,7 +156,7 @@ class BotService:
             "fx_eur_per_unit": factor, "fx_observed_at": fx_at,
         }
 
-    def _safety_contract(self, decision: Dict[str, Any], is_live: bool) -> dict:
+    def _safety_contract(self, decision: Dict[str, Any], is_live: bool, *, historical: bool = False) -> dict:
         """Expose the saved guardrail result without rerunning market checks on a read."""
         result = decision.get("guardrails_result")
         checked_at = self._parse_execution_timestamp(
@@ -177,12 +177,12 @@ class BotService:
                 state = "no_proposal"
         limit_state = state
         stale_after_minutes = 60 if is_live else 1440
-        if checked_at and state not in {"missing", "error"}:
+        if not historical and checked_at and state not in {"missing", "error"}:
             if (datetime.now(timezone.utc) - checked_at).total_seconds() / 60 > stale_after_minutes:
                 state = "stale"
-        if decision.get("status") in {"executed", "skipped"}:
+        if not historical and decision.get("status") in {"executed", "skipped"}:
             state = decision["status"]
-        if decision.get("status") == "failed_execution":
+        if not historical and decision.get("status") == "failed_execution":
             state = "error"
         next_steps = {
             "missing": "Laat de bot een nieuwe beslissing en veiligheidscheck maken.",
@@ -194,6 +194,10 @@ class BotService:
             "executed": "Bekijk de bevestigde trade.",
             "skipped": "Wacht op de volgende botcyclus.",
         }
+        explanations = (result or {}).get("explanations") or []
+        if not isinstance(explanations, list):
+            explanations = []
+        limiting_rule = explanations[0].get("code") if state == "reduced" and explanations and isinstance(explanations[0], dict) else None
         return {
             "state": state,
             "checked_at": checked_at.isoformat() if checked_at else None,
@@ -202,9 +206,9 @@ class BotService:
             "allowed_amount_eur": round(allowed, 2) if state in {"allowed", "reduced"} else 0,
             "checked_amount_eur": round(allowed, 2),
             "limit_state": limit_state,
-            "explanations": (result or {}).get("explanations") or [],
+            "explanations": explanations,
             "execution_failure": decision.get("execution_failure"),
-            "reason_code": "failed_execution" if decision.get("status") == "failed_execution" else blocked_by or state,
+            "reason_code": "failed_execution" if not historical and decision.get("status") == "failed_execution" else blocked_by or limiting_rule or state,
             "reason": decision.get("execution_failure") or (result or {}).get("reason") or decision.get("strategy_reason"),
             "next_step": next_steps.get(state, "Controleer de botinstellingen."),
             "decision_id": decision.get("id"),
@@ -712,7 +716,12 @@ class BotService:
                 continue
             before = self._as_float(existing.get(field))
             after = self._as_float(merged.get(field))
-            if before is not None and after is not None and after > before:
+            # Zero disables these optional Paper limits; positive -> zero is
+            # therefore a relaxation, unlike zero asset exposure (a block).
+            disabled_limit = field in {"budget_total_eur", "budget_daily_limit_eur", "budget_max_order_eur"} and before is not None and before > 0 and after == 0
+            if disabled_limit:
+                reasons.append(f"{field} uitgeschakeld (van {before:g} naar 0)")
+            elif before is not None and after is not None and after > before:
                 reasons.append(f"{field} verhoogd van {before:g} naar {after:g}")
 
         if "is_live" in updates and not bool(existing.get("is_live")) and bool(merged.get("is_live")):
@@ -1719,8 +1728,19 @@ class BotService:
                 "setup_match": setup_match,
                 "reasons": reasons,
                 "guardrails_result": scores.get("guardrails_result"),
+                "guardrails_checked_at": scores.get("guardrails_checked_at"),
+                "requested_amount_eur": scores.get("requested_amount_eur"),
                 "execution_failure": scores.get("execution_failure"),
-                "status": r["status"]
+                "status": r["status"],
+                "safety_check": self._safety_contract({
+                    "id": r["id"], "bot_id": r["bot_id"],
+                    "status": r["status"],
+                    "created_at": r["decision_ts"],
+                    "guardrails_result": scores.get("guardrails_result"),
+                    "guardrails_checked_at": scores.get("guardrails_checked_at"),
+                    "requested_amount_eur": scores.get("requested_amount_eur"),
+                    "execution_failure": scores.get("execution_failure"),
+                }, bool(r.get("is_live")), historical=True),
             })
         return out
 
