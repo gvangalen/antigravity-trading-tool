@@ -2024,7 +2024,22 @@ class FinnV2RunService:
                         final_response_id: str | None = None
                         if prepared.proposal_analysis is None:
                             responses_stage_started = monotonic()
-                            if (
+                            logger.info(
+                                "FINN read boundary selected kind=%s coach=%s model_repair=%s tool_count=%d",
+                                prepared.response.answer_kind,
+                                prepared.response.model_led_coach,
+                                prepared.response.model_owned_repair,
+                                len(prepared.response.tool_trace),
+                                extra={"run_id": run_id},
+                            )
+                            if prepared.response.answer_kind == "unsupported_execution":
+                                # This is a server-owned refusal for an explicit
+                                # unsupported execution request. It contains no
+                                # factual claim that needs read evidence.
+                                answer = FinnResponsesVerifiedAnswer(
+                                    "completed", prepared.response.text, None, (),
+                                )
+                            elif (
                                 _minimal_read_answers_enabled()
                                 and prepared.response.model_led_coach
                                 and prepared.response.answer_kind == "free_text"

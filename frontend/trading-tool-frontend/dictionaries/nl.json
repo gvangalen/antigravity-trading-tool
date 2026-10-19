@@ -912,6 +912,7 @@
       "saveError": "Opslaan van je onboarding-asset is mislukt. Probeer het nog eens."
     },
     "analysisOnboardingStep": {
+      "indicatorNames": {"price": "Prijs", "volume": "Handelsvolume", "change_24h": "Koersverandering 24 uur", "dxy": "Amerikaanse dollarindex (DXY)", "rsi": "Relatieve sterkte-index (RSI)"},
       "stepNumber": "Analyse · 2 van 4",
       "title": "Voeg je eerste analysebasis toe",
       "description": "Voeg voor {symbol} exact één markt-, één macro- en één technische indicator toe. Daarna controleer je eerst je basis en ga je zelf door naar Mijn Plan.",
@@ -949,6 +950,13 @@
       "saveError": "Opslaan van deze analyse-stap is mislukt. Probeer het opnieuw."
     },
     "planOnboardingStep": {
+      "dcaScoreExplanation": "Het DCA-ritme bepaalt wanneer een aankoop wordt beoordeeld. Scoregrenzen zijn optioneel: buiten die grenzen wacht een gekoppelde bot. Zonder grenzen blijft het ritme staan, maar andere controles kunnen een aankoop nog tegenhouden. Een ontbrekende score is geen koopsignaal.",
+      "strategyDcaAmountLabel": "Bedrag per uitvoering (€)",
+      "strategyReviewBeforeSave": "Controleer vóór opslaan",
+      "strategyDcaExecutionSummary": "Vast bedrag: €{amount} per geplande uitvoering ({cadence}).",
+      "strategyDcaRiskSummary": "Dit bedrag is geen kassaldo of botbudget. Opslaan maakt alleen een strategie; er start geen bot en er wordt niets gekocht.",
+      "strategyTradeExecutionSummary": "Vast basisbedrag voor deze trade-strategie. Controleer entry, stop-loss en koersdoelen hierboven.",
+      "strategyTradeRiskSummary": "Opslaan start geen bot of order. Controleer je maximale verlies en positieomvang apart voordat je handelt.",
       "scoreRangesTitle": "Wanneer past deze setup bij de scores?",
       "scoreRangesHelp": "Dit zijn algemene productvoorstellen, niet berekend uit jouw marktdata of handelsstijl. Ze bepalen of de setup bij scores past; controleer ze vóór opslag.",
       "scoreRangesConfirm": "Ik heb de markt-, macro- en technische scoregrenzen bekeken en wil deze als voorwaarden voor mijn setup opslaan.",

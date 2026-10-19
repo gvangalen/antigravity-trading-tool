@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Nieuwe gebruiker: doorlopende DCA-coaching en onboarding
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. Onafhankelijke browser-QA op
+productie-SHA `735c0f1fbb36100b66c900b5d2089e3ee11aac67` gaf
+`NOT_ACCEPTED`: drie read-only vervolgvragen vielen terug op een generieke fout.
+Dezelfde proef vond onduidelijkheid over het DCA-bedrag per uitvoering,
+technische indicatorcodes in de keuzelijst en een onvoldoende uitgelegde
+DCA-scorevoorwaarde. Native mobiel, gesloten-tradereview, tweede eigenaar en
+herlogin vielen buiten die proef.
+
+De begrensde productie-runcontractdiagnose [run 39221548253](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39221548253)
+vond voor de drie terminale beurten `no_evidence_available` zonder toolaanroep.
+De opgeslagen antwoordvorm was driemaal dezelfde vaste weigering voor een
+koopuitvoering; de huidige request-preprocessor classificeerde die volledige
+vragen als `execute`, hoewel de eerste vraagzin telkens read-only was. De
+backend en interactieve FINN-worker meldden de lichte leesgrens als ingeschakeld.
+Dit is de aangetoonde routefout, niet een providerstoring of een ontbrekende
+Score 2.0-bron. De reparatie onderscheidt bespreking van kopen van een aan
+FINN gerichte order en behandelt een echte niet-ondersteunde order als een
+afgeronde veilige weigering zonder bewijsverifier.
+
+Lokaal: **3929 backendtests geslaagd, 3 bestaande skips**; gerichte
+verzoekclassificatie **356/356**; de worker-gedreven actiecontractmatrix
+**16/16** (artifact SHA-256
+`aaf5925b2824a6e4acd985287380e19b76292c4019b789ae401ac43d4eca97af`);
+een echte Luna/Responses-proef met een opgeslagen vrijdag-DCA-plan en vijf
+opeenvolgende vragen eindigde vijfmaal `completed`, zonder voorstel of order.
+Frontendbuild, typecheck, i18n-, command- en proposalchecks zijn geslaagd;
+`audit:high` gaf alleen een bestaande moderate Next.js-melding. Dit is
+Build-bewijs; een nieuwe ingelogde productieherkeuring en onafhankelijk
+QA-verdict ontbreken nog.
+
 ## Gesloten Paper-trade: Reflectie en FINN-vervolgvragen
 
 Phase: `INDEPENDENT_DESKTOP_QA_ACCEPTED` voor de gerichte Paper-reflectie- en

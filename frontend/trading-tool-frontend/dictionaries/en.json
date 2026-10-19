@@ -911,6 +911,7 @@
       "saveError": "Saving your onboarding asset failed. Please try again."
     },
     "analysisOnboardingStep": {
+      "indicatorNames": {"price": "Price", "volume": "Trading volume", "change_24h": "24-hour price change", "dxy": "US Dollar Index (DXY)", "rsi": "Relative Strength Index (RSI)"},
       "stepNumber": "Analysis · 2 of 4",
       "title": "Add your first analysis base",
       "description": "For {symbol}, add exactly one market, one macro, and one technical indicator. Then review the base first and continue into My Plan yourself.",
@@ -948,6 +949,13 @@
       "saveError": "Saving this analysis step failed. Please try again."
     },
     "planOnboardingStep": {
+      "dcaScoreExplanation": "The DCA schedule determines when a purchase is evaluated. Score limits are optional: a linked bot waits when scores are outside them. Without limits, the schedule remains, but other checks can still prevent a purchase. A missing score is not a buy signal.",
+      "strategyDcaAmountLabel": "Amount per execution (€)",
+      "strategyReviewBeforeSave": "Review before saving",
+      "strategyDcaExecutionSummary": "Fixed amount: €{amount} per planned execution ({cadence}).",
+      "strategyDcaRiskSummary": "This amount is neither cash balance nor bot budget. Saving creates only a strategy; no bot or purchase starts.",
+      "strategyTradeExecutionSummary": "Fixed base amount for this trade strategy. Review the entry, stop loss and targets above.",
+      "strategyTradeRiskSummary": "Saving starts no bot or order. Check your maximum loss and position size separately before trading.",
       "scoreRangesTitle": "When does this setup match the scores?",
       "scoreRangesHelp": "These are general product suggestions, not calculated from your market data or trading style. They determine the setup match; review them before saving.",
       "scoreRangesConfirm": "I have reviewed the market, macro and technical score bounds and want to save them as conditions for my setup.",

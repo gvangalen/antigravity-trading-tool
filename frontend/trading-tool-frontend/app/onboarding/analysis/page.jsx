@@ -65,8 +65,8 @@ function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function getOptionLabel(option) {
-  return String(option?.display_name || option?.name || "").trim();
+function getOptionLabel(option, indicatorNames = {}) {
+  return String(indicatorNames[normalizeName(option?.name)] || option?.display_name || option?.name || "").trim();
 }
 
 function isDuplicateIndicatorError(err) {
@@ -160,7 +160,7 @@ function SelectedAssetCard({ asset, onReset, actionLabel }) {
   );
 }
 
-function SelectedIndicatorCard({ item, typeLabel, actionLabel, onReset, disabled }) {
+function SelectedIndicatorCard({ item, typeLabel, actionLabel, onReset, disabled, indicatorNames }) {
   if (!item) return null;
 
   return (
@@ -169,7 +169,7 @@ function SelectedIndicatorCard({ item, typeLabel, actionLabel, onReset, disabled
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-base font-black tracking-tight text-slate-950">
-              {getOptionLabel(item)}
+              {getOptionLabel(item, indicatorNames)}
             </span>
             <span className="rounded-full border border-blue-200 bg-white px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-blue-700">
               {typeLabel}
@@ -210,6 +210,7 @@ function IndicatorSelector({
   isOpen,
   onOpen,
   disabled = false,
+  indicatorNames,
 }) {
   const showDropdown = !disabled && isOpen && !selected;
 
@@ -259,13 +260,8 @@ function IndicatorSelector({
                       >
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-black text-slate-900">
-                            {getOptionLabel(option)}
+                            {getOptionLabel(option, indicatorNames)}
                           </div>
-                          {option.display_name && option.display_name !== option.name ? (
-                            <div className="truncate text-[11px] font-semibold text-slate-400">
-                              {option.name}
-                            </div>
-                          ) : null}
                         </div>
                         <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">
                           {selectLabel}
@@ -287,6 +283,7 @@ function IndicatorSelector({
           actionLabel={changeLabel}
           onReset={onReset}
           disabled={saving}
+          indicatorNames={indicatorNames}
         />
       </div>
     </section>
@@ -474,10 +471,10 @@ export default function OnboardingAnalysisPage() {
       .filter(
         (option) =>
           normalizeName(option.name).includes(normalized) ||
-          normalizeName(option.display_name).includes(normalized),
+          normalizeName(getOptionLabel(option, copy.indicatorNames)).includes(normalized),
       )
       .slice(0, 8);
-  }, [marketCatalog, marketQuery]);
+  }, [marketCatalog, marketQuery, copy.indicatorNames]);
 
   const filteredMacro = useMemo(() => {
     const normalized = normalizeName(macroQuery);
@@ -486,10 +483,10 @@ export default function OnboardingAnalysisPage() {
       .filter(
         (option) =>
           normalizeName(option.name).includes(normalized) ||
-          normalizeName(option.display_name).includes(normalized),
+          normalizeName(getOptionLabel(option, copy.indicatorNames)).includes(normalized),
       )
       .slice(0, 8);
-  }, [macroCatalog, macroQuery]);
+  }, [macroCatalog, macroQuery, copy.indicatorNames]);
 
   const filteredTechnical = useMemo(() => {
     const normalized = normalizeName(technicalQuery);
@@ -498,10 +495,10 @@ export default function OnboardingAnalysisPage() {
       .filter(
         (option) =>
           normalizeName(option.name).includes(normalized) ||
-          normalizeName(option.display_name).includes(normalized),
+          normalizeName(getOptionLabel(option, copy.indicatorNames)).includes(normalized),
       )
       .slice(0, 8);
-  }, [technicalCatalog, technicalQuery]);
+  }, [technicalCatalog, technicalQuery, copy.indicatorNames]);
 
   const persistSelectedAsset = async (asset) => {
     const normalizedAsset = normalizeOnboardingAsset(asset?.symbol);
@@ -710,6 +707,7 @@ export default function OnboardingAnalysisPage() {
       <div className="mt-5 grid min-w-0 grid-cols-1 gap-5">
         <IndicatorSelector
           title={copy.marketTitle || "1. Market indicator"}
+          indicatorNames={copy.indicatorNames}
           placeholder={copy.marketPlaceholder || "Search a market indicator"}
           query={marketQuery}
           selected={selectedMarket}
@@ -739,6 +737,7 @@ export default function OnboardingAnalysisPage() {
 
         <IndicatorSelector
           title={copy.macroTitle || "2. Macro indicator"}
+          indicatorNames={copy.indicatorNames}
           placeholder={copy.macroPlaceholder || "Search a macro indicator"}
           query={macroQuery}
           selected={selectedMacro}
@@ -768,6 +767,7 @@ export default function OnboardingAnalysisPage() {
 
         <IndicatorSelector
           title={copy.technicalTitle || "3. Technical indicator"}
+          indicatorNames={copy.indicatorNames}
           placeholder={copy.technicalPlaceholder || "Search a technical indicator"}
           query={technicalQuery}
           selected={selectedTechnical}
