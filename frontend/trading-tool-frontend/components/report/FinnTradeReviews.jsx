@@ -357,6 +357,57 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   );
 }
 
+function ReflectionOverview({ weekly, copy, weeklySummary, rolloutDisabled, loading, error, openReview }) {
+  const trades = number(weekly.trades);
+  const analyzed = number(weekly.analyzed);
+  const patterns = Array.isArray(weekly.patterns) ? weekly.patterns : [];
+  const lessons = Array.isArray(weekly.confirmed_lesson_repetitions) ? weekly.confirmed_lesson_repetitions : [];
+  const hasFindings = patterns.length > 0;
+
+  return (
+    <div className="rounded-[28px] border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950 sm:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-400">{copy.weekPattern}</p>
+          <h3 className="mt-2 text-xl font-black text-slate-950 dark:text-white">{copy.overviewTitle}</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">{copy.overviewDescription}</p>
+        </div>
+        {!loading && !error && !rolloutDisabled && <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-200">{weeklySummary}</span>}
+      </div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        {[[copy.overviewClosed, trades], [copy.overviewAnalyzed, analyzed], [copy.overviewWithPlan, number(weekly.plans)]].map(([label, value]) => (
+          <div key={label} className="rounded-2xl bg-slate-50 px-4 py-4 dark:bg-slate-900">
+            <span className="block text-2xl font-black text-slate-950 dark:text-white">{loading || error || rolloutDisabled ? '—' : value}</span>
+            <span className="mt-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+        <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.overviewFindings}</h4>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          {loading ? copy.loading : error ? copy.error : rolloutDisabled ? copy.rolloutDisabled : trades === 0 ? copy.weekNoTrades : !hasFindings ? copy.overviewNoFindings : copy.overviewEvidence}
+        </p>
+        {hasFindings && !rolloutDisabled && <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {patterns.map((pattern) => <div key={pattern.theme} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+            <strong className="text-sm text-slate-900 dark:text-white">{copy.themes?.[pattern.theme] || pattern.theme}</strong>
+            <p className="mt-1 text-xs text-slate-500">{pattern.count} {pattern.count === 1 ? copy.weekTrade : copy.weekTrades}</p>
+            {pattern.example && <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{pattern.example}</p>}
+            <p className="mt-2 text-xs text-slate-500">{pattern.basis === 'plan_record' ? copy.overviewPlanBasis : copy.overviewAnalysisBasis}</p>
+            <div className="mt-3 flex flex-wrap gap-2">{pattern.review_ids.map((id) => <button key={id} type="button" onClick={() => openReview(id)} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-200">#{id}</button>)}</div>
+          </div>)}
+        </div>}
+        {lessons.map((pattern) => <div key={pattern.review_ids.join('-')} className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/30">
+          <strong className="text-slate-900 dark:text-white">{copy.weekLessonRepeat}</strong>
+          <p className="mt-1 text-slate-800 dark:text-slate-100">{pattern.lesson_text}</p>
+          <p className="mt-2 text-xs text-slate-500">{copy.weekLessonNote} · {pattern.count} {pattern.count === 1 ? copy.weekTrade : copy.weekTrades}</p>
+          <div className="mt-2 flex flex-wrap gap-2">{pattern.review_ids.map((id) => <button key={id} type="button" onClick={() => openReview(id)} className="text-xs font-bold text-blue-600 underline">#{id}</button>)}</div>
+        </div>)}
+        {weekly.patterns_truncated && <p className="mt-3 text-xs text-amber-600">{copy.weekTruncated}</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function FinnTradeReviews() {
   const router = useRouter();
   const { t, locale } = useTranslation();
@@ -548,17 +599,24 @@ export default function FinnTradeReviews() {
   }
 
   return (
-    <section aria-labelledby="finn-trades-title" className="my-8 grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
+    <section aria-labelledby="finn-trades-title" className="my-8 min-w-0 space-y-5">
+      <div className="rounded-[28px] bg-[#111f3c] px-6 py-8 text-white sm:px-8">
+        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-200">{copy.eyebrow}</p>
+        <h2 id="finn-trades-title" className="mt-2 text-3xl font-black tracking-tight">{copy.title}</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-blue-100">{copy.description}</p>
+      </div>
+      <ReflectionOverview weekly={weekly} copy={copy} weeklySummary={weeklySummary} rolloutDisabled={rolloutDisabled} loading={loading} error={error} openReview={openReview} />
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
       <div className="min-w-0 overflow-hidden rounded-[28px] border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-        <div className="bg-[#111f3c] px-6 py-7 text-white sm:px-8">
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-200">{copy.eyebrow}</p>
-          <h2 id="finn-trades-title" className="mt-2 text-2xl font-black tracking-tight">{copy.title}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{copy.description}</p>
+        <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-800 sm:px-8">
+          <h3 className="text-lg font-black text-slate-950 dark:text-white">{copy.dossiersTitle}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">{copy.dossiersDescription}</p>
         </div>
         <div className="px-6 py-6 sm:px-8">
-          {rolloutDisabled === false && <div className="mb-5 rounded-xl bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-900 dark:bg-blue-950/40 dark:text-blue-100">{copy.limitedHistory}</div>}
-          {rolloutDisabled === false && <div className="mb-5 rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-800">
-            <h3 className="font-black text-slate-900 dark:text-white">{copy.exchangeImportTitle}</h3>
+          {rolloutDisabled === false && <details className="mb-5 rounded-xl border border-slate-200 text-xs dark:border-slate-800">
+            <summary className="cursor-pointer px-4 py-3 font-black text-slate-900 dark:text-white">{copy.exchangeImportTitle}</summary>
+            <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+            <p className="mb-4 rounded-xl bg-blue-50 px-4 py-3 leading-relaxed text-blue-900 dark:bg-blue-950/40 dark:text-blue-100">{copy.limitedHistory}</p>
             <p className="mt-1 leading-relaxed text-slate-600 dark:text-slate-300">{copy.exchangeImportIntro}</p>
             {importLoading && <p role="status" className="mt-2 text-slate-500">{copy.loading}</p>}
             {importError && <p role="alert" className="mt-2 text-red-600">{copy.exchangeImportError}</p>}
@@ -589,7 +647,8 @@ export default function FinnTradeReviews() {
               await load();
               router.replace(`/report?trade_review_id=${reviewId}`, { scroll: false });
             }} />}
-          </div>}
+            </div>
+          </details>}
           {deepLinkLoading && <p role="status" className="mb-4 text-sm text-slate-500">{copy.loading}</p>}
           {deepLinkError && <p role="alert" className="mb-4 text-sm text-red-600">{copy.error}</p>}
           {loading ? <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> {copy.loading}</p> : error ? <p role="alert" className="text-sm text-red-600">{copy.error}</p> : (
@@ -602,13 +661,14 @@ export default function FinnTradeReviews() {
               </button>)}</div>}
               {items.length < total && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-blue-600 disabled:opacity-50 dark:border-slate-700">{loadingMore ? copy.loading : copy.more}</button>}
               {(number(excluded.legacy_or_ambiguous) > 0 || number(excluded.inconsistent) > 0) && <p className="mt-4 text-xs text-amber-700 dark:text-amber-300">{copy.excluded}</p>}
-              <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800"><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">{copy.weekPattern}</p><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{rolloutDisabled ? copy.rolloutDisabled : number(weekly.trades) > 0 ? weeklySummary : copy.weekNoTrades}</p>{number(weekly.trades) > 0 && <p className="mt-1 text-xs text-slate-500">{number(weekly.analyzed)} {copy.weekAnalyzed} · {number(weekly.pending)} {copy.weekPending} · {number(weekly.unavailable)} {copy.weekUnavailable}</p>}{Array.isArray(weekly.patterns) && weekly.patterns.map((pattern) => <div key={pattern.theme} className="mt-3 rounded-xl bg-slate-50 p-3 text-xs dark:bg-slate-900"><strong>{copy.themes?.[pattern.theme] || pattern.theme}</strong> · {pattern.count} {pattern.count === 1 ? copy.weekTrade : copy.weekTrades}<div className="mt-1 flex flex-wrap gap-2">{pattern.review_ids.map((id) => <button key={id} type="button" onClick={() => openReview(id)} className="font-bold text-blue-600 underline">#{id}</button>)}</div></div>)}{Array.isArray(weekly.confirmed_lesson_repetitions) && weekly.confirmed_lesson_repetitions.map((pattern) => <div key={pattern.review_ids.join('-')} className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs dark:border-blue-900 dark:bg-blue-950/30"><strong>{copy.weekLessonRepeat}</strong> · {pattern.count} {pattern.count === 1 ? copy.weekTrade : copy.weekTrades}<p className="mt-1 text-slate-800 dark:text-slate-100">{pattern.lesson_text}</p><p className="mt-1 text-slate-500">{copy.weekLessonNote}</p><div className="mt-1 flex flex-wrap gap-2">{pattern.review_ids.map((id) => <button key={id} type="button" onClick={() => openReview(id)} className="font-bold text-blue-600 underline">#{id}</button>)}</div></div>)}{weekly.patterns_truncated && <p className="mt-2 text-xs text-amber-600">{copy.weekTruncated}</p>}</div>
+
             </>
           )}
         </div>
       </div>
       <div ref={detailRef} tabIndex={-1} className="min-w-0 outline-none">
         {selected ? <ReviewDetail key={selected.id} review={selected} onClose={() => { openRequest.current += 1; setSelected(null); router.replace('/report', { scroll: false }); }} onSaved={async (updated) => { setSelected((current) => current?.id === updated.id ? updated : current); await load(); }} copy={copy} locale={locale} /> : <div className="rounded-[26px] border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950">{deepLinkLoading ? copy.loading : deepLinkError ? copy.error : copy.selectHint || copy.open}</div>}
+      </div>
       </div>
     </section>
   );
