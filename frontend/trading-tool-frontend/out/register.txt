@@ -1,5 +1,5 @@
 1:"$Sreact.fragment"
-9:I[57150,[],""]
+9:I[75331,[],""]
 :HL["/_next/static/css/8b3b84bf2b7c53c2.css","style"]
 2:T1293,
 (function () {
@@ -119,18 +119,18 @@
     else recoverMixedDeploy(reason);
   });
 })();0:{"P":null,"b":"static-export","p":"","c":["","register"],"i":false,"f":[[["",{"children":["(public)",{"children":["register",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/8b3b84bf2b7c53c2.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(public)","$L5",{"children":["register","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
-b:I[69835,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-68b198ab7e88e7ad.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9495","static/chunks/9495-7299d89a053939c9.js","7177","static/chunks/app/layout-2117292db2c69e26.js"],"default"]
-c:I[55038,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-68b198ab7e88e7ad.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9495","static/chunks/9495-7299d89a053939c9.js","7177","static/chunks/app/layout-2117292db2c69e26.js"],"default"]
-d:I[9766,[],""]
-e:I[98924,[],""]
-f:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-68b198ab7e88e7ad.js","4345","static/chunks/app/not-found-f9c1de95849a7c9e.js"],"default"]
-10:I[11803,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-68b198ab7e88e7ad.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9495","static/chunks/9495-7299d89a053939c9.js","7177","static/chunks/app/layout-2117292db2c69e26.js"],"default"]
-11:I[81959,[],"ClientPageRoot"]
-12:I[50243,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-68b198ab7e88e7ad.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","7561","static/chunks/app/(public)/register/page-17f74caf75fd4da6.js"],"default"]
-15:I[24431,[],"OutletBoundary"]
-17:I[15278,[],"AsyncMetadataOutlet"]
-19:I[24431,[],"ViewportBoundary"]
-1b:I[24431,[],"MetadataBoundary"]
+b:I[85709,["5051","static/chunks/5051-06d016be9117847f.js","3723","static/chunks/3723-50bdb9478a454fb2.js","9253","static/chunks/9253-236c74b142aa65cf.js","2716","static/chunks/2716-a462ed07642633cd.js","9906","static/chunks/9906-9c7f94dd6f5c298e.js","7177","static/chunks/app/layout-fc527f26b85896a8.js"],"default"]
+c:I[45264,["5051","static/chunks/5051-06d016be9117847f.js","3723","static/chunks/3723-50bdb9478a454fb2.js","9253","static/chunks/9253-236c74b142aa65cf.js","2716","static/chunks/2716-a462ed07642633cd.js","9906","static/chunks/9906-9c7f94dd6f5c298e.js","7177","static/chunks/app/layout-fc527f26b85896a8.js"],"default"]
+d:I[97297,[],""]
+e:I[97989,[],""]
+f:I[52131,["964","static/chunks/964-8c4fd5ef0eca8375.js","9253","static/chunks/9253-236c74b142aa65cf.js","4345","static/chunks/app/not-found-aaf8d76989ff09bd.js"],"default"]
+10:I[10879,["5051","static/chunks/5051-06d016be9117847f.js","3723","static/chunks/3723-50bdb9478a454fb2.js","9253","static/chunks/9253-236c74b142aa65cf.js","2716","static/chunks/2716-a462ed07642633cd.js","9906","static/chunks/9906-9c7f94dd6f5c298e.js","7177","static/chunks/app/layout-fc527f26b85896a8.js"],"default"]
+11:I[3048,[],"ClientPageRoot"]
+12:I[20209,["5051","static/chunks/5051-06d016be9117847f.js","964","static/chunks/964-8c4fd5ef0eca8375.js","9253","static/chunks/9253-236c74b142aa65cf.js","2716","static/chunks/2716-a462ed07642633cd.js","7561","static/chunks/app/(public)/register/page-51e834b47f81037f.js"],"default"]
+15:I[73572,[],"OutletBoundary"]
+17:I[66493,[],"AsyncMetadataOutlet"]
+19:I[73572,[],"ViewportBoundary"]
+1b:I[73572,[],"MetadataBoundary"]
 1c:"$Sreact.suspense"
 a:T619,
     (function () {

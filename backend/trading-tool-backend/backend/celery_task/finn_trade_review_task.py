@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from celery import shared_task
 from sqlalchemy import text
@@ -9,7 +10,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.infrastructure.database import ASYNC_DATABASE_URL, async_session_factory
-from backend.services.finn_trade_review_service import FinnTradeReviewService
+from backend.services.finn_trade_review_service import FinnTradeReviewService, completed_reflection_week
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import allowed_trade_review_users
 from backend.services.finn_exchange_import_service import FinnExchangeImportService
@@ -17,6 +18,40 @@ from backend.services.finn_bybit_derivative_import_service import FinnBybitDeriv
 
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task(name="backend.celery_task.finn_trade_review_task.finalize_weekly_trade_reflections")
+def finalize_weekly_trade_reflections() -> int:
+    return asyncio.run(_run_with_task_database(_finalize_weekly_trade_reflections))
+
+
+async def _finalize_weekly_trade_reflections(session_factory=None) -> int:
+    """Save the last closed Amsterdam week; a read can backfill older weeks."""
+    session_factory = session_factory or async_session_factory
+    allowed = allowed_trade_review_users()
+    if allowed == set():
+        return 0
+    monday, _, start, end = completed_reflection_week(datetime.now(timezone.utc))
+    user_filter = "AND user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
+    params = {"start": start, "end": end}
+    if allowed is not None:
+        params["allowed"] = sorted(allowed)
+    async with session_factory() as session:
+        result = await session.execute(text(f"""
+            SELECT DISTINCT user_id FROM finn_trade_reviews
+            WHERE exit_at >= :start AND exit_at < :end {user_filter}
+            ORDER BY user_id LIMIT 500
+        """), params)
+        user_ids = [int(row.user_id) for row in result.fetchall()]
+    completed = 0
+    for user_id in user_ids:
+        try:
+            async with session_factory() as session:
+                await FinnTradeReviewService(session).weekly_report(user_id, monday)
+            completed += 1
+        except Exception:
+            logger.exception("FINN weekly reflection failed", extra={"user_id": user_id})
+    return completed
 
 
 @shared_task(name="backend.celery_task.finn_trade_review_task.sync_linked_exchange_fills")
