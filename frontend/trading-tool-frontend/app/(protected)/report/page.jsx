@@ -2059,13 +2059,13 @@ RENDER
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <ReportTabs selected={reportType} onChange={setReportType} />
 
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-sm flex items-center gap-2 transition-colors">
-                      <div className="flex items-center gap-2 px-3 py-1 border-r border-slate-100 dark:border-slate-800">
+                    <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900 md:flex md:w-auto md:items-center md:gap-2">
+                      <div className="col-span-2 flex min-w-0 items-center gap-2 px-3 py-1 md:border-r md:border-slate-100 dark:md:border-slate-800">
                         <Calendar size={13} className="text-slate-400 dark:text-slate-500" />
                         <select
                           value={selectedDate}
                           onChange={(e) => loadData(e.target.value)}
-                          className="bg-transparent text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:outline-none appearance-none"
+                          className="min-w-0 max-w-full flex-1 appearance-none bg-transparent text-[11px] font-bold text-slate-600 focus:outline-none dark:text-slate-400 md:flex-none"
                         >
                           <option value="latest">{reportT.recent}</option>
                           {dates.map((d) => (
@@ -2074,11 +2074,11 @@ RENDER
                         </select>
                       </div>
 
-                      <div className="flex items-center gap-2 pr-1">
+                      <div className="col-span-2 grid min-w-0 grid-cols-2 gap-1 md:flex md:items-center md:gap-2 md:pr-1">
                         <button
                           onClick={handleDownload}
                           disabled={pdfLoading || !report}
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg transition-all disabled:opacity-30"
+                          className="flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-900 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white md:px-3"
                         >
                           {pdfLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                           <span className="text-[11px] font-black uppercase tracking-widest">{reportT.pdf}</span>
@@ -2087,7 +2087,7 @@ RENDER
                         <button
                           onClick={() => handleGenerate(false, selectedDate)}
                           disabled={generating}
-                          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10 active:scale-95 disabled:bg-slate-300"
+                          className="flex min-w-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-2 py-2 text-white shadow-lg shadow-blue-600/10 transition-all hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 md:px-4"
                         >
                           <RefreshCw size={13} className={generating ? "animate-spin" : ""} />
                           <span className="text-[11px] font-black uppercase tracking-widest">{reportT.new}</span>
