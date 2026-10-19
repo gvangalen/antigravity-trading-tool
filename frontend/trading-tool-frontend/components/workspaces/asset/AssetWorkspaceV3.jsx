@@ -251,6 +251,7 @@ function getUiCopy(locale = "nl") {
       watchlistRemoveConfirm: "Remove asset",
       watchlistRemoveBusy: "Removing asset...",
       watchlistRemoveSuccess: (symbol) => `${symbol} removed from watchlist`,
+      modalCancelLabel: "Cancel",
       modalContextLabel: "Context",
       modalImpactLabel: "Impact",
       modalSafetyLabel: "Safety",
@@ -421,6 +422,7 @@ function getUiCopy(locale = "nl") {
       watchlistRemoveConfirm: "Asset entfernen",
       watchlistRemoveBusy: "Asset wird entfernt...",
       watchlistRemoveSuccess: (symbol) => `${symbol} aus Watchlist entfernt`,
+      modalCancelLabel: "Abbrechen",
       modalContextLabel: "Kontext",
       modalImpactLabel: "Auswirkung",
       modalSafetyLabel: "Sicherheit",
@@ -590,6 +592,7 @@ function getUiCopy(locale = "nl") {
     watchlistRemoveConfirm: "Asset verwijderen",
     watchlistRemoveBusy: "Asset verwijderen...",
     watchlistRemoveSuccess: (symbol) => `${symbol} verwijderd van watchlist`,
+    modalCancelLabel: "Annuleren",
     modalContextLabel: "Context",
     modalImpactLabel: "Impact",
     modalSafetyLabel: "Veiligheid",
@@ -2405,7 +2408,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedAsset, setSelectedAsset } = useAsset();
-  const { symbols: persistedWatchlistSymbols = [] } = useWatchlist();
+  const { symbols: persistedWatchlistSymbols = [], refresh: refreshPersistedWatchlist } = useWatchlist();
   const { locale, t } = useTranslation();
   const { openConfirm, showSnackbar } = useModal();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
@@ -2418,6 +2421,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
   const [watchlistRows, setWatchlistRows] = useState([]);
+  const [removedWatchlistSymbols, setRemovedWatchlistSymbols] = useState([]);
   const [showChart, setShowChart] = useState(true);
   const [analysisChartInterval, setAnalysisChartInterval] = useState(DEFAULT_TRADINGVIEW_INTERVAL);
   const [hiddenIndicatorKeys, setHiddenIndicatorKeys] = useState([]);
@@ -2719,6 +2723,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
       if (!cancelled) {
         setWatchlistRows(nextRows);
+        setRemovedWatchlistSymbols((current) => {
+          const remaining = current.filter((symbol) => nextRows.some((row) => row.symbol === symbol));
+          return remaining.length === current.length ? current : remaining;
+        });
       }
     }
 
@@ -2728,13 +2736,17 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     };
   }, [locale, ui, watchlistData, watchlistLoading]);
 
+  const currentWatchlistRows = useMemo(
+    () => watchlistRows.filter((row) => !removedWatchlistSymbols.includes(row.symbol)),
+    [removedWatchlistSymbols, watchlistRows]
+  );
   const visibleWatchlistRows = useMemo(
-    () => watchlistRows.filter((row) => row.assetGroup === activeAssetGroup),
-    [activeAssetGroup, watchlistRows]
+    () => currentWatchlistRows.filter((row) => row.assetGroup === activeAssetGroup),
+    [activeAssetGroup, currentWatchlistRows]
   );
   const activeWatchlistRow = useMemo(
-    () => watchlistRows.find((row) => row.symbol === activeSymbol) || null,
-    [activeSymbol, watchlistRows]
+    () => currentWatchlistRows.find((row) => row.symbol === activeSymbol) || null,
+    [activeSymbol, currentWatchlistRows]
   );
   const handleAssetGroupChange = (nextGroup) => {
     const normalizedGroup = normalizeAssetGroup(nextGroup);
@@ -2743,7 +2755,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     const activeRowGroup = normalizeAssetGroup(activeWatchlistRow?.assetGroup || activeWatchlistRow?.assetClass);
     if (activeRowGroup === normalizedGroup) return;
 
-    const fallbackRow = watchlistRows.find((row) => row.assetGroup === normalizedGroup);
+    const fallbackRow = currentWatchlistRows.find((row) => row.assetGroup === normalizedGroup);
     if (fallbackRow?.symbol) {
       handleAssetSelect(fallbackRow.symbol);
     }
@@ -2761,16 +2773,19 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       safetyLabel: ui.modalSafetyLabel,
       consequenceLabel: ui.modalConsequenceLabel,
       closeLabel: ui.modalCloseLabel,
+      cancelText: ui.modalCancelLabel,
       consequence: ui.watchlistRemoveConsequence,
       tone: "danger",
       confirmText: ui.watchlistRemoveConfirm,
       busyText: ui.watchlistRemoveBusy,
       onConfirm: async () => {
         const normalizedSymbol = String(row.symbol || "").toUpperCase();
-        const remainingRows = watchlistRows.filter(
+        await removeFromWatchlist(normalizedSymbol);
+        setRemovedWatchlistSymbols((current) => current.includes(normalizedSymbol)
+          ? current : [...current, normalizedSymbol]);
+        const remainingRows = currentWatchlistRows.filter(
           (item) => String(item?.symbol || "").toUpperCase() !== normalizedSymbol
         );
-
         setWatchlistRows(remainingRows);
 
         const removedActiveAsset = normalizedSymbol === activeSymbol;
@@ -2791,8 +2806,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           }
         }
 
-        await removeFromWatchlist(normalizedSymbol);
-        await reloadWatchlist();
+        await Promise.allSettled([reloadWatchlist(), refreshPersistedWatchlist(true)]);
         showSnackbar(ui.watchlistRemoveSuccess(normalizedSymbol));
       },
     });
@@ -2801,13 +2815,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     initialTab,
     openConfirm,
     pathname,
+    currentWatchlistRows,
     reloadWatchlist,
+    refreshPersistedWatchlist,
     router,
     setSelectedAsset,
     showSnackbar,
     ui,
     variant,
-    watchlistRows,
   ]);
   const activeAssetName =
     activeWatchlistRow?.displayName ||
@@ -2932,7 +2947,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         combinedSummary={combinedSummary}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
-        onSelectAsset={() => openSearch()}
+        onSelectAsset={() => openSearch({ mode: "asset" })}
         ui={ui}
       />
 
@@ -2943,7 +2958,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         onRemove={handleRemoveWatchlistAsset}
         activeGroup={activeAssetGroup}
         onGroupChange={handleAssetGroupChange}
-        onAddAsset={() => openSearch()}
+        onAddAsset={() => openSearch({ mode: "asset" })}
         conditionOptions={t?.setups?.marketConditions?.options}
         ui={ui}
       />

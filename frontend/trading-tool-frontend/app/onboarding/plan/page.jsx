@@ -7,12 +7,11 @@ import { ArrowRight, CheckCircle2, Lock, Sparkles } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import { fetchActiveSetup, fetchLastSetup, fetchSetups, saveNewSetup } from "@/lib/api/setups";
+import { fetchLastSetup, fetchSetups, saveNewSetup } from "@/lib/api/setups";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
-import { marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
+import { MARKET_CONDITIONS, marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
 import { createStrategy, fetchLastStrategy, fetchStrategyBySetup } from "@/lib/api/strategy";
 import {
-  getActiveSetupId,
   findSavedSetupForAsset,
   getPlanCompletionForAsset,
   getSetupId,
@@ -145,27 +144,19 @@ export default function OnboardingPlanPage() {
         setStrategy(DEFAULT_STRATEGY);
         setConditionChoice(null);
 
-        const [activeSetup, lastSetup, lastStrategy] = await Promise.all([
-          fetchActiveSetup(symbol).catch(() => null),
+        const [lastSetup, savedSetups, lastStrategy] = await Promise.all([
           fetchLastSetup().catch(() => null),
+          fetchSetups(),
           fetchLastStrategy().catch(() => null),
         ]);
 
         if (cancelled) return;
 
-        let setupCandidate = findSavedSetupForAsset(symbol, activeSetup, lastSetup);
-
-        if (!setupCandidate) {
-          const savedSetups = await fetchSetups();
-          if (cancelled) return;
-          setupCandidate = findSavedSetupForAsset(symbol, activeSetup, lastSetup, savedSetups);
-        }
+        const setupCandidate = findSavedSetupForAsset(symbol, lastSetup, savedSetups);
 
         if (setupCandidate) {
           setConditionChoice(marketConditionChoiceFromSetup(setupCandidate));
-          const setupId = activeSetup === setupCandidate
-            ? getActiveSetupId(setupCandidate)
-            : getSetupId(setupCandidate);
+          const setupId = getSetupId(setupCandidate);
           setSavedSetup(setupCandidate);
           setSetup({
             name: setupCandidate.name || `${symbol} Setup`,
@@ -347,6 +338,23 @@ export default function OnboardingPlanPage() {
   };
 
   const reviewReady = setupDone && strategyDone;
+  const savedCondition = MARKET_CONDITIONS.find(({ id }) => id === conditionChoice);
+  const savedLegacyRanges = [
+    ["market", savedSetup?.min_market_score, savedSetup?.max_market_score],
+    ["macro", savedSetup?.min_macro_score, savedSetup?.max_macro_score],
+    ["technical", savedSetup?.min_technical_score, savedSetup?.max_technical_score],
+  ].filter(([, minimum, maximum]) => minimum != null || maximum != null);
+  const conditionLabel = conditionChoice === "off"
+    ? t?.setups?.marketConditions?.offTitle || "No extra score condition"
+    : conditionChoice === "custom"
+      ? savedLegacyRanges.length
+        ? savedLegacyRanges.map(([category, minimum, maximum]) =>
+          `${copy.scoreCategories?.[category] || category} ${minimum ?? "—"}–${maximum ?? "—"}`
+        ).join(" · ")
+        : `${savedSetup?.min_benchmark_score ?? setup.min_benchmark_score}–${savedSetup?.max_benchmark_score ?? setup.max_benchmark_score}`
+      : savedCondition
+        ? `${t?.setups?.marketConditions?.options?.[conditionChoice]?.title || savedCondition.id} (${savedCondition.min}–${savedCondition.max})`
+        : "—";
 
   return (
     <div className="mx-auto max-w-5xl py-8">
@@ -549,6 +557,7 @@ export default function OnboardingPlanPage() {
                   ].filter(Boolean).join(" · ")}
                 />
               ) : null}
+              <SummaryRow label={copy.scoreConditionLabel || "Score condition"} value={conditionLabel} />
             </div>
           )}
         </Section>
