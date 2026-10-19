@@ -1,283 +1,187 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Check, ShieldCheck, Zap, Brain, LineChart, Globe, DollarSign, ArrowUpRight, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowRight,
+  Check,
+  MessageCircle,
+  ShieldCheck,
+  Activity,
+} from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+
+function ActionLink({ href, children, light = false }) {
+  return (
+    <Link
+      href={href}
+      className={`inline-flex min-h-12 items-center justify-center gap-3 rounded-full px-6 text-sm font-semibold transition-colors ${
+        light
+          ? "border border-slate-300 bg-white text-slate-900 hover:border-blue-500 hover:text-blue-700"
+          : "bg-blue-600 text-white hover:bg-blue-700"
+      }`}
+    >
+      {children}
+      <ArrowRight size={17} aria-hidden="true" />
+    </Link>
+  );
+}
 
 export default function LandingPage() {
   const { isAuthenticated } = useAuth();
   const { t } = useTranslation();
-  const copy = t?.publicPages?.landing || {};
-  const pricing = copy.pricing || {};
-  const cta = copy.cta || {};
-  const footer = copy.footer || {};
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return <div className="min-h-screen bg-background" />;
-  }
+  const c = t.publicPages.landing;
+  const destination = isAuthenticated ? "/asset" : "/login";
+  const action = isAuthenticated ? c.openDashboard : c.startTrial;
+  const steps = [
+    [MessageCircle, c.step1Title, c.step1Body],
+    [Activity, c.step2Title, c.step2Body],
+    [ShieldCheck, c.step3Title, c.step3Body],
+  ];
+  const plans = [
+    { name: "Basis", price: 89, tagline: c.pricing.basicTagline, features: c.pricing.basicFeatures },
+    { name: "Pro", price: 149, tagline: c.pricing.proTagline, features: c.pricing.proFeatures, featured: true },
+  ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-sans selection:bg-blue-600/30">
-      <span className="hidden">v1.1.3-final-cache-break</span>
-      
-      {/* 1. HEADER */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-[var(--color-border-subtle)]">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link href={isAuthenticated ? "/asset" : "/"} className="flex items-center gap-3 group">
-            <img src="/tradamind_icon_v2.png" alt="TM" className="h-12 w-12 object-contain rounded-xl group-hover:scale-105 transition-transform" />
-            <div className="flex flex-col justify-center">
-              <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 group-hover:text-blue-600 transition-colors">
-                Tradamind
-              </div>
-              <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-500">
-                <div className="animate-pulse-soft">
-                  <ShieldCheck size={12} strokeWidth={2.5} className="text-blue-600" />
-                </div>
-                <div className="text-[8px] font-black uppercase tracking-[0.2em]">
-                  {copy.badge}
-                </div>
-              </div>
-            </div>
+    <div className="min-h-screen bg-white text-slate-950">
+      <header className="relative z-20 border-b border-slate-200/80 bg-white">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:h-20 sm:px-8">
+          <Link href="/" className="flex items-center gap-3" aria-label={c.brandHome}>
+            <Image src="/tradamind_icon_v2.png" alt="" width={38} height={38} className="rounded-md" />
+            <span className="text-lg font-bold">Tradamind</span>
           </Link>
-            {!isAuthenticated ? (
-              <Link 
-                href="/login" 
-                className="px-6 py-2.5 rounded-xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[11px] font-black uppercase tracking-widest transition-all"
-              >
-                {copy.login}
-              </Link>
-            ) : (
-              <Link 
-                href="/asset"
-                className="px-6 py-2.5 rounded-xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
-              >
-                {copy.dashboard}
-              </Link>
-            )}
+          <nav className="hidden items-center gap-8 md:flex" aria-label={c.siteNavigation}>
+            <a href="#hoe-het-werkt" className="text-sm font-medium text-slate-600 hover:text-blue-700">{c.seeHow}</a>
+            <a href="#prijzen" className="text-sm font-medium text-slate-600 hover:text-blue-700">{c.pricingEyebrow}</a>
+          </nav>
+          <div className="flex items-center gap-4">
+            {!isAuthenticated && <Link href="/login" className="hidden text-sm font-semibold text-slate-700 hover:text-blue-700 sm:block">{c.login}</Link>}
+            <Link href={destination} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-blue-700">
+              {action}<ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="pt-20">
-        
-        {/* 2. HERO SECTION */}
-        <section className="relative px-6 py-24 sm:py-32 overflow-hidden">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden">
-            <div className="absolute top-1/4 -right-1/4 w-[500px] h-[500px] bg-blue-600/5 blur-[120px] rounded-full" />
-            <div className="absolute bottom-1/4 -left-1/4 w-[500px] h-[500px] bg-blue-600/5 blur-[120px] rounded-full" />
-          </div>
-
-          <div className="max-w-4xl mx-auto text-center relative z-10">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mb-8 border border-blue-200 dark:border-blue-800/50">
-              <Zap size={12} className="fill-current" /> {copy.badge}
+      <main>
+        <section className="relative isolate overflow-hidden bg-[#f3f8f8]">
+          <Image
+            src="/dashboard_real_preview.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-center opacity-[0.12]"
+          />
+          <div className="absolute inset-0 bg-white/70" aria-hidden="true" />
+          <div className="relative mx-auto max-w-7xl px-5 pb-14 pt-16 sm:px-8 sm:pb-16 sm:pt-20 lg:pt-24">
+            <div className="max-w-[900px]">
+              <p className="mb-5 flex items-center gap-3 text-sm font-semibold text-blue-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />{c.heroEyebrow}
+              </p>
+              <h1 className="max-w-[880px] text-5xl font-semibold leading-[1.04] text-slate-950 sm:text-6xl lg:text-7xl">
+                {c.heroTitle}
+              </h1>
+              <p className="mt-7 max-w-2xl text-lg leading-relaxed text-slate-700 sm:text-xl">{c.heroBody}</p>
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <ActionLink href={destination}>{action}</ActionLink>
+                <ActionLink href="#hoe-het-werkt" light>{c.seeHow}</ActionLink>
+              </div>
+              <p className="mt-5 text-sm text-slate-600">{c.heroFootnote}</p>
             </div>
-            <h1 className="text-6xl sm:text-8xl font-black text-foreground tracking-tighter leading-[0.9] mb-8">
-              {copy.titleLine1} <br />
-              <span className="text-blue-600 italic">{copy.titleLine2}</span>
-            </h1>
-            <p className="text-xl sm:text-2xl font-bold text-secondary max-w-2xl mx-auto mb-12 leading-relaxed">
-              {copy.subtitle}
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              {!isAuthenticated ? (
-                <>
-                  <Link 
-                    href="/login" 
-                    className="w-full sm:w-auto bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-10 py-5 rounded-2xl text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 shadow-xl shadow-foreground/5 active:scale-95"
-                  >
-                    {copy.startTrial}
-                    <ArrowRight size={16} />
-                  </Link>
-                  <Link 
-                    href="/login?next=/asset"
-                    className="w-full sm:w-auto px-10 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:border-blue-600/30 text-[12px] font-black uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 active:scale-95"
-                  >
-                    {copy.viewDashboard}
-                  </Link>
-                </>
-              ) : (
-                <Link 
-                  href="/asset"
-                  className="w-full sm:w-auto bg-blue-600 text-white hover:bg-blue-700 px-14 py-6 rounded-[2rem] text-[14px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 active:scale-95 animate-pulse-soft"
-                >
-                  <LayoutDashboard size={20} />
-                  {copy.openDashboard}
-                  <ArrowRight size={18} />
-                </Link>
-              )}
+          </div>
+          <div className="relative border-t border-slate-200/80 bg-white/75">
+            <div className="mx-auto grid max-w-7xl gap-0 px-5 sm:grid-cols-3 sm:px-8">
+              {[c.heroPoint1, c.heroPoint2, c.heroPoint3].map((point, index) => (
+                <div key={point} className="flex items-center gap-3 border-b border-slate-200 py-4 text-sm font-medium text-slate-700 last:border-b-0 sm:border-b-0 sm:border-r sm:px-6 sm:first:pl-0 sm:last:border-r-0">
+                  <span className="text-xs font-bold text-blue-600">0{index + 1}</span>{point}
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* 3. FEATURES SECTION */}
-        <section className="px-6 py-24 bg-[var(--color-border-subtle)]/30 border-y border-[var(--color-border-subtle)]">
-          <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              
-              {/* Feature 1 */}
-              <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-6 hover:border-blue-600/20 transition-all group">
-                <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-bold group-hover:scale-110 transition-transform">
-                  <Globe size={24} />
-                </div>
-                <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{copy.features?.marketTitle}</h3>
-                  <p className="text-sm font-bold text-secondary leading-relaxed">
-                    {copy.features?.marketBody}
-                  </p>
-                </div>
+        <section id="hoe-het-werkt" className="py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:gap-16">
+              <div>
+                <p className="text-sm font-semibold text-blue-700">{c.workflowEyebrow}</p>
+                <h2 className="mt-4 max-w-xl text-4xl font-semibold leading-tight sm:text-5xl">{c.workflowTitle}</h2>
               </div>
-
-              {/* Feature 2 */}
-              <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-6 hover:border-blue-600/20 transition-all group">
-                <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-bold group-hover:scale-110 transition-transform">
-                  <Brain size={24} />
+              <p className="max-w-xl self-end text-lg leading-relaxed text-slate-600">{c.workflowBody}</p>
+            </div>
+            <div className="mt-14 grid gap-8 border-t border-slate-200 pt-9 md:grid-cols-3 md:gap-12">
+              {steps.map(([Icon, title, body], index) => (
+                <div key={title}>
+                  <div className="flex items-center justify-between text-blue-700"><Icon size={23} strokeWidth={1.7} aria-hidden="true" /><span className="text-sm font-semibold">0{index + 1}</span></div>
+                  <h3 className="mt-7 text-xl font-semibold">{title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{body}</p>
                 </div>
-                <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{copy.features?.coachTitle}</h3>
-                  <p className="text-sm font-bold text-secondary leading-relaxed">
-                    {copy.features?.coachBody}
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 3 */}
-              <div className="bg-card border-2 border-[var(--color-border)] rounded-[2.5rem] p-10 space-y-6 hover:border-blue-600/20 transition-all group">
-                <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600 font-bold group-hover:scale-110 transition-transform">
-                  <LineChart size={24} />
-                </div>
-                <div className="space-y-3">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{copy.features?.strategyTitle}</h3>
-                  <p className="text-sm font-bold text-secondary leading-relaxed">
-                    {copy.features?.strategyBody}
-                  </p>
-                </div>
-              </div>
-
+              ))}
             </div>
           </div>
         </section>
 
-        {/* 4. LIVE PREVIEW */}
-        <section className="px-6 py-24 overflow-hidden">
-          <div className="max-w-7xl mx-auto">
-            <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 to-transparent blur-2xl opacity-50 group-hover:opacity-100 transition duration-1000" />
-              <div className="relative bg-card border-2 border-[var(--color-border)] rounded-[3rem] overflow-hidden shadow-2xl">
-                <Image 
-                  src="/dashboard_real_preview.png"
-                  alt={copy.previewAlt}
-                  width={1920}
-                  height={1080}
-                  className="w-full h-auto"
-                />
-              </div>
+        <section className="bg-[#edf5f3] py-20 sm:py-28">
+          <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-20">
+            <div>
+              <p className="text-sm font-semibold text-blue-700">{c.exampleEyebrow}</p>
+              <h2 className="mt-4 text-4xl font-semibold leading-tight sm:text-5xl">{c.exampleTitle}</h2>
+              <p className="mt-6 text-lg leading-relaxed text-slate-700">{c.exampleBody}</p>
+              <p className="mt-6 text-xs leading-relaxed text-slate-500">{c.exampleDisclaimer}</p>
+            </div>
+            <div className="border-l-2 border-blue-600 pl-6 sm:pl-9">
+              <div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 font-bold text-white">F</span><span className="font-semibold">Finn</span><span className="ml-auto text-xs text-slate-500">{c.exampleLabel}</span></div>
+              <p className="mt-8 text-sm text-slate-600">{c.examplePrompt}</p>
+              <blockquote className="mt-5 text-2xl font-medium leading-snug text-slate-950 sm:text-3xl">“{c.exampleResponse}”</blockquote>
+              <p className="mt-5 leading-relaxed text-slate-700">{c.exampleDetail}</p>
+              <p className="mt-7 flex items-center gap-2 text-sm font-semibold text-emerald-800"><ShieldCheck size={18} aria-hidden="true" />{c.exampleGuardrail}</p>
             </div>
           </div>
         </section>
 
-        {/* 5. PRICING SECTION */}
-        <section className="px-6 py-24 bg-[var(--color-border-subtle)]/30 border-y border-[var(--color-border-subtle)]">
-          <div className="max-w-4xl mx-auto text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-black text-foreground tracking-tighter mb-4">{copy.pricingTitle}</h2>
-            <p className="text-lg font-bold text-secondary uppercase tracking-widest">{copy.pricingSubtitle}</p>
+        <section className="py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <p className="text-sm font-semibold text-blue-700">{c.platformEyebrow}</p>
+            <h2 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight sm:text-5xl">{c.platformTitle}</h2>
+            <div className="mt-12 grid gap-8 border-t border-slate-200 pt-8 md:grid-cols-2 md:gap-16">
+              <div><Activity size={23} className="text-blue-700" aria-hidden="true" /><h3 className="mt-5 text-xl font-semibold">{c.dashboardTitle}</h3><p className="mt-3 max-w-md text-sm leading-relaxed text-slate-600">{c.dashboardBody}</p></div>
+              <div><ShieldCheck size={23} className="text-emerald-700" aria-hidden="true" /><h3 className="mt-5 text-xl font-semibold">{c.botTitle}</h3><p className="mt-3 max-w-md text-sm leading-relaxed text-slate-600">{c.botBody}</p></div>
+            </div>
           </div>
+        </section>
 
-          <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
-            {/* BASIC */}
-            <div className="bg-card border-2 border-[var(--color-border)] rounded-[3rem] p-12 flex flex-col justify-between hover:border-foreground/10 transition-all">
-              <div className="space-y-10">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-2xl font-black text-foreground uppercase tracking-tight italic">Basis</h3>
-                    <p className="text-[10px] font-black text-secondary uppercase tracking-widest mt-1">{pricing.basicTagline}</p>
+        <section id="prijzen" className="bg-slate-50 py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div><p className="text-sm font-semibold text-blue-700">{c.pricingEyebrow}</p><h2 className="mt-4 text-4xl font-semibold sm:text-5xl">{c.pricingTitle}</h2></div>
+              <p className="max-w-sm text-sm text-slate-600">{c.pricingSubtitle}</p>
+            </div>
+            <div className="mt-12 grid gap-10 border-t border-slate-300 pt-10 md:grid-cols-2 md:gap-16">
+              {plans.map((plan) => (
+                <div key={plan.name} className="flex flex-col md:border-r md:border-slate-200 md:pr-12 md:last:border-r-0 md:last:pr-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>{plan.featured && <p className="mb-2 text-xs font-semibold text-blue-700">{c.pricing.featuredBadge}</p>}<h3 className="text-2xl font-semibold">{plan.name}</h3><p className="mt-2 text-sm text-slate-600">{plan.tagline}</p></div>
+                    <p className="whitespace-nowrap text-3xl font-semibold">€{plan.price}<span className="text-sm font-normal text-slate-500"> / {c.pricePeriod}</span></p>
                   </div>
-                  <div className="text-4xl font-black text-foreground tracking-tighter">€89<span className="text-sm text-dim align-top mt-2 ml-1">/mo</span></div>
+                  <ul className="mt-8 flex-1 space-y-3">{plan.features.map(feature => <li key={feature} className="flex gap-3 text-sm text-slate-700"><Check size={17} className="shrink-0 text-emerald-700" aria-hidden="true" />{feature}</li>)}</ul>
+                  <div className="mt-9"><ActionLink href={destination} light={!plan.featured}>{action}</ActionLink></div>
                 </div>
-                <div className="space-y-5">
-                  {(pricing.basicFeatures || []).map((f) => (
-                    <div key={f} className="flex items-center gap-4">
-                      <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
-                        <Check size={12} strokeWidth={4} />
-                      </div>
-                      <span className="text-sm font-bold text-dim">{f}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <Link 
-                href="/login" 
-                className="w-full mt-12 py-5 rounded-2xl border-2 border-[var(--color-border)] hover:bg-foreground hover:text-card hover:border-foreground text-[11px] font-black uppercase tracking-[0.2em] transition-all text-center flex items-center justify-center gap-2 group active:scale-95"
-              >
-                {copy.startTrial}
-                <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-              </Link>
-            </div>
-
-            {/* PRO */}
-            <div className="bg-foreground text-card border-2 border-foreground rounded-[3rem] p-12 flex flex-col justify-between shadow-2xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/20 blur-3xl rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
-              
-              <div className="relative z-10 space-y-10">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="inline-flex px-2 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest mb-2">{pricing.featuredBadge}</div>
-                    <h3 className="text-2xl font-black text-card dark:text-slate-900 uppercase tracking-tight italic">Pro</h3>
-                    <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mt-1">{pricing.proTagline}</p>
-                  </div>
-                  <div className="text-4xl font-black text-card dark:text-slate-900 tracking-tighter">€149<span className="text-sm opacity-60 align-top mt-2 ml-1">/mo</span></div>
-                </div>
-                <div className="space-y-5">
-                  {(pricing.proFeatures || []).map((f) => (
-                    <div key={f} className="flex items-center gap-4">
-                      <div className="w-5 h-5 rounded-full bg-slate-800 dark:bg-slate-200 flex items-center justify-center text-white dark:text-slate-900">
-                        <Check size={12} strokeWidth={4} />
-                      </div>
-                      <span className="text-sm font-bold opacity-80">{f}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <Link 
-                href="/login" 
-                className="relative z-10 w-full mt-12 py-5 rounded-2xl bg-white dark:bg-slate-100 text-slate-900 hover:bg-blue-600 hover:text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all text-center flex items-center justify-center gap-2 group active:scale-95 border-none shadow-lg"
-              >
-                {copy.startTrial}
-                <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-              </Link>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* 6. CTA FOOTER */}
-        <section className="px-6 py-32 text-center">
-          <div className="max-w-4xl mx-auto space-y-12">
-            <h2 className="text-5xl sm:text-7xl font-black text-foreground tracking-tighter leading-none">
-              {cta.title}
-            </h2>
-            <Link 
-              href="/login" 
-              className="inline-flex bg-foreground text-card hover:bg-slate-800 dark:hover:bg-slate-200 px-12 py-6 rounded-2xl text-[14px] font-black uppercase tracking-[0.2em] transition-all items-center gap-3 shadow-2xl active:scale-95"
-            >
-              {copy.startTrial}
-              <ArrowRight size={18} />
-            </Link>
-            <div className="pt-24 border-t border-[var(--color-border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-6 opacity-40">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{footer.rights}</div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                {footer.legal}
-              </div>
-            </div>
+        <section className="border-t border-slate-200 bg-white py-20 sm:py-28">
+          <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 sm:px-8 md:flex-row md:items-end md:justify-between">
+            <div><p className="text-sm font-semibold text-blue-700">{c.heroEyebrow}</p><h2 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight sm:text-5xl">{c.finalTitle}</h2><p className="mt-4 max-w-xl text-slate-600">{c.finalBody}</p></div>
+            <ActionLink href={destination}>{action}</ActionLink>
           </div>
         </section>
-
       </main>
+      <footer className="border-t border-slate-200 px-5 py-8 text-center text-xs text-slate-500">{c.footer.rights}</footer>
     </div>
   );
 }
