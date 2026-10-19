@@ -51,6 +51,7 @@ jobs:
           import os
           import json
           import hashlib
+          import re
           import subprocess
           from sqlalchemy import text
           from backend.infrastructure.database import sync_engine
@@ -112,6 +113,13 @@ jobs:
                   'exact_dca_question=' + str(message.strip() == 'Welke dag staat mijn BTC DCA gepland?').lower(),
                   'contains_dca_question=' + str('Welke dag staat mijn BTC DCA gepland?' in message).lower(),
                   'financial_execution_intent=' + str(facts.financial_execution_intent).lower(),
+                  'first_clause_polarity=' + FinnV2RequestPreprocessorService().preprocess(
+                      message=re.split(r'[.!?]', message, maxsplit=1)[0]
+                  ).action_polarity,
+                  'read_only_cue=' + str(bool(re.search(
+                      r'\b(?:alleen\s+sparren|geen\s+(?:voorstel|aankoop|order)|hoe\s+zou\s+je|welke\s+dag)\b',
+                      message, re.I,
+                  ))).lower(),
                   'message_sha256=' + hashlib.sha256(message.encode()).hexdigest()[:12],
               )))
           with sync_engine.connect() as connection:
