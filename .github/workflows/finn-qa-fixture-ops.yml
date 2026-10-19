@@ -50,6 +50,7 @@ jobs:
           from datetime import datetime, timezone
           import os
           import json
+          import hashlib
           import subprocess
           from sqlalchemy import text
           from backend.infrastructure.database import sync_engine
@@ -94,6 +95,10 @@ jobs:
                   'answer_chars=' + str(len(str(exchange.get('answer') or ''))),
                   'response_id_present=' + str(bool(exchange.get('response_id'))).lower(),
                   'uses_previous_response=' + str(bool(exchange.get('uses_previous_response'))).lower(),
+                  'unsupported_execution_copy=' + str(
+                      exchange.get('answer') == 'Ik kan hier geen aankoop uitvoeren. We kunnen eerst je plan en risico bespreken; ondersteunde acties vragen een apart voorstel en bevestiging.'
+                  ).lower(),
+                  'answer_sha256=' + hashlib.sha256(str(exchange.get('answer') or '').encode()).hexdigest()[:12],
               )))
           with sync_engine.connect() as connection:
               completed = connection.execute(text("""
