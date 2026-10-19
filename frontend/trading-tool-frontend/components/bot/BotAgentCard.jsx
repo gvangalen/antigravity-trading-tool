@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import BotPortfolioCard from "@/components/bot/BotPortfolioCard";
-import BotHistoryTable from "@/components/bot/BotHistoryTable";
 import BotSettingsMenu from "@/components/bot/BotSettingsMenu";
 import GuardrailsPanel from "@/components/bot/GuardrailsPanel";
 
@@ -31,8 +30,6 @@ export default function BotAgentCard({
   decision,
   order,
   portfolio,
-  history = [],
-  trades = [],
   loadingDecision = false,
   onGenerate,
   loadingMarketIntelligence = false,
@@ -56,7 +53,6 @@ export default function BotAgentCard({
   const [scenarios, setScenarios] = useState({});
   const [scenariosLoading, setScenariosLoading] = useState(false);
 
-  const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef(null);
 
@@ -361,36 +357,6 @@ export default function BotAgentCard({
     blocker,
     blockerToneClasses,
   } = decisionView;
-
-  /* ================= HISTORY ================= */
-  const combinedHistory = useMemo(() => {
-    const botHistory = (history || []).filter((h) => h.bot_id === bot.id);
-
-    const tradeAsHistory = (trades || []).map((t) => ({
-      id: t.id,
-      bot_id: bot.id,
-      created_at: t.executed_at,
-      date: t.executed_at,
-      side: t.side,
-      qty: t.qty,
-      price: t.price,
-      amount_eur: t.amount_eur,
-      confidence: t.confidence || null,
-      status: "executed",
-      symbol: t.symbol,
-      mode: t.mode,
-      action: t.side,
-      is_trade: true,
-    }));
-
-    const merged = [...tradeAsHistory, ...botHistory].sort((a, b) => {
-      const d1 = new Date(a.created_at || a.date || 0);
-      const d2 = new Date(b.created_at || b.date || 0);
-      return d2 - d1;
-    });
-
-    return merged;
-  }, [history, trades, bot.id]);
 
   /* ================= CLOSE SETTINGS ================= */
 
@@ -1129,25 +1095,6 @@ export default function BotAgentCard({
             ) : null}
           </div>
 
-          {/* 📜 TERMINAL LOGS / HISTORY (BOTTOM BAR) */}
-          <div className="mt-auto border-t border-slate-100 bg-[var(--color-border-subtle)] text-muted overflow-hidden">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowHistory((v) => !v); }}
-              className="w-full p-5 lg:p-6 text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-100/80 hover:text-slate-800 transition-all flex items-center justify-between group"
-            >
-              <div className="flex items-center gap-3">
-                <Clock size={14} className="group-hover:rotate-[360deg] transition-transform duration-700" />
-                {showHistory ? copy.systemLogsMinimize : copy.systemLogsOpen}
-              </div>
-              <div className="text-[10px] opacity-40">[{combinedHistory.length} {copy.entries.toUpperCase()}]</div>
-            </button>
-
-            {showHistory && (
-              <div className="p-6 bg-card border-t border-slate-100 max-h-[400px] overflow-y-auto animate-fade-slide">
-                <BotHistoryTable history={combinedHistory} />
-              </div>
-            )}
-          </div>
         </>
       )}
     </div>
