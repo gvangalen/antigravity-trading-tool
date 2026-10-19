@@ -170,6 +170,7 @@ function getUiCopy(locale = "nl") {
       },
       indicatorStates: { low: "Little support", mixed: "Mixed", high: "Strong support" },
       unavailable: "Insufficient data",
+      notConfigured: "No indicators added",
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
       indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
@@ -266,9 +267,9 @@ function getUiCopy(locale = "nl") {
       modalSafetyLabel: "Safety",
       modalConsequenceLabel: "After this",
       modalCloseLabel: "Close",
-      marketEmpty: "No market indicators loaded yet.",
-      macroEmpty: "No macro indicators loaded yet.",
-      technicalEmpty: "No technical indicators loaded yet.",
+      marketEmpty: "You have not added any market indicators yet. Add one to build your market score.",
+      macroEmpty: "You have not added any macro indicators yet. Add one to build your macro score.",
+      technicalEmpty: "You have not added any technical indicators yet. Add one to build your technical score.",
       loadingMarket: "Loading market data...",
       loadingMacro: "Loading macro data...",
       loadingTechnical: "Loading technical data...",
@@ -351,6 +352,7 @@ function getUiCopy(locale = "nl") {
       },
       indicatorStates: { low: "Wenig Unterstützung", mixed: "Gemischt", high: "Starke Unterstützung" },
       unavailable: "Unzureichende Daten",
+      notConfigured: "Keine Indikatoren hinzugefügt",
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
       indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
@@ -447,9 +449,9 @@ function getUiCopy(locale = "nl") {
       modalSafetyLabel: "Sicherheit",
       modalConsequenceLabel: "Danach",
       modalCloseLabel: "Schließen",
-      marketEmpty: "Noch keine Marktindikatoren geladen.",
-      macroEmpty: "Noch keine Makroindikatoren geladen.",
-      technicalEmpty: "Noch keine technischen Indikatoren geladen.",
+      marketEmpty: "Du hast noch keine Marktindikatoren hinzugefügt. Füge einen hinzu, um deinen Markt-Score aufzubauen.",
+      macroEmpty: "Du hast noch keine Makroindikatoren hinzugefügt. Füge einen hinzu, um deinen Makro-Score aufzubauen.",
+      technicalEmpty: "Du hast noch keine technischen Indikatoren hinzugefügt. Füge einen hinzu, um deinen technischen Score aufzubauen.",
       loadingMarket: "Marktdaten werden geladen...",
       loadingMacro: "Makrodaten werden geladen...",
       loadingTechnical: "Technische Daten werden geladen...",
@@ -531,6 +533,7 @@ function getUiCopy(locale = "nl") {
     },
     indicatorStates: { low: "Weinig steun", mixed: "Gemengd", high: "Veel steun" },
     unavailable: "Onvoldoende data",
+    notConfigured: "Geen indicatoren toegevoegd",
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
     indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
@@ -627,9 +630,9 @@ function getUiCopy(locale = "nl") {
     modalSafetyLabel: "Veiligheid",
     modalConsequenceLabel: "Daarna",
     modalCloseLabel: "Sluiten",
-    marketEmpty: "Nog geen marktindicatoren geladen.",
-    macroEmpty: "Nog geen macro-indicatoren geladen.",
-    technicalEmpty: "Nog geen technische indicatoren geladen.",
+    marketEmpty: "Je hebt nog geen marktindicatoren toegevoegd. Voeg er een toe om je marktscore op te bouwen.",
+    macroEmpty: "Je hebt nog geen macro-indicatoren toegevoegd. Voeg er een toe om je macroscore op te bouwen.",
+    technicalEmpty: "Je hebt nog geen technische indicatoren toegevoegd. Voeg er een toe om je technische score op te bouwen.",
     loadingMarket: "Marktdata laden...",
     loadingMacro: "Macrodata laden...",
     loadingTechnical: "Technische data laden...",
@@ -1474,11 +1477,12 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
   });
 }
 
-function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, rows = []) {
+function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, rows = [], notConfigured = false) {
   const score = normalizeScore(sectionScore);
   const copy = ui.sectionInsights;
 
   if (score === null) {
+    if (notConfigured) return ui[`${sectionId}Empty`];
     if (sourceStatus === "score_rebuild_pending") return ui.scoreRebuilding;
     if (rows.some((row) => row?.raw?.configured || row?.raw?.value != null)) return ui.scoreIncomplete;
     return copy.missing;
@@ -1607,7 +1611,9 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
           const benchmarkCondition = item.id === "combined" ? marketConditionForScore(item.score) : null;
           const summary = item.id === "combined"
             ? (benchmarkCondition ? conditionOptions?.[benchmarkCondition.id]?.title : ui.unavailable)
-            : componentScoreLabel(item.id, item.score, ui);
+            : sections.find((section) => section.id === item.id)?.notConfigured
+              ? ui.notConfigured
+              : componentScoreLabel(item.id, item.score, ui);
           const sourceAt = item.id === "combined" ? combinedSource : sectionSource(item.id);
           return (
             <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
@@ -2824,6 +2830,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     const marketRows = buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score);
     const macroRows = buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe, macro?.score), macro?.score);
     const technicalRows = buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe, technical?.score), technical?.score);
+    const notConfigured = (rows, loadingState, score) =>
+      workspace?.symbol === activeSymbol && !loadingState && !isFallbackWorkspace && rows.length === 0 && normalizeScore(score) === null;
+    const marketNotConfigured = notConfigured(marketRows, marketLoading, market?.score);
+    const macroNotConfigured = notConfigured(macroRows, macroLoading, macro?.score);
+    const technicalNotConfigured = notConfigured(technicalRows, technicalLoading, technical?.score);
     const visibleScore = (rows) => averageVisibleSectionScore(rows);
     const fallbackEmptyState = (score, rows, loadingState, defaultEmptyState) =>
       loadingState
@@ -2851,9 +2862,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
         score: marketTimeframe === "day" ? normalizeScore(market?.score) : visibleScore(marketRows),
-        insight: buildSectionInsight("market", marketTimeframe === "day" ? market?.score : visibleScore(marketRows), ui, workspace?.daily?.market?.source_status, marketRows),
+        insight: buildSectionInsight("market", marketTimeframe === "day" ? market?.score : visibleScore(marketRows), ui, workspace?.daily?.market?.source_status, marketRows, marketNotConfigured),
         rows: marketRows,
-        emptyState: fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
+        notConfigured: marketNotConfigured,
+        emptyState: marketNotConfigured ? ui.notConfigured : fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
         emptyAction: showEmptyAction(market?.score, marketRows, marketLoading) ? emptyActionButton("market") : null,
       },
       {
@@ -2862,9 +2874,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
         score: macroTimeframe === "day" ? normalizeScore(macro?.score) : visibleScore(macroRows),
-        insight: buildSectionInsight("macro", macroTimeframe === "day" ? macro?.score : visibleScore(macroRows), ui, workspace?.daily?.macro?.source_status, macroRows),
+        insight: buildSectionInsight("macro", macroTimeframe === "day" ? macro?.score : visibleScore(macroRows), ui, workspace?.daily?.macro?.source_status, macroRows, macroNotConfigured),
         rows: macroRows,
-        emptyState: fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
+        notConfigured: macroNotConfigured,
+        emptyState: macroNotConfigured ? ui.notConfigured : fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
         emptyAction: showEmptyAction(macro?.score, macroRows, macroLoading) ? emptyActionButton("macro") : null,
       },
       {
@@ -2873,13 +2886,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
         score: technicalTimeframe === "day" ? normalizeScore(technical?.score) : visibleScore(technicalRows),
-        insight: buildSectionInsight("technical", technicalTimeframe === "day" ? technical?.score : visibleScore(technicalRows), ui, workspace?.daily?.technical?.source_status, technicalRows),
+        insight: buildSectionInsight("technical", technicalTimeframe === "day" ? technical?.score : visibleScore(technicalRows), ui, workspace?.daily?.technical?.source_status, technicalRows, technicalNotConfigured),
         rows: technicalRows,
-        emptyState: fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
+        notConfigured: technicalNotConfigured,
+        emptyState: technicalNotConfigured ? ui.notConfigured : fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
         emptyAction: showEmptyAction(technical?.score, technicalRows, technicalLoading) ? emptyActionButton("technical") : null,
       },
     ];
-  }, [isFallbackWorkspace, locale, macro?.score, macroData, macroLoading, macroTimeframe, market?.score, marketDayData, marketLoading, marketTimeframe, technical?.score, technicalData, technicalLoading, technicalTimeframe, ui, workspace?.daily?.indicator_evidence]);
+  }, [activeSymbol, isFallbackWorkspace, locale, macro?.score, macroData, macroLoading, macroTimeframe, market?.score, marketDayData, marketLoading, marketTimeframe, technical?.score, technicalData, technicalLoading, technicalTimeframe, ui, workspace?.daily?.indicator_evidence, workspace?.symbol]);
 
   const combinedSummary = useMemo(() => {
     if (Object.values(periods).every((period) => period === "day")) {
