@@ -6,7 +6,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Nieuwe gebruiker: doorlopende DCA-coaching en onboarding
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI_AND_DEPLOY`. Onafhankelijke browser-QA op
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De reparatie is gemerged via
+[PR #430](https://github.com/gvangalen/antigravity-trading-tool/pull/430)
+als product-SHA `f4757a3b021c614b3f9405fb7b7196b351737395`.
+Alle vijf PR-checks, [main-CI run 39223651879](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39223651879)
+en [Auto Deploy run 39223891517](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39223891517)
+slaagden. Daarna gaven backend-health en frontend-buildinfo ieder HTTP 200
+en exact die SHA. Deze statuswijziging krijgt zelf een nieuwe SHA; QA controleert
+de uiteindelijke live-identiteit opnieuw. Onafhankelijke browser-QA op
 productie-SHA `735c0f1fbb36100b66c900b5d2089e3ee11aac67` gaf
 `NOT_ACCEPTED`: drie read-only vervolgvragen vielen terug op een generieke fout.
 Dezelfde proef vond onduidelijkheid over het DCA-bedrag per uitvoering,
