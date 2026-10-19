@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Weekreflectie voor alle gebruikers
+
+Phase: `LOCAL_READY_FOR_CANDIDATE`. De nieuwe kandidaat vervangt het rollende
+zevendaagse trade-overzicht door een per gebruiker opgeslagen reflectie voor
+een afgeronde kalenderweek (maandag tot maandag, Europe/Amsterdam). De
+weekselector toont de bijbehorende afgesloten trades; een maandagtaak legt de
+voorgaande week vast en een eigenaargebonden leesactie kan gemiste of oude
+weken alsnog materialiseren. Later toegevoegd bewijs werkt dezelfde opgeslagen
+week bij. De productieconfiguratie schakelt Trade Reviews voor alle accounts
+in, ook als een oude beschermde allowlist of PM2-omgeving is achtergebleven.
+De individuele trade-analyse en het Marktrapport behouden hun eigen functie.
+
+Build-bewijs vóór kandidaat: **3937 backendtests geslaagd, 3 bestaande skips**;
+35 gerichte tests voor trade-review, uitrol en deployobservatie geslaagd.
+Frontend productiebuild, typecheck, i18n-lint, 15 i18n-tests en 26
+commandchecks geslaagd. `audit:high` slaagde met alleen een bestaande moderate
+Next.js-advisory. De laatste frontend-copywijziging krijgt nog een nieuwe
+productiebuild en CI. Er is nog geen nieuwe deployment of onafhankelijke
+ingelogde browser-QA van deze weekrelease geclaimd.
+
 ## Reflectie-indeling: afgesloten trades en Marktrapport
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #440](https://github.com/gvangalen/antigravity-trading-tool/pull/440)
