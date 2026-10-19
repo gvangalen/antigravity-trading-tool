@@ -100,6 +100,20 @@ def verified_selected_setup(previous: Mapping[str, Any] | None) -> tuple[int, st
             if item.get("status") != "completed":
                 continue
             data = item.get("data") or {}
+            if item.get("scope") == "read_setup_market_matches":
+                matches = data.get("matches") or []
+                selected_id = arguments.get("setup_id")
+                if (
+                    isinstance(selected_id, int) and selected_id > 0
+                    and len(matches) == 1 and isinstance(matches[0], dict)
+                    and matches[0].get("setup_id") == selected_id
+                ):
+                    name = str(matches[0].get("name") or "").strip()
+                    if name and (
+                        name.casefold() in current_message.casefold()
+                        or references_selected_setup(current_message)
+                    ):
+                        return selected_id, name
             if item.get("scope") == "read_active_setup":
                 setup_id = data.get("setup_id")
                 name = str(data.get("name") or "")
@@ -141,10 +155,13 @@ def verified_selected_setup_asset(previous: Mapping[str, Any] | None, setup_id: 
             if item.get("status") != "completed":
                 continue
             data = item.get("data") or {}
-            rows = data.get("setups") if item.get("scope") == "read_saved_setup_inventory" else [data]
+            rows = (
+                data.get("setups") if item.get("scope") == "read_saved_setup_inventory" else
+                data.get("matches") if item.get("scope") == "read_setup_market_matches" else [data]
+            )
             for row in rows or []:
                 if isinstance(row, dict) and row.get("setup_id") == setup_id:
-                    symbol = str(row.get("symbol") or item.get("asset") or "").upper()
+                    symbol = str(row.get("symbol") or data.get("symbol") or item.get("asset") or "").upper()
                     return symbol or None
     return None
 
@@ -163,4 +180,8 @@ def references_selected_setup(message: str, asset: str | None = None) -> bool:
             r"\b(?:daarvan|daarbij|daardoor|daarmee|daarop|daarover|"
             r"hierbij|damit|darüber)\b", message, re.I,
         )
+        or (asset and re.search(
+            r"\b(?:mijn|my|mein(?:e|en)?)\s+" + re.escape(asset)
+            + r"[- ]?(?:dca|plan|setup|strategie|strategy)\b", message, re.I,
+        ))
     )

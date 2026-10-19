@@ -3441,6 +3441,7 @@
     },
     "card": {
       "fallbackName": "Strategy",
+      "amountPerExecution": "Amount per execution",
       "analysisSuccess": "AI explanation updated.",
       "analysisFailed": "AI analysis failed.",
       "finnFailed": "Finn check failed.",

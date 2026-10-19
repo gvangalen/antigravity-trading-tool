@@ -754,6 +754,8 @@ def test_selected_setup_identity_comes_from_verified_read_not_previous_prose():
     assert verified_selected_setup_asset(selected, 2) == "BTC"
     assert references_selected_setup("Ik krijg FOMO bij dat plan. Wat staat er vast?")
     assert references_selected_setup("Beoordeel dat BTC-plan", "BTC")
+    assert references_selected_setup("Welke dag staat mijn BTC DCA gepland?", "BTC")
+    assert not references_selected_setup("Welke dag staat mijn ETH DCA gepland?", "BTC")
     assert not references_selected_setup("Beoordeel dat breakout-plan", "BTC")
     assert not references_selected_setup("Ik weet dat BTC gisteren steeg")
     selected["answer"] = "Nummer 2 is BTC Breakout Full"
@@ -763,6 +765,28 @@ def test_selected_setup_identity_comes_from_verified_read_not_previous_prose():
     assert verified_selected_setup(selected) is None
     selected["tool_trace"][0]["arguments"]["setup_ids"] = [2]
     selected["terminal_kind"] = "saved_setup_collection"
+    assert verified_selected_setup(selected) is None
+
+
+def test_selected_score_match_can_update_conversation_focus_only_when_server_scoped():
+    selected = {
+        "terminal_status": "completed", "terminal_kind": "free_text",
+        "user_message": "Vergelijk de scores met BTC Vrijdag.",
+        "answer": "De benchmark ligt buiten BTC Vrijdag.",
+        "tool_trace": [{
+            "name": "get_setup_market_matches", "status": "completed",
+            "arguments": {"asset": "BTC", "setup_id": 11},
+            "result": {"results": [{
+                "scope": "read_setup_market_matches", "status": "completed",
+                "data": {"symbol": "BTC", "matches": [
+                    {"setup_id": 11, "name": "BTC Vrijdag", "status": "outside_conditions"},
+                ]},
+            }]},
+        }],
+    }
+    assert verified_selected_setup(selected) == (11, "BTC Vrijdag")
+    assert verified_selected_setup_asset(selected, 11) == "BTC"
+    selected["tool_trace"][0]["arguments"].pop("setup_id")
     assert verified_selected_setup(selected) is None
 
 
@@ -1403,6 +1427,106 @@ def test_cross_asset_followup_binds_verified_source_and_unique_target():
     assert [row["name"] for row in tool_result["results"][0]["data"]["setups"]] == [
         "BTC Full Base", "Apple Full Setup",
     ]
+
+
+def test_score_followup_binds_the_previously_verified_setup_instead_of_sibling_matches():
+    question = "Vergelijk de actuele scores met deze setup."
+    fake = FakeResponses(
+        response("score-read", calls=[tool_call("score-call", "get_setup_market_matches", {
+            "asset": None, "timeframe": None,
+        })]),
+        response("score-answer", text="De benchmark ligt buiten de gekozen setupgrens."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="selected-score-followup", model_led_coach=True,
+    )
+    reads = []
+
+    async def read(call):
+        reads.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_setup_market_matches", "status": "completed",
+            "data": {"symbol": "BTC", "source_status": "available", "benchmark_score": 48.3,
+                     "matches": [{"setup_id": 11, "name": "QA Vrijdag", "status": "outside_conditions"}]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+        previous_response={
+            "terminal_status": "completed", "terminal_kind": "free_text",
+            "owner_user_id": 7, "answer": "De Paper-bot volgt QA Vrijdag.",
+            "verified_setup_subject": {
+                "owner_id": 7, "setup_id": 11, "name": "QA Vrijdag", "symbol": "BTC",
+            },
+        },
+    ))
+    assert reads[0].name == "get_setup_market_matches"
+    assert reads[0].inputs["setup_id"] == 11
+    assert reads[0].inputs["asset"] == "BTC"
+    assert result.response.text == "De benchmark ligt buiten de gekozen setupgrens."
+
+
+def test_explicit_owned_setup_name_overrides_older_score_conversation_focus(monkeypatch):
+    question = "Vergelijk de scores met BTC Andere DCA."
+    fake = FakeResponses(
+        response("score-read", calls=[tool_call("score-call", "get_setup_market_matches", {
+            "asset": None, "timeframe": None,
+        })]),
+        response("score-answer", text="BTC Andere DCA heeft een andere grens."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="explicit-score-target", model_led_coach=True,
+    )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    class Reads:
+        def __init__(self):
+            self.session_factory = session_factory
+            self.calls = []
+
+        async def __call__(self, call):
+            self.calls.append(call)
+            return {"status": "completed", "results": [{
+                "scope": "read_setup_market_matches", "status": "completed",
+                "data": {"symbol": "BTC", "source_status": "available", "matches": [
+                    {"setup_id": 12, "name": "BTC Andere DCA"},
+                ]},
+            }]}
+
+    from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
+
+    def resolver_init(self, _session):
+        self.setups = SimpleNamespace(get_user_setups=AsyncMock(return_value=[
+            {"id": 11, "name": "BTC Vrijdag DCA", "symbol": "BTC"},
+            {"id": 12, "name": "BTC Andere DCA", "symbol": "BTC"},
+        ]))
+
+    monkeypatch.setattr(FinnV2EntityResolutionService, "__init__", resolver_init)
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    reads = Reads()
+    front.reads = reads
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None,
+        previous_response={
+            "terminal_status": "completed", "terminal_kind": "free_text",
+            "owner_user_id": 7, "answer": "De bot volgt BTC Vrijdag DCA.",
+            "verified_setup_subject": {
+                "owner_id": 7, "setup_id": 11, "name": "BTC Vrijdag DCA", "symbol": "BTC",
+            },
+        },
+    ))
+    assert reads.calls[0].inputs["setup_id"] == 12
 
 
 def test_complete_cross_asset_inventory_ends_read_round_without_guessing_source():

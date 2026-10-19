@@ -425,6 +425,11 @@ class FinnV2RunService:
                 prior_subject = dict((previous_response or {}).get("verified_setup_subject") or {})
                 prior_asset = str(prior_subject.get("symbol") or "").upper()
                 mentioned_assets = mentioned_catalog_symbols(run.message)
+                current_target_ids = {
+                    target.get("setup_id")
+                    for target in (exchange.get("turn_contract") or {}).get("targets") or []
+                    if isinstance(target, dict) and isinstance(target.get("setup_id"), int)
+                }
                 if (
                     prior_subject.get("owner_id") == user_id
                     and isinstance(prior_subject.get("setup_id"), int)
@@ -434,9 +439,11 @@ class FinnV2RunService:
                         "cross_asset_rule_scope", "cross_asset_scope_unresolved",
                     }
                     and (not mentioned_assets or mentioned_assets == {prior_asset})
-                    and (references_selected_setup(run.message, prior_asset)
-                         or (answer.used_previous_response and prior_subject["name"] in answer.text))
+                    and (not current_target_ids or current_target_ids == {prior_subject["setup_id"]})
                 ):
+                    # A coach turn about the bot, risk or scores does not erase
+                    # the last owner-verified setup merely because it omits its
+                    # name. An explicit newly read setup takes precedence above.
                     subject = prior_subject
         await self.runtime_contracts.record_verified_setup_subject(
             run_id=run_id, user_id=user_id, subject=subject,

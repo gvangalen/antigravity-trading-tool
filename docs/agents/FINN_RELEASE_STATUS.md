@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Coachvervolg: gekozen setup bij scorevergelijking
+
+Phase: `LOCAL_READY_FOR_CANDIDATE`. Onafhankelijke ingelogde browser-QA op
+productie-SHA `1485061c7afdc7da5005090a6d1dd5a462a65274` vond de eerdere
+generieke FOMO-terugval niet terug: planvraag, bezwaar, dag en Paper-bot kregen
+inhoudelijke antwoorden zonder order. De scorevraag over **deze** vrijdagse
+BTC-setup koppelde Markt 40, Macro 65 en Technisch 40 echter eerst aan een
+andere BTC-setup met band 34–55. De bedoelde setup heeft band 26–45 en werd
+pas na expliciete hernoeming goed gelezen. Dit was een bestaand QA-account,
+geen nieuwe-gebruikerproef. QA noemt de flow gedeeltelijk geslaagd.
+
+De lokale reparatie draagt de laatst eigenaargebonden bewezen setup door
+tussenliggende read-only coachbeurten, ook wanneer zo'n beurt alleen naar de
+bot verwijst. Een enkelvoudige score- of inventarisvraag bindt aan de
+expliciet genoemde eigenaargebonden setup of aan die bewezen gespreksreferentie;
+een scoretool geeft dan slechts de match van dat setup-ID terug. Meervoudige
+collectievragen blijven volledige collecties. De strategieweergave vermeldt
+nu het eurobedrag **per uitvoering** in NL, EN en DE.
+
+Build-bewijs vóór kandidaat: **3934 backendtests geslaagd, 3 bestaande skips**;
+lokale worker-gedreven actiecontractmatrix **16/16** (artifact SHA-256
+`1edca8896b4ee43c519d3fc1f126c5bab2222fd4facd000f91f38b8474c0886b`);
+een echte Luna/Responses-proef met twee opgeslagen BTC-DCA's en zes
+opeenvolgende beurten eindigde **6/6 completed** met de gekozen setup als enige
+scorematch in de laatste beurt. Deze proef gebruikte dezelfde lichte
+read-only antwoordgrens als productie; een eerdere lokale run zonder die
+instelling liet zien dat de oude zware verifier een inhoudelijk modelantwoord
+kon vervangen. Webbuild, typecheck, i18n-, command-, proposalchecks en de
+high-severity auditpoort slaagden; audit meldde alleen de bestaande moderate
+Next.js-advisory. Er is nog geen nieuwe deployment of onafhankelijke QA van
+deze reparatie geclaimd.
+
 ## Nieuwe gebruiker: doorlopende DCA-coaching en onboarding
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De reparatie is gemerged via

@@ -3442,6 +3442,7 @@
     },
     "card": {
       "fallbackName": "Strategie",
+      "amountPerExecution": "Bedrag per uitvoering",
       "analysisSuccess": "AI-uitleg bijgewerkt.",
       "analysisFailed": "AI-analyse mislukt.",
       "finnFailed": "Finn-check mislukt.",

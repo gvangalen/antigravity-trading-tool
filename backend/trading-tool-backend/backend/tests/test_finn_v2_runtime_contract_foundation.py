@@ -28,6 +28,7 @@ from backend.domain.finn_v2_runtime_contract import (
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.services.finn_v2_run_service import FinnV2RunService
+from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 
 
@@ -55,6 +56,42 @@ def test_verified_read_losing_to_cancel_is_a_benign_terminal_race():
         ))
 
     service.runs.get_by_id_for_user.assert_awaited_once_with(run_id="run-contract-1", user_id=7)
+
+
+def test_read_only_bot_turn_keeps_the_owner_verified_setup_for_next_score_question():
+    run = SimpleNamespace(
+        id="bot-turn", conversation_id="conversation-1", trace_id="trace-1",
+        user_id=7, status="planned", message="Koopt de Paper-bot automatisch op vrijdag?",
+        client_context_json={},
+    )
+    service = FinnV2RunService.__new__(FinnV2RunService)
+    service.runs = SimpleNamespace(
+        get_by_id_for_user=AsyncMock(return_value=run), update_status=AsyncMock(),
+    )
+    service.runtime_contracts = SimpleNamespace(
+        record_previous_response_reference=AsyncMock(),
+        get_for_run=AsyncMock(return_value=SimpleNamespace(state_json={
+            "responses_exchange": {"answer_kind": "free_text", "tool_trace": [], "turn_contract": {}},
+        })),
+        record_verified_setup_subject=AsyncMock(),
+        materialize_terminal=AsyncMock(return_value=SimpleNamespace(terminal_projection_json={})),
+    )
+    service.traces = SimpleNamespace(append_event=AsyncMock())
+    service.conversations = SimpleNamespace(set_responses_cursor=AsyncMock())
+    service._trace_payload = lambda *_args, **_kwargs: {}
+    service._commit_session_if_possible = AsyncMock()
+    subject = {"owner_id": 7, "setup_id": 11, "name": "QA Vrijdag", "symbol": "BTC"}
+    asyncio.run(service.complete_responses_read(
+        run_id=run.id, user_id=7, response_id="response-bot",
+        answer=FinnResponsesVerifiedAnswer(
+            "completed", "De bot blijft handmatig in Paper.", None, (),
+        ),
+        previous_response={"run_id": "plan-turn", "verified_setup_subject": subject},
+        locale="nl",
+    ))
+    service.runtime_contracts.record_verified_setup_subject.assert_awaited_once_with(
+        run_id=run.id, user_id=7, subject=subject,
+    )
 
 
 def _selected_strategy_state():

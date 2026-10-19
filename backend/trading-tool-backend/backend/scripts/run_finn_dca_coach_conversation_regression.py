@@ -17,11 +17,20 @@ from backend.utils.auth_utils import create_access_token
 def main() -> None:
     user = _create_local_user()
     with sync_engine.begin() as connection:
-        setup_id = _insert_setup(connection, user["id"], f"BTC Vrijdag DCA {uuid.uuid4().hex[:6]}", setup_type="dca")
+        setup_name = f"BTC Vrijdag DCA {uuid.uuid4().hex[:6]}"
+        sibling_name = f"BTC Andere DCA {uuid.uuid4().hex[:6]}"
+        setup_id = _insert_setup(connection, user["id"], setup_name, setup_type="dca")
+        sibling_id = _insert_setup(connection, user["id"], sibling_name, setup_type="dca")
         connection.execute(text("""
-            UPDATE setups SET timeframe='1D', dca_frequency='weekly', dca_day='friday'
+            UPDATE setups SET timeframe='1D', dca_frequency='weekly', dca_day='friday',
+                              min_benchmark_score=26, max_benchmark_score=45
             WHERE id=:id
         """), {"id": setup_id})
+        connection.execute(text("""
+            UPDATE setups SET timeframe='1D', dca_frequency='weekly', dca_day='monday',
+                              min_benchmark_score=34, max_benchmark_score=55
+            WHERE id=:id
+        """), {"id": sibling_id})
         strategy_id = connection.execute(text("""
             INSERT INTO strategies (user_id, setup_id, name, setup_type, execution_mode,
                                     base_amount, data, created_at)
@@ -32,11 +41,12 @@ def main() -> None:
         _insert_bot(connection, user["id"], strategy_id, "BTC Vrijdag Paper")
     token = create_access_token({"sub": str(user["id"]), "role": "user"})
     prompts = (
-        "Wat weet je zeker over mijn BTC-plan, de DCA-dag, het bedrag, de Paper-bot en de scores?",
+        f"Wat weet je zeker over {setup_name}, de DCA-dag, het bedrag, de Paper-bot en de scores?",
         "Ik ben bang de boot te missen en wil vandaag €100 extra kopen. Hoe zou je me als coach helpen dit tegen mijn plan en risico af te wegen? Doe geen aankoop of wijziging.",
         "Ik voel FOMO bij BTC. Wat zegt mijn plan hierover? Alleen sparren.",
         "Welke dag staat mijn BTC DCA gepland?",
         "Welke dag staat mijn BTC DCA gepland? Koopt de bot dan automatisch op die dag?",
+        "Vergelijk de actuele scores met deze setup. Welke opgeslagen benchmarkgrens geldt hiervoor?",
     )
     conversation_id = None
     failed = False
@@ -53,6 +63,23 @@ def main() -> None:
             "verifier": state.get("verifier"),
             "tool_names": [item.get("name") for item in (state.get("responses_exchange") or {}).get("tool_trace") or []],
         }
+        if index == len(prompts):
+            target_ids = [
+                row.get("setup_id") for call in (state.get("responses_exchange") or {}).get("tool_trace") or []
+                for item in (call.get("result") or {}).get("results") or []
+                if item.get("scope") in {"read_setup_market_matches", "read_saved_setup_inventory", "read_active_setup"}
+                and item.get("status") == "completed"
+                for row in (
+                    (item.get("data") or {}).get("matches") or []
+                    if item.get("scope") == "read_setup_market_matches" else
+                    (item.get("data") or {}).get("setups") or []
+                    if item.get("scope") == "read_saved_setup_inventory" else
+                    [item.get("data") or {}]
+                )
+            ]
+            summary["selected_setup_ids"] = target_ids
+            failed |= not target_ids or set(target_ids) != {setup_id}
+            failed |= sibling_name in str(response.get("content") or "")
         print(json.dumps(summary, ensure_ascii=False, default=str), flush=True)
         failed |= observed["status"] != "completed" or "Ik kan dit nog niet onderbouwen" in str(response.get("content") or "")
     if failed:
