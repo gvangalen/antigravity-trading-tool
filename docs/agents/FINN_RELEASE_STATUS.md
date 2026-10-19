@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Weekreflectie voor alle gebruikers
 
-Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #442](https://github.com/gvangalen/antigravity-trading-tool/pull/442) vervangt het rollende
+Phase: `LIVE_AWAITING_TRADE_FIXTURE_QA`. [PR #442](https://github.com/gvangalen/antigravity-trading-tool/pull/442) vervangt het rollende
 zevendaagse trade-overzicht door een per gebruiker opgeslagen reflectie voor
 een afgeronde kalenderweek (maandag tot en met zondag, Europe/Amsterdam). De
 weekselector toont de samenvatting van die week; individuele afgesloten trades
@@ -26,7 +26,24 @@ commandchecks geslaagd. `audit:high` slaagde met alleen een bestaande moderate
 Next.js-advisory. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39309089818)
 slaagde. Daarna gaven backend-health en frontend-buildinfo HTTP 200 met
 dezelfde product-SHA `f11ffdfd4823ff32c4e7e50daac92673c058aaf3`.
-Er is nog geen onafhankelijke ingelogde browser-QA van deze weekrelease.
+
+Onafhankelijke gerichte browser-QA op SHA `10030d64c05d5fc58def21e5a9d52643b42a4de8`
+bevestigde dat het ingelogde Test QA Agent-account `/report` zonder allowlistmelding
+opent. De afgeronde week van 12 oktober en het opgeslagen lege weekoverzicht
+bleven na refresh en in een nieuwe tab zichtbaar. Dit account had nul afgesloten
+trades en geen gekoppelde exchange; een gevuld weekoverzicht, direct beschikbaar
+dossier in de lopende week, een nieuwe login en eigenaarsscheiding tussen twee
+accounts zijn daardoor niet live bewezen. Dezelfde QA vond op 390 px horizontale
+overflow. [PR #447](https://github.com/gvangalen/antigravity-trading-tool/pull/447)
+en [PR #449](https://github.com/gvangalen/antigravity-trading-tool/pull/449)
+herstelden de periodeknoppen, rapportacties en verificatievoet. Op live product-SHA
+`9dca28f9287a0b59cf266bd7ce44845f229d9ba8` mat onafhankelijke QA na
+expliciete reload `scrollWidth=390` en `clientWidth=390`; alle vier
+periodeknoppen waren bedienbaar en de mobiele overflowfix kreeg een gericht
+`ACCEPTED`. [Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39315079232)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39315366826)
+slaagden; backend en frontend gaven HTTP 200 met diezelfde SHA. De positieve
+tradeflow vereist nog onafhankelijke QA met veilig afgesloten testtrades.
 
 ## Reflectie-indeling: afgesloten trades en Marktrapport
 
