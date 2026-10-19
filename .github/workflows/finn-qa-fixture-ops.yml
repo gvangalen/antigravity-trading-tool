@@ -108,6 +108,10 @@ jobs:
                   'polarity=' + facts.action_polarity,
                   'fomo=' + str('fomo' in message.casefold()).lower(),
                   'dca_day=' + str('welke dag' in message.casefold() and 'dca' in message.casefold()).lower(),
+                  'chars=' + str(len(message)),
+                  'exact_dca_question=' + str(message.strip() == 'Welke dag staat mijn BTC DCA gepland?').lower(),
+                  'contains_dca_question=' + str('Welke dag staat mijn BTC DCA gepland?' in message).lower(),
+                  'financial_execution_intent=' + str(facts.financial_execution_intent).lower(),
                   'message_sha256=' + hashlib.sha256(message.encode()).hexdigest()[:12],
               )))
           with sync_engine.connect() as connection:
