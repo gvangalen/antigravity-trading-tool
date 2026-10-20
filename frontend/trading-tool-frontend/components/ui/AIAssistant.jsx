@@ -478,7 +478,6 @@ function AIAssistantContent({
   const [contextMetric, setContextMetric] = useState(null);
   const [finnDraft, setFinnDraft] = useState(null);
   const [missionControl, setMissionControl] = useState(null);
-  const [missionControlLoadError, setMissionControlLoadError] = useState(null);
   const [missionControlLoading, setMissionControlLoading] = useState(false);
   const [executingAction, setExecutingAction] = useState(false);
   const [missionDetailSection, setMissionDetailSection] = useState("");
@@ -594,7 +593,6 @@ function AIAssistantContent({
     setContextMetric(null);
     setFinnDraft(null);
     setMissionControl(null);
-    setMissionControlLoadError(null);
     setMissionControlLoading(false);
     setRecentConversations([]);
     setActiveFinnSessionId(null);
@@ -5875,9 +5873,9 @@ function AIAssistantContent({
             </p>
           </div>
         )}
-        {!isSimpleFinnModal && shouldCondenseMissionControl ? (
+        {!isSimpleFinnModal && shouldCondenseMissionControl && (missionControl || missionControlLoading) ? (
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(255,255,255,1)_100%)] dark:bg-[#0f172a] space-y-3 animate-fade-in">
-            {!missionControl && (missionControlLoading || (pathname === "/dashboard" && onboardingComplete && !missionControlLoadError)) ? (
+            {!missionControl && missionControlLoading ? (
               <div className="rounded-[22px] border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/35 px-4 py-4 space-y-3 animate-pulse">
                 <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
                   <Sparkles size={11} className="text-blue-500" />
