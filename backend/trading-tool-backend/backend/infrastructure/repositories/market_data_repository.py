@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import and_, desc, delete, func
+from sqlalchemy import String, and_, column, desc, delete, func, true, values
 from typing import List, Optional, Sequence
 import datetime
 
@@ -34,20 +34,24 @@ class MarketDataRepository:
         if not normalized:
             return []
 
-        ranked = (
-            select(
-                MarketData.id.label("id"),
-                func.row_number()
-                .over(partition_by=MarketData.symbol, order_by=MarketData.timestamp.desc())
-                .label("row_number"),
-            )
-            .where(MarketData.symbol.in_(normalized))
-            .subquery()
+        # One indexed top-1 lookup per symbol avoids ranking each symbol's
+        # full historical market_data series for a workspace watchlist.
+        requested = values(column("symbol", String), name="requested").data(
+            [(symbol,) for symbol in normalized]
+        ).alias("requested")
+        latest = (
+            select(MarketData.id)
+            .where(MarketData.symbol == requested.c.symbol)
+            .order_by(MarketData.timestamp.desc())
+            .limit(1)
+            .correlate(requested)
+            .lateral()
         )
         stmt = (
             select(MarketData)
-            .join(ranked, MarketData.id == ranked.c.id)
-            .where(ranked.c.row_number == 1)
+            .select_from(requested)
+            .join(latest, true())
+            .join(MarketData, MarketData.id == latest.c.id)
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()

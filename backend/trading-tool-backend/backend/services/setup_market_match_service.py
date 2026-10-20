@@ -34,6 +34,7 @@ class SetupMarketMatchService:
         self.setups = SetupRepository(session)
         self.daily_rows = daily_rows
         self._weights_by_user: dict[int, dict[str, float] | None] = {}
+        self.last_source_row: dict | None = None
 
     async def _benchmark_weights(self, user_id: int) -> dict[str, float] | None:
         if user_id in self._weights_by_user:
@@ -131,6 +132,7 @@ class SetupMarketMatchService:
                 LIMIT 1
             """), {"user_id": user_id, "symbol": symbol})
             row = result.mappings().first()
+        self.last_source_row = dict(row) if row else None
         scores = None
         source_status = "missing_scores"
         stored_scores = {
