@@ -21,6 +21,10 @@ def requested_state_for_review(change: Mapping[str, Any] | None) -> dict[str, An
 
     return {
         key: fields[key]
-        for key in ("asset", "setup_id", "strategy_id", "bot_id", "plan_id", "indicator_id", "operation", "requested_mode")
+        for key in (
+            "asset", "setup_id", "strategy_id", "bot_id", "plan_id", "indicator_id",
+            "operation", "requested_mode", "side", "order_type", "quantity",
+            "notional", "limit_price",
+        )
         if fields.get(key) is not None
     }

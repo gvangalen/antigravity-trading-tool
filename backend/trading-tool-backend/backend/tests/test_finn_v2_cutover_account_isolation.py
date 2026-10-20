@@ -85,3 +85,13 @@ def test_proposal_summary_exposes_only_immutable_update_review_state(monkeypatch
 ])
 def test_proposal_review_exposes_create_and_activation_fields(change, expected):
     assert requested_state_for_review(change) == expected
+
+
+def test_manual_order_review_exposes_economically_significant_fields():
+    assert requested_state_for_review({
+        "asset": "ETH", "side": "sell", "order_type": "limit",
+        "quantity": "0.5", "limit_price": "3000",
+    }) == {
+        "asset": "ETH", "side": "sell", "order_type": "limit",
+        "quantity": "0.5", "limit_price": "3000",
+    }

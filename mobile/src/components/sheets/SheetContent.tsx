@@ -7,6 +7,7 @@ import { StatusChip } from '../layout/StatusChip';
 import type { FinnV2ProposalSummary } from '../../services/tradamindApi';
 import type { AppLanguage } from '../../preferences/AppPreferencesProvider';
 import { translate } from '../../i18n';
+import { proposalHasConfirmableReview } from '../../services/proposalReview';
 
 export function ScoreDetailSheetContent() {
   return (
@@ -67,11 +68,13 @@ export function FinnV2ProposalReviewSheetContent({
     </Text></View>;
   }
   const fields = Object.entries(proposal.requested_state || {});
-  const active = fields.length > 0 && ['draft', 'pending_confirmation'].includes(proposal.status)
+  const reviewReady = proposalHasConfirmableReview(proposal);
+  const active = reviewReady && ['draft', 'pending_confirmation'].includes(proposal.status)
     && Date.parse(proposal.expires_at) > Date.now();
   const setup = proposal.requested_state?.setup;
   const strategy = proposal.requested_state?.strategy;
   const name = proposal.requested_state?.name
+    || proposal.before_state?.name
     || (setup && typeof setup === 'object' && 'name' in setup ? setup.name : null)
     || (strategy && typeof strategy === 'object' && 'name' in strategy ? strategy.name : null)
     || proposal.target?.asset
@@ -85,8 +88,8 @@ export function FinnV2ProposalReviewSheetContent({
         <Text style={styles.title}>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</Text>
       </View>)}
       <Text style={styles.body}>{translate(language, 'finn.proposalReviewBody')}</Text>
-      {fields.length === 0 ? <Text style={styles.errorText}>{translate(language, 'finn.proposalDetailsMissing')}</Text> : null}
-      {fields.length > 0 && !active ? <Text style={styles.errorText}>{translate(language, 'finn.proposalExpired')}</Text> : null}
+      {!reviewReady ? <Text style={styles.errorText}>{translate(language, 'finn.proposalDetailsMissing')}</Text> : null}
+      {reviewReady && !active ? <Text style={styles.errorText}>{translate(language, 'finn.proposalExpired')}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <AppButton label={translate(language, 'finn.proposalConfirm')} disabled={!active || saving} onPress={onConfirm} />
       {saving ? <ActivityIndicator color={theme.colors.accent} /> : null}
