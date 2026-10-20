@@ -2,7 +2,7 @@
 
 Latest verified production baseline on 2026-10-20: backend health and frontend
 build info both returned HTTP 200 and SHA
-`116f19e0aff8389b8c836546c8fc82774d451ec4`. The scaled topology has
+`465b3191d78d86e7b381714efe31114add9f29a4`. The scaled topology has
 two API workers and separate critical/market/scoring/AI/FINN workers.
 Independent QA owner canaries passed for workspace and FINN conversation
 content; trade-review body ownership remains unproven because canary lists
@@ -50,7 +50,17 @@ bounded at two async connections per child; the repair candidate disposes it
 inside each task's event loop. Score calculations and market provider waits
 must also avoid open database transactions. All 1,000 QA fixture accounts
 were deactivated and private token files removed. The 500- and 1,000-user
-stages remain unaccepted. Deep health exposes dispatcher reservation
+stages remain unaccepted. The worker transaction repair on production SHA
+`465b3191d78d86e7b381714efe31114add9f29a4` passed independent QA's
+100:120 read canary: all 1,302 requests returned HTTP 200, steady p95 was
+73/11/32 ms for workspace/FINN/reviews, PostgreSQL peaked at 30/100 sessions,
+and idle-in-transaction remained zero through post-stage sampling. The first
+500:120 attempt stopped before a phase report on a single observation of two
+idle transactions younger than one second at 38/100 total sessions; both
+disappeared by the next sample. No 500-user capacity verdict exists. The
+revised stop rule below distinguishes that transient observation from a
+persistent transaction leak. QA deactivated all fixtures and removed private
+token files after both runs. Deep health exposes dispatcher reservation
 count and one-hour age by queue.
 `backend/scripts/reconcile_dispatch_reservations.py` reports stale task IDs
 and can release terminal reservations directly. Routine reconciliation leaves
@@ -131,11 +141,18 @@ provide their independent reviews.
 With 1000 distinct fixture accounts on the authorized live environment, run
 read-heavy stages at 100, 500, and 1000 simultaneous users. Record route p50,
 p95, 5xx and 429 counts, queue depth and age, RSS and CPU, PostgreSQL
-connections and slow queries, and provider errors. Abort escalation on rising
-error or queue-age trends, growing idle-in-transaction counts, a transaction
-older than 60 seconds, blocked writers or critical tasks, or shrinking
-database headroom. Confirm that post-task PostgreSQL sessions return to their
-pre-stage baseline before starting 500 or 1000. A 1000-active-user claim requires a sustained stage
+connections and slow queries, and provider errors. Sample PostgreSQL activity
+about every 10 seconds, recording idle-in-transaction PID, transaction start,
+age, application name, and blocking relationships as well as the total count.
+Abort a stage immediately on an idle transaction older than 60 seconds, a
+blocked writer or execution-critical query, fewer than 20 usable free
+PostgreSQL connections, or rising HTTP errors or queue age. Also abort if the
+same idle transaction persists and ages across two samples at least 10 seconds
+apart, or if the idle count exceeds its pre-stage baseline in three successive
+samples spanning at least 20 seconds. A single subsecond transaction that is
+gone at the next sample is not a stop signal. After task activity settles,
+confirm that the idle count returns to its pre-stage baseline before starting
+the next load stage. A 1000-active-user claim requires a sustained stage
 meeting these provisional gates: workspace p95 at most 2 seconds, FINN-conversation
 and trade-review reads p95 at most 1 second, under 0.1% 5xx responses, no
 normal-traffic 429s, no growing queue age, and at least 20 database connections
