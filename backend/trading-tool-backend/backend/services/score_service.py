@@ -22,6 +22,9 @@ class ScoreService:
     def __init__(self, repository: ScoreRepository, user_repository: Optional[UserRepository] = None):
         self.repository = repository
         self.user_repository = user_repository
+        # ScoreService is request scoped in workspace reads. Reuse the exact
+        # owner/symbol assessment when the watchlist includes the open asset.
+        self.last_master_assessment: tuple[int, str, dict, dict | None] | None = None
 
     async def get_macro_score(self, user_id: int, symbol: str = "BTC"):
         return await asyncio.to_thread(generate_scores_db, "macro", user_id=user_id, symbol=symbol)
@@ -119,7 +122,11 @@ class ScoreService:
         )
 
     async def get_master_score(self, user_id: int, symbol: str = "BTC") -> MasterScoreResponse:
-        assessment = await SetupMarketMatchService(self.repository.db).for_asset(user_id, symbol, setups=[])
+        matcher = SetupMarketMatchService(self.repository.db)
+        assessment = await matcher.for_asset(user_id, symbol, setups=[])
+        self.last_master_assessment = (
+            user_id, str(symbol).upper(), assessment, getattr(matcher, "last_source_row", None),
+        )
         display_weights = {
             key.removesuffix("_score"): value
             for key, value in (assessment.get("benchmark_weights") or {}).items()

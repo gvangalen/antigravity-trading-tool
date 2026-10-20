@@ -449,19 +449,23 @@ class WorkspaceDataService:
         macro_rows = await measure("macro_rows", lambda: self._macro_rows(user_id, symbol, periods["macro"], asset_class=asset_class))
         await measure("score_history_coverage", lambda: self._add_score_history_coverage(user_id, symbol, market_rows, macro_rows))
         technical_rows = await measure("technical_rows", lambda: self._technical_rows(user_id, symbol, periods["technical"], asset_class=asset_class))
-        quote_snapshot = await measure("quote_snapshot", lambda: self._resolve_quote_snapshot(symbol))
-        regime = await measure(
-            "regime",
-            lambda: self.intelligence.get_market_intelligence(user_id, symbol, allow_compute=False),
-        )
-        master = await measure("master_score", lambda: self.score_service.get_master_score(user_id, symbol))
-        daily = await measure("daily_scores", lambda: self._daily_scores(user_id, symbol))
         effective_watchlist_symbols = (
             watchlist_symbols if watchlist_symbols else await self._fetch_user_watchlist_symbols(user_id)
         )
         normalized_watchlist_symbols = list(dict.fromkeys(
             str(item).upper() for item in (effective_watchlist_symbols or [symbol]) if item
         ))[:25]
+        quote_map = await measure(
+            "quote_snapshot",
+            lambda: self._resolve_quote_map(list(dict.fromkeys([symbol, *normalized_watchlist_symbols]))),
+        )
+        quote_snapshot = quote_map.get(symbol, {})
+        regime = await measure(
+            "regime",
+            lambda: self.intelligence.get_market_intelligence(user_id, symbol, allow_compute=False),
+        )
+        master = await measure("master_score", lambda: self.score_service.get_master_score(user_id, symbol))
+        daily = await measure("daily_scores", lambda: self._daily_scores(user_id, symbol))
         session = getattr(self, "session", None)
         asset_catalog = await measure(
             "asset_catalog",
@@ -518,6 +522,8 @@ class WorkspaceDataService:
                 normalized_watchlist_symbols,
                 master_payload.get("weights"),
                 asset_catalog=asset_catalog,
+                quote_map=quote_map,
+                selected_assessment=getattr(self.score_service, "last_master_assessment", None),
             ),
         )
         finn_snapshot = await measure(
@@ -582,6 +588,8 @@ class WorkspaceDataService:
         weights: dict[str, Any] | None = None,
         *,
         asset_catalog: dict[str, dict[str, Any]] | None = None,
+        quote_map: dict[str, dict[str, Any]] | None = None,
+        selected_assessment: tuple[int, str, dict, dict | None] | None = None,
     ) -> dict[str, Any]:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))[:25]
         if not normalized:
@@ -592,7 +600,8 @@ class WorkspaceDataService:
                 "ai_calls": 0,
             }
 
-        quote_map = await self._resolve_quote_map(normalized)
+        if quote_map is None:
+            quote_map = await self._resolve_quote_map(normalized)
         daily_rows = await self.scores.fetch_daily_scores_batch(user_id, normalized)
         from backend.services.setup_market_match_service import SetupMarketMatchService
 
@@ -603,7 +612,27 @@ class WorkspaceDataService:
         rows = []
         for symbol in normalized:
             quote = quote_map.get(symbol)
-            assessment = await match_service.for_asset(user_id, symbol, setups=[])
+            current_row = daily_rows.get(symbol)
+            source_row = selected_assessment[3] if selected_assessment is not None else None
+            assessment = (
+                selected_assessment[2]
+                if selected_assessment is not None
+                and selected_assessment[0] == user_id
+                and selected_assessment[1] == symbol
+                and (
+                    current_row is None and source_row is None
+                    or current_row is not None and source_row is not None
+                    and current_row.get("report_date") == date.today()
+                    and all(
+                        current_row.get(key) == source_row.get(key)
+                        for key in (
+                            "report_date", "calculated_at", "macro_score", "technical_score",
+                            "market_score", "indicator_evidence",
+                        )
+                    )
+                )
+                else await match_service.for_asset(user_id, symbol, setups=[])
+            )
             asset_meta = asset_catalog.get(symbol, {})
             combined = assessment["benchmark_score"]
             score_freshness = _freshness(

@@ -727,6 +727,75 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
     assert result["quote"]["volume"] == 1200.0
     for method in (service._market_rows, service._macro_rows, service._technical_rows):
         assert method.await_args.kwargs["asset_class"] == "crypto"
+    service.market.get_latest_snapshot.assert_awaited_once_with("BTC")
+    assert service._build_watchlist_payload.await_args.kwargs["quote_map"]["BTC"]["price"] == 64000.0
+
+
+def test_watchlist_reuses_only_matching_owner_and_symbol_assessment(monkeypatch):
+    assessed = []
+
+    class FakeMatchService:
+        def __init__(self, _session, *, daily_rows):
+            self.daily_rows = daily_rows
+
+        async def for_asset(self, user_id, symbol, *, setups):
+            assessed.append((user_id, symbol, setups))
+            row = self.daily_rows.get(symbol) or {}
+            return {"benchmark_score": 20, "source_status": "stale_scores" if row else "available",
+                    "as_of": row.get("report_date")}
+
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", FakeMatchService)
+    service = object.__new__(WorkspaceDataService)
+    service.session = object()
+    service.scores = SimpleNamespace(fetch_daily_scores_batch=AsyncMock(return_value={}))
+    service._resolve_quote_map = AsyncMock(side_effect=AssertionError("quotes already fetched"))
+    selected = {"benchmark_score": 80, "source_status": "available", "as_of": None}
+    quotes = {"BTC": {"price": 50000, "change_24h": 1, "timestamp": None}}
+
+    result = asyncio.run(service._build_watchlist_payload(
+        7, ["BTC", "ETH"], asset_catalog={}, quote_map=quotes,
+        selected_assessment=(7, "BTC", selected, None),
+    ))
+    assert [(row["symbol"], row["score"]) for row in result["rows"]] == [("BTC", 80), ("ETH", 20)]
+    assert assessed == [(7, "ETH", [])]
+
+    asyncio.run(service._build_watchlist_payload(
+        8, ["BTC"], asset_catalog={}, quote_map=quotes,
+        selected_assessment=(7, "BTC", selected, None),
+    ))
+    assert assessed[-1] == (8, "BTC", [])
+
+    service.scores.fetch_daily_scores_batch.return_value = {
+        "BTC": {"report_date": date.today() - timedelta(days=1)}
+    }
+    stale = asyncio.run(service._build_watchlist_payload(
+        7, ["BTC"], asset_catalog={}, quote_map=quotes,
+        selected_assessment=(7, "BTC", selected, None),
+    ))
+    assert assessed[-1] == (7, "BTC", [])
+    assert stale["rows"][0]["score_status"] == "stale_scores"
+    assert stale["rows"][0]["score_freshness"]["as_of"] == str(date.today() - timedelta(days=1))
+
+    calculated_at = datetime.now(timezone.utc)
+    service.scores.fetch_daily_scores_batch.return_value = {
+        "BTC": {"report_date": date.today(), "calculated_at": calculated_at}
+    }
+    current_assessment = {**selected, "as_of": date.today()}
+    source_row = {"report_date": date.today(), "calculated_at": calculated_at}
+    assessed_before = len(assessed)
+    current = asyncio.run(service._build_watchlist_payload(
+        7, ["BTC"], asset_catalog={}, quote_map=quotes,
+        selected_assessment=(7, "BTC", current_assessment, source_row),
+    ))
+    assert current["rows"][0]["score"] == 80
+    assert len(assessed) == assessed_before
+
+    updated_source_row = {**source_row, "market_score": 10}
+    asyncio.run(service._build_watchlist_payload(
+        7, ["BTC"], asset_catalog={}, quote_map=quotes,
+        selected_assessment=(7, "BTC", current_assessment, updated_source_row),
+    ))
+    assert len(assessed) == assessed_before + 1
 
 
 def test_prefetched_workspace_asset_class_skips_isolated_scope_reads():
