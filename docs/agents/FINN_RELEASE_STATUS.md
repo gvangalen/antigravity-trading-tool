@@ -7,8 +7,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 ## Nieuwe-gebruiker QA-herstel na agentuitfasering
 
 Phase: `LOCAL_VALIDATION`. De publieke backend en frontend gaven op
-20 oktober 2026 na de capaciteitsrelease beide HTTP 200 en SHA
-`749391240369d9874a50e908c973fe77bd063b89`. Onafhankelijke QA heeft op
+20 oktober 2026 na de herstelde capaciteitsrelease beide HTTP 200 en SHA
+`2159c045c5cf071131078c2871502203dadaa5e7`. Onafhankelijke QA heeft op
 de eerdere SHA `1f7077ea179bbf1ef0887be4605d731df73af880`
 de feedvolgorde na refresh bevestigd, maar de bredere nieuwe-gebruiker-
 route nog niet geaccepteerd. De concrete bevindingen waren een niet-duurzame
@@ -22,8 +22,8 @@ eindigde als failure ondanks de publiek zichtbare SHA. De log toont dat de
 productie-deep-healthcheck naar `staging-*`-queues keek. De daaropvolgende
 `main`-commit `2159c045c5cf071131078c2871502203dadaa5e7` herstelt de
 deploydoel-, topologie- en capaciteitswaarden ná het inlezen van de
-langlevende serverinstellingen. Een geslaagde Auto Deploy op die correctie is
-hier nog niet aangetoond.
+langlevende serverinstellingen. [Auto Deploy op die correctie](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39489597019)
+slaagde en beide publieke oppervlakken melden nu die SHA.
 
 De lokale kandidaat `codex/finn-new-user-qa-repairs` projecteert alleen voor
 bevestigde DCA-bedragregels de opgeslagen planning naast de botstatus. Dit
@@ -36,7 +36,7 @@ feedtekst veronderstelt geen afzonderlijke instapregel meer. Twee niet
 aangeroepen oude UI-wrappers zijn verwijderd; de actieve FINN-chat blijft.
 
 Gemeten lokale controles na samenvoeging met de capaciteitsrelease:
-root backend-suite **3544 geslaagd, 3 bestaande skips**; gerichte bot- en
+root backend-suite **3545 geslaagd, 3 bestaande skips**; gerichte bot- en
 onboardingtests **98/98**; feed- en
 financiële-tooltests **29/29**. Webbuild, typecheck, i18n-lint, 15 i18n-tests,
 27 commandtests, 8 voorsteltests, 9 setuptests en `audit:high` slaagden; de audit meldt
@@ -46,16 +46,17 @@ en 110 bestaande waarschuwingen. De geïsoleerde lokale API/Celery-matrix vóór
 de samenvoeging slaagde **16/16**, zonder productieverbindingen,
 brokerorders, live bots of live trading calls; artifact SHA-256
 `b9627fe435f55da47e7e064d14a85039b5808e87c8c32f97b7a135d13910a19b`.
-De echte Luna/Responses-ontwikkelset op die code slaagde **20/20**; de
-gecombineerde workeractieproef slaagde opnieuw **16/16** (artifact SHA-256
+De echte Luna/Responses-ontwikkelset op de gecombineerde code slaagde
+**20/20**, zonder fout; artifact SHA-256
+`40c4cecf2b77fd17132b1040466997f9a3069cbcbea76bc347a7abd51f280a14`.
+De gecombineerde workeractieproef slaagde opnieuw **16/16** (artifact SHA-256
 `6ffbd3d9ff09c0f3ead13cba6835fa15c40c8c45467096820a5cb1ad19aa432f`),
 ook zonder productieverbindingen, brokerorders, live bots of live trading
 calls. De echte `gpt-6-luna` Responses-regressie op de gecombineerde code
 slaagde **109/109**, zonder provider-, schema-, parse- of validatiefout;
 artifact SHA-256
 `232dec4a021c2ad843bd1389c354ce94785dff5eec5ccd1604a0777f74cca5a0`.
-De 20-case ontwikkelset wordt ook op de gecombineerde code herhaald. Dit is
-geen live acceptatie of deployment van deze kandidaat.
+Dit is geen live acceptatie of deployment van deze kandidaat.
 
 ## Multi-user capacity hardening candidate
 
