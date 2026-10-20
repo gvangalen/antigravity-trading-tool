@@ -2,17 +2,17 @@
 
 Latest verified production baseline on 2026-10-20: backend health and frontend
 build info both returned HTTP 200 and SHA
-`52ef2159338ba360932ebe7fcd2d578657a9adab`. Release 1 correctness,
-cluster metrics, the marked-account provisioner, and the bounded read-load
-harness are deployed. Independent QA owner canaries passed for workspace and
-FINN conversation content; trade-review body ownership remains unproven
-because canary lists were empty. No order or FINN action route was load-tested.
+`0755a9c402565a9c8641ea8d43d34aae036d007b`. The scaled topology has
+two API workers and separate critical/market/scoring/AI/FINN workers.
+Independent QA owner canaries passed for workspace and FINN conversation
+content; trade-review body ownership remains unproven because canary lists
+were empty. No order or FINN action route was load-tested.
 The production ecosystem configuration records worker OOMs from an earlier
 multi-process layout on a 1 GB host. A read-only SSH check on 2026-10-20 of
-the host serving the current production SHA found 4 vCPU and 8,125,916 KiB
+the production host found 4 vCPU and 8,125,916 KiB
 (7.75 GiB) RAM, with 6,054 MiB available and no swap at idle. PostgreSQL
 reported `max_connections=100` and 19 active connections. PM2 showed five
-online compact-profile processes. This is the current 7.75 GiB host, not the
+online compact-profile processes at that earlier check. This is the current 7.75 GiB host, not the
 historical 1 GiB host.
 
 Independent QA repeated the live read workload on `52ef2159` with 1,000
@@ -26,12 +26,19 @@ with a three-second checkout timeout; PostgreSQL had at most 20 of 100
 connections in sampled measurements, more than 5.83 GiB RAM remained
 available, queues were empty, and PM2 recorded no restarts. All synthetic
 accounts were deactivated and private token files removed after each run.
-Therefore 1,000 active users are **not accepted** on compact topology. The
-next candidate selects the existing scaled profile: two API processes,
-separate critical/market/scoring/AI/FINN workers, and a configured maximum of
-70 database connections under an 80-connection budget. Repeat the live
-canary and staged test after deploying that candidate; the profile switch
-alone is not capacity evidence. Deep health exposes dispatcher reservation
+Therefore 1,000 active users were **not accepted** on compact topology.
+Independent QA then measured the scaled topology on `0755a9c4`: the 100-user
+and 500-user stages passed with all 1,308 and 6,492 requests returning HTTP
+200. Steady p95 for workspace/FINN list/review list was 74/10/29 ms at 100
+and 162/23/50 ms at 500. The 1,000-user stage stopped early after one review
+HTTP 500 and p95 breaches on all three routes. One API worker exhausted its
+local 10+5 async database pool; sampled PostgreSQL occupancy peaked at 49/100,
+CPU at 63%, and MemAvailable remained above 4.18 GiB. All fixture accounts
+were deactivated and private token files removed. The next candidate removes
+the remaining review GET write, skips weekly work for empty owners, batches
+workspace coverage reads, and increases each API worker's async pool from
+15 to 20 slots within an 80-connection configured maximum. A new full live test is required before a
+1,000-active-user claim. Deep health exposes dispatcher reservation
 count and one-hour age by queue.
 `backend/scripts/reconcile_dispatch_reservations.py` reports stale task IDs
 and can release terminal reservations directly. Routine reconciliation leaves
@@ -94,8 +101,8 @@ live worker traffic remain separate acceptance work.
    the current host or host group has enough RAM. The deploy preflight rejects
    a scaled topology below 6 GiB RAM. The scaled profile gives execution,
    market/portfolio, scoring, AI reporting, and FINN interactive separate
-   workers, with two API processes and a default maximum of 70 database
-   connections against a budget of 80. Measure RSS and queue age before
+   workers. The next candidate retains two API processes and a default maximum
+   of 80 database connections against a budget of 80. Measure RSS and queue age before
    increasing concurrency. Use a shared PostgreSQL and Redis broker/rate-limit
    store across hosts.
 

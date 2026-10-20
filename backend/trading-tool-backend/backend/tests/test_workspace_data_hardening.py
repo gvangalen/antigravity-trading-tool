@@ -263,10 +263,19 @@ def test_macro_and_technical_rows_keep_the_actual_source_moment():
 
 def test_history_coverage_counts_distinct_source_days_in_scoring_windows():
     service = object.__new__(WorkspaceDataService)
-    readings = iter((2, 3, 4))
-    service.session = SimpleNamespace(execute=AsyncMock(side_effect=lambda _: SimpleNamespace(
-        scalar_one=lambda: next(readings)
-    )))
+    # The grouped macro row carries the count at index zero, as SQLAlchemy rows do.
+    class MacroRow:
+        name = "dxy"
+
+        def __getitem__(self, index):
+            assert index == 0
+            return 4
+
+    responses = iter((
+        SimpleNamespace(one=lambda: SimpleNamespace(price_days=2, volume_days=3)),
+        SimpleNamespace(all=lambda: [MacroRow()]),
+    ))
+    service.session = SimpleNamespace(execute=AsyncMock(side_effect=lambda _: next(responses)))
     market = [{"name": "price"}, {"name": "volume"}, {"name": "change_24h"}]
     macro = [{"name": "dxy"}, {"name": "inflation_rate"}]
 
@@ -282,7 +291,7 @@ def test_history_coverage_counts_distinct_source_days_in_scoring_windows():
     assert "score_history_coverage" not in market[2]
     assert "score_history_coverage" not in macro[1]
     statements = [call.args[0] for call in service.session.execute.await_args_list]
-    assert len(statements) == 3
+    assert len(statements) == 2
     assert all("count(distinct(date(" in str(statement).lower() for statement in statements)
     assert "macro_data.user_id" in str(statements[-1])
     assert 7 in statements[-1].compile().params.values()

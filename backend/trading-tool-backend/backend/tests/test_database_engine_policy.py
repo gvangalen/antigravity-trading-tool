@@ -17,8 +17,8 @@ def test_api_and_background_workers_have_bounded_database_pools():
     options = _async_engine_options("backend")
 
     assert options["pool_pre_ping"] is True
-    assert options["pool_size"] == 10
-    assert options["max_overflow"] == 5
+    assert options["pool_size"] == 16
+    assert options["max_overflow"] == 4
     assert options["pool_timeout"] == 3
     background = _async_engine_options("celery-worker-default")
     assert background["pool_size"] == 2

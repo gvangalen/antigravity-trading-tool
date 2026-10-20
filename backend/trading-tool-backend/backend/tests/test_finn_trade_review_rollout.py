@@ -103,6 +103,38 @@ def test_worker_queries_only_allowlisted_users(monkeypatch):
     assert "LEFT JOIN finn_bybit_derivative_attempts attempt" in queries[3][0]
 
 
+def test_weekly_reflection_worker_paginates_past_first_500_owners(monkeypatch):
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "all")
+    completed = []
+
+    class Result:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def fetchall(self):
+            return [type("Row", (), {"user_id": user_id})() for user_id in self.ids]
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def execute(self, sql, params):
+            assert "user_id > :last_user_id" in str(sql)
+            start = params["last_user_id"] + 1
+            return Result(list(range(start, min(start + 500, 502))))
+
+    async def save_week(_self, user_id, _monday):
+        completed.append(user_id)
+
+    monkeypatch.setattr(task, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(task.FinnTradeReviewService, "weekly_report", save_week)
+    assert asyncio.run(task._finalize_weekly_trade_reflections()) == 501
+    assert completed == list(range(1, 502))
+
+
 def test_scheduled_derivative_sync_uses_owner_scoped_bounded_candidates(monkeypatch):
     monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
     monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7,8")

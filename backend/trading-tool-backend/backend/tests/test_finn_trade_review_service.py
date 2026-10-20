@@ -88,7 +88,7 @@ def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
             return []
 
         def scalar_one(self):
-            return 0
+            return 1
 
     class Session:
         async def execute(self, statement, params):
@@ -100,7 +100,8 @@ def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
     async def no_projection(_user_id):
         raise AssertionError("GET must not project or write")
 
-    async def prior_week(_user_id, _week_start):
+    async def prior_week(_user_id, _week_start, *, persist):
+        assert persist is False
         return {"week_start": "2026-10-12"}
 
     service._project = no_projection
@@ -112,6 +113,76 @@ def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
         assert "WHERE user_id=:user_id" in sql
         assert "exit_at >= :start" not in sql
         assert params["user_id"] == 7
+
+
+def test_empty_trade_review_list_avoids_weekly_queries_and_writes():
+    calls = []
+
+    class Result:
+        def fetchone(self):
+            return SimpleNamespace(legacy_or_ambiguous=0, inconsistent=0, projection_pending=False)
+
+        def fetchall(self):
+            return []
+
+        def scalar_one(self):
+            return 0
+
+    class Session:
+        async def execute(self, statement, params):
+            calls.append(str(statement))
+            return Result()
+
+        async def commit(self):
+            raise AssertionError("GET must not commit")
+
+    result = asyncio.run(FinnTradeReviewService(Session()).list_reviews(7, week_start=date(2026, 10, 12)))
+    assert result["total"] == 0
+    assert result["weekly"]["week_start"] == "2026-10-12"
+    assert result["weeks"] == ["2026-10-12"]
+    assert len(calls) == 3
+    assert all(sql.lstrip().startswith("SELECT") for sql in calls)
+
+
+def test_weekly_reflection_read_does_not_upsert_or_commit():
+    calls = []
+    saved_summary = {
+        "trades": 1, "plans": 0, "notes": 0, "analyzed": 0,
+        "pending": 1, "unavailable": 0, "patterns": [],
+        "confirmed_lesson_repetitions": [], "patterns_truncated": False,
+    }
+
+    class Result:
+        def fetchone(self):
+            return SimpleNamespace(_mapping={"trades": 1, "plans": 0, "notes": 0,
+                                             "analyzed": 0, "pending": 1, "unavailable": 0})
+
+        def fetchall(self):
+            return []
+
+        def one_or_none(self):
+            return SimpleNamespace(summary=saved_summary,
+                                   generated_at=datetime(2026, 10, 19, 6, tzinfo=timezone.utc))
+
+    class Session:
+        async def execute(self, statement, params):
+            calls.append(str(statement))
+            return Result()
+
+        async def commit(self):
+            raise AssertionError("GET must not commit")
+
+    result = asyncio.run(FinnTradeReviewService(Session()).weekly_report(
+        7, date(2026, 10, 12), persist=False))
+    assert result["trades"] == 1
+    assert result["generated_at"] == "2026-10-19T06:00:00+00:00"
+    assert len(calls) == 4
+    assert all(sql.lstrip().startswith("SELECT") for sql in calls)
+    saved_summary["trades"] = 0
+    changed = asyncio.run(FinnTradeReviewService(Session()).weekly_report(
+        7, date(2026, 10, 12), persist=False))
+    assert changed["trades"] == 1
+    assert changed["generated_at"] is None
 
 
 def test_exchange_plan_not_recorded_is_evidence_gap_not_behavioral_missing_plan():

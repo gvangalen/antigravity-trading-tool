@@ -821,38 +821,43 @@ class WorkspaceDataService:
         if not hasattr(getattr(self, "session", None), "execute"):
             return
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        for row in market_rows:
-            key = _indicator_key(row.get("name"))
-            if key not in {"price", "volume"}:
-                continue
-            column = MarketData.price if key == "price" else MarketData.volume
-            stmt = select(func.count(func.distinct(func.date(MarketData.source_observed_at)))).where(
+        market_keys = {_indicator_key(row.get("name")) for row in market_rows} & {"price", "volume"}
+        if market_keys:
+            day = func.date(MarketData.source_observed_at)
+            stmt = select(
+                func.count(func.distinct(day)).filter(MarketData.price.is_not(None)).label("price_days"),
+                func.count(func.distinct(day)).filter(MarketData.volume.is_not(None)).label("volume_days"),
+            ).where(
                 MarketData.symbol == symbol,
                 MarketData.source_observed_at >= now - timedelta(days=30),
-                column.is_not(None),
             )
-            result = await self.session.execute(stmt)
-            row["score_history_coverage"] = {
-                "observed_days": int(result.scalar_one() or 0),
-                "required_days": 5,
-                "window_days": 30,
-            }
-        for row in macro_rows:
-            key = _indicator_key(row.get("name"))
-            if key not in {"dxy", "sp500", "gold_price", "oil_price"}:
-                continue
+            counts = (await self.session.execute(stmt)).one()
+            for row in market_rows:
+                key = _indicator_key(row.get("name"))
+                if key in market_keys:
+                    row["score_history_coverage"] = {
+                        "observed_days": int(getattr(counts, f"{key}_days") or 0),
+                        "required_days": 5, "window_days": 30,
+                    }
+        macro_keys = {_indicator_key(row.get("name")) for row in macro_rows} & {
+            "dxy", "sp500", "gold_price", "oil_price",
+        }
+        if macro_keys:
+            macro_name = func.lower(MacroData.name)
             stmt = select(func.count(func.distinct(func.date(MacroData.source_observed_at)))).where(
                 MacroData.user_id == user_id,
-                func.lower(MacroData.name) == key,
+                macro_name.in_(macro_keys),
                 MacroData.source_observed_at >= now - timedelta(days=90),
                 MacroData.value.is_not(None),
-            )
-            result = await self.session.execute(stmt)
-            row["score_history_coverage"] = {
-                "observed_days": int(result.scalar_one() or 0),
-                "required_days": 5,
-                "window_days": 90,
-            }
+            ).add_columns(macro_name.label("name")).group_by(macro_name)
+            counts = {row.name: int(row[0] or 0) for row in (await self.session.execute(stmt)).all()}
+            for row in macro_rows:
+                key = _indicator_key(row.get("name"))
+                if key in macro_keys:
+                    row["score_history_coverage"] = {
+                        "observed_days": counts.get(key, 0),
+                        "required_days": 5, "window_days": 90,
+                    }
 
     async def _market_rows(self, user_id: int, symbol: str, period: str,
                            *, asset_class: str | None = None) -> list[dict[str, Any]]:

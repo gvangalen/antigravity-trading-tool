@@ -112,7 +112,7 @@ def test_tracked_production_profile_selects_budgeted_scaled_topology():
     config = json.loads(result.stdout)
     assert config["topology"] == "scaled"
     assert config["api"] == 2
-    assert config["db"] == 70
+    assert config["db"] == 80
     assert len(config["apps"]) == 9
     assert "celery-worker-execution-critical" in config["apps"]
 
