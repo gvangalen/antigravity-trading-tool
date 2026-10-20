@@ -6,9 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Nieuwe-gebruiker QA-herstel na agentuitfasering
 
-Phase: `LOCAL_VALIDATION`. De publieke backend en frontend gaven op
-20 oktober 2026 na de herstelde capaciteitsrelease beide HTTP 200 en SHA
-`2159c045c5cf071131078c2871502203dadaa5e7`. Onafhankelijke QA heeft op
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De publieke backend en frontend gaven op
+20 oktober 2026 na de FINN-reparatie beide HTTP 200 en product-SHA
+`daaa81002f6ec8aa5b978d17eaa97eb740756682`. Onafhankelijke QA heeft op
 de eerdere SHA `1f7077ea179bbf1ef0887be4605d731df73af880`
 de feedvolgorde na refresh bevestigd, maar de bredere nieuwe-gebruiker-
 route nog niet geaccepteerd. De concrete bevindingen waren een niet-duurzame
@@ -23,9 +23,10 @@ productie-deep-healthcheck naar `staging-*`-queues keek. De daaropvolgende
 `main`-commit `2159c045c5cf071131078c2871502203dadaa5e7` herstelt de
 deploydoel-, topologie- en capaciteitswaarden ná het inlezen van de
 langlevende serverinstellingen. [Auto Deploy op die correctie](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39489597019)
-slaagde en beide publieke oppervlakken melden nu die SHA.
+slaagde en beide publieke oppervlakken meldden toen die SHA.
 
-De lokale kandidaat `codex/finn-new-user-qa-repairs` projecteert alleen voor
+De gemergede [PR #459](https://github.com/gvangalen/antigravity-trading-tool/pull/459)
+projecteert alleen voor
 bevestigde DCA-bedragregels de opgeslagen planning naast de botstatus. Dit
 gebruikt dezelfde `dca_due_on_date`-regel als de Paper-engine en maakt na
 refresh zichtbaar dat een aankoop op de huidige datum niet gepland is; het
@@ -56,7 +57,15 @@ calls. De echte `gpt-6-luna` Responses-regressie op de gecombineerde code
 slaagde **109/109**, zonder provider-, schema-, parse- of validatiefout;
 artifact SHA-256
 `232dec4a021c2ad843bd1389c354ce94785dff5eec5ccd1604a0777f74cca5a0`.
-Dit is geen live acceptatie of deployment van deze kandidaat.
+Alle vijf [merge-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39490602689)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39490980493)
+slaagden. Backend-health en frontend-buildinfo gaven ieder HTTP 200 en exact
+de product-SHA hierboven. De ingelogde functionele acceptatie is nog niet
+onafhankelijk afgerond; Build heeft na deployment alleen identiteit en
+beschikbaarheid gecontroleerd.
+Een documentatie-only statuscommit verandert de deploy-SHA; controleer vóór
+QA daarom opnieuw beide publieke identiteiten en gebruik die SHA voor de
+ingelogde hertest.
 
 ## Multi-user capacity hardening candidate
 
