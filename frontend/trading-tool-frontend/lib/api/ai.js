@@ -38,7 +38,7 @@ export const fetchFinnV2Proposal = (proposalId) => {
 // A V2 proposal is visible before this function is called. One explicit UI
 // confirmation then uses only the V2 publish/confirm/execute contract, never
 // the legacy assistant-action mutation endpoint.
-export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
+export const confirmAndExecuteFinnV2Proposal = async (proposalId, expectedReviewTargetName = null) => {
   const normalizedProposalId = String(proposalId || '').trim();
   if (!normalizedProposalId) {
     throw new Error('Deze FINN V2-proposal mist een server-issued proposal_id.');
@@ -57,6 +57,7 @@ export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
         idempotency_key: idempotencyKey,
         confirmation_token: publication.confirmation_token,
         expected_payload_hash: publication.payload_hash,
+        expected_review_target_name: expectedReviewTargetName || undefined,
       }),
     },
   );
@@ -68,6 +69,7 @@ export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
         idempotency_key: idempotencyKey,
         confirmation_token: publication.confirmation_token,
         expected_payload_hash: publication.payload_hash,
+        expected_review_target_name: expectedReviewTargetName || undefined,
       }),
     },
   );

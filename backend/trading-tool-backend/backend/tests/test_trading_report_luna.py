@@ -63,26 +63,12 @@ def test_report_text_uses_luna_responses(monkeypatch):
     assert "temperature" not in requests[0]
 
 
-def test_shared_client_default_keeps_legacy_chat_route(monkeypatch):
-    requests = []
+def test_shared_client_default_uses_luna_responses(monkeypatch):
+    requests = _stub_report_provider(monkeypatch, "FINN answer")
 
-    class Completions:
-        def create(self, **kwargs):
-            requests.append(kwargs)
-            return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="Legacy answer"))],
-                model="gpt-4o-mini",
-                usage=SimpleNamespace(prompt_tokens=8, completion_tokens=3),
-            )
-
-    monkeypatch.setattr(openai_client, "client", SimpleNamespace(chat=SimpleNamespace(completions=Completions())))
-    monkeypatch.setattr(openai_client, "get_ai_availability", lambda: {"available": True})
-    monkeypatch.setattr(openai_client, "_rate_limit_allows_call", lambda: True)
-    monkeypatch.setattr(openai_client, "_quota_breaker_active", lambda: False)
-    monkeypatch.setattr(openai_client, "_log_openai_usage", lambda **kwargs: None)
-
-    assert openai_client.ask_gpt_text(prompt="Question", system_role="General") == "Legacy answer"
-    assert requests[0]["model"] == openai_client.model
+    assert openai_client.ask_gpt_text(prompt="Question", system_role="General") == "FINN answer"
+    assert requests[0]["model"] == "gpt-6-luna"
+    assert requests[0]["reasoning"] == {"effort": "none"}
 
 
 def test_all_trading_report_generators_pin_luna(monkeypatch):

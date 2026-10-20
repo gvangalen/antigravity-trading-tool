@@ -376,7 +376,9 @@ export function FinnScreen({
     setProposalSaving(true);
     setProposalError(null);
     try {
-      const result = await assistantApi.confirmAndExecuteV2Proposal(currentProposal.proposal_id);
+      const result = await assistantApi.confirmAndExecuteV2Proposal(
+        currentProposal.proposal_id, currentProposal.review_target_name,
+      );
       if (!['succeeded', 'already_executed'].includes(result.status)) {
         throw new Error('FINN kon de wijziging niet bevestigen. Controleer je plan voordat je opnieuw probeert.');
       }

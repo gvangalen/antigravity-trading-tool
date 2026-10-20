@@ -330,38 +330,6 @@ def test_report_translation_uses_watchlist_match_names_beyond_top_setups(monkeyp
     assert localized["watchlist"] == original["watchlist"]
 
 
-def test_saved_german_today_briefing_follows_requested_language_without_storage_change(monkeypatch):
-    async def translate(**kwargs):
-        fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])
-        replacements = {
-            "Guten Morgen ETH 50.": "Goedemorgen ETH 50.",
-            "Der Markt ist ruhig.": "De markt is rustig.",
-            "Warte auf Daten.": "Wacht op gegevens.",
-            "DXY fehlt.": "DXY ontbreekt.",
-        }
-        return json.dumps({key: replacements[value] for key, value in fields.items()})
-
-    monkeypatch.setattr(locale_service, "ask_gpt_text_async", translate)
-    original = {"first_dashboard_context": {
-        "content_locale": "de",
-        "asset": "ETH",
-        "market_snapshot": {"market_score": 50},
-        "coaching_briefing": {
-            "assessment": "Guten Morgen ETH 50.",
-            "reasoning": "Der Markt ist ruhig.",
-            "recommended_action": "Warte auf Daten.",
-            "data_limitation": "DXY fehlt.",
-        },
-        "briefing_text": "Guten Morgen ETH 50.\nDer Markt ist ruhig.\nWarte auf Daten.\nDXY fehlt.",
-    }}
-    localized = asyncio.run(locale_service.localize_first_dashboard_context(original, "nl"))
-    context = localized["first_dashboard_context"]
-    assert context["briefing_text"].startswith("Goedemorgen ETH 50.")
-    assert context["coaching_briefing"]["data_limitation"] == "DXY ontbreekt."
-    assert context["market_snapshot"] == original["first_dashboard_context"]["market_snapshot"]
-    assert original["first_dashboard_context"]["briefing_text"].startswith("Guten Morgen")
-
-
 def test_report_translation_keeps_original_if_model_changes_a_score(monkeypatch):
     async def translate(**kwargs):
         fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])

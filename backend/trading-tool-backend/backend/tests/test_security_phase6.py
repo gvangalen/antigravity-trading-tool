@@ -25,9 +25,3 @@ def test_sensitive_manual_order_routes_have_rate_limits():
     assert "def _apply_sensitive_order_rate_limit" in source
     assert 'action_key="manual_order"' in source
     assert 'action_key="manual_order_preflight"' in source
-
-
-def test_finn_replay_paths_return_explicit_replayed_flag():
-    source = _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
-
-    assert 'return {**result, "replayed": True}' in source

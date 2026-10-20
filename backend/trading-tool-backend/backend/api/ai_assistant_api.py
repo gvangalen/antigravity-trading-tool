@@ -45,7 +45,7 @@ from backend.services.finn_v2_runtime_selector_service import FinnV2RuntimeSelec
 from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
 from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
 from backend.schemas.finn_v2_execution_schema import FinnV2ExecuteProposalRequest
-from backend.schemas.finn_v2_proposal_review import requested_state_for_review
+from backend.schemas.finn_v2_proposal_review import requested_state_for_review, verified_review_target_name
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -765,6 +765,10 @@ async def assistant_v2_get_proposal(
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
     change = dict((proposal.payload_json or {}).get("change") or {})
+    review_target_name = await verified_review_target_name(
+        db, user_id=current_user["id"], operation_type=proposal.operation_type,
+        target_id=proposal.target_id, change=change,
+    )
     return FinnV2ProposalSummary(
         proposal_id=proposal.id,
         run_id=proposal.run_id,
@@ -780,6 +784,7 @@ async def assistant_v2_get_proposal(
         confirmation_required=True,
         before_state=dict(change.get("before_state") or change.get("before") or {}),
         requested_state=requested_state_for_review(change),
+        review_target_name=review_target_name,
         target_revision=change.get("target_revision"),
         snapshot_timestamp=change.get("snapshot_timestamp"),
     )
@@ -909,6 +914,7 @@ async def assistant_v2_execute_proposal(
             user_id=current_user["id"],
             idempotency_key=request.idempotency_key,
             expected_payload_hash=request.expected_payload_hash,
+            expected_review_target_name=request.expected_review_target_name,
         )
     ).dict()
     return result

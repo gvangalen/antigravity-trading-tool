@@ -26,14 +26,6 @@ class _FakeValidationRepo:
         self.rows[(kwargs["snapshot_id"], kwargs["user_id"], kwargs["validator_version"])] = SimpleNamespace(**kwargs)
 
 
-class _StubFinnPlanService:
-    async def hydrate_context(self, user_id, context):
-        return dict(context or {})
-
-    def sanitize_context_for_query(self, query, context):
-        return dict(context or {})
-
-
 def test_evidence_validator_handles_empty_snapshot_without_none_payload_crash():
     service = FinnV2EvidenceValidatorService(session=object())
     service.validations = _FakeValidationRepo()

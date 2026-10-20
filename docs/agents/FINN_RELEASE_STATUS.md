@@ -10,19 +10,18 @@ Phase: `LOCAL_IN_PROGRESS`, niet gedeployed. De aparte cutover-checkout verplaat
 de deterministische botuitvoering uit `ai_agents`, laat web en mobiel
 V2-voorstellen via dezelfde eigenaargebonden lees-, publicatie-, bevestigings-
 en uitvoeringsroute afhandelen, en verwijdert de oude assistent-actie-, status-
-en chatsessie-endpoints. De V2-uitvoeringsroute roept de oude `FinnPlanService`
-niet meer aan. De niet meer aangeroepen eerste-dashboardbriefingtaken zijn
+en chatsessie-endpoints. De oude `FinnPlanService` en zijn ongebruikte
+response-traceservice zijn verwijderd. De niet meer aangeroepen eerste-dashboardbriefingtaken zijn
 uit de onboarding-worker en queue-registratie gehaald; workerobservatie volgt
 nu de coachfeed- en rapportgeneratie. De gesprek-, score-, feed- en
-rapportbronnen blijven bestaan. De oude `FinnPlanService` en Mission Control-
-UI-code hebben geen actieve productie-aanroepers meer, maar staan nog in de
-repository met historische tests en zijn nog niet fysiek verwijderd. Web- en
+rapportbronnen blijven bestaan. Mission Control-UI-code heeft geen actieve
+productie-aanroepers meer, maar staat nog in de repository. Web- en
 mobiele dashboardprojecties lezen de actuele `reported_scores` nu rechtstreeks
 uit dezelfde Score 2.0-beoordeling als Analyse en FINN; de oude parallelle
 `get_scores_for_symbol`-uitlezing en ongebruikte `market_data/interpreted`-route
 met een fictieve scorefallback zijn verwijderd.
 
-Build-bewijs voor deze lokale stand: backend **3949 geslaagd, 3 bestaande
+Build-bewijs voor deze lokale stand: backend **3522 geslaagd, 3 bestaande
 skips**; webbuild, typecheck, i18n-lint, i18n-tests, 27 commandchecks,
 8 voorsteltests en `audit:high` geslaagd. Mobiele typecheck, 16 chattests,
 web-, iOS- en Android-bundels, en lint met 0 errors geslaagd; de 110
@@ -34,12 +33,28 @@ echte `gpt-6-luna` Responses-regressie met **109/109** operatie- en
 veldmatches, zonder provider-, schema-, parse- of validatiefout. Een aparte
 review vond dat mobiele destructieve voorstellen alleen een object-ID en
 handmatige orders alleen het asset konden tonen. Het volledige orderveld staat
-nu in de reviewprojectie; mobiele bevestiging van delete-, activatie-,
-deactivatie- en rebalancevoorstellen blijft uitgeschakeld totdat een
-eigenaargeverifieerde doelnaam en concreet gevolg in de review staan. De
-gerichte mobiele reviewtests (16/16) en backendprojectietests (8/8) slagen.
-Nog open: dode Mission Control-code met
-vervangende V2-dekking verwijderen, CI/deployment en onafhankelijke ingelogde
+nu in de reviewprojectie; een eigenaargeverifieerde doelnaam komt uit de
+opgeslagen setup, strategie of bot, en de mobiele kaart noemt het gevolg van
+verwijderen of (de)activeren. Herbalanceren blijft uitgeschakeld omdat die
+uitvoering ook server-side in shadow mode staat. De gerichte mobiele
+reviewtests (16/16), backendprojectietests (9/9) en de volledige backend-suite
+na legacyverwijdering slagen. Bij verwijderen en bot-(de)activatie vergelijkt
+de uitvoeringsroute de door de gebruiker bekeken eigenaargebonden naam nogmaals
+onder een database-rijvergrendeling; web en mobiel tonen en verzenden diezelfde
+naam. De gerichte postcondition- en eigenaarstests slagen (27/27). De actieve
+gedeelde OpenAI-client gebruikt nu ook standaard Luna/Responses; de oude
+Chat Completions-stream en de ongebruikte eerste-briefingvertaler zijn weg.
+De na deze aanpassingen herhaalde lokale actiematrix slaagde met **16/16
+contracten en 19/19 adaptertests** (artifact SHA-256
+`6c4a1b35bb5083101d9e1160b02f4af5fdab07eab2921fcee570727b0e943154`).
+Een echte lokale runtimeprobe op de ontwikkelsleutel kreeg HTTP 200 van
+Responses en rapporteerde `gpt-6-luna`; de volledige backendherhaling na de
+laatste legacyverwijdering telt **3522 geslaagd, 3 bestaande skips**.
+De herhaalde echte `gpt-6-luna` Responses-regressie slaagde met **109/109**
+operatie- en veldmatches en nul provider-, schema-, timeout-, parse- of
+validatiefouten (artifact SHA-256
+`4371c6bb6a57151b6d3dd540c75e168a4e1cd1491971e6492b98f36de3d3be3f`).
+Nog open: dode Mission Control-UI-code verwijderen, CI/deployment en onafhankelijke ingelogde
 web- en mobiele QA. Deze lokale stand is geen live-acceptatie.
 
 ## Weekreflectie voor alle gebruikers

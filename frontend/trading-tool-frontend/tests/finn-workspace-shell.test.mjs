@@ -32,7 +32,10 @@ test("shared workspace shows the persisted coach feed and opens chat on demand",
 });
 
 test("web confirmation uses the FINN V2 proposal contract without legacy action writes", () => {
-  assert.match(assistantSource, /confirmAndExecuteFinnV2Proposal\(action\.proposal_id\)/);
+  assert.match(assistantSource, /confirmAndExecuteFinnV2Proposal\(\s*action\.proposal_id, reviewedName \|\| latestProposal\.review_target_name/);
+  assert.match(assistantApiSource, /\/execute[\s\S]*?expected_review_target_name: expectedReviewTargetName \|\| undefined/);
+  assert.match(assistantSource, /const objectName = verifiedTargetName \|\| displayContext\.name/);
+  assert.match(assistantSource, /namedTargetReview && !verifiedTargetName/);
   assert.doesNotMatch(assistantSource, /executeAssistantAction|executePendingAction|fetchFinnState/);
   assert.doesNotMatch(assistantApiSource, /\/api\/assistant\/actions\/execute|\/api\/assistant\/finn\/state/);
   assert.match(assistantSource, /getFinnV2ConversationDetail\(candidateId\)/);

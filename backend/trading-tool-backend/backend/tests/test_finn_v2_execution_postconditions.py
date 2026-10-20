@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -6,6 +7,25 @@ from types import SimpleNamespace
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
+
+
+@pytest.mark.parametrize("operation,field", [
+    ("delete_setup", "setup_id"), ("delete_strategy", "strategy_id"),
+    ("delete_bot", "bot_id"), ("deactivate_bot", "bot_id"),
+    ("activate_paper_bot", "bot_id"), ("activate_live_bot", "bot_id"),
+])
+def test_confirmed_target_name_must_still_match_at_execution(operation, field):
+    proposal = SimpleNamespace(operation_type=operation, payload_json={"change": {field: 9}})
+    FinnV2ExecutionService._assert_reviewed_target_name(
+        proposal=proposal, current_entity={"id": 9, "name": "Reviewed target"},
+        expected_name="Reviewed target",
+    )
+    for old_name, current in ((None, "Reviewed target"), ("Reviewed target", "Renamed target")):
+        with pytest.raises(ValueError, match="proposal_target_changed"):
+            FinnV2ExecutionService._assert_reviewed_target_name(
+                proposal=proposal, current_entity={"id": 9, "name": current},
+                expected_name=old_name,
+            )
 
 
 class _Session:

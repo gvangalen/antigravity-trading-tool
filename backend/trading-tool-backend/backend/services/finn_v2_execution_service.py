@@ -36,7 +36,7 @@ class FinnV2ExecutionService:
         self.gates = FinnV2ExecutionGateService(session, flag_service=self.flags)
         self.adapters = FinnV2ActionAdapterRegistry(session, flag_service=self.flags)
 
-    async def execute(self, *, proposal_id: str, user_id: int, idempotency_key: str, expected_payload_hash: str, step_up_proof: StepUpProof | None = None) -> ExecutionResult:
+    async def execute(self, *, proposal_id: str, user_id: int, idempotency_key: str, expected_payload_hash: str, expected_review_target_name: str | None = None, step_up_proof: StepUpProof | None = None) -> ExecutionResult:
         existing = await self.repo.get_by_idempotency_key_for_user(idempotency_key=idempotency_key, user_id=user_id)
         if existing is not None:
             return ExecutionResult(
@@ -145,6 +145,11 @@ class FinnV2ExecutionService:
         )
         try:
             prior_entity = await self._owned_entity_reference(proposal=proposal)
+            self._assert_reviewed_target_name(
+                proposal=proposal,
+                current_entity=prior_entity,
+                expected_name=expected_review_target_name,
+            )
             self._assert_target_revision(proposal=proposal, current_entity=prior_entity)
             result_payload = await adapter(user_id, proposal.payload_json)
             # Adapters expose existing domain-service results. Normalize them at
@@ -350,6 +355,7 @@ class FinnV2ExecutionService:
             "update_setup": "setup", "delete_setup": "setup",
             "update_strategy": "strategy", "delete_strategy": "strategy",
             "update_bot": "bot", "delete_bot": "bot", "deactivate_bot": "bot",
+            "activate_paper_bot": "bot", "activate_live_bot": "bot",
         }.get(operation)
         if entity_type is None or not hasattr(self.session, "execute"):
             return {}
@@ -358,13 +364,25 @@ class FinnV2ExecutionService:
         if entity_id is None:
             return {}
         queries = {
-            "setup": "SELECT *, NULL::text AS parent_entity_type, NULL::text AS parent_entity_id FROM setups WHERE id = :entity_id AND user_id = :user_id",
-            "strategy": "SELECT *, 'setup' AS parent_entity_type, setup_id::text AS parent_entity_id FROM strategies WHERE id = :entity_id AND user_id = :user_id",
-            "bot": "SELECT *, 'strategy' AS parent_entity_type, strategy_id::text AS parent_entity_id FROM bot_configs WHERE id = :entity_id AND user_id = :user_id",
+            "setup": "SELECT *, NULL::text AS parent_entity_type, NULL::text AS parent_entity_id FROM setups WHERE id = :entity_id AND user_id = :user_id FOR UPDATE",
+            "strategy": "SELECT *, 'setup' AS parent_entity_type, setup_id::text AS parent_entity_id FROM strategies WHERE id = :entity_id AND user_id = :user_id FOR UPDATE",
+            "bot": "SELECT *, 'strategy' AS parent_entity_type, strategy_id::text AS parent_entity_id FROM bot_configs WHERE id = :entity_id AND user_id = :user_id FOR UPDATE",
         }
         result = await self.session.execute(text(queries[entity_type]), {"entity_id": int(entity_id), "user_id": proposal.user_id})
         row = result.mappings().one_or_none()
         return dict(row) if row else {}
+
+    @staticmethod
+    def _assert_reviewed_target_name(*, proposal, current_entity: dict, expected_name: str | None) -> None:
+        if proposal.operation_type not in {
+            "delete_setup", "delete_strategy", "delete_bot", "deactivate_bot",
+            "activate_paper_bot", "activate_live_bot",
+        }:
+            return
+        if not expected_name or not expected_name.strip() or not current_entity:
+            raise ValueError("proposal_target_changed")
+        if str(current_entity.get("name") or "").strip() != expected_name.strip():
+            raise ValueError("proposal_target_changed")
 
     @staticmethod
     def _assert_target_revision(*, proposal, current_entity: dict) -> None:

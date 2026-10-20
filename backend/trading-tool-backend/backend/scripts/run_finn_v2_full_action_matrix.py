@@ -295,6 +295,12 @@ def _proposal_lifecycle(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}", method="GET",
         headers=other_headers, body=None, timeout=10,
     )
+    review, review_status = _request_json(
+        url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}", method="GET",
+        headers=headers, body=None, timeout=10,
+    )
+    if review_status != 200:
+        raise RuntimeError(f"proposal_review_failed:{review_status}:{proposal_id}")
     sleep(max(0.0, mutation_pace_seconds))
     published, publish_status = _request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish", method="POST",
@@ -314,6 +320,7 @@ def _proposal_lifecycle(
     execution_payload = {
         "idempotency_key": f"local-execute-{uuid.uuid4().hex}",
         "expected_payload_hash": proposal["payload_hash"],
+        "expected_review_target_name": review.get("review_target_name"),
     }
     sleep(max(0.0, mutation_pace_seconds))
     executed, execution_status = _request_json(

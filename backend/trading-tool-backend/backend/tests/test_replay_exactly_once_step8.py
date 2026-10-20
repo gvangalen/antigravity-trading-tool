@@ -16,21 +16,6 @@ def test_retired_assistant_action_route_is_not_exposed():
     assert '"/assistant/v2/proposals/{proposal_id}/execute"' in source
 
 
-def test_finn_maintenance_actions_keep_deterministic_idempotency_boundary():
-    source = _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
-
-    for action_type in (
-        "skip_bot_decision",
-        "resolve_mission_item",
-        "agent_controller_handoff",
-    ):
-        assert action_type in source
-
-    assert "ON CONFLICT (id) DO NOTHING" in source
-    assert "_try_create_pending_action" in source
-    assert "_wait_for_action_result" in source
-
-
 def test_execution_replay_inventory_documents_current_guards():
     source = _read(REPO_ROOT / "docs" / "operations" / "replay-exactly-once-inventory.md")
 

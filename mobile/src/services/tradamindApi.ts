@@ -324,6 +324,7 @@ export type FinnV2ProposalSummary = {
   target: Record<string, unknown>;
   requested_state: Record<string, unknown>;
   before_state: Record<string, unknown>;
+  review_target_name?: string | null;
   expires_at: string;
   confirmation_required: boolean;
 };
@@ -391,13 +392,14 @@ export const assistantApi = {
     return apiClient.get<FinnV2ProposalSummary>(`/api/assistant/v2/proposals/${encodeURIComponent(proposalId)}`);
   },
 
-  async confirmAndExecuteV2Proposal(proposalId: string) {
+  async confirmAndExecuteV2Proposal(proposalId: string, expectedReviewTargetName?: string | null) {
     const path = `/api/assistant/v2/proposals/${encodeURIComponent(proposalId)}`;
     const publication = await apiClient.post<{ confirmation_token: string; payload_hash: string }>(`${path}/publish`, {});
     const payload = {
       idempotency_key: `v2-mobile-${proposalId}`,
       confirmation_token: publication.confirmation_token,
       expected_payload_hash: publication.payload_hash,
+      expected_review_target_name: expectedReviewTargetName || undefined,
     };
     await apiClient.post(`${path}/confirm`, payload);
     return apiClient.post<FinnV2ExecutionResult>(`${path}/execute`, payload);

@@ -31,6 +31,7 @@ class FinnV2ProposalSummary(BaseModel):
     confirmation_required: bool = True
     before_state: Dict[str, Any] = Field(default_factory=dict)
     requested_state: Dict[str, Any] = Field(default_factory=dict)
+    review_target_name: Optional[str] = None
     target_revision: Optional[str] = None
     snapshot_timestamp: Optional[datetime] = None
 
@@ -39,6 +40,7 @@ class FinnV2ExecuteProposalRequest(BaseModel):
     idempotency_key: constr(min_length=8, max_length=128)
     confirmation_token: Optional[SecretStr] = None
     expected_payload_hash: str
+    expected_review_target_name: Optional[str] = None
     csrf_token: Optional[str] = None
 
 

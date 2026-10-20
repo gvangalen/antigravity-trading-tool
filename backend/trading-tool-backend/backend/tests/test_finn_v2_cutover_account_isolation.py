@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.ai_assistant_api import assistant_v2_get_proposal, router as assistant_router
-from backend.schemas.finn_v2_proposal_review import requested_state_for_review
+from backend.schemas.finn_v2_proposal_review import requested_state_for_review, verified_review_target_name
 
 
 def test_proposal_lookup_is_account_scoped(monkeypatch):
@@ -95,3 +95,20 @@ def test_manual_order_review_exposes_economically_significant_fields():
         "asset": "ETH", "side": "sell", "order_type": "limit",
         "quantity": "0.5", "limit_price": "3000",
     }
+
+
+def test_destructive_review_resolves_only_owned_target(monkeypatch):
+    async def owned_setup(self, setup_id, user_id):
+        assert setup_id == 12
+        return {"name": "BTC Friday DCA"} if user_id == 9 else None
+
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.setup_repository.SetupRepository.get_setup_by_id",
+        owned_setup,
+    )
+    kwargs = {"operation_type": "delete_setup", "target_id": "12", "change": {"setup_id": 12}}
+    assert asyncio.run(verified_review_target_name(object(), user_id=9, **kwargs)) == "BTC Friday DCA"
+    assert asyncio.run(verified_review_target_name(object(), user_id=10, **kwargs)) is None
+    assert asyncio.run(verified_review_target_name(
+        object(), user_id=9, operation_type="delete_setup", target_id="13", change={"setup_id": 12},
+    )) is None

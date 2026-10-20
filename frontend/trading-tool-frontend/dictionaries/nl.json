@@ -4566,6 +4566,8 @@
       "evidence": "Bewijs uit je recente Finn-activiteit"
     },
     "inlineAction": {
+      "activateLiveEffect": "Je activeert bot {name} in Live-modus na bevestiging.",
+      "activatePaperEffect": "Je activeert bot {name} in Paper-modus na bevestiging.",
       "updatesAfterConfirm": "Finn werkt pas iets bij nadat jij expliciet bevestigt welke voorgestelde stap door mag.",
       "noLiveTrades": "Er worden vanuit deze kaart geen live trades geplaatst. Gevoelige acties blijven review-first.",
       "afterConfirmation": "Na bevestigen geeft Finn een korte statusupdate en de eerstvolgende veilige stap.",

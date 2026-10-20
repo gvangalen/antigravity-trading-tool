@@ -3959,6 +3959,11 @@ function AIAssistantContent({
           }
         : null;
       const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
+      const requiresNamedTargetReview = [
+        "delete_setup", "delete_strategy", "delete_bot", "deactivate_bot",
+        "activate_paper_bot", "activate_live_bot",
+      ].includes(operationId);
+      const reviewedTargetName = immutableProposalState?.review_target_name || null;
       setMessages((prev) => retireEarlierFinnProposalCards(
         prev, streamId, verified?.proposal_id,
       ).map((message) => (
@@ -3981,8 +3986,12 @@ function AIAssistantContent({
               actionDraft: visibleActionDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id
-                && (operationId !== "create_bot" || verifiedBotStrategyName)),
-              confirmationSuspended: Boolean(verified?.proposal_id && operationId === "create_bot" && !verifiedBotStrategyName),
+                && (operationId !== "create_bot" || verifiedBotStrategyName)
+                && (!requiresNamedTargetReview || reviewedTargetName)),
+              confirmationSuspended: Boolean(verified?.proposal_id && (
+                (operationId === "create_bot" && !verifiedBotStrategyName)
+                || (requiresNamedTargetReview && !reviewedTargetName)
+              )),
               actions: verified?.proposal_id ? [{
                 type: "v2_proposal",
                 proposal_id: verified.proposal_id,
@@ -3995,6 +4004,7 @@ function AIAssistantContent({
                   conversation_id: projection?.conversation_id || run?.conversation_id || null,
                   run_id: runId,
                   operation_id: operationId || projection?.final_operation_id,
+                  review_target_name: reviewedTargetName,
                   name: actionDraft?.supplied_inputs?.name
                     || setupDraft?.supplied_inputs?.name
                     || projection?.action_result?.canonical_name
@@ -4488,7 +4498,15 @@ function AIAssistantContent({
           showSnackbar("Dit voorstel is niet meer bevestigbaar.", "info");
           return;
         }
-        const result = await confirmAndExecuteFinnV2Proposal(action.proposal_id);
+        const reviewedName = action.display_context?.review_target_name;
+        if (reviewedName && latestProposal.review_target_name !== reviewedName) {
+          retireProposalCards(new Set([action.proposal_id]));
+          showSnackbar("Dit voorstel verwijst niet meer naar dezelfde naam. Vraag FINN om een nieuw voorstel.", "info");
+          return;
+        }
+        const result = await confirmAndExecuteFinnV2Proposal(
+          action.proposal_id, reviewedName || latestProposal.review_target_name,
+        );
         const execution = result?.execution || {};
         if (!["succeeded", "already_executed"].includes(execution.status)) {
           throw new Error(publicFinnExecutionError(execution.error_codes?.[0]));
@@ -5239,8 +5257,13 @@ function AIAssistantContent({
     const isWatchlistAction = ["watchlist_add", "watchlist_remove"].includes(operationId);
     const isIndicatorAction = ["create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"].includes(operationId);
     const suppliedInputs = displayContext.supplied_inputs || {};
+    const namedTargetReview = [
+      "delete_setup", "delete_strategy", "delete_bot", "deactivate_bot",
+      "activate_paper_bot", "activate_live_bot",
+    ].includes(operationId);
+    const verifiedTargetName = namedTargetReview ? displayContext.review_target_name : null;
     const objectType = operationId.includes("strategy") ? at("draftCards.objectStrategy", "Strategie") : operationId.includes("bot") ? at("draftCards.objectBot", "Paper-bot") : operationId.includes("setup") ? at("draftCards.objectSetup", "Setup") : at("draftCards.objectProposal", "Voorstel");
-    const objectName = displayContext.name
+    const objectName = verifiedTargetName || displayContext.name
       || (operationId.includes("setup") ? activeSetup?.name : null)
       || (operationId.includes("strategy") ? displayContext.strategy_name || activeSetup?.strategy_name : null)
       || (operationId.includes("bot") ? displayContext.bot_name || activeBot?.name : null)
@@ -5253,7 +5276,7 @@ function AIAssistantContent({
     });
     const isDomainProposal = isUpdate || isDelete;
     const contextParts = [
-      displayContext.name,
+      verifiedTargetName || displayContext.name,
       displayContext.symbol,
       displayContext.timeframe,
       displayContext.safety_mode,
@@ -5310,7 +5333,7 @@ function AIAssistantContent({
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended || (namedTargetReview && !verifiedTargetName)} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? at("draftCards.delete", "Verwijderen") : at("draftCards.confirm", "Bevestigen")}
               </button>
             ))}
@@ -5336,7 +5359,11 @@ function AIAssistantContent({
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
             <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.impact}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-              {at("inlineAction.updatesAfterConfirm")}
+              {operationId === "activate_live_bot"
+                ? at("inlineAction.activateLiveEffect", "Je activeert bot {name} in Live-modus na bevestiging.", { name: verifiedTargetName })
+                : operationId === "activate_paper_bot"
+                  ? at("inlineAction.activatePaperEffect", "Je activeert bot {name} in Paper-modus na bevestiging.", { name: verifiedTargetName })
+                  : at("inlineAction.updatesAfterConfirm")}
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
@@ -5357,7 +5384,7 @@ function AIAssistantContent({
             <button
               key={`${action.type}-${action.id || index}`}
               onClick={() => handleExecuteAction(action)}
-              disabled={loading || executingAction}
+              disabled={loading || executingAction || message.confirmationSuspended || (namedTargetReview && !verifiedTargetName)}
               className={actionButtonStyles({
                 variant: "primary",
                 className: "w-full justify-center gap-2 px-4 py-3 rounded-xl text-[11px] tracking-widest shadow-sm",
