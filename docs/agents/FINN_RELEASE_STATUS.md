@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 2.0 agentuitfasering
+
+Phase: `LOCAL_IN_PROGRESS`, niet gedeployed. De aparte cutover-checkout verplaatst
+de deterministische botuitvoering uit `ai_agents`, laat web en mobiel
+V2-voorstellen via dezelfde eigenaargebonden lees-, publicatie-, bevestigings-
+en uitvoeringsroute afhandelen, en verwijdert de oude assistent-actie- en
+statusendpoints. De niet meer aangeroepen eerste-dashboardbriefingtaken zijn
+uit de onboarding-worker en queue-registratie gehaald; workerobservatie volgt
+nu de coachfeed- en rapportgeneratie. De gesprek-, score-, feed- en
+rapportbronnen blijven bestaan.
+
+Build-bewijs voor deze lokale stand: backend **3943 geslaagd, 3 bestaande
+skips**; webbuild, typecheck, i18n-lint, 15 i18n-tests en 27 commandchecks
+geslaagd; mobiele typecheck, 14 chattests, webbundle en lint met 0 errors
+geslaagd. De mobiele lintwaarschuwingen zijn bestaand. Nog open: dode
+Mission Control-code verwijderen, lokale actiecontractmatrix en echte
+Responses-proef opnieuw draaien, CI/deployment en onafhankelijke ingelogde
+web- en mobiele QA. Deze lokale stand is geen live-acceptatie.
+
 ## Weekreflectie voor alle gebruikers
 
 Phase: `LIVE_AWAITING_TRADE_FIXTURE_QA`. [PR #442](https://github.com/gvangalen/antigravity-trading-tool/pull/442) vervangt het rollende

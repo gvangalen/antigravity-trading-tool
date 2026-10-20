@@ -15945,27 +15945,15 @@ class FinnPlanService:
             behavioral_memory=behavioral_memory,
         )
 
-        mission_context = {}
-        if not lightweight_prompt:
-            try:
-                mission_context = await self.build_mission_control_response(user_id, {"page": "mission_control"})
-            except Exception:
-                mission_context = {}
-        portfolio_operating_system = (
-            (mission_context.get("analysis") or {}).get("portfolio_operating_system")
-            or mission_context.get("portfolio_operating_system")
-            or {}
+        portfolio_operating_system = self._portfolio_operating_system_contract(
+            daily_analysis={},
+            mission={"summary": {}, "plan_health": [], "portfolio_risk": {}, "workqueue": []},
+            priority_engine={},
+            memory={},
+            personal_performance=personal_performance,
+            trade_journal_intelligence=trade_journal_intelligence,
+            governance_events=governance_events,
         )
-        if not portfolio_operating_system:
-            portfolio_operating_system = self._portfolio_operating_system_contract(
-                daily_analysis={},
-                mission={"summary": {}, "plan_health": [], "portfolio_risk": {}, "workqueue": []},
-                priority_engine={},
-                memory={},
-                personal_performance=personal_performance,
-                trade_journal_intelligence=trade_journal_intelligence,
-                governance_events=governance_events,
-            )
 
         analysis = self._build_personal_coach_summary(
             query=query,

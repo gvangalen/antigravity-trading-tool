@@ -260,7 +260,6 @@ def test_completed_onboarding_queues_data_pipeline_without_briefing(monkeypatch)
         for key in ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")
     ])
     calls = []
-    monkeypatch.setattr(onboarding_task.enqueue_first_dashboard_briefing, "delay", lambda *a, **kw: calls.append(("briefing", a, kw)))
     monkeypatch.setattr(onboarding_task.run_onboarding_pipeline, "delay", lambda *a, **kw: calls.append(("pipeline", a, kw)))
     service = OnboardingService(repo)
 
@@ -277,10 +276,7 @@ def test_onboarding_does_not_dispatch_old_briefing(monkeypatch):
     ])
     calls = []
 
-    def fail_briefing(*args, **kwargs):
-        raise AssertionError("Old briefing must not be dispatched")
-
-    monkeypatch.setattr(onboarding_task.enqueue_first_dashboard_briefing, "delay", fail_briefing)
+    assert not hasattr(onboarding_task, "enqueue_first_dashboard_briefing")
     monkeypatch.setattr(onboarding_task.run_onboarding_pipeline, "delay", lambda user_id: calls.append(user_id))
 
     asyncio.run(OnboardingService(repo)._kickstart_user_pipeline(42))

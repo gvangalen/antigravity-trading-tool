@@ -227,8 +227,8 @@ def test_check_celery_includes_rate_limit_summary(monkeypatch):
         staticmethod(
             lambda: {
                 "worker-a": [
-                    "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing",
-                    "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+                    "backend.celery_task.store_daily_scores_task.generate_coach_feed_copy",
+                    "backend.celery_task.daily_report_task.generate_daily_report",
                 ]
             }
         ),
@@ -242,9 +242,9 @@ def test_check_celery_includes_rate_limit_summary(monkeypatch):
     assert result["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
     assert result["rate_limits_by_queue"]["portfolio"]["rate_limit"] is None
     assert result["registered_tasks"]["visible_worker_count"] == 1
-    assert result["registered_tasks"]["workers_with_first_dashboard_tasks"]["worker-a"] == [
-        "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing",
-        "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+    assert result["registered_tasks"]["workers_with_finn_generation_tasks"]["worker-a"] == [
+        "backend.celery_task.store_daily_scores_task.generate_coach_feed_copy",
+        "backend.celery_task.daily_report_task.generate_daily_report",
     ]
 
 

@@ -23,9 +23,9 @@ PM2_CELERY_WORKER_QUEUE_MAP = {
     "celery-worker-finn-interactive": ["finn_interactive"],
 }
 
-FIRST_DASHBOARD_TASK_NAMES = [
-    "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing",
-    "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+FINN_GENERATION_TASK_NAMES = [
+    "backend.celery_task.store_daily_scores_task.generate_coach_feed_copy",
+    "backend.celery_task.daily_report_task.generate_daily_report",
 ]
 
 # Celery broadcasts inspection replies over the broker. Keep one bounded
@@ -529,16 +529,16 @@ class SystemHealthService:
 
     @staticmethod
     def _registered_task_summary(registered_result: Dict[str, Any]) -> Dict[str, Any]:
-        workers_with_first_dashboard = {}
+        workers_with_finn_generation = {}
         for worker_name, task_names in (registered_result or {}).items():
             normalized = [str(task_name) for task_name in (task_names or [])]
-            matched = [task_name for task_name in normalized if task_name in FIRST_DASHBOARD_TASK_NAMES]
+            matched = [task_name for task_name in normalized if task_name in FINN_GENERATION_TASK_NAMES]
             if matched:
-                workers_with_first_dashboard[str(worker_name)] = matched
+                workers_with_finn_generation[str(worker_name)] = matched
         return {
-            "required_tasks": list(FIRST_DASHBOARD_TASK_NAMES),
-            "workers_with_first_dashboard_tasks": workers_with_first_dashboard,
-            "visible_worker_count": len(workers_with_first_dashboard),
+            "required_tasks": list(FINN_GENERATION_TASK_NAMES),
+            "workers_with_finn_generation_tasks": workers_with_finn_generation,
+            "visible_worker_count": len(workers_with_finn_generation),
         }
 
     @staticmethod
