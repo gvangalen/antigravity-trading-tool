@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 agentuitfasering
 
-Phase: `LIVE_QA_PARTIAL_FOLLOW_UP_LOCAL_READY`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
+Phase: `LIVE_AWAITING_FOCUSED_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
 is gemerged als product-SHA `191c1199b6129c8feb305657e7d3483d8eef4048`.
 Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470300165)
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470689636)
@@ -90,7 +90,15 @@ adaptertests **19/19** (artifact SHA-256
 De echte Luna/Responses-regressie slaagde **109/109** op operatie en velden,
 met nul provider-, schema-, timeout-, parse- of validatiefouten (artifact
 SHA-256 `188a109b55f1033314276c5785615d9a8e8b6c0d81686749b94104a523511877`).
-Deze vervolgkandidaat is nog niet gedeployed of onafhankelijk live herkeurd.
+[PR #454](https://github.com/gvangalen/antigravity-trading-tool/pull/454)
+is gemerged als `971ebc5b1dd4452ee44ee57c56f5443c9f854de4`.
+Alle vijf PR- en [main-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39476383389)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39476766922)
+slaagde; daarna gaven publieke backend-health en frontend-buildinfo ieder
+HTTP 200 en exact die SHA. Deze statuswijziging krijgt zelf een nieuwe SHA;
+de uiteindelijke runtime-identiteit moet opnieuw worden geverifieerd voordat
+de bestaande QA Agent de gerichte live herkeuring uitvoert. De
+herstelbatch is nog niet onafhankelijk live afgetekend.
 
 ## Weekreflectie voor alle gebruikers
 
