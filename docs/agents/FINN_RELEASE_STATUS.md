@@ -6,9 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Agentuitfasering: laatste webopruiming en nieuwe-gebruiker QA
 
-Phase: `LOCAL_VALIDATION_IN_PROGRESS`, nog niet gedeployed. Productie meldt op
-20 oktober 2026 voor backend en frontend HTTP 200 en SHA
-`52ef2159338ba360932ebe7fcd2d578657a9adab`. De bestaande onafhankelijke
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #464](https://github.com/gvangalen/antigravity-trading-tool/pull/464)
+is gemerged als product-SHA `0b3458bfd187509a2227077d439904fb3cdf6ce5`.
+Alle vijf [PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39498460315)
+en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39498894735)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39499249351)
+slaagde; daarna gaven backend-health en frontend-buildinfo op 20 oktober 2026
+ieder HTTP 200 en exact die SHA. Een eerdere overlappende deployrun voor de
+voorafgaande capaciteitcommit faalde terecht op een SHA-mismatch en is door
+de succesvolle run hierboven opgevolgd. De bestaande onafhankelijke
 QA-agent testte de eerdere release `b248f0dd2bc12db73d2bd46cbabaa55a1463d1d1`:
 de vijf gerichte FINN/Paper/onboarding-paden werkten, maar een eerste
 profielopslag voor een nieuw account kreeg eenmalig HTTP 500. Een herhaling
@@ -16,7 +22,7 @@ slaagde. De opgeslagen Mijn Plan-kaart noemde het strategiebedrag zonder
 valuta of uitvoeringsbetekenis; de Nederlandse onboarding-samenvatting toonde
 Engelse indicatornamen. De nieuwe-gebruikerroute is daarom niet geaccepteerd.
 
-De huidige lokale kandidaat verwijdert dode Mission Control/Today-presentatie
+De live kandidaat verwijdert dode Mission Control/Today-presentatie
 en zijn oude briefingcache uit de webchat. De actieve FINN 2.0-chat,
 voorstelkaarten, coachfeed en gesprekstoestand blijven bestaan. Mijn Plan
 labelt een strategiebedrag als bedrag per uitvoering met euroteken; de
@@ -47,7 +53,10 @@ moderate Next.js-advisory. De nieuwe main-commit verandert de gedeelde
 werkruimtegegevensroute, maar geen FINN-providerselectiecode. De gecombineerde
 actiematrix slaagde **16/16 contracten en 19/19 adaptertests** (artifact
 SHA-256 `4746e7b508d9462115a6101cf857406c571b455e723d2134ddbf23e140e667e0`).
-Deze kandidaat is nog niet live of onafhankelijk geaccepteerd.
+De ingelogde nieuwe-gebruikerhertest is nog niet onafhankelijk afgerond.
+Een statusdocumentatiecommit verandert opnieuw de deploy-SHA; verifieer
+vóór QA beide publieke identiteiten en gebruik uitsluitend die SHA voor de
+ingelogde hertest.
 
 ## Nieuwe-gebruiker QA-herstel na agentuitfasering
 
