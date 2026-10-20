@@ -4,9 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-tradereview: veldspecifieke diagnose (21 oktober 2026)
+
+Phase: `LOCAL_DIAGNOSTIC_CANDIDATE`, nog niet gedeployed. [PR #475](https://github.com/gvangalen/antigravity-trading-tool/pull/475)
+is op product-SHA `a7445f2344426424fc758bf5ea58b7a6d4ec92cb` live gezet.
+Alle vijf PR- en main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39515842618)
+slaagden; publieke backend-health en frontend-buildinfo gaven beide HTTP 200
+en exact die SHA. De bestaande onafhankelijke QA-agent herhaalde het beschermde
+profiel in [run 39516106734](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39516106734).
+Er werd nu exact één eigenaargebonden gesloten Paper-dossier gevonden, maar
+de gecombineerde dossiercontrole gaf `closed_paper_review_dossier_incomplete`.
+QA-status `INCOMPLETE`, verdict `NOT_ACCEPTED`; het gesaniteerde rapport heeft
+SHA-256 `dde6afd6abb449d0badcf0d5699712140a12e98c2fe052c9ed81d7c822ac2c1b`.
+Twee fixture-uitvoeringen, nul Live-trading-calls en nul live-botactivaties
+zijn gemeten. Welke dossiercontrole faalde is uit dit artifact niet vast te
+stellen. De lokale diagnosekandidaat meldt daarom alleen de namen van de
+falende velden en de beperkte analysestatus; geen tradebedragen of inhoud.
+Gerichte diagnose-regressie **5/5** en root backend **3570 geslaagd,
+3 bestaande skips**. De productselector, uitvoeringsroute en providerclient
+zijn ongewijzigd ten opzichte van `a7445f2`; de daar gemeten 16/16
+actiematrix, 19/19 adapters en echte Responses 20/20 + 109/109 blijven het
+bewijs voor die routes. Nieuwe onafhankelijke QA moet het specifieke
+ontbrekende dossieronderdeel nog vaststellen.
+
 ## Gesloten Paper-tradereview: beschermde projectie (21 oktober 2026)
 
-Phase: `PR_CI_PENDING`, nog niet gedeployed. Kandidaatbranch
+Phase: `LIVE_QA_NOT_ACCEPTED`. Kandidaatbranch
 `codex/closed-paper-review-projection`, codecommit `fabcbf10d` en
 [PR #475](https://github.com/gvangalen/antigravity-trading-tool/pull/475).
 Onafhankelijke QA op
