@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Nieuwe-gebruiker QA-herstel na agentuitfasering
+
+Phase: `LOCAL_VALIDATION`. De huidige publieke backend en frontend gaven op
+20 oktober 2026 beide HTTP 200 en SHA
+`1f7077ea179bbf1ef0887be4605d731df73af880`. Onafhankelijke QA heeft op
+die SHA de feedvolgorde na refresh bevestigd, maar de bredere nieuwe-gebruiker-
+route nog niet geaccepteerd. De concrete bevindingen waren een niet-duurzame
+`not_due`-uitleg na een Paper-beoordeling, een onterecht ontbrekende exchange
+in Paper-onboarding, een irrelevante historie-eis bij RSI en een slecht
+leesbaar bedragveld. Een contextmelding verwees bij een DCA-plan bovendien
+naar een aparte instapregel.
+
+De lokale kandidaat `codex/finn-new-user-qa-repairs` projecteert alleen voor
+bevestigde DCA-bedragregels de opgeslagen planning naast de botstatus. Dit
+gebruikt dezelfde `dca_due_on_date`-regel als de Paper-engine en maakt na
+refresh zichtbaar dat een aankoop op de huidige datum niet gepland is; het
+maakt geen botbeslissing of order. Paper-onboarding vereist geen exchange meer,
+de RSI-verdieping toont de brondagenrij alleen waar die geschiedenisregel
+werkelijk geldt, en het strategiebedrag heeft een leesbaar euro-label. De
+feedtekst veronderstelt geen afzonderlijke instapregel meer. Twee niet
+aangeroepen oude UI-wrappers zijn verwijderd; de actieve FINN-chat blijft.
+
+Gemeten lokale controles op deze code: root backend-suite **3524 geslaagd, 3
+bestaande skips**; gerichte bot- en onboardingtests **98/98**; feed- en
+financiële-tooltests **29/29**. Webbuild, typecheck, i18n-lint, 15 i18n-tests,
+27 commandtests, 8 voorsteltests en `audit:high` slaagden; de audit meldt
+alleen een bestaande moderate Next.js-advisory. Mobiele typecheck, 16
+chattests en web-, iOS- en Android-Expo-bundels slaagden; lint had nul errors
+en 110 bestaande waarschuwingen. De geïsoleerde lokale API/Celery-matrix op
+de definitieve backendcode slaagde **16/16**, zonder productieverbindingen,
+brokerorders, live bots of live trading calls; artifact SHA-256
+`b9627fe435f55da47e7e064d14a85039b5808e87c8c32f97b7a135d13910a19b`.
+De echte Luna/Responses-ontwikkel- en regressiesets worden op de definitieve
+backendcode herhaald. Dit is geen live acceptatie of deployment van deze
+kandidaat.
+
 ## Multi-user capacity hardening candidate
 
 Phase: `LOCAL_GATES_PASSED_AWAITING_REVIEW`. Draft [PR #453](https://github.com/gvangalen/antigravity-trading-tool/pull/453)

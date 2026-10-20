@@ -2289,6 +2289,8 @@
       "legacyEnvironmentHint": "Bei einigen Orders wurde Paper oder Live nicht gespeichert. Die Umgebung bleibt unbekannt; die aktuelle Bot-Einstellung belegt nicht, wo diese Order ausgeführt wurde.",
       "legacyEnvironment": "Nicht erfasst",
       "scheduledDcaReason": "Der regelmäßige Kaufbetrag wurde aus dem bestätigten Plan gewählt.",
+      "dcaNotDueTitle": "Heute ist kein DCA-Kauf geplant",
+      "dcaNotDueBody": "Der nächste Kauf nach diesem Plan ist für den {date} vorgesehen. Eine heutige Prüfung löst keine Paper-Order aus.",
       "date": "Datum",
       "bot": "Bot",
       "trade": "Trade",

@@ -2273,6 +2273,8 @@
       "legacyEnvironmentHint": "Voor sommige orders is Paper of Live niet vastgelegd. We tonen dit als onbekend; de huidige botinstelling bewijst de omgeving van die order niet.",
       "legacyEnvironment": "Niet vastgelegd",
       "scheduledDcaReason": "Het periodieke aankoopbedrag is gekozen volgens het bevestigde plan.",
+      "dcaNotDueTitle": "Vandaag geen gepland DCA-moment",
+      "dcaNotDueBody": "Volgens deze setup is de volgende aankoop gepland op {date}. Een beoordeling vandaag maakt geen Paper-order.",
       "date": "Datum",
       "bot": "Bot",
       "trade": "Trade",

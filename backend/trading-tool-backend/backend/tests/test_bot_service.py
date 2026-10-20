@@ -1,12 +1,14 @@
 import asyncio
 import json
+from decimal import Decimal
 from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from datetime import date, datetime, timedelta, timezone
 
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema, BotManualOrderSchema
-from backend.services.bot_service import BotService
+from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
+from backend.services.bot_service import BotService, _dca_schedule_status
 
 
 def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
@@ -1660,6 +1662,32 @@ def test_bot_contract_exposes_consistent_top_level_ids_and_nested_strategy():
     assert contract["budget"]["total_eur"] == 1000
 
 
+def test_dca_schedule_status_uses_saved_weekday_without_creating_a_decision():
+    setup = {"setup_type": "dca", "dca_frequency": "weekly", "dca_day": "5"}
+    confirmed_fixed = {"execution_mode": "fixed", "base_amount": 80, "decision_curve": None}
+    assert _dca_schedule_status(setup, date(2026, 10, 20), confirmed_fixed) == {
+        "as_of_date": "2026-10-20",
+        "due_today": False,
+        "next_due_date": "2026-10-23",
+    }
+    assert _dca_schedule_status(setup, date(2026, 10, 23), confirmed_fixed)["due_today"] is True
+    assert _dca_schedule_status(setup, date(2026, 10, 20), {
+        **confirmed_fixed, "base_amount": Decimal("80.00"),
+    })["next_due_date"] == "2026-10-23"
+    assert _dca_schedule_status(setup, date(2026, 10, 20), {
+        "execution_mode": "custom", "base_amount": 80, "decision_curve": None,
+    }) is None
+    _, smart = split_confirmed_dca_plan({
+        "name": "BTC Smart", "symbol": "BTC", "setup_type": "dca", "timeframe": "1D",
+        "dca_frequency": "weekly", "dca_day": "friday", "dca_amount_mode": "score_bands",
+        "base_amount": 80, "score_source": "benchmark_score", "low_threshold": 40,
+        "high_threshold": 70, "low_score_percent": 50, "mid_score_percent": 100,
+        "high_score_percent": 150,
+    })
+    assert _dca_schedule_status(setup, date(2026, 10, 20), smart)["next_due_date"] == "2026-10-23"
+    assert _dca_schedule_status({"setup_type": "trade"}, date(2026, 10, 20), confirmed_fixed) is None
+
+
 def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
     class Repo:
         async def get_bot_configs(self, user_id):
@@ -1668,6 +1696,8 @@ def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
                 "id": 9, "name": "ETH Paper", "is_active": True, "is_live": False,
                 "mode": "manual", "cadence": "daily", "risk_profile": "balanced",
                 "strategy_id": 42, "strategy_name": "ETH Strategy", "setup_type": "dca",
+                "dca_amount_semantics": None, "execution_mode": "fixed",
+                "base_amount": 25, "decision_curve": None,
                 "setup_id": 5, "setup_name": "ETH DCA", "symbol": "ETH",
                 "timeframe": "1W", "setup_timeframe": "1D",
                 "dca_frequency": "monthly", "dca_day": None, "dca_month_day": 5,
@@ -1688,6 +1718,7 @@ def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
     assert bot["strategy"]["setup"]["dca_frequency"] == "monthly"
     assert bot["strategy"]["setup"]["dca_month_day"] == 5
     assert bot["paper_initial_cash_eur"] == 25
+    assert bot["dca_schedule_status"]["next_due_date"]
 
 
 def test_bot_update_pressure_event_detects_budget_live_and_mode_risk():

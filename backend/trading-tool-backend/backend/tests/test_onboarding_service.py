@@ -328,6 +328,7 @@ def test_status_marks_automation_complete_without_exchange_for_v1_onboarding():
     status = asyncio.run(service.get_status_dict(user_id=5))
 
     assert status.phases_completed["automation"] is True
+    assert status.phase_missing["automation"] == []
     assert status.phases_completed["complete"] is True
     assert status.current_phase == "complete"
     assert status.next_route == "/dashboard?symbol=BTC"

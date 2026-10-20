@@ -124,9 +124,9 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
     if focus == "context":
         context_bodies = {
             "plan_match": {
-                "nl": f"De opgeslagen scoregrenzen van {name} passen bij de gemeten benchmark. Controleer je aparte instapregel; dit is geen instapsignaal.",
-                "en": f"The saved score bounds for {name} match the measured benchmark. Check your separate entry rule; this is not an entry signal.",
-                "de": f"Die gespeicherten Scoregrenzen für {name} passen zur gemessenen Benchmark. Prüfe deine separate Einstiegsregel; dies ist kein Einstiegssignal.",
+                "nl": f"De opgeslagen scoregrenzen van {name} passen bij de gemeten benchmark. Bekijk wat dit voor je hele plan betekent; dit is geen instapsignaal.",
+                "en": f"The saved score bounds for {name} match the measured benchmark. Review what this means for your full plan; this is not an entry signal.",
+                "de": f"Die gespeicherten Scoregrenzen für {name} passen zur gemessenen Benchmark. Prüfe, was dies für deinen gesamten Plan bedeutet; dies ist kein Einstiegssignal.",
             },
             "data_blocked": {
                 "nl": f"Voor {name} kan FINN je planvoorwaarden nu niet toetsen omdat complete, actuele scores ontbreken.",

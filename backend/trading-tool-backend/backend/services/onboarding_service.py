@@ -252,7 +252,6 @@ class OnboardingService:
             "automation": [
                 token
                 for token, done in [
-                    ("exchange_connection", inferred_state.get("has_exchange")),
                     ("bot", status_kwargs.get("has_bot")),
                 ]
                 if not done
