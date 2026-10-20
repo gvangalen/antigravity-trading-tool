@@ -38,6 +38,17 @@ zonder provider-, schema-, parse- of validatiefout (artifact SHA-256
 Er was geen productieverbinding, Live-order of
 Live-botactivatie in de lokale actiematrix.
 
+Na samenvoeging met `origin/main` op
+`52ef2159338ba360932ebe7fcd2d578657a9adab` slaagde de volledige
+backend-suite opnieuw met **3552 geslaagd, 3 bestaande skips**. De webbuild,
+typecheck, i18n-lint, 15 i18n-tests, 27 commandtests, 8 voorsteltests,
+9 setuptests en `audit:high` slaagden opnieuw; de audit noemt één bestaande
+moderate Next.js-advisory. De nieuwe main-commit verandert de gedeelde
+werkruimtegegevensroute, maar geen FINN-providerselectiecode. De gecombineerde
+actiematrix slaagde **16/16 contracten en 19/19 adaptertests** (artifact
+SHA-256 `4746e7b508d9462115a6101cf857406c571b455e723d2134ddbf23e140e667e0`).
+Deze kandidaat is nog niet live of onafhankelijk geaccepteerd.
+
 ## Nieuwe-gebruiker QA-herstel na agentuitfasering
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De publieke backend en frontend gaven op
