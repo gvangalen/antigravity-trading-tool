@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 agentuitfasering
 
-Phase: `LOCAL_FEED_REPAIR_AWAITING_CI`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
+Phase: `LIVE_FEED_REPAIR_AWAITING_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
 is gemerged als product-SHA `191c1199b6129c8feb305657e7d3483d8eef4048`.
 Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470300165)
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470689636)
@@ -124,6 +124,14 @@ Backendactiecontracten, score- en uitvoeringscode en Responses-adapter zijn
 ongewijzigd sinds de hierboven gemeten 3523 backendtests, 16/16 workeracties,
 19/19 adaptertests en 109/109 echte-providerregressie. Deze kandidaat wijzigt
 uitsluitend welk bestaand API-tijdveld web en mobiel tonen.
+[PR #456](https://github.com/gvangalen/antigravity-trading-tool/pull/456)
+is gemerged als `1cf720404d79c7f31220b6a58ecffe4b2b29c8e3`.
+Alle vijf PR-CI-jobs en alle vijf [main-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39479585377)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39479993288)
+slaagde; daarna gaven publieke backend-health en frontend-buildinfo ieder
+HTTP 200 en exact die SHA. Deze statuscommit krijgt zelf een nieuwe SHA;
+Build moet daarvan opnieuw de CI-, deployment- en publieke identiteit
+controleren voordat de bestaande QA Agent een gericht feedverdict geeft.
 
 ## Weekreflectie voor alle gebruikers
 
