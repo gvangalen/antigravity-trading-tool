@@ -2,13 +2,14 @@
 
 import { useEffect } from "react";
 import { CheckCircle2, ArrowRight, LayoutDashboard, FileText, Sparkles } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useTranslation();
   const { activeAsset, finish, saving, error } = useOnboarding();
 
@@ -31,7 +32,8 @@ export default function OnboardingCompletePage() {
     });
 
     if (await finish()) {
-      router.push(activeAsset ? `/dashboard?symbol=${encodeURIComponent(activeAsset)}` : "/dashboard");
+      const completedSymbol = String(searchParams.get("symbol") || activeAsset || "").trim().toUpperCase();
+      router.push(completedSymbol ? `/dashboard?symbol=${encodeURIComponent(completedSymbol)}` : "/dashboard");
     }
   };
 

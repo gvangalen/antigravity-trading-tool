@@ -1,8 +1,8 @@
 # 1000 active users: implementation and release plan
 
 Baseline checked on 2026-10-20: the production backend and frontend both report
-`e26a1b4d049a1aa57bd19f96503e2b79155fbe99`. That commit records the
-FINN V2 cutover deployment; the product code baseline is its parent `191c1199`.
+`2664fe1fb675f226e0dd4e627d3c8995f132a87b`. This includes the recent
+FINN cutover QA repair. The capacity candidate includes that `main` revision.
 The production ecosystem configuration records worker OOMs from an earlier
 multi-process layout on a 1 GB host. A read-only SSH check on 2026-10-20 of
 the host serving the current production SHA found 4 vCPU and 8,125,916 KiB
@@ -12,14 +12,16 @@ online compact-profile processes. These point-in-time observations establish
 that the current host is larger than the historical one; they do not prove
 capacity under load.
 
-The clean `active-users-main` worktree contains the Release 1 code changes,
+The isolated `active-users-main` worktree contains the Release 1 code changes,
 cluster metrics, a read-only load harness, and database pool reductions. The
-backend suite passed 3529 tests with 3 skips; candidate CI passed all five
-jobs. The isolated FINN action matrix passed 16/16 contracts and 19/19
-adapter tests; real-provider selector development and regression passed
-20/20 and 109/109 cases. See `docs/agents/FINN_RELEASE_STATUS.md` for artifact
-hashes. These changes are not deployed or capacity-proven. The live environment
-has no 1000-account fixture file yet.
+combined backend suite passed 3530 tests with 3 skips. The combined frontend
+build, typecheck, focused tests and production audit passed. The isolated FINN
+action matrix passed 16/16 contracts and 19/19 adapter tests after the merge;
+real-provider selector development and regression passed 20/20 and 109/109
+cases on unchanged selector code. The pre-merge candidate CI passed all five
+jobs; combined-commit CI is pending. See `docs/agents/FINN_RELEASE_STATUS.md`
+for artifact hashes. These changes are not deployed or capacity-proven. The
+live environment has no 1000-account fixture file yet.
 
 ## Release 1: correctness on the current main branch
 

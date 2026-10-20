@@ -88,7 +88,9 @@ function AutomationStep() {
 
   const handleContinue = () => {
     setContinuing(true);
-    router.push("/onboarding/complete");
+    router.push(symbol
+      ? `/onboarding/complete?symbol=${encodeURIComponent(symbol)}`
+      : "/onboarding/complete");
   };
 
   return (

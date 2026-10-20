@@ -1772,6 +1772,7 @@ def run_trading_bot_execution(
 
 
         results = []
+        skip_reasons = {}
         touched_bot_ids = []
         price_cache = {}
 
@@ -1875,6 +1876,7 @@ def run_trading_bot_execution(
                 from backend.domain.finn_dca_plan_contract import dca_due_on_date
 
                 if not dca_due_on_date(bot, report_date):
+                    skip_reasons[bot["bot_id"]] = "not_due"
                     continue
                 with conn.cursor() as cur:
                     # Serialize runs for this owner and bot until the paper
@@ -1891,6 +1893,7 @@ def run_trading_bot_execution(
                         (user_id, bot["bot_id"], report_date),
                     )
                     if cur.fetchone():
+                        skip_reasons[bot["bot_id"]] = "already_executed"
                         continue
 
             if setup_payload.get("symbol"):
@@ -2181,6 +2184,7 @@ def run_trading_bot_execution(
             "bots": len(bots),
             "decisions": results,
             "bot_ids": touched_bot_ids,
+            "skip_reasons": skip_reasons,
         }
 
     except Exception as e:

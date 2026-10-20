@@ -389,7 +389,7 @@ class FinnCoachFeedService:
                     WHERE p.id=finn_coach_feed_items.subject_id
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
-            ORDER BY priority DESC, updated_at DESC LIMIT :limit
+            ORDER BY created_at DESC, priority DESC, id DESC LIMIT :limit
         """), {"user_id": user_id, "history": history, "limit": min(max(limit, 1), 100)})
         return [self._serialize(dict(row), locale) for row in result.mappings().all()]
 

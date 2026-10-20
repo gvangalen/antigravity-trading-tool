@@ -2313,10 +2313,13 @@ class BotService:
                 raise HTTPException(409, "Bot is niet meer actief als Paper")
             raise HTTPException(502, "Botbeoordeling kon niet worden afgerond")
         decisions = result.get("decisions") or []
+        skip_reasons = result.get("skip_reasons") or {}
+        skip_reason = skip_reasons.get(bot_id) or skip_reasons.get(str(bot_id))
         execution_statuses = [str(row.get("execution_status") or "") for row in decisions]
         return {
             "ok": True, "bot_id": bot_id, "date": str(report_date),
             "generated": bool(decisions),
+            "skip_reason": skip_reason if not decisions and skip_reason in {"not_due", "already_executed"} else None,
             "paper_order_filled": any(status == "filled" for status in execution_statuses),
             "execution_failed": any(status.startswith("failed:") for status in execution_statuses),
             "decision_ids": [row.get("decision_id") for row in decisions if row.get("decision_id") is not None],
