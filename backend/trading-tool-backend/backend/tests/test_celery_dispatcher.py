@@ -325,3 +325,17 @@ def test_dispatcher_defers_remaining_users_at_capacity_and_resumes(monkeypatch):
     assert third["enqueued"] == 1
     assert third["deferred"] == 0
     assert [item["kwargs"]["user_id"] for item in queued] == [1, 2, 3, 4, 5]
+
+
+def test_continuation_remains_durable_after_long_backlog(monkeypatch):
+    import backend.celery_task.dispatcher as dispatcher
+
+    scheduled = []
+    monkeypatch.setattr(dispatcher.dispatch_for_all_users, "apply_async", lambda **kwargs: scheduled.append(kwargs))
+    assert dispatcher._schedule_continuation(
+        task_name="demo.task", active_only=True, batch_size=50, max_spread_seconds=60,
+        dispatch_window_seconds=900, backlog_limit=400, start_after_user_id=90,
+        continuation_attempt=120, window_bucket=1,
+    )
+    assert scheduled[0]["kwargs"]["continuation_attempt"] == 121
+    assert scheduled[0]["kwargs"]["start_after_user_id"] == 90

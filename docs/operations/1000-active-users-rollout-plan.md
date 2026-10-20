@@ -61,6 +61,10 @@ read-heavy stages at 100, 500, and 1000 simultaneous users. Record route p50,
 p95, 5xx and 429 counts, queue depth and age, RSS and CPU, PostgreSQL
 connections and slow queries, and provider errors. Abort escalation on rising
 error or queue-age trends. A 1000-active-user claim requires a sustained stage
-with agreed SLOs, no cross-account response, no unintended trade writes, and
-the independent runtime verdict. The load harness is `ops/load/active_users.py`;
+meeting these provisional gates: workspace p95 at most 2 seconds, FINN-state
+and trade-review reads p95 at most 1 second, under 0.1% 5xx responses, no
+normal-traffic 429s, no growing queue age, and at least 20 database connections
+of headroom. Confirm the thresholds with product/operations before the test.
+There must be no cross-account response or unintended trade write, and the
+independent runtime verdict must pass. The load harness is `ops/load/active_users.py`;
 tokens remain in a local file outside Git.

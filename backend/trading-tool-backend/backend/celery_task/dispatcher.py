@@ -119,9 +119,9 @@ def _schedule_continuation(
     dispatch_window_seconds: int, backlog_limit: int, start_after_user_id: int,
     continuation_attempt: int, window_bucket: int,
 ) -> bool:
-    if continuation_attempt >= 120:
-        logger.error("Dispatcher continuation exhausted task=%s after_user=%s", task_name, start_after_user_id)
-        return False
+    if continuation_attempt and continuation_attempt % 120 == 0:
+        logger.error("Dispatcher wave still backlogged task=%s after_user=%s retries=%s",
+                     task_name, start_after_user_id, continuation_attempt)
     dispatch_for_all_users.apply_async(
         kwargs={
             "task_name": task_name,
