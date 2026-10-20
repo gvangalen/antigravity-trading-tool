@@ -4,9 +4,8 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Primary assistant limits. Authenticated Finn users get enough room for
@@ -23,15 +22,12 @@ LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
 
 from backend.infrastructure.database import async_session_factory, get_db
 from backend.utils.auth_utils import get_current_user
-from backend.infrastructure.models import ChatSession, ChatMessage
 from backend.schemas.assistant_schema import (
     AssistantAnalyticsEvent,
     AssistantChatRequest,
     AssistantChatResponse,
     AssistantPreferences,
     AssistantPreferenceUpdate,
-    ChatSessionResponse,
-    ChatSessionDetailResponse,
 )
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.locale_service import resolve_locale
@@ -380,105 +376,6 @@ async def assistant_chat(
         )
         logger.error(f"❌ AI Assistant Chat Error: {e} | Trace: {trace_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Assistant")
-
-# =====================================================
-# Chat Sessions REST endpoints
-# =====================================================
-
-@router.get("/assistant/sessions", response_model=List[ChatSessionResponse])
-async def list_chat_sessions(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        # Fetch sessions ordered by updated_at desc
-        stmt = select(ChatSession).where(ChatSession.user_id == user_id).order_by(ChatSession.updated_at.desc())
-        res = await db.execute(stmt)
-        sessions = res.scalars().all()
-        return sessions
-    except Exception as e:
-        logger.exception("❌ Error opvragen chatsessies")
-        raise HTTPException(status_code=500, detail="Fout bij ophalen chatsessies")
-
-
-@router.api_route("/assistant/sessions/new", methods=["GET", "POST"], response_model=ChatSessionResponse)
-async def create_compat_chat_session(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        now = datetime.utcnow()
-        session = ChatSession(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            title="Nieuw FINN gesprek",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(session)
-        await db.commit()
-        await db.refresh(session)
-        return session
-    except Exception:
-        logger.exception("❌ Error aanmaken compat chatsessie")
-        raise HTTPException(status_code=500, detail="Fout bij aanmaken chatsessie")
-
-
-@router.get("/assistant/sessions/{session_id}", response_model=ChatSessionDetailResponse)
-async def get_chat_session_detail(
-    session_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        # Fetch session
-        stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
-        res = await db.execute(stmt)
-        session = res.scalars().first()
-        if not session:
-            raise HTTPException(status_code=404, detail="Chatsessie niet gevonden")
-        
-        # Fetch messages ordered chronologically
-        msg_stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
-        msg_res = await db.execute(msg_stmt)
-        messages = msg_res.scalars().all()
-        
-        return ChatSessionDetailResponse(session=session, messages=messages)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"❌ Error opvragen chatsessie {session_id}")
-        raise HTTPException(status_code=500, detail="Fout bij ophalen chatsessie details")
-
-
-@router.delete("/assistant/sessions/{session_id}")
-async def delete_chat_session(
-    session_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        # Verify ownership
-        stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
-        res = await db.execute(stmt)
-        session = res.scalars().first()
-        if not session:
-            raise HTTPException(status_code=404, detail="Chatsessie niet gevonden")
-        
-        # Delete session (will cascade delete messages due to Foreign Key ON DELETE CASCADE)
-        await db.delete(session)
-        await db.commit()
-        return {"status": "ok", "message": "Chathistorie succesvol gewist"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"❌ Error verwijderen chatsessie {session_id}")
-        raise HTTPException(status_code=500, detail="Fout bij verwijderen chatsessie")
-
 
 from fastapi.responses import StreamingResponse
 

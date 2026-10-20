@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from backend.api.ai_assistant_api import assistant_v2_get_proposal
+from backend.api.ai_assistant_api import assistant_v2_get_proposal, router as assistant_router
 from backend.schemas.finn_v2_proposal_review import requested_state_for_review
 
 
@@ -20,6 +20,12 @@ def test_proposal_lookup_is_account_scoped(monkeypatch):
         asyncio.run(assistant_v2_get_proposal("proposal-foreign", {"id": 9}, object()))
 
     assert exc.value.status_code == 404
+
+
+def test_legacy_chat_session_routes_are_retired():
+    paths = {route.path for route in assistant_router.routes}
+    assert not any(path.startswith("/assistant/sessions") for path in paths)
+    assert "/assistant/v2/proposals/{proposal_id}" in paths
 
 
 def test_proposal_summary_exposes_only_immutable_update_review_state(monkeypatch):

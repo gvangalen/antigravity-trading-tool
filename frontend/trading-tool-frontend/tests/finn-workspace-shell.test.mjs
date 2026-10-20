@@ -35,6 +35,9 @@ test("web confirmation uses the FINN V2 proposal contract without legacy action 
   assert.match(assistantSource, /confirmAndExecuteFinnV2Proposal\(action\.proposal_id\)/);
   assert.doesNotMatch(assistantSource, /executeAssistantAction|executePendingAction|fetchFinnState/);
   assert.doesNotMatch(assistantApiSource, /\/api\/assistant\/actions\/execute|\/api\/assistant\/finn\/state/);
+  assert.match(assistantSource, /getFinnV2ConversationDetail\(candidateId\)/);
+  assert.doesNotMatch(assistantSource, /getAssistantSessionDetail/);
+  assert.doesNotMatch(assistantApiSource, /\/api\/assistant\/sessions/);
 });
 
 test("feed discussion enters the persistent FINN panel with its event identity", () => {

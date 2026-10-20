@@ -136,18 +136,6 @@ export const updateAssistantPreferences = (preferences) => {
   });
 };
 
-export const getAssistantSessions = () => {
-  return fetchAuth(`/api/assistant/sessions`, {
-    method: 'GET',
-  });
-};
-
-export const getAssistantSessionDetail = (sessionId) => {
-  return fetchAuth(`/api/assistant/sessions/${encodeURIComponent(sessionId)}`, {
-    method: 'GET',
-  });
-};
-
 export const getFinnV2Conversations = () => fetchAuth(`/api/assistant/v2/conversations`, {
   method: 'GET',
 });
