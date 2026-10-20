@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
+from sqlalchemy.exc import DBAPIError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Primary assistant limits. Authenticated Finn users get enough room for
@@ -675,12 +676,35 @@ async def update_preferences(
     db: AsyncSession = Depends(get_db)
 ):
     user_repo = UserRepository(db)
-    existing_user = await user_repo.get_by_id(current_user["id"])
-    existing_preferences = getattr(existing_user, "ai_preferences", {}) or {}
-    old_profile = normalize_trader_profile_preferences(existing_preferences)
-    old_has_profile = has_trader_profile(old_profile)
     updates = {k: v for k, v in request.dict().items() if v is not None}
-    user = await user_repo.update_ai_preferences(current_user["id"], updates)
+    for attempt in range(2):
+        try:
+            existing_user = await user_repo.get_by_id(current_user["id"])
+            if existing_user is None:
+                raise HTTPException(status_code=404, detail="Gebruiker niet gevonden")
+            existing_preferences = getattr(existing_user, "ai_preferences", {}) or {}
+            old_profile = normalize_trader_profile_preferences(existing_preferences)
+            old_has_profile = has_trader_profile(old_profile)
+            user = await user_repo.update_ai_preferences(current_user["id"], updates)
+            if user is None:
+                raise HTTPException(status_code=404, detail="Gebruiker niet gevonden")
+            break
+        except (DBAPIError, SQLAlchemyTimeoutError) as exc:
+            sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", None)
+            transient = (
+                isinstance(exc, SQLAlchemyTimeoutError)
+                or bool(getattr(exc, "connection_invalidated", False))
+                or sqlstate in {"08003", "08006", "40001", "40P01", "53300", "57P03"}
+            )
+            if attempt or not transient:
+                raise
+            await db.rollback()
+            logger.warning(
+                "Retrying idempotent profile preference save after transient database error: %s %s",
+                type(exc).__name__, sqlstate or "unknown_sqlstate",
+            )
+            await asyncio.sleep(0.1)
+
     new_preferences = getattr(user, "ai_preferences", {}) or {}
     new_profile = normalize_trader_profile_preferences(new_preferences)
     new_has_profile = has_trader_profile(new_profile)

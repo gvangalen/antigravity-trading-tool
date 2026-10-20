@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Agentuitfasering: laatste webopruiming en nieuwe-gebruiker QA
+
+Phase: `LOCAL_VALIDATION_IN_PROGRESS`, nog niet gedeployed. Productie meldt op
+20 oktober 2026 voor backend en frontend HTTP 200 en SHA
+`52ef2159338ba360932ebe7fcd2d578657a9adab`. De bestaande onafhankelijke
+QA-agent testte de eerdere release `b248f0dd2bc12db73d2bd46cbabaa55a1463d1d1`:
+de vijf gerichte FINN/Paper/onboarding-paden werkten, maar een eerste
+profielopslag voor een nieuw account kreeg eenmalig HTTP 500. Een herhaling
+slaagde. De opgeslagen Mijn Plan-kaart noemde het strategiebedrag zonder
+valuta of uitvoeringsbetekenis; de Nederlandse onboarding-samenvatting toonde
+Engelse indicatornamen. De nieuwe-gebruikerroute is daarom niet geaccepteerd.
+
+De huidige lokale kandidaat verwijdert dode Mission Control/Today-presentatie
+en zijn oude briefingcache uit de webchat. De actieve FINN 2.0-chat,
+voorstelkaarten, coachfeed en gesprekstoestand blijven bestaan. Mijn Plan
+labelt een strategiebedrag als bedrag per uitvoering met euroteken; de
+onboarding-samenvatting gebruikt de gekozen taal. Bij profielopslag wordt
+uitsluitend een aantoonbaar tijdelijke SQLAlchemy-verbindings- of
+transactiefout éénmaal veilig herhaald. De oorzaak van de productie-HTTP 500
+is zonder servertrace niet bewezen; deze wijziging mag pas na onafhankelijke
+nieuwe-gebruiker QA als herstel worden beschouwd. De backend-suite telt
+**3551 geslaagd, 3 bestaande skips**; webbuild, typecheck, i18n-lint,
+i18n-/setup-/command-/voorsteltests en `audit:high` slaagden. De lokale
+FINN-actiematrix slaagde met **16/16 contracten en 19/19 adaptertests**
+(artifact SHA-256
+`608ec7ab91ee5201dc20903a8f3063da27da38f90c978c628144592c1e631ad0`).
+De echte `gpt-6-luna`/Responses-ontwikkelset slaagde **20/20** (artifact
+SHA-256 `6fa24409032f7f0a44d1ddb9672a3fce5daba19654d7f17dfe307edb0813e810`);
+de echte Responses-regressie slaagde **109/109** operatie- en veldmatches,
+zonder provider-, schema-, parse- of validatiefout (artifact SHA-256
+`a13a1a3f913e5bf19fad23588f662fde7dedb799b402a2162ef7011941f65048`).
+Er was geen productieverbinding, Live-order of
+Live-botactivatie in de lokale actiematrix.
+
+Na samenvoeging met `origin/main` op
+`52ef2159338ba360932ebe7fcd2d578657a9adab` slaagde de volledige
+backend-suite opnieuw met **3552 geslaagd, 3 bestaande skips**. De webbuild,
+typecheck, i18n-lint, 15 i18n-tests, 27 commandtests, 8 voorsteltests,
+9 setuptests en `audit:high` slaagden opnieuw; de audit noemt één bestaande
+moderate Next.js-advisory. De nieuwe main-commit verandert de gedeelde
+werkruimtegegevensroute, maar geen FINN-providerselectiecode. De gecombineerde
+actiematrix slaagde **16/16 contracten en 19/19 adaptertests** (artifact
+SHA-256 `4746e7b508d9462115a6101cf857406c571b455e723d2134ddbf23e140e667e0`).
+Deze kandidaat is nog niet live of onafhankelijk geaccepteerd.
+
 ## Nieuwe-gebruiker QA-herstel na agentuitfasering
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De publieke backend en frontend gaven op
