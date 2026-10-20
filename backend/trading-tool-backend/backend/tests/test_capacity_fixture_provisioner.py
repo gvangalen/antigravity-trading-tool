@@ -141,6 +141,38 @@ def test_capacity_load_operator_gate_requires_explicit_continue(monkeypatch):
     harness["require_operator_continue"]("500:120")
 
 
+def test_capacity_load_stops_active_stage_on_error_or_latency():
+    import asyncio
+    import time
+    from collections import defaultdict
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+
+    class FailingClient:
+        async def request(self, *_args, **_kwargs):
+            return SimpleNamespace(status_code=503)
+
+    async def check():
+        stop = asyncio.Event()
+        results = defaultdict(list)
+        await asyncio.wait_for(harness["virtual_user"](
+            FailingClient(), {"user_id": 42, "access_token": "fixture"},
+            time.monotonic() + 30, 10, None, results, stop,
+        ), timeout=1)
+        assert stop.is_set()
+        assert sum(map(len, results.values())) == 1
+
+        stop = asyncio.Event()
+        results = {"workspace": [(200, 250)] * 20}
+        await asyncio.wait_for(harness["monitor_stage"](
+            results, {"workspace": 200}, time.monotonic() + 30, stop,
+        ), timeout=3)
+        assert stop.is_set()
+
+    asyncio.run(check())
+
+
 def test_capacity_load_rejects_nonfinite_production_latency_gate(monkeypatch):
     import sys
 

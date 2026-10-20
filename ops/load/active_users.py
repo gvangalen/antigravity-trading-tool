@@ -50,13 +50,13 @@ def percentile(values, fraction):
     return round(values[min(len(values) - 1, max(0, int(len(values) * fraction + 0.999999) - 1))], 2)
 
 
-async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results):
+async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results, stop_event):
     rng = random.Random(fixture["user_id"])
     headers = {"Authorization": f"Bearer {fixture['access_token']}"}
     choices = list(ROUTES)
     if chat_budget is not None:
         choices.append(("finn_chat", "POST", "/api/assistant/chat", 1))
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and not stop_event.is_set():
         name, method, path, _ = rng.choices(choices, weights=[item[3] for item in choices])[0]
         if name == "finn_chat":
             if chat_budget["remaining"] <= 0:
@@ -74,7 +74,15 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
         except httpx.HTTPError:
             status = 0
         results[name].append((status, (time.perf_counter() - started) * 1000))
-        await asyncio.sleep(rng.uniform(think_seconds * 0.5, think_seconds * 1.5))
+        if not 200 <= status < 300:
+            stop_event.set()
+            break
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=rng.uniform(
+                think_seconds * 0.5, think_seconds * 1.5,
+            ))
+        except asyncio.TimeoutError:
+            pass
 
 
 def identity_matches(response, fixture):
@@ -145,6 +153,17 @@ def stage_exceeds_latency_limit(summary, limits):
     return exceeded
 
 
+async def monitor_stage(results, limits, deadline, stop_event):
+    """Stop an active stage once a measured route has a stable p95 breach."""
+    while not stop_event.is_set() and time.monotonic() < deadline:
+        await asyncio.sleep(min(2, max(0, deadline - time.monotonic())))
+        for name, limit in limits.items():
+            samples = results.get(name, ())
+            if len(samples) >= 20 and percentile([latency for _, latency in samples], 0.95) > limit:
+                stop_event.set()
+                return
+
+
 def require_operator_continue(next_stage):
     answer = input(f"Inspect host, DB and queue metrics. Type CONTINUE for {next_stage}: ")
     if answer.strip() != "CONTINUE":
@@ -163,11 +182,17 @@ async def run(args, fixtures):
                 raise ValueError("Each stage needs positive duration and one distinct fixture per active user")
             await verify_identity(client, fixtures[:users])
             results = defaultdict(list)
+            stop_event = asyncio.Event()
             deadline = time.monotonic() + seconds
-            await asyncio.gather(*(
-                virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results)
-                for fixture in fixtures[:users]
-            ))
+            monitor = asyncio.create_task(monitor_stage(results, args.p95_limits, deadline, stop_event))
+            try:
+                await asyncio.gather(*(
+                    virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results, stop_event)
+                    for fixture in fixtures[:users]
+                ))
+            finally:
+                monitor.cancel()
+                await asyncio.gather(monitor, return_exceptions=True)
             summary = report(f"{users} users / {seconds}s", results)
             if stage_has_blocking_errors(summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")

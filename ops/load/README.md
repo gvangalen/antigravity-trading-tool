@@ -32,7 +32,9 @@ limits; an operator must also inspect worker restarts, queue age, database
 headroom and host memory during each pause. A multi-stage production run
 requires an interactive terminal and the operator must type `CONTINUE` after
 each pause. The script refuses escalation if any route is unmeasured or exceeds
-its all-response p95 limit. It never submits orders. To include
+its all-response p95 limit. During a stage, any non-2xx response or timeout
+stops new requests immediately; a route with at least 20 samples above its
+p95 limit also stops the stage. Requests already in flight can finish. It never submits orders. To include
 controlled FINN chat, use separately approved accounts and add
 `--include-chat --max-chat-requests 50`; the provisioned capacity fixture tokens
 are restricted to four read routes and return 403 for chat. The script prints only
