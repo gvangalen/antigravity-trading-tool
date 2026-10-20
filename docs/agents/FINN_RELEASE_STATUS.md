@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Actuele uitkomst agentuitfasering en begeleide Analyse (20 oktober 2026)
+
+Phase: `DESKTOP_SCOPED_QA_ACCEPTED`, volledige productacceptatie blijft open.
+De FINN 2.0-chat is de enige actieve webcoach; de oude onboarding-agentketen
+en de onbereikbare Mission Control/Today-presentatie zijn uit de actieve
+webroute verwijderd. Scoreberekening, dataverzameling, rapportage,
+botuitvoering en trade-review blijven gespecialiseerde ondersteunende
+services, geen zelfstandige gesprekscoaches. De mobiele legacy-briefingvorm
+en native mobiele acceptatie zijn nog niet afgerond.
+
+Na [PR #466](https://github.com/gvangalen/antigravity-trading-tool/pull/466)
+is de taalwisselreparatie gemerged als `19ddf25faf4b71d40c7f0855f1b586f669e82ba7`.
+Alle vijf PR- en main-CI-controles en Auto Deploy slaagden. Backend en frontend
+gaven daarop HTTP 200 en dezelfde SHA. Een parallelle capaciteitsrelease
+wijzigde productie tijdens de eerste onafhankelijke QA-run naar
+`116f19e0aff8389b8c836546c8fc82774d451ec4`; een eenmalige chat-502
+viel samen met die wissel en werkte na handmatige retry. De oorzaak is niet
+bewezen. De bestaande QA-agent herhaalde daarna de gerichte desktoproute met
+een nieuw account op de stabiele `116f19e0` (backend/frontend vóór en na gelijk)
+en gaf `ACCEPTED` voor die scope: Prijs/DXY/RSI en de vervolgknop bleven na
+NL → EN → DE → NL, navigatie en refresh zichtbaar; vrijdag-DCA, een
+€80-strategie en een gepauzeerde Paper-bot werden correct gekoppeld. FINN
+las de opgeslagen setup-toelichting zonder 502 terug. Geen Live-order.
+
+Resterend: native mobiel was door een vergrendelde Mac niet testbaar; een
+positieve scoregestuurde Paper-beslissing, een gesloten tradereview,
+exchange-import en databasebrede duplicaatcontrole zijn niet door deze
+gerichte QA bewezen. Kleine zichtbare copyrest: de Nederlandse assetkaart
+toont na herladen “BTC · BTC · Market”; de plancontrole toont nog de
+technische range “Onder druk (26–45)”. Een Paper-bot zonder kassaldo heet
+in de lijst “Bot actief”, hoewel de details de beperking uitleggen.
+
 ## Begeleide Analyse: taalwissel verliest opgeslagen indicatoren
 
 Phase: `LOCAL_REPAIR_IN_VALIDATION`, nog niet gedeployed. Onafhankelijke
