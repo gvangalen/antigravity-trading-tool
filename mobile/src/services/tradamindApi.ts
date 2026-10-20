@@ -145,6 +145,7 @@ export type MobileCoachFeedItem = {
   evidence?: { subject?: string };
   status: 'unread' | 'read' | 'handled' | 'archived' | 'resolved';
   priority: number;
+  created_at: string;
   updated_at: string;
 };
 

@@ -34,7 +34,7 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss, onToggleHistory, 
             {item.symbol ? <Text style={styles.symbol}>{item.symbol}</Text> : null}
           </View>
           <Text style={styles.description}>{item.description}</Text>
-          <Text style={styles.time}>{new Date(item.updated_at).toLocaleString(language)}</Text>
+          <Text style={styles.time}>{new Date(item.created_at).toLocaleString(language)}</Text>
           {item.status === 'unread' || item.status === 'read' ? (
             <View style={styles.actions}>
               <Pressable onPress={async () => { await triggerHaptic('selection'); onDiscuss(item); }} accessibilityRole="button">

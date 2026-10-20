@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 agentuitfasering
 
-Phase: `LIVE_AWAITING_FOCUSED_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
+Phase: `LOCAL_FEED_REPAIR_AWAITING_CI`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
 is gemerged als product-SHA `191c1199b6129c8feb305657e7d3483d8eef4048`.
 Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470300165)
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470689636)
@@ -96,9 +96,34 @@ Alle vijf PR- en [main-CI-jobs](https://github.com/gvangalen/antigravity-trading
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39476766922)
 slaagde; daarna gaven publieke backend-health en frontend-buildinfo ieder
 HTTP 200 en exact die SHA. Deze statuswijziging krijgt zelf een nieuwe SHA;
-de uiteindelijke runtime-identiteit moet opnieuw worden geverifieerd voordat
-de bestaande QA Agent de gerichte live herkeuring uitvoert. De
-herstelbatch is nog niet onafhankelijk live afgetekend.
+de uiteindelijke runtime-identiteit moest opnieuw worden geverifieerd voor
+de gerichte live herkeuring. Het resultaat staat hieronder.
+
+De bestaande QA Agent herkeurde de definitieve document-SHA
+`2664fe1fb675f226e0dd4e627d3c8995f132a87b` ingelogd op productie.
+Backend en frontend toonden beide die SHA. De normale ETH-onboarding ging nu door
+naar `/dashboard?symbol=ETH`; een BTC-Paper-DCA buiten de vrijdagplanning gaf
+een specifieke `niet aan de beurt`-uitleg zonder nieuwe beslissing of order.
+FINN las de BTC-scores 40/20/40, benchmark 33, vrijdagcadans, €75 per uitvoering
+en €300 botlimiet correct terug. De feed bleef gedeeltelijk fout: de lijst
+staat op `created_at`, maar web en mobiel toonden `updated_at`; dat moment
+verandert bij lezen en bij het schrijven van de AI-tekst. Daardoor lijken de
+zichtbare datums niet aflopend. De afzonderlijke `already_executed`-tak, een
+positieve Paper-beslissing, nieuwe registratie en ingelogd mobiel zijn in die
+run niet afgetekend. Een contextloos geopende afrondpagina viel nog op de
+bestaande actieve asset terug; de normale ETH-overgang werkte.
+
+Vervolgkandidaat `codex/finn-agent-cutover-final`: de web- en mobiele feed
+tonen nu het `created_at`-moment dat de API ook voor de volgorde gebruikt.
+Webbuild, webtypecheck, 27 commandtests, 15 i18n-tests, 8 voorsteltests,
+i18n-lint en `audit:high` slaagden; de audit meldt één moderate Next.js-
+advisory. Mobiele typecheck, 16 chattests, web-, iOS- en Android-bundels en
+lint met nul errors (110 bestaande waarschuwingen) slaagden na `npm ci` in de
+geïsoleerde checkout. Dit is lokale validatie, geen nieuwe live-acceptatie.
+Backendactiecontracten, score- en uitvoeringscode en Responses-adapter zijn
+ongewijzigd sinds de hierboven gemeten 3523 backendtests, 16/16 workeracties,
+19/19 adaptertests en 109/109 echte-providerregressie. Deze kandidaat wijzigt
+uitsluitend welk bestaand API-tijdveld web en mobiel tonen.
 
 ## Weekreflectie voor alle gebruikers
 
