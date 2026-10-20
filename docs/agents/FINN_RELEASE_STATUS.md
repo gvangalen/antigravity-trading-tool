@@ -6,15 +6,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Nieuwe-gebruiker QA-herstel na agentuitfasering
 
-Phase: `LOCAL_VALIDATION`. De huidige publieke backend en frontend gaven op
-20 oktober 2026 beide HTTP 200 en SHA
-`1f7077ea179bbf1ef0887be4605d731df73af880`. Onafhankelijke QA heeft op
-die SHA de feedvolgorde na refresh bevestigd, maar de bredere nieuwe-gebruiker-
+Phase: `LOCAL_VALIDATION`. De publieke backend en frontend gaven op
+20 oktober 2026 na de capaciteitsrelease beide HTTP 200 en SHA
+`749391240369d9874a50e908c973fe77bd063b89`. Onafhankelijke QA heeft op
+de eerdere SHA `1f7077ea179bbf1ef0887be4605d731df73af880`
+de feedvolgorde na refresh bevestigd, maar de bredere nieuwe-gebruiker-
 route nog niet geaccepteerd. De concrete bevindingen waren een niet-duurzame
 `not_due`-uitleg na een Paper-beoordeling, een onterecht ontbrekende exchange
 in Paper-onboarding, een irrelevante historie-eis bij RSI en een slecht
 leesbaar bedragveld. Een contextmelding verwees bij een DCA-plan bovendien
 naar een aparte instapregel.
+
+De [Auto Deploy-run voor `749391240`](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39487592096)
+eindigde als failure ondanks de publiek zichtbare SHA. De log toont dat de
+productie-deep-healthcheck naar `staging-*`-queues keek. De daaropvolgende
+`main`-commit `2159c045c5cf071131078c2871502203dadaa5e7` herstelt de
+deploydoel-, topologie- en capaciteitswaarden ná het inlezen van de
+langlevende serverinstellingen. Een geslaagde Auto Deploy op die correctie is
+hier nog niet aangetoond.
 
 De lokale kandidaat `codex/finn-new-user-qa-repairs` projecteert alleen voor
 bevestigde DCA-bedragregels de opgeslagen planning naast de botstatus. Dit
@@ -26,19 +35,27 @@ werkelijk geldt, en het strategiebedrag heeft een leesbaar euro-label. De
 feedtekst veronderstelt geen afzonderlijke instapregel meer. Twee niet
 aangeroepen oude UI-wrappers zijn verwijderd; de actieve FINN-chat blijft.
 
-Gemeten lokale controles op deze code: root backend-suite **3524 geslaagd, 3
-bestaande skips**; gerichte bot- en onboardingtests **98/98**; feed- en
+Gemeten lokale controles na samenvoeging met de capaciteitsrelease:
+root backend-suite **3544 geslaagd, 3 bestaande skips**; gerichte bot- en
+onboardingtests **98/98**; feed- en
 financiële-tooltests **29/29**. Webbuild, typecheck, i18n-lint, 15 i18n-tests,
-27 commandtests, 8 voorsteltests en `audit:high` slaagden; de audit meldt
+27 commandtests, 8 voorsteltests, 9 setuptests en `audit:high` slaagden; de audit meldt
 alleen een bestaande moderate Next.js-advisory. Mobiele typecheck, 16
 chattests en web-, iOS- en Android-Expo-bundels slaagden; lint had nul errors
-en 110 bestaande waarschuwingen. De geïsoleerde lokale API/Celery-matrix op
-de definitieve backendcode slaagde **16/16**, zonder productieverbindingen,
+en 110 bestaande waarschuwingen. De geïsoleerde lokale API/Celery-matrix vóór
+de samenvoeging slaagde **16/16**, zonder productieverbindingen,
 brokerorders, live bots of live trading calls; artifact SHA-256
 `b9627fe435f55da47e7e064d14a85039b5808e87c8c32f97b7a135d13910a19b`.
-De echte Luna/Responses-ontwikkel- en regressiesets worden op de definitieve
-backendcode herhaald. Dit is geen live acceptatie of deployment van deze
-kandidaat.
+De echte Luna/Responses-ontwikkelset op die code slaagde **20/20**; de
+gecombineerde workeractieproef slaagde opnieuw **16/16** (artifact SHA-256
+`6ffbd3d9ff09c0f3ead13cba6835fa15c40c8c45467096820a5cb1ad19aa432f`),
+ook zonder productieverbindingen, brokerorders, live bots of live trading
+calls. De echte `gpt-6-luna` Responses-regressie op de gecombineerde code
+slaagde **109/109**, zonder provider-, schema-, parse- of validatiefout;
+artifact SHA-256
+`232dec4a021c2ad843bd1389c354ce94785dff5eec5ccd1604a0777f74cca5a0`.
+De 20-case ontwikkelset wordt ook op de gecombineerde code herhaald. Dit is
+geen live acceptatie of deployment van deze kandidaat.
 
 ## Multi-user capacity hardening candidate
 
