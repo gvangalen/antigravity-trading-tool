@@ -24,7 +24,10 @@ The harness accepts the exact production origin `https://tradamind.com` with
 `--allow-production`, or a loopback origin for local checks. Before each stage
 it verifies `/api/auth/me` returns the expected account ID and email for every
 fixture. The default profile mixes authenticated workspace, FINN conversation,
-and trade-review reads with ten seconds of average think time. It stops before
+and trade-review reads with ten seconds of average think time. Each fixture's
+first request is spread deterministically across that think-time window, so
+the stage measures concurrently active users without a synchronized login
+burst. It stops before
 the next stage on any non-2xx response or timeout and reports successful and
 all-response p95 separately. Production runs require explicit p95 limits for all three routes and at least
 30 seconds between stages. The example uses conservative exploratory stop

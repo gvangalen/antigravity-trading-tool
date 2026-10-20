@@ -163,6 +163,15 @@ def test_capacity_load_stops_active_stage_on_error_or_latency():
         assert stop.is_set()
         assert sum(map(len, results.values())) == 1
 
+        # A stopped stage must not start a delayed virtual user request.
+        delayed_results = defaultdict(list)
+        await harness["virtual_user"](
+            FailingClient(), {"user_id": 43, "access_token": "fixture"},
+            time.monotonic() + 30, 10, None, delayed_results, stop,
+            initial_spread_seconds=10,
+        )
+        assert not delayed_results
+
         stop = asyncio.Event()
         results = {"workspace": [(200, 250)] * 20}
         latency_abort_routes = []

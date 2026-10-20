@@ -432,12 +432,23 @@ class WorkspaceDataService:
         }
         periods = {key: value if value in PERIOD_DAYS else "day" for key, value in periods.items()}
 
+        # Resolve the asset scope on this request's session before loading
+        # preferences. The preference services otherwise open a second session
+        # for the same catalog lookup while this session already owns a pooled
+        # connection. Concurrent workspaces can exhaust the pool that way.
+        asset_class = None
+        if hasattr(self.session, "execute"):
+            asset_scope = await measure(
+                "asset_scope", lambda: AssetCatalogService(self.session).get_asset(symbol),
+            )
+            asset_class = str(asset_scope.get("asset_class") or "").strip().lower() or None
+
         # Repositories share this request's AsyncSession. SQLAlchemy sessions may
         # not provision or execute multiple connections concurrently.
-        market_rows = await measure("market_rows", lambda: self._market_rows(user_id, symbol, periods["market"]))
-        macro_rows = await measure("macro_rows", lambda: self._macro_rows(user_id, symbol, periods["macro"]))
+        market_rows = await measure("market_rows", lambda: self._market_rows(user_id, symbol, periods["market"], asset_class=asset_class))
+        macro_rows = await measure("macro_rows", lambda: self._macro_rows(user_id, symbol, periods["macro"], asset_class=asset_class))
         await measure("score_history_coverage", lambda: self._add_score_history_coverage(user_id, symbol, market_rows, macro_rows))
-        technical_rows = await measure("technical_rows", lambda: self._technical_rows(user_id, symbol, periods["technical"]))
+        technical_rows = await measure("technical_rows", lambda: self._technical_rows(user_id, symbol, periods["technical"], asset_class=asset_class))
         quote_snapshot = await measure("quote_snapshot", lambda: self._resolve_quote_snapshot(symbol))
         regime = await measure(
             "regime",
@@ -843,12 +854,13 @@ class WorkspaceDataService:
                 "window_days": 90,
             }
 
-    async def _market_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+    async def _market_rows(self, user_id: int, symbol: str, period: str,
+                           *, asset_class: str | None = None) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
         resolver = getattr(getattr(self, "market_service", None), "resolve_effective_preferences", None)
         if callable(resolver):
-            resolved = await resolver(user_id, symbol=symbol)
+            resolved = await resolver(user_id, symbol=symbol, asset_class=asset_class)
             configured = list(resolved.get("rows", []))
             allowed = {
                 _indicator_key(row.indicator)
@@ -870,12 +882,13 @@ class WorkspaceDataService:
                 configured,
             )
 
-    async def _macro_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+    async def _macro_rows(self, user_id: int, symbol: str, period: str,
+                          *, asset_class: str | None = None) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
         resolver = getattr(getattr(self, "macro_service", None), "resolve_effective_preferences", None)
         if callable(resolver):
-            resolved = await resolver(user_id, symbol=symbol)
+            resolved = await resolver(user_id, symbol=symbol, asset_class=asset_class)
             configured = list(resolved.get("rows", []))
             allowed = {
                 _indicator_key(row.indicator)
@@ -897,12 +910,13 @@ class WorkspaceDataService:
                 configured,
             )
 
-    async def _technical_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+    async def _technical_rows(self, user_id: int, symbol: str, period: str,
+                              *, asset_class: str | None = None) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
         resolver = getattr(getattr(self, "technical_service", None), "resolve_effective_preferences", None)
         if callable(resolver):
-            resolved = await resolver(user_id, symbol=symbol)
+            resolved = await resolver(user_id, symbol=symbol, asset_class=asset_class)
             configured = list(resolved.get("rows", []))
             allowed = {
                 _indicator_key(row.indicator)

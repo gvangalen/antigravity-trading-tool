@@ -50,12 +50,18 @@ def percentile(values, fraction):
     return round(values[min(len(values) - 1, max(0, int(len(values) * fraction + 0.999999) - 1))], 2)
 
 
-async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results, stop_event):
+async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results, stop_event,
+                       initial_spread_seconds=0):
     rng = random.Random(fixture["user_id"])
     headers = {"Authorization": f"Bearer {fixture['access_token']}"}
     choices = list(ROUTES)
     if chat_budget is not None:
         choices.append(("finn_chat", "POST", "/api/assistant/chat", 1))
+    if initial_spread_seconds:
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=rng.uniform(0, initial_spread_seconds))
+        except asyncio.TimeoutError:
+            pass
     while time.monotonic() < deadline and not stop_event.is_set():
         name, method, path, _ = rng.choices(choices, weights=[item[3] for item in choices])[0]
         if name == "finn_chat":
@@ -198,7 +204,8 @@ async def run(args, fixtures):
             ))
             try:
                 await asyncio.gather(*(
-                    virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results, stop_event)
+                    virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results,
+                                 stop_event, initial_spread_seconds=args.think_seconds)
                     for fixture in fixtures[:users]
                 ))
             finally:
