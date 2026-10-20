@@ -27,7 +27,8 @@ fixture. The default profile mixes authenticated workspace, FINN conversation,
 and trade-review reads with ten seconds of average think time. Each fixture's
 first request is spread deterministically across that think-time window, so
 the stage measures concurrently active users without a synchronized login
-burst. It stops before
+burst. The configured stage duration starts after this ramp, so `1000:300`
+allows 300 seconds with all fixtures active after the ten-second ramp. It stops before
 the next stage on any non-2xx response or timeout and reports successful and
 all-response p95 separately. Production runs require explicit p95 limits for all three routes and at least
 30 seconds between stages. The example uses conservative exploratory stop

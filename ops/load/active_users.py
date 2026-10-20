@@ -198,7 +198,9 @@ async def run(args, fixtures):
             results = defaultdict(list)
             stop_event = asyncio.Event()
             latency_abort_routes = []
-            deadline = time.monotonic() + seconds
+            # Keep the requested duration after the final fixture has joined;
+            # the deterministic first-request spread is a separate ramp.
+            deadline = time.monotonic() + args.think_seconds + seconds
             monitor = asyncio.create_task(monitor_stage(
                 results, args.p95_limits, deadline, stop_event, latency_abort_routes,
             ))
@@ -211,7 +213,7 @@ async def run(args, fixtures):
             finally:
                 monitor.cancel()
                 await asyncio.gather(monitor, return_exceptions=True)
-            summary = report(f"{users} users / {seconds}s", results)
+            summary = report(f"{users} users / {seconds}s steady (+{args.think_seconds:g}s ramp)", results)
             reject_aborted_stage(latency_abort_routes)
             if stage_has_blocking_errors(summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")
