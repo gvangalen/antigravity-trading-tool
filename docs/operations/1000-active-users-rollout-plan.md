@@ -1,8 +1,9 @@
 # 1000 active users: implementation and release plan
 
 Baseline checked on 2026-10-20: the production backend and frontend both report
-`2664fe1fb675f226e0dd4e627d3c8995f132a87b`. This includes the recent
-FINN cutover QA repair. The capacity candidate includes that `main` revision.
+`1f7077ea179bbf1ef0887be4605d731df73af880`. This includes the recent
+FINN cutover QA repair and feed update. The capacity candidate includes that
+`main` revision.
 The production ecosystem configuration records worker OOMs from an earlier
 multi-process layout on a 1 GB host. A read-only SSH check on 2026-10-20 of
 the host serving the current production SHA found 4 vCPU and 8,125,916 KiB
@@ -18,8 +19,9 @@ combined backend suite passed 3530 tests with 3 skips. The combined frontend
 build, typecheck, focused tests and production audit passed. The isolated FINN
 action matrix passed 16/16 contracts and 19/19 adapter tests after the merge;
 real-provider selector development and regression passed 20/20 and 109/109
-cases on unchanged selector code. The pre-merge candidate CI passed all five
-jobs; combined-commit CI is pending. See `docs/agents/FINN_RELEASE_STATUS.md`
+cases on unchanged selector code. CI passed all five jobs on the first merged
+candidate; CI on the later feed-merged commit is pending. See
+`docs/agents/FINN_RELEASE_STATUS.md`
 for artifact hashes. These changes are not deployed or capacity-proven. The
 live environment has no 1000-account fixture file yet.
 

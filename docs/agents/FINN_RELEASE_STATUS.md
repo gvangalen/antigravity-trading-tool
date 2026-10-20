@@ -37,11 +37,14 @@ artifact SHA-256
 `d4f2cebd6e61e46558667d47bb84e01dcc3daec2e6f625516907829882a8a297`.
 The merged main changes did not touch the selector boundary or registry used
 by the real-provider development and regression artifacts above. CI on the
-merge commit is still pending.
+first merge commit passed all five jobs. A later main revision
+`1f7077ea179bbf1ef0887be4605d731df73af880` changed FINN feed presentation
+and mobile feed code; it has also been merged. The frontend export was rebuilt
+from that combined source. CI on the final merge commit is pending.
 
-Production reported `2664fe1fb675f226e0dd4e627d3c8995f132a87b`
-from both public surfaces at the last check. That newer `main` revision is
-merged into the local candidate. A read-only host check found 4
+Production reported `1f7077ea179bbf1ef0887be4605d731df73af880`
+from both public surfaces at the last check. That `main` revision is merged
+into the local candidate. A read-only host check found 4
 vCPU, 7.75 GiB RAM and PostgreSQL `max_connections=100`; the historical 1 GB
 host note does not describe the current machine. Independent QA, Security and
 Architecture reviews, deployment identity checks, and an authenticated
@@ -50,7 +53,7 @@ Architecture reviews, deployment identity checks, and an authenticated
 
 ## FINN 2.0 agentuitfasering
 
-Phase: `LIVE_AWAITING_FOCUSED_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
+Phase: `LIVE_FEED_REPAIR_AWAITING_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
 is gemerged als product-SHA `191c1199b6129c8feb305657e7d3483d8eef4048`.
 Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470300165)
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470689636)
@@ -140,9 +143,42 @@ Alle vijf PR- en [main-CI-jobs](https://github.com/gvangalen/antigravity-trading
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39476766922)
 slaagde; daarna gaven publieke backend-health en frontend-buildinfo ieder
 HTTP 200 en exact die SHA. Deze statuswijziging krijgt zelf een nieuwe SHA;
-de uiteindelijke runtime-identiteit moet opnieuw worden geverifieerd voordat
-de bestaande QA Agent de gerichte live herkeuring uitvoert. De
-herstelbatch is nog niet onafhankelijk live afgetekend.
+de uiteindelijke runtime-identiteit moest opnieuw worden geverifieerd voor
+de gerichte live herkeuring. Het resultaat staat hieronder.
+
+De bestaande QA Agent herkeurde de definitieve document-SHA
+`2664fe1fb675f226e0dd4e627d3c8995f132a87b` ingelogd op productie.
+Backend en frontend toonden beide die SHA. De normale ETH-onboarding ging nu door
+naar `/dashboard?symbol=ETH`; een BTC-Paper-DCA buiten de vrijdagplanning gaf
+een specifieke `niet aan de beurt`-uitleg zonder nieuwe beslissing of order.
+FINN las de BTC-scores 40/20/40, benchmark 33, vrijdagcadans, €75 per uitvoering
+en €300 botlimiet correct terug. De feed bleef gedeeltelijk fout: de lijst
+staat op `created_at`, maar web en mobiel toonden `updated_at`; dat moment
+verandert bij lezen en bij het schrijven van de AI-tekst. Daardoor lijken de
+zichtbare datums niet aflopend. De afzonderlijke `already_executed`-tak, een
+positieve Paper-beslissing, nieuwe registratie en ingelogd mobiel zijn in die
+run niet afgetekend. Een contextloos geopende afrondpagina viel nog op de
+bestaande actieve asset terug; de normale ETH-overgang werkte.
+
+Vervolgkandidaat `codex/finn-agent-cutover-final`: de web- en mobiele feed
+tonen nu het `created_at`-moment dat de API ook voor de volgorde gebruikt.
+Webbuild, webtypecheck, 27 commandtests, 15 i18n-tests, 8 voorsteltests,
+i18n-lint en `audit:high` slaagden; de audit meldt één moderate Next.js-
+advisory. Mobiele typecheck, 16 chattests, web-, iOS- en Android-bundels en
+lint met nul errors (110 bestaande waarschuwingen) slaagden na `npm ci` in de
+geïsoleerde checkout. Dit is lokale validatie, geen nieuwe live-acceptatie.
+Backendactiecontracten, score- en uitvoeringscode en Responses-adapter zijn
+ongewijzigd sinds de hierboven gemeten 3523 backendtests, 16/16 workeracties,
+19/19 adaptertests en 109/109 echte-providerregressie. Deze kandidaat wijzigt
+uitsluitend welk bestaand API-tijdveld web en mobiel tonen.
+[PR #456](https://github.com/gvangalen/antigravity-trading-tool/pull/456)
+is gemerged als `1cf720404d79c7f31220b6a58ecffe4b2b29c8e3`.
+Alle vijf PR-CI-jobs en alle vijf [main-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39479585377)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39479993288)
+slaagde; daarna gaven publieke backend-health en frontend-buildinfo ieder
+HTTP 200 en exact die SHA. Deze statuscommit krijgt zelf een nieuwe SHA;
+Build moet daarvan opnieuw de CI-, deployment- en publieke identiteit
+controleren voordat de bestaande QA Agent een gericht feedverdict geeft.
 
 ## Weekreflectie voor alle gebruikers
 
