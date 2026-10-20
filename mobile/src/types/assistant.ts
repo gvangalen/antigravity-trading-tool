@@ -39,6 +39,12 @@ export type AssistantReasoning = {
 
 export type AssistantAction =
   | {
+      type: 'v2_proposal';
+      proposal_id: string;
+      requires_confirmation: boolean;
+      mode?: string;
+    }
+  | {
       type:
         | 'add_to_watchlist'
         | 'remove_from_watchlist'
@@ -127,6 +133,11 @@ export type AssistantFeedItem =
       id: string;
       type: 'draft';
       draft: AssistantDraft;
+    }
+  | {
+      id: string;
+      type: 'v2_proposal';
+      proposalId: string;
     }
   | {
       id: string;

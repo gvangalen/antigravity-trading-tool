@@ -40,26 +40,15 @@ def test_encryption_secret_fails_hard_when_missing_at_use():
     assert "RuntimeError" in source
 
 
-def test_assistant_execute_rejects_arbitrary_client_action_payloads():
+def test_assistant_v2_execution_requires_confirmed_proposal():
     api_source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
     frontend_source = _read(FRONTEND_ROOT / "lib" / "api" / "ai.js")
 
-    assert 'payload.get("action")' not in api_source
-    assert "execute_issued_action" in api_source
-    assert "issue_response_actions" in _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
-    assert 'body: JSON.stringify({ action_id: actionId })' in frontend_source
-    assert "body: JSON.stringify({ action })" not in frontend_source
-
-
-def test_finn_actions_are_issued_and_user_bound_before_execution():
-    source = _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
-
-    assert "issue_response_actions" in source
-    assert "_issue_pending_action" in source
-    assert "issued_by" in source
-    assert "execute_issued_action" in source
-    assert "WHERE id = :id AND user_id = :user_id" in source
-    assert "status = 'pending'" in source
+    assert '"/assistant/actions/execute"' not in api_source
+    assert '"/assistant/v2/proposals/{proposal_id}/execute"' in api_source
+    assert '"/assistant/v2/proposals/{proposal_id}/confirm"' in api_source
+    assert "expected_payload_hash=request.expected_payload_hash" in api_source
+    assert "/assistant/actions/execute" not in frontend_source
 
 
 def test_retired_mission_control_endpoint_is_not_exposed():

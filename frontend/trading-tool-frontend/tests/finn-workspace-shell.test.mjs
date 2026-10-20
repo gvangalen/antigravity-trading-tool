@@ -31,6 +31,18 @@ test("shared workspace shows the persisted coach feed and opens chat on demand",
   assert.doesNotMatch(assistantApiSource, /assistant\/mission-control/);
 });
 
+test("web confirmation uses the FINN V2 proposal contract without legacy action writes", () => {
+  assert.match(assistantSource, /confirmAndExecuteFinnV2Proposal\(\s*action\.proposal_id, reviewedName \|\| latestProposal\.review_target_name/);
+  assert.match(assistantApiSource, /\/execute[\s\S]*?expected_review_target_name: expectedReviewTargetName \|\| undefined/);
+  assert.match(assistantSource, /const objectName = verifiedTargetName \|\| displayContext\.name/);
+  assert.match(assistantSource, /namedTargetReview && !verifiedTargetName/);
+  assert.doesNotMatch(assistantSource, /executeAssistantAction|executePendingAction|fetchFinnState/);
+  assert.doesNotMatch(assistantApiSource, /\/api\/assistant\/actions\/execute|\/api\/assistant\/finn\/state/);
+  assert.match(assistantSource, /getFinnV2ConversationDetail\(candidateId\)/);
+  assert.doesNotMatch(assistantSource, /getAssistantSessionDetail/);
+  assert.doesNotMatch(assistantApiSource, /\/api\/assistant\/sessions/);
+});
+
 test("feed discussion enters the persistent FINN panel with its event identity", () => {
   assert.match(shellSource, /setFeedDiscussion\(\{ request: handoff, draft: nextQuery \}\)/);
   assert.match(shellSource, /data-feed-handoff-id=\{feedDiscussion\?\.request\.context\.feed_item_id \|\| undefined\}/);

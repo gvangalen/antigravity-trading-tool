@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from backend.ai_agents import trading_bot_agent
+from backend.engine import trading_bot_execution
 from backend.engine.guardrails_engine import apply_guardrails
 
 
@@ -80,27 +80,27 @@ def test_limit_trim_below_minimum_blocks_and_keeps_explanation():
 
 
 def test_execution_recheck_uses_current_limits(monkeypatch):
-    monkeypatch.setattr(trading_bot_agent, "get_bot_portfolio_state", lambda *_: {
+    monkeypatch.setattr(trading_bot_execution, "get_bot_portfolio_state", lambda *_: {
         "qty": 0, "invested": 0,
     })
-    monkeypatch.setattr(trading_bot_agent, "get_today_spent_eur", lambda *_: 20)
+    monkeypatch.setattr(trading_bot_execution, "get_today_spent_eur", lambda *_: 20)
     current_bot = ("auto", False, True, 100, 200, 50, 5, 100)
-    trading_bot_agent._recheck_auto_buy_limits(
+    trading_bot_execution._recheck_auto_buy_limits(
         conn=None, user_id=1, bot_id=2, symbol="BTC", notional=20,
         price=100, cash=100, current_bot=current_bot,
     )
-    with pytest.raises(trading_bot_agent.BotSafetyBlock, match="daglimiet"):
-        trading_bot_agent._recheck_auto_buy_limits(
+    with pytest.raises(trading_bot_execution.BotSafetyBlock, match="daglimiet"):
+        trading_bot_execution._recheck_auto_buy_limits(
             conn=None, user_id=1, bot_id=2, symbol="BTC", notional=40,
             price=100, cash=100, current_bot=current_bot,
         )
-    with pytest.raises(trading_bot_agent.BotSafetyBlock, match="daglimiet"):
-        trading_bot_agent._recheck_auto_buy_limits(
+    with pytest.raises(trading_bot_execution.BotSafetyBlock, match="daglimiet"):
+        trading_bot_execution._recheck_auto_buy_limits(
             conn=None, user_id=1, bot_id=2, symbol="BTC", notional=30.01,
             price=100, cash=100, current_bot=current_bot,
         )
-    with pytest.raises(trading_bot_agent.BotSafetyBlock, match="blootstelling"):
-        trading_bot_agent._recheck_auto_buy_limits(
+    with pytest.raises(trading_bot_execution.BotSafetyBlock, match="blootstelling"):
+        trading_bot_execution._recheck_auto_buy_limits(
             conn=None, user_id=1, bot_id=2, symbol="BTC", notional=20,
             price=100, cash=100,
             current_bot=("auto", False, True, 0, 200, 50, 5, 100),
@@ -111,7 +111,7 @@ def test_paper_reprice_preserves_approved_eur_spend():
     approved = 50
     old_qty = approved / 2000
     current_price = 2500
-    qty = trading_bot_agent._paper_buy_quantity(approved, current_price)
+    qty = trading_bot_execution._paper_buy_quantity(approved, current_price)
     assert qty < old_qty
     assert qty * current_price <= approved
     assert round(qty * current_price, 2) == approved

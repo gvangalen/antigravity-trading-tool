@@ -14,7 +14,7 @@ from backend.scripts import probe_protected_auto_paper_history as fixture
 
 
 def _close_paper_position(user_id: int, bot_id: int, buy_decision_id: int) -> None:
-    from backend.ai_agents.trading_bot_agent import _auto_execute_decision, _persist_bot_order
+    from backend.engine.trading_bot_execution import _auto_execute_decision, _persist_bot_order
 
     conn = fixture._connection()
     try:

@@ -101,7 +101,7 @@ def test_previous_market_only_smart_dca_plan_holds_even_with_a_valid_market_scor
 
 
 def test_persisted_forged_dca_marker_is_read_and_held_without_exact_amount_exemption(monkeypatch, paper_engines):
-    from backend.ai_agents import trading_bot_agent as worker
+    from backend.engine import trading_bot_execution as worker
 
     class Cursor:
         def __enter__(self):
@@ -145,7 +145,7 @@ def test_persisted_forged_dca_marker_is_read_and_held_without_exact_amount_exemp
 def test_saved_fixed_dca_from_strategy_editor_uses_its_exact_amount_rule(
     monkeypatch, base_amount, mode, expected_exact,
 ):
-    from backend.ai_agents import trading_bot_agent as worker
+    from backend.engine import trading_bot_execution as worker
 
     class Cursor:
         def __enter__(self):
@@ -409,7 +409,7 @@ def test_trade_with_unknown_market_score_holds_without_a_weak_score_claim(paper_
 
 
 def test_persisted_paper_scores_use_verified_benchmark_and_preserve_unknown(monkeypatch):
-    from backend.ai_agents.trading_bot_agent import _persist_decision_and_order
+    from backend.engine.trading_bot_execution import _persist_decision_and_order
 
     class Cursor:
         def __init__(self):
@@ -470,7 +470,7 @@ def test_persisted_paper_scores_use_verified_benchmark_and_preserve_unknown(monk
 
 @pytest.mark.parametrize("available", [False, True])
 def test_worker_records_score_2_decision_for_missing_and_complete_sources(monkeypatch, paper_engines, available):
-    from backend.ai_agents import trading_bot_agent as worker
+    from backend.engine import trading_bot_execution as worker
 
     class Connection:
         committed = False
@@ -528,7 +528,7 @@ def test_worker_records_score_2_decision_for_missing_and_complete_sources(monkey
         return 12
 
     monkeypatch.setattr(worker, "_persist_decision_and_order", persist)
-    result = worker.run_trading_bot_agent(user_id=7, report_date=date.today())
+    result = worker.run_trading_bot_execution(user_id=7, report_date=date.today())
 
     assert result["ok"] is True
     assert conn.committed is True

@@ -8,18 +8,13 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_assistant_action_execution_propagates_request_trace_id():
+def test_assistant_execution_uses_owner_bound_v2_contract():
     api_source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
-    action_engine_source = _read(BACKEND_ROOT / "services" / "ai_action_engine.py")
-    finn_source = _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
 
-    assert 'trace_id = getattr(request.state, "trace_id", None)' in api_source
-    assert "FinnPlanService(db, trace_id=trace_id)" in api_source
-    assert "execute_pending_action(action_id, user_id, trace_id=trace_id)" in api_source
-    assert "execution_trace_id = trace_id or action_record.trace_id" in action_engine_source
-    assert '"trace_id": execution_trace_id' in action_engine_source
-    assert "trace_id = COALESCE(EXCLUDED.trace_id, ai_pending_actions.trace_id)" in finn_source
-    assert "SELECT id, status, payload, trace_id, created_at" in finn_source
+    assert '"/assistant/actions/execute"' not in api_source
+    assert "idempotency_key=request.idempotency_key" in api_source
+    assert 'user_id=current_user["id"]' in api_source
+    assert "expected_payload_hash=request.expected_payload_hash" in api_source
 
 
 def test_manual_order_and_preflight_propagate_trace_to_results_and_audit():

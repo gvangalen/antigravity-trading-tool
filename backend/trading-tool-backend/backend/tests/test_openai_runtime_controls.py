@@ -130,7 +130,7 @@ def test_structured_response_exposes_incomplete_provider_details(monkeypatch):
 
 def test_probe_openai_runtime_clears_breaker_after_success(monkeypatch):
     class _Parsed:
-        model = "gpt-4o-mini"
+        model = "gpt-6-luna"
 
     class _RawResponse:
         status_code = 200
@@ -145,14 +145,11 @@ def test_probe_openai_runtime_clears_breaker_after_success(monkeypatch):
         def create(**kwargs):
             return _RawResponse()
 
-    class _Completions:
+    class _Responses:
         with_raw_response = _WithRawResponse()
 
-    class _Chat:
-        completions = _Completions()
-
     class _Client:
-        chat = _Chat()
+        responses = _Responses()
 
         def with_options(self, **kwargs):
             return self

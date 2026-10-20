@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -8,7 +7,6 @@ from sqlalchemy import text
 from fastapi import HTTPException
 
 from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
-from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.platform_metrics import record_latency_sample
 from backend.services.locale_service import localize_finn_payload
@@ -33,16 +31,6 @@ def _asset_logo_url(symbol: str) -> str | None:
     if not normalized:
         return None
     return f"https://assets.coincap.io/assets/icons/{normalized.lower()}@2x.png"
-
-# =========================================================
-# SYNCHRONOUS WRAPPER FOR SCORING ENGINE
-# =========================================================
-def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> dict:
-    from backend.utils.scoring_utils import get_scores_for_symbol
-    try:
-        return get_scores_for_symbol(user_id=user_id, symbol=symbol, include_metadata=True)
-    except TypeError:
-        return get_scores_for_symbol(include_metadata=True)
 
 class DashboardService:
     def __init__(self, db_session: AsyncSession):
@@ -84,17 +72,17 @@ class DashboardService:
                 for row in technical_rows
             }
             
-            # Execute Sync Scoring Request
-            scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id, symbol)
-            
             from backend.services.setup_market_match_service import SetupMarketMatchService
             score_assessment = await SetupMarketMatchService(self.session).for_asset(
                 user_id, symbol, setups=[],
             )
-            component_status = score_assessment["component_source_status"]
-            macro_score = scores.get("macro_score") if component_status["macro_score"] == "fresh" else None
-            technical_score = scores.get("technical_score") if component_status["technical_score"] == "fresh" else None
-            market_score = scores.get("market_score") if component_status["market_score"] == "fresh" else None
+            # The dashboard, Analyse and FINN read the same Score 2.0
+            # projection. A raw historical score must not revive a component
+            # whose source is now stale or incomplete.
+            reported_scores = score_assessment["reported_scores"]
+            macro_score = reported_scores.get("macro_score")
+            technical_score = reported_scores.get("technical_score")
+            market_score = reported_scores.get("market_score")
             
             # GET DYNAMIC SETUP SCORE
             from backend.services.setup_service import SetupService
@@ -206,7 +194,6 @@ class DashboardService:
         # We declare safe defaults for all sub-components so they are populated even under failure
         prices_data = {s: {"price": None, "change_24h": None} for s in symbols}
         bot_portfolios = []
-        ai_insight = {}
         asset_catalog_map = {}
 
         # 3. Run DB-backed components sequentially. A single AsyncSession must
@@ -240,21 +227,15 @@ class DashboardService:
         match_service = SetupMarketMatchService(self.session)
         owned_setups = await SetupRepository(self.session).get_all_setups(user_id)
         for sym in symbols:
-            try:
-                scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id, sym)
-            except Exception as e:
-                logger.error(f"⚠️ [MobileOverview] P1 Warning: Failed to fetch scores for {sym}: {e}")
-                scores = {}
-
             price_info = prices_data.get(sym, {}) if isinstance(prices_data, dict) else {}
             assessment = await match_service.for_asset(user_id, sym, setups=owned_setups)
-            component_status = assessment["component_source_status"]
-            macro_val = (float(scores["macro_score"]) if component_status["macro_score"] == "fresh"
-                         and scores.get("macro_score") is not None else None)
-            tech_val = (float(scores["technical_score"]) if component_status["technical_score"] == "fresh"
-                        and scores.get("technical_score") is not None else None)
-            mkt_val = (float(scores["market_score"]) if component_status["market_score"] == "fresh"
-                       and scores.get("market_score") is not None else None)
+            reported_scores = assessment["reported_scores"]
+            macro_val = (float(reported_scores["macro_score"])
+                         if reported_scores["macro_score"] is not None else None)
+            tech_val = (float(reported_scores["technical_score"])
+                        if reported_scores["technical_score"] is not None else None)
+            mkt_val = (float(reported_scores["market_score"])
+                       if reported_scores["market_score"] is not None else None)
             ranked_match = assessment["matches"][0] if assessment["matches"] else None
             setup_match_score = ranked_match["score"] if ranked_match else None
             setup_match_status = ranked_match["status"] if ranked_match else (
@@ -334,49 +315,8 @@ class DashboardService:
         if total_invested_eur > 0:
             total_profit_pct = round(((total_value_eur - total_invested_eur) / total_invested_eur) * 100.0, 2)
 
-        # 7. PRIORITEIT 3: Dutch FINN Briefing with bulletproof fallback logic
-        first_name = "Handelaar"
-        try:
-            user_repo = UserRepository(self.session)
-            user_obj = await user_repo.get_by_id(user_id)
-            if user_obj and hasattr(user_obj, "first_name") and user_obj.first_name:
-                first_name = user_obj.first_name
-        except Exception as e:
-            logger.error(f"⚠️ [MobileOverview] P3 Warning: Failed to retrieve user object: {e}")
-
-        greeting = f"Hallo {first_name}!"
-        summary = "Je portfolio is stabiel. Er zijn geen directe waarschuwingen voor je actieve setups."
-        suggested_actions = ["DCA setup maken", "Mijn bots bekijken", "Risico aanpassen"]
-
-        # If AI insights succeeded, unpack them safely
-        if isinstance(ai_insight, dict):
-            daily_coach = ai_insight.get("daily_coach")
-            if isinstance(daily_coach, dict):
-                stance = daily_coach.get("stance")
-                asset = daily_coach.get("asset", "BTC")
-                blockers = daily_coach.get("blockers") or []
-                if stance == "plan_is_active":
-                    summary = f"{asset}: je plan is vandaag actief volgens je eigen ranges. Review bot-proposals handmatig voor uitvoering."
-                elif stance == "wait_for_scores":
-                    summary = f"{asset}: daily scores ontbreken nog; Finn wacht met een actief/inactief oordeel."
-                elif blockers:
-                    first = blockers[0]
-                    summary = (
-                        f"{asset}: wachten. {first.get('category')} score {first.get('score')} "
-                        f"valt buiten je range {first.get('range')}."
-                    )
-                else:
-                    summary = ai_insight.get("briefing_text") or summary
-            insight_market = ai_insight.get("market_insight", {})
-            if isinstance(insight_market, dict):
-                insight_conclusion = insight_market.get("conclusion")
-                if insight_conclusion and not ai_insight.get("daily_coach"):
-                    summary = insight_conclusion
-            
-            ai_suggested = ai_insight.get("suggested_actions")
-            if isinstance(ai_suggested, list) and len(ai_suggested) > 0:
-                suggested_actions = ai_suggested
-
+        # The coach feed is the only source of proactive FINN messages. Keep
+        # the legacy overview response shape until mobile consumers migrate.
         finn_briefing = MobileFinnBriefingSchema(
             greeting="", summary="", suggested_actions=[],
         )

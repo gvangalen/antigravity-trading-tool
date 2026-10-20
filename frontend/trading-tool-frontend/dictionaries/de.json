@@ -4607,6 +4607,8 @@
       "evidence": "Evidence from your recent Finn activity"
     },
     "inlineAction": {
+      "activateLiveEffect": "Nach der Bestätigung aktivierst du Bot {name} im Live-Modus.",
+      "activatePaperEffect": "Nach der Bestätigung aktivierst du Bot {name} im Paper-Modus.",
       "updatesAfterConfirm": "Finn only updates something after you explicitly confirm which proposed step may proceed.",
       "noLiveTrades": "No live trades are placed from this card. Sensitive actions remain review-first.",
       "afterConfirmation": "After confirmation, Finn gives a short status update and the next safe step.",

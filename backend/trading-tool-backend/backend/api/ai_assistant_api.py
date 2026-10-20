@@ -4,9 +4,8 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Primary assistant limits. Authenticated Finn users get enough room for
@@ -19,20 +18,16 @@ ASSISTANT_USER_LIMIT = 30
 ASSISTANT_FINN_DRAFT_LIMIT = 45
 ASSISTANT_IP_FALLBACK_LIMIT = 20
 ASSISTANT_EXECUTE_USER_LIMIT = 20
-ASSISTANT_EXECUTE_IP_LIMIT = 30
 LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
 
 from backend.infrastructure.database import async_session_factory, get_db
 from backend.utils.auth_utils import get_current_user
-from backend.infrastructure.models import ChatSession, ChatMessage
 from backend.schemas.assistant_schema import (
     AssistantAnalyticsEvent,
     AssistantChatRequest,
     AssistantChatResponse,
     AssistantPreferences,
     AssistantPreferenceUpdate,
-    ChatSessionResponse,
-    ChatSessionDetailResponse,
 )
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.locale_service import resolve_locale
@@ -44,13 +39,13 @@ from backend.services.trader_profile_service import (
 )
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.finn_v2_execution_repository import FinnV2ExecutionRepository
-from backend.services.ai_action_engine import AiActionEngine
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 from backend.services.finn_v2_runtime_selector_service import FinnV2RuntimeSelectorService
 from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
 from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
 from backend.schemas.finn_v2_execution_schema import FinnV2ExecuteProposalRequest
+from backend.schemas.finn_v2_proposal_review import requested_state_for_review, verified_review_target_name
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -277,27 +272,6 @@ def _apply_assistant_rate_limit(
     return ip_addr, user_limit
 
 
-def _apply_assistant_execute_rate_limit(*, user_id: int, raw_request: Request) -> None:
-    ip_addr = _client_ip(raw_request)
-    execute_rate_limiter.check_rate_limit(
-        f"user_{user_id}:assistant_execute",
-        limit=ASSISTANT_EXECUTE_USER_LIMIT,
-        detail="Te veel Finn execute-verzoeken. Wacht kort en probeer opnieuw.",
-    )
-    if ip_addr not in LOCAL_PROXY_IPS:
-        execute_rate_limiter.check_rate_limit(
-            f"ip_{ip_addr}:assistant_execute",
-            limit=ASSISTANT_EXECUTE_IP_LIMIT,
-            detail="Te veel Finn execute-verzoeken vanaf dit IP-adres. Wacht kort en probeer opnieuw.",
-        )
-
-
-def _new_finn_plan_service(db: AsyncSession, *, trace_id: Optional[str] = None):
-    from backend.services.finn_plan_service import FinnPlanService
-
-    return FinnPlanService(db, trace_id=trace_id)
-
-
 @router.post("/assistant/chat", response_model=AssistantChatResponse)
 async def assistant_chat(
     request: AssistantChatRequest,
@@ -396,105 +370,6 @@ async def assistant_chat(
         )
         logger.error(f"❌ AI Assistant Chat Error: {e} | Trace: {trace_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij AI Assistant")
-
-# =====================================================
-# Chat Sessions REST endpoints
-# =====================================================
-
-@router.get("/assistant/sessions", response_model=List[ChatSessionResponse])
-async def list_chat_sessions(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        # Fetch sessions ordered by updated_at desc
-        stmt = select(ChatSession).where(ChatSession.user_id == user_id).order_by(ChatSession.updated_at.desc())
-        res = await db.execute(stmt)
-        sessions = res.scalars().all()
-        return sessions
-    except Exception as e:
-        logger.exception("❌ Error opvragen chatsessies")
-        raise HTTPException(status_code=500, detail="Fout bij ophalen chatsessies")
-
-
-@router.api_route("/assistant/sessions/new", methods=["GET", "POST"], response_model=ChatSessionResponse)
-async def create_compat_chat_session(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        now = datetime.utcnow()
-        session = ChatSession(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            title="Nieuw FINN gesprek",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(session)
-        await db.commit()
-        await db.refresh(session)
-        return session
-    except Exception:
-        logger.exception("❌ Error aanmaken compat chatsessie")
-        raise HTTPException(status_code=500, detail="Fout bij aanmaken chatsessie")
-
-
-@router.get("/assistant/sessions/{session_id}", response_model=ChatSessionDetailResponse)
-async def get_chat_session_detail(
-    session_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        # Fetch session
-        stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
-        res = await db.execute(stmt)
-        session = res.scalars().first()
-        if not session:
-            raise HTTPException(status_code=404, detail="Chatsessie niet gevonden")
-        
-        # Fetch messages ordered chronologically
-        msg_stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
-        msg_res = await db.execute(msg_stmt)
-        messages = msg_res.scalars().all()
-        
-        return ChatSessionDetailResponse(session=session, messages=messages)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"❌ Error opvragen chatsessie {session_id}")
-        raise HTTPException(status_code=500, detail="Fout bij ophalen chatsessie details")
-
-
-@router.delete("/assistant/sessions/{session_id}")
-async def delete_chat_session(
-    session_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        user_id = current_user["id"]
-        # Verify ownership
-        stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
-        res = await db.execute(stmt)
-        session = res.scalars().first()
-        if not session:
-            raise HTTPException(status_code=404, detail="Chatsessie niet gevonden")
-        
-        # Delete session (will cascade delete messages due to Foreign Key ON DELETE CASCADE)
-        await db.delete(session)
-        await db.commit()
-        return {"status": "ok", "message": "Chathistorie succesvol gewist"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"❌ Error verwijderen chatsessie {session_id}")
-        raise HTTPException(status_code=500, detail="Fout bij verwijderen chatsessie")
-
 
 from fastapi.responses import StreamingResponse
 
@@ -836,48 +711,6 @@ async def update_preferences(
 
     return AssistantPreferences(preferences=user.ai_preferences)
 
-async def get_ai_action_engine(db: AsyncSession = Depends(get_db)):
-    return AiActionEngine(db)
-
-@router.post("/assistant/actions/execute")
-async def execute_pending_action(
-    payload: dict,
-    request: Request,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    engine: AiActionEngine = Depends(get_ai_action_engine),
-):
-    trace_id = getattr(request.state, "trace_id", None)
-    action_id = payload.get("action_id")
-    if not action_id:
-        raise HTTPException(status_code=400, detail="Action ID is verplicht.")
-    
-    user_id = current_user["id"]
-    _apply_assistant_execute_rate_limit(user_id=user_id, raw_request=request)
-    if str(action_id).startswith("finn-"):
-        try:
-            finn = _new_finn_plan_service(db, trace_id=trace_id)
-            result = await finn.execute_issued_action(user_id, str(action_id))
-            from backend.services.finn_plan_service import FinnPlanService
-            FinnPlanService.invalidate_runtime_caches_for_user(user_id)
-            _record_finn_product_event(
-                user_id=user_id,
-                event_name="finn_confirm_confirmed",
-                surface="assistant_execute",
-                flow_type="confirm",
-                action_type="execute_issued_action",
-                trace_id=trace_id,
-                metadata={"action_id": str(action_id)},
-            )
-            return result
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ AI Assistant Action Error: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Fout bij Finn action")
-    return await engine.execute_pending_action(action_id, user_id, trace_id=trace_id)
-
-
 @router.post("/assistant/analytics/events")
 async def record_assistant_analytics_event(
     payload: AssistantAnalyticsEvent,
@@ -918,16 +751,6 @@ async def get_assistant_response_trace(
         raise HTTPException(status_code=404, detail="FINN-trace niet gevonden.")
     return trace
 
-@router.get("/assistant/finn/state")
-async def get_finn_state(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    finn = _new_finn_plan_service(db)
-    response = await finn.get_open_plan_state(current_user["id"])
-    return await _enrich_with_trader_profile(db, current_user["id"], response)
-
-
 @router.get("/assistant/v2/proposals/{proposal_id}")
 async def assistant_v2_get_proposal(
     proposal_id: str,
@@ -942,6 +765,10 @@ async def assistant_v2_get_proposal(
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
     change = dict((proposal.payload_json or {}).get("change") or {})
+    review_target_name = await verified_review_target_name(
+        db, user_id=current_user["id"], operation_type=proposal.operation_type,
+        target_id=proposal.target_id, change=change,
+    )
     return FinnV2ProposalSummary(
         proposal_id=proposal.id,
         run_id=proposal.run_id,
@@ -956,7 +783,8 @@ async def assistant_v2_get_proposal(
         proposal_version=PROPOSAL_VERSION,
         confirmation_required=True,
         before_state=dict(change.get("before_state") or change.get("before") or {}),
-        requested_state=dict(change.get("requested_state") or change.get("changed_fields") or {}),
+        requested_state=requested_state_for_review(change),
+        review_target_name=review_target_name,
         target_revision=change.get("target_revision"),
         snapshot_timestamp=change.get("snapshot_timestamp"),
     )
@@ -1086,9 +914,7 @@ async def assistant_v2_execute_proposal(
             user_id=current_user["id"],
             idempotency_key=request.idempotency_key,
             expected_payload_hash=request.expected_payload_hash,
+            expected_review_target_name=request.expected_review_target_name,
         )
     ).dict()
-    # FINN Today reads its owner-scoped projection directly on each request.
-    from backend.services.finn_plan_service import FinnPlanService
-    FinnPlanService.invalidate_runtime_caches_for_user(current_user["id"])
     return result

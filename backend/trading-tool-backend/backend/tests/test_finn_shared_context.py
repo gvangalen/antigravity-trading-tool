@@ -9,8 +9,6 @@ from backend.services.finn_shared_context_service import FinnSharedContextServic
 from backend.services import finn_unified_report_service as reports
 from backend.schemas.finn_v2_evidence_schema import IndicatorConfigurationData, IndicatorConfigurationItem
 from backend.celery_task import daily_report_task
-from backend.services.finn_plan_service import FinnPlanService
-from backend.services import finn_plan_service as finn_plan_module
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 from backend.services.report_service import ReportService
 
@@ -189,7 +187,7 @@ def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(m
     }
 
 
-def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypatch):
+def test_chat_and_report_project_the_same_verified_score_snapshot(monkeypatch):
     assessment = {
         "symbol": "ETH", "as_of": "2026-10-10", "source_status": "available",
         "benchmark_score": 70,
@@ -221,18 +219,14 @@ def test_chat_today_and_report_project_the_same_verified_score_snapshot(monkeypa
     chat_adapter.context = source
     chat = asyncio.run(chat_adapter.execute(user_id=7, asset="ETH"))["data"]
 
-    monkeypatch.setattr(finn_plan_module, "FinnSharedContextService", lambda _session: source)
-    today = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
-        7, asset="ETH", asset_analysis={"setup": {"id": 9}}, has_scores=True,
-    ))
     monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
     monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {"error": "provider_unavailable"})
     report = reports.generate_unified_daily_report_sections(7)
 
-    assert chat.benchmark_score == today["benchmark_score"] == report["watchlist"][0]["benchmark"]["benchmark_score"] == 70
-    assert chat.reported_scores["market_score"] == today["reported_scores"]["market_score"] == report["watchlist"][0]["benchmark"]["reported_scores"]["market_score"] == 80
+    assert chat.benchmark_score == report["watchlist"][0]["benchmark"]["benchmark_score"] == 70
+    assert chat.reported_scores["market_score"] == report["watchlist"][0]["benchmark"]["reported_scores"]["market_score"] == 80
     assert (report["market_score"], report["macro_score"], report["technical_score"]) == (80, 70, 60)
-    assert today["setup_match_score"] == report["setup_score"] == 80
+    assert report["setup_score"] == 80
     assert report["active_strategy"]["strategy_name"] == "ETH Strategy"
     assert report["active_strategy"]["setup_name"] == "ETH Plan"
     assert "alle gevolgde assets" in report["setup_validation"]

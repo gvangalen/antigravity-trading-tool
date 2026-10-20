@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from backend.ai_agents import trading_bot_agent as paper_worker
+from backend.engine import trading_bot_execution as paper_worker
 from backend.celery_task import store_daily_scores_task
 from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 from backend.domain.setup_market_match import match_setup_from_daily_scores
@@ -341,7 +341,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     persisted = {}
     monkeypatch.setattr(paper_worker, "_persist_decision_and_order", lambda **kwargs: persisted.update(kwargs) or 13)
 
-    result = paper_worker.run_trading_bot_agent(user_id=7, report_date=date.today())
+    result = paper_worker.run_trading_bot_execution(user_id=7, report_date=date.today())
     assert result["ok"] is True
     assert result["decisions"][0]["action"] == ("hold" if unavailable else "buy")
     assert result["decisions"][0]["decision"]["amount_eur"] == (0 if unavailable else 150)

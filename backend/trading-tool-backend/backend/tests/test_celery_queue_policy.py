@@ -250,7 +250,7 @@ def test_staging_queue_names_are_prefixed_consistently(monkeypatch):
         ]
         assert reloaded.resolve_task_queue("backend.celery_task.trading_bot_task.run_daily_trading_bot") == "staging-execution_critical"
         assert reloaded.celery_task_routes()[
-            "backend.celery_task.onboarding_task.generate_first_dashboard_briefing"
+            "backend.celery_task.store_daily_scores_task.generate_coach_feed_copy"
         ]["queue"] == "staging-ai_generation"
     finally:
         monkeypatch.setenv("APP_ENV", "production")

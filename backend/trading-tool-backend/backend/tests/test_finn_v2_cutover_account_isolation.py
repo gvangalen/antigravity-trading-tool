@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from backend.api.ai_assistant_api import assistant_v2_get_proposal
+from backend.api.ai_assistant_api import assistant_v2_get_proposal, router as assistant_router
+from backend.schemas.finn_v2_proposal_review import requested_state_for_review, verified_review_target_name
 
 
 def test_proposal_lookup_is_account_scoped(monkeypatch):
@@ -19,6 +20,12 @@ def test_proposal_lookup_is_account_scoped(monkeypatch):
         asyncio.run(assistant_v2_get_proposal("proposal-foreign", {"id": 9}, object()))
 
     assert exc.value.status_code == 404
+
+
+def test_legacy_chat_session_routes_are_retired():
+    paths = {route.path for route in assistant_router.routes}
+    assert not any(path.startswith("/assistant/sessions") for path in paths)
+    assert "/assistant/v2/proposals/{proposal_id}" in paths
 
 
 def test_proposal_summary_exposes_only_immutable_update_review_state(monkeypatch):
@@ -62,3 +69,46 @@ def test_proposal_summary_exposes_only_immutable_update_review_state(monkeypatch
     assert result.target_revision == "revision-hash"
     assert result.snapshot_timestamp == now
     assert not hasattr(result, "internal_adapter_detail")
+
+
+@pytest.mark.parametrize("change, expected", [
+    ({"setup_fields": {"name": "BTC DCA", "symbol": "BTC"},
+      "strategy_fields": {"name": "BTC DCA strategy", "base_amount": 100}},
+     {"setup": {"name": "BTC DCA", "symbol": "BTC"},
+      "strategy": {"name": "BTC DCA strategy", "base_amount": 100}}),
+    ({"strategy_fields": {"name": "Variant", "base_amount": 75}},
+     {"name": "Variant", "base_amount": 75}),
+    ({"bot_fields": {"name": "Paper bot", "is_live": False}},
+     {"name": "Paper bot", "is_live": False}),
+    ({"bot_id": 12, "requested_mode": "paper"},
+     {"bot_id": 12, "requested_mode": "paper"}),
+])
+def test_proposal_review_exposes_create_and_activation_fields(change, expected):
+    assert requested_state_for_review(change) == expected
+
+
+def test_manual_order_review_exposes_economically_significant_fields():
+    assert requested_state_for_review({
+        "asset": "ETH", "side": "sell", "order_type": "limit",
+        "quantity": "0.5", "limit_price": "3000",
+    }) == {
+        "asset": "ETH", "side": "sell", "order_type": "limit",
+        "quantity": "0.5", "limit_price": "3000",
+    }
+
+
+def test_destructive_review_resolves_only_owned_target(monkeypatch):
+    async def owned_setup(self, setup_id, user_id):
+        assert setup_id == 12
+        return {"name": "BTC Friday DCA"} if user_id == 9 else None
+
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.setup_repository.SetupRepository.get_setup_by_id",
+        owned_setup,
+    )
+    kwargs = {"operation_type": "delete_setup", "target_id": "12", "change": {"setup_id": 12}}
+    assert asyncio.run(verified_review_target_name(object(), user_id=9, **kwargs)) == "BTC Friday DCA"
+    assert asyncio.run(verified_review_target_name(object(), user_id=10, **kwargs)) is None
+    assert asyncio.run(verified_review_target_name(
+        object(), user_id=9, operation_type="delete_setup", target_id="13", change={"setup_id": 12},
+    )) is None

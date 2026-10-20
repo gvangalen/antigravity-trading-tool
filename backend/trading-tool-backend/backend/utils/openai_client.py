@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 api_key = os.getenv("OPENAI_API_KEY")
-model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+model = os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna")
 
 if not api_key:
     logger.warning("⚠️ OPENAI_API_KEY ontbreekt in de omgeving. AI functionaliteit is beperkt.")
@@ -357,14 +357,14 @@ def probe_openai_runtime(*, clear_breaker_on_success: bool = True, caller: str =
 
     try:
         active_client = client.with_options(max_retries=0)
-        raw_response = active_client.chat.completions.with_raw_response.create(
+        raw_response = active_client.responses.with_raw_response.create(
             model=model,
-            messages=[
+            input=[
                 {"role": "system", "content": "Return the single token ok."},
                 {"role": "user", "content": "ok"},
             ],
-            temperature=0,
-            max_tokens=1,
+            reasoning={"effort": "none"},
+            max_output_tokens=16,
         )
         parsed = raw_response.parse()
         if clear_breaker_on_success:
@@ -676,8 +676,7 @@ def _rate_limit_allows_call() -> bool:
 # ============================================================
 # ✅ GPT JSON CALL
 # ============================================================
-def _json_prompt_messages(prompt: str, system_role: str, image_png: Optional[bytes] = None,
-                          *, responses_api: bool = False) -> list[dict]:
+def _json_prompt_messages(prompt: str, system_role: str, image_png: Optional[bytes] = None) -> list[dict]:
     user_text = prompt + "\n\nRETURN ONLY VALID JSON."
     if image_png is None:
         return [{"role": "system", "content": system_role},
@@ -685,12 +684,8 @@ def _json_prompt_messages(prompt: str, system_role: str, image_png: Optional[byt
     if not isinstance(image_png, bytes) or len(image_png) > 3 * 1024 * 1024 or not image_png.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("invalid_png_image_input")
     data_url = "data:image/png;base64," + base64.b64encode(image_png).decode("ascii")
-    if responses_api:
-        content = [{"type": "input_text", "text": user_text},
-                   {"type": "input_image", "image_url": data_url, "detail": "low"}]
-    else:
-        content = [{"type": "text", "text": user_text},
-                   {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}}]
+    content = [{"type": "input_text", "text": user_text},
+               {"type": "input_image", "image_url": data_url, "detail": "low"}]
     return [{"role": "system", "content": system_role}, {"role": "user", "content": content}]
 
 
@@ -727,40 +722,28 @@ def ask_gpt_json(
 
     _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
 
-    messages = _json_prompt_messages(prompt, system_role, image_png)
-
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"🧠 GPT JSON Call (Attempt {attempt})")
             started = start_timer()
             
             active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
-            if model_override:
-                response = active_client.responses.create(
-                    model=model_override,
-                    input=_json_prompt_messages(prompt, system_role, image_png, responses_api=True),
-                    reasoning={"effort": reasoning_effort or "none"},
-                    max_output_tokens=max_tokens or MAX_TOKENS,
-                    text={"format": {"type": "json_object"}},
-                )
-                content = response.output_text
-            else:
-                response = active_client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=JSON_TEMP,
-                    max_tokens=max_tokens or MAX_TOKENS,
-                    response_format={"type": "json_object"}
-                )
-                content = response.choices[0].message.content
+            response = active_client.responses.create(
+                model=model_override or model,
+                input=_json_prompt_messages(prompt, system_role, image_png),
+                reasoning={"effort": reasoning_effort or "none"},
+                max_output_tokens=max_tokens or MAX_TOKENS,
+                text={"format": {"type": "json_object"}},
+            )
+            content = response.output_text
             parsed = sanitize_json_output(content)
 
             if parsed:
                 usage = getattr(response, "usage", None)
                 _log_openai_usage(
                     model_name=str(getattr(response, "model", None) or model_override or model),
-                    prompt_tokens=int(getattr(usage, "input_tokens" if model_override else "prompt_tokens", 0) or 0),
-                    completion_tokens=int(getattr(usage, "output_tokens" if model_override else "completion_tokens", 0) or 0),
+                    prompt_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+                    completion_tokens=int(getattr(usage, "output_tokens", 0) or 0),
                     response_time_ms=elapsed_ms(started),
                 )
                 return parsed
@@ -1156,28 +1139,19 @@ def ask_gpt_text(
             started = start_timer()
             
             active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
-            if model_override:
-                response = active_client.responses.create(
-                    model=model_override,
-                    input=messages,
-                    reasoning={"effort": reasoning_effort or "none"},
-                    max_output_tokens=max_tokens or MAX_TOKENS,
-                )
-                content = response.output_text
-            else:
-                response = active_client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=TEXT_TEMP,
-                    max_tokens=max_tokens or MAX_TOKENS
-                )
-                content = response.choices[0].message.content
+            response = active_client.responses.create(
+                model=model_override or model,
+                input=messages,
+                reasoning={"effort": reasoning_effort or "none"},
+                max_output_tokens=max_tokens or MAX_TOKENS,
+            )
+            content = response.output_text
             if content:
                 usage = getattr(response, "usage", None)
                 _log_openai_usage(
                     model_name=str(getattr(response, "model", None) or model_override or model),
-                    prompt_tokens=int(getattr(usage, "input_tokens" if model_override else "prompt_tokens", 0) or 0),
-                    completion_tokens=int(getattr(usage, "output_tokens" if model_override else "completion_tokens", 0) or 0),
+                    prompt_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+                    completion_tokens=int(getattr(usage, "output_tokens", 0) or 0),
                     response_time_ms=elapsed_ms(started),
                 )
                 return content.strip()
@@ -1207,38 +1181,3 @@ async def ask_gpt_json_async(*args, **kwargs):
 
 async def ask_gpt_text_async(*args, **kwargs):
     return await asyncio.to_thread(ask_gpt_text, *args, **kwargs)
-
-
-def stream_gpt_json(
-    *,
-    prompt: str,
-    system_role: str,
-    max_tokens: Optional[int] = None
-):
-    """
-    Initiates a streaming chat completion in JSON mode, yielding the raw OpenAI stream.
-    """
-    availability = get_ai_availability()
-    if not availability["available"]:
-        reason = str(availability.get("reason") or AI_UNAVAILABLE_BUDGET)
-        _log_openai_quota_skip(reason)
-        raise RuntimeError(reason)
-    if not client:
-        logger.error("❌ GPT Stream Call gefaald: Geen OpenAI Client")
-        raise ValueError("AI is offline")
-    if not _rate_limit_allows_call():
-        raise RuntimeError("ai_rate_limited")
-
-    messages = [
-        {"role": "system", "content": system_role},
-        {"role": "user", "content": prompt + "\n\nRETURN ONLY VALID JSON."}
-    ]
-
-    return client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=JSON_TEMP,
-        max_tokens=max_tokens or MAX_TOKENS,
-        response_format={"type": "json_object"},
-        stream=True
-    )

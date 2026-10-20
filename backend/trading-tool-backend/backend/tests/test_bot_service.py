@@ -1427,7 +1427,7 @@ def test_paper_reassessment_reports_whether_a_new_decision_was_saved(monkeypatch
     from backend.services import bot_service as module
 
     service = BotService(_FakeSession())
-    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {
+    monkeypatch.setattr(module, "sync_run_trading_bot_execution", lambda *_args: {
         "ok": True, "decisions": [],
     })
     unchanged = asyncio.run(service.run_bot_agent_generate(9, None, user_id=1))
@@ -1435,7 +1435,7 @@ def test_paper_reassessment_reports_whether_a_new_decision_was_saved(monkeypatch
     assert unchanged["generated"] is False
     assert unchanged["decision_ids"] == []
 
-    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {
+    monkeypatch.setattr(module, "sync_run_trading_bot_execution", lambda *_args: {
         "ok": True, "decisions": [{"decision_id": 42, "action": "hold"}],
     })
     created = asyncio.run(service.run_bot_agent_generate(9, None, user_id=1))
@@ -1453,7 +1453,7 @@ def test_paper_reassessment_rejects_live_bot_before_worker(monkeypatch):
 
     service = BotService(_FakeSession())
     service.repository = Repo()
-    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: pytest.fail("worker called"))
+    monkeypatch.setattr(module, "sync_run_trading_bot_execution", lambda *_args: pytest.fail("worker called"))
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(service.run_bot_agent_generate(9, None, user_id=1, paper_only=True))
@@ -1469,7 +1469,7 @@ def test_paper_reassessment_reports_execution_outcome_and_worker_failure(monkeyp
 
     service = BotService(_FakeSession())
     service.repository = Repo()
-    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {
+    monkeypatch.setattr(module, "sync_run_trading_bot_execution", lambda *_args: {
         "ok": True, "decisions": [{"decision_id": 43, "execution_status": "failed: cash"}],
     })
     failed_execution = asyncio.run(service.run_bot_agent_generate(9, None, user_id=1, paper_only=True))
@@ -1477,14 +1477,14 @@ def test_paper_reassessment_reports_execution_outcome_and_worker_failure(monkeyp
     assert failed_execution["paper_order_filled"] is False
     assert failed_execution["execution_failed"] is True
 
-    monkeypatch.setattr(module, "sync_run_trading_bot_agent", lambda *_args: {"ok": False})
+    monkeypatch.setattr(module, "sync_run_trading_bot_execution", lambda *_args: {"ok": False})
     with pytest.raises(HTTPException) as exc:
         asyncio.run(service.run_bot_agent_generate(9, None, user_id=1, paper_only=True))
     assert exc.value.status_code == 502
 
 
 def test_paper_only_worker_does_not_assess_live_bot(monkeypatch):
-    from backend.ai_agents import trading_bot_agent as worker
+    from backend.engine import trading_bot_execution as worker
 
     class Connection:
         def close(self):
@@ -1494,7 +1494,7 @@ def test_paper_only_worker_does_not_assess_live_bot(monkeypatch):
     monkeypatch.setattr(worker, "_get_active_bots", lambda *_args: [{
         "bot_id": 9, "is_live": True, "is_active": True,
     }])
-    result = worker.run_trading_bot_agent(user_id=1, bot_id=9, paper_only=True)
+    result = worker.run_trading_bot_execution(user_id=1, bot_id=9, paper_only=True)
     assert result == {"ok": False, "error": "paper_mode_changed"}
 
 
@@ -1514,7 +1514,7 @@ def test_paper_reassessment_uses_server_today_even_with_caller_date(monkeypatch)
 
     service = BotService(_FakeSession())
     service.repository = Repo()
-    monkeypatch.setattr(module, "sync_run_trading_bot_agent", worker)
+    monkeypatch.setattr(module, "sync_run_trading_bot_execution", worker)
     asyncio.run(service.run_bot_agent_generate(9, "2030-01-15", user_id=1, paper_only=True))
     assert calls == [(1, date.today(), 9, True)]
 

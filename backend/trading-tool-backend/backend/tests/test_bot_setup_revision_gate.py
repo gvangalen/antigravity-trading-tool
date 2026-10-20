@@ -3,8 +3,8 @@ from datetime import date, datetime
 
 import pytest
 
-from backend.ai_agents import trading_bot_agent
-from backend.ai_agents.trading_bot_agent import (
+from backend.engine import trading_bot_execution
+from backend.engine.trading_bot_execution import (
     _persist_decision_and_order,
     _require_current_setup_revision_for_buy,
 )
@@ -87,7 +87,7 @@ def test_worker_rejects_buy_if_setup_changed_after_it_was_read():
 
 def test_paper_hold_persists_the_actual_guardrail_reason(monkeypatch):
     conn = _Connection((42,))
-    monkeypatch.setattr(trading_bot_agent, "_persist_trade_plan", lambda **kwargs: None)
+    monkeypatch.setattr(trading_bot_execution, "_persist_trade_plan", lambda **kwargs: None)
 
     decision_id = _persist_decision_and_order(
         conn=conn, user_id=7, bot_id=8, strategy_id=10, setup_id=9,
@@ -114,7 +114,7 @@ def test_reassessment_cannot_reopen_an_executed_daily_decision(monkeypatch):
     def unexpected_trade_plan(**_kwargs):
         raise AssertionError("an executed decision must not receive a new plan")
 
-    monkeypatch.setattr(trading_bot_agent, "_persist_trade_plan", unexpected_trade_plan)
+    monkeypatch.setattr(trading_bot_execution, "_persist_trade_plan", unexpected_trade_plan)
     decision_id = _persist_decision_and_order(
         conn=conn, user_id=7, bot_id=8, strategy_id=10, setup_id=9,
         report_date=date(2026, 10, 11),

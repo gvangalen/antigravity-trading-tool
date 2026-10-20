@@ -42,7 +42,7 @@ def test_ecosystem_explicitly_passes_openai_calls_enabled():
 def test_market_latest_and_7d_get_routes_are_read_only():
     source = _read(BACKEND_ROOT / "api" / "market_data_api.py")
 
-    latest_section = source.split('@router.get("/market_data/{symbol}/latest"', 1)[1].split('@router.get("/market_data/interpreted")', 1)[0]
+    latest_section = source.split('@router.get("/market_data/{symbol}/latest"', 1)[1].split('@router.post("/market_data/7d/fill")', 1)[0]
     seven_day_section = source.split('@router.get("/market_data/7d"', 1)[1].split("# =========================================================\n# FORWARD RETURNS", 1)[0]
 
     assert "sync_live_price" not in latest_section

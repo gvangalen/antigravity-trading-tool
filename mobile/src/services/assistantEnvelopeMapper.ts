@@ -32,11 +32,20 @@ export function mapAssistantEnvelopeToFeedItems(envelope: AssistantEnvelope, lan
     });
   }
 
-  if (envelope.action && envelope.state?.status !== 'collecting') {
+  if (envelope.action && envelope.action.type !== 'v2_proposal' && envelope.state?.status !== 'collecting') {
     items.push({
       id: `action-${suffix}`,
       type: 'action',
       ...describeAction(envelope.action),
+    });
+  }
+
+  const proposal = envelope.actions?.find((action) => action.type === 'v2_proposal');
+  if (proposal?.type === 'v2_proposal' && proposal.requires_confirmation) {
+    items.push({
+      id: `proposal-${proposal.proposal_id}`,
+      type: 'v2_proposal',
+      proposalId: proposal.proposal_id,
     });
   }
 
@@ -60,6 +69,14 @@ export function mapAssistantEnvelopeToFeedItems(envelope: AssistantEnvelope, lan
 }
 
 function describeAction(action: AssistantAction) {
+  if (action.type === 'v2_proposal') {
+    return {
+      title: 'Voorstel van FINN',
+      reason: 'Controleer de wijzigingen.',
+      impact: 'Bevestiging blijft verplicht.',
+      primaryAction: 'Bekijk voorstel',
+    };
+  }
   if (action.type === 'bundle') {
     return {
       title: 'Review assistant actions',

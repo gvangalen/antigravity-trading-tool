@@ -40,7 +40,7 @@ def generate_quarterly_report(user_id: int):
     today = date.today()
     period_start, period_end = _get_quarter_period(today)
 
-    # 1️⃣ AI agent
+    # 1. FINN-rapport op basis van gedeelde feiten
     with ai_usage_context(
         user_id=user_id,
         user_email=get_user_email_snapshot(user_id),
@@ -52,9 +52,9 @@ def generate_quarterly_report(user_id: int):
     ):
         report = generate_quarterly_report_sections(user_id=user_id)
     if not isinstance(report, dict):
-        raise RuntimeError("Quarterly report agent failed")
+        raise RuntimeError("FINN quarterly report generation failed")
 
-    logger.info("✅ Quarterly report agent OK")
+    logger.info("✅ FINN kwartaalrapport gegenereerd")
 
     # 2️⃣ Opslaan
     conn = get_db_connection()

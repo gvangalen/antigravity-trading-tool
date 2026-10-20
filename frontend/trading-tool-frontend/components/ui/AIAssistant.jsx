@@ -2,27 +2,23 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal, executeAssistantAction, getAssistantPreferences, getAssistantSessionDetail, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, executePendingAction, fetchFinnState, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { assistantChat, cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal, getAssistantPreferences, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { useModal } from "@/components/modal/ModalProvider";
-import { saveNewSetup, fetchSetups } from "@/lib/api/setups";
-import { createStrategy, fetchStrategies } from "@/lib/api/strategy";
-import { createBotConfig, fetchBotConfigs } from "@/lib/api/botApi";
+import { fetchSetups } from "@/lib/api/setups";
+import { fetchStrategies } from "@/lib/api/strategy";
+import { fetchBotConfigs } from "@/lib/api/botApi";
 import { getIndicatorConfig } from "@/lib/api/indicatorConfig";
 import { fetchMacroData } from "@/lib/api/macro";
 import { initializeAsset } from "@/lib/api/market";
 import { technicalDataAll } from "@/lib/api/technical";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
-import SetupForm from "@/components/setup/SetupForm";
-import StrategyForm from "@/components/strategy/StrategyForm";
-import AddBotForm from "@/components/bot/AddBotForm";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
-import Drawer from "@/components/ui/Drawer";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { normalizeScopedAssetSymbol, resolveFinnContextSymbol, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
@@ -482,7 +478,6 @@ function AIAssistantContent({
   const [contextMetric, setContextMetric] = useState(null);
   const [finnDraft, setFinnDraft] = useState(null);
   const [missionControl, setMissionControl] = useState(null);
-  const [missionControlLoadError, setMissionControlLoadError] = useState(null);
   const [missionControlLoading, setMissionControlLoading] = useState(false);
   const [executingAction, setExecutingAction] = useState(false);
   const [missionDetailSection, setMissionDetailSection] = useState("");
@@ -491,7 +486,6 @@ function AIAssistantContent({
   const [manualCommandRequest, setManualCommandRequest] = useState(null);
   const [showSessionMenu, setShowSessionMenu] = useState(false);
   const [chatAssetOverride, setChatAssetOverride] = useState(null);
-  const [draftDrawer, setDraftDrawer] = useState(null);
   const [activeFinnSessionId, setActiveFinnSessionId] = useState(null);
   const [availableFinnSessions, setAvailableFinnSessions] = useState([]);
   
@@ -499,10 +493,8 @@ function AIAssistantContent({
   const scrollRef = useRef(null);
   const composerInputRef = useRef(null);
   const commandCenterRef = useRef(null);
-  const draftFormRef = useRef(null);
   const handledContextRequestRef = useRef(null);
   const usedFeedRequestRef = useRef(null);
-  const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
   const pendingRunRef = useRef(null);
@@ -511,7 +503,6 @@ function AIAssistantContent({
   const missionControlRequestRef = useRef(null);
   const missionControlRequestKeyRef = useRef("");
   const missionControlRequestGenerationRef = useRef(0);
-  const finnStateRequestRef = useRef(null);
   const sharedSessionRestoreRef = useRef(false);
   const forceNewFinnConversationRef = useRef(false);
   const activeFinnSessionIdRef = useRef(null);
@@ -602,21 +593,17 @@ function AIAssistantContent({
     setContextMetric(null);
     setFinnDraft(null);
     setMissionControl(null);
-    setMissionControlLoadError(null);
     setMissionControlLoading(false);
     setRecentConversations([]);
-    setDraftDrawer(null);
     setActiveFinnSessionId(null);
     activeFinnSessionIdRef.current = null;
     setAvailableFinnSessions([]);
     setChatAssetOverride(null);
     handledContextRequestRef.current = null;
-    loadedFinnStateRef.current = false;
     missionControlCacheKeyRef.current = "";
     missionControlRequestRef.current = null;
     missionControlRequestKeyRef.current = "";
     missionControlRequestGenerationRef.current += 1;
-    finnStateRequestRef.current = null;
     sharedSessionRestoreRef.current = false;
   }, [user?.id]);
 
@@ -1005,7 +992,6 @@ function AIAssistantContent({
   };
 
   const context = getContext();
-  const skipNextFinnRestoreRef = useRef(null);
   const currentConversationStorageKey = React.useMemo(() => {
     const userScope = String(user?.id || "anonymous");
     const section = String(context.page_type || pathname || "overview").toLowerCase();
@@ -3723,7 +3709,6 @@ function AIAssistantContent({
         setIsOpen(true);
       }
       if (assistantSuppressRestore && assistantFlow) {
-        skipNextFinnRestoreRef.current = assistantFlow;
         if (assistantFlow === "strategy_creation") {
           setFinnDraft(null);
           setActiveState(null);
@@ -3751,17 +3736,10 @@ function AIAssistantContent({
   }, [messages, handleChat]);
 
   useEffect(() => {
-    if (isOpen) {
-      if (!previewSectionsOnly && !isFeedHandoff) {
-        loadFinnState();
-      }
-      if (Object.keys(preferences).length === 0) {
-        getAssistantPreferences().then(res => setPreferences(res.preferences || {}));
-      }
-    } else {
-      loadedFinnStateRef.current = false;
+    if (isOpen && Object.keys(preferences).length === 0) {
+      getAssistantPreferences().then(res => setPreferences(res.preferences || {}));
     }
-  }, [isOpen, isAssetAnalysisPage, pathname, locale, isFeedHandoff]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || previewSectionsOnly || isFeedHandoff || sharedSessionRestoreRef.current) return;
@@ -3778,21 +3756,19 @@ function AIAssistantContent({
         const sessions = await getFinnV2Conversations();
         setAvailableFinnSessions(Array.isArray(sessions) ? sessions : []);
         const latestSessionId = normalizeFinnSessionId(sessions?.[0]?.id);
-        const resolvedSessionId = browserSessionId || preferredSessionId || latestSessionId;
-        if (!resolvedSessionId) return;
-
-        if (isFinnV2ConversationId(resolvedSessionId)) {
-          const detail = await getFinnV2ConversationDetail(resolvedSessionId);
-          activeFinnSessionIdRef.current = resolvedSessionId;
-          setActiveFinnSessionId(resolvedSessionId);
-          setMessages((current) => (current.length > 0 ? current : mapBackendSessionMessages(detail?.messages)));
-          return;
+        const candidates = [...new Set([browserSessionId, preferredSessionId, latestSessionId]
+          .filter(isFinnV2ConversationId))];
+        for (const candidateId of candidates) {
+          try {
+            const detail = await getFinnV2ConversationDetail(candidateId);
+            activeFinnSessionIdRef.current = candidateId;
+            setActiveFinnSessionId(candidateId);
+            setMessages((current) => (current.length > 0 ? current : mapBackendSessionMessages(detail?.messages)));
+            return;
+          } catch (error) {
+            console.warn("FINN-gesprek niet meer beschikbaar:", candidateId, error);
+          }
         }
-
-        const detail = await getAssistantSessionDetail(resolvedSessionId);
-        activeFinnSessionIdRef.current = resolvedSessionId;
-        setActiveFinnSessionId(resolvedSessionId);
-        setMessages((current) => (current.length > 0 ? current : mapBackendSessionMessages(detail?.messages)));
       } catch (error) {
         console.warn("Kon gedeelde FINN-sessie niet laden:", error);
       }
@@ -3801,17 +3777,15 @@ function AIAssistantContent({
 
   const persistActiveFinnSessionId = async (sessionId) => {
     const normalized = normalizeFinnSessionId(sessionId);
-    if (!normalized) return;
+    if (!isFinnV2ConversationId(normalized)) return;
     activeFinnSessionIdRef.current = normalized;
     setActiveFinnSessionId(normalized);
     if (typeof window !== "undefined") {
       writeActiveFinnConversation(window.sessionStorage, user?.id, normalized);
     }
-    if (isFinnV2ConversationId(normalized)) {
-      getFinnV2Conversations()
-        .then((sessions) => setAvailableFinnSessions(Array.isArray(sessions) ? sessions : []))
-        .catch((error) => console.warn("Kon FINN-gespreksgeschiedenis niet laden:", error));
-    }
+    getFinnV2Conversations()
+      .then((sessions) => setAvailableFinnSessions(Array.isArray(sessions) ? sessions : []))
+      .catch((error) => console.warn("Kon FINN-gespreksgeschiedenis niet laden:", error));
     try {
       await updateAssistantPreferences({
         [ACTIVE_FINN_SESSION_ID_KEY]: normalized,
@@ -3850,11 +3824,9 @@ function AIAssistantContent({
 
   const restoreFinnSession = async (sessionId) => {
     const normalized = normalizeFinnSessionId(sessionId);
-    if (!normalized) return;
+    if (!isFinnV2ConversationId(normalized)) return;
     try {
-      const detail = isFinnV2ConversationId(normalized)
-        ? await getFinnV2ConversationDetail(normalized)
-        : await getAssistantSessionDetail(normalized);
+      const detail = await getFinnV2ConversationDetail(normalized);
       await persistActiveFinnSessionId(normalized);
       setFinnDraft(null);
       setActiveState(null);
@@ -3863,120 +3835,6 @@ function AIAssistantContent({
       console.warn("Kon FINN-sessie niet herstellen:", error);
     }
   };
-
-  async function loadFinnState() {
-    if (loadedFinnStateRef.current) return;
-    if (finnStateRequestRef.current) return finnStateRequestRef.current;
-    if (skipNextFinnRestoreRef.current) {
-      loadedFinnStateRef.current = true;
-      skipNextFinnRestoreRef.current = null;
-      return;
-    }
-    loadedFinnStateRef.current = true;
-    finnStateRequestRef.current = (async () => {
-      try {
-        const envelope = await fetchFinnState();
-        if (!envelope?.has_draft || !envelope.draft) return;
-        const indicatorModalRequest = buildIndicatorModalRequest(envelope, context.symbol || globalSymbol || "BTC");
-
-        if (indicatorModalRequest && typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent(INDICATOR_MODAL_OPEN_EVENT, {
-              detail: {
-                category: indicatorModalRequest.category,
-                indicatorName: indicatorModalRequest.indicatorName,
-                title: indicatorModalRequest.title,
-                source: "finn",
-              },
-            })
-          );
-        }
-
-        setFinnDraft(indicatorModalRequest ? null : envelope.draft);
-        setActiveState(
-          indicatorModalRequest
-            ? null
-            : envelope.state
-              ? { ...envelope.state, can_confirm: envelope.can_confirm }
-              : null
-        );
-        setMessages(prev => {
-          const alreadyVisible = prev.some((m) =>
-            (m.intent === envelope.intent || m.flow === envelope.flow) &&
-            (indicatorModalRequest ? m.text === indicatorModalRequest.responseText : m.draft)
-          );
-          if (alreadyVisible) return prev;
-          return [...prev, {
-            role: "assistant",
-            text: indicatorModalRequest?.responseText || envelope.response,
-            intent: envelope.intent,
-            flow: envelope.flow,
-            draft: indicatorModalRequest ? null : envelope.draft,
-            actions: indicatorModalRequest ? [] : (Array.isArray(envelope.actions) ? envelope.actions : []),
-            missingFields: indicatorModalRequest ? [] : (envelope.missing_fields || []),
-            invalidFields: indicatorModalRequest ? [] : (envelope.invalid_fields || []),
-            nextQuestion: indicatorModalRequest ? null : (envelope.next_question || null),
-            canConfirm: indicatorModalRequest ? false : envelope.can_confirm,
-            suggestedActions: indicatorModalRequest ? [] : (envelope.suggested_actions || []),
-            reviewLinks: indicatorModalRequest ? [] : (Array.isArray(envelope.review_links) ? envelope.review_links : []),
-            reasoning: envelope.reasoning,
-            state: indicatorModalRequest ? null : (envelope.state || null),
-            summary: envelope.summary || null,
-            riskSummary: envelope.risk_summary || null,
-            nextBestAction: envelope.next_best_action || null,
-            reviewReason: envelope.review_reason || null,
-            restoredFinnDraft: true,
-            isComplete: true,
-          }];
-        });
-      } catch (err) {
-        console.error("Finn state herstellen mislukt", err);
-      } finally {
-        finnStateRequestRef.current = null;
-      }
-    })();
-    return finnStateRequestRef.current;
-  }
-
-  async function handleActionClick(action) {
-    if (!action) return;
-    const { type, symbol, params } = action;
-
-    try {
-      if (type === "add_to_watchlist") {
-        if (symbol && watchlist?.add) {
-          await watchlist.add({ symbol });
-        }
-      } else if (type === "remove_from_watchlist") {
-        if (symbol && watchlist?.remove) {
-          await watchlist.remove(symbol);
-        }
-      } else if (type === "open_setup_page") {
-        router.push(`/setup${symbol ? `?symbol=${symbol}` : ""}`);
-        setIsOpen(false);
-      } else if (type === "generate_strategy") {
-        router.push(`/setup${symbol ? `?symbol=${symbol}` : ""}`);
-        setIsOpen(false);
-      } else if (type === "open_bot_draft") {
-        // Support prefilled bot parameters via query params
-        const qParams = new URLSearchParams();
-        if (symbol) qParams.append("symbol", symbol);
-        if (params?.mode) qParams.append("mode", params.mode);
-        if (params?.risk) qParams.append("risk", params.risk);
-        if (params?.budget) qParams.append("budget", params.budget);
-        
-        router.push(`/bot?action=new_bot&${qParams.toString()}`);
-        setIsOpen(false);
-      } else if (type === "navigate_to_page") {
-        if (params?.path) {
-          router.push(params.path);
-          setIsOpen(false);
-        }
-      }
-    } catch (err) {
-      console.error("Action execution failed", err);
-    }
-  }
 
   const retireProposalCards = (proposalIds) => {
     if (!proposalIds.size) return;
@@ -4101,6 +3959,11 @@ function AIAssistantContent({
           }
         : null;
       const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
+      const requiresNamedTargetReview = [
+        "delete_setup", "delete_strategy", "delete_bot", "deactivate_bot",
+        "activate_paper_bot", "activate_live_bot",
+      ].includes(operationId);
+      const reviewedTargetName = immutableProposalState?.review_target_name || null;
       setMessages((prev) => retireEarlierFinnProposalCards(
         prev, streamId, verified?.proposal_id,
       ).map((message) => (
@@ -4123,8 +3986,12 @@ function AIAssistantContent({
               actionDraft: visibleActionDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id
-                && (operationId !== "create_bot" || verifiedBotStrategyName)),
-              confirmationSuspended: Boolean(verified?.proposal_id && operationId === "create_bot" && !verifiedBotStrategyName),
+                && (operationId !== "create_bot" || verifiedBotStrategyName)
+                && (!requiresNamedTargetReview || reviewedTargetName)),
+              confirmationSuspended: Boolean(verified?.proposal_id && (
+                (operationId === "create_bot" && !verifiedBotStrategyName)
+                || (requiresNamedTargetReview && !reviewedTargetName)
+              )),
               actions: verified?.proposal_id ? [{
                 type: "v2_proposal",
                 proposal_id: verified.proposal_id,
@@ -4137,6 +4004,7 @@ function AIAssistantContent({
                   conversation_id: projection?.conversation_id || run?.conversation_id || null,
                   run_id: runId,
                   operation_id: operationId || projection?.final_operation_id,
+                  review_target_name: reviewedTargetName,
                   name: actionDraft?.supplied_inputs?.name
                     || setupDraft?.supplied_inputs?.name
                     || projection?.action_result?.canonical_name
@@ -4618,72 +4486,6 @@ function AIAssistantContent({
     }));
   };
 
-  const trackFinnConfirmEvent = (eventName, draftType) => {
-    trackAssistantEvent({
-      event_name: eventName,
-      page: pathname || "/assistant",
-      surface: "finn_overlay",
-      asset: globalSymbol || null,
-      flow_type: "confirm",
-      action_type: draftType,
-    });
-  };
-
-  const closeDraftDrawer = () => {
-    if (draftFormRef.current?.isSubmitting?.()) return;
-    if (draftDrawer?.trackingType) {
-      trackFinnConfirmEvent("finn_confirm_canceled", draftDrawer.trackingType);
-    }
-    setDraftDrawer(null);
-  };
-
-  const handleEditDraft = async (draft, onSuccess) => {
-    if (draft.type === "setup") {
-      try {
-        trackFinnConfirmEvent("finn_confirm_opened", "setup_draft");
-        setDraftDrawer({
-          type: "setup",
-          title: at("modals.editSetupTitle"),
-          payload: draft.payload,
-          onSuccess,
-          trackingType: "setup_draft",
-        });
-      } catch (err) {
-        console.error("Failed to load SetupForm", err);
-      }
-    } else if (draft.type === "strategy") {
-      try {
-        const setupsList = await fetchSetups();
-        trackFinnConfirmEvent("finn_confirm_opened", "strategy_draft");
-        setDraftDrawer({
-          type: "strategy",
-          title: at("modals.editStrategyTitle"),
-          payload: draft.payload,
-          setups: setupsList,
-          onSuccess,
-          trackingType: "strategy_draft",
-        });
-      } catch (err) {
-        console.error("Failed to load StrategyForm", err);
-      }
-    } else if (draft.type === "bot") {
-      try {
-        const stratList = await fetchStrategies();
-        trackFinnConfirmEvent("finn_confirm_opened", "bot_draft");
-        setDraftDrawer({
-          type: "bot",
-          title: at("modals.editBotTitle"),
-          payload: draft.payload,
-          strategies: stratList,
-          onSuccess,
-          trackingType: "bot_draft",
-        });
-      } catch (err) {
-        console.error("Failed to load AddBotForm", err);
-      }
-    }
-  };
-
   const handleExecuteAction = async (action) => {
     if (!action) return;
     setExecutingAction(true);
@@ -4696,7 +4498,15 @@ function AIAssistantContent({
           showSnackbar("Dit voorstel is niet meer bevestigbaar.", "info");
           return;
         }
-        const result = await confirmAndExecuteFinnV2Proposal(action.proposal_id);
+        const reviewedName = action.display_context?.review_target_name;
+        if (reviewedName && latestProposal.review_target_name !== reviewedName) {
+          retireProposalCards(new Set([action.proposal_id]));
+          showSnackbar("Dit voorstel verwijst niet meer naar dezelfde naam. Vraag FINN om een nieuw voorstel.", "info");
+          return;
+        }
+        const result = await confirmAndExecuteFinnV2Proposal(
+          action.proposal_id, reviewedName || latestProposal.review_target_name,
+        );
         const execution = result?.execution || {};
         if (!["succeeded", "already_executed"].includes(execution.status)) {
           throw new Error(publicFinnExecutionError(execution.error_codes?.[0]));
@@ -4766,178 +4576,7 @@ function AIAssistantContent({
         }
         return;
       }
-      const res = await executeAssistantAction(action);
-      if (action.type === "refresh_daily_scores") {
-        if (!res?.ok || !res?.verified?.daily_scores) {
-          throw new Error("Daily scores zijn nog niet verifieerbaar.");
-        }
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: res.message || "Daily scores ververst en geverifieerd.",
-          intent: "daily_score_refresh_done",
-        }]);
-        emitFinnRefreshSignals();
-        return;
-      }
-
-      if (action.type === "generate_bot_decision") {
-        if (!res?.ok || !res?.verified?.bot_decision) {
-          throw new Error("Bot-decision is nog niet verifieerbaar.");
-        }
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: res.message || "Bot-decision gegenereerd. Review het voorstel voordat je iets uitvoert.",
-          intent: "bot_decision_generated",
-        }]);
-        emitFinnRefreshSignals();
-        return;
-      }
-
-      if (action.type === "skip_bot_decision") {
-        if (!res?.ok || !res?.verified?.bot_decision_skipped) {
-          throw new Error("Bot-decision skip is nog niet verifieerbaar.");
-        }
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: res.message || uiText.botDecisionSkippedVerified,
-          intent: "bot_decision_skipped",
-          operatorResolution: res.operator_resolution,
-        }]);
-        emitFinnRefreshSignals();
-        return;
-      }
-
-      if (action.type === "paper_execute_bot_decision") {
-        if (!res?.ok || !res?.verified?.paper_execution) {
-          throw new Error(uiText.paperExecutionPendingVerification);
-        }
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: res.message || uiText.botDecisionPaperExecuted,
-          intent: "bot_decision_executed",
-        }]);
-        emitFinnRefreshSignals();
-        return;
-      }
-
-      if (action.type === "live_preflight_bot_decision") {
-        const executionConsoleAction = buildExecutionConsoleAction(action, res);
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: res.message || "Live preflight gecontroleerd.",
-          intent: "bot_live_preflight",
-          isError: !res?.verified?.live_preflight,
-          suggestedActions: executionConsoleAction ? [executionConsoleAction] : [],
-        }]);
-        emitFinnRefreshSignals();
-        return;
-      }
-
-      if (action.type === "resolve_mission_item" || action.type === "snooze_mission_item") {
-        if (!res?.ok || !res?.verified?.mission_item_resolved) {
-          throw new Error("Dit overzichtsitem is nog niet verifieerbaar afgehandeld.");
-        }
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: res.message || "Overzichtsitem bijgewerkt.",
-          intent: "mission_item_resolved",
-          operatorResolution: res.operator_resolution,
-        }]);
-        emitFinnRefreshSignals();
-        return;
-      }
-
-      const isBotOnly = res?.draft?.draft_kind === "bot";
-      const isStrategyOnly = res?.draft?.draft_kind === "strategy";
-      const isIndicatorConfig = res?.draft?.draft_kind === "indicator_config";
-      const isIndicatorDelete = isIndicatorConfig && res?.operation === "delete";
-      const verifiedOk = isBotOnly
-        ? Boolean(res?.verified?.bot)
-        : isIndicatorConfig
-        ? Boolean(
-            res?.verified?.indicator_config &&
-            res?.verified?.backend_confirmed !== false &&
-            (res.category === "technical"
-              ? res?.verified?.technical_node !== false
-              : res?.verified?.macro_node !== false)
-          )
-        : Boolean(res?.verified?.setup && res?.verified?.strategy && (!res.bot_id || res?.verified?.bot));
-      if (!res?.ok || !verifiedOk) {
-        throw new Error("Read-after-write verificatie faalde.");
-      }
-
-      if (isIndicatorConfig) {
-        const indicatorName = String(res.indicator || "").toLowerCase();
-        const symbol = res.draft?.symbol || context.symbol || "BTC";
-        if (isIndicatorDelete) {
-          const rows = res.category === "macro"
-            ? await fetchMacroData()
-            : await technicalDataAll(symbol);
-          const stillPresent = res.category === "macro"
-            ? rows.some((row) => String(row.name || "").toLowerCase() === indicatorName)
-            : rows.some((row) => String(row.indicator || "").toLowerCase() === indicatorName);
-          if (stillPresent) {
-            throw new Error("Indicator staat nog steeds in de actieve lijst na verwijderen.");
-          }
-        } else {
-          const [config, rows] = await Promise.all([
-            getIndicatorConfig(res.category, res.indicator, symbol),
-            res.category === "macro" ? fetchMacroData() : technicalDataAll(symbol),
-          ]);
-          const configFound = Boolean(config?.indicator === res.indicator && Array.isArray(config?.rules) && config.rules.length === 5);
-          const shouldVerifyNode = Boolean(res.draft?.activate_node || res.draft?.node_already_active);
-          const nodeFound = !shouldVerifyNode ? true : res.category === "macro"
-            ? rows.some((row) => String(row.name).toLowerCase() === indicatorName)
-            : rows.some((row) => String(row.indicator).toLowerCase() === indicatorName);
-          if (!configFound || !nodeFound) {
-            throw new Error("Indicator-configuratie is nog niet terugleesbaar via de API.");
-          }
-        }
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: isIndicatorDelete
-            ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}${res.message || "Indicator verwijderd"} en geverifieerd: ${res.category}/${res.indicator} is niet langer actief.`
-            : `${res.duplicate ? "Deze actie was al verwerkt. " : ""}${res.message || "Indicator-configuratie opgeslagen"} en geverifieerd: ${res.category}/${res.indicator}.`,
-          intent: "indicator_configured",
-        }]);
-        setFinnDraft(null);
-        emitFinnRefreshSignals();
-        return;
-      }
-
-      const [setups, strategies, bots] = await Promise.all([
-        fetchSetups(),
-        fetchStrategies(),
-        fetchBotConfigs(),
-      ]);
-      const setupFound = isBotOnly || setups.some((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
-      const strategyFound = isBotOnly || strategies.some((strategy) => Number(strategy.id) === Number(res.strategy_id));
-      const botFound = !res.bot_id || bots.some((bot) => Number(bot.id || bot.bot_id) === Number(res.bot_id));
-      if (!setupFound || !strategyFound || !botFound) {
-        throw new Error("Aangemaakte objecten zijn nog niet terugleesbaar via de API.");
-      }
-      const persistedStrategy = strategies.find((strategy) => Number(strategy.id || strategy.strategy_id) === Number(res.strategy_id));
-      const persistedBot = bots.find((bot) => Number(bot.id || bot.bot_id) === Number(res.bot_id));
-
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        text: isBotOnly
-          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Paper-bot ‘${persistedBot?.name || action?.payload?.name || "Nieuwe paper-bot"}’ is ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en veilig opgeslagen.`
-          : isStrategyOnly
-          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie ‘${persistedStrategy?.name || action?.payload?.name || "Nieuwe strategie"}’ is ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en opgeslagen.`
-          : (() => {
-              const createdSetup = setups.find((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
-              const createdName = createdSetup?.name || action?.payload?.name || "Nieuwe setup";
-              const createdTimeframe = createdSetup?.timeframe || action?.payload?.timeframe || null;
-              const createdSymbol = createdSetup?.symbol || action?.payload?.symbol || context.symbol || globalSymbol || "BTC";
-              const createdType = createdSetup?.setup_type || action?.payload?.setup_type || "setup";
-              const timeframeSuffix = createdTimeframe ? ` op ${createdTimeframe}` : "";
-              return `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Setup '${createdName}' voor ${createdSymbol}${timeframeSuffix} is aangemaakt en geverifieerd (${createdType}).`;
-            })(),
-        intent: isBotOnly ? "bot_created" : (isStrategyOnly ? "strategy_created" : "plan_created"),
-      }]);
-      setFinnDraft(null);
-      emitFinnRefreshSignals();
+      throw new Error("Dit oudere actievoorstel kan niet meer worden bevestigd. Vraag FINN om een nieuw voorstel.");
     } catch (err) {
       console.error("Finn action failed", err);
       setMessages(prev => [...prev, {
@@ -5599,15 +5238,7 @@ function AIAssistantContent({
     if (isCollectingDraft(message)) return null;
     const actions = Array.isArray(message.actions) ? message.actions : [];
     const actionOnly = actions.filter((action) => (
-      action?.requires_confirmation &&
-      [
-        "refresh_daily_scores",
-        "generate_bot_decision",
-        "skip_bot_decision",
-        "paper_execute_bot_decision",
-        "live_preflight_bot_decision",
-        "v2_proposal",
-      ].includes(action.type)
+      action?.requires_confirmation && action.type === "v2_proposal"
     ));
     const dedicatedDraftOperation = message.setupDraft?.operation_id
       || message.actionDraft?.operation_id
@@ -5626,8 +5257,13 @@ function AIAssistantContent({
     const isWatchlistAction = ["watchlist_add", "watchlist_remove"].includes(operationId);
     const isIndicatorAction = ["create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"].includes(operationId);
     const suppliedInputs = displayContext.supplied_inputs || {};
+    const namedTargetReview = [
+      "delete_setup", "delete_strategy", "delete_bot", "deactivate_bot",
+      "activate_paper_bot", "activate_live_bot",
+    ].includes(operationId);
+    const verifiedTargetName = namedTargetReview ? displayContext.review_target_name : null;
     const objectType = operationId.includes("strategy") ? at("draftCards.objectStrategy", "Strategie") : operationId.includes("bot") ? at("draftCards.objectBot", "Paper-bot") : operationId.includes("setup") ? at("draftCards.objectSetup", "Setup") : at("draftCards.objectProposal", "Voorstel");
-    const objectName = displayContext.name
+    const objectName = verifiedTargetName || displayContext.name
       || (operationId.includes("setup") ? activeSetup?.name : null)
       || (operationId.includes("strategy") ? displayContext.strategy_name || activeSetup?.strategy_name : null)
       || (operationId.includes("bot") ? displayContext.bot_name || activeBot?.name : null)
@@ -5640,7 +5276,7 @@ function AIAssistantContent({
     });
     const isDomainProposal = isUpdate || isDelete;
     const contextParts = [
-      displayContext.name,
+      verifiedTargetName || displayContext.name,
       displayContext.symbol,
       displayContext.timeframe,
       displayContext.safety_mode,
@@ -5697,7 +5333,7 @@ function AIAssistantContent({
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onClick={() => void handleExecuteAction(action)} disabled={loading || executingAction || message.confirmationSuspended || (namedTargetReview && !verifiedTargetName)} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? at("draftCards.delete", "Verwijderen") : at("draftCards.confirm", "Bevestigen")}
               </button>
             ))}
@@ -5723,7 +5359,11 @@ function AIAssistantContent({
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
             <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.impact}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-              {at("inlineAction.updatesAfterConfirm")}
+              {operationId === "activate_live_bot"
+                ? at("inlineAction.activateLiveEffect", "Je activeert bot {name} in Live-modus na bevestiging.", { name: verifiedTargetName })
+                : operationId === "activate_paper_bot"
+                  ? at("inlineAction.activatePaperEffect", "Je activeert bot {name} in Paper-modus na bevestiging.", { name: verifiedTargetName })
+                  : at("inlineAction.updatesAfterConfirm")}
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
@@ -5744,7 +5384,7 @@ function AIAssistantContent({
             <button
               key={`${action.type}-${action.id || index}`}
               onClick={() => handleExecuteAction(action)}
-              disabled={loading || executingAction}
+              disabled={loading || executingAction || message.confirmationSuspended || (namedTargetReview && !verifiedTargetName)}
               className={actionButtonStyles({
                 variant: "primary",
                 className: "w-full justify-center gap-2 px-4 py-3 rounded-xl text-[11px] tracking-widest shadow-sm",
@@ -6260,9 +5900,9 @@ function AIAssistantContent({
             </p>
           </div>
         )}
-        {!isSimpleFinnModal && shouldCondenseMissionControl ? (
+        {!isSimpleFinnModal && shouldCondenseMissionControl && (missionControl || missionControlLoading) ? (
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(255,255,255,1)_100%)] dark:bg-[#0f172a] space-y-3 animate-fade-in">
-            {!missionControl && (missionControlLoading || (pathname === "/dashboard" && onboardingComplete && !missionControlLoadError)) ? (
+            {!missionControl && missionControlLoading ? (
               <div className="rounded-[22px] border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/35 px-4 py-4 space-y-3 animate-pulse">
                 <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
                   <Sparkles size={11} className="text-blue-500" />
@@ -6923,32 +6563,6 @@ function AIAssistantContent({
                 {!isSimpleFinnModal && m.reasoning && m.isComplete !== false && (
                   <ReasoningWidget reasoning={m.reasoning} />
                 )}
-                {/* Universal Action Card Renderer */}
-                {m.isComplete !== false && !isCollectingDraft(m) && (() => {
-                  const card = (m.draft?.type === "action_card" ? m.draft : null) || (m.action?.type === "action_card" ? m.action : null);
-                  if (card) {
-                    return (
-                      <UniversalActionCard
-                        card={card}
-                        onCancel={() => handleCancelDraft(i)}
-                        onSuccess={() => handleDraftSuccess(i)}
-                        handleEditDraft={handleEditDraft}
-                      />
-                    );
-                  }
-                  return null;
-                })()}
-                {m.action && m.action.type !== "action_card" && !m.draft?.plan_type && !isCollectingDraft(m) && m.isComplete !== false && (
-                  <ActionCard action={m.action} onAction={handleActionClick} />
-                )}
-                {m.draft && hasConfirmableDraft(m) && m.intent !== "plan_creation" && m.flow !== "plan_creation" && m.intent !== "strategy_creation" && m.flow !== "strategy_creation" && !m.draft?.plan_type && m.draft?.draft_kind !== "strategy" && m.draft?.draft_kind !== "indicator_config" && m.draft.type !== "action_card" && !m.draftCanceled && !m.draftExecuted && m.isComplete !== false && (
-                  <DraftCard 
-                    draft={m.draft} 
-                    onCancel={() => handleCancelDraft(i)} 
-                    onSuccess={() => handleDraftSuccess(i)}
-                    handleEditDraft={handleEditDraft}
-                  />
-                )}
                 {m.draft && m.draftCanceled && m.isComplete !== false && (
                   <div className="mt-3 p-3 bg-slate-100/50 dark:bg-slate-950/20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl text-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                     {at("draftStatus.canceled")}
@@ -6987,66 +6601,7 @@ function AIAssistantContent({
             </div>
           ))}
 
-          {/* LIVE INTERACTIVE CONCEPT CARD */}
-          {activeState && activeState.current_flow && activeState.current_flow !== "none" && activeState.current_flow !== "plan_creation" && (() => {
-            const flow = activeState.current_flow;
-            const slots = flow === "strategy_creation" ? getStrategyFlowSlots(activeState) : (activeState.slots || {});
-            const canConfirmActiveFlow = Boolean(activeState.can_confirm);
-            let shouldShowCard = false;
-            
-            if (flow === "setup_creation") {
-              const hasCoreChoice = !!slots.setup_type;
-              const hasMeaningfulProgress = !!(slots.timeframe && (slots.dca_frequency || slots.entry || slots.stop_loss || slots.base_amount));
-              shouldShowCard = canConfirmActiveFlow && hasCoreChoice && hasMeaningfulProgress;
-            } else if (flow === "strategy_creation") {
-              shouldShowCard = false;
-            } else if (flow === "bot_creation") {
-              shouldShowCard = canConfirmActiveFlow && !!slots.budget_total_eur;
-            } else {
-              shouldShowCard = canConfirmActiveFlow;
-            }
 
-            if (!shouldShowCard) return null;
-
-            return (
-              <div className="flex justify-start animate-in slide-in-from-bottom-3 duration-300">
-                <div className="max-w-[90%]">
-                  <ConceptCard 
-                    state={activeState}
-                    onCancel={() => {
-                      handleChat("annuleer", false);
-                      setActiveState(null);
-                    }}
-                    onEdit={() => {
-                      const mockDraft = {
-                        type: activeState.current_flow.split("_")[0],
-                        payload: {
-                          name: activeState.slots?.name || `${activeState.slots?.symbol || globalSymbol} Concept`,
-                          symbol: activeState.slots?.symbol || globalSymbol,
-                          setup_type: activeState.slots?.setup_type || "trade",
-                          ...activeState.slots
-                        }
-                      };
-                      handleEditDraft(mockDraft, async () => {
-                        setActiveState(null);
-                        await handleChat("ik heb hem zojuist opgeslagen", true);
-                      });
-                    }}
-                    onFinalize={() => handleChat(flow === "strategy_creation" ? "maak de strategie" : "maak de setup")}
-                    onUpdateSlots={(newSlots) => {
-                      if (flow === "setup_creation") {
-                        if (newSlots.setup_type) handleChat(newSlots.setup_type, true);
-                        if (newSlots.dca_frequency) handleChat(newSlots.dca_frequency, true);
-                      }
-                      if (flow === "bot_creation" && (newSlots.budget_total_eur || newSlots.budget_daily_limit_eur)) {
-                        handleChat(String(newSlots.budget_total_eur || newSlots.budget_daily_limit_eur), true);
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            );
-          })()}
 
           {loading && (
             <div role="status" className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
@@ -7060,94 +6615,6 @@ function AIAssistantContent({
         </>
         )}
       </div>
-
-      <Drawer
-        isOpen={Boolean(draftDrawer)}
-        onClose={closeDraftDrawer}
-        isCloseBlocked={() => Boolean(draftFormRef.current?.isSubmitting?.())}
-        title={draftDrawer?.title || at("uiText.draftLabel")}
-        subtitle={at("uiText.draftLabel")}
-        width={draftDrawer?.type === "setup" ? "max-w-3xl" : "max-w-2xl"}
-      >
-        {draftDrawer?.type === "setup" ? (
-          <SetupForm
-            ref={draftFormRef}
-            mode="new"
-            initialData={draftDrawer.payload}
-            onSaved={() => {
-              trackFinnConfirmEvent("finn_confirm_confirmed", draftDrawer.trackingType);
-              showSnackbar(at("modals.setupCreatedSuccess"), "success");
-              draftDrawer.onSuccess?.();
-              setDraftDrawer(null);
-            }}
-          />
-        ) : null}
-
-        {draftDrawer?.type === "strategy" ? (
-          <StrategyForm
-            ref={draftFormRef}
-            setups={draftDrawer.setups || []}
-            isEdit={false}
-            strategy={{
-              name: draftDrawer.payload?.name,
-              symbol: draftDrawer.payload?.symbol,
-              setup_type: draftDrawer.payload?.setup_type,
-              setup_id: draftDrawer.payload?.setup_id || draftDrawer.setups?.[0]?.id,
-              base_amount: draftDrawer.payload?.base_amount,
-              entry: draftDrawer.payload?.entry,
-              targets: draftDrawer.payload?.targets,
-              stop_loss: draftDrawer.payload?.stop_loss,
-              execution_mode: draftDrawer.payload?.execution_mode || "fixed",
-            }}
-            onSubmit={async (payload) => {
-              await createStrategy(payload);
-              trackFinnConfirmEvent("finn_confirm_confirmed", draftDrawer.trackingType);
-              showSnackbar(at("modals.strategyCreatedSuccess"), "success");
-              draftDrawer.onSuccess?.();
-              setDraftDrawer(null);
-            }}
-          />
-        ) : null}
-
-        {draftDrawer?.type === "bot" ? (
-          <AddBotForm
-            ref={draftFormRef}
-            strategies={draftDrawer.strategies || []}
-            initialData={{
-              name: draftDrawer.payload?.name,
-              strategy_id: draftDrawer.payload?.strategy_id || draftDrawer.strategies?.[0]?.id,
-              mode: draftDrawer.payload?.mode || "manual",
-              is_live: draftDrawer.payload?.is_live || false,
-              risk_profile: draftDrawer.payload?.risk_profile || "balanced",
-              base_currency: draftDrawer.payload?.base_currency || "EUR",
-              budget_total_eur: draftDrawer.payload?.budget_total_eur || 500.0,
-              budget_daily_limit_eur: draftDrawer.payload?.budget_daily_limit_eur || 50.0,
-              budget_min_order_eur: draftDrawer.payload?.budget_min_order_eur || 10.0,
-              budget_max_order_eur: draftDrawer.payload?.budget_max_order_eur || 100.0,
-              max_asset_exposure_pct: draftDrawer.payload?.max_asset_exposure_pct || 100.0,
-            }}
-            hideActions={false}
-            submitLabel={at("modals.saveCreate")}
-            submitBusyLabel={at("uiText.loadingShort")}
-            cancelLabel={uiText.cancel}
-            successMessage=""
-            saveFailedMessage={at("universalAction.executionFailed")}
-            onCancel={closeDraftDrawer}
-            onSubmit={async (payload) => {
-              return await createBotConfig({
-                ...payload,
-                cadence: draftDrawer.payload?.cadence || "daily",
-              });
-            }}
-            onSaved={() => {
-              trackFinnConfirmEvent("finn_confirm_confirmed", draftDrawer.trackingType);
-              showSnackbar("Bot succesvol aangemaakt!", "success");
-              draftDrawer.onSuccess?.();
-              setDraftDrawer(null);
-            }}
-          />
-        ) : null}
-      </Drawer>
 
       {/* INPUT AREA */}
       {!previewSectionsOnly && (
@@ -7286,991 +6753,6 @@ export function FinnPanel(props) {
         persistent
       />
     </Suspense>
-  );
-}
-
-function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
-  const { openConfirm, showSnackbar } = useModal();
-  const { t, locale } = useTranslation();
-  const [status, setStatus] = useState("pending"); // pending, executing, success, error, canceled
-  const [errorMessage, setErrorMessage] = useState("");
-  const assistantCopy = t?.assistant || {};
-  const at = (path, fallback = "", vars = {}) => interpolateTranslation(getDictionaryValue(assistantCopy, path) ?? fallback, vars);
-  const uiText = {
-    actionCanceled: at("uiText.actionCanceled"),
-    actionSucceeded: at("uiText.actionSucceeded"),
-    aiCommandCenter: at("uiText.aiCommandCenter"),
-    conceptSuffix: at("uiText.conceptSuffix"),
-    draftLabel: at("uiText.draftLabel"),
-    actionLabel: at("uiText.actionLabel"),
-    asset: at("uiText.asset"),
-    setupType: at("uiText.setupType"),
-    marketConditionOptions: t?.setups?.marketConditions?.options || {},
-    dcaParameters: at("uiText.dcaParameters"),
-    scoreThresholds: at("uiText.scoreThresholds"),
-    scoreThresholdsMissing: at("uiText.scoreThresholdsMissing"),
-    baseBudget: at("uiText.baseBudget"),
-    entryTarget: at("uiText.entryTarget"),
-    stopLoss: at("uiText.stopLoss"),
-    takeProfitTargets: at("uiText.takeProfitTargets"),
-    dcaMultiplierMode: at("uiText.dcaMultiplierMode"),
-    targetAsset: at("uiText.targetAsset"),
-    noDetailedParameters: at("uiText.noDetailedParameters"),
-    loadingShort: at("uiText.loadingShort"),
-    edit: at("uiText.edit"),
-    cancel: at("uiText.cancel"),
-    approve: at("uiText.approve"),
-    safetyProfile: at("uiText.safetyProfile"),
-    budget: at("uiText.budget"),
-    environment: at("uiText.environment"),
-    mode: at("uiText.mode"),
-    liveReal: at("uiText.liveReal"),
-    paperSandbox: at("uiText.paperSandbox"),
-  };
-
-  const cardType = card.card_type || "";
-  const payload = card.payload || {};
-  const isDraft = cardType.endsWith("_draft_card");
-  const baseType = cardType.replace("_draft_card", "").replace("_card", ""); // setup, strategy, bot, add_to_watchlist, remove_from_watchlist etc.
-
-  const handleApprove = async () => {
-    setStatus("executing");
-    setErrorMessage("");
-    try {
-      const res = await executePendingAction(card.action_id);
-      if (res && res.error) {
-        throw new Error(res.error || at("universalAction.executionFailed"));
-      }
-      setStatus("success");
-      showSnackbar(at("universalAction.executionSucceeded"), "success");
-      if (onSuccess) onSuccess();
-    } catch (err) {
-      console.error("Action execution failed:", err);
-      setStatus("error");
-      setErrorMessage(err.message || at("universalAction.executionError"));
-      showSnackbar(at("universalAction.executionFailed"), "danger");
-    }
-  };
-
-  const handleCancelClick = () => {
-    setStatus("canceled");
-    if (onCancel) onCancel();
-  };
-
-  const handleEditClick = () => {
-    if (!handleEditDraft) return;
-    const draftType = cardType.replace("_draft_card", ""); // setup, strategy, bot
-    const mockDraft = {
-      type: draftType,
-      payload: payload
-    };
-    handleEditDraft(mockDraft, () => {
-      setStatus("success");
-      if (onSuccess) onSuccess();
-    });
-  };
-
-  // --- Theme styling ---
-  const getAccentGradient = () => {
-    if (baseType === "setup") return "from-amber-500 to-yellow-400";
-    if (baseType === "strategy") return "from-blue-500 to-indigo-500";
-    if (baseType === "bot") return "from-emerald-500 to-teal-500";
-    return "from-violet-500 to-fuchsia-500";
-  };
-
-  const getRiskBadge = () => {
-    if (baseType === "setup") {
-      const isDca = payload.setup_type === "dca";
-      return isDca 
-        ? { text: uiText.riskLow, class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" }
-        : { text: uiText.riskMedium, class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
-    }
-    if (baseType === "strategy") {
-      const sl = parseFloat(payload.stop_loss);
-      const isHighSl = sl && sl > 12;
-      return isHighSl
-        ? { text: uiText.riskHigh, class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" }
-        : { text: uiText.riskMedium, class: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" };
-    }
-    if (baseType === "bot") {
-      const risk = payload.risk_profile || "balanced";
-      if (risk === "aggressive") return { text: uiText.riskActive, class: "bg-rose-500/10 text-rose-500 dark:text-rose-400 border-rose-500/20" };
-      if (risk === "conservative") return { text: uiText.riskConservative, class: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20" };
-      return { text: uiText.riskBalanced, class: "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20" };
-    }
-    return { text: uiText.operational, class: "bg-violet-500/10 text-violet-500 dark:text-violet-400 border-violet-500/20" };
-  };
-
-  const riskBadge = getRiskBadge();
-
-  if (status === "canceled") {
-    return (
-      <div className="mt-4 p-4 bg-slate-100/50 dark:bg-slate-950/20 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-2xl text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider animate-in fade-in duration-200">
-        ✕ {uiText.actionCanceled}
-      </div>
-    );
-  }
-
-  if (status === "success") {
-    return (
-      <div className="mt-4 p-5 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/30 rounded-2xl text-center text-xs text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest flex flex-col items-center justify-center gap-2 animate-in fade-in zoom-in-95 duration-300">
-        <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center text-lg font-black shadow-lg shadow-emerald-500/20 animate-bounce">
-          ✓
-        </div>
-        <span>{uiText.actionSucceeded}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-xl shadow-slate-100/10 dark:shadow-none animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* CARD ACCENT LINE */}
-      <div className={`h-1.5 w-full bg-gradient-to-r ${getAccentGradient()}`} />
-
-      <div className="p-4 space-y-4">
-        {/* CARD TITLE & RISK BADGE */}
-        <div className="flex items-start justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              {uiText.aiCommandCenter}
-            </span>
-            <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
-              {payload.name || (baseType === "add_to_watchlist" ? at("universalAction.watchlistActivation", "", { symbol: payload.symbol }) : baseType === "remove_from_watchlist" ? at("universalAction.watchlistDeactivation", "", { symbol: payload.symbol }) : `${payload.symbol || uiText.asset} ${uiText.conceptSuffix}`)}
-            </h4>
-          </div>
-          <div className="flex flex-col items-end gap-1.5">
-            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
-              {baseType} {isDraft ? uiText.draftLabel : uiText.actionLabel}
-            </span>
-            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${riskBadge.class}`}>
-              {riskBadge.text}
-            </span>
-          </div>
-        </div>
-
-        {/* METADATA CONTENT AREA */}
-        <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-inner">
-          {baseType === "setup" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col col-span-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name || "Naam"}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{payload.name || "—"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
-                <span className="uppercase text-xs text-foreground dark:text-slate-200">{payload.setup_type || "dca"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{payload.timeframe || "—"}</span>
-              </div>
-              {(payload.market_condition || payload.min_benchmark_score != null) && (
-                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200">
-                    {getSetupMarketConditionLabel(payload.market_condition || inferSetupMarketConditionFromScores(payload), uiText)}
-                  </span>
-                </div>
-              )}
-              {payload.setup_type === "dca" && (
-                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200">
-                    {[payload.dca_frequency, payload.dca_day ? `op ${payload.dca_day}` : null].filter(Boolean).join(" ") || "—"}
-                  </span>
-                </div>
-              )}
-              {(payload.min_benchmark_score != null || payload.max_benchmark_score != null) && (
-                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
-                  <div className="bg-white dark:bg-slate-900 rounded-lg p-1.5 border border-slate-100 dark:border-slate-800">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Benchmark</div>
-                    <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_benchmark_score ?? "—"}-{payload.max_benchmark_score ?? "—"}</div>
-                  </div>
-                </div>
-              )}
-              {payload.min_benchmark_score == null && payload.max_benchmark_score == null && (
-                <div className="col-span-2 text-xs text-slate-500">{uiText.scoreThresholdsMissing}</div>
-              )}
-            </div>
-          )}
-
-          {baseType === "strategy" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">€{payload.base_amount || 100.0}</span>
-              </div>
-              {payload.setup_type === "trade" ? (
-                <>
-                  <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.entryTarget}</span>
-                    <span className="text-xs text-foreground dark:text-slate-200">€{payload.entry}</span>
-                  </div>
-                  <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.stopLoss}</span>
-                    <span className="text-xs text-rose-500">€{payload.stop_loss}</span>
-                  </div>
-                  <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.takeProfitTargets}</span>
-                    <span className="text-xs text-emerald-500 font-mono">
-                      {Array.isArray(payload.targets) ? payload.targets.map(t => `€${t}`).join(" · ") : `€${payload.targets}`}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200">{formatExecutionMode(payload.execution_mode || "fixed", locale)}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {baseType === "bot" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.risk_profile || "balanced"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">€{payload.budget_total_eur || 500.0}</span>
-              </div>
-              <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.environment}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">
-                  {payload.is_live ? uiText.liveReal : uiText.paperSandbox}
-                </span>
-              </div>
-              <div className="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.mode}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.mode || "manual"}</span>
-              </div>
-            </div>
-          )}
-
-          {baseType.includes("watchlist") && (
-            <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-3">
-              <Activity size={18} className="text-violet-500 animate-pulse" />
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.targetAsset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol}</span>
-              </div>
-            </div>
-          )}
-
-          {!["setup", "strategy", "bot"].includes(baseType) && !baseType.includes("watchlist") && (
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
-              {payload.description || uiText.noDetailedParameters}
-            </div>
-          )}
-        </div>
-
-        {/* INLINE ERROR DISPLAY */}
-        {status === "error" && (
-          <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-[10px] text-rose-500 font-black tracking-wide leading-snug animate-in fade-in slide-in-from-top-1 duration-200">
-            ⚠ {errorMessage}
-          </div>
-        )}
-
-        {/* CONTROL BUTTONS WITH OPTIMISTIC LOADING */}
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={handleApprove}
-            disabled={status === "executing"}
-            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider text-white transition-all shadow-md flex items-center justify-center gap-1.5 bg-gradient-to-r ${getAccentGradient()} hover:opacity-90 active:scale-95 disabled:opacity-50`}
-          >
-            {status === "executing" ? (
-              <>
-                <Loader2 size={12} className="animate-spin" />
-                <span>{uiText.loadingShort}</span>
-              </>
-            ) : (
-              uiText.approve
-            )}
-          </button>
-
-          {isDraft && handleEditDraft ? (
-            <button
-              onClick={handleEditClick}
-              disabled={status === "executing"}
-              className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50 flex items-center justify-center"
-            >
-              {uiText.edit}
-            </button>
-          ) : (
-            <div className="col-span-1" /> // Placeholder to maintain exact symmetrical grid alignment
-          )}
-
-          <button
-            onClick={handleCancelClick}
-            disabled={status === "executing"}
-            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 hover:text-red-500 dark:hover:border-red-500/30 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50 flex items-center justify-center"
-          >
-            {uiText.cancel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ActionCard({ action, onAction }) {
-  const { t } = useTranslation();
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const assistantCopy = t?.assistant || {};
-  const at = (path, fallback = "", vars = {}) => interpolateTranslation(getDictionaryValue(assistantCopy, path) ?? fallback, vars);
-  const uiText = {
-    actionCheck: at("uiText.actionCheck"),
-    actionCheckBody: at("uiText.actionCheckBody"),
-  };
-  
-  // State for bundle execution
-  const [steps, setSteps] = useState([]);
-  const [bundleStatus, setBundleStatus] = useState("idle"); // idle, running, success, failed
-
-  useEffect(() => {
-    if (action?.type === "bundle" && action?.actions) {
-      setSteps(
-        action.actions.map((act, index) => ({
-          ...act,
-          id: index,
-          status: "pending", // pending, processing, success, failed
-        }))
-      );
-    }
-  }, [action]);
-
-  const handleSingleClick = async () => {
-    setLoading(true);
-    try {
-      await onAction(action);
-      setSuccess(true);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBundleClick = async () => {
-    setBundleStatus("running");
-    
-    let hasError = false;
-    const updatedSteps = [...steps];
-
-    for (let i = 0; i < updatedSteps.length; i++) {
-      // Update state to processing for the current step
-      updatedSteps[i] = { ...updatedSteps[i], status: "processing" };
-      setSteps([...updatedSteps]);
-
-      try {
-        // Execute the action via the callback
-        await onAction(updatedSteps[i]);
-        
-        // Mark as success
-        updatedSteps[i] = { ...updatedSteps[i], status: "success" };
-        setSteps([...updatedSteps]);
-      } catch (err) {
-        console.error(`Step ${i} failed:`, err);
-        updatedSteps[i] = { ...updatedSteps[i], status: "failed" };
-        setSteps([...updatedSteps]);
-        hasError = true;
-        break; // Stop sequential execution upon error
-      }
-      
-      // Short delay for visual polish & sequential feel
-      await new Promise(resolve => setTimeout(resolve, 600));
-    }
-
-    if (hasError) {
-      setBundleStatus("failed");
-    } else {
-      setBundleStatus("success");
-    }
-  };
-
-  const getActionLabel = (act = action) => {
-    switch (act.type) {
-      case "add_to_watchlist": return at("actionLabels.add_to_watchlist", "", { symbol: act.symbol || "" });
-      case "remove_from_watchlist": return at("actionLabels.remove_from_watchlist", "", { symbol: act.symbol || "" });
-      case "open_setup_page": return at("actionLabels.open_setup_page", "", { symbol: act.symbol || "" });
-      case "generate_strategy": return at("actionLabels.generate_strategy", "", { symbol: act.symbol || "" });
-      case "open_bot_draft": return at("actionLabels.open_bot_draft", "", { symbol: act.symbol || "" });
-      case "navigate_to_page": return at("actionLabels.navigate_to_page", "", { label: act.params?.label || at("actionLabels.page") });
-      default: return at("actionLabels.default");
-    }
-  };
-
-  const getActionDescription = (act = action) => {
-    switch (act.type) {
-      case "add_to_watchlist": return at("actionDescriptions.add_to_watchlist", "", { symbol: act.symbol || "" });
-      case "remove_from_watchlist": return at("actionDescriptions.remove_from_watchlist", "", { symbol: act.symbol || "" });
-      case "open_setup_page": return at("actionDescriptions.open_setup_page", "", { symbol: act.symbol || "" });
-      case "generate_strategy": return at("actionDescriptions.generate_strategy", "", { symbol: act.symbol || "" });
-      case "open_bot_draft": return at("actionDescriptions.open_bot_draft");
-      case "navigate_to_page": return at("actionDescriptions.navigate_to_page", "", { label: act.params?.label || at("actionLabels.page") });
-      default: return "";
-    }
-  };
-
-  // --- RENDERING MULTI-ACTION BUNDLE ---
-  if (action?.type === "bundle") {
-    return (
-      <div className="mt-3 p-5 bg-gradient-to-br from-blue-600/5 to-indigo-600/5 dark:from-blue-950/10 dark:to-indigo-950/10 border-2 border-blue-200/50 dark:border-blue-900/40 rounded-2xl flex flex-col gap-4 shadow-xl shadow-blue-500/5">
-        <div className="flex items-center justify-between border-b border-blue-100/30 dark:border-blue-900/20 pb-2.5">
-          <div>
-            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400 flex items-center gap-2">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </span>
-              {uiText.actionCheck}
-            </h4>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">
-              {uiText.actionCheckBody}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Steps List */}
-        <div className="space-y-3">
-          {steps.map((step, idx) => (
-            <div 
-              key={step.id} 
-              className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
-                step.status === "processing" 
-                  ? "bg-blue-50/50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800 shadow-sm"
-                  : step.status === "success"
-                    ? "bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-500/30 dark:border-emerald-500/20"
-                    : step.status === "failed"
-                      ? "bg-rose-50/20 dark:bg-rose-950/10 border-rose-500/30 dark:border-rose-500/20"
-                      : "bg-white/50 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800"
-              }`}
-            >
-              {/* Step Number / Status Indicator */}
-              <div className="flex-shrink-0 mt-0.5">
-                {step.status === "pending" && (
-                  <div className="w-5 h-5 rounded-full border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center text-[9px] font-black text-slate-400 dark:text-slate-500">
-                    {idx + 1}
-                  </div>
-                )}
-                {step.status === "processing" && (
-                  <div className="w-5 h-5 flex items-center justify-center text-blue-500">
-                    <Loader2 size={16} className="animate-spin" />
-                  </div>
-                )}
-                {step.status === "success" && (
-                  <div className="w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center text-white text-[10px] font-black transition-all duration-300 scale-100">
-                    ✓
-                  </div>
-                )}
-                {step.status === "failed" && (
-                  <div className="w-5 h-5 rounded-full bg-rose-500 dark:bg-rose-600 flex items-center justify-center text-white text-[10px] font-black">
-                    !
-                  </div>
-                )}
-              </div>
-
-              {/* Step Info */}
-              <div className="flex-1">
-                <span className="text-xs font-black text-foreground dark:text-slate-200 block leading-tight">
-                  {step.description || getActionLabel(step)}
-                </span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block mt-0.5">
-                  {getActionDescription(step)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Execution Trigger */}
-        <button 
-          onClick={handleBundleClick}
-          disabled={bundleStatus === "running" || bundleStatus === "success"}
-          className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all shadow-lg active:scale-95 ${
-            bundleStatus === "success" 
-              ? "bg-emerald-600 shadow-emerald-600/15 cursor-default" 
-              : bundleStatus === "failed"
-                ? "bg-rose-600 shadow-rose-600/15"
-                : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/15"
-          }`}
-        >
-          {bundleStatus === "running" 
-            ? "Acties worden verwerkt..." 
-            : bundleStatus === "success" 
-              ? "✓ Acties opgeslagen" 
-              : bundleStatus === "failed"
-                ? "Probeer opnieuw"
-                : `Bevestig acties (${steps.length})`}
-        </button>
-      </div>
-    );
-  }
-
-  // --- RENDERING SINGLE ACTION ---
-  return (
-    <div className="mt-3 p-4 bg-blue-100/10 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/40 rounded-2xl flex flex-col gap-3">
-      <div>
-        <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-600 dark:text-blue-400">{uiText.proposedAction}</h4>
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 leading-snug">{getActionDescription()}</p>
-      </div>
-      
-      <button 
-        onClick={handleSingleClick}
-        disabled={loading || success}
-        className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all shadow-md active:scale-95 ${
-          success 
-            ? "bg-emerald-600 shadow-emerald-600/15 cursor-default" 
-            : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/15"
-        }`}
-      >
-        {loading ? "Processing..." : success ? "✓ Executed Successfully" : getActionLabel()}
-      </button>
-    </div>
-  );
-}
-
-function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
-  const { openConfirm, showSnackbar } = useModal();
-  const { t, locale } = useTranslation();
-  const at = createAssistantTranslator(t);
-  const uiText = buildAssistantUiText(at);
-  const [approving, setApproving] = useState(false);
-  const payload = draft?.payload && typeof draft.payload === "object" ? draft.payload : {};
-
-  const handleApprove = async () => {
-    setApproving(true);
-    try {
-      if (draft.type === "setup") {
-        await saveNewSetup(payload);
-        showSnackbar(uiText.draftSetupApproved, "success");
-        onSuccess();
-      } else if (draft.type === "strategy") {
-        const setups = await fetchSetups();
-        const matching = setups.filter(s => s.symbol?.toUpperCase() === payload.symbol?.toUpperCase());
-        if (matching.length === 0) {
-          showSnackbar(uiText.missingSetupForStrategy.replace("{symbol}", payload.symbol || ""), "danger");
-          setApproving(false);
-          return;
-        }
-        const payload = {
-          ...draft.payload,
-          setup_id: matching[0].id
-        };
-        await createStrategy(payload);
-        showSnackbar(uiText.draftStrategyApproved, "success");
-        onSuccess();
-      } else if (draft.type === "bot") {
-        const strategies = await fetchStrategies();
-        const matching = strategies.filter(s => s.symbol?.toUpperCase() === payload.name?.split(' ')[0]?.toUpperCase() || s.name?.toLowerCase().includes(payload.name?.toLowerCase()));
-        let stratId = matching[0]?.id;
-        if (!stratId && strategies.length > 0) {
-          stratId = strategies[0].id;
-        }
-        if (!stratId) {
-          showSnackbar(uiText.missingStrategyForBot, "danger");
-          setApproving(false);
-          return;
-        }
-        const payload = {
-          ...draft.payload,
-          strategy_id: stratId
-        };
-        await createBotConfig(payload);
-        showSnackbar(uiText.draftBotApproved, "success");
-        onSuccess();
-      }
-    } catch (err) {
-      console.error(err);
-      showSnackbar(uiText.draftApproveError.replace("{type}", draft.type), "danger");
-    } finally {
-      setApproving(false);
-    }
-  };
-
-  const handleEditClick = () => {
-    handleEditDraft(draft, onSuccess);
-  };
-
-  const getAccentGradient = () => {
-    if (draft.type === "setup") return "from-amber-500 to-yellow-400";
-    if (draft.type === "strategy") return "from-blue-500 to-indigo-500";
-    return "from-emerald-500 to-teal-500";
-  };
-
-  return (
-    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 shadow-xl shadow-slate-100/10 dark:shadow-none animate-in fade-in duration-300">
-      {/* CARD HEADER */}
-      <div className={`h-1.5 w-full bg-gradient-to-r ${getAccentGradient()}`} />
-      
-      <div className="p-4 space-y-4">
-        {/* TITLE & BADGE */}
-        <div className="flex items-start justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              {uiText.conceptReview}
-            </span>
-            <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
-              {payload.name || uiText.newConcept}
-            </h4>
-          </div>
-          <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
-            {draft.type}
-          </span>
-        </div>
-
-        {/* METADATA RENDER */}
-        <div className="rounded-xl bg-white dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-sm">
-          {draft.type === "setup" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col col-span-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name || "Naam"}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{payload.name || "—"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.setupType}</span>
-                <span className="uppercase text-xs text-foreground dark:text-slate-200">{payload.setup_type || "dca"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{payload.timeframe || uiText.required}</span>
-              </div>
-              {(payload.market_condition || payload.min_benchmark_score != null) && (
-                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200">
-                    {getSetupMarketConditionLabel(payload.market_condition || inferSetupMarketConditionFromScores(payload), uiText)}
-                  </span>
-                </div>
-              )}
-              {payload.setup_type === "dca" && (
-                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaParameters}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200">
-                    {[payload.dca_frequency, payload.dca_day ? `op ${payload.dca_day}` : null].filter(Boolean).join(" ") || uiText.required}
-                  </span>
-                </div>
-              )}
-              {(payload.min_benchmark_score != null || payload.max_benchmark_score != null) && (
-                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2 space-y-1">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{uiText.scoreThresholds}</span>
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-1.5">
-                    <div className="text-[7px] font-black uppercase text-slate-400 dark:text-slate-500">Benchmark</div>
-                    <div className="text-[10px] font-mono font-black text-blue-500">{payload.min_benchmark_score ?? "—"}-{payload.max_benchmark_score ?? "—"}</div>
-                  </div>
-                </div>
-              )}
-              {payload.min_benchmark_score == null && payload.max_benchmark_score == null && (
-                <div className="col-span-2 text-xs text-slate-500">{uiText.scoreThresholdsMissing}</div>
-              )}
-            </div>
-          )}
-
-          {draft.type === "strategy" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{payload.symbol || globalSymbol || context.symbol || "—"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">€{payload.base_amount || 100.0}</span>
-              </div>
-              {payload.setup_type === "trade" ? (
-                <>
-                  <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.entryTarget}</span>
-                    <span className="text-xs text-foreground dark:text-slate-200">€{payload.entry}</span>
-                  </div>
-                  <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.stopLoss}</span>
-                    <span className="text-xs text-rose-500">€{payload.stop_loss}</span>
-                  </div>
-                  <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.takeProfitTargets}</span>
-                    <span className="text-xs text-emerald-500 font-mono">
-                      {Array.isArray(payload.targets) ? payload.targets.map(t => `€${t}`).join(" · ") : `€${payload.targets}`}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200">{formatExecutionMode(payload.execution_mode || "fixed", locale)}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {draft.type === "bot" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.risk_profile || "balanced"}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">€{payload.budget_total_eur || 500.0}</span>
-              </div>
-              <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.environment}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">
-                  {payload.is_live ? uiText.liveReal : uiText.paperSandbox}
-                </span>
-              </div>
-              <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.mode}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{payload.mode || "manual"}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* BUTTON CONTROLS */}
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={handleApprove}
-            disabled={approving}
-            className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider text-white transition-all shadow-md flex items-center justify-center gap-1 bg-gradient-to-r ${getAccentGradient()} hover:opacity-90 active:scale-95`}
-          >
-            {approving ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              uiText.approve
-            )}
-          </button>
-          
-          <button
-            onClick={handleEditClick}
-            disabled={approving}
-            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
-          >
-            {uiText.edit}
-          </button>
-
-          <button
-            onClick={onCancel}
-            disabled={approving}
-            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 hover:text-red-500 dark:hover:border-red-500/30 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
-          >
-            {uiText.cancel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
-  const { t, locale } = useTranslation();
-  const at = createAssistantTranslator(t);
-  const uiText = buildAssistantUiText(at);
-  const { current_flow, slots } = state;
-  const flowType = current_flow?.split("_")?.[0] || "setup"; // setup, strategy, bot
-
-  const getAccentGradient = () => {
-    if (flowType === "setup") return "from-amber-500 to-yellow-400";
-    if (flowType === "strategy") return "from-blue-500 to-indigo-500";
-    return "from-emerald-500 to-teal-500";
-  };
-
-  return (
-    <div className="mt-4 overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/40 shadow-md animate-in fade-in duration-300">
-      <div className="p-4 space-y-4">
-        {/* TITLE & BADGE */}
-        <div className="flex items-start justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              {uiText.activeConcept}
-            </span>
-            <h4 className="text-xs font-black text-foreground dark:text-slate-200 tracking-tight leading-snug">
-              {flowType === "setup" ? `${slots?.symbol || "..."} ${uiText.setupConceptSuffix}` :
-               flowType === "strategy" ? `${slots?.symbol || "..."} ${uiText.strategyConceptSuffix}` :
-               `${slots?.name || "..."} ${uiText.botConceptSuffix}`}
-            </h4>
-          </div>
-          <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm text-white bg-gradient-to-r ${getAccentGradient()}`}>
-            {flowType} {uiText.conceptSuffix}
-          </span>
-        </div>
-
-        {/* METADATA RENDER WITH PLACEHOLDERS */}
-        <div className="rounded-xl bg-white dark:bg-slate-950 p-3.5 border border-slate-100 dark:border-slate-800/80 space-y-2.5 shadow-sm">
-          {flowType === "setup" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col col-span-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.name}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">
-                  {slots?.name || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
-              </div>
-              
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">{uiText.setupType}</span>
-                <div className="flex gap-1.5">
-                  {['dca', 'trade'].map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => onUpdateSlots && onUpdateSlots({ setup_type: type })}
-                      className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-150 active:scale-95 ${
-                        slots?.setup_type === type
-                          ? 'bg-amber-500 text-white shadow-sm'
-                          : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.timeframe || "Timeframe"}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">
-                  {slots?.timeframe || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
-                </span>
-              </div>
-
-              {slots?.setup_type === "dca" && (
-                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1.5">{uiText.dcaFrequency}</span>
-                  <div className="flex gap-1.5">
-                    {['daily', 'weekly', 'monthly'].map((freq) => (
-                      <button
-                        key={freq}
-                        onClick={() => onUpdateSlots && onUpdateSlots({ dca_frequency: freq })}
-                        className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-150 active:scale-95 ${
-                          slots?.dca_frequency === freq
-                            ? 'bg-amber-500 text-white shadow-sm'
-                            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        {freq === "daily" ? uiText.daily : freq === "weekly" ? uiText.weekly : uiText.monthly}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(slots?.market_condition || slots?.min_benchmark_score != null) && (
-                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800/80 pt-2.5">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.marketCondition}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200">
-                    {getSetupMarketConditionLabel(slots?.market_condition, uiText)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {flowType === "strategy" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.asset}</span>
-                <span className="font-mono text-xs text-foreground dark:text-slate-200">{slots?.symbol || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.baseBudget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">
-                  {slots?.base_amount ? `€${slots.base_amount}` : <span className="text-slate-400 italic font-normal">{uiText.chooseAmount}</span>}
-                </span>
-              </div>
-              {slots?.setup_type === "trade" ? (
-                <>
-                  <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.entryTarget}</span>
-                    <span className="text-xs text-foreground dark:text-slate-200">
-                      {slots?.entry ? `€${slots.entry}` : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}
-                    </span>
-                  </div>
-                  <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.stopLoss}</span>
-                    <span className="text-xs text-rose-500">
-                      {slots?.stop_loss ? `€${slots.stop_loss}` : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}
-                    </span>
-                  </div>
-                  <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.takeProfitTargets}</span>
-                    <span className="text-xs text-emerald-500 font-mono">
-                      {slots?.targets ? (Array.isArray(slots.targets) ? slots.targets.map(t => `€${t}`).join(" · ") : `€${slots.targets}`) : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                    <span className="text-xs text-foreground dark:text-slate-200">{slots?.execution_mode ? formatExecutionMode(slots.execution_mode, locale) : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {flowType === "bot" && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <div className="flex flex-col col-span-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.botName}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">{slots?.name || uiText.defaultBotName}</span>
-              </div>
-              <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.safetyProfile}</span>
-                <span className="text-xs text-foreground dark:text-slate-200 capitalize">{slots?.risk_profile || <span className="text-slate-400 italic font-normal">{uiText.required}</span>}</span>
-              </div>
-              <div className="flex flex-col border-t border-slate-50 dark:border-slate-800 pt-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.budget}</span>
-                <span className="text-xs text-foreground dark:text-slate-200">
-                  {slots?.budget_total_eur ? `€${slots.budget_total_eur}` : <span className="text-slate-400 italic font-normal">{uiText.required}</span>}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* CONTROLS */}
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={onCancel}
-            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
-          >
-            {uiText.cancel}
-          </button>
-          
-          <button
-            onClick={onEdit}
-            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-950 transition-all hover:bg-slate-50 active:scale-95 flex items-center justify-center"
-          >
-            {uiText.edit}
-          </button>
-
-          <button
-            onClick={onFinalize}
-            className="py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider text-white transition-all shadow-md flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 active:scale-95"
-          >
-            {uiText.approve}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 

@@ -1,37 +1,19 @@
 import { AssistantEnvelope, AssistantHistoryMessage, AssistantRuntimeContext } from '../types/assistant';
 import { apiClient } from './apiClient';
-import { pollFinnRun, type FinnRunEnvelope } from './finnRunPolling';
+import { pollFinnRun, proposalActionFromRun, type FinnRunEnvelope } from './finnRunPolling';
 
 export type AssistantPreferencesResponse = {
   preferences: Record<string, unknown>;
 };
 
-export type AssistantChatSession = {
-  id: string;
-  user_id: number;
-  title: string;
-  created_at: string;
-  updated_at: string;
-};
-
-export type AssistantChatSessionMessage = {
-  id: number;
-  role: 'assistant' | 'user';
-  content: string;
-  created_at: string;
-  intent?: string | null;
-  actions?: Record<string, unknown> | null;
-};
-
-export type AssistantChatSessionDetailResponse = {
-  session: AssistantChatSession;
-  messages: AssistantChatSessionMessage[];
-};
-
 export type FinnV2Conversation = { id: string; title: string; updated_at: string };
 export type FinnV2ConversationDetail = {
   id: string;
-  messages: { role: 'assistant' | 'user'; content: string }[];
+  messages: {
+    role: 'assistant' | 'user';
+    content: string;
+    pending_proposal?: { proposal_id: string };
+  }[];
 };
 
 export type MobileOverviewAsset = {
@@ -335,16 +317,23 @@ export type AssistantAnalyticsPayload = {
   metadata?: Record<string, unknown>;
 };
 
-export type AssistantActionExecutionResponse = {
-  ok: boolean;
-  message?: string | null;
-  setup_id?: number | null;
-  strategy_id?: number | null;
-  bot_id?: number | null;
-  action_id?: string | null;
-  operation?: string | null;
-  verified?: Record<string, unknown> | null;
-  draft?: Record<string, unknown> | null;
+export type FinnV2ProposalSummary = {
+  proposal_id: string;
+  status: string;
+  operation_type: string;
+  target: Record<string, unknown>;
+  requested_state: Record<string, unknown>;
+  before_state: Record<string, unknown>;
+  review_target_name?: string | null;
+  expires_at: string;
+  confirmation_required: boolean;
+};
+
+export type FinnV2ExecutionResult = {
+  status: 'started' | 'succeeded' | 'failed' | 'blocked' | 'already_executed';
+  proposal_id: string;
+  conversation_id?: string | null;
+  error_codes?: string[];
 };
 
 export type IntelligenceWeightsPayload = {
@@ -385,6 +374,7 @@ export const assistantApi = {
       throw new Error('FINN kon dit antwoord niet afronden. Probeer het opnieuw.');
     }
     if (!content) throw new Error('FINN gaf geen afgerond antwoord terug. Probeer het opnieuw.');
+    const proposalAction = proposalActionFromRun(run);
     return {
       ...initial,
       response: content,
@@ -392,17 +382,27 @@ export const assistantApi = {
       flow: 'finn_v2_visible',
       session_id: run.conversation_id || initial.session_id,
       state: { current_flow: 'finn_v2_visible', status: 'complete', slots: {}, run_id: run.run_id },
-      can_confirm: Boolean(run.response?.confirmation_required && run.response?.proposal_id),
+      can_confirm: Boolean(proposalAction),
+      actions: proposalAction ? [proposalAction] : [],
       next_best_action: run.response?.next_step?.title || null,
     } satisfies AssistantEnvelope;
   },
 
-  sessions() {
-    return apiClient.get<AssistantChatSession[]>('/api/assistant/sessions');
+  v2Proposal(proposalId: string) {
+    return apiClient.get<FinnV2ProposalSummary>(`/api/assistant/v2/proposals/${encodeURIComponent(proposalId)}`);
   },
 
-  sessionDetail(sessionId: string) {
-    return apiClient.get<AssistantChatSessionDetailResponse>(`/api/assistant/sessions/${encodeURIComponent(sessionId)}`);
+  async confirmAndExecuteV2Proposal(proposalId: string, expectedReviewTargetName?: string | null) {
+    const path = `/api/assistant/v2/proposals/${encodeURIComponent(proposalId)}`;
+    const publication = await apiClient.post<{ confirmation_token: string; payload_hash: string }>(`${path}/publish`, {});
+    const payload = {
+      idempotency_key: `v2-mobile-${proposalId}`,
+      confirmation_token: publication.confirmation_token,
+      expected_payload_hash: publication.payload_hash,
+      expected_review_target_name: expectedReviewTargetName || undefined,
+    };
+    await apiClient.post(`${path}/confirm`, payload);
+    return apiClient.post<FinnV2ExecutionResult>(`${path}/execute`, payload);
   },
 
   v2Conversations() {
@@ -413,11 +413,6 @@ export const assistantApi = {
     return apiClient.get<FinnV2ConversationDetail>(`/api/assistant/v2/conversations/${encodeURIComponent(conversationId)}`);
   },
 
-  executePendingAction(actionId: string) {
-    return apiClient.post<AssistantActionExecutionResponse>('/api/assistant/actions/execute', {
-      action_id: actionId,
-    });
-  },
 };
 
 export const analyticsApi = {

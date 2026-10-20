@@ -6,7 +6,7 @@ from typing import Optional
 
 from celery import shared_task
 
-from backend.ai_agents.trading_bot_agent import run_trading_bot_agent
+from backend.engine.trading_bot_execution import run_trading_bot_execution
 from backend.services.platform_metrics import increment_retry_counter
 from backend.services.portfolio_snapshot_service import snapshot_all_for_user
 
@@ -33,13 +33,13 @@ def run_daily_trading_bot(self, user_id: int, report_date: Optional[str] = None)
     try:
         # Strategy snapshots are generated independently. A high-frequency bot
         # check must only consume the latest valid snapshot, never invoke AI.
-        result = run_trading_bot_agent(
+        result = run_trading_bot_execution(
             user_id=user_id,
             report_date=run_date,
         )
 
         if not result.get("ok"):
-            raise RuntimeError(result.get("error") or "trading_bot_agent_failed")
+            raise RuntimeError(result.get("error") or "trading_bot_execution_failed")
 
         # 3️⃣ Portfolio snapshot
         try:

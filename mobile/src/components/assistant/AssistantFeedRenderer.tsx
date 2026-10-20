@@ -8,11 +8,15 @@ import { describeDraft } from '../../services/assistantEnvelopeMapper';
 import { AssistantFeedItem } from '../../types/assistant';
 import { ActiveFlowStateCard } from './ActiveFlowStateCard';
 import { AssistantMessage } from './AssistantMessage';
+import type { AppLanguage } from '../../preferences/AppPreferencesProvider';
+import { translate } from '../../i18n';
 
 type AssistantFeedRendererProps = {
+  language: AppLanguage;
   items: AssistantFeedItem[];
   onActionPress?: () => void;
   onDraftPress?: () => void;
+  onProposalPress?: (proposalId: string) => void;
   onRiskPress?: () => void;
   onChoicePress?: (reply: string) => void;
   onOtherPress?: () => void;
@@ -20,9 +24,11 @@ type AssistantFeedRendererProps = {
 };
 
 export function AssistantFeedRenderer({
+  language,
   items,
   onActionPress,
   onDraftPress,
+  onProposalPress,
   onRiskPress,
   onChoicePress,
   onOtherPress,
@@ -83,6 +89,20 @@ export function AssistantFeedRenderer({
               key={item.id}
               {...describeDraft(item.draft)}
               onReview={onDraftPress}
+            />
+          );
+        }
+
+        if (item.type === 'v2_proposal') {
+          return (
+            <ActionCard
+              key={item.id}
+              title={translate(language, 'finn.proposalTitle')}
+              reason={translate(language, 'finn.proposalCardReason')}
+              impact={translate(language, 'finn.proposalCardImpact')}
+              primaryAction={translate(language, 'finn.proposalCardAction')}
+              tone="accent"
+              onPrimary={() => onProposalPress?.(item.proposalId)}
             />
           );
         }

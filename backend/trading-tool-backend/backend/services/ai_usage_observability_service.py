@@ -208,14 +208,14 @@ def log_background_ai_skip(
     """Record a zero-cost reuse decision alongside normal AI usage rows."""
     log_ai_usage_sync(
         user_id=user_id,
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        model=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
         prompt_tokens=0,
         completion_tokens=0,
         cost=0.0,
         purpose=purpose,
         status="input_unchanged",
         estimated_cost_if_full=estimate_blocked_cost(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            model=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
             purpose=purpose,
             entry_point=entry_point,
         ),
@@ -300,7 +300,7 @@ def log_openai_quota_skip_from_context(
     )
 
     purpose = str(context.get("purpose") or "unscoped_openai_call")
-    model = str(context.get("model") or os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+    model = str(context.get("model") or os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"))
     entry_point = context.get("entry_point") or infer_entry_point(purpose=purpose, run_kind=run_kind)
     estimated_cost = estimate_blocked_cost(
         model=model,

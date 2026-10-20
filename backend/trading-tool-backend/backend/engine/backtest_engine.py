@@ -6,10 +6,10 @@ from typing import Any, Dict, List, Optional
 from backend.utils.db import get_db_connection
 from backend.engine.bot_brain import run_bot_brain
 
-# Reuse helpers from trading_bot_agent where possible
+# Reuse helpers from trading_bot_execution where possible
 # Note: In a real refactor we'd move these to a shared service, 
 # but for V1 we keep it focused.
-from backend.ai_agents.trading_bot_agent import (
+from backend.engine.trading_bot_execution import (
     _get_strategy_setup_payload,
     _get_active_strategy_snapshot,
     _get_daily_scores,

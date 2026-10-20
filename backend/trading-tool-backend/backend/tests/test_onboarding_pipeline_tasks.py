@@ -57,7 +57,6 @@ def test_run_onboarding_pipeline_queues_expected_workflow(monkeypatch):
     monkeypatch.setattr(score_module, "store_daily_scores_task", _TaskStub("store_daily_scores_task"))
     monkeypatch.setattr(history_module, "bootstrap_indicator_histories", _TaskStub("bootstrap_indicator_histories"))
     monkeypatch.setattr(daily_report_module, "generate_daily_report", _TaskStub("generate_daily_report"))
-    monkeypatch.setattr(onboarding_module, "enqueue_first_dashboard_briefing", _TaskStub("enqueue_first_dashboard_briefing"))
 
     captured = {}
 

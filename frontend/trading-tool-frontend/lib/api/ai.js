@@ -13,23 +13,6 @@ export const assistantChat = (query, context = {}, history = [], sessionId = nul
   });
 };
 
-export const executeAssistantAction = (action) => {
-  const actionId = action?.action_id || action?.id;
-  if (!actionId) {
-    throw new Error("Deze Finn actie mist een server-issued action_id.");
-  }
-  return fetchAuth(`/api/assistant/actions/execute`, {
-    method: 'POST',
-    body: JSON.stringify({ action_id: actionId }),
-  });
-};
-
-export const fetchFinnState = () => {
-  return fetchAuth(`/api/assistant/finn/state`, {
-    method: 'GET',
-  });
-};
-
 export const fetchFinnV2Run = (runId) => {
   return fetchAuth(`/api/assistant/v2/runs/${encodeURIComponent(runId)}`, {
     method: 'GET',
@@ -55,7 +38,7 @@ export const fetchFinnV2Proposal = (proposalId) => {
 // A V2 proposal is visible before this function is called. One explicit UI
 // confirmation then uses only the V2 publish/confirm/execute contract, never
 // the legacy assistant-action mutation endpoint.
-export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
+export const confirmAndExecuteFinnV2Proposal = async (proposalId, expectedReviewTargetName = null) => {
   const normalizedProposalId = String(proposalId || '').trim();
   if (!normalizedProposalId) {
     throw new Error('Deze FINN V2-proposal mist een server-issued proposal_id.');
@@ -74,6 +57,7 @@ export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
         idempotency_key: idempotencyKey,
         confirmation_token: publication.confirmation_token,
         expected_payload_hash: publication.payload_hash,
+        expected_review_target_name: expectedReviewTargetName || undefined,
       }),
     },
   );
@@ -85,6 +69,7 @@ export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
         idempotency_key: idempotencyKey,
         confirmation_token: publication.confirmation_token,
         expected_payload_hash: publication.payload_hash,
+        expected_review_target_name: expectedReviewTargetName || undefined,
       }),
     },
   );
@@ -153,18 +138,6 @@ export const updateAssistantPreferences = (preferences) => {
   });
 };
 
-export const getAssistantSessions = () => {
-  return fetchAuth(`/api/assistant/sessions`, {
-    method: 'GET',
-  });
-};
-
-export const getAssistantSessionDetail = (sessionId) => {
-  return fetchAuth(`/api/assistant/sessions/${encodeURIComponent(sessionId)}`, {
-    method: 'GET',
-  });
-};
-
 export const getFinnV2Conversations = () => fetchAuth(`/api/assistant/v2/conversations`, {
   method: 'GET',
 });
@@ -173,19 +146,6 @@ export const getFinnV2ConversationDetail = (conversationId) => fetchAuth(
   `/api/assistant/v2/conversations/${encodeURIComponent(conversationId)}`,
   { method: 'GET' },
 );
-
-// ========================================
-// Execute a server-issued FINN action
-// ========================================
-export const executePendingAction = (actionIdOrAction) => {
-  const actionId = typeof actionIdOrAction === 'string'
-    ? actionIdOrAction
-    : actionIdOrAction?.action_id || actionIdOrAction?.id;
-  return fetchAuth(`/api/assistant/actions/execute`, {
-    method: 'POST',
-    body: JSON.stringify({ action_id: actionId }),
-  });
-};
 
 // ========================================
 // ⚡ 8. AI Assistant Chat Stream (SSE) with Resilience

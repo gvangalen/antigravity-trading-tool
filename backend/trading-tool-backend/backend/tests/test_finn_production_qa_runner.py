@@ -111,7 +111,7 @@ def test_stale_score_paper_profile_is_explicitly_gated_and_owner_isolated(monkey
     assert "min_macro_score,min_technical_score,min_market_score" not in probe_source
     dispatcher = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "celery_task" / "dispatcher.py").read_text(encoding="utf-8")
     assert "SELECT id FROM users WHERE is_active = true;" in dispatcher
-    assert "run_trading_bot_agent(" in probe_source
+    assert "run_trading_bot_execution(" in probe_source
     assert "bot_id=bot_id, paper_only=True" in probe_source
     monkeypatch.delenv("FINN_QA_ALLOW_STALE_SCORE_FIXTURE", raising=False)
     monkeypatch.setenv("FINN_QA_USER_ID", "42")
@@ -175,7 +175,7 @@ def test_score2_match_paper_result_checks_match_before_execution():
     from backend.scripts import probe_protected_score2_match_paper as probe
 
     source = Path(probe.__file__).read_text(encoding="utf-8")
-    assert "run_trading_bot_agent(" in source
+    assert "run_trading_bot_execution(" in source
     assert "paper_only=True" in source
     assert "max_benchmark_score" in source
     assert "fixture._quarantine" in source
@@ -421,10 +421,10 @@ def test_portfolio_paper_fx_fill_replay_projection_and_quarantine(monkeypatch):
             return "filled"
         raise RuntimeError("Decision already processing or executed")
 
-    fake_agent = types.ModuleType("backend.ai_agents.trading_bot_agent")
+    fake_agent = types.ModuleType("backend.engine.trading_bot_execution")
     fake_agent._persist_bot_order = lambda **kwargs: events.append(("persist", kwargs["is_live"]))
     fake_agent._auto_execute_decision = execute
-    monkeypatch.setitem(sys.modules, "backend.ai_agents.trading_bot_agent", fake_agent)
+    monkeypatch.setitem(sys.modules, "backend.engine.trading_bot_execution", fake_agent)
     monkeypatch.setattr(probe, "_verify", lambda *_: {"result": "PASS"})
     result = probe.run("qa-123456-1-abcd1234-5678abcd")
     assert result == {"result": "PASS"}

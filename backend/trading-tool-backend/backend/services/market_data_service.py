@@ -77,12 +77,6 @@ def sync_score_indicator(category: str, indicator: str, value: float, user_id: i
         if conn:
             conn.close()
 
-def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
-    from backend.utils.scoring_utils import get_scores_for_symbol
-    return get_scores_for_symbol(user_id=user_id, symbol=symbol, include_metadata=True)
-
-
-
 class MarketDataService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
@@ -1008,25 +1002,3 @@ class MarketDataService:
 
         return []  # default / fallback
 
-    # =========================================================
-    # Interpreted Data
-    # =========================================================
-    async def get_interpreted_data(self, user_id: int, symbol: str = "BTC") -> dict:
-        symbol = symbol.upper()
-        snapshot = await self.repository.get_latest_snapshot(symbol)
-        if not snapshot:
-            raise HTTPException(404, f"Geen {symbol} data gevonden.")
-
-        scores = await asyncio.to_thread(sync_get_scores_for_symbol, int(user_id), symbol)
-
-        return {
-            "symbol": snapshot.symbol,
-            "timestamp": snapshot.timestamp.isoformat(),
-            "price": float(snapshot.price or 0.0),
-            "change_24h": float(snapshot.change_24h or 0.0),
-            "volume": float(snapshot.volume or 0.0),
-            "score": scores.get("market_score", 10) or 10,
-            "top_contributors": scores.get("market_top_contributors", []),
-            "interpretation": scores.get("market_interpretation", "Geen interpretatie"),
-            "action": f"Market-score voor {symbol} is globaal, advies is informatief.",
-        }

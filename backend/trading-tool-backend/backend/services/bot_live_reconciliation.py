@@ -6,7 +6,7 @@ import math
 from decimal import Decimal
 from typing import Optional
 
-from backend.ai_agents.trading_bot_agent import record_bot_ledger_entry
+from backend.engine.trading_bot_execution import record_bot_ledger_entry
 from backend.services.exchange_service import ExchangeService
 from backend.utils.db import get_db_connection
 

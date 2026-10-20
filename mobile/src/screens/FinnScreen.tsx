@@ -22,6 +22,7 @@ import { BottomSheet } from '../components/sheets/BottomSheet';
 import {
   ConfirmActionSheetContent,
   DraftReviewSheetContent,
+  FinnV2ProposalReviewSheetContent,
   RiskExplanationSheetContent,
 } from '../components/sheets/SheetContent';
 import { theme } from '../constants/theme';
@@ -37,44 +38,17 @@ import {
   mapMobileOverviewPrompts,
 } from '../services/dataMappers';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
-import { MobileOverviewAsset, MobileOverviewResponse, MobileCoachFeedItem, assistantApi, mobileApi, intelligenceApi, coachFeedApi } from '../services/tradamindApi';
+import { MobileOverviewAsset, MobileOverviewResponse, MobileCoachFeedItem, FinnV2ProposalSummary, assistantApi, mobileApi, coachFeedApi } from '../services/tradamindApi';
 import { apiClient } from '../services/apiClient';
-import { AssistantAction, AssistantFeedItem, AssistantDraft, AssistantEnvelope } from '../types/assistant';
+import { AssistantFeedItem, AssistantDraft } from '../types/assistant';
 import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useAuth } from '../auth/AuthProvider';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 
-type SheetType = 'risk' | 'confirm' | 'draft' | null;
-type PendingAction = AssistantAction & {
-  action_id?: string;
-  id?: string;
-  label?: string;
-  requires_confirmation?: boolean;
-};
-
+type SheetType = 'risk' | 'confirm' | 'draft' | 'proposal' | null;
 const ACTIVE_FINN_SESSION_ID_KEY = 'active_finn_session_id';
-
-function getPendingActionFromEnvelope(envelope: AssistantEnvelope): PendingAction | null {
-  const candidates = [
-    envelope.action,
-    ...(Array.isArray(envelope.actions) ? envelope.actions : []),
-  ];
-
-  for (const candidate of candidates) {
-    if (
-      candidate &&
-      typeof candidate === 'object' &&
-      (typeof (candidate as PendingAction).action_id === 'string' ||
-        typeof (candidate as PendingAction).id === 'string')
-    ) {
-      return candidate as PendingAction;
-    }
-  }
-
-  return null;
-}
 
 function formatFinnContextLabel(pageType?: string, symbol?: string, timeframe?: string) {
   const laneMap: Record<string, string> = {
@@ -129,10 +103,11 @@ export function FinnScreen({
   const [discussFeedItemId, setDiscussFeedItemId] = useState<string | null>(null);
   const [feedItems, setFeedItems] = useState<AssistantFeedItem[]>([]);
   const [currentDraft, setCurrentDraft] = useState<AssistantDraft | null>(null);
-  const [currentDraftAction, setCurrentDraftAction] = useState<PendingAction | null>(null);
+  const [currentProposal, setCurrentProposal] = useState<FinnV2ProposalSummary | null>(null);
   const [activeState, setActiveState] = useState<any>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [draftSaving, setDraftSaving] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
+  const [proposalSaving, setProposalSaving] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [availableSessions, setAvailableSessions] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
   const isActionFlow = source?.startsWith('strategy-') || source?.startsWith('setup-') || source?.startsWith('bot-');
@@ -196,7 +171,7 @@ export function FinnScreen({
         const preferredSessionId = normalizeAssistantSessionId(
           preferencesResponse?.preferences?.[ACTIVE_FINN_SESSION_ID_KEY],
         );
-        const sessions = await assistantApi.sessions();
+        const sessions = await assistantApi.v2Conversations();
         if (!cancelled) {
           setAvailableSessions(
             Array.isArray(sessions)
@@ -209,12 +184,12 @@ export function FinnScreen({
           );
         }
         const fallbackSessionId =
-          preferredSessionId ||
+          (preferredSessionId?.startsWith('finn-v2-conv-') ? preferredSessionId : null) ||
           normalizeAssistantSessionId(sessions?.[0]?.id);
 
         if (!fallbackSessionId) return;
 
-        const detail = await assistantApi.sessionDetail(fallbackSessionId);
+        const detail = await assistantApi.v2ConversationDetail(fallbackSessionId);
         if (cancelled) return;
 
         setActiveSessionId(fallbackSessionId);
@@ -237,10 +212,10 @@ export function FinnScreen({
     if (!normalized) return;
 
     try {
-      const detail = await assistantApi.sessionDetail(normalized);
+      const detail = await assistantApi.v2ConversationDetail(normalized);
       await persistActiveSessionId(normalized);
       setCurrentDraft(null);
-      setCurrentDraftAction(null);
+      setCurrentProposal(null);
       setActiveState(null);
       setFeedItems(mapSessionMessagesToFeedItems(detail?.messages));
     } catch (error) {
@@ -251,7 +226,7 @@ export function FinnScreen({
   const startNewConversation = useCallback(async () => {
     setActiveSessionId(null);
     setCurrentDraft(null);
-    setCurrentDraftAction(null);
+    setCurrentProposal(null);
     setActiveState(null);
     setChatError(null);
     setFeedItems([]);
@@ -354,10 +329,8 @@ export function FinnScreen({
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope, language)]);
       if (canReviewDraft(envelope) && envelope.draft) {
         setCurrentDraft(envelope.draft);
-        setCurrentDraftAction(getPendingActionFromEnvelope(envelope));
       } else {
         setCurrentDraft(null);
-        setCurrentDraftAction(null);
       }
       if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
         setActiveState(envelope.state);
@@ -380,85 +353,50 @@ export function FinnScreen({
     }
   }
 
-  async function handleDraftConfirm() {
-    if (!currentDraft || draftSaving) return;
-
-    setDraftSaving(true);
-    setDraftError(null);
-
-    try {
-      let successMessage = 'Concept opgeslagen.';
-
-      const actionId =
-        typeof currentDraftAction?.action_id === 'string'
-          ? currentDraftAction.action_id
-          : typeof currentDraftAction?.id === 'string'
-            ? currentDraftAction.id
-            : null;
-
-      if (actionId) {
-        const result = await assistantApi.executePendingAction(actionId);
-        successMessage = result.message || successMessage;
-      } else if (currentDraft.type === 'strategy') {
-        const payload = currentDraft.payload;
-        if (payload.strategy_id) {
-          await intelligenceApi.updateStrategy(Number(payload.strategy_id), payload);
-          successMessage = 'Strategie bijgewerkt.';
-        } else {
-          await intelligenceApi.createStrategy(payload);
-          successMessage = 'Strategie aangemaakt.';
-        }
-      } else if (currentDraft.type === 'setup') {
-        const payload = currentDraft.payload;
-        if (payload.setup_id) {
-          await intelligenceApi.updateSetup(Number(payload.setup_id), payload);
-          successMessage = 'Setup bijgewerkt.';
-        } else {
-          await intelligenceApi.createSetup(payload);
-          successMessage = 'Setup aangemaakt.';
-        }
-      } else if (currentDraft.type === 'bot') {
-        const payload = currentDraft.payload;
-        if (payload.bot_id) {
-          await intelligenceApi.updateBotConfig(Number(payload.bot_id), payload);
-          successMessage = 'Bot bijgewerkt.';
-        } else if (payload.strategy_id) {
-          await intelligenceApi.createBotConfig(payload);
-          successMessage = 'Bot aangemaakt.';
-        } else {
-          throw new Error('Deze botdraft mist een strategy_id en kan daarom nog niet worden opgeslagen.');
-        }
-      } else {
-        throw new Error('Dit drafttype wordt nog niet ondersteund.');
-      }
-
-      await overviewResource.refresh();
-      await loadCoachFeed();
-      await triggerHaptic('success');
-      setCurrentDraftAction(null);
-      setCurrentDraft(null);
-      setDraftError(null);
-      setFeedItems((current) => [
-        ...current,
-        {
-          id: `draft-save-${Date.now()}`,
-          type: 'message',
-          role: 'assistant',
-          text: successMessage,
-        },
-      ]);
-      setSheet(null);
-    } catch (error) {
-      setDraftError(error instanceof Error ? error.message : 'Opslaan mislukt. Probeer opnieuw.');
-      console.error('Failed to save draft:', error);
-    } finally {
-      setDraftSaving(false);
-    }
-  }
-
   function openDraftSheet() {
     setDraftError(null);
     setSheet('draft');
+  }
+
+  async function openProposalSheet(proposalId: string) {
+    setProposalError(null);
+    setCurrentProposal(null);
+    setSheet('proposal');
+    try {
+      const proposal = await assistantApi.v2Proposal(proposalId);
+      if (proposal.proposal_id !== proposalId) throw new Error('Voorstelidentiteit klopt niet.');
+      setCurrentProposal(proposal);
+    } catch (error) {
+      setProposalError(error instanceof Error ? error.message : 'Voorstel kon niet worden gelezen.');
+    }
+  }
+
+  async function confirmProposal() {
+    if (!currentProposal || proposalSaving) return;
+    setProposalSaving(true);
+    setProposalError(null);
+    try {
+      const result = await assistantApi.confirmAndExecuteV2Proposal(
+        currentProposal.proposal_id, currentProposal.review_target_name,
+      );
+      if (!['succeeded', 'already_executed'].includes(result.status)) {
+        throw new Error('FINN kon de wijziging niet bevestigen. Controleer je plan voordat je opnieuw probeert.');
+      }
+      await Promise.allSettled([overviewResource.refresh(), loadCoachFeed()]);
+      setFeedItems((current) => current.filter((item) =>
+        item.type !== 'v2_proposal' || item.proposalId !== currentProposal.proposal_id,
+      ).concat({
+        id: `proposal-result-${currentProposal.proposal_id}`,
+        type: 'message', role: 'assistant', text: 'Je bevestigde wijziging is opgeslagen.',
+      }));
+      setCurrentProposal(null);
+      setSheet(null);
+      await triggerHaptic('success');
+    } catch (error) {
+      setProposalError(error instanceof Error ? error.message : 'Bevestigen is mislukt.');
+    } finally {
+      setProposalSaving(false);
+    }
   }
 
   const handleArchiveEvent = useCallback((eventId: string) => {
@@ -498,7 +436,7 @@ export function FinnScreen({
       // A superseded proposal must not remain available if the replacement
       // turn fails before a new review card arrives.
       setCurrentDraft(null);
-      setCurrentDraftAction(null);
+      setCurrentProposal(null);
       setSheet(null);
     }
     setChatError(null);
@@ -520,11 +458,9 @@ export function FinnScreen({
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope, language)]);
       if (canReviewDraft(envelope) && envelope.draft) {
         setCurrentDraft(envelope.draft);
-        setCurrentDraftAction(getPendingActionFromEnvelope(envelope));
       } else {
         setCurrentDraft(null);
-        setCurrentDraftAction(null);
-      }
+        }
       if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
         setActiveState(envelope.state);
       } else {
@@ -660,9 +596,11 @@ export function FinnScreen({
           )}
 
           <AssistantFeedRenderer
+            language={language}
             items={isActionFlow ? feedItems.filter(item => item.type !== 'reasoning') : feedItems}
             onActionPress={() => setSheet('confirm')}
             onDraftPress={openDraftSheet}
+            onProposalPress={(proposalId) => { void openProposalSheet(proposalId); }}
             onRiskPress={() => setSheet('risk')}
             onChoicePress={(reply) => { if (!sending) void handleSend(reply); }}
             onOtherPress={() => composerRef.current?.focus()}
@@ -727,17 +665,27 @@ export function FinnScreen({
         visible={sheet === 'draft'}
         title="Review concept"
         onClose={() => {
-          if (draftSaving) return;
           setDraftError(null);
           setSheet(null);
         }}
-        allowClose={!draftSaving}
       >
         <DraftReviewSheetContent
           draft={currentDraft}
           error={draftError}
-          onConfirm={handleDraftConfirm}
-          saving={draftSaving}
+        />
+      </BottomSheet>
+      <BottomSheet
+        visible={sheet === 'proposal'}
+        title={translate(language, 'finn.proposalReview')}
+        onClose={() => { if (!proposalSaving) setSheet(null); }}
+        allowClose={!proposalSaving}
+      >
+        <FinnV2ProposalReviewSheetContent
+          language={language}
+          proposal={currentProposal}
+          error={proposalError}
+          saving={proposalSaving}
+          onConfirm={confirmProposal}
         />
       </BottomSheet>
     </View>
@@ -750,15 +698,21 @@ function normalizeAssistantSessionId(value: unknown): string | null {
   return normalized ? normalized : null;
 }
 
-function mapSessionMessagesToFeedItems(messages: Array<{ id: number; role: 'assistant' | 'user'; content: string; created_at: string }> = []): AssistantFeedItem[] {
-  return messages
-    .filter((message) => typeof message?.content === 'string' && message.content.trim())
-    .map((message) => ({
-      id: `session-${message.id}`,
-      type: 'message',
-      role: message.role,
-      text: message.content,
-    }));
+function mapSessionMessagesToFeedItems(messages: Array<{
+  role: 'assistant' | 'user'; content: string;
+  pending_proposal?: { proposal_id: string };
+}> = []): AssistantFeedItem[] {
+  return messages.flatMap((message, index): AssistantFeedItem[] => {
+    if (typeof message?.content !== 'string' || !message.content.trim()) return [];
+    const items: AssistantFeedItem[] = [{
+      id: `session-${index}`, type: 'message', role: message.role, text: message.content,
+    }];
+    const proposalId = message.pending_proposal?.proposal_id;
+    if (message.role === 'assistant' && proposalId) {
+      items.push({ id: `proposal-${proposalId}`, type: 'v2_proposal', proposalId });
+    }
+    return items;
+  });
 }
 
 function formatSessionTimestamp(value?: string) {

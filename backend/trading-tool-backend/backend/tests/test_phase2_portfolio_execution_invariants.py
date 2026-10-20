@@ -36,7 +36,7 @@ def test_bot_generated_execution_idempotency_is_enforced_in_schema_and_repositor
     repository = _read(
         BACKEND_ROOT / "infrastructure" / "repositories" / "bot_repository.py"
     )
-    agent = _read(BACKEND_ROOT / "ai_agents" / "trading_bot_agent.py")
+    agent = _read(BACKEND_ROOT / "engine" / "trading_bot_execution.py")
 
     assert "ux_bot_executions_user_order" in migration
     assert "ON bot_executions (user_id, bot_order_id)" in migration
@@ -69,7 +69,7 @@ def test_bot_portfolio_state_is_scoped_by_symbol_in_schema_and_runtime_paths():
     repository = _read(
         BACKEND_ROOT / "infrastructure" / "repositories" / "bot_repository.py"
     )
-    agent = _read(BACKEND_ROOT / "ai_agents" / "trading_bot_agent.py")
+    agent = _read(BACKEND_ROOT / "engine" / "trading_bot_execution.py")
 
     assert "ux_bot_portfolios_bot_symbol" in migration
     assert "ON bot_portfolios (bot_id, symbol)" in migration
@@ -84,7 +84,7 @@ def test_bot_portfolio_state_is_scoped_by_symbol_in_schema_and_runtime_paths():
 
 
 def test_bot_decision_generation_is_unique_per_user_bot_decision_date():
-    source = _read(BACKEND_ROOT / "ai_agents" / "trading_bot_agent.py")
+    source = _read(BACKEND_ROOT / "engine" / "trading_bot_execution.py")
 
     assert "ON CONFLICT (user_id, bot_id, decision_date) DO UPDATE SET" in source
     assert "RETURNING id" in source
@@ -106,7 +106,7 @@ def test_live_manual_order_preflight_is_required_before_persistence():
 
 
 def test_bot_execution_paths_use_atomic_claim_and_failed_execution_boundary():
-    source = _read(BACKEND_ROOT / "ai_agents" / "trading_bot_agent.py")
+    source = _read(BACKEND_ROOT / "engine" / "trading_bot_execution.py")
     task_source = _read(BACKEND_ROOT / "celery_task" / "trading_bot_task.py")
 
     assert "SET status='executing'" in source
@@ -114,4 +114,4 @@ def test_bot_execution_paths_use_atomic_claim_and_failed_execution_boundary():
     assert "RETURNING id" in source
     assert "SET status='failed_execution'" in source
     assert "Decision already processing or executed" in source
-    assert "raise RuntimeError(result.get(\"error\") or \"trading_bot_agent_failed\")" in task_source
+    assert "raise RuntimeError(result.get(\"error\") or \"trading_bot_execution_failed\")" in task_source

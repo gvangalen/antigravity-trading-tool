@@ -66,13 +66,14 @@ Verified commands:
 - `npm run web`
 - `npm run typecheck`
 - `npm run lint`
+- `npm run test:chat`
 - `npm run smoke:web`
 - `npm run smoke:ios`
 - `npm run smoke:android`
 
 Current open gaps:
 
-- no verified `test` script
+- no single mobile test command covering every native runtime interaction
 
 Current mobile quality notes:
 

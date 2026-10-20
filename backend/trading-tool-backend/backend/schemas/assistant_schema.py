@@ -116,31 +116,3 @@ class AssistantAnalyticsEvent(BaseModel):
     class Config:
         extra = "allow"
 
-# =====================================================
-# Chat Session Management schemas
-# =====================================================
-
-class ChatSessionResponse(BaseModel):
-    id: str
-    user_id: int
-    title: str
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
-class ChatMessageResponse(BaseModel):
-    id: int
-    role: str
-    content: str
-    created_at: datetime
-    intent: Optional[str] = None
-    actions: Optional[Dict[str, Any]] = None
-
-    class Config:
-        orm_mode = True
-
-class ChatSessionDetailResponse(BaseModel):
-    session: ChatSessionResponse
-    messages: List[ChatMessageResponse]

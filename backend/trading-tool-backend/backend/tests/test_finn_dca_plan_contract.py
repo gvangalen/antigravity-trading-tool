@@ -6,7 +6,7 @@ from backend.domain.finn_dca_plan_contract import (
     is_confirmed_dca_amount_rule,
 )
 from backend.engine.decision_engine import decide_amount
-from backend.ai_agents.trading_bot_agent import _get_current_benchmark_weights
+from backend.engine.trading_bot_execution import _get_current_benchmark_weights
 from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
 import asyncio
 

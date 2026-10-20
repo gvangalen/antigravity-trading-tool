@@ -336,22 +336,6 @@ async def get_latest_price(
         logger.error(f"❌ [latest_price] {symbol} Error: {e}")
         raise HTTPException(500, f"Kon laatste {symbol}_prijs niet ophalen")
 
-@router.get("/market_data/interpreted")
-async def fetch_interpreted_data(
-    symbol: str = Query("BTC"),
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        service = MarketDataService(db)
-        return await service.get_interpreted_data(int(current_user["id"]), symbol=symbol)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ [interpreted] {symbol} Fout: {e}")
-        raise HTTPException(500, f"❌ Interpretatiefout voor {symbol}.")
-
-
 # =========================================================
 # 7D DATA (COINGECKO SYNC & GET)
 # =========================================================

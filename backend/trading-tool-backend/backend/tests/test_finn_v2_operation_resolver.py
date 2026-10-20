@@ -694,6 +694,26 @@ def test_unbound_execution_fact_cannot_be_erased_as_off_topic():
     assert resolved.operation_id == "unsupported_financial_operation"
 
 
+def test_direct_order_for_named_asset_stays_in_unsupported_execution_contract():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Voer zonder voorstel direct een kooporder voor Stellar uit."
+    )
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("off_topic", {"goal": "off_topic", "object": None}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "domain_hint": facts.domain_hint,
+            "action_polarity": facts.action_polarity,
+            "financial_execution_intent": facts.financial_execution_intent,
+        },
+    )
+
+    assert facts.referenced_asset == "XLM"
+    assert resolved.operation_id == "unsupported_financial_operation"
+
+
 def test_financial_workspace_change_without_an_object_requires_clarification_not_off_topic():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
