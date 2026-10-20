@@ -58,7 +58,7 @@ const WORKER_CONCURRENCY = {
   scaledFinnInteractive: positiveIntEnv("CELERY_FINN_INTERACTIVE_CONCURRENCY", 2),
 };
 
-const apiDbMaximum = 18;
+const apiDbMaximum = 23;
 const backgroundDbMaximum = 4;
 const finnDbMaximum = 3;
 const workerDbMaximum = SCALED

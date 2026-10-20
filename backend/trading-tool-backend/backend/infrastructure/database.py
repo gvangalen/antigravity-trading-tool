@@ -39,8 +39,8 @@ def _async_engine_options(build_service: str | None) -> dict:
         return options
     worker = (build_service or "").startswith("celery-worker-")
     options.update(
-        pool_size=2 if worker else 10,
-        max_overflow=0 if worker else 5,
+        pool_size=2 if worker else 16,
+        max_overflow=0 if worker else 4,
         pool_pre_ping=True,
         pool_recycle=60,
         pool_timeout=3,

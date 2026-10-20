@@ -404,7 +404,21 @@ class FinnTradeReviewService:
             WHERE user_id=:user_id
         """), params)
         total = count.scalar_one()
-        weekly = await self.weekly_report(user_id, week_start)
+        if total == 0:
+            monday, next_monday, _, _ = completed_reflection_week(selected=week_start)
+            return {
+                "items": items, "total": 0, "excluded": excluded,
+                "projection_pending": projection_pending,
+                "weekly": {
+                    "trades": 0, "plans": 0, "notes": 0, "analyzed": 0,
+                    "pending": 0, "unavailable": 0, "patterns": [],
+                    "confirmed_lesson_repetitions": [], "patterns_truncated": False,
+                    "week_start": monday.isoformat(), "week_end": next_monday.isoformat(),
+                    "generated_at": None, "status": "complete",
+                },
+                "weeks": [monday.isoformat()],
+            }
+        weekly = await self.weekly_report(user_id, week_start, persist=False)
         week_options = await self.session.execute(text("""
             SELECT DISTINCT date_trunc('week', exit_at AT TIME ZONE 'Europe/Amsterdam')::date AS week_start
             FROM finn_trade_reviews
@@ -416,7 +430,8 @@ class FinnTradeReviewService:
                 "projection_pending": projection_pending,
                 "weekly": weekly, "weeks": weeks}
 
-    async def weekly_report(self, user_id: int, selected: date | None = None) -> dict:
+    async def weekly_report(self, user_id: int, selected: date | None = None,
+                            *, persist: bool = True) -> dict:
         monday, next_monday, start, end = completed_reflection_week(selected=selected)
         params = {"user_id": user_id, "start": start, "end": end}
         week = await self.session.execute(text("""
@@ -464,22 +479,33 @@ class FinnTradeReviewService:
         summary = {**weekly_counts, "patterns": patterns,
                    "confirmed_lesson_repetitions": repeated_lessons,
                    "patterns_truncated": weekly_counts["trades"] > 500}
-        await self.session.execute(text("""
-            INSERT INTO finn_weekly_trade_reflections
-              (user_id, week_start, week_end, summary)
-            VALUES (:user_id, :week_start, :week_end, CAST(:summary AS JSONB))
-            ON CONFLICT (user_id, week_start) DO UPDATE
-              SET summary=EXCLUDED.summary, generated_at=NOW()
-            WHERE finn_weekly_trade_reflections.summary IS DISTINCT FROM EXCLUDED.summary
-        """), {"user_id": user_id, "week_start": monday, "week_end": next_monday,
-                "summary": json.dumps(summary, default=str)})
-        await self.session.commit()
-        stored = await self.session.execute(text("""
-            SELECT generated_at FROM finn_weekly_trade_reflections
-            WHERE user_id=:user_id AND week_start=:week_start
-        """), {"user_id": user_id, "week_start": monday})
+        generated_at = None
+        if persist:
+            await self.session.execute(text("""
+                INSERT INTO finn_weekly_trade_reflections
+                  (user_id, week_start, week_end, summary)
+                VALUES (:user_id, :week_start, :week_end, CAST(:summary AS JSONB))
+                ON CONFLICT (user_id, week_start) DO UPDATE
+                  SET summary=EXCLUDED.summary, generated_at=NOW()
+                WHERE finn_weekly_trade_reflections.summary IS DISTINCT FROM EXCLUDED.summary
+            """), {"user_id": user_id, "week_start": monday, "week_end": next_monday,
+                    "summary": json.dumps(summary, default=str)})
+            await self.session.commit()
+            stored = await self.session.execute(text("""
+                SELECT generated_at FROM finn_weekly_trade_reflections
+                WHERE user_id=:user_id AND week_start=:week_start
+            """), {"user_id": user_id, "week_start": monday})
+            generated_at = stored.scalar_one().isoformat()
+        else:
+            stored = await self.session.execute(text("""
+                SELECT summary, generated_at FROM finn_weekly_trade_reflections
+                WHERE user_id=:user_id AND week_start=:week_start
+            """), {"user_id": user_id, "week_start": monday})
+            saved = stored.one_or_none()
+            if saved is not None and saved.summary == json.loads(json.dumps(summary, default=str)):
+                generated_at = saved.generated_at.isoformat()
         return {**summary, "week_start": monday.isoformat(), "week_end": next_monday.isoformat(),
-                "generated_at": stored.scalar_one().isoformat(), "status": "complete"}
+                "generated_at": generated_at, "status": "complete"}
 
     async def get_review(self, user_id: int, review_id: int) -> dict:
         result = await self.session.execute(text("""

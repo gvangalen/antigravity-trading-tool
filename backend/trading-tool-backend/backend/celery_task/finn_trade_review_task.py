@@ -26,7 +26,7 @@ def finalize_weekly_trade_reflections() -> int:
 
 
 async def _finalize_weekly_trade_reflections(session_factory=None) -> int:
-    """Save the last closed Amsterdam week; a read can backfill older weeks."""
+    """Save the last closed Amsterdam week for every owner with a review."""
     session_factory = session_factory or async_session_factory
     allowed = allowed_trade_review_users()
     if allowed == set():
@@ -36,21 +36,27 @@ async def _finalize_weekly_trade_reflections(session_factory=None) -> int:
     params = {"start": start, "end": end}
     if allowed is not None:
         params["allowed"] = sorted(allowed)
-    async with session_factory() as session:
-        result = await session.execute(text(f"""
-            SELECT DISTINCT user_id FROM finn_trade_reviews
-            WHERE exit_at >= :start AND exit_at < :end {user_filter}
-            ORDER BY user_id LIMIT 500
-        """), params)
-        user_ids = [int(row.user_id) for row in result.fetchall()]
     completed = 0
-    for user_id in user_ids:
-        try:
-            async with session_factory() as session:
-                await FinnTradeReviewService(session).weekly_report(user_id, monday)
-            completed += 1
-        except Exception:
-            logger.exception("FINN weekly reflection failed", extra={"user_id": user_id})
+    last_user_id = 0
+    while True:
+        async with session_factory() as session:
+            result = await session.execute(text(f"""
+                SELECT DISTINCT user_id FROM finn_trade_reviews
+                WHERE exit_at >= :start AND exit_at < :end
+                  AND user_id > :last_user_id {user_filter}
+                ORDER BY user_id LIMIT 500
+            """), {**params, "last_user_id": last_user_id})
+            user_ids = [int(row.user_id) for row in result.fetchall()]
+        if not user_ids:
+            break
+        for user_id in user_ids:
+            try:
+                async with session_factory() as session:
+                    await FinnTradeReviewService(session).weekly_report(user_id, monday)
+                completed += 1
+            except Exception:
+                logger.exception("FINN weekly reflection failed", extra={"user_id": user_id})
+        last_user_id = user_ids[-1]
     return completed
 
 

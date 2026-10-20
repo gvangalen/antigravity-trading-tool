@@ -204,6 +204,45 @@ def test_capacity_load_stops_active_stage_on_error_or_latency():
     asyncio.run(check())
 
 
+def test_capacity_load_reports_steady_samples_before_error_abort(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    scope = harness["run"].__globals__
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+    async def identity(_client, _fixtures):
+        pass
+
+    async def fail(_client, _fixture, _deadline, _think, _chat, results, stop,
+                   initial_spread_seconds=0, steady_results=None, steady_started=None):
+        results["trade_reviews"].append((500, 25))
+        steady_results["trade_reviews"].append((500, 25))
+        stop.set()
+
+    monkeypatch.setitem(scope, "verify_identity", identity)
+    monkeypatch.setitem(scope, "virtual_user", fail)
+    monkeypatch.setattr(scope["httpx"], "AsyncClient", lambda **_: Client())
+    args = SimpleNamespace(
+        max_users=1, base_url="http://127.0.0.1:8000", timeout=1,
+        include_chat=False, stages="1:1", think_seconds=0.01,
+        p95_limits={"trade_reviews": 1000}, between_stage_pause_seconds=0,
+        allow_production=False,
+    )
+    with pytest.raises(RuntimeError, match="non-2xx"):
+        asyncio.run(harness["run"](args, [{"user_id": 7, "access_token": "fixture"}]))
+    reports = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert len(reports) == 2
+    assert reports[0]["routes"]["trade_reviews"]["statuses"] == {"500": 1}
+    assert reports[1]["routes"]["trade_reviews"]["statuses"] == {"500": 1}
+
+
 def test_capacity_load_rejects_nonfinite_production_latency_gate(monkeypatch):
     import sys
 

@@ -221,10 +221,10 @@ async def run(args, fixtures):
                 monitor.cancel()
                 await asyncio.gather(monitor, return_exceptions=True)
             all_summary = report(f"{users} users / ramp + {seconds}s steady", results)
+            summary = report(f"{users} users / observed steady interval", steady_results)
             reject_aborted_stage(latency_abort_routes)
             if stage_has_blocking_errors(all_summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")
-            summary = report(f"{users} users / {seconds}s steady p95", steady_results)
             exceeded = stage_exceeds_latency_limit(summary, args.p95_limits)
             if exceeded:
                 raise RuntimeError(f"Load stage exceeded p95 limits for {', '.join(exceeded)}; refusing a higher stage")
