@@ -126,7 +126,7 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert 'if [ \\"\\$exit_code\\" -ne 0 ]; then' in source
     assert "cleanup_previous_frontend_static || true" in source
     assert "trap cleanup_previous_frontend_static EXIT" not in source
-    assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
+    assert "NODE_BIN=$NODE_BIN ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
     for step in (
         "remote_preflight",
         "migration_plan",
@@ -160,6 +160,21 @@ def test_worker_queue_readiness_requires_registered_topology_consumers() -> None
             assert missing(payload, topology=topology, environment="production") == ["execution_critical"]
         payload["components"]["celery"]["control_plane_ready"] = False
         assert missing(payload, topology=topology, environment="production") == ["celery_control_plane"]
+
+
+def test_deploy_restores_validated_environment_after_secrets_file() -> None:
+    source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    secret_load = source.index('source "\\$ENV_FILE"')
+    for name, value in (
+        ("APP_ENV", "ENVIRONMENT"),
+        ("TRADAMIND_WORKER_TOPOLOGY", "TRADAMIND_WORKER_TOPOLOGY"),
+        ("API_WORKERS", "API_WORKERS"),
+        ("DB_CONNECTION_BUDGET", "DB_CONNECTION_BUDGET"),
+    ):
+        assert source.rfind(f"export {name}=${value}") > secret_load
+
+    rollback_source = (REPO_ROOT / "ops" / "deploy" / "rollback_env.sh").read_text(encoding="utf-8")
+    assert 'v20.19.5/bin' in rollback_source
 
 
 def test_release_identity_is_written_before_pm2_and_loaded_by_every_process(tmp_path: Path) -> None:

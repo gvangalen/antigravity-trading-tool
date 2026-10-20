@@ -10,7 +10,7 @@ if [ -z "$ENVIRONMENT" ]; then
 fi
 
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
-NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v18.20.8/bin}"
+NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v20.19.5/bin}"
 
 case "$ENVIRONMENT" in
   production)
