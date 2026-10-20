@@ -270,6 +270,8 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
 
 def test_trade_review_rollout_reaches_api_and_workers_with_fail_closed_default() -> None:
     ecosystem = REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js"
+    capacity_profile = json.loads((REPO_ROOT / "ops" / "deploy" / "capacity_profile.json").read_text())
+    expected_apps = 9 if capacity_profile["topology"] == "scaled" else 5
     script = (
         "const {createEcosystem}=require(process.argv[1]);"
         "process.stdout.write(JSON.stringify(createEcosystem(process.argv[2]).apps.map("
@@ -297,7 +299,7 @@ def test_trade_review_rollout_reaches_api_and_workers_with_fail_closed_default()
 
     for mode, ids, qa_id in ((None, None, None), ("allowlist", "93", None), ("off", "", "71")):
         apps = process_env(mode, ids, qa_id)
-        assert len(apps) == 5
+        assert len(apps) == expected_apps
         assert all(app["mode"] == "all" and app["ids"] == "" for app in apps if app["name"] != "frontend")
         assert next(app for app in apps if app["name"] == "frontend")["mode"] == (mode or "off")
 

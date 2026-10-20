@@ -1,39 +1,38 @@
 # 1000 active users: implementation and release plan
 
-Baseline checked on 2026-10-20: the production backend and frontend both report
-`1f7077ea179bbf1ef0887be4605d731df73af880`. This includes the recent
-FINN cutover QA repair and feed update. The capacity candidate includes that
-`main` revision.
+Latest verified production baseline on 2026-10-20: backend health and frontend
+build info both returned HTTP 200 and SHA
+`52ef2159338ba360932ebe7fcd2d578657a9adab`. Release 1 correctness,
+cluster metrics, the marked-account provisioner, and the bounded read-load
+harness are deployed. Independent QA owner canaries passed for workspace and
+FINN conversation content; trade-review body ownership remains unproven
+because canary lists were empty. No order or FINN action route was load-tested.
 The production ecosystem configuration records worker OOMs from an earlier
 multi-process layout on a 1 GB host. A read-only SSH check on 2026-10-20 of
 the host serving the current production SHA found 4 vCPU and 8,125,916 KiB
 (7.75 GiB) RAM, with 6,054 MiB available and no swap at idle. PostgreSQL
 reported `max_connections=100` and 19 active connections. PM2 showed five
-online compact-profile processes. These point-in-time observations establish
-that the current host is larger than the historical one; they do not prove
-capacity under load.
+online compact-profile processes. This is the current 7.75 GiB host, not the
+historical 1 GiB host.
 
-The isolated `active-users-main` worktree contains the Release 1 code changes,
-cluster metrics, a read-only load harness, and database pool reductions. The
-combined backend suite passed 3543 tests with 3 skips. The combined frontend
-build, typecheck, focused tests and production audit passed. The isolated FINN
-action matrix passed 16/16 contracts and 19/19 adapter tests after the merge;
-real-provider selector development and regression passed 20/20 and 109/109
-cases on unchanged selector code. CI passed all five jobs on the first merged
-candidate and on the provisioner candidate `c216d99aa`. See
-`docs/agents/FINN_RELEASE_STATUS.md`
-for artifact hashes. These changes are not deployed or capacity-proven. The
-live environment has no 1000-account fixture file yet. A marked account
-provisioner is prepared but has not been run against production; its tokens
-are restricted to the three load reads plus account identity. Local creation,
-issuance and deactivation of 1000 accounts passed; production accounts remain
-uncreated. Independent reviews found that synthetic users entered scheduled
-jobs and deployment could pass without worker readiness. The candidate now
-excludes marked users from those jobs, holds dispatcher reservations until
-task completion, and requires queue consumers at deployment. Independent QA,
-Security, and Architecture re-reviews found no remaining P1 code blocker;
-live QA remains pending. Deep health now exposes reservation count and one-hour
-age by queue.
+Independent QA repeated the live read workload on `52ef2159` with 1,000
+distinct marked accounts. The 100-user stage completed with all 1,302 HTTP
+responses successful and steady p95 of 66/9/18 ms for workspace/FINN list/
+trade-review list. The 500-user stage completed with all 6,501 responses
+successful and steady p95 of 366/121/191 ms. The 1,000-user stage stopped
+early after four HTTP 500s and p95 breaches on all routes. The API's single
+async SQLAlchemy pool exhausted its 10 base plus five overflow connections
+with a three-second checkout timeout; PostgreSQL had at most 20 of 100
+connections in sampled measurements, more than 5.83 GiB RAM remained
+available, queues were empty, and PM2 recorded no restarts. All synthetic
+accounts were deactivated and private token files removed after each run.
+Therefore 1,000 active users are **not accepted** on compact topology. The
+next candidate selects the existing scaled profile: two API processes,
+separate critical/market/scoring/AI/FINN workers, and a configured maximum of
+70 database connections under an 80-connection budget. Repeat the live
+canary and staged test after deploying that candidate; the profile switch
+alone is not capacity evidence. Deep health exposes dispatcher reservation
+count and one-hour age by queue.
 `backend/scripts/reconcile_dispatch_reservations.py` reports stale task IDs
 and can release terminal reservations directly. Routine reconciliation leaves
 `PENDING`, `STARTED`, and `RETRY` untouched. If those remain stale, inspect
