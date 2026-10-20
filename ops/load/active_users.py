@@ -208,7 +208,7 @@ async def run(args, fixtures):
             steady_started = time.monotonic() + args.think_seconds
             deadline = steady_started + seconds
             monitor = asyncio.create_task(monitor_stage(
-                results, args.p95_limits, deadline, stop_event, latency_abort_routes,
+                steady_results, args.p95_limits, deadline, stop_event, latency_abort_routes,
             ))
             try:
                 await asyncio.gather(*(
