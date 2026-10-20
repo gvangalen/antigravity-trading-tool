@@ -70,6 +70,32 @@ def _dossier_incomplete_fields(detail: dict) -> list[str]:
     return failed
 
 
+@contextmanager
+def _controlled_fixture_paper_quote():
+    """Supply only this inactive Paper fixture with a deterministic EUR quote.
+
+    The review probe tests ledger-to-dossier projection, not live market quote
+    ingestion. This process-local override is restored before any review read
+    or AI task and never changes application workers or market data.
+    """
+    if os.getenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE") != "1":
+        raise RuntimeError("closed_paper_review_fixture_not_authorized")
+    from backend.engine import trading_bot_execution as execution
+
+    original = execution._get_live_price
+
+    def paper_quote(conn, symbol: str, max_age_seconds=None):
+        if str(symbol).upper() == fixture.SYMBOL and max_age_seconds is None:
+            return float(fixture.PRICE_EUR)
+        return original(conn, symbol, max_age_seconds)
+
+    try:
+        execution._get_live_price = paper_quote
+        yield
+    finally:
+        execution._get_live_price = original
+
+
 def _close_paper_position(user_id: int, bot_id: int, buy_decision_id: int) -> None:
     from backend.engine.trading_bot_execution import _auto_execute_decision, _persist_bot_order
 
@@ -171,8 +197,9 @@ def run(namespace: str) -> dict:
             conn.commit()
         finally:
             conn.close()
-        fixture._execute(user_id, bot_id, buy_decision_id)
-        _close_paper_position(user_id, bot_id, buy_decision_id)
+        with _controlled_fixture_paper_quote():
+            fixture._execute(user_id, bot_id, buy_decision_id)
+            _close_paper_position(user_id, bot_id, buy_decision_id)
         _process_review_for_fixture(user_id)
         result = asyncio.run(_read_review(user_id))
         return result

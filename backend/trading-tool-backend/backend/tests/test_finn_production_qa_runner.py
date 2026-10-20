@@ -273,6 +273,30 @@ def test_closed_paper_dossier_failure_identifies_only_safe_field_names():
     ]
 
 
+def test_closed_paper_fixture_quote_is_scoped_to_protected_paper_execution(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.engine import trading_bot_execution as execution
+
+    original = lambda conn, symbol, max_age_seconds=None: 17.0
+    monkeypatch.setattr(execution, "_get_live_price", original)
+    monkeypatch.setenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE", "1")
+    with probe._controlled_fixture_paper_quote():
+        assert execution._get_live_price(None, "BTC") == float(probe.fixture.PRICE_EUR)
+        assert execution._get_live_price(None, "ETH") == 17.0
+        assert execution._get_live_price(None, "BTC", 60) == 17.0
+    assert execution._get_live_price is original
+    with pytest.raises(RuntimeError, match="synthetic_execution_failure"):
+        with probe._controlled_fixture_paper_quote():
+            raise RuntimeError("synthetic_execution_failure")
+    assert execution._get_live_price is original
+
+    monkeypatch.setenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE", "0")
+    with pytest.raises(RuntimeError, match="closed_paper_review_fixture_not_authorized"):
+        with probe._controlled_fixture_paper_quote():
+            pass
+    assert execution._get_live_price is original
+
+
 def test_protected_stale_paper_contract_identifies_the_failed_safety_boundary():
     path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_protected_score2_stale_paper.py"
     spec = importlib.util.spec_from_file_location("protected_stale_probe_contract", path)
