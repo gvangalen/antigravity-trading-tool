@@ -26,6 +26,7 @@ class MarketDataIngestionService:
         *,
         commit: bool = True,
         continue_on_error: bool = True,
+        release_catalog_read_transaction: bool = False,
     ) -> dict[str, Any]:
         normalized = list(
             dict.fromkeys(
@@ -42,6 +43,11 @@ class MarketDataIngestionService:
             }
 
         assets = await self.asset_catalog_service.get_assets(normalized)
+        if release_catalog_read_transaction:
+            # Scheduled ingestion may wait on several external providers. End
+            # the catalog SELECT transaction before those network requests;
+            # this option is for callers with no pending session writes.
+            await self.session.rollback()
         ingested: list[dict[str, Any]] = []
         failed: list[dict[str, Any]] = []
 

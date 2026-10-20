@@ -69,6 +69,9 @@ class IndicatorHistoryBootstrap:
 
         asset = AssetRecord(**await AssetCatalogService(self.session).get_asset(normalized_symbol))
         provider = MarketDataProviderRegistry().resolve_for_asset(asset)
+        # Coverage/catalog reads opened a transaction. The provider can take
+        # seconds or fail; keep that wait outside a PostgreSQL transaction.
+        await self.session.rollback()
         candles = await provider.fetch_candles(asset, "1d" if asset.asset_class == "crypto" else "1day", limit=40)
         today = datetime.now(timezone.utc).date()
         cutoff_day = today - timedelta(days=30)
@@ -118,6 +121,7 @@ class IndicatorHistoryBootstrap:
         if coverage >= REQUIRED_SOURCE_DAYS:
             return {"inserted": 0, "status": "ready", "observed_days": coverage}
 
+        await self.session.rollback()
         readings = await asyncio.to_thread(fetch_absolute_macro_history, name)
         today = datetime.now(timezone.utc).date()
         cutoff_day = today - timedelta(days=90)

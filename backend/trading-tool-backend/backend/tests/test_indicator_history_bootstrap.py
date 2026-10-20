@@ -100,6 +100,9 @@ class _MarketSession:
     async def commit(self):
         self.commits += 1
 
+    async def rollback(self):
+        pass
+
 
 class _MacroSession:
     def __init__(self, owner_id=7):
@@ -115,6 +118,9 @@ class _MacroSession:
 
     async def commit(self):
         self.commits += 1
+
+    async def rollback(self):
+        pass
 
 
 def test_market_backfill_uses_closed_dated_candles_and_is_idempotent(monkeypatch):

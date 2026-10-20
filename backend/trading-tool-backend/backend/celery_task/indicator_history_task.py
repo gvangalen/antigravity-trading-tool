@@ -1,6 +1,5 @@
 """Recover dated indicator history without inventing scores or source times."""
 
-import asyncio
 import logging
 import time
 from collections import defaultdict
@@ -9,7 +8,7 @@ from celery import shared_task
 from sqlalchemy import select
 from requests import HTTPError
 
-from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.database import async_session_factory, run_celery_coroutine
 from backend.infrastructure.models import UserIndicatorConfig
 from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.services.indicator_history_bootstrap import (
@@ -177,7 +176,7 @@ def bootstrap_indicator_histories(
     category: str | None = None, indicator: str | None = None,
     enqueue_score_refresh: bool = True,
 ) -> dict:
-    return asyncio.run(_bootstrap_indicator_histories(
+    return run_celery_coroutine(_bootstrap_indicator_histories(
         user_id=user_id, symbol=symbol, category=category, indicator=indicator,
         enqueue_score_refresh=enqueue_score_refresh,
     ))

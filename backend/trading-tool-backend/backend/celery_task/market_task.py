@@ -1,7 +1,6 @@
 import logging
 import requests
 import json
-import asyncio
 import time
 from datetime import datetime
 from collections import defaultdict
@@ -12,7 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from backend.utils.db import get_db_connection
 from backend.celery_task.btc_price_history_task import update_btc_history
 from backend.utils.scoring_utils import generate_scores_db
-from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.database import async_session_factory, run_celery_coroutine
 from backend.infrastructure.models import UserIndicatorConfig, Watchlist
 from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
@@ -103,10 +102,14 @@ async def _sync_configured_market_snapshots() -> dict:
                 "deferred_scope_count": deferred_scope_count,
             }
 
+        # The configuration read must not keep a transaction open while
+        # providers fetch quotes. All values needed below are plain scalars.
+        await session.rollback()
         result = await MarketDataIngestionService(session).ingest_latest_snapshots(
             symbols,
             commit=True,
             continue_on_error=True,
+            release_catalog_read_transaction=True,
         )
         services = {
             "market": MarketDataService(session),
@@ -119,15 +122,22 @@ async def _sync_configured_market_snapshots() -> dict:
             try:
                 materialization = await services[category].sync_effective_indicators(user_id, symbol)
                 if materialization.get("failed"):
+                    # Individual provider failures may coexist with valid
+                    # writes from other indicators in this scope.
+                    if materialization.get("synced"):
+                        await session.commit()
+                    else:
+                        await session.rollback()
                     rehydration_failures.append({"user_id": user_id, "symbol": symbol, "category": category})
                     continue
+                await session.commit()
                 rehydrated_scopes.append({"user_id": user_id, "symbol": symbol, "category": category})
             except Exception:
+                await session.rollback()
                 # A single unavailable upstream indicator must not starve other
                 # user workspaces or make the snapshot task fail as a whole.
                 logger.exception("Configured %s indicator refresh failed for %s", category, symbol)
                 rehydration_failures.append({"user_id": user_id, "symbol": symbol, "category": category})
-        await session.commit()
         result["rehydrated_scopes"] = rehydrated_scopes
         result["rehydration_failures"] = rehydration_failures
         result["deferred_scope_count"] = deferred_scope_count
@@ -247,7 +257,7 @@ def fetch_market_data():
 def sync_configured_market_snapshots():
     """Persist fresh quotes for configured watchlist assets without blocking FINN."""
     try:
-        result = asyncio.run(_sync_configured_market_snapshots())
+        result = run_celery_coroutine(_sync_configured_market_snapshots())
         # Score 2.0 verifies that the saved score used these exact source
         # measurements. Rebuild after the indicator transaction commits;
         # otherwise a fresh quote can make the previous score unavailable
@@ -455,7 +465,7 @@ def sync_crypto_forward_returns():
 
     try:
         logger.info("📚 Start crypto forward returns sync...")
-        result = asyncio.run(_run())
+        result = run_celery_coroutine(_run())
         logger.info("✅ Crypto forward returns sync voltooid: %s", result)
     except Exception:
         logger.exception("❌ Crypto forward returns sync mislukt")

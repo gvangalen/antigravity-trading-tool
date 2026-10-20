@@ -55,3 +55,38 @@ def test_market_ingestion_refuses_provider_currency_different_from_catalog():
     asset = AssetRecord(symbol="BTC", display_name="Bitcoin", asset_class="crypto", quote_currency="USDT")
     with pytest.raises(ValueError, match="market_quote_currency_mismatch"):
         asyncio.run(service._fetch_snapshot(asset))
+
+
+def test_scheduled_ingestion_ends_catalog_transaction_before_provider_wait():
+    events = []
+
+    class Session:
+        async def rollback(self):
+            events.append("rollback")
+
+        def add(self, _record):
+            events.append("add")
+
+        async def commit(self):
+            events.append("commit")
+
+    service = MarketDataIngestionService(Session())
+
+    async def get_assets(_symbols):
+        events.append("catalog")
+        return {"BTC": {"symbol": "BTC", "display_name": "Bitcoin",
+                        "asset_class": "crypto", "quote_currency": "USDT"}}
+
+    async def fetch(_asset):
+        events.append("provider")
+        return PriceSnapshotDTO(symbol="BTC", provider="test", provider_symbol="BTCUSDT",
+                                price=100, currency="USDT", observed_at=datetime.now(timezone.utc))
+
+    service.asset_catalog_service.get_assets = get_assets
+    service._fetch_snapshot = fetch
+    result = asyncio.run(service.ingest_latest_snapshots(
+        ["BTC"], release_catalog_read_transaction=True,
+    ))
+
+    assert result["success_count"] == 1
+    assert events == ["catalog", "rollback", "provider", "add", "commit"]
