@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -32,16 +31,6 @@ def _asset_logo_url(symbol: str) -> str | None:
     if not normalized:
         return None
     return f"https://assets.coincap.io/assets/icons/{normalized.lower()}@2x.png"
-
-# =========================================================
-# SYNCHRONOUS WRAPPER FOR SCORING ENGINE
-# =========================================================
-def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> dict:
-    from backend.utils.scoring_utils import get_scores_for_symbol
-    try:
-        return get_scores_for_symbol(user_id=user_id, symbol=symbol, include_metadata=True)
-    except TypeError:
-        return get_scores_for_symbol(include_metadata=True)
 
 class DashboardService:
     def __init__(self, db_session: AsyncSession):
@@ -83,17 +72,17 @@ class DashboardService:
                 for row in technical_rows
             }
             
-            # Execute Sync Scoring Request
-            scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id, symbol)
-            
             from backend.services.setup_market_match_service import SetupMarketMatchService
             score_assessment = await SetupMarketMatchService(self.session).for_asset(
                 user_id, symbol, setups=[],
             )
-            component_status = score_assessment["component_source_status"]
-            macro_score = scores.get("macro_score") if component_status["macro_score"] == "fresh" else None
-            technical_score = scores.get("technical_score") if component_status["technical_score"] == "fresh" else None
-            market_score = scores.get("market_score") if component_status["market_score"] == "fresh" else None
+            # The dashboard, Analyse and FINN read the same Score 2.0
+            # projection. A raw historical score must not revive a component
+            # whose source is now stale or incomplete.
+            reported_scores = score_assessment["reported_scores"]
+            macro_score = reported_scores.get("macro_score")
+            technical_score = reported_scores.get("technical_score")
+            market_score = reported_scores.get("market_score")
             
             # GET DYNAMIC SETUP SCORE
             from backend.services.setup_service import SetupService
@@ -238,21 +227,15 @@ class DashboardService:
         match_service = SetupMarketMatchService(self.session)
         owned_setups = await SetupRepository(self.session).get_all_setups(user_id)
         for sym in symbols:
-            try:
-                scores = await asyncio.to_thread(sync_get_scores_for_symbol, user_id, sym)
-            except Exception as e:
-                logger.error(f"⚠️ [MobileOverview] P1 Warning: Failed to fetch scores for {sym}: {e}")
-                scores = {}
-
             price_info = prices_data.get(sym, {}) if isinstance(prices_data, dict) else {}
             assessment = await match_service.for_asset(user_id, sym, setups=owned_setups)
-            component_status = assessment["component_source_status"]
-            macro_val = (float(scores["macro_score"]) if component_status["macro_score"] == "fresh"
-                         and scores.get("macro_score") is not None else None)
-            tech_val = (float(scores["technical_score"]) if component_status["technical_score"] == "fresh"
-                        and scores.get("technical_score") is not None else None)
-            mkt_val = (float(scores["market_score"]) if component_status["market_score"] == "fresh"
-                       and scores.get("market_score") is not None else None)
+            reported_scores = assessment["reported_scores"]
+            macro_val = (float(reported_scores["macro_score"])
+                         if reported_scores["macro_score"] is not None else None)
+            tech_val = (float(reported_scores["technical_score"])
+                        if reported_scores["technical_score"] is not None else None)
+            mkt_val = (float(reported_scores["market_score"])
+                       if reported_scores["market_score"] is not None else None)
             ranked_match = assessment["matches"][0] if assessment["matches"] else None
             setup_match_score = ranked_match["score"] if ranked_match else None
             setup_match_status = ranked_match["status"] if ranked_match else (
