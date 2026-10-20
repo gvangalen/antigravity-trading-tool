@@ -82,3 +82,5 @@ def test_web_and_mobile_dashboard_use_the_same_current_score_projection(monkeypa
     assert web.scores.technical == mobile.watchlist[0].technical_score == 75
     assert web.scores.macro is mobile.watchlist[0].macro_score is None
     assert mobile.watchlist[0].benchmark_score is None
+    assert "finn_briefing" not in mobile.dict()
+    assert "intelligence_events" not in mobile.dict()

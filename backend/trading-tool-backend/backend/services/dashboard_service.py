@@ -12,8 +12,7 @@ from backend.services.platform_metrics import record_latency_sample
 from backend.services.locale_service import localize_finn_payload
 from backend.schemas.dashboard_schema import (
     DashboardResponse, MobileOverviewResponse, MobilePortfolioOverviewSchema,
-    MobileAssetWatchlistSchema, MobileActiveBotSchema, MobileFinnBriefingSchema,
-    MobileIntelligenceEventSchema
+    MobileAssetWatchlistSchema, MobileActiveBotSchema,
 )
 
 logger = logging.getLogger(__name__)
@@ -315,12 +314,6 @@ class DashboardService:
         if total_invested_eur > 0:
             total_profit_pct = round(((total_value_eur - total_invested_eur) / total_invested_eur) * 100.0, 2)
 
-        # The coach feed is the only source of proactive FINN messages. Keep
-        # the legacy overview response shape until mobile consumers migrate.
-        finn_briefing = MobileFinnBriefingSchema(
-            greeting="", summary="", suggested_actions=[],
-        )
-
         portfolio_overview = MobilePortfolioOverviewSchema(
             total_balance_eur=round(total_value_eur, 2),
             total_invested_eur=round(total_invested_eur, 2),
@@ -333,8 +326,6 @@ class DashboardService:
             portfolio=portfolio_overview,
             watchlist=watchlist_items,
             active_bots=active_bots,
-            finn_briefing=finn_briefing,
-            intelligence_events=[]
         )
 
         return response_payload

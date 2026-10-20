@@ -18,7 +18,7 @@ import { SwipeActionRow } from '../components/rows/SwipeActionRow';
 import { BottomSheet } from '../components/sheets/BottomSheet';
 import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
 import { StrategyCard } from '../components/StrategyCard';
-import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { FinnCoachFeedCard } from '../components/workspace/FinnCoachFeedCard';
 import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { listRowStandards } from '../constants/listRows';
@@ -26,7 +26,7 @@ import { StatusTone, statusTones, theme } from '../constants/theme';
 import { typography } from '../constants/typography';
 
 import { useApiResource } from '../hooks/useApiResource';
-import { localizedBackendText, translate, translateFinnTag } from '../i18n';
+import { translate, translateFinnTag } from '../i18n';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { mapBotDecision, mapStrategy, nowLabel } from '../services/dataMappers';
@@ -457,24 +457,7 @@ export function SetupScreen() {
         <LoadingSkeletonCard />
       ) : (
         <>
-          <FinnSetupBriefingCard
-            briefing={overviewResource.data?.finn_briefing}
-            decisionState={decisionState}
-            topSetups={topSetups}
-            isStale={isStale}
-            onAskFinn={() =>
-              openFinn({
-                prefill: setup.id
-                  ? `Explain my current plan for ${activeAsset}. Tell me why ${setup.name} is leading, what confirms it and what should wait.`
-                  : `Help me review whether I have an existing plan for ${activeAsset}. If not, explain what I need to create one.`,
-                source: 'my-plan-workspace',
-                symbol: activeAsset,
-              })
-            }
-            hasLinkedStrategy={hasLinkedStrategy}
-            setup={setup}
-            strategy={strategy}
-          />
+          <WorkspaceHeroSection><FinnCoachFeedCard /></WorkspaceHeroSection>
           <WorkflowStepsRail
             steps={[
               {
@@ -650,95 +633,6 @@ export function SetupScreen() {
         ) : null}
       </BottomSheet>
     </ScreenContainer>
-  );
-}
-
-function FinnSetupBriefingCard({
-  briefing,
-  decisionState,
-  hasLinkedStrategy,
-  isStale,
-  onAskFinn,
-  setup,
-  strategy,
-  topSetups,
-}: {
-  briefing?: MobileOverviewResponse['finn_briefing'];
-  decisionState: ReturnType<typeof mapDecisionState>;
-  hasLinkedStrategy: boolean;
-  isStale: boolean;
-  onAskFinn: () => void;
-  setup: SetupSummary;
-  strategy: ReturnType<typeof mapStrategy>;
-  topSetups: SetupSummary[];
-}) {
-  const { language } = useAppPreferences();
-  const seenSetupIds = new Set<number>();
-  const distinctSetups = [setup, ...topSetups].filter((item) => {
-    if (item.id === undefined || seenSetupIds.has(item.id)) return false;
-    seenSetupIds.add(item.id);
-    return true;
-  });
-  const reviewCount = distinctSetups.filter((item) => item.status !== 'matches').length;
-  const queueItems = [
-    {
-      key: 'tasks',
-      label: translate(language, 'queue.label.tasks'),
-      value: distinctSetups.length,
-      body: translate(language, 'queue.body.plansInCurrentWorkspace'),
-    },
-    {
-      key: 'reviews',
-      label: translate(language, 'queue.label.reviews'),
-      value: reviewCount,
-      body: translate(language, 'queue.body.plansNeedReview'),
-    },
-    {
-      key: 'risks',
-      label: translate(language, 'queue.label.risks'),
-      value: distinctSetups.filter((item) => item.status === 'outside_conditions').length,
-      body: translate(language, 'queue.body.weakPlansSlowing'),
-    },
-    {
-      key: 'performance',
-      label: translate(language, 'queue.label.performance'),
-      value: hasLinkedStrategy ? 1 : 0,
-      body: translate(language, 'queue.body.plansAlreadyReady'),
-    },
-  ];
-  const finnHeadline = localizedBackendText(
-    language,
-    briefing?.summary?.trim(),
-    translate(language, 'finn.noBriefingReady'),
-  );
-  const metaItems = [
-    !decisionState.benchmarkAvailable
-      ? 'Benchmark niet beschikbaar'
-      : decisionState.score >= 70
-      ? translate(language, 'myPlan.constructive')
-      : decisionState.score >= 50
-        ? translate(language, 'myPlan.selective')
-        : translate(language, 'myPlan.defensive'),
-    `${setupConditionLabel(setup.status, language)} · ${setupClosenessLabel(setup, language)}`,
-    translate(language, 'myPlan.reviewPoints', { count: reviewCount }),
-  ];
-
-  return (
-    <WorkspaceHeroSection>
-      <TodayWithFinnCard
-        headline={finnHeadline}
-        metaItems={metaItems}
-        support={
-          hasLinkedStrategy
-            ? translate(language, 'myPlan.supportNeedsConfirmation', {
-                value: Math.max(0, 100 - strategy.confidence),
-              })
-            : translate(language, 'myPlan.supportInsufficientConfidence')
-        }
-        queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: reviewCount })}
-      />
-    </WorkspaceHeroSection>
   );
 }
 

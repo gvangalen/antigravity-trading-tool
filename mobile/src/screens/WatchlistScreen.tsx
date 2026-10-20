@@ -13,14 +13,14 @@ import { SwipeActionRow } from '../components/rows/SwipeActionRow';
 import { BottomSheet } from '../components/sheets/BottomSheet';
 import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
 import { TradingViewWidget } from '../components/charts/TradingViewWidget';
-import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { FinnCoachFeedCard } from '../components/workspace/FinnCoachFeedCard';
 import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { listRowStandards } from '../constants/listRows';
 import { StatusTone, theme } from '../constants/theme';
 import { typography } from '../constants/typography';
 import { useApiResource } from '../hooks/useApiResource';
-import { localizedBackendText, translate } from '../i18n';
+import { translate } from '../i18n';
 import { benchmarkSituationId } from '../services/benchmarkSituation';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
@@ -218,7 +218,6 @@ export function WatchlistScreen() {
   const intelligence = selectedAsset
     ? buildAssetIntelligence(selectedAsset, latestResource.data, insightResource.data)
     : null;
-  const overview = overviewResource.data;
   const hasRenderableAnalysisCore =
     hasAnalysisBootstrap ||
     Boolean(insightResource.data);
@@ -356,18 +355,7 @@ export function WatchlistScreen() {
           <LoadingSkeletonCard />
         ) : !selectedAsset ? (
           <>
-            <AnalysisWorkspaceFallback
-              activeSymbol={selectedSymbol}
-              onRefreshScores={() => {
-                overviewResource.refresh();
-                latestResource.refresh();
-                chartResource.refresh();
-                workspaceAssetResource.refresh();
-                insightResource.refresh();
-                topSetupsResource.refresh();
-                forwardReturnsMonthResource.refresh();
-              }}
-            />
+            <AnalysisWorkspaceFallback />
             <WorkflowStepsRail
               steps={[
                 {
@@ -428,20 +416,7 @@ export function WatchlistScreen() {
           </>
         ) : (
           <>
-            <AnalysisWorkspaceMissionControl
-              activeSymbol={selectedSymbol}
-              assets={workspaceAssets}
-              briefing={overview?.finn_briefing}
-              intelligence={intelligence!}
-              onRefreshScores={() => {
-                overviewResource.refresh();
-                latestResource.refresh();
-                chartResource.refresh();
-                workspaceAssetResource.refresh();
-                insightResource.refresh();
-                topSetupsResource.refresh();
-              }}
-            />
+            <WorkspaceHeroSection><FinnCoachFeedCard /></WorkspaceHeroSection>
             <WorkflowStepsRail
               steps={[
                 {
@@ -833,61 +808,6 @@ function AnalysisContextScores({
   );
 }
 
-function AnalysisWorkspaceMissionControl({
-  activeSymbol,
-  assets,
-  briefing,
-  intelligence,
-  onRefreshScores,
-}: {
-  activeSymbol: string;
-  assets: MobileOverviewAsset[];
-  briefing?: MobileOverviewResponse['finn_briefing'];
-  intelligence: AssetIntelligence;
-  onRefreshScores: () => void;
-}) {
-  const { language } = useAppPreferences();
-  const reviewCount = assets.filter((asset) => asset.setup_match_status === 'outside_conditions' || asset.setup_match_status === 'insufficient_data').length;
-  const riskCount = assets.filter((asset) => asset.setup_match_status === 'outside_conditions' || scoreBelow(asset.technical_score, 40)).length;
-  const performanceCount = assets.filter((asset) => (asset.change_24h ?? 0) >= 0).length;
-  const summary = localizedBackendText(
-    language,
-    briefing?.summary?.trim(),
-    translate(language, 'analysis.summaryUnavailable', { symbol: activeSymbol }),
-  );
-  const metaItems = [
-    translate(language, 'analysis.available'),
-    `${translate(language, 'queue.label.reviews')} ${reviewCount}`,
-    `${translate(language, 'queue.label.risks')} ${riskCount}`,
-  ];
-  const queueItems = [
-    {
-      key: 'tasks',
-      label: translate(language, 'queue.label.tasks'),
-      value: reviewCount,
-      body: translate(language, 'analysis.reviewBotDecision'),
-      detail: translate(language, 'analysis.reviewBotDecisionDetail', { symbol: activeSymbol }),
-    },
-    { key: 'reviews', label: translate(language, 'queue.label.reviews'), value: reviewCount, body: translate(language, 'queue.body.needDecision') },
-    { key: 'risks', label: translate(language, 'queue.label.risks'), value: riskCount, body: translate(language, 'queue.body.slowingYouDown') },
-    { key: 'performance', label: translate(language, 'queue.label.performance'), value: performanceCount, body: translate(language, 'queue.body.howTodayBehaves') },
-  ];
-
-  return (
-    <WorkspaceHeroSection>
-      <TodayWithFinnCard
-        headline={summary}
-        metaItems={metaItems}
-        support={translate(language, reviewCount === 1 ? 'finn.reviewNeedsAttention' : 'finn.reviewsNeedAttention', {
-          count: reviewCount,
-        })}
-        queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: reviewCount })}
-      />
-    </WorkspaceHeroSection>
-  );
-}
-
 function AnalysisWatchlistCard({
   assets,
   onOpenActions,
@@ -999,57 +919,8 @@ function AnalysisWatchlistCard({
   );
 }
 
-function AnalysisWorkspaceFallback({
-  activeSymbol,
-  onRefreshScores,
-}: {
-  activeSymbol: string;
-  onRefreshScores: () => void;
-}) {
-  const { language } = useAppPreferences();
-  const metaItems = [
-    translate(language, 'tag.monitoring'),
-    translate(language, 'tag.staleSync'),
-    `${translate(language, 'queue.label.reviews')} 0`,
-  ];
-  const queueItems = [
-    {
-      key: 'tasks',
-      label: translate(language, 'queue.label.tasks'),
-      value: 0,
-      body: translate(language, 'queue.body.staleSyncMissingBackendContext'),
-    },
-    {
-      key: 'reviews',
-      label: translate(language, 'queue.label.reviews'),
-      value: 0,
-      body: translate(language, 'queue.body.needDecision'),
-    },
-    {
-      key: 'risks',
-      label: translate(language, 'queue.label.risks'),
-      value: 0,
-      body: translate(language, 'queue.body.slowingYouDown'),
-    },
-    {
-      key: 'performance',
-      label: translate(language, 'queue.label.performance'),
-      value: '--',
-      body: translate(language, 'queue.body.howTodayBehaves'),
-    },
-  ];
-
-  return (
-    <WorkspaceHeroSection>
-      <TodayWithFinnCard
-        headline={translate(language, 'analysis.summaryUnavailable', { symbol: activeSymbol })}
-        metaItems={metaItems}
-        support={translate(language, 'finn.noBriefingReady')}
-        queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: 0 })}
-      />
-    </WorkspaceHeroSection>
-  );
+function AnalysisWorkspaceFallback() {
+  return <WorkspaceHeroSection><FinnCoachFeedCard /></WorkspaceHeroSection>;
 }
 
 function AnalysisRegimeCard({

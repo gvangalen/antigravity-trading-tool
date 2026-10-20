@@ -109,29 +109,11 @@ export type MobileOverviewPortfolio = {
   active_bots_count: number;
 };
 
-export type MobileOverviewFinnBriefing = {
-  greeting: string;
-  summary: string;
-  suggested_actions: string[];
-};
-
 export type MobileOverviewResponse = {
   user_id: number;
   portfolio: MobileOverviewPortfolio;
   watchlist: MobileOverviewAsset[];
   active_bots: MobileOverviewBot[];
-  finn_briefing: MobileOverviewFinnBriefing;
-  intelligence_events?: MobileIntelligenceEvent[] | null;
-};
-
-export type MobileIntelligenceEvent = {
-  id: number;
-  type: string;
-  symbol?: string | null;
-  title: string;
-  description: string;
-  severity: string;
-  created_at: string;
 };
 
 export type MobileCoachFeedItem = {
