@@ -89,7 +89,7 @@ def test_daily_score_storage_keeps_missing_macro_as_null(monkeypatch):
             return False
 
         def execute(self, sql, params):
-            if "pg_advisory_xact_lock" in sql:
+            if "pg_advisory_lock" in sql:
                 events.append(("lock", params))
             if "INSERT INTO daily_scores" in sql:
                 self.conn.saved = params
@@ -196,7 +196,7 @@ def test_overlapping_owner_rebuilds_write_newest_source_evidence_last(monkeypatc
             return False
 
         def execute(self, sql, params):
-            if "pg_advisory_xact_lock" in sql:
+            if "pg_advisory_lock" in sql:
                 owner_lock.acquire()
                 self.connection.locked = True
             elif "INSERT INTO daily_scores" in sql:
@@ -210,18 +210,17 @@ def test_overlapping_owner_rebuilds_write_newest_source_evidence_last(monkeypatc
             return Cursor(self)
 
         def commit(self):
-            committed.append(self.saved)
-            if self.locked:
-                owner_lock.release()
-                self.locked = False
+            if self.saved is not None:
+                committed.append(self.saved)
+                self.saved = None
 
         def rollback(self):
+            pass
+
+        def close(self):
             if self.locked:
                 owner_lock.release()
                 self.locked = False
-
-        def close(self):
-            pass
 
     def generate(category, **_):
         score = source["score"]

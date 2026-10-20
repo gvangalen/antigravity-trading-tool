@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -61,6 +62,22 @@ async_session_factory = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False
 )
+
+
+def run_celery_coroutine(coroutine):
+    """Dispose pooled asyncpg sockets before a Celery task's event loop ends.
+
+    Ordinary Celery workers call asyncio.run for each task. Their pooled
+    connections must be closed on the loop that created them; the next task
+    then checks out fresh connections while retaining the pool's size limit.
+    """
+    async def run_and_dispose():
+        try:
+            return await coroutine
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(run_and_dispose())
 
 # Declarative base voor alle SQLAlchemy ORM modellen
 Base = declarative_base()

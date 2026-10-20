@@ -2,7 +2,6 @@ import logging
 import json
 import math
 import os
-import asyncio
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
@@ -100,11 +99,15 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
         # handoff all write the same daily score row. Serialize them per owner
         # before reading any sources, through the final UPSERT/commit, so an
         # older calculation cannot finish after and replace newer evidence.
+        # A session lock survives the commits below and is released when this
+        # dedicated connection closes. Do not hold an open transaction while
+        # the score engine reads other connections for every symbol.
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT pg_advisory_xact_lock(%s, %s)",
+                "SELECT pg_advisory_lock(%s, %s)",
                 (SCORE_OWNER_LOCK_NAMESPACE, int(user_id)),
             )
+        conn.commit()
         # 1. Haal watchlist op
         if symbols is None:
             with conn.cursor() as cur:
@@ -115,6 +118,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
                           WHERE user_id = %s AND enabled = TRUE AND symbol IS NOT NULL
                 """, (user_id, user_id, user_id))
                 watchlist = [str(row[0]).upper() for row in cur.fetchall() if row[0]]
+            conn.commit()
         else:
             watchlist = list(dict.fromkeys(str(item).strip().upper() for item in symbols if item))
 
@@ -123,6 +127,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
             logger.info(f"ℹ️ Geen watchlist voor user {user_id}. Gebruik BTC als fallback.")
             watchlist = ["BTC"]
 
+        calculated = []
         for symbol in watchlist:
             logger.info(f"🔍 Scannen van asset {symbol} voor user {user_id}")
             
@@ -137,6 +142,10 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
             technical_score = _confirmed_component_score(technical)
             market_score = _confirmed_component_score(market)
 
+            calculated.append((symbol, macro, technical, market,
+                               macro_score, technical_score, market_score))
+
+        for symbol, macro, technical, market, macro_score, technical_score, market_score in calculated:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -204,7 +213,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
 @shared_task(name="backend.celery_task.store_daily_scores_task.reconcile_coach_feed_score")
 def reconcile_coach_feed_score(user_id: int, symbol: str):
     """Observe completed Score 2.0 output, never generate on a feed GET."""
-    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
     async def run():
@@ -216,7 +225,7 @@ def reconcile_coach_feed_score(user_id: int, symbol: str):
             return item_ids
 
     try:
-        for item_id in asyncio.run(run()):
+        for item_id in run_celery_coroutine(run()):
             generate_coach_feed_copy.delay(user_id, item_id)
     except Exception:
         logger.warning("FINN feed reconciliation failed for %s", symbol, exc_info=True)
@@ -225,7 +234,7 @@ def reconcile_coach_feed_score(user_id: int, symbol: str):
 @shared_task(name="backend.celery_task.store_daily_scores_task.generate_coach_feed_copy")
 def generate_coach_feed_copy(user_id: int, item_id: str):
     """One bounded Luna/Responses attempt with a stored factual fallback."""
-    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
     async def run():
@@ -237,7 +246,7 @@ def generate_coach_feed_copy(user_id: int, item_id: str):
             return result
 
     try:
-        return asyncio.run(run())
+        return run_celery_coroutine(run())
     except Exception:
         logger.warning("FINN feed copy failed", exc_info=True)
         return False
@@ -247,7 +256,7 @@ def generate_coach_feed_copy(user_id: int, item_id: str):
 def publish_coach_bot_decision(user_id: int, decision_id: int):
     """Only a persisted owner-owned Paper decision can enter the feed."""
     from sqlalchemy import text
-    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
     async def run():
@@ -277,7 +286,7 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
             return item_id
 
     try:
-        item_id = asyncio.run(run())
+        item_id = run_celery_coroutine(run())
         if item_id:
             generate_coach_feed_copy.delay(user_id, item_id)
     except Exception:

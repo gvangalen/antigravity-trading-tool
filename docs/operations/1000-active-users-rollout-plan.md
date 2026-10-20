@@ -2,7 +2,7 @@
 
 Latest verified production baseline on 2026-10-20: backend health and frontend
 build info both returned HTTP 200 and SHA
-`0755a9c402565a9c8641ea8d43d34aae036d007b`. The scaled topology has
+`116f19e0aff8389b8c836546c8fc82774d451ec4`. The scaled topology has
 two API workers and separate critical/market/scoring/AI/FINN workers.
 Independent QA owner canaries passed for workspace and FINN conversation
 content; trade-review body ownership remains unproven because canary lists
@@ -34,11 +34,23 @@ and 162/23/50 ms at 500. The 1,000-user stage stopped early after one review
 HTTP 500 and p95 breaches on all three routes. One API worker exhausted its
 local 10+5 async database pool; sampled PostgreSQL occupancy peaked at 49/100,
 CPU at 63%, and MemAvailable remained above 4.18 GiB. All fixture accounts
-were deactivated and private token files removed. The next candidate removes
-the remaining review GET write, skips weekly work for empty owners, batches
-workspace coverage reads, and increases each API worker's async pool from
-15 to 20 slots within an 80-connection configured maximum. A new full live test is required before a
-1,000-active-user claim. Deep health exposes dispatcher reservation
+were deactivated and private token files removed. Release `116f19e0` removed
+the remaining review GET write for empty owners, batched workspace coverage
+reads, and increased each API worker's async pool from 15 to 20 slots within
+an 80-connection configured maximum. Independent QA passed its 100-user stage
+on that release: all 1,300 requests returned HTTP 200; steady workspace/FINN/
+review p95 was 81/11/10 ms. QA stopped before 500 because `idle in transaction`
+PostgreSQL sessions grew from four to fourteen. Twelve remained more than two
+minutes later in the scoring Celery process, with one transaction over nine
+minutes old. Scoring logs had repeated `Event loop is closed` errors at the
+times those sessions began. This is strong evidence for pooled asyncpg sockets
+being reused across separate Celery `asyncio.run` event loops, though the exact
+causal chain still needs a post-fix runtime check. The ordinary worker pool is
+bounded at two async connections per child; the repair candidate disposes it
+inside each task's event loop. Score calculations and market provider waits
+must also avoid open database transactions. All 1,000 QA fixture accounts
+were deactivated and private token files removed. The 500- and 1,000-user
+stages remain unaccepted. Deep health exposes dispatcher reservation
 count and one-hour age by queue.
 `backend/scripts/reconcile_dispatch_reservations.py` reports stale task IDs
 and can release terminal reservations directly. Routine reconciliation leaves
@@ -120,7 +132,10 @@ With 1000 distinct fixture accounts on the authorized live environment, run
 read-heavy stages at 100, 500, and 1000 simultaneous users. Record route p50,
 p95, 5xx and 429 counts, queue depth and age, RSS and CPU, PostgreSQL
 connections and slow queries, and provider errors. Abort escalation on rising
-error or queue-age trends. A 1000-active-user claim requires a sustained stage
+error or queue-age trends, growing idle-in-transaction counts, a transaction
+older than 60 seconds, blocked writers or critical tasks, or shrinking
+database headroom. Confirm that post-task PostgreSQL sessions return to their
+pre-stage baseline before starting 500 or 1000. A 1000-active-user claim requires a sustained stage
 meeting these provisional gates: workspace p95 at most 2 seconds, FINN-conversation
 and trade-review reads p95 at most 1 second, under 0.1% 5xx responses, no
 normal-traffic 429s, no growing queue age, and at least 20 database connections

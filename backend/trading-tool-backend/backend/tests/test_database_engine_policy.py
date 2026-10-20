@@ -1,3 +1,5 @@
+import asyncio
+
 from backend.infrastructure.database import _async_engine_options
 from backend.celery_task import finn_v2_task
 
@@ -23,6 +25,29 @@ def test_api_and_background_workers_have_bounded_database_pools():
     background = _async_engine_options("celery-worker-default")
     assert background["pool_size"] == 2
     assert background["max_overflow"] == 0
+
+
+def test_celery_task_disposes_pooled_connections_in_each_event_loop(monkeypatch):
+    from backend.infrastructure import database
+
+    events = []
+
+    class Engine:
+        async def dispose(self):
+            events.append(("dispose", asyncio.get_running_loop()))
+
+    monkeypatch.setattr(database, "engine", Engine())
+
+    async def task():
+        events.append(("task", asyncio.get_running_loop()))
+        return 7
+
+    assert database.run_celery_coroutine(task()) == 7
+    assert database.run_celery_coroutine(task()) == 7
+    assert [kind for kind, _ in events] == ["task", "dispose", "task", "dispose"]
+    assert events[0][1] is events[1][1]
+    assert events[2][1] is events[3][1]
+    assert events[0][1] is not events[2][1]
 
 
 def test_interactive_task_reuses_pre_pinged_pool_between_runs():
