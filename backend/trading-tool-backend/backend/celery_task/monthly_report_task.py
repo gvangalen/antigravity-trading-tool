@@ -43,10 +43,8 @@ def generate_monthly_report(user_id: int):
     """
     Genereert een monthly report voor één user.
 
-    Principes:
-    - AI agent = content only
-    - Task = periode + opslag
-    - DB = single source of truth
+    FINN schrijft de tekst op basis van dezelfde eigenaargebonden feiten als
+    chat en Analyse. Deze taak bepaalt de periode en slaat het rapport op.
     """
 
     logger.info("🟢 Start monthly report generation (user_id=%s)", user_id)
@@ -55,7 +53,7 @@ def generate_monthly_report(user_id: int):
     period_start, period_end = _get_month_period(today)
 
     # -------------------------------------------------
-    # 1️⃣ AI AGENT
+    # 1. FINN-rapport op basis van gedeelde feiten
     # -------------------------------------------------
     with ai_usage_context(
         user_id=user_id,
@@ -69,10 +67,10 @@ def generate_monthly_report(user_id: int):
         report = generate_monthly_report_sections(user_id=user_id)
 
     if not report or not isinstance(report, dict):
-        logger.error("❌ Monthly report agent gaf geen geldig resultaat")
-        raise RuntimeError("Monthly report agent failed")
+        logger.error("❌ FINN maandrapport gaf geen geldig resultaat")
+        raise RuntimeError("FINN monthly report generation failed")
 
-    logger.info("✅ Monthly report agent OK")
+    logger.info("✅ FINN maandrapport gegenereerd")
 
     # -------------------------------------------------
     # 2️⃣ OPSLAAN IN DATABASE
