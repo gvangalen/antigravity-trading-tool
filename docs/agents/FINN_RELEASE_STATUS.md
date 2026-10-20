@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Begeleide Analyse: taalwissel verliest opgeslagen indicatoren
+
+Phase: `LOCAL_REPAIR_IN_VALIDATION`, nog niet gedeployed. Onafhankelijke
+ingelogde QA op product-SHA `0755a9c402565a9c8641ea8d43d34aae036d007b`
+gaf `NOT_ACCEPTED` voor de gerichte webscope. Twee nieuwe accounts sloegen
+hun profiel bij de eerste poging op; de vorige incidentele HTTP 500 trad in
+deze twee pogingen niet op. De Nederlandse indicatornamen, de opgeslagen
+“Bedrag per uitvoering: €80”-kaart, FINN-chat en coachfeed bleven goed na
+navigatie, refresh en herlogin. De oude Today/Mission Control-weergave kwam
+niet terug. Bij NL → EN/DE verdwenen echter Prijs, DXY en RSI uit de
+begeleide Analyse-stap terwijl de voortgang 2/4 bleef; refresh herstelde de
+gekozen indicatoren en de knop naar Mijn Plan niet. QA moest ze opnieuw
+aanklikken. Er is geen Live-order uitgevoerd; mobiel, positieve Paper-uitvoering
+en gesloten tradereview zijn niet getest.
+
+De lokale reparatie laat een taalwissel de assetgebonden formulierstatus niet
+meer resetten en leest na een echte heropening alleen eigenaargebonden,
+opgeslagen indicatorvoorkeuren terug voor reeds voltooide onboardingstappen.
+Een lege of standaardvoorkeur voltooit geen stap. De gerichte hersteltests
+slagen **2/2** en de volledige i18n-suite **17/17**; webbuild, typecheck,
+i18n-lint, 27 commandtests, 8 voorsteltests, 9 setuptests en `audit:high`
+zijn groen; de audit meldt alleen de bestaande moderate Next.js-advisory.
+De volledige backend-suite slaagde **3555 tests, 3 bestaande skips**. Deze
+batch verandert geen FINN-actieregister, providerselectie, backendservice of
+worker; de gemeten 16/16-actiematrix en 109/109 echte Responses-regressie
+van de huidige live productrelease blijven het relevante contractbewijs.
+Een nieuwe onafhankelijke live
+taalwissel-/refreshproef is vereist vóór acceptatie.
+
 ## Agentuitfasering: laatste webopruiming en nieuwe-gebruiker QA
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #464](https://github.com/gvangalen/antigravity-trading-tool/pull/464)
