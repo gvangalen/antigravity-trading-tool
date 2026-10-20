@@ -19,7 +19,6 @@ ASSISTANT_USER_LIMIT = 30
 ASSISTANT_FINN_DRAFT_LIMIT = 45
 ASSISTANT_IP_FALLBACK_LIMIT = 20
 ASSISTANT_EXECUTE_USER_LIMIT = 20
-ASSISTANT_EXECUTE_IP_LIMIT = 30
 LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
 
 from backend.infrastructure.database import async_session_factory, get_db
@@ -44,7 +43,6 @@ from backend.services.trader_profile_service import (
 )
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.finn_v2_execution_repository import FinnV2ExecutionRepository
-from backend.services.ai_action_engine import AiActionEngine
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 from backend.services.finn_v2_runtime_selector_service import FinnV2RuntimeSelectorService
@@ -276,21 +274,6 @@ def _apply_assistant_rate_limit(
     else:
         logger.debug("Skipping assistant IP rate limit for local proxy IP %s on %s", ip_addr, endpoint)
     return ip_addr, user_limit
-
-
-def _apply_assistant_execute_rate_limit(*, user_id: int, raw_request: Request) -> None:
-    ip_addr = _client_ip(raw_request)
-    execute_rate_limiter.check_rate_limit(
-        f"user_{user_id}:assistant_execute",
-        limit=ASSISTANT_EXECUTE_USER_LIMIT,
-        detail="Te veel Finn execute-verzoeken. Wacht kort en probeer opnieuw.",
-    )
-    if ip_addr not in LOCAL_PROXY_IPS:
-        execute_rate_limiter.check_rate_limit(
-            f"ip_{ip_addr}:assistant_execute",
-            limit=ASSISTANT_EXECUTE_IP_LIMIT,
-            detail="Te veel Finn execute-verzoeken vanaf dit IP-adres. Wacht kort en probeer opnieuw.",
-        )
 
 
 def _new_finn_plan_service(db: AsyncSession, *, trace_id: Optional[str] = None):
@@ -837,48 +820,6 @@ async def update_preferences(
 
     return AssistantPreferences(preferences=user.ai_preferences)
 
-async def get_ai_action_engine(db: AsyncSession = Depends(get_db)):
-    return AiActionEngine(db)
-
-@router.post("/assistant/actions/execute")
-async def execute_pending_action(
-    payload: dict,
-    request: Request,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    engine: AiActionEngine = Depends(get_ai_action_engine),
-):
-    trace_id = getattr(request.state, "trace_id", None)
-    action_id = payload.get("action_id")
-    if not action_id:
-        raise HTTPException(status_code=400, detail="Action ID is verplicht.")
-    
-    user_id = current_user["id"]
-    _apply_assistant_execute_rate_limit(user_id=user_id, raw_request=request)
-    if str(action_id).startswith("finn-"):
-        try:
-            finn = _new_finn_plan_service(db, trace_id=trace_id)
-            result = await finn.execute_issued_action(user_id, str(action_id))
-            from backend.services.finn_plan_service import FinnPlanService
-            FinnPlanService.invalidate_runtime_caches_for_user(user_id)
-            _record_finn_product_event(
-                user_id=user_id,
-                event_name="finn_confirm_confirmed",
-                surface="assistant_execute",
-                flow_type="confirm",
-                action_type="execute_issued_action",
-                trace_id=trace_id,
-                metadata={"action_id": str(action_id)},
-            )
-            return result
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ AI Assistant Action Error: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Fout bij Finn action")
-    return await engine.execute_pending_action(action_id, user_id, trace_id=trace_id)
-
-
 @router.post("/assistant/analytics/events")
 async def record_assistant_analytics_event(
     payload: AssistantAnalyticsEvent,
@@ -918,16 +859,6 @@ async def get_assistant_response_trace(
     if trace is None:
         raise HTTPException(status_code=404, detail="FINN-trace niet gevonden.")
     return trace
-
-@router.get("/assistant/finn/state")
-async def get_finn_state(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    finn = _new_finn_plan_service(db)
-    response = await finn.get_open_plan_state(current_user["id"])
-    return await _enrich_with_trader_profile(db, current_user["id"], response)
-
 
 @router.get("/assistant/v2/proposals/{proposal_id}")
 async def assistant_v2_get_proposal(

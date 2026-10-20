@@ -12,7 +12,7 @@ from backend.services.finn_plan_service import FinnPlanService
 from backend.services.finn_plan_service import _utc_now
 from backend.services.finn_plan_service import empty_indicator_config_draft
 from backend.services.finn_plan_service import empty_plan_draft
-from backend.services.ai_action_engine import _utc_db_timestamp
+from backend.services.finn_plan_service import _utc_db_timestamp
 from backend.services.strategy_service import StrategyService
 from backend.schemas.assistant_schema import AssistantContextSchema
 
