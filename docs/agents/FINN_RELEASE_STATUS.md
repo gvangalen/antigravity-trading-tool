@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Multi-user capacity hardening candidate
+
+Phase: `LOCAL_GATES_PASSED_AWAITING_REVIEW`. Draft [PR #453](https://github.com/gvangalen/antigravity-trading-tool/pull/453)
+contains account-scoped workspace caching, shared Redis limits, bounded and
+durable dispatch waves, read-only trade-review listing, cluster metrics, pool
+limits, reduced polling, and an opt-in scaled worker profile. The tracked
+profile remains `compact`; no capacity claim or deployment is recorded here.
+The implementation and plan baseline is `b2ccc7c5f48cddf72098bc10145fadcdb3f85783`.
+
+Build evidence on 2026-10-20: root backend suite **3529 passed, 3 skipped**;
+frontend typecheck, focused tests and production build passed. All five
+[candidate CI jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39476821430)
+passed. The isolated local worker-driven FINN matrix passed **16/16** action
+contracts and **19/19** adapter tests; its artifact SHA-256 is
+`a97eb8b4f5fab376fc44f3b088371ee4975f15e705f133c6e305eb6179495446`.
+The real-provider development selector passed **20/20** cases (SHA-256
+`3d2a333f5b37fdf9ce7bf2d22ecbcdac962a2ed76e889c392ddd2031c03458ab`),
+and the real-provider regression selector passed **109/109** cases (SHA-256
+`3b3236d12132911caffa8fb3d43298c1643954b33e6d968bb9ebee5502b5b3cf`).
+Both selector runs had zero provider, schema, timeout, parse and validation
+failure rates. No broker orders, live trading calls or production connections
+were made by the local matrix.
+
+Production still reported `e26a1b4d049a1aa57bd19f96503e2b79155fbe99`
+from both public surfaces at the last check. A read-only host check found 4
+vCPU, 7.75 GiB RAM and PostgreSQL `max_connections=100`; the historical 1 GB
+host note does not describe the current machine. Independent QA, Security and
+Architecture reviews, deployment identity checks, and an authenticated
+1000-distinct-account sustained load test are still outstanding. No file with
+1000 test accounts exists on this workspace.
+
 ## FINN 2.0 agentuitfasering
 
 Phase: `LOCAL_IN_PROGRESS`, niet gedeployed. De aparte cutover-checkout verplaatst

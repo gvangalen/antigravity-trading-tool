@@ -13,9 +13,13 @@ that the current host is larger than the historical one; they do not prove
 capacity under load.
 
 The clean `active-users-main` worktree contains the Release 1 code changes,
-cluster metrics, a read-only load harness, and database pool reductions. Local
-backend tests and frontend build pass. These changes are not deployed or
-capacity-proven. The live environment has no 1000-account fixture file yet.
+cluster metrics, a read-only load harness, and database pool reductions. The
+backend suite passed 3529 tests with 3 skips; candidate CI passed all five
+jobs. The isolated FINN action matrix passed 16/16 contracts and 19/19
+adapter tests; real-provider selector development and regression passed
+20/20 and 109/109 cases. See `docs/agents/FINN_RELEASE_STATUS.md` for artifact
+hashes. These changes are not deployed or capacity-proven. The live environment
+has no 1000-account fixture file yet.
 
 ## Release 1: correctness on the current main branch
 
