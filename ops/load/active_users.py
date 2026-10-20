@@ -6,7 +6,9 @@ Input JSON: [{"user_id": 1, "access_token": "..."}, ...]. Keep this file outside
 import argparse
 import asyncio
 import json
+import math
 import random
+import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -48,13 +50,13 @@ def percentile(values, fraction):
     return round(values[min(len(values) - 1, max(0, int(len(values) * fraction + 0.999999) - 1))], 2)
 
 
-async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results):
+async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results, stop_event):
     rng = random.Random(fixture["user_id"])
     headers = {"Authorization": f"Bearer {fixture['access_token']}"}
     choices = list(ROUTES)
     if chat_budget is not None:
         choices.append(("finn_chat", "POST", "/api/assistant/chat", 1))
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and not stop_event.is_set():
         name, method, path, _ = rng.choices(choices, weights=[item[3] for item in choices])[0]
         if name == "finn_chat":
             if chat_budget["remaining"] <= 0:
@@ -72,7 +74,15 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
         except httpx.HTTPError:
             status = 0
         results[name].append((status, (time.perf_counter() - started) * 1000))
-        await asyncio.sleep(rng.uniform(think_seconds * 0.5, think_seconds * 1.5))
+        if not 200 <= status < 300:
+            stop_event.set()
+            break
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=rng.uniform(
+                think_seconds * 0.5, think_seconds * 1.5,
+            ))
+        except asyncio.TimeoutError:
+            pass
 
 
 def identity_matches(response, fixture):
@@ -132,25 +142,81 @@ def stage_has_blocking_errors(summary):
     )
 
 
+def stage_exceeds_latency_limit(summary, limits):
+    exceeded = sorted(set(limits) - set(summary))
+    exceeded.extend(
+        name for name, route in summary.items()
+        if name in limits and (
+            route["p95_all_ms"] is None or route["p95_all_ms"] > limits[name]
+        )
+    )
+    return exceeded
+
+
+async def monitor_stage(results, limits, deadline, stop_event, latency_abort_routes):
+    """Stop an active stage once a measured route has a stable p95 breach."""
+    while not stop_event.is_set() and time.monotonic() < deadline:
+        await asyncio.sleep(min(2, max(0, deadline - time.monotonic())))
+        for name, limit in limits.items():
+            samples = results.get(name, ())
+            if len(samples) >= 20 and percentile([latency for _, latency in samples], 0.95) > limit:
+                latency_abort_routes.append(name)
+                stop_event.set()
+                return
+
+
+def reject_aborted_stage(latency_abort_routes):
+    if latency_abort_routes:
+        raise RuntimeError(
+            f"Load stage was stopped for interim p95 breach on {', '.join(latency_abort_routes)}"
+        )
+
+
+def require_operator_continue(next_stage):
+    answer = input(f"Inspect host, DB and queue metrics. Type CONTINUE for {next_stage}: ")
+    if answer.strip() != "CONTINUE":
+        raise RuntimeError("Operator declined the next load stage")
+
+
 async def run(args, fixtures):
     limits = httpx.Limits(max_connections=max(100, args.max_users + 50), max_keepalive_connections=args.max_users)
     async with httpx.AsyncClient(base_url=args.base_url, timeout=args.timeout, limits=limits) as client:
         chat_budget = {"remaining": args.max_chat_requests} if args.include_chat else None
-        for stage in args.stages.split(","):
+        stages = args.stages.split(",")
+        for stage_index, stage in enumerate(stages):
             users_raw, seconds_raw = stage.split(":", 1)
             users, seconds = int(users_raw), int(seconds_raw)
             if users < 1 or users > len(fixtures) or seconds < 1:
                 raise ValueError("Each stage needs positive duration and one distinct fixture per active user")
             await verify_identity(client, fixtures[:users])
             results = defaultdict(list)
+            stop_event = asyncio.Event()
+            latency_abort_routes = []
             deadline = time.monotonic() + seconds
-            await asyncio.gather(*(
-                virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results)
-                for fixture in fixtures[:users]
+            monitor = asyncio.create_task(monitor_stage(
+                results, args.p95_limits, deadline, stop_event, latency_abort_routes,
             ))
+            try:
+                await asyncio.gather(*(
+                    virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results, stop_event)
+                    for fixture in fixtures[:users]
+                ))
+            finally:
+                monitor.cancel()
+                await asyncio.gather(monitor, return_exceptions=True)
             summary = report(f"{users} users / {seconds}s", results)
+            reject_aborted_stage(latency_abort_routes)
             if stage_has_blocking_errors(summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")
+            exceeded = stage_exceeds_latency_limit(summary, args.p95_limits)
+            if exceeded:
+                raise RuntimeError(f"Load stage exceeded p95 limits for {', '.join(exceeded)}; refusing a higher stage")
+            if stage_index < len(stages) - 1 and args.between_stage_pause_seconds:
+                print(json.dumps({"operator_pause_seconds": args.between_stage_pause_seconds,
+                                  "next_stage": stages[stage_index + 1]}), flush=True)
+                await asyncio.sleep(args.between_stage_pause_seconds)
+            if stage_index < len(stages) - 1 and args.allow_production:
+                await asyncio.to_thread(require_operator_continue, stages[stage_index + 1])
 
 
 def main():
@@ -163,6 +229,10 @@ def main():
     parser.add_argument("--include-chat", action="store_true")
     parser.add_argument("--max-chat-requests", type=int, default=0)
     parser.add_argument("--allow-production", action="store_true")
+    parser.add_argument("--max-workspace-p95-ms", type=float)
+    parser.add_argument("--max-finn-p95-ms", type=float)
+    parser.add_argument("--max-reviews-p95-ms", type=float)
+    parser.add_argument("--between-stage-pause-seconds", type=int, default=60)
     args = parser.parse_args()
     try:
         args.base_url = validate_base_url(args.base_url, allow_production=args.allow_production)
@@ -170,6 +240,22 @@ def main():
         parser.error(str(exc))
     if args.include_chat and args.max_chat_requests < 1:
         parser.error("FINN chat load requires --max-chat-requests with an explicit positive budget")
+    if not math.isfinite(args.think_seconds) or args.think_seconds < (1 if args.allow_production else 0.01):
+        parser.error("Think time must be finite and at least 1 second in production")
+    thresholds = (args.max_workspace_p95_ms, args.max_finn_p95_ms, args.max_reviews_p95_ms)
+    if args.allow_production and any(value is None for value in thresholds):
+        parser.error("Production load requires explicit p95 limits for workspace, FINN and reviews")
+    if any(value is not None and (not math.isfinite(value) or value <= 0) for value in thresholds):
+        parser.error("p95 limits must be finite positive numbers")
+    if args.between_stage_pause_seconds < 0 or (args.allow_production and args.between_stage_pause_seconds < 30):
+        parser.error("Production load requires at least 30 seconds between stages")
+    if args.allow_production and "," in args.stages and not sys.stdin.isatty():
+        parser.error("Multi-stage production load requires an interactive operator terminal")
+    args.p95_limits = {name: value for name, value in {
+        "workspace": args.max_workspace_p95_ms,
+        "finn_conversations": args.max_finn_p95_ms,
+        "trade_reviews": args.max_reviews_p95_ms,
+    }.items() if value is not None}
     fixtures = json.loads(args.fixtures.read_text())
     if not isinstance(fixtures, list) or not fixtures or any(
         not isinstance(item, dict) or not item.get("user_id") or not item.get("access_token")

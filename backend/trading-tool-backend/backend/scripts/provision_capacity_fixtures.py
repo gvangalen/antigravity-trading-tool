@@ -28,7 +28,7 @@ FIXTURE_KIND = "read_only_load_v1"
 
 
 def fixture_email(campaign: str, index: int) -> str:
-    return f"capacity+{campaign}-{index:04d}@load.invalid"
+    return f"capacity+{campaign}-{index:04d}@load.example"
 
 
 def fixture_emails(campaign: str, count: int) -> list[str]:

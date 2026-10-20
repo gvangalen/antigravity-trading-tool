@@ -89,6 +89,13 @@ def test_capacity_load_routes_exist_and_match_token_scope():
     assert configured <= available
 
 
+def test_capacity_fixture_email_is_accepted_by_auth_response_schema():
+    from pydantic import EmailStr, parse_obj_as
+
+    email = fixtures.fixture_email("capacity-check", 1)
+    assert parse_obj_as(EmailStr, email) == email
+
+
 def test_capacity_load_origin_rejects_unapproved_token_destinations():
     validate = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))["validate_base_url"]
     assert validate("http://127.0.0.1:8000", allow_production=False) == "http://127.0.0.1:8000"
@@ -107,7 +114,7 @@ def test_capacity_load_identity_and_error_gate():
 
     harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
     identity_matches = harness["identity_matches"]
-    fixture = {"user_id": 42, "email": "capacity+test-0042@load.invalid"}
+    fixture = {"user_id": 42, "email": "capacity+test-0042@load.example"}
     response = SimpleNamespace(status_code=200, json=lambda: {"id": 42, "email": fixture["email"]})
     assert identity_matches(response, fixture)
     assert not identity_matches(SimpleNamespace(status_code=200, json=lambda: {
@@ -120,3 +127,70 @@ def test_capacity_load_identity_and_error_gate():
     assert summary["workspace"]["p95_ms"] == 100
     assert summary["workspace"]["p95_all_ms"] == 250
     assert harness["stage_has_blocking_errors"](summary)
+    assert harness["stage_exceeds_latency_limit"](summary, {"workspace": 200}) == ["workspace"]
+    assert harness["stage_exceeds_latency_limit"](summary, {"workspace": 300}) == []
+    assert harness["stage_exceeds_latency_limit"]({}, {"workspace": 200}) == ["workspace"]
+
+
+def test_capacity_load_operator_gate_requires_explicit_continue(monkeypatch):
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    monkeypatch.setattr("builtins.input", lambda prompt: "no")
+    with pytest.raises(RuntimeError, match="declined"):
+        harness["require_operator_continue"]("500:120")
+    monkeypatch.setattr("builtins.input", lambda prompt: "CONTINUE")
+    harness["require_operator_continue"]("500:120")
+
+
+def test_capacity_load_stops_active_stage_on_error_or_latency():
+    import asyncio
+    import time
+    from collections import defaultdict
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+
+    class FailingClient:
+        async def request(self, *_args, **_kwargs):
+            return SimpleNamespace(status_code=503)
+
+    async def check():
+        stop = asyncio.Event()
+        results = defaultdict(list)
+        await asyncio.wait_for(harness["virtual_user"](
+            FailingClient(), {"user_id": 42, "access_token": "fixture"},
+            time.monotonic() + 30, 10, None, results, stop,
+        ), timeout=1)
+        assert stop.is_set()
+        assert sum(map(len, results.values())) == 1
+
+        stop = asyncio.Event()
+        results = {"workspace": [(200, 250)] * 20}
+        latency_abort_routes = []
+        await asyncio.wait_for(harness["monitor_stage"](
+            results, {"workspace": 200}, time.monotonic() + 30, stop, latency_abort_routes,
+        ), timeout=3)
+        assert stop.is_set()
+        assert latency_abort_routes == ["workspace"]
+        results["workspace"].extend([(200, 100)] * 980)
+        assert harness["stage_exceeds_latency_limit"](
+            harness["report"]("recovered-final-p95", results), {"workspace": 200},
+        ) == []
+        with pytest.raises(RuntimeError, match="interim p95 breach"):
+            harness["reject_aborted_stage"](latency_abort_routes)
+
+    asyncio.run(check())
+
+
+def test_capacity_load_rejects_nonfinite_production_latency_gate(monkeypatch):
+    import sys
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    monkeypatch.setattr(sys, "argv", [
+        "active_users.py", "--base-url", "https://tradamind.com",
+        "--fixtures", "/missing-private-file", "--stages", "100:1",
+        "--allow-production", "--max-workspace-p95-ms", "nan",
+        "--max-finn-p95-ms", "1000", "--max-reviews-p95-ms", "1000",
+    ])
+    with pytest.raises(SystemExit) as rejected:
+        harness["main"]()
+    assert rejected.value.code == 2
