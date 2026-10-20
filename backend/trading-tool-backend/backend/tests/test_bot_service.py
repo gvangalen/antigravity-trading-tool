@@ -1443,6 +1443,19 @@ def test_paper_reassessment_reports_whether_a_new_decision_was_saved(monkeypatch
     assert created["decision_ids"] == [42]
 
 
+def test_paper_reassessment_explains_a_skipped_dca_day(monkeypatch):
+    from backend.services import bot_service as module
+
+    service = BotService(_FakeSession())
+    monkeypatch.setattr(module, "sync_run_trading_bot_execution", lambda *_args: {
+        "ok": True, "decisions": [], "skip_reasons": {9: "not_due"},
+    })
+
+    result = asyncio.run(service.run_bot_agent_generate(9, None, user_id=1))
+    assert result["generated"] is False
+    assert result["skip_reason"] == "not_due"
+
+
 def test_paper_reassessment_rejects_live_bot_before_worker(monkeypatch):
     from backend.services import bot_service as module
 
