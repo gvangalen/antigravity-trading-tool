@@ -44,11 +44,11 @@ const ENVIRONMENTS = {
 };
 
 const WORKER_CONCURRENCY = {
-  // The production host has 1 GB RAM.  Four separate background prefork
-  // process trees plus FINN's dedicated queue exceeded that budget and the
-  // kernel killed workers under sustained interactive traffic.  Keep FINN
-  // isolated, but serve every non-interactive queue from one bounded shared
-  // background worker.
+  // An earlier 1 GB production host could not sustain four separate
+  // background prefork process trees plus FINN's dedicated queue: the kernel
+  // killed workers under sustained interactive traffic. Measure the current
+  // host before selecting a larger topology. In compact mode, keep FINN
+  // isolated and serve the other queues from one bounded shared worker.
   background: 1,
   finnInteractive: 1,
   marketPortfolio: positiveIntEnv("CELERY_MARKET_PORTFOLIO_CONCURRENCY", 2),

@@ -3,9 +3,10 @@
 Baseline checked on 2026-10-20: the production backend and frontend both report
 `e26a1b4d049a1aa57bd19f96503e2b79155fbe99`. That commit records the
 FINN V2 cutover deployment; the product code baseline is its parent `191c1199`.
-The production ecosystem configuration says the host has 1 GB RAM and records
-worker OOMs from an earlier multi-process layout. Treat the current host as a
-capacity constraint, not as proof that another worker split is safe.
+The production ecosystem configuration records worker OOMs from an earlier
+multi-process layout on a 1 GB host. The current live host size has not been
+measured from this workspace. Verify its actual RAM and CPU before choosing a
+worker topology or a server upgrade.
 
 The clean `active-users-main` worktree contains the Release 1 code changes,
 cluster metrics, a read-only load harness, and database pool reductions. Local
@@ -37,8 +38,8 @@ capacity-proven. The live environment has no 1000-account fixture file yet.
    request-path or strict readiness check.
 2. Measure actual production memory, CPU, queue age, database connection
    ceiling, and provider quotas. Budget every proposed API and worker process.
-3. Move to a host or host group with sufficient measured RAM before selecting
-   `scaled` in `ops/deploy/capacity_profile.json`. The deploy preflight rejects
+3. Select `scaled` in `ops/deploy/capacity_profile.json` only after verifying
+   the current host or host group has enough RAM. The deploy preflight rejects
    a scaled topology below 6 GiB RAM. The scaled profile gives execution,
    market/portfolio, scoring, AI reporting, and FINN interactive separate
    workers, with two API processes and a default maximum of 70 database
@@ -48,8 +49,8 @@ capacity-proven. The live environment has no 1000-account fixture file yet.
 
 ## Release and capacity gate
 
-Build a clean candidate from current `origin/main`; do not deploy the old local
-branch or its multi-worker defaults to the 1 GB production host. Complete the
+Build a clean candidate from current `origin/main`; measure the actual live host
+before enabling a multi-worker topology. Complete the
 applicable FINN local action-contract, provider, backend, frontend, and CI
 gates before Auto Deploy. After deploy, Build checks only deployment success,
 backend HTTP 200, frontend build info, and matching SHA. Independent QA owns
