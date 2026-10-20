@@ -670,10 +670,13 @@ function BotPageInner() {
       setGeneratingBotId(bot.id);
       const result = await generateDecisionForBot({ bot_id: bot.id });
       if (!silent) {
+        const noNewCopy = result?.skip_reason === "not_due" ? copy.paperRecheckNotDue
+          : result?.skip_reason === "already_executed" ? copy.paperRecheckAlreadyExecuted
+            : copy.paperRecheckNoNew;
         showSnackbar(
           result?.execution_failed ? copy.paperRecheckExecutionFailed :
             result?.paper_order_filled ? copy.paperRecheckFilled :
-              result?.generated === false ? copy.paperRecheckNoNew : copy.paperRecheckSuccess,
+              result?.generated === false ? noNewCopy : copy.paperRecheckSuccess,
           result?.execution_failed ? "danger" : result?.generated === false ? "info" : "success"
         );
       }

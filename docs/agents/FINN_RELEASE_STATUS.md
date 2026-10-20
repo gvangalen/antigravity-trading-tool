@@ -6,14 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 agentuitfasering
 
-Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
+Phase: `LIVE_QA_PARTIAL_FOLLOW_UP_LOCAL_READY`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
 is gemerged als product-SHA `191c1199b6129c8feb305657e7d3483d8eef4048`.
 Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470300165)
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470689636)
 slaagde; daarna gaven backend-health en frontend-buildinfo ieder HTTP 200
-en exact die SHA. Deze statuswijziging krijgt zelf een nieuwe SHA; verifieer
-de uiteindelijke runtime-identiteit opnieuw. Onafhankelijke ingelogde web-
-en mobiele QA ontbreekt nog. De aparte cutover-checkout verplaatst
+en exact die SHA. De latere onafhankelijke ingelogde herkeuring staat hieronder.
+De aparte cutover-checkout verplaatst
 de deterministische botuitvoering uit `ai_agents`, laat web en mobiel
 V2-voorstellen via dezelfde eigenaargebonden lees-, publicatie-, bevestigings-
 en uitvoeringsroute afhandelen, en verwijdert de oude assistent-actie-, status-
@@ -61,9 +60,37 @@ De herhaalde echte `gpt-6-luna` Responses-regressie slaagde met **109/109**
 operatie- en veldmatches en nul provider-, schema-, timeout-, parse- of
 validatiefouten (artifact SHA-256
 `4371c6bb6a57151b6d3dd540c75e168a4e1cd1491971e6492b98f36de3d3be3f`).
-Nog open: dode Mission Control-UI-code verwijderen en onafhankelijke ingelogde
-web- en mobiele QA. De lokale en CI-bewijzen hierboven zijn geen
+Nog open: dode Mission Control-UI-code verwijderen en volledige onafhankelijke
+ingelogde web- en mobiele acceptatie. De lokale en CI-bewijzen hierboven zijn geen
 live-productacceptatie.
+
+De uiteindelijke document-SHA `e26a1b4d049a1aa57bd19f96503e2b79155fbe99`
+doorliep alle vijf main-CI-jobs en Auto Deploy; backend-health en frontend-
+buildinfo gaven beide HTTP 200 en exact die SHA. Onafhankelijke ingelogde
+desktop-QA op die SHA gaf een gedeeltelijk geslaagd oordeel: Score 2.0,
+ETH-plan, strategie, Paper-bot, pauze na refresh en FINN-teruglezing werkten.
+QA vond drie herstelpunten: afronden van een ETH-onboarding opende BTC, een
+overgeslagen Paper-beoordeling gaf geen specifieke datumreden, en de feed
+sorteerde oude prioriteitsmeldingen tussen nieuwe gebeurtenissen. De rauwe
+`/onboarding/plan.txt`-route trad alleen in een oude tab tijdens een
+deploywissel op; dezelfde overgang werkte na een verse paginalading. QA
+heeft registratie vanaf nul, een positieve Paper-beslissing en ingelogd
+mobiel niet afgetekend; de simulator meldde `API OFFLINE`.
+
+De vervolgkandidaat op `codex/finn-cutover-qa-fixes` draagt de gekozen asset
+door naar het dashboard, geeft de getypeerde engine-redenen `not_due` en
+`already_executed` door aan de Paper-UI, en sorteert de feed op gebeurtenistijd.
+De actieve feed voegt dezelfde gebeurtenissleutel al samen; historie blijft
+leesbaar. Lokale validatie van deze batch: backend **3523 geslaagd, 3 bestaande
+skips**; webbuild, typecheck, i18n-lint, 15 i18n-tests, 27 commandchecks,
+8 voorsteltests en `audit:high` geslaagd (één bestaande moderate Next.js-
+advisory). De lokale workeractiecontractmatrix slaagde **16/16** en de
+adaptertests **19/19** (artifact SHA-256
+`55db4acb33e4aa70b49f23b88aaed4a3cfbecb77c32b9abc748e421cbdaaa2ad`).
+De echte Luna/Responses-regressie slaagde **109/109** op operatie en velden,
+met nul provider-, schema-, timeout-, parse- of validatiefouten (artifact
+SHA-256 `188a109b55f1033314276c5785615d9a8e8b6c0d81686749b94104a523511877`).
+Deze vervolgkandidaat is nog niet gedeployed of onafhankelijk live herkeurd.
 
 ## Weekreflectie voor alle gebruikers
 
