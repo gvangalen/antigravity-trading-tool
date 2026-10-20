@@ -820,13 +820,13 @@ export default function OnboardingAnalysisPage() {
                   {selectedAssetChoice?.symbol}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700">
-                  {getOptionLabel(selectedMarket)}
+                  {getOptionLabel(selectedMarket, copy.indicatorNames)}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700">
-                  {getOptionLabel(selectedMacro)}
+                  {getOptionLabel(selectedMacro, copy.indicatorNames)}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700">
-                  {getOptionLabel(selectedTechnical)}
+                  {getOptionLabel(selectedTechnical, copy.indicatorNames)}
                 </span>
               </div>
             </div>

@@ -96,7 +96,7 @@ const COPY = {
     market: "markt",
     macro: "macro",
     technical: "technisch",
-    amount: "Bedrag",
+    amountPerExecution: "Bedrag per uitvoering",
     entry: "Entry",
     stopLoss: "Stop-loss",
     targets: "Targets",
@@ -181,7 +181,7 @@ const COPY = {
     market: "market",
     macro: "macro",
     technical: "technical",
-    amount: "Amount",
+    amountPerExecution: "Amount per execution",
     entry: "Entry",
     stopLoss: "Stop loss",
     targets: "Targets",
@@ -266,7 +266,7 @@ const COPY = {
     market: "Markt",
     macro: "Makro",
     technical: "Technik",
-    amount: "Betrag",
+    amountPerExecution: "Betrag pro Ausführung",
     entry: "Einstieg",
     stopLoss: "Stop-Loss",
     targets: "Ziele",
@@ -821,7 +821,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               icon={Target}
               eyebrow={`${copy.strategyTerm} · ${copy.strategyHelp}`}
               title={activePlan.hasStrategy ? activePlan.strategy.name : copy.missingStrategy}
-              meta={activePlan.hasStrategy ? `${copy.amount} ${formatNumber(activePlan.strategy.base_amount || activePlan.strategy.amount)} · ${activePlan.strategy.execution_mode === "fixed" ? copy.fixed : copy.dynamic}` : copy.notReady}
+              meta={activePlan.hasStrategy ? `${copy.amountPerExecution} €${formatNumber(activePlan.strategy.base_amount || activePlan.strategy.amount)} · ${activePlan.strategy.execution_mode === "fixed" ? copy.fixed : copy.dynamic}` : copy.notReady}
               detail={activePlan.hasStrategy ? getExecutionSummary(activePlan, copy) : copy.strategyHelp}
               actionLabel={activePlan.hasStrategy ? copy.editStrategy : copy.addStrategy}
               onAction={() => openStrategyDrawer(activePlan.setup, activePlan.strategy, activePlan.strategy?.id ? "edit-strategy" : "new-strategy")}
@@ -1050,7 +1050,7 @@ function getExecutionSummary(plan, copy) {
   const strategy = plan.strategy;
   if (!strategy) return copy.notReady;
   if (String(plan.setup?.setup_type || "").toLowerCase() === "dca") {
-    return `${copy.amount}: ${formatNumber(strategy.base_amount || strategy.amount)} · ${strategy.execution_mode === "fixed" ? copy.fixed : copy.dynamic}`;
+    return `${copy.amountPerExecution}: €${formatNumber(strategy.base_amount || strategy.amount)} · ${strategy.execution_mode === "fixed" ? copy.fixed : copy.dynamic}`;
   }
   const targets = Array.isArray(strategy.targets)
     ? strategy.targets.map((target) => typeof target === "object" ? target.price : target).filter((value) => value != null)

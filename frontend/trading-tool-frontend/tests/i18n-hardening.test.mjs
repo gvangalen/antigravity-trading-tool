@@ -122,6 +122,9 @@ test("auth dictionaries expose locale-specific login and reset copy", () => {
 });
 
 test("onboarding translations cover German profile and Dutch exchange status", () => {
+  assert.equal(nl.finnWorkspace.onboardingHeader.eyebrow, "Begeleide start");
+  assert.equal(nl.nav.automation, "Automatisering");
+  assert.equal(nl.traderProfile.onboardingOverview.steps.bot.title, "Automatisering");
   assert.equal(de.traderProfile.onboardingStep.title, "Wer bist du als Trader?");
   assert.equal(de.traderProfile.onboardingOverview.steps.asset.title, "Analyse");
   assert.equal(de.traderProfile.assetOnboardingStep.stepNumber, "Analyse · 1 von 4");
