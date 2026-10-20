@@ -796,7 +796,14 @@ class FinnV2RequestPreprocessorService:
         """
         market_verb = r"(?:koop\w*|kopen|verkoop\w*|verkopen|buy\w*|sell\w*|kaufe\w*|kaufen|verkaufe\w*|verkaufen|plaats\w*|place\w*|submit\w*)"
         imperative_verb = r"(?:koop|verkoop|buy|sell|kaufe|verkaufe|plaats|place|submit)"
+        execute_order = re.search(
+            r"(?:^|[,;.!?]\s*)(?:voer|execute|führe)\b[^.!?]{0,100}"
+            r"\b(?:koop|verkoop|buy|sell)[-\s]?orders?\b",
+            text,
+        )
         return bool(
+            (execute_order and not re.search(r"\b(?:geen|niet|no)\b", execute_order.group()))
+            or
             re.search(rf"(?:^|[,;.!?]\s*)(?:please\s+|bitte\s+)?{imperative_verb}\b", text)
             or re.search(
                 rf"\b(?:kun|kan|kunt|could|can|wil|would|laat|let)\s+"

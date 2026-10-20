@@ -109,11 +109,19 @@ def test_hypothetical_market_mention_is_a_read_question(message):
     "Kun je BTC voor mij kopen?", "Sell my Apple position.",
     "Bitte kaufe BTC für mich.",
     "Als ik Apple koop, verkoop BTC dan voor mij.",
+    "Voer zonder voorstel direct een kooporder voor Stellar uit.",
 ])
 def test_direct_market_order_stays_inside_execution_boundary(message):
     facts = FinnV2RequestPreprocessorService().preprocess(message=message)
     assert facts.action_polarity == "execute"
     assert facts.financial_execution_intent is True
+
+
+def test_negated_order_does_not_delegate_execution():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Voer geen kooporder voor Stellar uit. Leg mijn plan uit."
+    )
+    assert facts.financial_execution_intent is False
 
 
 @pytest.mark.parametrize("message", [
