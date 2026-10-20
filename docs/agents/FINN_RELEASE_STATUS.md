@@ -40,7 +40,9 @@ by the real-provider development and regression artifacts above. CI on the
 first merge commit passed all five jobs. A later main revision
 `1f7077ea179bbf1ef0887be4605d731df73af880` changed FINN feed presentation
 and mobile feed code; it has also been merged. The frontend export was rebuilt
-from that combined source. CI on the final merge commit is pending.
+from that combined source. The provisioner candidate
+`c216d99aa5b38cd520b7876eab56a3b0df1cd3ef` then passed all five
+[CI checks](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39482730857).
 
 Production reported `1f7077ea179bbf1ef0887be4605d731df73af880`
 from both public surfaces at the last check. That `main` revision is merged
