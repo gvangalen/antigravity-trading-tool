@@ -165,10 +165,18 @@ def test_capacity_load_stops_active_stage_on_error_or_latency():
 
         stop = asyncio.Event()
         results = {"workspace": [(200, 250)] * 20}
+        latency_abort_routes = []
         await asyncio.wait_for(harness["monitor_stage"](
-            results, {"workspace": 200}, time.monotonic() + 30, stop,
+            results, {"workspace": 200}, time.monotonic() + 30, stop, latency_abort_routes,
         ), timeout=3)
         assert stop.is_set()
+        assert latency_abort_routes == ["workspace"]
+        results["workspace"].extend([(200, 100)] * 980)
+        assert harness["stage_exceeds_latency_limit"](
+            harness["report"]("recovered-final-p95", results), {"workspace": 200},
+        ) == []
+        with pytest.raises(RuntimeError, match="interim p95 breach"):
+            harness["reject_aborted_stage"](latency_abort_routes)
 
     asyncio.run(check())
 

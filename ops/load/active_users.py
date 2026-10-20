@@ -153,15 +153,23 @@ def stage_exceeds_latency_limit(summary, limits):
     return exceeded
 
 
-async def monitor_stage(results, limits, deadline, stop_event):
+async def monitor_stage(results, limits, deadline, stop_event, latency_abort_routes):
     """Stop an active stage once a measured route has a stable p95 breach."""
     while not stop_event.is_set() and time.monotonic() < deadline:
         await asyncio.sleep(min(2, max(0, deadline - time.monotonic())))
         for name, limit in limits.items():
             samples = results.get(name, ())
             if len(samples) >= 20 and percentile([latency for _, latency in samples], 0.95) > limit:
+                latency_abort_routes.append(name)
                 stop_event.set()
                 return
+
+
+def reject_aborted_stage(latency_abort_routes):
+    if latency_abort_routes:
+        raise RuntimeError(
+            f"Load stage was stopped for interim p95 breach on {', '.join(latency_abort_routes)}"
+        )
 
 
 def require_operator_continue(next_stage):
@@ -183,8 +191,11 @@ async def run(args, fixtures):
             await verify_identity(client, fixtures[:users])
             results = defaultdict(list)
             stop_event = asyncio.Event()
+            latency_abort_routes = []
             deadline = time.monotonic() + seconds
-            monitor = asyncio.create_task(monitor_stage(results, args.p95_limits, deadline, stop_event))
+            monitor = asyncio.create_task(monitor_stage(
+                results, args.p95_limits, deadline, stop_event, latency_abort_routes,
+            ))
             try:
                 await asyncio.gather(*(
                     virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results, stop_event)
@@ -194,6 +205,7 @@ async def run(args, fixtures):
                 monitor.cancel()
                 await asyncio.gather(monitor, return_exceptions=True)
             summary = report(f"{users} users / {seconds}s", results)
+            reject_aborted_stage(latency_abort_routes)
             if stage_has_blocking_errors(summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")
             exceeded = stage_exceeds_latency_limit(summary, args.p95_limits)
@@ -228,6 +240,8 @@ def main():
         parser.error(str(exc))
     if args.include_chat and args.max_chat_requests < 1:
         parser.error("FINN chat load requires --max-chat-requests with an explicit positive budget")
+    if not math.isfinite(args.think_seconds) or args.think_seconds < (1 if args.allow_production else 0.01):
+        parser.error("Think time must be finite and at least 1 second in production")
     thresholds = (args.max_workspace_p95_ms, args.max_finn_p95_ms, args.max_reviews_p95_ms)
     if args.allow_production and any(value is None for value in thresholds):
         parser.error("Production load requires explicit p95 limits for workspace, FINN and reviews")
