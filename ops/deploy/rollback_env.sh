@@ -42,6 +42,17 @@ export APP_ENV="$ENVIRONMENT"
 export BACKEND_PORT
 export FRONTEND_PORT
 cd "$REMOTE_DIR"
+ENV_FILE="$HOME/.secrets/trading.env"
+if [ -f "$ENV_FILE" ]; then
+  set -o allexport
+  source "$ENV_FILE"
+  set +o allexport
+fi
+# A secret file can contain stale deploy selections; the rollback target owns
+# its environment, topology and release identity.
+export APP_ENV="$ENVIRONMENT"
+export BACKEND_PORT
+export FRONTEND_PORT
 
 if [ -z "$ROLLBACK_COMMIT" ]; then
   if [ -f "${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" ]; then

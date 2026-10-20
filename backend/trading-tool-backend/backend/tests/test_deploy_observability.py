@@ -309,6 +309,9 @@ def test_finn_policy_gate_covers_every_scaled_worker_and_release_sha(tmp_path: P
 
 def test_rollback_requires_policy_and_queue_readiness_before_success() -> None:
     source = (REPO_ROOT / "ops" / "deploy" / "rollback_env.sh").read_text(encoding="utf-8")
+    assert 'source "$ENV_FILE"' in source
+    assert source.index('source "$ENV_FILE"') < source.index('pm2 startOrReload')
+    assert source.index('source "$ENV_FILE"') < source.rindex('export APP_ENV="$ENVIRONMENT"')
     assert "node ops/deploy/check_finn_runtime_policy.js" in source
     assert "python3 ops/deploy/check_worker_queue_readiness.py" in source
     assert source.index("check_worker_queue_readiness.py") < source.index("pm2 save --force")
