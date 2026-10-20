@@ -13,23 +13,6 @@ export const assistantChat = (query, context = {}, history = [], sessionId = nul
   });
 };
 
-export const executeAssistantAction = (action) => {
-  const actionId = action?.action_id || action?.id;
-  if (!actionId) {
-    throw new Error("Deze Finn actie mist een server-issued action_id.");
-  }
-  return fetchAuth(`/api/assistant/actions/execute`, {
-    method: 'POST',
-    body: JSON.stringify({ action_id: actionId }),
-  });
-};
-
-export const fetchFinnState = () => {
-  return fetchAuth(`/api/assistant/finn/state`, {
-    method: 'GET',
-  });
-};
-
 export const fetchFinnV2Run = (runId) => {
   return fetchAuth(`/api/assistant/v2/runs/${encodeURIComponent(runId)}`, {
     method: 'GET',
@@ -173,19 +156,6 @@ export const getFinnV2ConversationDetail = (conversationId) => fetchAuth(
   `/api/assistant/v2/conversations/${encodeURIComponent(conversationId)}`,
   { method: 'GET' },
 );
-
-// ========================================
-// Execute a server-issued FINN action
-// ========================================
-export const executePendingAction = (actionIdOrAction) => {
-  const actionId = typeof actionIdOrAction === 'string'
-    ? actionIdOrAction
-    : actionIdOrAction?.action_id || actionIdOrAction?.id;
-  return fetchAuth(`/api/assistant/actions/execute`, {
-    method: 'POST',
-    body: JSON.stringify({ action_id: actionId }),
-  });
-};
 
 // ========================================
 // ⚡ 8. AI Assistant Chat Stream (SSE) with Resilience

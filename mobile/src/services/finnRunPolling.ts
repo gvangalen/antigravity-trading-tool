@@ -13,6 +13,17 @@ export type FinnRunEnvelope = {
   } | null;
 };
 
+export function proposalActionFromRun(run: FinnRunEnvelope) {
+  const proposalId = run.response?.proposal_id;
+  if (run.status !== 'completed' || !proposalId || !run.response?.confirmation_required) return null;
+  return {
+    type: 'v2_proposal' as const,
+    proposal_id: proposalId,
+    requires_confirmation: true,
+    mode: run.response.mode || undefined,
+  };
+}
+
 const TERMINAL = new Set([
   'completed', 'blocked', 'failed', 'canceled', 'unavailable',
   'downgraded', 'rejected', 'clarification_required',

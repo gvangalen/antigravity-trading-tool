@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.ai_assistant_api import assistant_v2_get_proposal
+from backend.schemas.finn_v2_proposal_review import requested_state_for_review
 
 
 def test_proposal_lookup_is_account_scoped(monkeypatch):
@@ -62,3 +63,19 @@ def test_proposal_summary_exposes_only_immutable_update_review_state(monkeypatch
     assert result.target_revision == "revision-hash"
     assert result.snapshot_timestamp == now
     assert not hasattr(result, "internal_adapter_detail")
+
+
+@pytest.mark.parametrize("change, expected", [
+    ({"setup_fields": {"name": "BTC DCA", "symbol": "BTC"},
+      "strategy_fields": {"name": "BTC DCA strategy", "base_amount": 100}},
+     {"setup": {"name": "BTC DCA", "symbol": "BTC"},
+      "strategy": {"name": "BTC DCA strategy", "base_amount": 100}}),
+    ({"strategy_fields": {"name": "Variant", "base_amount": 75}},
+     {"name": "Variant", "base_amount": 75}),
+    ({"bot_fields": {"name": "Paper bot", "is_live": False}},
+     {"name": "Paper bot", "is_live": False}),
+    ({"bot_id": 12, "requested_mode": "paper"},
+     {"bot_id": 12, "requested_mode": "paper"}),
+])
+def test_proposal_review_exposes_create_and_activation_fields(change, expected):
+    assert requested_state_for_review(change) == expected

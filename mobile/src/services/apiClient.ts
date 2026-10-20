@@ -26,6 +26,12 @@ function resolveDevApiBaseUrl() {
 const DEFAULT_API_BASE_URL = __DEV__ ? resolveDevApiBaseUrl() : 'https://tradamind.com';
 const USE_COOKIE_CREDENTIALS = Platform.OS === 'web';
 
+function webCsrfToken(): string | null {
+  if (!USE_COOKIE_CREDENTIALS || typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 declare const process: {
   env?: Record<string, string | undefined>;
 };
@@ -119,6 +125,7 @@ class APIClient {
         throw new ApiError('Authentication required', 401);
       }
       const locale = await getStoredAppLanguage();
+      const csrfToken = webCsrfToken();
       const response = await fetch(this.buildUrl(path, options.query), {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         credentials: USE_COOKIE_CREDENTIALS ? 'include' : 'omit',
@@ -127,6 +134,7 @@ class APIClient {
           'Content-Type': 'application/json',
           'X-Locale': locale,
           'X-Tradamind-Client': 'mobile-expo',
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         method: options.method ?? 'GET',

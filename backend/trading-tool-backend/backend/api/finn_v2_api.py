@@ -22,6 +22,7 @@ from backend.schemas.finn_v2_schema import (
 )
 from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 from backend.services.finn_v2_run_service import FinnV2RunService
+from backend.schemas.finn_v2_proposal_review import requested_state_for_review
 from backend.utils.auth_utils import get_current_user
 
 
@@ -117,7 +118,7 @@ async def get_finn_v2_conversation(
             "asset": proposal.asset,
             "draft": draft,
             "before_state": dict(change.get("before_state") or change.get("before") or {}),
-            "requested_state": dict(change.get("requested_state") or change.get("changed_fields") or {}),
+            "requested_state": requested_state_for_review(change),
         }
     messages = []
     for run in runs:

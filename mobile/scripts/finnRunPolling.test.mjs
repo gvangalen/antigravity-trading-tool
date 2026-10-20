@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { pollFinnRun } from '../src/services/finnRunPolling.ts';
+import { pollFinnRun, proposalActionFromRun } from '../src/services/finnRunPolling.ts';
+
+test('only a completed, confirmable V2 run exposes its owner-bound proposal', () => {
+  const response = { proposal_id: 'proposal-123', confirmation_required: true, mode: 'action' };
+  assert.deepEqual(proposalActionFromRun({ run_id: 'run-1', status: 'completed', response }), {
+    type: 'v2_proposal', proposal_id: 'proposal-123', requires_confirmation: true, mode: 'action',
+  });
+  assert.equal(proposalActionFromRun({ run_id: 'run-1', status: 'running', response }), null);
+  assert.equal(proposalActionFromRun({ run_id: 'run-1', status: 'completed', response: {
+    ...response, confirmation_required: false,
+  } }), null);
+});
 
 test('processing turns are read until their owner-scoped run completes', async () => {
   const statuses = ['created', 'running', 'completed'];

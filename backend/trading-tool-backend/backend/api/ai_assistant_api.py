@@ -51,6 +51,7 @@ from backend.services.finn_v2_runtime_selector_service import FinnV2RuntimeSelec
 from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
 from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
 from backend.schemas.finn_v2_execution_schema import FinnV2ExecuteProposalRequest
+from backend.schemas.finn_v2_proposal_review import requested_state_for_review
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -956,7 +957,7 @@ async def assistant_v2_get_proposal(
         proposal_version=PROPOSAL_VERSION,
         confirmation_required=True,
         before_state=dict(change.get("before_state") or change.get("before") or {}),
-        requested_state=dict(change.get("requested_state") or change.get("changed_fields") or {}),
+        requested_state=requested_state_for_review(change),
         target_revision=change.get("target_revision"),
         snapshot_timestamp=change.get("snapshot_timestamp"),
     )
