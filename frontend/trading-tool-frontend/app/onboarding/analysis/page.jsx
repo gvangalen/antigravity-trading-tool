@@ -13,21 +13,25 @@ import { searchAssets } from "@/lib/api/assets";
 import { updateAssistantPreferences } from "@/lib/api/ai";
 import { initializeAsset } from "@/lib/api/market";
 import {
+  getMacroPreferences,
   getMacroIndicatorNames,
   syncMacroPreferences,
   updateMacroPreferences,
 } from "@/lib/api/macro";
 import {
+  getMarketPreferences,
   getMarketIndicatorNames,
   syncMarketPreferences,
   updateMarketPreferences,
 } from "@/lib/api/market";
 import {
+  getTechnicalPreferences,
   getIndicatorNames as getTechnicalIndicatorNames,
   syncTechnicalPreferences,
   updateTechnicalPreferences,
 } from "@/lib/api/technical";
 import { buildOnboardingAssetPreferencePatch, normalizeOnboardingAsset } from "@/lib/onboardingAsset";
+import { restoreOnboardingIndicator } from "@/lib/onboardingIndicatorSelection.mjs";
 
 const ASSET_CLASS_LABELS = {
   crypto: "Crypto",
@@ -326,8 +330,13 @@ export default function OnboardingAnalysisPage() {
   const [selectedMacro, setSelectedMacro] = useState(null);
   const [selectedTechnical, setSelectedTechnical] = useState(null);
   const hydratedAssetSymbolRef = useRef(null);
+  const hydratedSelectionsSymbolRef = useRef(null);
 
   const symbol = selectedAssetChoice?.symbol || "";
+  const assetStepDone = Boolean(status?.has_asset);
+  const marketStepDone = Boolean(status?.has_market);
+  const macroStepDone = Boolean(status?.has_macro);
+  const technicalStepDone = Boolean(status?.has_technical);
   const assetDone = Boolean(selectedAssetChoice);
   const marketDone = Boolean(selectedMarket);
   const macroDone = Boolean(selectedMacro);
@@ -348,6 +357,7 @@ export default function OnboardingAnalysisPage() {
     setSelectedMarket(null);
     setSelectedMacro(null);
     setSelectedTechnical(null);
+    hydratedSelectionsSymbolRef.current = null;
     setContinuing(false);
     setSavingKey(null);
     setError(null);
@@ -415,6 +425,7 @@ export default function OnboardingAnalysisPage() {
   }, [assetQuery, selectedAssetChoice]);
 
   useEffect(() => {
+    if (!symbol || !assetStepDone || hydratedSelectionsSymbolRef.current === symbol) return;
     let cancelled = false;
 
     async function loadStep() {
@@ -422,30 +433,39 @@ export default function OnboardingAnalysisPage() {
         setCatalogLoading(true);
         setError(null);
 
-        const hasChosenAsset = Boolean(symbol);
-
-        const [marketNames, macroNames, technicalNames] = await Promise.all([
+        const [marketNames, macroNames, technicalNames, marketPrefs, macroPrefs, technicalPrefs] = await Promise.all([
           getMarketIndicatorNames().catch(() => []),
           getMacroIndicatorNames().catch(() => []),
           getTechnicalIndicatorNames().catch(() => []),
+          marketStepDone ? getMarketPreferences({ symbol }).catch(() => null) : null,
+          macroStepDone ? getMacroPreferences({ symbol }).catch(() => null) : null,
+          technicalStepDone ? getTechnicalPreferences({ symbol }).catch(() => null) : null,
         ]);
 
         if (cancelled) return;
 
-        setMarketCatalog(normalizeCatalogItems(marketNames));
-        setMacroCatalog(normalizeCatalogItems(macroNames));
-        setTechnicalCatalog(normalizeCatalogItems(technicalNames));
+        const marketOptions = normalizeCatalogItems(marketNames);
+        const macroOptions = normalizeCatalogItems(macroNames);
+        const technicalOptions = normalizeCatalogItems(technicalNames);
+        setMarketCatalog(marketOptions);
+        setMacroCatalog(macroOptions);
+        setTechnicalCatalog(technicalOptions);
 
-        // Onboarding starts blank on purpose.
-        // Existing backend indicators may still exist from earlier attempts,
-        // but they should not auto-complete this step for the user.
-        setSelectedMarket(null);
-        setSelectedMacro(null);
-        setSelectedTechnical(null);
+        // Resume only indicator choices actually confirmed in onboarding for
+        // this asset. A catalog entry or a default preference alone is not a
+        // completed user choice.
+        const savedMarket = restoreOnboardingIndicator(marketPrefs, marketOptions, marketStepDone);
+        const savedMacro = restoreOnboardingIndicator(macroPrefs, macroOptions, macroStepDone);
+        const savedTechnical = restoreOnboardingIndicator(technicalPrefs, technicalOptions, technicalStepDone);
+        setSelectedMarket(savedMarket);
+        setSelectedMacro(savedMacro);
+        setSelectedTechnical(savedTechnical);
+        setOpenSelector(savedMarket ? (savedMacro ? (savedTechnical ? null : "technical") : "macro") : "market");
+        hydratedSelectionsSymbolRef.current = symbol;
       } catch (err) {
         console.error("Failed to load onboarding analysis step", err);
         if (!cancelled) {
-          setError(copy.loadError || "Loading the analysis onboarding step failed.");
+          setError("load");
         }
       } finally {
         if (!cancelled) setCatalogLoading(false);
@@ -456,7 +476,7 @@ export default function OnboardingAnalysisPage() {
     return () => {
       cancelled = true;
     };
-  }, [copy.loadError, symbol]);
+  }, [symbol, assetStepDone, marketStepDone, macroStepDone, technicalStepDone]);
 
   const goToPlan = () => {
     if (!symbol || continuing) return;
@@ -664,6 +684,7 @@ export default function OnboardingAnalysisPage() {
               setSelectedMarket(null);
               setSelectedMacro(null);
               setSelectedTechnical(null);
+              hydratedSelectionsSymbolRef.current = null;
               setMarketQuery("");
               setMacroQuery("");
               setTechnicalQuery("");
@@ -694,6 +715,7 @@ export default function OnboardingAnalysisPage() {
               // Do not re-hydrate the previous persisted asset while the user
               // is actively choosing a replacement.
               hydratedAssetSymbolRef.current = selectedAssetChoice?.symbol || null;
+              hydratedSelectionsSymbolRef.current = null;
               setSelectedAssetChoice(null);
               setAssetQuery("");
               setSearchOpen(false);
@@ -798,7 +820,7 @@ export default function OnboardingAnalysisPage() {
 
       {error ? (
         <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-          {error}
+          {error === "load" ? (copy.loadError || "Loading the analysis onboarding step failed.") : error}
         </div>
       ) : null}
 
