@@ -8,7 +8,6 @@ from sqlalchemy import text
 from fastapi import HTTPException
 
 from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
-from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.platform_metrics import record_latency_sample
 from backend.services.locale_service import localize_finn_payload
@@ -206,7 +205,6 @@ class DashboardService:
         # We declare safe defaults for all sub-components so they are populated even under failure
         prices_data = {s: {"price": None, "change_24h": None} for s in symbols}
         bot_portfolios = []
-        ai_insight = {}
         asset_catalog_map = {}
 
         # 3. Run DB-backed components sequentially. A single AsyncSession must
@@ -334,49 +332,8 @@ class DashboardService:
         if total_invested_eur > 0:
             total_profit_pct = round(((total_value_eur - total_invested_eur) / total_invested_eur) * 100.0, 2)
 
-        # 7. PRIORITEIT 3: Dutch FINN Briefing with bulletproof fallback logic
-        first_name = "Handelaar"
-        try:
-            user_repo = UserRepository(self.session)
-            user_obj = await user_repo.get_by_id(user_id)
-            if user_obj and hasattr(user_obj, "first_name") and user_obj.first_name:
-                first_name = user_obj.first_name
-        except Exception as e:
-            logger.error(f"⚠️ [MobileOverview] P3 Warning: Failed to retrieve user object: {e}")
-
-        greeting = f"Hallo {first_name}!"
-        summary = "Je portfolio is stabiel. Er zijn geen directe waarschuwingen voor je actieve setups."
-        suggested_actions = ["DCA setup maken", "Mijn bots bekijken", "Risico aanpassen"]
-
-        # If AI insights succeeded, unpack them safely
-        if isinstance(ai_insight, dict):
-            daily_coach = ai_insight.get("daily_coach")
-            if isinstance(daily_coach, dict):
-                stance = daily_coach.get("stance")
-                asset = daily_coach.get("asset", "BTC")
-                blockers = daily_coach.get("blockers") or []
-                if stance == "plan_is_active":
-                    summary = f"{asset}: je plan is vandaag actief volgens je eigen ranges. Review bot-proposals handmatig voor uitvoering."
-                elif stance == "wait_for_scores":
-                    summary = f"{asset}: daily scores ontbreken nog; Finn wacht met een actief/inactief oordeel."
-                elif blockers:
-                    first = blockers[0]
-                    summary = (
-                        f"{asset}: wachten. {first.get('category')} score {first.get('score')} "
-                        f"valt buiten je range {first.get('range')}."
-                    )
-                else:
-                    summary = ai_insight.get("briefing_text") or summary
-            insight_market = ai_insight.get("market_insight", {})
-            if isinstance(insight_market, dict):
-                insight_conclusion = insight_market.get("conclusion")
-                if insight_conclusion and not ai_insight.get("daily_coach"):
-                    summary = insight_conclusion
-            
-            ai_suggested = ai_insight.get("suggested_actions")
-            if isinstance(ai_suggested, list) and len(ai_suggested) > 0:
-                suggested_actions = ai_suggested
-
+        # The coach feed is the only source of proactive FINN messages. Keep
+        # the legacy overview response shape until mobile consumers migrate.
         finn_briefing = MobileFinnBriefingSchema(
             greeting="", summary="", suggested_actions=[],
         )
