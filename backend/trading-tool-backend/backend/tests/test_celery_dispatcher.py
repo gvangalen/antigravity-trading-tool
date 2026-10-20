@@ -25,6 +25,23 @@ def test_dispatch_plan_is_bounded_for_10k_users():
     assert plan["max_countdown_seconds"] == 300
 
 
+def test_monitor_reports_stale_reservations(monkeypatch):
+    import backend.celery_task.dispatcher as dispatcher
+
+    events = []
+    class Redis:
+        def zcount(self, key, minimum, maximum):
+            return 2 if key.endswith(":execution_critical") else 0
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(dispatcher, "_broker_client", lambda: Redis())
+    monkeypatch.setattr(dispatcher, "increment_dispatcher_counter", lambda name: events.append(name))
+    dispatcher.monitor_dispatch_reservations()
+    assert events == ["stale_reservation_alert_count"]
+
+
 def test_bounded_countdown_repeats_inside_fixed_window():
     first_batch = [
         _bounded_countdown(i, batch_size=5, max_spread_seconds=20)
@@ -214,7 +231,7 @@ def test_dispatcher_dedupes_users_inside_same_window(monkeypatch):
         def llen(self, queue_name):
             return 0
 
-        def eval(self, script, key_count, queue_name, reservations_key, now, limit, due, token, ttl):
+        def eval(self, script, key_count, queue_name, reservations_key, limit, token, created_at):
             assert key_count == 2
             self.reservations.add(token)
             return [1, 0, len(self.reservations) - 1]
@@ -285,7 +302,7 @@ def test_dispatcher_defers_remaining_users_at_capacity_and_resumes(monkeypatch):
         def llen(self, queue_name):
             return 0
 
-        def eval(self, script, key_count, queue_name, reservations_key, now, limit, due, token, ttl):
+        def eval(self, script, key_count, queue_name, reservations_key, limit, token, created_at):
             if len(self.reservations) >= limit:
                 return [0, 0, len(self.reservations)]
             self.reservations.add(token)
@@ -339,3 +356,45 @@ def test_continuation_remains_durable_after_long_backlog(monkeypatch):
     )
     assert scheduled[0]["kwargs"]["continuation_attempt"] == 121
     assert scheduled[0]["kwargs"]["start_after_user_id"] == 90
+
+
+def test_dispatch_reservation_is_released_only_after_task_postrun(monkeypatch):
+    import backend.celery_task.dispatcher as dispatcher
+
+    class Redis:
+        def __init__(self):
+            self.reservations = set()
+
+        def eval(self, script, key_count, queue_name, reservations_key, limit, token, created_at):
+            assert "ZREMRANGEBYSCORE" not in script
+            assert "EXPIRE" not in script
+            if len(self.reservations) >= limit:
+                return [0, 0, len(self.reservations)]
+            self.reservations.add(token)
+            return [1, 0, len(self.reservations) - 1]
+
+        def zrem(self, key, token):
+            self.reservations.discard(token)
+
+        def close(self):
+            pass
+
+    client = Redis()
+    monkeypatch.setattr(dispatcher, "_broker_client", lambda: client)
+    admitted, token = dispatcher._reserve_dispatch_capacity(
+        client, queue_name="execution_critical", backlog_limit=1,
+    )
+    assert admitted is True
+    assert dispatcher._reserve_dispatch_capacity(
+        client, queue_name="execution_critical", backlog_limit=1,
+    )[0] is False
+    task = SimpleNamespace(request=SimpleNamespace(headers={
+        "dispatch_reservation": token, "dispatch_queue": "execution_critical",
+    }))
+    dispatcher.release_dispatch_reservation(task_id=token, task=task, state="RETRY")
+    assert token in client.reservations
+    dispatcher.release_dispatch_reservation(task_id=token, task=task, state="SUCCESS")
+    assert not client.reservations
+    assert dispatcher._reserve_dispatch_capacity(
+        client, queue_name="execution_critical", backlog_limit=1,
+    )[0] is True

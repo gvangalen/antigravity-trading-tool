@@ -17,7 +17,11 @@ def sync_all_users_scores():
     
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id FROM users WHERE is_active = TRUE")
+            cur.execute("""
+                SELECT id FROM users
+                WHERE is_active = TRUE
+                  AND COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+            """)
             user_ids = [r[0] for r in cur.fetchall()]
         
         logger.info(f"🔄 [Score-Sync] Start berekening voor {len(user_ids)} users")

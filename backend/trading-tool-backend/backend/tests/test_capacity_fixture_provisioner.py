@@ -53,7 +53,7 @@ def test_token_file_rejects_world_readable_directory_and_repo_path(tmp_path):
         fixtures.private_output_path(fixtures.REPO_ROOT / "fixtures.json")
 
 
-def test_fixture_token_is_limited_to_three_get_routes():
+def test_fixture_token_is_limited_to_load_get_routes():
     token = create_token({"sub": "42", "role": "user", "capacity_fixture": {
         "kind": fixtures.FIXTURE_KIND, "campaign": "capacity-check",
     }}, timedelta(minutes=20), "access")
@@ -67,14 +67,14 @@ def test_fixture_token_is_limited_to_three_get_routes():
                                              authorization=f"Bearer {token}"))
 
     assert CAPACITY_FIXTURE_ROUTES == {
-        "/api/workspace/asset", "/api/assistant/v2/conversations", "/api/bot/trade-reviews",
+        "/api/auth/me", "/api/workspace/asset", "/api/assistant/v2/conversations", "/api/bot/trade-reviews",
     }
     for path in CAPACITY_FIXTURE_ROUTES:
         assert authenticate("GET", path) == {"id": 42, "role": "user"}
         with pytest.raises(HTTPException) as blocked:
             authenticate("POST", path)
         assert blocked.value.status_code == 403
-    for path in ("/api/bot/orders", "/api/auth/me", "/api/bot/trade-reviews/7"):
+    for path in ("/api/bot/orders", "/api/auth/refresh", "/api/bot/trade-reviews/7"):
         with pytest.raises(HTTPException) as blocked:
             authenticate("GET", path)
         assert blocked.value.status_code == 403
@@ -85,5 +85,38 @@ def test_capacity_load_routes_exist_and_match_token_scope():
 
     configured = {path.split("?", 1)[0] for _, method, path, _ in routes if method == "GET"}
     available = {route.path for route in app.routes if "GET" in getattr(route, "methods", ())}
-    assert configured == CAPACITY_FIXTURE_ROUTES
+    assert configured | {"/api/auth/me"} == CAPACITY_FIXTURE_ROUTES
     assert configured <= available
+
+
+def test_capacity_load_origin_rejects_unapproved_token_destinations():
+    validate = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))["validate_base_url"]
+    assert validate("http://127.0.0.1:8000", allow_production=False) == "http://127.0.0.1:8000"
+    assert validate("https://tradamind.com/", allow_production=True) == "https://tradamind.com"
+    for url in ("http://tradamind.com", "https://api.tradamind.com",
+                "https://tradamimd.com", "https://tradamind.com.evil.test",
+                "https://tradamind.com@evil.test", "https://tradamind.com/path"):
+        with pytest.raises(ValueError):
+            validate(url, allow_production=True)
+    with pytest.raises(ValueError):
+        validate("https://tradamind.com", allow_production=False)
+
+
+def test_capacity_load_identity_and_error_gate():
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    identity_matches = harness["identity_matches"]
+    fixture = {"user_id": 42, "email": "capacity+test-0042@load.invalid"}
+    response = SimpleNamespace(status_code=200, json=lambda: {"id": 42, "email": fixture["email"]})
+    assert identity_matches(response, fixture)
+    assert not identity_matches(SimpleNamespace(status_code=200, json=lambda: {
+        "id": 43, "email": fixture["email"],
+    }), fixture)
+    assert not identity_matches(SimpleNamespace(status_code=200, json=lambda: {
+        "id": 42, "email": "another-user@example.test",
+    }), fixture)
+    summary = harness["report"]("test", {"workspace": [(200, 100), (503, 250)]})
+    assert summary["workspace"]["p95_ms"] == 100
+    assert summary["workspace"]["p95_all_ms"] == 250
+    assert harness["stage_has_blocking_errors"](summary)

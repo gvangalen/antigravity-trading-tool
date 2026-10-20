@@ -84,6 +84,7 @@ def hash_token(token: str) -> str:
 
 
 CAPACITY_FIXTURE_ROUTES = frozenset({
+    "/api/auth/me",
     "/api/workspace/asset",
     "/api/assistant/v2/conversations",
     "/api/bot/trade-reviews",

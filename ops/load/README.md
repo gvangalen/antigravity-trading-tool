@@ -5,7 +5,7 @@ authenticated fixture account per virtual user. Keep the JSON token file outside
 the repo:
 
 ```json
-[{"user_id": 1, "access_token": "fixture-token"}]
+[{"user_id": 1, "email": "capacity+example-0001@load.invalid", "access_token": "fixture-token"}]
 ```
 
 Run from the repository root after confirming the deployed SHA and migrations:
@@ -18,12 +18,19 @@ python3 ops/load/active_users.py \
   --allow-production
 ```
 
-This default profile mixes authenticated workspace, FINN conversation, and trade-review
-reads with ten seconds of average think time. It never submits orders. To include
+The harness accepts the exact production origin `https://tradamind.com` with
+`--allow-production`, or a loopback origin for local checks. Before each stage
+it verifies `/api/auth/me` returns the expected account ID and email for every
+fixture. The default profile mixes authenticated workspace, FINN conversation,
+and trade-review reads with ten seconds of average think time. It stops before
+the next stage on any non-2xx response or timeout and reports successful and
+all-response p95 separately. It never submits orders. To include
 controlled FINN chat, use separately approved accounts and add
 `--include-chat --max-chat-requests 50`; the provisioned capacity fixture tokens
-are restricted to three read routes and return 403 for chat. The script prints only
+are restricted to four read routes and return 403 for chat. The script prints only
 route-level status counts and latency summaries; it does not print tokens.
+The identity preflight detects account-token mixups, but a separate owner-canary
+test is still needed to prove isolation within workspace, FINN, and review bodies.
 
 ## Prepare distinct fixture accounts
 
@@ -36,6 +43,9 @@ inspect the campaign with `plan`, then run `create` and `issue` in the approved
 test window. The token output must be an absolute path outside the repo under
 a preexisting private (0700) directory. The script creates a 0600 JSON file
 and never prints tokens.
+Marked fixture accounts are excluded from scheduled all-user dispatch, score
+sync, and daily score generation. This keeps the read load from creating bot
+execution or report work for synthetic users.
 
 ```bash
 python -m backend.scripts.provision_capacity_fixtures plan \
@@ -58,7 +68,7 @@ python -m backend.scripts.provision_capacity_fixtures issue \
 
 After the test, use `deactivate` with the same campaign/count/target flags and
 `--allow-production --apply`, then delete the token file. Tokens are stateless:
-already issued tokens can still access the three read routes until expiry
+already issued tokens can still access the four read routes until expiry
 (20 minutes by default, at most 60). Use a new campaign for every run; never
 reuse a deactivated campaign.
 

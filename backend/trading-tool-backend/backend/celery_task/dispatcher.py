@@ -1,10 +1,12 @@
-from celery import shared_task, current_app
+from celery import shared_task, current_app, states
+from celery.signals import task_postrun
 import logging
 import os
 import time
 import uuid
 from backend.utils.db import get_db_connection
 from backend.celery_task.queue_policy import (
+    NAMED_QUEUES,
     resolve_task_queue,
     resolve_task_rate_limit,
     resolve_queue_backlog_limit,
@@ -84,34 +86,74 @@ def _queue_has_capacity(client, *, queue_name: str, backlog_limit: int) -> tuple
 
 
 _RESERVE_CAPACITY_SCRIPT = """
-redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', ARGV[1])
 local queued = redis.call('LLEN', KEYS[1])
-local scheduled = redis.call('ZCARD', KEYS[2])
-if queued + scheduled >= tonumber(ARGV[2]) then
-    return {0, queued, scheduled}
+local reserved = redis.call('ZCARD', KEYS[2])
+if queued + reserved >= tonumber(ARGV[1]) then
+    return {0, queued, reserved}
 end
-redis.call('ZADD', KEYS[2], ARGV[3], ARGV[4])
-redis.call('EXPIRE', KEYS[2], ARGV[5])
-return {1, queued, scheduled}
+redis.call('ZADD', KEYS[2], ARGV[3], ARGV[2])
+return {1, queued, reserved}
 """
 
 
-def _reserve_dispatch_capacity(client, *, queue_name: str, backlog_limit: int, countdown: int) -> tuple[bool, str]:
-    reservation_key = f"dispatcher:{os.getenv('APP_ENV', 'production')}:scheduled:{queue_name}"
+def _reservation_key(queue_name: str) -> str:
+    return f"dispatcher:{os.getenv('APP_ENV', 'production')}:scheduled:{queue_name}"
+
+
+def _reserve_dispatch_capacity(client, *, queue_name: str, backlog_limit: int) -> tuple[bool, str]:
     token = uuid.uuid4().hex
-    now = int(time.time())
     admitted, _, _ = client.eval(
         _RESERVE_CAPACITY_SCRIPT,
         2,
         queue_name,
-        reservation_key,
-        now,
+        _reservation_key(queue_name),
         max(1, int(backlog_limit)),
-        now + max(0, int(countdown)) + 15,
         token,
-        max(60, int(countdown) + 60),
+        int(time.time()),
     )
     return bool(admitted), token
+
+
+@task_postrun.connect
+def release_dispatch_reservation(task_id=None, task=None, state=None, **_kwargs):
+    """Keep a dispatched task counted until it actually finishes.
+
+    A worker lost before postrun leaves the reservation in place. This fails
+    closed instead of admitting above the backlog limit; operations must
+    reconcile a lost task before removing its reservation.
+    """
+    headers = getattr(getattr(task, "request", None), "headers", None) or {}
+    queue_name = headers.get("dispatch_queue") if isinstance(headers, dict) else None
+    token = headers.get("dispatch_reservation") if isinstance(headers, dict) else None
+    if not queue_name or not token or token != task_id or state not in states.READY_STATES:
+        return
+    client = None
+    try:
+        client = _broker_client()
+        client.zrem(_reservation_key(queue_name), token)
+    except Exception:
+        logger.exception("Could not release dispatcher reservation task_id=%s queue=%s", task_id, queue_name)
+    finally:
+        if client is not None:
+            client.close()
+
+
+@shared_task(name="backend.celery_task.dispatcher.monitor_dispatch_reservations")
+def monitor_dispatch_reservations():
+    """Emit a recurring operational error for reservations older than one hour."""
+    client = _broker_client()
+    stale_before = time.time() - 3600
+    try:
+        for queue_name in NAMED_QUEUES:
+            stale_count = int(client.zcount(_reservation_key(queue_name), "-inf", stale_before) or 0)
+            if stale_count:
+                increment_dispatcher_counter("stale_reservation_alert_count")
+                logger.critical(
+                    "Dispatcher stale reservations require operator reconciliation queue=%s count=%s",
+                    queue_name, stale_count,
+                )
+    finally:
+        client.close()
 
 
 def _schedule_continuation(
@@ -161,9 +203,18 @@ def dispatch_for_all_users(
     try:
         with conn.cursor() as cur:
             if active_only:
-                cur.execute("SELECT id FROM users WHERE is_active = true ORDER BY id;")
+                cur.execute("""
+                    SELECT id FROM users
+                    WHERE is_active = true
+                      AND COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+                    ORDER BY id;
+                """)
             else:
-                cur.execute("SELECT id FROM users ORDER BY id;")
+                cur.execute("""
+                    SELECT id FROM users
+                    WHERE COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+                    ORDER BY id;
+                """)
 
             user_ids = [r[0] for r in cur.fetchall() if r[0] > start_after_user_id]
 
@@ -341,7 +392,7 @@ def dispatch_for_all_users(
                 try:
                     has_capacity, reservation_token = _reserve_dispatch_capacity(
                         lease_client, queue_name=queue_name,
-                        backlog_limit=backlog_limit, countdown=countdown_seconds,
+                        backlog_limit=backlog_limit,
                     )
                 except Exception:
                     lease_client.delete(user_lease_key)
@@ -364,9 +415,11 @@ def dispatch_for_all_users(
                         kwargs={"user_id": user_id},
                         countdown=countdown_seconds,
                         queue=queue_name,
+                        task_id=reservation_token,
+                        headers={"dispatch_reservation": reservation_token, "dispatch_queue": queue_name},
                     )
                 except Exception:
-                    lease_client.zrem(f"dispatcher:{os.getenv('APP_ENV', 'production')}:scheduled:{queue_name}", reservation_token)
+                    lease_client.zrem(_reservation_key(queue_name), reservation_token)
                     lease_client.delete(user_lease_key)
                     raise
                 enqueued += 1

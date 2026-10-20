@@ -11,6 +11,16 @@ contains account-scoped workspace caching, shared Redis limits, bounded and
 durable dispatch waves, read-only trade-review listing, cluster metrics, pool
 limits, reduced polling, and an opt-in scaled worker profile. The tracked
 profile remains `compact`; no capacity claim or deployment is recorded here.
+The latest Build repair excludes synthetic fixture accounts from scheduled
+jobs, holds dispatcher reservations through retries, adds stale-reservation
+monitoring and fenced single-host recovery, requires queue consumers during
+deployment, and verifies each load token's account identity. The current
+combined backend suite passed **3543 tests, 3 skips**; Redis admission and
+retry/terminal release passed against local Redis. Independent QA, Security,
+and Architecture re-reviews found no remaining P1 code blocker in the scoped
+candidate. This repair has not yet completed CI, Auto Deploy, or independent
+authenticated live QA. Alert-channel routing and the 1000-user live capacity
+run remain pending.
 The pre-merge implementation and plan baseline is
 `b2ccc7c5f48cddf72098bc10145fadcdb3f85783`.
 

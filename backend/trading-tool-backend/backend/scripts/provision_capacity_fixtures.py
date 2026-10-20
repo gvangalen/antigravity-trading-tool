@@ -164,7 +164,7 @@ def issue_tokens(campaign: str, count: int, output: Path, ttl_minutes: int) -> d
         ordered = [rows[fixture_email(campaign, index)] for index in range(1, count + 1)]
     expiry = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
     payload = [
-        {"user_id": row["id"], "access_token": create_token(
+        {"user_id": row["id"], "email": row["email"], "access_token": create_token(
             {"sub": str(row["id"]), "role": "user", "capacity_fixture": {
                 "kind": FIXTURE_KIND, "campaign": campaign,
             }}, timedelta(minutes=ttl_minutes), "access"

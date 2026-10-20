@@ -120,6 +120,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert 'tail -n +\\$((start_line + 1))' in source
     assert "grep -Fq 'production-finn-interactive'" in source
     assert "grep -Fq ' ready.'" in source
+    assert "check_worker_queue_readiness.py /tmp/tradamind_deep_health.json" in source
+    assert "Required Celery queue consumers did not become ready" in source
     assert '"timestamp_utc"' in source
     assert 'if [ \\"\\$exit_code\\" -ne 0 ]; then' in source
     assert "cleanup_previous_frontend_static || true" in source
@@ -137,6 +139,27 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
         "release_complete",
     ):
         assert step in source
+
+
+def test_worker_queue_readiness_requires_registered_topology_consumers() -> None:
+    import runpy
+
+    check = runpy.run_path(str(REPO_ROOT / "ops/deploy/check_worker_queue_readiness.py"))
+    mappings = check["WORKER_BY_QUEUE"]
+    missing = check["missing_queue_consumers"]
+    for topology in ("compact", "scaled"):
+        workers = {queue: [f"production-{worker}@host"] for queue, worker in mappings[topology].items()}
+        payload = {"components": {"celery": {
+            "status": "ok", "control_plane_ready": True,
+            "worker_mapping_source": "celery_active_queues_inspect",
+            "workers_by_queue": workers,
+        }}}
+        assert missing(payload, topology=topology, environment="production") == []
+        workers["execution_critical"] = ["production-background@host"]
+        if topology == "scaled":
+            assert missing(payload, topology=topology, environment="production") == ["execution_critical"]
+        payload["components"]["celery"]["control_plane_ready"] = False
+        assert missing(payload, topology=topology, environment="production") == ["celery_control_plane"]
 
 
 def test_release_identity_is_written_before_pm2_and_loaded_by_every_process(tmp_path: Path) -> None:

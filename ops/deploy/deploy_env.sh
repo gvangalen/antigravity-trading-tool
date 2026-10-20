@@ -45,8 +45,9 @@ REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS="${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS:-
 # A Celery worker is reported online by PM2 before its task registry is ready.
 # Production cold starts have taken just over a minute, so keep the real
 # diagnostic probe but give workers enough time to finish initializing.
-# The lightweight health check remains the readiness gate.
-DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-1}"
+# Confirm every topology queue has a registered consumer before completing
+# a rollout. Deep health is sampled during deployment, not per request.
+DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"
 DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
 # The interactive queue is user-facing. Its worker must register before the
 # memory-heavy background workers are started, otherwise a cold deploy can
@@ -716,7 +717,7 @@ PY
     if curl --max-time 45 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/system/health >/tmp/tradamind_deep_health.json; then
       cat /tmp/tradamind_deep_health.json
       echo
-      if python3 - <<'PY'
+      if python3 - <<'PY' && python3 ops/deploy/check_worker_queue_readiness.py /tmp/tradamind_deep_health.json
 import json
 import os
 import sys
@@ -756,11 +757,8 @@ PY
     sleep \"$DEEP_HEALTH_RETRY_DELAY_SECONDS\"
   done
   if [ \"\$deep_health_ready\" != \"true\" ]; then
-    if [ \"\$(printf '%s' '$STRICT_DEEP_HEALTH' | tr '[:upper:]' '[:lower:]')\" = \"true\" ]; then
-      echo \"❌ Deep health did not stabilize within deploy retry window.\" >&2
-      exit 1
-    fi
-    echo \"⚠️ Deep health diagnostic did not stabilize; lightweight health remains the deploy gate.\" >&2
+    echo \"❌ Required Celery queue consumers did not become ready within deploy retry window.\" >&2
+    exit 1
   fi
   if [ \"$DEPLOY_COMPONENT_SET\" != \"backend_only\" ]; then
     DEPLOY_STEP_ID='frontend_smoke'
