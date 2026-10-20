@@ -186,7 +186,7 @@ if [ -z "$REMOTE_LAST_GOOD" ]; then
   exit 1
 fi
 ROLLBACK_COMMIT="$REMOTE_LAST_GOOD"
-ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT'"
+ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && NODE_BIN=$NODE_BIN ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT'"
 
 echo "🌐 2. Deploying ${ENVIRONMENT} commit ${TARGET_COMMIT}..."
 echo "🧭 Previous known-good commit: ${ROLLBACK_COMMIT}"
@@ -290,9 +290,18 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
     source "\$ENV_FILE"
     set +o allexport
   fi
-  # Release identity is deployment-owned metadata. Restore it after loading
-  # long-lived runtime secrets so a stale environment value cannot make a
-  # healthy candidate fail its own SHA-bound readiness check.
+  # Environment, topology, capacity, and release identity are deployment-owned.
+  # A long-lived secrets file may still contain values from another environment;
+  # restore the validated deploy selections after sourcing it.
+  export APP_ENV=$ENVIRONMENT
+  export TRADAMIND_WORKER_TOPOLOGY=$TRADAMIND_WORKER_TOPOLOGY
+  export API_WORKERS=$API_WORKERS
+  export DB_CONNECTION_BUDGET=$DB_CONNECTION_BUDGET
+  export CELERY_MARKET_PORTFOLIO_CONCURRENCY=$CELERY_MARKET_PORTFOLIO_CONCURRENCY
+  export CELERY_SCORING_CONCURRENCY=$CELERY_SCORING_CONCURRENCY
+  export CELERY_EXECUTION_CONCURRENCY=$CELERY_EXECUTION_CONCURRENCY
+  export CELERY_AI_REPORTING_CONCURRENCY=$CELERY_AI_REPORTING_CONCURRENCY
+  export CELERY_FINN_INTERACTIVE_CONCURRENCY=$CELERY_FINN_INTERACTIVE_CONCURRENCY
   export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL
   export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
   # Twelve Data is optional: the runtime has an explicit provider fallback
@@ -771,7 +780,7 @@ PY
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
     ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" \
-      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+      "cd $REMOTE_DIR && NODE_BIN=$NODE_BIN ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
   fi
   echo "Rollback command:" >&2
   echo "  ${ROLLBACK_COMMAND}" >&2
@@ -845,7 +854,7 @@ if [ "$external_smoke_failed" = "true" ]; then
     if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
       echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
       ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" \
-        "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+        "cd $REMOTE_DIR && NODE_BIN=$NODE_BIN ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
     fi
     record_remote_deploy_status "$DEPLOY_STEP_ID" failure 1 || true
     echo "Rollback command:" >&2
