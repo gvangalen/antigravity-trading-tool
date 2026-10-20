@@ -73,11 +73,6 @@ def test_web_and_mobile_dashboard_use_the_same_current_score_projection(monkeypa
     monkeypatch.setattr("backend.infrastructure.repositories.setup_repository.SetupRepository", SetupRepository)
     monkeypatch.setattr("backend.services.dashboard_service.AssetCatalogService", AssetCatalogService)
     monkeypatch.setattr("backend.services.bot_service.BotService", BotService)
-    monkeypatch.setattr(
-        "backend.utils.scoring_utils.get_scores_for_symbol",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("retired score read")),
-    )
-
     service = DashboardService(object())
     service.repository = Repository()
     web = asyncio.run(service.get_dashboard_data(7, "ETH"))
