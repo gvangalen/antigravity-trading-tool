@@ -6,7 +6,9 @@ Input JSON: [{"user_id": 1, "access_token": "..."}, ...]. Keep this file outside
 import argparse
 import asyncio
 import json
+import math
 import random
+import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -133,12 +135,20 @@ def stage_has_blocking_errors(summary):
 
 
 def stage_exceeds_latency_limit(summary, limits):
-    return [
+    exceeded = sorted(set(limits) - set(summary))
+    exceeded.extend(
         name for name, route in summary.items()
         if name in limits and (
             route["p95_all_ms"] is None or route["p95_all_ms"] > limits[name]
         )
-    ]
+    )
+    return exceeded
+
+
+def require_operator_continue(next_stage):
+    answer = input(f"Inspect host, DB and queue metrics. Type CONTINUE for {next_stage}: ")
+    if answer.strip() != "CONTINUE":
+        raise RuntimeError("Operator declined the next load stage")
 
 
 async def run(args, fixtures):
@@ -168,6 +178,8 @@ async def run(args, fixtures):
                 print(json.dumps({"operator_pause_seconds": args.between_stage_pause_seconds,
                                   "next_stage": stages[stage_index + 1]}), flush=True)
                 await asyncio.sleep(args.between_stage_pause_seconds)
+            if stage_index < len(stages) - 1 and args.allow_production:
+                await asyncio.to_thread(require_operator_continue, stages[stage_index + 1])
 
 
 def main():
@@ -194,10 +206,12 @@ def main():
     thresholds = (args.max_workspace_p95_ms, args.max_finn_p95_ms, args.max_reviews_p95_ms)
     if args.allow_production and any(value is None for value in thresholds):
         parser.error("Production load requires explicit p95 limits for workspace, FINN and reviews")
-    if any(value is not None and value <= 0 for value in thresholds):
-        parser.error("p95 limits must be positive")
+    if any(value is not None and (not math.isfinite(value) or value <= 0) for value in thresholds):
+        parser.error("p95 limits must be finite positive numbers")
     if args.between_stage_pause_seconds < 0 or (args.allow_production and args.between_stage_pause_seconds < 30):
         parser.error("Production load requires at least 30 seconds between stages")
+    if args.allow_production and "," in args.stages and not sys.stdin.isatty():
+        parser.error("Multi-stage production load requires an interactive operator terminal")
     args.p95_limits = {name: value for name, value in {
         "workspace": args.max_workspace_p95_ms,
         "finn_conversations": args.max_finn_p95_ms,

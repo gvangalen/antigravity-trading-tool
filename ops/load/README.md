@@ -5,7 +5,7 @@ authenticated fixture account per virtual user. Keep the JSON token file outside
 the repo:
 
 ```json
-[{"user_id": 1, "email": "capacity+example-0001@load.invalid", "access_token": "fixture-token"}]
+[{"user_id": 1, "email": "capacity+example-0001@load.example", "access_token": "fixture-token"}]
 ```
 
 Run from the repository root after confirming the deployed SHA and migrations:
@@ -29,8 +29,10 @@ the next stage on any non-2xx response or timeout and reports successful and
 all-response p95 separately. Production runs require explicit p95 limits for all three routes and at least
 30 seconds between stages. The example uses conservative exploratory stop
 limits; an operator must also inspect worker restarts, queue age, database
-headroom and host memory during each pause. The script refuses escalation if
-any route exceeds its all-response p95 limit. It never submits orders. To include
+headroom and host memory during each pause. A multi-stage production run
+requires an interactive terminal and the operator must type `CONTINUE` after
+each pause. The script refuses escalation if any route is unmeasured or exceeds
+its all-response p95 limit. It never submits orders. To include
 controlled FINN chat, use separately approved accounts and add
 `--include-chat --max-chat-requests 50`; the provisioned capacity fixture tokens
 are restricted to four read routes and return 403 for chat. The script prints only

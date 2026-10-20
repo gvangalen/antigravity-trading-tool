@@ -89,6 +89,13 @@ def test_capacity_load_routes_exist_and_match_token_scope():
     assert configured <= available
 
 
+def test_capacity_fixture_email_is_accepted_by_auth_response_schema():
+    from pydantic import EmailStr, parse_obj_as
+
+    email = fixtures.fixture_email("capacity-check", 1)
+    assert parse_obj_as(EmailStr, email) == email
+
+
 def test_capacity_load_origin_rejects_unapproved_token_destinations():
     validate = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))["validate_base_url"]
     assert validate("http://127.0.0.1:8000", allow_production=False) == "http://127.0.0.1:8000"
@@ -107,7 +114,7 @@ def test_capacity_load_identity_and_error_gate():
 
     harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
     identity_matches = harness["identity_matches"]
-    fixture = {"user_id": 42, "email": "capacity+test-0042@load.invalid"}
+    fixture = {"user_id": 42, "email": "capacity+test-0042@load.example"}
     response = SimpleNamespace(status_code=200, json=lambda: {"id": 42, "email": fixture["email"]})
     assert identity_matches(response, fixture)
     assert not identity_matches(SimpleNamespace(status_code=200, json=lambda: {
@@ -122,3 +129,28 @@ def test_capacity_load_identity_and_error_gate():
     assert harness["stage_has_blocking_errors"](summary)
     assert harness["stage_exceeds_latency_limit"](summary, {"workspace": 200}) == ["workspace"]
     assert harness["stage_exceeds_latency_limit"](summary, {"workspace": 300}) == []
+    assert harness["stage_exceeds_latency_limit"]({}, {"workspace": 200}) == ["workspace"]
+
+
+def test_capacity_load_operator_gate_requires_explicit_continue(monkeypatch):
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    monkeypatch.setattr("builtins.input", lambda prompt: "no")
+    with pytest.raises(RuntimeError, match="declined"):
+        harness["require_operator_continue"]("500:120")
+    monkeypatch.setattr("builtins.input", lambda prompt: "CONTINUE")
+    harness["require_operator_continue"]("500:120")
+
+
+def test_capacity_load_rejects_nonfinite_production_latency_gate(monkeypatch):
+    import sys
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    monkeypatch.setattr(sys, "argv", [
+        "active_users.py", "--base-url", "https://tradamind.com",
+        "--fixtures", "/missing-private-file", "--stages", "100:1",
+        "--allow-production", "--max-workspace-p95-ms", "nan",
+        "--max-finn-p95-ms", "1000", "--max-reviews-p95-ms", "1000",
+    ])
+    with pytest.raises(SystemExit) as rejected:
+        harness["main"]()
+    assert rejected.value.code == 2
