@@ -10,7 +10,7 @@ import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { StatusChip } from '../components/layout/StatusChip';
 import { BottomSheet } from '../components/sheets/BottomSheet';
 import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
-import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { FinnCoachFeedCard } from '../components/workspace/FinnCoachFeedCard';
 import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { listRowStandards } from '../constants/listRows';
@@ -180,7 +180,7 @@ export function AutomationScreen() {
       }}
     >
       <WorkspaceHeroSection>
-        <TodayWithFinnCard headline="" support="" />
+        <FinnCoachFeedCard />
       </WorkspaceHeroSection>
       <WorkflowStepsRail
         steps={[

@@ -81,30 +81,14 @@ class MobileActiveBotSchema(BaseModel):
     position_value_eur: Optional[float] = None
     profit_pct: Optional[float] = None
 
-class MobileFinnBriefingSchema(BaseModel):
-    greeting: str
-    summary: str
-    suggested_actions: List[str]
-
 class MobilePortfolioOverviewSchema(BaseModel):
     total_balance_eur: float
     total_invested_eur: float
     total_profit_pct: float
     active_bots_count: int
 
-class MobileIntelligenceEventSchema(BaseModel):
-    id: int
-    type: str
-    symbol: Optional[str] = None
-    title: str
-    description: str
-    severity: str
-    created_at: datetime
-
 class MobileOverviewResponse(BaseModel):
     user_id: int
     portfolio: MobilePortfolioOverviewSchema
     watchlist: List[MobileAssetWatchlistSchema]
     active_bots: List[MobileActiveBotSchema]
-    finn_briefing: MobileFinnBriefingSchema
-    intelligence_events: Optional[List[MobileIntelligenceEventSchema]] = None

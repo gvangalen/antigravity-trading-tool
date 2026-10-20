@@ -9,20 +9,20 @@ import { InsightCard } from '../components/cards/InsightCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { StatusChip } from '../components/layout/StatusChip';
-import { TodayWithFinnCard, type TodayWithFinnQueueItem } from '../components/workspace/TodayWithFinnCard';
+import { FinnCoachFeedCard } from '../components/workspace/FinnCoachFeedCard';
 import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { StatusTone, theme } from '../constants/theme';
 import { typography } from '../constants/typography';
-import { localizedBackendText, translate, translateFinnTag } from '../i18n';
+import { translate, translateFinnTag } from '../i18n';
 import { triggerHaptic } from '../utils/haptics';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { useApiResource } from '../hooks/useApiResource';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import type { AppLanguage } from '../preferences/appLocale';
-import { MobileOverviewResponse, MobileReportHighlight, MobileReportResponse, ReportResponse, assistantApi, intelligenceApi, mobileApi } from '../services/tradamindApi';
+import { MobileReportHighlight, MobileReportResponse, ReportResponse, assistantApi, intelligenceApi } from '../services/tradamindApi';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly';
@@ -158,12 +158,6 @@ export function ReportScreen() {
     fallbackData: {},
     fetcher: fetchReport,
   });
-  const fetchOverview = useCallback(() => mobileApi.overview(activeSymbol), [activeSymbol]);
-  const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
-    fallbackData: undefined,
-    fetcher: fetchOverview,
-  });
-
   const report = useMemo(
     () => mapMobileReport(reportResource.data.mobile, period, language, reportResource.data.full),
     [language, period, reportResource.data],
@@ -177,22 +171,10 @@ export function ReportScreen() {
     <ScreenContainer
       edgeToEdge={true}
       contentInsetBottom={320}
-      refreshing={reportResource.refreshing || overviewResource.refreshing}
-      onRefresh={async () => {
-        await Promise.all([reportResource.refresh(), overviewResource.refresh()]);
-      }}
+      refreshing={reportResource.refreshing}
+      onRefresh={reportResource.refresh}
     >
-      <ReflectionTodayHero
-        onAskFinn={() =>
-          openFinn({
-            prefill: `Translate the current ${period} report for ${activeSymbol} into conclusion, main risk and next safe step.`,
-            source: 'reflection-today',
-            symbol: activeSymbol,
-          })
-        }
-        briefing={overviewResource.data?.finn_briefing}
-        report={report}
-      />
+      <WorkspaceHeroSection><FinnCoachFeedCard /></WorkspaceHeroSection>
       <WorkflowStepsRail
         steps={[
           {
@@ -673,65 +655,6 @@ function ReflectionFinnAnalysisBlocks({
         </View>
       ) : null}
     </View>
-  );
-}
-
-function ReflectionTodayHero({
-  briefing,
-  onAskFinn,
-  report,
-}: {
-  briefing?: MobileOverviewResponse['finn_briefing'];
-  onAskFinn: () => void;
-  report: MappedReport;
-}) {
-  const { language } = useAppPreferences();
-  const support = report.summary || translate(language, 'report.unavailableBody');
-  const metaItems = [report.periodLabel, report.dateLabel, report.updatedAt].filter(
-    (item): item is string => Boolean(item && item !== '-'),
-  );
-  const riskCount = report.highlights.filter((item) => item.tone === 'warning' || item.tone === 'danger').length;
-  const openCount = report.isUnavailable ? 0 : 1;
-  const queueItems: TodayWithFinnQueueItem[] = [
-    {
-      key: 'tasks',
-      label: translate(language, 'queue.label.tasks'),
-      value: openCount,
-      body: report.isUnavailable ? translate(language, 'report.queueTaskUnavailable') : translate(language, 'report.queueTaskReview'),
-      detail: report.isUnavailable
-        ? translate(language, 'report.queueTaskDetailUnavailable')
-        : translate(language, 'report.queueTaskDetailReady'),
-    },
-    {
-      key: 'reviews',
-      label: translate(language, 'queue.label.reviews'),
-      value: report.highlights.length,
-      body: report.highlights.length > 0 ? translate(language, 'report.queueReviewsCaptured') : translate(language, 'report.queueReviewsEmpty'),
-    },
-    {
-      key: 'risks',
-      label: translate(language, 'queue.label.risks'),
-      value: riskCount,
-      body: riskCount > 0 ? translate(language, 'report.queueRisksOpen') : translate(language, 'report.queueRisksClear'),
-    },
-    {
-      key: 'performance',
-      label: translate(language, 'queue.label.performance'),
-      value: report.scores.filter((score) => score.value >= 50).length,
-      body: translate(language, 'report.queuePerformance'),
-    },
-  ];
-
-  return (
-    <WorkspaceHeroSection>
-      <TodayWithFinnCard
-        headline={localizedBackendText(language, briefing?.summary?.trim(), report.headline)}
-        support={support}
-        metaItems={metaItems}
-        queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: openCount })}
-      />
-    </WorkspaceHeroSection>
   );
 }
 

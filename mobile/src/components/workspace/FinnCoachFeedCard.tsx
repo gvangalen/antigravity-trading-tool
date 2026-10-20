@@ -8,27 +8,7 @@ import { translate } from '../../i18n';
 import { coachFeedApi, type MobileCoachFeedItem } from '../../services/tradamindApi';
 import { useAuth } from '../../auth/AuthProvider';
 
-// Existing workspace screens keep this component name during their layout
-// migration. Their page-specific briefing and queue are no longer rendered.
-export type TodayWithFinnQueueItem = {
-  key: string;
-  label: string;
-  value: number | string;
-  body: string;
-  detail?: string;
-};
-
-type TodayWithFinnCardProps = {
-  headline: string;
-  support: string;
-  metaItems?: string[];
-  queueItems?: TodayWithFinnQueueItem[];
-  queueStatusLabel?: string;
-  queueTitle?: string;
-  defaultQueueExpanded?: boolean;
-};
-
-export function TodayWithFinnCard(_props: TodayWithFinnCardProps) {
+export function FinnCoachFeedCard() {
   const { language } = useAppPreferences();
   const { user } = useAuth();
   const { openFinn } = useFinnOverlay();

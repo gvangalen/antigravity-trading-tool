@@ -6,11 +6,6 @@ import { benchmarkSituationId } from './benchmarkSituation';
 type UnknownRecord = Record<string, unknown>;
 const EMPTY_VALUE = '—';
 
-export function mapMobileOverviewPrompts(overview?: MobileOverviewResponse) {
-  const actions = overview?.finn_briefing.suggested_actions.filter(Boolean) ?? [];
-  return actions.length > 0 ? actions.slice(0, 4) : [];
-}
-
 export function mapMobileOverviewMarket(overview?: MobileOverviewResponse, symbol?: string) {
   const asset =
     overview?.watchlist.find((item) => item.symbol === symbol) ??

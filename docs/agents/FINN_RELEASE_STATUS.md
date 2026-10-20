@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Mobiele FINN-feed en gesloten Paper-reflectie (21 oktober 2026)
+
+Phase: `LOCAL_CANDIDATE_VALIDATED`, nog niet gedeployed of onafhankelijk live
+geaccepteerd. Branch: `codex/mobile-finn-feed-cutover`.
+
+De mobiele werkruimtes tonen dezelfde eigenaargebonden coachfeed in plaats van
+een pagina-afhankelijke Today-briefing. Het oude lege briefingcontract is uit
+de mobiele overview-API verwijderd. Een niet gebruikte mobiele FINN-screen
+met lokaal verzonnen antwoorden en zijn ongebruikte chatkaarten zijn verwijderd.
+Score-uitleg gaat via een echte vraag aan FINN 2.0. Reflectie haalt geen apart
+mobiel overview meer op alleen voor de oude briefing. De onderliggende
+score-, strategie-, bot- en rapportservices blijven bestaan als feitenbronnen.
+
+Lokale metingen: root backend `pytest -q` **3559 geslaagd, 3 bestaande skips**;
+41 gerichte dashboard- en tradereviewtests geslaagd. Mobiele typecheck,
+chatcontracttests **16/16**, lint zonder errors (90 waarschuwingen) en Expo
+web-, iOS- en Android-bundels geslaagd. Webbuild, typecheck, i18n-lint/tests,
+command- en voorsteltests en `audit:high` geslaagd; audit meldde één moderate
+Next.js-advisory en geen high of critical. De geïsoleerde lokale
+FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix sloot **16/16**
+contracten en **19/19** adaptertests af zonder brokerorder of Live-activatie;
+artifact SHA-256 `245f752b6d7e6bef996792ad58e0e5900baecc876c1da414ebfc3e779751b4af`.
+Echte `gpt-6-luna`/Responses-selectie: development **20/20** (SHA-256
+`03fde7b1a70f7898e8075df400450d84a5c122f8fd24c34ce7feb4eba95fd909`)
+en regression **109/109** (SHA-256
+`75407be96f65207d8d34b3fdb2ea3a4a08a6aedb8174ea61a82ea32075660b29`),
+beide zonder provider-, schema-, parse-, validatie- of timeoutfalen.
+
+CI, Auto Deploy, publieke backend/frontend-SHA en onafhankelijke native
+mobiele acceptatie ontbreken nog. De bestaande QA-agent moet daarnaast via de
+beschermde fixture één gecontroleerde Paper-aankoop en volledige verkoop tot
+het blijvende tradereviewdossier en FINN-reflectie volgen. Build heeft die
+fixture niet aangeroepen. Exchange-import en Live-orders vallen buiten deze
+acceptatie.
+
 ## Actuele uitkomst agentuitfasering en begeleide Analyse (20 oktober 2026)
 
 Phase: `DESKTOP_SCOPED_QA_ACCEPTED`, volledige productacceptatie blijft open.
