@@ -1,5 +1,25 @@
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+
+function positiveIntEnv(name, fallback) {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < 1 || value > 128) {
+    throw new Error(`${name} must be an integer between 1 and 128`);
+  }
+  return value;
+}
+
+const capacityProfile = require("./capacity_profile.json");
+const WORKER_TOPOLOGY = process.env.TRADAMIND_WORKER_TOPOLOGY || capacityProfile.topology;
+if (!["compact", "scaled"].includes(WORKER_TOPOLOGY)) {
+  throw new Error("TRADAMIND_WORKER_TOPOLOGY must be compact or scaled");
+}
+const SCALED = WORKER_TOPOLOGY === "scaled";
+if (SCALED && os.totalmem() < 6 * 1024 ** 3) {
+  throw new Error("Scaled worker topology requires at least 6 GiB host RAM");
+}
+const API_WORKERS = positiveIntEnv("API_WORKERS", SCALED ? 2 : 1);
 
 const BASE_REMOTE_DIR = process.env.REMOTE_DIR || "/home/ubuntu/antigravity-trading-tool";
 const NODE_INTERPRETER =
@@ -24,14 +44,33 @@ const ENVIRONMENTS = {
 };
 
 const WORKER_CONCURRENCY = {
-  // The production host has 1 GB RAM.  Four separate background prefork
-  // process trees plus FINN's dedicated queue exceeded that budget and the
-  // kernel killed workers under sustained interactive traffic.  Keep FINN
-  // isolated, but serve every non-interactive queue from one bounded shared
-  // background worker.
+  // An earlier 1 GB production host could not sustain four separate
+  // background prefork process trees plus FINN's dedicated queue: the kernel
+  // killed workers under sustained interactive traffic. Measure the current
+  // host before selecting a larger topology. In compact mode, keep FINN
+  // isolated and serve the other queues from one bounded shared worker.
   background: 1,
   finnInteractive: 1,
+  marketPortfolio: positiveIntEnv("CELERY_MARKET_PORTFOLIO_CONCURRENCY", 2),
+  scoring: positiveIntEnv("CELERY_SCORING_CONCURRENCY", 1),
+  executionCritical: positiveIntEnv("CELERY_EXECUTION_CONCURRENCY", 1),
+  aiReporting: positiveIntEnv("CELERY_AI_REPORTING_CONCURRENCY", 2),
+  scaledFinnInteractive: positiveIntEnv("CELERY_FINN_INTERACTIVE_CONCURRENCY", 2),
 };
+
+const apiDbMaximum = 18;
+const backgroundDbMaximum = 4;
+const finnDbMaximum = 3;
+const workerDbMaximum = SCALED
+  ? backgroundDbMaximum * (WORKER_CONCURRENCY.background + WORKER_CONCURRENCY.marketPortfolio
+      + WORKER_CONCURRENCY.scoring + WORKER_CONCURRENCY.executionCritical + WORKER_CONCURRENCY.aiReporting)
+    + finnDbMaximum * WORKER_CONCURRENCY.scaledFinnInteractive
+  : backgroundDbMaximum + finnDbMaximum;
+const dbConnectionBudget = positiveIntEnv("DB_CONNECTION_BUDGET", 80);
+const configuredDbMaximum = API_WORKERS * apiDbMaximum + workerDbMaximum;
+if (configuredDbMaximum > dbConnectionBudget) {
+  throw new Error(`Configured DB connection maximum ${configuredDbMaximum} exceeds budget ${dbConnectionBudget}`);
+}
 
 function pickRuntimeEnv(keys) {
   return keys.reduce((acc, key) => {
@@ -80,6 +119,7 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "COINBASE_API_KEY",
   "COINBASE_API_SECRET",
   "REDIS_URL",
+  "TRUSTED_PROXY_CIDRS",
   "CELERY_BROKER_URL",
   "CELERY_RESULT_BACKEND",
   // FINN's runtime safety policy is configured by the protected server
@@ -185,6 +225,23 @@ function createEcosystem(environmentName) {
   const beatWorker = `celery-beat${environment.suffix}`;
   const queuePrefix = environment.queueNamePrefix;
 
+  const workerApp = (name, workerName, queues, pool, concurrency, profile, memoryLimit) => ({
+    name,
+    script: CELERY_BIN,
+    args: `-A backend.celery_task.celery_app worker --pool=${pool} --loglevel=info -Ofair --concurrency=${concurrency} -Q ${queues.map((queue) => `${queuePrefix}${queue}`).join(",")} -n ${environmentName}-${workerName}@%h`,
+    cwd: backendDir,
+    interpreter: "none",
+    env: {
+      ...FINN_RUNTIME_DEFAULT_ENV,
+      ...backendRuntimeEnv,
+      ...RELEASE_METADATA_ENV,
+      APP_ENV: environment.appEnv,
+      TRADAMIND_BUILD_SERVICE: name.replace(environment.suffix, ""),
+      TRADAMIND_CELERY_PROFILE: profile,
+    },
+    max_memory_restart: memoryLimit,
+  });
+
   return {
     apps: [
       {
@@ -206,7 +263,7 @@ function createEcosystem(environmentName) {
       {
         name: backendApp,
         script: "python3",
-        args: `-m uvicorn backend.main:app --host 0.0.0.0 --port ${environment.backendPort}`,
+        args: `-m uvicorn backend.main:app --host 0.0.0.0 --port ${environment.backendPort} --workers ${API_WORKERS}`,
         cwd: backendDir,
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
@@ -218,46 +275,25 @@ function createEcosystem(environmentName) {
         },
         max_memory_restart: "500M",
       },
-      {
-        name: backgroundWorker,
-        script: CELERY_BIN,
-        // This worker is already strictly serial. A prefork parent plus one
-        // child duplicated its heavy reporting/market imports on the 1 GB
-        // production host and forced the isolated FINN worker into swap. The
-        // solo pool preserves the same queues and concurrency while removing
-        // that redundant process tree; FINN itself remains isolated/prefork.
-        args: `-A backend.celery_task.celery_app worker --pool=solo --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.background} -Q ${queuePrefix}celery,${queuePrefix}market_data,${queuePrefix}portfolio,${queuePrefix}scoring,${queuePrefix}execution_critical,${queuePrefix}ai_generation -n ${environmentName}-background@%h`,
-        cwd: backendDir,
-        interpreter: "none",
-        env: {
-          ...FINN_RUNTIME_DEFAULT_ENV,
-          ...backendRuntimeEnv,
-          ...RELEASE_METADATA_ENV,
-          APP_ENV: environment.appEnv,
-          TRADAMIND_BUILD_SERVICE: "celery-worker-default",
-          TRADAMIND_CELERY_PROFILE: "full",
-        },
-        max_memory_restart: "300M",
-      },
-      {
-        name: finnInteractiveWorker,
-        script: CELERY_BIN,
-        // FINN has its own queue and runs exactly one task at a time. A solo
-        // pool keeps that isolation but avoids a redundant prefork parent on
-        // the memory-constrained production host.
-        args: `-A backend.celery_task.celery_app worker --pool=solo --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.finnInteractive} -Q ${queuePrefix}finn_interactive -n ${environmentName}-finn-interactive@%h`,
-        cwd: backendDir,
-        interpreter: "none",
-        env: {
-          ...FINN_RUNTIME_DEFAULT_ENV,
-          ...backendRuntimeEnv,
-          ...RELEASE_METADATA_ENV,
-          APP_ENV: environment.appEnv,
-          TRADAMIND_BUILD_SERVICE: "celery-worker-finn-interactive",
-          TRADAMIND_CELERY_PROFILE: "finn",
-        },
-        max_memory_restart: "350M",
-      },
+      workerApp(
+        backgroundWorker, "background", SCALED ? ["celery"]
+          : ["celery", "market_data", "portfolio", "scoring", "execution_critical", "ai_generation"],
+        "solo", WORKER_CONCURRENCY.background, "full", "300M",
+      ),
+      ...(SCALED ? [
+        workerApp(`celery-worker-market-portfolio${environment.suffix}`, "market-portfolio",
+          ["market_data", "portfolio"], "prefork", WORKER_CONCURRENCY.marketPortfolio, "full", "900M"),
+        workerApp(`celery-worker-scoring${environment.suffix}`, "scoring",
+          ["scoring"], "solo", WORKER_CONCURRENCY.scoring, "full", "500M"),
+        workerApp(`celery-worker-execution-critical${environment.suffix}`, "execution-critical",
+          ["execution_critical"], "solo", WORKER_CONCURRENCY.executionCritical, "full", "500M"),
+        workerApp(`celery-worker-ai-reporting${environment.suffix}`, "ai-reporting",
+          ["ai_generation"], "prefork", WORKER_CONCURRENCY.aiReporting, "full", "900M"),
+      ] : []),
+      workerApp(finnInteractiveWorker, "finn-interactive", ["finn_interactive"],
+        SCALED ? "prefork" : "solo",
+        SCALED ? WORKER_CONCURRENCY.scaledFinnInteractive : WORKER_CONCURRENCY.finnInteractive,
+        "finn", SCALED ? "900M" : "350M"),
       {
         name: beatWorker,
         script: CELERY_BIN,
@@ -282,4 +318,7 @@ module.exports = {
   createEcosystem,
   ENVIRONMENTS,
   WORKER_CONCURRENCY,
+  WORKER_TOPOLOGY,
+  API_WORKERS,
+  configuredDbMaximum,
 };

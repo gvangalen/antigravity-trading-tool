@@ -364,6 +364,15 @@ def test_check_broker_includes_default_queue_sample(monkeypatch):
                 ]
             return []
 
+        async def zrange(self, key, start, end, withscores=False):
+            return []
+
+        async def zcard(self, key):
+            return 0
+
+        async def zcount(self, key, minimum, maximum):
+            return 0
+
         async def aclose(self):
             return None
 

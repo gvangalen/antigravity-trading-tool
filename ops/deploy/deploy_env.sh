@@ -14,7 +14,28 @@ SSH_KEY="${SSH_KEY:-$HOME/Documents/market_dashboard/Oracle_Keys/ssh-key-2025-05
 SERVER_IP="${SERVER_IP:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
 NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v20.19.5/bin}"
-STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-true}"
+STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
+TRADAMIND_WORKER_TOPOLOGY="$(python3 -c 'import json; print(json.load(open("ops/deploy/capacity_profile.json"))["topology"])')"
+if [ "$TRADAMIND_WORKER_TOPOLOGY" != "compact" ] && [ "$TRADAMIND_WORKER_TOPOLOGY" != "scaled" ]; then
+  echo "TRADAMIND_WORKER_TOPOLOGY must be compact or scaled." >&2
+  exit 1
+fi
+API_WORKERS="${API_WORKERS:-$( [ "$TRADAMIND_WORKER_TOPOLOGY" = scaled ] && echo 2 || echo 1 )}"
+DB_CONNECTION_BUDGET="${DB_CONNECTION_BUDGET:-80}"
+CELERY_MARKET_PORTFOLIO_CONCURRENCY="${CELERY_MARKET_PORTFOLIO_CONCURRENCY:-2}"
+CELERY_SCORING_CONCURRENCY="${CELERY_SCORING_CONCURRENCY:-1}"
+CELERY_EXECUTION_CONCURRENCY="${CELERY_EXECUTION_CONCURRENCY:-1}"
+CELERY_AI_REPORTING_CONCURRENCY="${CELERY_AI_REPORTING_CONCURRENCY:-2}"
+CELERY_FINN_INTERACTIVE_CONCURRENCY="${CELERY_FINN_INTERACTIVE_CONCURRENCY:-2}"
+for capacity_value in "$API_WORKERS" "$DB_CONNECTION_BUDGET" \
+  "$CELERY_MARKET_PORTFOLIO_CONCURRENCY" "$CELERY_SCORING_CONCURRENCY" \
+  "$CELERY_EXECUTION_CONCURRENCY" "$CELERY_AI_REPORTING_CONCURRENCY" \
+  "$CELERY_FINN_INTERACTIVE_CONCURRENCY"; do
+  if [[ ! "$capacity_value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Capacity settings must be positive integers." >&2
+    exit 1
+  fi
+done
 STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
@@ -23,10 +44,10 @@ MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"
 REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS="${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS:-900}"
 # A Celery worker is reported online by PM2 before its task registry is ready.
 # Production cold starts have taken just over a minute, so keep the real
-# deep-health gate but give all workers enough time to finish initializing.
-# Cold PM2 restarts initialize the four Celery workers sequentially. Keep the
-# deploy gate alive until the last worker can register with Redis/health.
-DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"
+# diagnostic probe but give workers enough time to finish initializing.
+# Confirm every topology queue has a registered consumer before completing
+# a rollout. Deep health is sampled during deployment, not per request.
+DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"
 DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
 # The interactive queue is user-facing. Its worker must register before the
 # memory-heavy background workers are started, otherwise a cold deploy can
@@ -36,7 +57,11 @@ INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS="${INTERACTIVE_WORKER_READY_RETRY_D
 # PM2 can report a worker deleted before its prefork children have released
 # their RSS. Wait for bounded memory headroom before importing FastAPI again
 # so a replacement backend does not immediately thrash in swap.
-MIN_DEPLOY_AVAILABLE_MEMORY_KB="${MIN_DEPLOY_AVAILABLE_MEMORY_KB:-196608}"
+if [ "$TRADAMIND_WORKER_TOPOLOGY" = scaled ]; then
+  MIN_DEPLOY_AVAILABLE_MEMORY_KB="${MIN_DEPLOY_AVAILABLE_MEMORY_KB:-1048576}"
+else
+  MIN_DEPLOY_AVAILABLE_MEMORY_KB="${MIN_DEPLOY_AVAILABLE_MEMORY_KB:-196608}"
+fi
 DEPLOY_MEMORY_HEADROOM_ATTEMPTS="${DEPLOY_MEMORY_HEADROOM_ATTEMPTS:-45}"
 # A production cold start can take more than two minutes while routers and
 # worker-facing dependencies initialize. Do not tear down a healthy startup
@@ -90,9 +115,35 @@ case "$ENVIRONMENT" in
     ;;
 esac
 
+if [ "$TRADAMIND_WORKER_TOPOLOGY" = scaled ]; then
+  if [ "$ENVIRONMENT" = production ]; then
+    AUX_PM2_APPS="celery-worker-default,celery-worker-market-portfolio,celery-worker-scoring,celery-worker-execution-critical,celery-worker-ai-reporting,celery-worker-finn-interactive,celery-beat"
+    EXPECTED_PM2_APPS="frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring celery-worker-execution-critical celery-worker-ai-reporting celery-worker-finn-interactive celery-beat"
+    RETIRED_PM2_APPS="celery-worker-scoring-execution"
+  else
+    AUX_PM2_APPS="celery-worker-default-staging,celery-worker-market-portfolio-staging,celery-worker-scoring-staging,celery-worker-execution-critical-staging,celery-worker-ai-reporting-staging,celery-worker-finn-interactive-staging,celery-beat-staging"
+    EXPECTED_PM2_APPS="frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-staging celery-worker-execution-critical-staging celery-worker-ai-reporting-staging celery-worker-finn-interactive-staging celery-beat-staging"
+    RETIRED_PM2_APPS="celery-worker-scoring-execution-staging"
+  fi
+else
+  if [ "$ENVIRONMENT" = production ]; then
+    RETIRED_PM2_APPS="${RETIRED_PM2_APPS},celery-worker-scoring,celery-worker-execution-critical,celery-worker-ai-reporting"
+  else
+    RETIRED_PM2_APPS="${RETIRED_PM2_APPS},celery-worker-scoring-staging,celery-worker-execution-critical-staging,celery-worker-ai-reporting-staging"
+  fi
+fi
+
 if [ -z "$SERVER_IP" ]; then
   echo "SERVER_IP is required for $ENVIRONMENT deploy." >&2
   exit 1
+fi
+
+if [ "$TRADAMIND_WORKER_TOPOLOGY" = scaled ]; then
+  HOST_MEMORY_KB="$(ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "awk '/^MemTotal:/ { print \$2 }' /proc/meminfo")"
+  if [[ ! "$HOST_MEMORY_KB" =~ ^[0-9]+$ ]] || [ "$HOST_MEMORY_KB" -lt 6291456 ]; then
+    echo "Scaled topology requires at least 6 GiB host RAM before deployment." >&2
+    exit 1
+  fi
 fi
 
 DEPLOY_STATE_DIR="ops/deploy/${ENVIRONMENT}"
@@ -160,6 +211,14 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   IFS= read -r DEPLOY_GIT_TOKEN || true
   export PATH=$NODE_BIN:\$PATH
   export APP_ENV=$ENVIRONMENT
+  export TRADAMIND_WORKER_TOPOLOGY=$TRADAMIND_WORKER_TOPOLOGY
+  export API_WORKERS=$API_WORKERS
+  export DB_CONNECTION_BUDGET=$DB_CONNECTION_BUDGET
+  export CELERY_MARKET_PORTFOLIO_CONCURRENCY=$CELERY_MARKET_PORTFOLIO_CONCURRENCY
+  export CELERY_SCORING_CONCURRENCY=$CELERY_SCORING_CONCURRENCY
+  export CELERY_EXECUTION_CONCURRENCY=$CELERY_EXECUTION_CONCURRENCY
+  export CELERY_AI_REPORTING_CONCURRENCY=$CELERY_AI_REPORTING_CONCURRENCY
+  export CELERY_FINN_INTERACTIVE_CONCURRENCY=$CELERY_FINN_INTERACTIVE_CONCURRENCY
   export BACKEND_PORT=$BACKEND_PORT
   export FRONTEND_PORT=$FRONTEND_PORT
   export PM2_DEPLOY_MODE='$PM2_DEPLOY_MODE'
@@ -373,6 +432,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_10_22_finn_trade_reflection_memory.py
   run_migration backend/scripts/migrations/2026_10_23_setup_benchmark_bounds.py
   run_migration backend/scripts/migrations/2026_10_24_finn_weekly_trade_reflections.py
+  run_migration backend/scripts/migrations/2026_10_25_finn_trade_review_projection_status.py
   advance_deploy_step 'schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \
@@ -611,6 +671,7 @@ PY
   if [ \"$PM2_DEPLOY_MODE\" = \"phased\" ]; then
     rebuild_pm2_processes
   else
+    for_each_pm2_app \"$RETIRED_PM2_APPS\" pm2_delete_app
     if pm2 startOrReload $PM2_CONFIG --update-env && check_pm2_apps_online; then
       echo \"✅ PM2 reload completed with all expected apps online.\"
     else
@@ -656,7 +717,7 @@ PY
     if curl --max-time 45 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/system/health >/tmp/tradamind_deep_health.json; then
       cat /tmp/tradamind_deep_health.json
       echo
-      if python3 - <<'PY'
+      if python3 - <<'PY' && python3 ops/deploy/check_worker_queue_readiness.py /tmp/tradamind_deep_health.json
 import json
 import os
 import sys
@@ -696,7 +757,7 @@ PY
     sleep \"$DEEP_HEALTH_RETRY_DELAY_SECONDS\"
   done
   if [ \"\$deep_health_ready\" != \"true\" ]; then
-    echo \"❌ Deep health did not stabilize within deploy retry window.\" >&2
+    echo \"❌ Required Celery queue consumers did not become ready within deploy retry window.\" >&2
     exit 1
   fi
   if [ \"$DEPLOY_COMPONENT_SET\" != \"backend_only\" ]; then

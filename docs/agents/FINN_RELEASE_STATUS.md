@@ -4,6 +4,73 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Multi-user capacity hardening candidate
+
+Phase: `LOCAL_GATES_PASSED_AWAITING_REVIEW`. Draft [PR #453](https://github.com/gvangalen/antigravity-trading-tool/pull/453)
+contains account-scoped workspace caching, shared Redis limits, bounded and
+durable dispatch waves, read-only trade-review listing, cluster metrics, pool
+limits, reduced polling, and an opt-in scaled worker profile. The tracked
+profile remains `compact`; no capacity claim or deployment is recorded here.
+The latest Build repair excludes synthetic fixture accounts from scheduled
+jobs, holds dispatcher reservations through retries, adds stale-reservation
+monitoring and fenced single-host recovery, requires queue consumers during
+deployment, and verifies each load token's account identity. The current
+combined backend suite passed **3543 tests, 3 skips**; Redis admission and
+retry/terminal release passed against local Redis. Independent QA, Security,
+and Architecture re-reviews found no remaining P1 code blocker in the scoped
+candidate. This repair has not yet completed CI, Auto Deploy, or independent
+authenticated live QA. Alert-channel routing and the 1000-user live capacity
+run remain pending.
+The pre-merge implementation and plan baseline is
+`b2ccc7c5f48cddf72098bc10145fadcdb3f85783`.
+
+Build evidence on 2026-10-20: root backend suite **3529 passed, 3 skipped**;
+frontend typecheck, focused tests and production build passed. All five
+[candidate CI jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39476821430)
+passed. The isolated local worker-driven FINN matrix passed **16/16** action
+contracts and **19/19** adapter tests; its artifact SHA-256 is
+`a97eb8b4f5fab376fc44f3b088371ee4975f15e705f133c6e305eb6179495446`.
+The real-provider development selector passed **20/20** cases (SHA-256
+`3d2a333f5b37fdf9ce7bf2d22ecbcdac962a2ed76e889c392ddd2031c03458ab`),
+and the real-provider regression selector passed **109/109** cases (SHA-256
+`3b3236d12132911caffa8fb3d43298c1643954b33e6d968bb9ebee5502b5b3cf`).
+Both selector runs had zero provider, schema, timeout, parse and validation
+failure rates. No broker orders, live trading calls or production connections
+were made by the local matrix.
+
+After merging production `main` at `2664fe1fb675f226e0dd4e627d3c8995f132a87b`,
+the backend suite passed **3530 tests, 3 skips**. The frontend production build,
+typecheck, i18n lint and tests, 27 command tests, 8 proposal tests, and
+`audit:high` passed. The isolated worker-driven action matrix was repeated
+against the combined source: **16/16** contracts and **19/19** adapter tests,
+artifact SHA-256
+`d4f2cebd6e61e46558667d47bb84e01dcc3daec2e6f625516907829882a8a297`.
+The merged main changes did not touch the selector boundary or registry used
+by the real-provider development and regression artifacts above. CI on the
+first merge commit passed all five jobs. A later main revision
+`1f7077ea179bbf1ef0887be4605d731df73af880` changed FINN feed presentation
+and mobile feed code; it has also been merged. The frontend export was rebuilt
+from that combined source. The provisioner candidate
+`c216d99aa5b38cd520b7876eab56a3b0df1cd3ef` then passed all five
+[CI checks](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39482730857).
+
+Production reported `1f7077ea179bbf1ef0887be4605d731df73af880`
+from both public surfaces at the last check. That `main` revision is merged
+into the local candidate. A read-only host check found 4
+vCPU, 7.75 GiB RAM and PostgreSQL `max_connections=100`; the historical 1 GB
+host note does not describe the current machine. Independent QA, Security and
+Architecture reviews, deployment identity checks, and an authenticated
+1000-distinct-account sustained load test are still outstanding. No file with
+1000 test accounts exists on this workspace. A controlled production-account
+provisioner has now been prepared, but has not run on production. Its
+20-minute default tokens allow only the three read routes in the load harness;
+the nonexistent FINN state route in the initial harness was replaced with the
+existing FINN conversation listing. A local PostgreSQL cycle created three
+marked accounts, issued three distinct 0600-file tokens, then deactivated
+all three; the private token file was removed. The backend suite on this
+candidate passed **3534 tests, 3 skips** after these additions. These checks
+are Build evidence, not independent live acceptance.
+
 ## FINN 2.0 agentuitfasering
 
 Phase: `LIVE_FEED_REPAIR_AWAITING_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)

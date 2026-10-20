@@ -38,3 +38,7 @@ export function subscribeWorkspaceSnapshot(listener) {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+export function clearWorkspaceSnapshots() {
+  snapshots.clear();
+}

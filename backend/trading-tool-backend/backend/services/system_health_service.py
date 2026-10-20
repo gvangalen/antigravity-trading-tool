@@ -165,6 +165,18 @@ class SystemHealthService:
                     queue_name: int(await client.llen(queue_name) or 0)
                     for queue_name in NAMED_QUEUES
                 }
+                reservation_metrics = {}
+                stale_before = time.time() - 3600
+                for queue_name in NAMED_QUEUES:
+                    key = f"dispatcher:{os.getenv('APP_ENV', 'production')}:scheduled:{queue_name}"
+                    oldest = await client.zrange(key, 0, 0, withscores=True)
+                    reservation_metrics[queue_name] = {
+                        "count": int(await client.zcard(key) or 0),
+                        "oldest_age_seconds": (
+                            max(0, int(time.time() - oldest[0][1])) if oldest else None
+                        ),
+                        "older_than_one_hour_count": int(await client.zcount(key, "-inf", stale_before) or 0),
+                    }
                 queue_metrics = await SystemHealthService._queue_metrics(
                     client,
                     queue_depths=queue_depths,
@@ -176,12 +188,15 @@ class SystemHealthService:
                     sample_size=200,
                 )
                 return _component(
-                    "ok",
+                    "stale" if any(
+                        item["older_than_one_hour_count"] for item in reservation_metrics.values()
+                    ) else "ok",
                     broker="redis",
                     latency_ms=round((time.perf_counter() - started) * 1000, 2),
                     default_queue_depth=queue_depths.get(DEFAULT_QUEUE, 0),
                     default_queue_sample=default_queue_sample,
                     queue_depths=queue_depths,
+                    dispatcher_reservations=reservation_metrics,
                     queue_metrics=queue_metrics,
                     total_queue_depth=sum(queue_depths.values()),
                 )

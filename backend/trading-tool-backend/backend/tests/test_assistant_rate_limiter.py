@@ -22,6 +22,19 @@ def test_client_ip_prefers_forwarded_headers():
     assert ai_assistant_api._client_ip(request) == "203.0.113.10"
 
 
+def test_client_ip_ignores_spoofed_forwarded_header_from_untrusted_peer():
+    class RemoteRequest:
+        client = type("Client", (), {"host": "198.51.100.25"})()
+        headers = {"x-forwarded-for": "203.0.113.99"}
+
+    assert ai_assistant_api._client_ip(RemoteRequest()) == "198.51.100.25"
+
+
+def test_client_ip_uses_proxy_appended_address_not_client_supplied_prefix():
+    request = _Request({"x-forwarded-for": "203.0.113.99, 198.51.100.25"})
+    assert ai_assistant_api._client_ip(request) == "198.51.100.25"
+
+
 def test_local_proxy_ip_does_not_share_global_ip_bucket(monkeypatch):
     calls = []
 
@@ -53,7 +66,7 @@ def test_real_ip_gets_user_and_ip_limits(monkeypatch):
 
     ai_assistant_api._apply_assistant_rate_limit(
         user_id=42,
-        raw_request=_Request({"x-real-ip": "198.51.100.25"}),
+        raw_request=_Request({"x-forwarded-for": "198.51.100.25"}),
         query="Wat denk je van BTC?",
         context={},
         endpoint="/assistant/chat",

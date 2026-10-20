@@ -71,6 +71,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.finn_v2_task.warm_finn_v2_interactive_worker": "finn_interactive",
     # Recovery must not share the interactive worker's failure domain.
     "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches": DEFAULT_QUEUE_LOGICAL,
+    "backend.celery_task.dispatcher.monitor_dispatch_reservations": DEFAULT_QUEUE_LOGICAL,
     "backend.celery_task.finn_v2_task.cleanup_finn_v2_retention": "ai_generation",
 }
 

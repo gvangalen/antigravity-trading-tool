@@ -87,6 +87,28 @@ if [ ! -f "$PM2_CONFIG" ]; then
   exit 1
 fi
 
+# The restored commit owns its worker topology. Recompute the PM2 gate after
+# checkout instead of carrying the failed release's process list into rollback.
+unset API_WORKERS DB_CONNECTION_BUDGET CELERY_MARKET_PORTFOLIO_CONCURRENCY \
+  CELERY_SCORING_CONCURRENCY CELERY_EXECUTION_CONCURRENCY \
+  CELERY_AI_REPORTING_CONCURRENCY CELERY_FINN_INTERACTIVE_CONCURRENCY
+if [ -f ops/deploy/capacity_profile.json ]; then
+  export TRADAMIND_WORKER_TOPOLOGY="$(python3 -c 'import json; print(json.load(open("ops/deploy/capacity_profile.json"))["topology"])')"
+else
+  unset TRADAMIND_WORKER_TOPOLOGY
+fi
+EXPECTED_PM2_APPS="$(node -e 'const config=require("./"+process.argv[1]); process.stdout.write(config.apps.map(app=>app.name).join(" "))' "$PM2_CONFIG")"
+if [ "$ENVIRONMENT" = production ]; then
+  POSSIBLE_RETIRED_WORKERS="celery-worker-market-portfolio celery-worker-scoring celery-worker-execution-critical celery-worker-ai-reporting celery-worker-scoring-execution"
+else
+  POSSIBLE_RETIRED_WORKERS="celery-worker-market-portfolio-staging celery-worker-scoring-staging celery-worker-execution-critical-staging celery-worker-ai-reporting-staging celery-worker-scoring-execution-staging"
+fi
+for worker_name in $POSSIBLE_RETIRED_WORKERS; do
+  if [[ " $EXPECTED_PM2_APPS " != *" $worker_name "* ]]; then
+    pm2 delete "$worker_name" || true
+  fi
+done
+
 check_pm2_apps_online() {
   for attempt in $(seq 1 20); do
     pm2 jlist >/tmp/tradamind_rollback_pm2_jlist.json

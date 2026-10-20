@@ -356,12 +356,33 @@ class FinnTradeReviewService:
             DELETE FROM finn_trade_review_dirty_users
             WHERE user_id=:user_id AND generation=:generation
         """), {"user_id": user_id, "generation": generation})
+        await self.session.execute(text("""
+            INSERT INTO finn_trade_review_projection_status
+                (user_id, legacy_or_ambiguous, inconsistent, updated_at)
+            VALUES (:user_id, :legacy_or_ambiguous, :inconsistent, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET
+                legacy_or_ambiguous=EXCLUDED.legacy_or_ambiguous,
+                inconsistent=EXCLUDED.inconsistent,
+                updated_at=NOW()
+        """), {"user_id": user_id, **excluded})
         await self.session.commit()
         return excluded
 
     async def list_reviews(self, user_id: int, limit: int = 50, offset: int = 0,
                            week_start: date | None = None) -> dict:
-        excluded = await self._project(user_id)
+        projection = await self.session.execute(text("""
+            SELECT s.legacy_or_ambiguous, s.inconsistent,
+                   EXISTS (SELECT 1 FROM finn_trade_review_dirty_users d
+                           WHERE d.user_id=:user_id) AS projection_pending
+            FROM (SELECT CAST(:user_id AS INTEGER) AS user_id) target
+            LEFT JOIN finn_trade_review_projection_status s ON s.user_id=target.user_id
+        """), {"user_id": user_id})
+        projection_row = projection.fetchone()
+        excluded = {
+            "legacy_or_ambiguous": int(projection_row.legacy_or_ambiguous or 0),
+            "inconsistent": int(projection_row.inconsistent or 0),
+        }
+        projection_pending = bool(projection_row.projection_pending)
         # Individual dossiers remain available as soon as a trade closes.
         # The selected completed week applies only to the saved weekly report.
         params = {"user_id": user_id, "limit": limit, "offset": offset}
@@ -392,6 +413,7 @@ class FinnTradeReviewService:
         """), {"user_id": user_id, "closed_before": completed_reflection_week()[3]})
         weeks = sorted({weekly["week_start"], *(row.week_start.isoformat() for row in week_options.fetchall())}, reverse=True)
         return {"items": items, "total": total, "excluded": excluded,
+                "projection_pending": projection_pending,
                 "weekly": weekly, "weeks": weeks}
 
     async def weekly_report(self, user_id: int, selected: date | None = None) -> dict:

@@ -26,7 +26,7 @@ def _redis_client():
         import redis
 
         return redis.from_url(
-            os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+            os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
             socket_connect_timeout=1,
             socket_timeout=1,
             decode_responses=True,
@@ -160,16 +160,21 @@ def acquire_ai_call_slot(
     )
     bucket = int(time.time()) // window
     normalized_scope = (scope or "unscoped").replace(" ", "_")[:180]
-    key = f"tradamind:ai:openai:call-slot:{bucket}:{normalized_scope}"
+    key = f"tradamind:{os.getenv('APP_ENV', 'development')}:ai:openai:call-slot:{bucket}:{normalized_scope}"
     client = _redis_client()
     if client is not None:
         try:
-            current = int(client.incr(key))
-            if current == 1:
-                client.expire(key, window + 60)
+            current = int(client.eval(
+                "local n=redis.call('INCR',KEYS[1]); "
+                "if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n",
+                1, key, window + 60,
+            ))
             return current <= limit
         except Exception:
             pass
+
+    if os.getenv("APP_ENV", "development").lower() in {"production", "staging"}:
+        return False
 
     current = _local_call_slots.get(key, 0) + 1
     _local_call_slots[key] = current

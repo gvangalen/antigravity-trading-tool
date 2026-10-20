@@ -110,7 +110,8 @@ def test_stale_score_paper_profile_is_explicitly_gated_and_owner_isolated(monkey
     assert "min_benchmark_score,max_benchmark_score" in probe_source
     assert "min_macro_score,min_technical_score,min_market_score" not in probe_source
     dispatcher = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "celery_task" / "dispatcher.py").read_text(encoding="utf-8")
-    assert "SELECT id FROM users WHERE is_active = true;" in dispatcher
+    assert "WHERE is_active = true" in dispatcher
+    assert "capacity_fixture,kind" in dispatcher
     assert "run_trading_bot_execution(" in probe_source
     assert "bot_id=bot_id, paper_only=True" in probe_source
     monkeypatch.delenv("FINN_QA_ALLOW_STALE_SCORE_FIXTURE", raising=False)

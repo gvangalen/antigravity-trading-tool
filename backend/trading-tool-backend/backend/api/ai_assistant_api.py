@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Primary assistant limits. Authenticated Finn users get enough room for
 # multi-turn draft repair, while anonymous/IP fallback remains stricter.
-from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
+from backend.utils.rate_limit import SharedRateLimiter, client_ip
 
-chat_rate_limiter = InMemoryRateLimiter(requests_limit=30, window_seconds=60)
-execute_rate_limiter = InMemoryRateLimiter(requests_limit=20, window_seconds=60)
+chat_rate_limiter = SharedRateLimiter(requests_limit=30, window_seconds=60, namespace="assistant-chat")
+execute_rate_limiter = SharedRateLimiter(requests_limit=20, window_seconds=60, namespace="assistant-execute")
 ASSISTANT_USER_LIMIT = 30
 ASSISTANT_FINN_DRAFT_LIMIT = 45
 ASSISTANT_IP_FALLBACK_LIMIT = 20

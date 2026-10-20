@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
-from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
+from backend.utils.rate_limit import SharedRateLimiter, client_ip
 from backend.services.bot_service import BotService
 from backend.services.finn_trade_review_service import FinnTradeReviewService, completed_reflection_week
 from backend.services.finn_trade_screenshot import MAX_BYTES
@@ -35,9 +35,9 @@ from backend.schemas.bot_schema import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-order_rate_limiter = InMemoryRateLimiter(requests_limit=20, window_seconds=60)
-review_rate_limiter = InMemoryRateLimiter(requests_limit=30, window_seconds=60)
-allocation_rate_limiter = InMemoryRateLimiter(requests_limit=3, window_seconds=60)
+order_rate_limiter = SharedRateLimiter(requests_limit=20, window_seconds=60, namespace="orders")
+review_rate_limiter = SharedRateLimiter(requests_limit=30, window_seconds=60, namespace="trade-reviews")
+allocation_rate_limiter = SharedRateLimiter(requests_limit=3, window_seconds=60, namespace="allocation")
 ORDER_USER_LIMIT = 20
 ORDER_IP_LIMIT = 30
 LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
@@ -431,7 +431,7 @@ async def list_finn_trade_reviews(
     if not trade_review_enabled(current_user["id"]):
         return {"status": "disabled", "items": [], "total": 0,
                 "weekly": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0,
-                           "patterns": []}, "excluded": {}}
+                           "patterns": []}, "excluded": {}, "projection_pending": False}
     return await FinnTradeReviewService(db).list_reviews(current_user["id"], limit, offset, week_start)
 
 

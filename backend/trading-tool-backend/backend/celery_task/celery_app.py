@@ -97,6 +97,13 @@ def reset_sqlalchemy_pools_after_fork(**kwargs):
 
 
 @worker_process_init.connect
+def reset_cluster_metrics_after_fork(**kwargs):
+    from backend.services.platform_metrics import reset_metrics_after_fork
+
+    reset_metrics_after_fork()
+
+
+@worker_process_init.connect
 def reset_and_warm_finn_provider_after_fork(**kwargs):
     """Finish the interactive worker's network warmup before user tasks run."""
     if os.getenv("TRADAMIND_BUILD_SERVICE") != "celery-worker-finn-interactive":
@@ -140,6 +147,10 @@ def warm_finn_interactive_worker_after_ready(sender=None, **kwargs):
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)
 # =========================================================
 celery_app.conf.beat_schedule = {
+    "monitor_dispatch_reservations": build_task_schedule_entry(
+        "backend.celery_task.dispatcher.monitor_dispatch_reservations",
+        timedelta(minutes=5),
+    ),
     "sync_linked_exchange_fills": build_task_schedule_entry(
         "backend.celery_task.finn_trade_review_task.sync_linked_exchange_fills",
         crontab(minute="*/5"),

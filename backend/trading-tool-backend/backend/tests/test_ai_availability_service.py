@@ -1,4 +1,10 @@
 from backend.services import ai_availability_service
+
+
+def test_paid_ai_call_slot_fails_closed_when_shared_redis_is_unavailable(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
+    assert ai_availability_service.acquire_ai_call_slot("chat:7:BTC") is False
 from backend.utils import embedding_client
 
 
@@ -74,15 +80,6 @@ def test_scheduled_call_slots_are_limited_per_scope(monkeypatch):
     assert ai_availability_service.acquire_ai_call_slot("setup:7:BTC", scheduled=True) is True
     assert ai_availability_service.acquire_ai_call_slot("setup:7:BTC", scheduled=True) is False
     assert ai_availability_service.acquire_ai_call_slot("setup:7:ETH", scheduled=True) is True
-
-
-def test_call_slot_honors_a_typed_boundary_override(monkeypatch):
-    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
-    ai_availability_service.reset_ai_availability_for_tests()
-
-    assert ai_availability_service.acquire_ai_call_slot("selector:7:GLOBAL", limit_override=2) is True
-    assert ai_availability_service.acquire_ai_call_slot("selector:7:GLOBAL", limit_override=2) is True
-    assert ai_availability_service.acquire_ai_call_slot("selector:7:GLOBAL", limit_override=2) is False
 
 
 def test_embeddings_are_disabled_in_no_budget_mode(monkeypatch):
