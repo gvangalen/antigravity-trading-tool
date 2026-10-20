@@ -332,12 +332,12 @@ def run(namespace: str) -> dict:
         user_id, bot_id, report_date = _seed(namespace, bound)
         _age_market_reading(user_id)
         from backend.celery_task.store_daily_scores_task import build_daily_scores_for_user
-        from backend.ai_agents.trading_bot_agent import run_trading_bot_agent
+        from backend.engine.trading_bot_execution import run_trading_bot_execution
 
         build_daily_scores_for_user(user_id, ["ETH"])
         from datetime import date
 
-        result = run_trading_bot_agent(
+        result = run_trading_bot_execution(
             user_id, report_date=date.fromisoformat(report_date),
             bot_id=bot_id, paper_only=True,
         )

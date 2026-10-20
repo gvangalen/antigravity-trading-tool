@@ -1,6 +1,6 @@
 import pytest
 
-from backend.ai_agents.trading_bot_agent import _auto_execute_decision, _get_live_exchange_balance, _get_live_price, _validate_live_auto_order_risk
+from backend.engine.trading_bot_execution import _auto_execute_decision, _get_live_exchange_balance, _get_live_price, _validate_live_auto_order_risk
 
 
 class _Cursor:
@@ -73,9 +73,9 @@ def test_auto_live_exposure_fails_without_market_price():
 
 
 def test_auto_live_exposure_uses_exchange_ticker_for_unpriced_holdings(monkeypatch):
-    from backend.ai_agents import trading_bot_agent
+    from backend.engine import trading_bot_execution
 
-    monkeypatch.setattr(trading_bot_agent, "_get_live_asset_eur_price", lambda *_args: 0.9)
+    monkeypatch.setattr(trading_bot_execution, "_get_live_asset_eur_price", lambda *_args: 0.9)
     _validate_live_auto_order_risk(
         _Connection(market_by_asset={"BTC": [(50000, 0, "EUR")], "USDT": []}),
         1, "BTC", 10,
@@ -95,13 +95,13 @@ def test_live_price_rejects_stale_or_invalid_market_snapshot():
 
 
 def test_auto_live_exposure_uses_verified_eur_ticker_instead_of_usdt_market_data(monkeypatch):
-    from backend.ai_agents import trading_bot_agent
+    from backend.engine import trading_bot_execution
 
     prices = []
     def eur_ticker(_conn, _user_id, _exchange, asset):
         prices.append(asset)
         return 50000
-    monkeypatch.setattr(trading_bot_agent, "_get_live_asset_eur_price", eur_ticker)
+    monkeypatch.setattr(trading_bot_execution, "_get_live_asset_eur_price", eur_ticker)
     _validate_live_auto_order_risk(
         _Connection(market=[(49000, 0, "USDT")]), 1, "BTC", 100,
         {"total": {"EUR": 900, "BTC": 0.002}}, 100,
@@ -111,9 +111,9 @@ def test_auto_live_exposure_uses_verified_eur_ticker_instead_of_usdt_market_data
 
 
 def test_auto_live_order_rechecks_limit_against_exchange_quote(monkeypatch):
-    from backend.ai_agents import trading_bot_agent
+    from backend.engine import trading_bot_execution
 
-    monkeypatch.setattr(trading_bot_agent, "_get_live_asset_eur_price", lambda *_args: 50000)
+    monkeypatch.setattr(trading_bot_execution, "_get_live_asset_eur_price", lambda *_args: 50000)
     with pytest.raises(RuntimeError, match="deviates from current exchange quote"):
         _validate_live_auto_order_risk(
             _Connection(), 1, "BTC", 100,
@@ -129,7 +129,7 @@ def test_auto_live_order_rechecks_limit_against_exchange_quote(monkeypatch):
     def unavailable_quote(*_args):
         raise ValueError("Exchange quote is stale")
 
-    monkeypatch.setattr(trading_bot_agent, "_get_live_asset_eur_price", unavailable_quote)
+    monkeypatch.setattr(trading_bot_execution, "_get_live_asset_eur_price", unavailable_quote)
     with pytest.raises(ValueError, match="Exchange quote is stale"):
         _validate_live_auto_order_risk(
             _Connection(), 1, "BTC", 100,

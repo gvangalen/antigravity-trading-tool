@@ -3,7 +3,7 @@ from datetime import date
 from backend.utils.db import get_db_connection
 from backend.engine.backtest_engine import run_bot_backtest
 from backend.engine.bot_brain import run_bot_brain
-from backend.ai_agents.trading_bot_agent import _get_daily_scores, _get_active_strategy_snapshot, _get_strategy_setup_payload
+from backend.engine.trading_bot_execution import _get_daily_scores, _get_active_strategy_snapshot, _get_strategy_setup_payload
 
 def validate_parity():
     user_id = 30

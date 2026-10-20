@@ -15,7 +15,7 @@ REQUEST_PATH_MODULES = [
 ]
 
 ALLOWED_LEGACY_SYNC_BOUNDARIES = {
-    "backend/trading-tool-backend/backend/ai_agents/trading_bot_agent.py",
+    "backend/trading-tool-backend/backend/engine/trading_bot_execution.py",
     "backend/trading-tool-backend/backend/celery_task/btc_price_history_task.py",
     "backend/trading-tool-backend/backend/celery_task/celery_task_generate_pdf.py",
     "backend/trading-tool-backend/backend/celery_task/daily_usage_reset.py",

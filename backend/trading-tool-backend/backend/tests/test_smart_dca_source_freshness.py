@@ -153,7 +153,7 @@ def test_legacy_exchange_indicator_keeps_its_candle_time(monkeypatch):
 
 
 def test_smart_dca_execution_rejects_freshly_stamped_score_with_old_component():
-    from backend.ai_agents.trading_bot_agent import _get_daily_scores
+    from backend.engine.trading_bot_execution import _get_daily_scores
     from backend.domain.finn_dca_plan_contract import benchmark_score, EQUAL_BENCHMARK_WEIGHTS
 
     old = datetime.now(timezone.utc) - timedelta(days=10)
@@ -189,7 +189,7 @@ def test_smart_dca_execution_rejects_freshly_stamped_score_with_old_component():
 
 
 def test_paper_decision_checks_each_component_against_its_saved_score_evidence(monkeypatch):
-    from backend.ai_agents.trading_bot_agent import _get_daily_scores
+    from backend.engine.trading_bot_execution import _get_daily_scores
     from backend.services import setup_market_match_sync
 
     calculated_at = datetime.now(timezone.utc)
@@ -225,7 +225,7 @@ def test_paper_decision_checks_each_component_against_its_saved_score_evidence(m
 
 
 def test_paper_score_reader_keeps_missing_unknown_and_measured_zero_valid(monkeypatch):
-    from backend.ai_agents.trading_bot_agent import _get_daily_scores
+    from backend.engine.trading_bot_execution import _get_daily_scores
     from backend.services import setup_market_match_sync
 
     class Cursor:

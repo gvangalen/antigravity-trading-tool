@@ -180,7 +180,7 @@ def _seed(namespace: str, bound_qa_owner: int) -> tuple[int, int, int]:
 
 
 def _execute_and_replay(user_id: int, bot_id: int, decision_id: int, source_price: float) -> str:
-    from backend.ai_agents.trading_bot_agent import _auto_execute_decision, _persist_bot_order
+    from backend.engine.trading_bot_execution import _auto_execute_decision, _persist_bot_order
 
     quantity = round(TARGET_ORDER_EUR / source_price, 8)
     if quantity <= 0 or not math.isfinite(quantity):

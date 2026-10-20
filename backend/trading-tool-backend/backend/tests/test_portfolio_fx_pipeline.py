@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
 
-from backend.ai_agents.trading_bot_agent import _get_live_price
+from backend.engine.trading_bot_execution import _get_live_price
 from backend.api.bot_api import get_verified_portfolio_value_history
 from backend.celery_task import portfolio_fx_task
 from backend.services.portfolio_snapshot_service import _snapshot_verified_paper

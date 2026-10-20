@@ -126,7 +126,7 @@ def _seed(namespace: str, bound_qa_owner: int) -> tuple[int, int, int]:
 
 
 def _execute(user_id: int, bot_id: int, decision_id: int) -> None:
-    from backend.ai_agents.trading_bot_agent import _auto_execute_decision, _persist_bot_order
+    from backend.engine.trading_bot_execution import _auto_execute_decision, _persist_bot_order
 
     order = {"symbol": SYMBOL, "side": "buy", "quote_amount_eur": ORDER_EUR,
              "estimated_price": PRICE_EUR, "estimated_qty": ORDER_QTY}

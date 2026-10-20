@@ -1,6 +1,6 @@
 import pytest
 
-from backend.ai_agents.trading_bot_agent import execute_manual_decision
+from backend.engine.trading_bot_execution import execute_manual_decision
 
 
 class _Cursor:

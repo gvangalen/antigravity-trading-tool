@@ -1,4 +1,4 @@
-# backend/ai_agents/trading_bot_agent.py
+# backend/engine/trading_bot_execution.py
 import logging
 import json
 import math
@@ -1737,7 +1737,7 @@ def _persist_decision_and_order(
 # =====================================================
 # 🚀 Run Trading Bot Agent
 # =====================================================
-def run_trading_bot_agent(
+def run_trading_bot_execution(
     user_id: int,
     report_date: Optional[date] = None,
     bot_id: Optional[int] = None,
@@ -2184,7 +2184,7 @@ def run_trading_bot_agent(
         }
 
     except Exception as e:
-        logger.exception("❌ trading_bot_agent failed")
+        logger.exception("❌ trading_bot_execution failed")
         try:
             conn.rollback()
         except Exception:

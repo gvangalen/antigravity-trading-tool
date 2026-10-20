@@ -1,4 +1,4 @@
-from backend.ai_agents.trading_bot_agent import _get_saved_strategy_plan
+from backend.engine.trading_bot_execution import _get_saved_strategy_plan
 
 
 class _Cursor:

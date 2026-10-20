@@ -26,7 +26,7 @@ def test_high_frequency_jobs_do_not_invoke_background_ai():
 
 
 def test_bot_uses_saved_strategy_and_measured_match_instead_of_ai_snapshot():
-    source = (ROOT / "ai_agents" / "trading_bot_agent.py").read_text()
+    source = (ROOT / "engine" / "trading_bot_execution.py").read_text()
     assert "_get_saved_strategy_plan(" in source
     assert "snapshot = _get_saved_strategy_plan(" in source
     assert "snapshot = _get_active_strategy_snapshot(" not in source

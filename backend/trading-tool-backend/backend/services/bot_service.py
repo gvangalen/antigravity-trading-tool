@@ -47,13 +47,13 @@ def sync_snapshot_all_for_user(user_id: int):
     snapshot_all_for_user(user_id, bucket="1h")
     snapshot_all_for_user(user_id, bucket="1d")
 
-def sync_run_trading_bot_agent(user_id: int, report_date: date, bot_id: int, paper_only: bool = False):
-    from backend.ai_agents.trading_bot_agent import run_trading_bot_agent
-    return run_trading_bot_agent(user_id=user_id, report_date=report_date, bot_id=bot_id, paper_only=paper_only)
+def sync_run_trading_bot_execution(user_id: int, report_date: date, bot_id: int, paper_only: bool = False):
+    from backend.engine.trading_bot_execution import run_trading_bot_execution
+    return run_trading_bot_execution(user_id=user_id, report_date=report_date, bot_id=bot_id, paper_only=paper_only)
 
 def sync_execute_manual_decision(user_id: int, bot_id: int, decision_id: int):
     from backend.utils.db import get_db_connection
-    from backend.ai_agents.trading_bot_agent import BotSafetyBlock, execute_manual_decision
+    from backend.engine.trading_bot_execution import BotSafetyBlock, execute_manual_decision
     
     conn = get_db_connection()
     try:
@@ -2306,7 +2306,7 @@ class BotService:
             if not bot or bool(bot.get("is_live")) or not bool(bot.get("is_active")):
                 raise HTTPException(409, "Paper-bot is niet meer actief als Paper")
 
-        result = await asyncio.to_thread(sync_run_trading_bot_agent, user_id, report_date, bot_id, paper_only)
+        result = await asyncio.to_thread(sync_run_trading_bot_execution, user_id, report_date, bot_id, paper_only)
         
         if not result or not getattr(result, "get", lambda k: False)("ok"):
             if result and result.get("error") == "paper_mode_changed":
