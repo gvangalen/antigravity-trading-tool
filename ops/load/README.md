@@ -15,6 +15,8 @@ python3 ops/load/active_users.py \
   --base-url https://tradamind.com \
   --fixtures /secure/path/load-fixtures.json \
   --stages 100:120,500:120,1000:300 \
+  --max-workspace-p95-ms 2000 --max-finn-p95-ms 1000 \
+  --max-reviews-p95-ms 1000 --between-stage-pause-seconds 60 \
   --allow-production
 ```
 
@@ -24,7 +26,11 @@ it verifies `/api/auth/me` returns the expected account ID and email for every
 fixture. The default profile mixes authenticated workspace, FINN conversation,
 and trade-review reads with ten seconds of average think time. It stops before
 the next stage on any non-2xx response or timeout and reports successful and
-all-response p95 separately. It never submits orders. To include
+all-response p95 separately. Production runs require explicit p95 limits for all three routes and at least
+30 seconds between stages. The example uses conservative exploratory stop
+limits; an operator must also inspect worker restarts, queue age, database
+headroom and host memory during each pause. The script refuses escalation if
+any route exceeds its all-response p95 limit. It never submits orders. To include
 controlled FINN chat, use separately approved accounts and add
 `--include-chat --max-chat-requests 50`; the provisioned capacity fixture tokens
 are restricted to four read routes and return 403 for chat. The script prints only

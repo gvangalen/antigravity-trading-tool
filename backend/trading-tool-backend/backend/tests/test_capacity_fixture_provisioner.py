@@ -120,3 +120,5 @@ def test_capacity_load_identity_and_error_gate():
     assert summary["workspace"]["p95_ms"] == 100
     assert summary["workspace"]["p95_all_ms"] == 250
     assert harness["stage_has_blocking_errors"](summary)
+    assert harness["stage_exceeds_latency_limit"](summary, {"workspace": 200}) == ["workspace"]
+    assert harness["stage_exceeds_latency_limit"](summary, {"workspace": 300}) == []

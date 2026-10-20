@@ -132,11 +132,21 @@ def stage_has_blocking_errors(summary):
     )
 
 
+def stage_exceeds_latency_limit(summary, limits):
+    return [
+        name for name, route in summary.items()
+        if name in limits and (
+            route["p95_all_ms"] is None or route["p95_all_ms"] > limits[name]
+        )
+    ]
+
+
 async def run(args, fixtures):
     limits = httpx.Limits(max_connections=max(100, args.max_users + 50), max_keepalive_connections=args.max_users)
     async with httpx.AsyncClient(base_url=args.base_url, timeout=args.timeout, limits=limits) as client:
         chat_budget = {"remaining": args.max_chat_requests} if args.include_chat else None
-        for stage in args.stages.split(","):
+        stages = args.stages.split(",")
+        for stage_index, stage in enumerate(stages):
             users_raw, seconds_raw = stage.split(":", 1)
             users, seconds = int(users_raw), int(seconds_raw)
             if users < 1 or users > len(fixtures) or seconds < 1:
@@ -151,6 +161,13 @@ async def run(args, fixtures):
             summary = report(f"{users} users / {seconds}s", results)
             if stage_has_blocking_errors(summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")
+            exceeded = stage_exceeds_latency_limit(summary, args.p95_limits)
+            if exceeded:
+                raise RuntimeError(f"Load stage exceeded p95 limits for {', '.join(exceeded)}; refusing a higher stage")
+            if stage_index < len(stages) - 1 and args.between_stage_pause_seconds:
+                print(json.dumps({"operator_pause_seconds": args.between_stage_pause_seconds,
+                                  "next_stage": stages[stage_index + 1]}), flush=True)
+                await asyncio.sleep(args.between_stage_pause_seconds)
 
 
 def main():
@@ -163,6 +180,10 @@ def main():
     parser.add_argument("--include-chat", action="store_true")
     parser.add_argument("--max-chat-requests", type=int, default=0)
     parser.add_argument("--allow-production", action="store_true")
+    parser.add_argument("--max-workspace-p95-ms", type=float)
+    parser.add_argument("--max-finn-p95-ms", type=float)
+    parser.add_argument("--max-reviews-p95-ms", type=float)
+    parser.add_argument("--between-stage-pause-seconds", type=int, default=60)
     args = parser.parse_args()
     try:
         args.base_url = validate_base_url(args.base_url, allow_production=args.allow_production)
@@ -170,6 +191,18 @@ def main():
         parser.error(str(exc))
     if args.include_chat and args.max_chat_requests < 1:
         parser.error("FINN chat load requires --max-chat-requests with an explicit positive budget")
+    thresholds = (args.max_workspace_p95_ms, args.max_finn_p95_ms, args.max_reviews_p95_ms)
+    if args.allow_production and any(value is None for value in thresholds):
+        parser.error("Production load requires explicit p95 limits for workspace, FINN and reviews")
+    if any(value is not None and value <= 0 for value in thresholds):
+        parser.error("p95 limits must be positive")
+    if args.between_stage_pause_seconds < 0 or (args.allow_production and args.between_stage_pause_seconds < 30):
+        parser.error("Production load requires at least 30 seconds between stages")
+    args.p95_limits = {name: value for name, value in {
+        "workspace": args.max_workspace_p95_ms,
+        "finn_conversations": args.max_finn_p95_ms,
+        "trade_reviews": args.max_reviews_p95_ms,
+    }.items() if value is not None}
     fixtures = json.loads(args.fixtures.read_text())
     if not isinstance(fixtures, list) or not fixtures or any(
         not isinstance(item, dict) or not item.get("user_id") or not item.get("access_token")
