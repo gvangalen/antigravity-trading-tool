@@ -445,10 +445,17 @@ class WorkspaceDataService:
         )
         master = await measure("master_score", lambda: self.score_service.get_master_score(user_id, symbol))
         daily = await measure("daily_scores", lambda: self._daily_scores(user_id, symbol))
+        effective_watchlist_symbols = (
+            watchlist_symbols if watchlist_symbols else await self._fetch_user_watchlist_symbols(user_id)
+        )
+        normalized_watchlist_symbols = list(dict.fromkeys(
+            str(item).upper() for item in (effective_watchlist_symbols or [symbol]) if item
+        ))[:25]
         session = getattr(self, "session", None)
         asset_catalog = await measure(
             "asset_catalog",
-            lambda: AssetCatalogService(session).get_assets([symbol]) if session is not None else self._async_empty_dict(),
+            lambda: AssetCatalogService(session).get_assets(list(dict.fromkeys([symbol, *normalized_watchlist_symbols])))
+            if session is not None else self._async_empty_dict(),
         )
         asset_meta = asset_catalog.get(symbol, {})
 
@@ -493,17 +500,13 @@ class WorkspaceDataService:
             })
         if canonical_day:
             combined = (daily or {}).get("benchmark_score")
-        effective_watchlist_symbols = (
-            watchlist_symbols
-            if watchlist_symbols
-            else await self._fetch_user_watchlist_symbols(user_id)
-        )
         watchlist_payload = await measure(
             "watchlist",
             lambda: self._build_watchlist_payload(
                 user_id,
-                effective_watchlist_symbols or [symbol],
+                normalized_watchlist_symbols,
                 master_payload.get("weights"),
+                asset_catalog=asset_catalog,
             ),
         )
         finn_snapshot = await measure(
@@ -566,6 +569,8 @@ class WorkspaceDataService:
         user_id: int,
         symbols: list[str],
         weights: dict[str, Any] | None = None,
+        *,
+        asset_catalog: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))[:25]
         if not normalized:
@@ -582,7 +587,8 @@ class WorkspaceDataService:
 
         match_service = SetupMarketMatchService(self.session, daily_rows=daily_rows)
         session = getattr(self, "session", None)
-        asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
+        if asset_catalog is None:
+            asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
         rows = []
         for symbol in normalized:
             quote = quote_map.get(symbol)

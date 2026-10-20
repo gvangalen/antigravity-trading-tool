@@ -13,12 +13,16 @@ def test_interactive_finn_worker_uses_fresh_bounded_database_connections():
     assert options["connect_args"] == {"timeout": 3, "command_timeout": 2}
 
 
-def test_api_and_other_workers_keep_normal_database_pooling():
+def test_api_and_background_workers_have_bounded_database_pools():
     options = _async_engine_options("backend")
 
     assert options["pool_pre_ping"] is True
     assert options["pool_size"] == 10
+    assert options["max_overflow"] == 5
     assert options["pool_timeout"] == 3
+    background = _async_engine_options("celery-worker-default")
+    assert background["pool_size"] == 2
+    assert background["max_overflow"] == 0
 
 
 def test_interactive_task_reuses_pre_pinged_pool_between_runs():

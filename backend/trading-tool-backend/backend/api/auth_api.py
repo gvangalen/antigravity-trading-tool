@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
-from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
+from backend.utils.rate_limit import SharedRateLimiter, client_ip
 from backend.schemas.auth_schema import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -60,7 +60,7 @@ CSRF_COOKIE_SETTINGS = dict(
     path="/",
 )
 
-auth_rate_limiter = InMemoryRateLimiter(requests_limit=10, window_seconds=300)
+auth_rate_limiter = SharedRateLimiter(requests_limit=10, window_seconds=300, namespace="auth")
 AUTH_LOGIN_EMAIL_LIMIT = 6
 AUTH_LOGIN_IP_LIMIT = 20
 AUTH_REFRESH_IP_LIMIT = 30

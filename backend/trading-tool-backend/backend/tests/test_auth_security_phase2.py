@@ -53,7 +53,9 @@ def test_client_mode_detects_mobile_header():
 
 
 def test_auth_login_rate_limit_returns_retry_after():
-    limiter = auth_api.InMemoryRateLimiter(requests_limit=1, window_seconds=60)
+    from backend.utils.rate_limit import InMemoryRateLimiter
+
+    limiter = InMemoryRateLimiter(requests_limit=1, window_seconds=60)
     limiter.check_rate_limit("auth_login_email:test@example.com")
 
     try:
@@ -99,7 +101,7 @@ def test_auth_refresh_rate_limit_applies_per_ip(monkeypatch):
 
     monkeypatch.setattr(auth_api, "auth_rate_limiter", type("Limiter", (), {"check_rate_limit": staticmethod(fake_check)})())
 
-    auth_api._apply_auth_refresh_rate_limit(_Request({"x-real-ip": "198.51.100.7"}))
+    auth_api._apply_auth_refresh_rate_limit(_Request({"x-forwarded-for": "198.51.100.7"}))
 
     assert calls == [
         (
@@ -126,7 +128,7 @@ def test_login_preserves_http_exception_rate_limit(monkeypatch):
         asyncio.run(
             auth_api.login(
                 body=type("Body", (), {"email": "henk@example.com", "password": "test123"})(),
-                request=_Request({"x-real-ip": "198.51.100.7"}),
+                request=_Request({"x-forwarded-for": "198.51.100.7"}),
                 response=Response(),
                 service=_Service(),
                 x_tradamind_client=None,

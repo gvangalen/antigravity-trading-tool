@@ -12,7 +12,7 @@ def _read(path: Path) -> str:
 def test_v2_execute_route_has_dedicated_rate_limit_and_no_reasoning_payload():
     source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
 
-    assert "execute_rate_limiter = InMemoryRateLimiter" in source
+    assert "execute_rate_limiter = SharedRateLimiter" in source
     assert 'f"user_{current_user[\'id\']}:finn_v2_execute"' in source
     assert '"/assistant/actions/execute"' not in source
     assert 'payload.get("reasoning")' not in source
@@ -21,7 +21,7 @@ def test_v2_execute_route_has_dedicated_rate_limit_and_no_reasoning_payload():
 def test_sensitive_manual_order_routes_have_rate_limits():
     source = _read(BACKEND_ROOT / "api" / "bot_api.py")
 
-    assert "order_rate_limiter = InMemoryRateLimiter" in source
+    assert "order_rate_limiter = SharedRateLimiter" in source
     assert "def _apply_sensitive_order_rate_limit" in source
     assert 'action_key="manual_order"' in source
     assert 'action_key="manual_order_preflight"' in source

@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/user";
 import { getActiveLocale, normalizeLocale } from "@/lib/i18n";
 import { logoutSession } from "@/lib/api/logoutSession.mjs";
+import { clearWorkspaceSnapshots } from "@/lib/workspaceSnapshotStore";
 
 /* =======================================================
    📌 Native Token Helpers
@@ -74,6 +75,8 @@ function clearStorageKeysByPrefixes(
 
 export function clearClientUserScopedState() {
   if (typeof window === "undefined") return;
+  clearWorkspaceSnapshots();
+  window.dispatchEvent(new Event("tradamind:auth-scope-changed"));
   clearStorageKeysByPrefixes(window.localStorage, USER_STATE_LOCAL_PREFIXES);
   clearStorageKeysByPrefixes(window.sessionStorage, USER_STATE_SESSION_PREFIXES);
 }

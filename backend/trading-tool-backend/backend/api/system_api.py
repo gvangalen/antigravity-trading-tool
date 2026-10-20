@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Cookie, Header
 
 from backend.celery_task.celery_app import celery_app
 from backend.celery_task.queue_policy import resolve_task_queue
-from backend.utils.rate_limit import InMemoryRateLimiter, client_ip
+from backend.utils.rate_limit import SharedRateLimiter, client_ip
 from backend.utils.auth_utils import decode_token, get_current_user
 from backend.services.system_health_service import SystemHealthService
 from backend.services.finn_product_analytics_service import finn_product_analytics
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-openai_runtime_probe_limiter = InMemoryRateLimiter(requests_limit=3, window_seconds=60)
+openai_runtime_probe_limiter = SharedRateLimiter(requests_limit=3, window_seconds=60, namespace="openai-probe")
 
 dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(dotenv_path=dotenv_path)

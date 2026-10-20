@@ -37,9 +37,10 @@ def _async_engine_options(build_service: str | None) -> dict:
             connect_args={"timeout": 3, "command_timeout": 2},
         )
         return options
+    worker = (build_service or "").startswith("celery-worker-")
     options.update(
-        pool_size=10,
-        max_overflow=20,
+        pool_size=2 if worker else 10,
+        max_overflow=0 if worker else 5,
         pool_pre_ping=True,
         pool_recycle=60,
         pool_timeout=3,
@@ -69,7 +70,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 SYNC_DATABASE_URL = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
-sync_engine = create_engine(SYNC_DATABASE_URL)
+sync_engine = create_engine(
+    SYNC_DATABASE_URL,
+    pool_size=2,
+    max_overflow=0 if os.getenv("TRADAMIND_BUILD_SERVICE", "").startswith("celery-worker-") else 1,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 async def validate_database_connection() -> None:

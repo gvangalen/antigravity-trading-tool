@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Deque, Dict
+from backend.services import cluster_metrics
 
 
 _COUNTER_LOCK = Lock()
@@ -25,6 +26,10 @@ _PROCESS_BUILD_TIME = os.getenv("TRADAMIND_BUILD_TIME", "unknown")
 
 
 def runtime_identity_snapshot() -> Dict[str, object]:
+    global _PROCESS_PID, _PROCESS_STARTED_AT
+    if os.getpid() != _PROCESS_PID:
+        _PROCESS_PID = os.getpid()
+        _PROCESS_STARTED_AT = datetime.now(timezone.utc)
     instance_id = f"{_PROCESS_APP_ENV}:{_PROCESS_HOSTNAME}:{_PROCESS_PID}"
     return {
         "instance_id": instance_id,
@@ -43,16 +48,19 @@ def runtime_identity_snapshot() -> Dict[str, object]:
 def increment_dispatcher_counter(name: str, amount: int = 1) -> None:
     with _COUNTER_LOCK:
         _DISPATCHER_COUNTERS[name] += max(0, int(amount))
+    cluster_metrics.record_counter("dispatcher", name, amount)
 
 
 def increment_execution_safety_counter(name: str, amount: int = 1) -> None:
     with _COUNTER_LOCK:
         _EXECUTION_SAFETY_COUNTERS[name] += max(0, int(amount))
+    cluster_metrics.record_counter("execution_safety", name, amount)
 
 
 def increment_retry_counter(task_family: str, amount: int = 1) -> None:
     with _COUNTER_LOCK:
         _RETRY_COUNTERS[task_family] += max(0, int(amount))
+    cluster_metrics.record_counter("retry", task_family, amount)
 
 
 def record_latency_sample(name: str, duration_ms: float) -> None:
@@ -62,6 +70,7 @@ def record_latency_sample(name: str, duration_ms: float) -> None:
         return
     with _LATENCY_LOCK:
         _LATENCY_SAMPLES[name].append(value)
+    cluster_metrics.record_latency(name, value)
 
 
 def _percentile(samples: list[float], percentile: float) -> float | None:
@@ -85,6 +94,7 @@ def latency_summary(name: str) -> dict[str, float | int | None]:
 
 
 def process_metrics_snapshot() -> Dict[str, object]:
+    cluster = cluster_metrics.snapshot()
     with _COUNTER_LOCK:
         dispatcher = dict(_DISPATCHER_COUNTERS)
         execution = dict(_EXECUTION_SAFETY_COUNTERS)
@@ -99,12 +109,13 @@ def process_metrics_snapshot() -> Dict[str, object]:
             "worker_truth_scope": "celery_inspect_snapshot_visible_from_current_instance",
             "counter_truth_scope": "instance_process_lifetime",
             "latency_truth_scope": "instance_process_window_last_256_samples",
-            "cluster_rollup_ready": False,
+            "cluster_rollup_ready": cluster["ready"],
             "cluster_rollup_note": (
-                "Aggregate multiple /api/system/health payloads externally for true cluster-wide "
-                "interpretation."
+                "Redis rolling 60-minute counters and approximate latency histogram bounds."
+                if cluster["ready"] else "Cluster rollup unavailable; process metrics only."
             ),
         },
+        "cluster_metrics": cluster,
         "dispatcher_counters": {
             "wave_lease_skip_count": dispatcher.get("wave_lease_skip_count", 0),
             "backlog_skip_count": dispatcher.get("backlog_skip_count", 0),
@@ -133,3 +144,11 @@ def reset_process_metrics() -> None:
         _RETRY_COUNTERS.clear()
     with _LATENCY_LOCK:
         _LATENCY_SAMPLES.clear()
+
+
+def reset_metrics_after_fork() -> None:
+    global _PROCESS_PID, _PROCESS_STARTED_AT
+    reset_process_metrics()
+    _PROCESS_PID = os.getpid()
+    _PROCESS_STARTED_AT = datetime.now(timezone.utc)
+    cluster_metrics.reset_after_fork()

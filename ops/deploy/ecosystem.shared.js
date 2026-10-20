@@ -80,6 +80,7 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "COINBASE_API_KEY",
   "COINBASE_API_SECRET",
   "REDIS_URL",
+  "TRUSTED_PROXY_CIDRS",
   "CELERY_BROKER_URL",
   "CELERY_RESULT_BACKEND",
   // FINN's runtime safety policy is configured by the protected server

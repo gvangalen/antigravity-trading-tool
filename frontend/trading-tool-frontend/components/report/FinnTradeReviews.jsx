@@ -145,11 +145,12 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   useEffect(() => {
     if (!['loading', 'failed'].includes(chartState)) return undefined;
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       fetchFinnTradeChart(review.id).then((result) => {
         setChart(result.chart);
         setChartState(result.status);
       }).catch(() => setChartState('failed'));
-    }, chartState === 'loading' ? 15000 : 30000);
+    }, chartState === 'loading' ? 15000 : 300000);
     return () => window.clearInterval(timer);
   }, [review.id, chartState]);
 
@@ -163,7 +164,9 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   }, [review.id, review.lesson?.lesson_text, review.lesson?.status]);
 
   useEffect(() => {
+    if (!['pending', 'running'].includes(analysisStatus)) return undefined;
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       fetchFinnTradeReview(review.id).then((fresh) => {
         if (fresh.analysis_status !== analysisStatus) {
           fetchFinnTradeMessages(review.id).then((history) => {
@@ -175,7 +178,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         setAnalysis(fresh.analysis_json || null);
         setAnalysisStatus(fresh.analysis_status);
       }).catch(() => {});
-    }, ['pending', 'running'].includes(analysisStatus) ? 15000 : 30000);
+    }, 15000);
     return () => window.clearInterval(timer);
   }, [review.id, analysisStatus, copy.aiHistoryError]);
 
@@ -425,6 +428,7 @@ export default function FinnTradeReviews() {
   const [weeks, setWeeks] = useState([]);
   const [selectedWeek, setSelectedWeek] = useState(null);
   const [excluded, setExcluded] = useState({});
+  const [projectionPending, setProjectionPending] = useState(false);
   const [selected, setSelected] = useState(null);
   const [deepLinkLoading, setDeepLinkLoading] = useState(false);
   const [deepLinkError, setDeepLinkError] = useState(false);
@@ -448,8 +452,8 @@ export default function FinnTradeReviews() {
   const detailRef = useRef(null);
   const reviewIdParam = useSearchParams().get('trade_review_id');
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
     setError(false);
     try {
       const result = await fetchFinnTradeReviews(50, 0, selectedWeek);
@@ -459,15 +463,24 @@ export default function FinnTradeReviews() {
       setWeekly(result?.weekly || { trades: 0, plans: 0, notes: 0 });
       setWeeks(Array.isArray(result?.weeks) ? result.weeks : []);
       setExcluded(result?.excluded || {});
+      setProjectionPending(Boolean(result?.projection_pending));
     } catch (loadError) {
       console.error('FINN trade reviews could not load:', loadError);
       setError(true);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [selectedWeek]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!projectionPending) return undefined;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load({ quiet: true });
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [projectionPending, load]);
 
   const loadImports = useCallback(async () => {
     setImportLoading(true);

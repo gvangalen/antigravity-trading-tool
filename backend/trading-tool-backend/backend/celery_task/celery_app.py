@@ -97,6 +97,13 @@ def reset_sqlalchemy_pools_after_fork(**kwargs):
 
 
 @worker_process_init.connect
+def reset_cluster_metrics_after_fork(**kwargs):
+    from backend.services.platform_metrics import reset_metrics_after_fork
+
+    reset_metrics_after_fork()
+
+
+@worker_process_init.connect
 def reset_and_warm_finn_provider_after_fork(**kwargs):
     """Finish the interactive worker's network warmup before user tasks run."""
     if os.getenv("TRADAMIND_BUILD_SERVICE") != "celery-worker-finn-interactive":

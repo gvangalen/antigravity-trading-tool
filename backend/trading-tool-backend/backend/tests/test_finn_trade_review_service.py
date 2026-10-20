@@ -81,6 +81,9 @@ def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
     calls = []
 
     class Result:
+        def fetchone(self):
+            return SimpleNamespace(legacy_or_ambiguous=0, inconsistent=0, projection_pending=False)
+
         def fetchall(self):
             return []
 
@@ -95,7 +98,7 @@ def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
     service = FinnTradeReviewService(Session())
 
     async def no_projection(_user_id):
-        return {}
+        raise AssertionError("GET must not project or write")
 
     async def prior_week(_user_id, _week_start):
         return {"week_start": "2026-10-12"}
@@ -103,7 +106,9 @@ def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
     service._project = no_projection
     service.weekly_report = prior_week
     asyncio.run(service.list_reviews(7, week_start=date(2026, 10, 12)))
-    for sql, params in calls[:2]:
+    dossier_queries = [(sql, params) for sql, params in calls if "FROM finn_trade_reviews" in sql and "ORDER BY exit_at DESC" in sql]
+    assert dossier_queries
+    for sql, params in dossier_queries:
         assert "WHERE user_id=:user_id" in sql
         assert "exit_at >= :start" not in sql
         assert params["user_id"] == 7
