@@ -6,7 +6,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 2.0 agentuitfasering
 
-Phase: `LOCAL_IN_PROGRESS`, niet gedeployed. De aparte cutover-checkout verplaatst
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #451](https://github.com/gvangalen/antigravity-trading-tool/pull/451)
+is gemerged als product-SHA `191c1199b6129c8feb305657e7d3483d8eef4048`.
+Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470300165)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39470689636)
+slaagde; daarna gaven backend-health en frontend-buildinfo ieder HTTP 200
+en exact die SHA. Deze statuswijziging krijgt zelf een nieuwe SHA; verifieer
+de uiteindelijke runtime-identiteit opnieuw. Onafhankelijke ingelogde web-
+en mobiele QA ontbreekt nog. De aparte cutover-checkout verplaatst
 de deterministische botuitvoering uit `ai_agents`, laat web en mobiel
 V2-voorstellen via dezelfde eigenaargebonden lees-, publicatie-, bevestigings-
 en uitvoeringsroute afhandelen, en verwijdert de oude assistent-actie-, status-
@@ -54,8 +61,9 @@ De herhaalde echte `gpt-6-luna` Responses-regressie slaagde met **109/109**
 operatie- en veldmatches en nul provider-, schema-, timeout-, parse- of
 validatiefouten (artifact SHA-256
 `4371c6bb6a57151b6d3dd540c75e168a4e1cd1491971e6492b98f36de3d3be3f`).
-Nog open: dode Mission Control-UI-code verwijderen, CI/deployment en onafhankelijke ingelogde
-web- en mobiele QA. Deze lokale stand is geen live-acceptatie.
+Nog open: dode Mission Control-UI-code verwijderen en onafhankelijke ingelogde
+web- en mobiele QA. De lokale en CI-bewijzen hierboven zijn geen
+live-productacceptatie.
 
 ## Weekreflectie voor alle gebruikers
 
