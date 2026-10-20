@@ -96,7 +96,7 @@ function ProgressStep({ index, title, subtitle, active, complete, locked }) {
 function Field({ label, children }) {
   return (
     <label className="block space-y-2">
-      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</span>
+      <span className="text-sm font-semibold text-slate-700">{label}</span>
       {children}
     </label>
   );
@@ -594,15 +594,18 @@ export default function OnboardingPlanPage() {
                   </Field>
 
                   <Field label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel}>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={strategy.baseAmount}
-                      onChange={(event) => setStrategy((current) => ({ ...current, baseAmount: event.target.value }))}
-                      disabled={strategyDone || savingStrategy || loading}
-                      className={inputClassName}
-                    />
+                    <div className="relative">
+                      <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 flex items-center font-bold text-slate-700">€</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={strategy.baseAmount}
+                        onChange={(event) => setStrategy((current) => ({ ...current, baseAmount: event.target.value }))}
+                        disabled={strategyDone || savingStrategy || loading}
+                        className={`${inputClassName} pl-10`}
+                      />
+                    </div>
                   </Field>
                 </div>
 

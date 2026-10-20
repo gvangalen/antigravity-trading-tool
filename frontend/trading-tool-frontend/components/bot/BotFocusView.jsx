@@ -97,6 +97,11 @@ export default function BotFocusView({
   }, [activeBot?.id, history, trades]);
   const strategyReason = decision?.strategy_reason === "Scheduled DCA amount selected from the confirmed plan"
     ? copy.scheduledDcaReason : decision?.strategy_reason;
+  const dcaSchedule = activeBot?.dca_schedule_status;
+  const nextDcaDate = dcaSchedule?.next_due_date
+    ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" })
+      .format(new Date(`${dcaSchedule.next_due_date}T12:00:00`))
+    : null;
 
   async function saveCash(event) {
     event.preventDefault();
@@ -222,6 +227,13 @@ export default function BotFocusView({
                   className="mt-2 text-sm font-bold text-blue-700 underline">{copy.deferredLiveLimits}</button>
               </section>
             ) : null}
+
+            {!activeBot.is_live && activeBot.is_active && dcaSchedule?.due_today === false && (
+              <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950" role="status">
+                <h3 className="font-bold">{copy.dcaNotDueTitle}</h3>
+                <p className="mt-1 text-sm">{copy.dcaNotDueBody?.replace("{date}", nextDcaDate || dcaSchedule.next_due_date)}</p>
+              </section>
+            )}
 
             <section className={`rounded-xl border p-4 ${riskTone}`} aria-live="polite">
               <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider"><AlertTriangle size={16} />{copy.now}</div>

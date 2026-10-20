@@ -24,6 +24,7 @@ from backend.engine.guardrails_engine import apply_guardrails
 from backend.services.exchange_service import ExchangeService
 from backend.services.bot_live_reconciliation import reconcile_live_orders
 from backend.services.finn_coach_feed_service import FinnCoachFeedService
+from backend.domain.finn_dca_plan_contract import dca_due_on_date, is_confirmed_dca_amount_rule
 
 logger = logging.getLogger(__name__)
 LIVE_EXECUTION_STALE_AFTER_MINUTES = 60
@@ -34,6 +35,49 @@ LIVE_MAX_PORTFOLIO_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_PORTFOLIO_EXPOSURE_P
 LIVE_MAX_ASSET_EXPOSURE_PCT = float(os.getenv("LIVE_MAX_ASSET_EXPOSURE_PCT", "70"))
 LIVE_MARKET_PRICE_STALE_AFTER_SECONDS = int(os.getenv("LIVE_MARKET_PRICE_STALE_AFTER_SECONDS", "300"))
 PAPER_PREVIEW_TTL_MINUTES = 5
+
+
+def _dca_schedule_status(setup: Optional[dict], report_date: date, strategy_row: Optional[dict]) -> Optional[dict]:
+    """Describe the saved DCA cadence without creating a bot decision."""
+    if not setup or not strategy_row or str(setup.get("setup_type") or "").lower() != "dca":
+        return None
+    if not setup.get("dca_frequency"):
+        return None
+    curve = strategy_row.get("decision_curve")
+    if isinstance(curve, str):
+        try:
+            curve = json.loads(curve)
+        except ValueError:
+            return None
+    mode = str(strategy_row.get("execution_mode") or "fixed").lower().strip()
+    semantics = strategy_row.get("dca_amount_semantics")
+    try:
+        base_amount = float(strategy_row.get("base_amount"))
+    except (TypeError, ValueError):
+        return None
+    # The worker treats pre-marker fixed DCA strategies as confirmed plans.
+    # Apply that same inference only when their curve is empty; custom plans
+    # still require the explicit, validated marker.
+    if mode == "fixed" and not curve:
+        semantics = "planned_exact"
+    if not is_confirmed_dca_amount_rule({
+        "setup_type": "dca", "execution_mode": mode,
+        "base_amount": base_amount,
+        "decision_curve": curve, "dca_amount_semantics": semantics,
+    }):
+        return None
+    next_due = next(
+        (report_date + timedelta(days=offset) for offset in range(62)
+         if dca_due_on_date(setup, report_date + timedelta(days=offset))),
+        None,
+    )
+    if next_due is None:
+        return None
+    return {
+        "as_of_date": report_date.isoformat(),
+        "due_today": next_due == report_date,
+        "next_due_date": next_due.isoformat(),
+    }
 
 
 def _utc_db_timestamp() -> datetime:
@@ -326,6 +370,9 @@ class BotService:
             "budget": budget,
             "paper_initial_cash_eur": float(bot.get("paper_initial_cash_eur") or 0),
             "strategy": strategy,
+            "dca_schedule_status": _dca_schedule_status(
+                strategy.get("setup") if strategy else None, date.today(), bot
+            ),
             "created_at": bot["created_at"].isoformat() if bot.get("created_at") else None,
             "updated_at": bot["updated_at"].isoformat() if bot.get("updated_at") else None,
         }
@@ -387,6 +434,9 @@ class BotService:
                     "max_asset_exposure_pct": float(100 if r["max_asset_exposure_pct"] is None else r["max_asset_exposure_pct"]),
                 },
                 "strategy": strategy,
+                "dca_schedule_status": _dca_schedule_status(
+                    strategy.get("setup") if strategy else None, date.today(), r
+                ),
                 "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
                 "updated_at": r["updated_at"].isoformat() if r.get("updated_at") else None,
             })

@@ -2272,6 +2272,8 @@
       "legacyEnvironmentHint": "Some orders did not record whether they were Paper or Live. Their environment remains unknown; the bot's current setting cannot prove where that order ran.",
       "legacyEnvironment": "Not recorded",
       "scheduledDcaReason": "The recurring purchase amount was chosen from the confirmed plan.",
+      "dcaNotDueTitle": "No DCA purchase scheduled today",
+      "dcaNotDueBody": "This setup's next purchase is scheduled for {date}. Running an assessment today will not place a Paper order.",
       "date": "Date",
       "bot": "Bot",
       "trade": "Trade",

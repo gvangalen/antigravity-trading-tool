@@ -6743,19 +6743,6 @@ export default function AIAssistant(props) {
   );
 }
 
-export function FinnPanel(props) {
-  return (
-    <Suspense fallback={null}>
-      <AIAssistantContent
-        {...props}
-        isOpen={true}
-        setIsOpen={() => {}}
-        persistent
-      />
-    </Suspense>
-  );
-}
-
 function ReasoningWidget({ reasoning }) {
   const pathname = usePathname();
   if (!reasoning) return null;
