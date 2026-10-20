@@ -1,7 +1,8 @@
 # 1000 active users: implementation and release plan
 
 Baseline checked on 2026-10-20: the production backend and frontend both report
-`191c1199b6129c8feb305657e7d3483d8eef4048`. That commit is `origin/main`.
+`e26a1b4d049a1aa57bd19f96503e2b79155fbe99`. That commit records the
+FINN V2 cutover deployment; the product code baseline is its parent `191c1199`.
 The production ecosystem configuration says the host has 1 GB RAM and records
 worker OOMs from an earlier multi-process layout. Treat the current host as a
 capacity constraint, not as proof that another worker split is safe.
@@ -36,11 +37,14 @@ capacity-proven. The live environment has no 1000-account fixture file yet.
    request-path or strict readiness check.
 2. Measure actual production memory, CPU, queue age, database connection
    ceiling, and provider quotas. Budget every proposed API and worker process.
-3. Move to a host or host group with sufficient measured RAM before separating
-   execution-critical, market/portfolio, scoring, and AI reporting workers.
-   Keep FINN interactive isolated. Start with one process per class, then tune
-   concurrency from observed queue age and RSS. Use a shared PostgreSQL and
-   Redis broker/rate-limit store across hosts.
+3. Move to a host or host group with sufficient measured RAM before selecting
+   `scaled` in `ops/deploy/capacity_profile.json`. The deploy preflight rejects
+   a scaled topology below 6 GiB RAM. The scaled profile gives execution,
+   market/portfolio, scoring, AI reporting, and FINN interactive separate
+   workers, with two API processes and a default maximum of 70 database
+   connections against a budget of 80. Measure RSS and queue age before
+   increasing concurrency. Use a shared PostgreSQL and Redis broker/rate-limit
+   store across hosts.
 
 ## Release and capacity gate
 

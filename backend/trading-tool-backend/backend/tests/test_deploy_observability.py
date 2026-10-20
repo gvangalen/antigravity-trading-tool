@@ -139,7 +139,7 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
         assert step in source
 
 
-def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() -> None:
+def test_release_identity_is_written_before_pm2_and_loaded_by_every_process(tmp_path: Path) -> None:
     deploy_source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     rollback_source = (REPO_ROOT / "ops" / "deploy" / "rollback_env.sh").read_text(encoding="utf-8")
     ecosystem_source = (REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js").read_text(encoding="utf-8")
@@ -152,13 +152,23 @@ def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() ->
     assert 'metadata_path="ops/deploy/.release_metadata.env"' in rollback_source
     assert "function loadReleaseMetadata()" in ecosystem_source
     assert "const RELEASE_METADATA_ENV = loadReleaseMetadata();" in ecosystem_source
-    # frontend, API, one bounded background worker, the isolated FINN worker,
-    # and beat all receive the immutable release metadata.
-    assert ecosystem_source.count("...RELEASE_METADATA_ENV,") == 5
+    metadata_dir = tmp_path / "ops" / "deploy"
+    metadata_dir.mkdir(parents=True)
+    (metadata_dir / ".release_metadata.env").write_text(
+        f"TRADAMIND_BUILD_COMMIT_SHA={SHA}\nTRADAMIND_BUILD_TIME=2026-10-20T18:00:00Z\n"
+    )
+    ecosystem = REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js"
+    script = "const c=require(process.argv[1]); console.log(JSON.stringify(c.createEcosystem('production').apps.map(a=>a.env)));"
+    for topology in ("compact", "scaled"):
+        env = {**os.environ, "REMOTE_DIR": str(tmp_path), "TRADAMIND_WORKER_TOPOLOGY": topology}
+        env.pop("API_WORKERS", None)
+        result = subprocess.run(["node", "-e", script, str(ecosystem)],
+                                env=env, text=True, capture_output=True, check=True)
+        assert all(app_env["TRADAMIND_BUILD_COMMIT_SHA"] == SHA for app_env in json.loads(result.stdout))
     # Explicit defaults replace obsolete PM2 process-only values when the
     # protected environment intentionally omits an otherwise safe flag.
     assert "const FINN_RUNTIME_DEFAULT_ENV =" in ecosystem_source
-    assert ecosystem_source.count("...FINN_RUNTIME_DEFAULT_ENV,") == 5
+    assert "...FINN_RUNTIME_DEFAULT_ENV," in ecosystem_source
     # Proposal policy must be identical in the gateway and FINN worker after
     # PM2 restarts; otherwise a release can pass a read-only health check while
     # action runs fail only after selection.

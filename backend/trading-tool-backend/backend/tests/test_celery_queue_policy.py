@@ -1,5 +1,7 @@
 import ast
 import importlib
+import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -59,21 +61,39 @@ def test_interactive_profile_registers_only_finn_tasks():
 
 
 def test_pm2_config_keeps_finn_isolated_and_bounds_background_queues():
-    from pathlib import Path
-
-    production_ecosystem = Path(__file__).resolve().parents[4] / "ecosystem.production.config.js"
     shared_ecosystem = Path(__file__).resolve().parents[4] / "ops" / "deploy" / "ecosystem.shared.js"
-    source = production_ecosystem.read_text() + "\n" + shared_ecosystem.read_text()
+    script = (
+        "const c=require(process.argv[1]);"
+        "console.log(JSON.stringify({db:c.configuredDbMaximum,apps:c.createEcosystem('production').apps"
+        ".filter(x=>x.name.startsWith('celery-worker')).map(x=>({name:x.name,args:x.args}))}));"
+    )
+    for topology in ("compact", "scaled"):
+        env = os.environ.copy()
+        env["TRADAMIND_WORKER_TOPOLOGY"] = topology
+        env.pop("API_WORKERS", None)
+        result = subprocess.run(["node", "-e", script, str(shared_ecosystem)],
+                                env=env, text=True, capture_output=True, check=True)
+        config = json.loads(result.stdout)
+        workers = config["apps"]
+        queues = [queue for worker in workers for queue in
+                  worker["args"].split(" -Q ", 1)[1].split(" -n ", 1)[0].split(",")]
+        assert sorted(queues) == sorted(NAMED_QUEUES)
+        assert config["db"] <= 80
+        finn = next(worker for worker in workers if worker["name"] == "celery-worker-finn-interactive")
+        assert "-Q finn_interactive" in finn["args"]
+        if topology == "scaled":
+            critical = next(worker for worker in workers if worker["name"] == "celery-worker-execution-critical")
+            assert "-Q execution_critical" in critical["args"]
+            assert "--pool=prefork" in finn["args"]
+        else:
+            assert len(workers) == 2
+            assert all("--pool=solo" in worker["args"] for worker in workers)
 
-    assert "celery-worker-default" in source
-    assert "celery-worker-finn-interactive" in source
-    assert "background: 1" in source
-    assert "finnInteractive: 1" in source
-    assert "--concurrency=${WORKER_CONCURRENCY.background}" in source
-    assert source.count("worker --pool=solo --loglevel=info") == 2
-    assert "--concurrency=${WORKER_CONCURRENCY.finnInteractive}" in source
-    assert "${queuePrefix}market_data,${queuePrefix}portfolio,${queuePrefix}scoring" in source
-    assert "${queuePrefix}finn_interactive" in source
+    over_budget = {**os.environ, "TRADAMIND_WORKER_TOPOLOGY": "scaled", "API_WORKERS": "6"}
+    result = subprocess.run(["node", "-e", script, str(shared_ecosystem)],
+                            env=over_budget, text=True, capture_output=True)
+    assert result.returncode != 0
+    assert "exceeds budget" in result.stderr
 
 
 def test_worker_concurrency_is_centralized_in_shared_ecosystem_config():
