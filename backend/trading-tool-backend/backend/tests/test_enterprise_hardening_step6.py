@@ -14,6 +14,18 @@ def test_api_adds_request_trace_id_middleware():
     assert "request.state.trace_id" in source
 
 
+def test_api_exposes_backend_duration_without_owner_data():
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    response = TestClient(app).get("/api/health")
+    assert response.status_code == 200
+    assert response.headers["server-timing"].startswith("app;dur=")
+    assert float(response.headers["server-timing"].removeprefix("app;dur=")) >= 0
+    invalid_trace = TestClient(app).get("/api/health", headers={"X-Trace-Id": "unsafe value"})
+    assert invalid_trace.headers["x-trace-id"].startswith("trdm-req-")
+
+
 def test_deploy_script_gates_pm2_processes_and_has_fallback_rebuild():
     wrapper_source = (REPO_ROOT / "deploy_live.sh").read_text()
     source = (REPO_ROOT / "ops" / "deploy" / "deploy_env.sh").read_text()

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import is_terminal_status
 from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
-from backend.infrastructure.database import async_session_factory, get_db
+from backend.infrastructure.database import async_session_factory, get_db, measure_read_connection_acquire
 from backend.infrastructure.models import FinnV2Conversation, FinnV2Run
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_schema import (
@@ -31,11 +31,13 @@ router = APIRouter()
 
 @router.get("/assistant/v2/conversations")
 async def list_finn_v2_conversations(
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List only the owner's visible FINN 2.0 conversations."""
     user_id = int(current_user["id"])
+    await measure_read_connection_acquire(db, route="finn_conversations", trace_id=getattr(request.state, "trace_id", None))
     rows = (await db.execute(
         select(FinnV2Conversation)
         .where(FinnV2Conversation.user_id == user_id)

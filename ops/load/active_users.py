@@ -71,6 +71,7 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
                 chat_budget["remaining"] -= 1
         started_at = time.monotonic()
         started = time.perf_counter()
+        response = None
         try:
             response = await client.request(
                 method, path, headers=headers,
@@ -80,7 +81,18 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
             status = response.status_code
         except httpx.HTTPError:
             status = 0
-        sample = (status, (time.perf_counter() - started) * 1000)
+        backend_ms = None
+        trace_id = None
+        if response is not None:
+            response_headers = getattr(response, "headers", {})
+            trace_id = response_headers.get("x-trace-id")
+            timing = response_headers.get("server-timing", "")
+            if timing.startswith("app;dur="):
+                try:
+                    backend_ms = max(0.0, float(timing.removeprefix("app;dur=")))
+                except ValueError:
+                    pass
+        sample = (status, (time.perf_counter() - started) * 1000, backend_ms, trace_id)
         results[name].append(sample)
         if steady_results is not None and steady_started is not None and started_at >= steady_started:
             steady_results[name].append(sample)
@@ -131,14 +143,23 @@ async def verify_identity(client, fixtures):
 def report(label, results):
     summary = {}
     for name, samples in results.items():
-        latencies = [duration for status, duration in samples if 200 <= status < 300]
-        statuses = Counter(str(status) for status, _ in samples)
+        latencies = [sample[1] for sample in samples if 200 <= sample[0] < 300]
+        statuses = Counter(str(sample[0]) for sample in samples)
+        backend_latencies = [sample[2] for sample in samples if len(sample) > 2 and sample[2] is not None]
+        slow_traces = [
+            {"trace_id": sample[3], "client_ms": round(sample[1], 2), "backend_ms": sample[2]}
+            for sample in sorted(samples, key=lambda item: item[1], reverse=True)
+            if len(sample) > 3 and sample[3]
+        ][:5]
         summary[name] = {
             "requests": len(samples),
             "statuses": dict(statuses),
             "p50_ms": percentile(latencies, 0.50),
             "p95_ms": percentile(latencies, 0.95),
-            "p95_all_ms": percentile([duration for _, duration in samples], 0.95),
+            "p95_all_ms": percentile([sample[1] for sample in samples], 0.95),
+            "backend_p95_ms": percentile(backend_latencies, 0.95),
+            "backend_timing_samples": len(backend_latencies),
+            "slow_traces": slow_traces,
             "max_ms": round(max(latencies), 2) if latencies else None,
         }
     print(json.dumps({"stage": label, "routes": summary}, sort_keys=True), flush=True)
@@ -169,7 +190,7 @@ async def monitor_stage(results, limits, deadline, stop_event, latency_abort_rou
         await asyncio.sleep(min(2, max(0, deadline - time.monotonic())))
         for name, limit in limits.items():
             samples = results.get(name, ())
-            if len(samples) >= 20 and percentile([latency for _, latency in samples], 0.95) > limit:
+            if len(samples) >= 20 and percentile([sample[1] for sample in samples], 0.95) > limit:
                 latency_abort_routes.append(name)
                 stop_event.set()
                 return

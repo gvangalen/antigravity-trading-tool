@@ -1,4 +1,7 @@
 import asyncio
+import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -36,6 +39,41 @@ def test_allowlist_and_explicit_all_mode(monkeypatch):
     monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "all")
     assert allowed_trade_review_users() is None
     assert trade_review_enabled(8)
+
+
+def test_review_read_rate_limit_does_not_block_other_async_requests(monkeypatch):
+    from backend.api import bot_api
+
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "all")
+    monkeypatch.setattr(bot_api.review_rate_limiter, "check_rate_limit",
+                        lambda *_args, **_kwargs: time.sleep(0.15))
+
+    class Reviews:
+        def __init__(self, _db):
+            pass
+
+        async def list_reviews(self, *_args):
+            return {"items": [], "total": 0}
+
+    monkeypatch.setattr(bot_api, "FinnTradeReviewService", Reviews)
+    request = SimpleNamespace(state=SimpleNamespace(trace_id="test-review-read"))
+    db = SimpleNamespace(connection=AsyncMock())
+
+    async def exercise():
+        started = time.perf_counter()
+
+        async def ticker():
+            await asyncio.sleep(0.02)
+            return time.perf_counter() - started
+
+        tick = asyncio.create_task(ticker())
+        review = asyncio.create_task(list_finn_trade_reviews(
+            request, current_user={"id": 7}, db=db,
+        ))
+        assert await tick < 0.10
+        assert (await review)["total"] == 0
+
+    asyncio.run(exercise())
 
 
 def test_disabled_api_and_coach_do_not_query_storage(monkeypatch):

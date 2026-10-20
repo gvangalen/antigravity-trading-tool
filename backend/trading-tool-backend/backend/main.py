@@ -2,9 +2,11 @@ import sys
 import os
 import logging
 import importlib
+import re
 import traceback
 import uuid
 import asyncio
+from time import perf_counter
 from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -76,10 +78,25 @@ def _is_trusted_same_origin_request(request) -> bool:
 
 @app.middleware("http")
 async def request_trace_id_middleware(request, call_next):
-    trace_id = request.headers.get("x-trace-id") or f"trdm-req-{uuid.uuid4().hex[:12]}"
+    supplied_trace_id = request.headers.get("x-trace-id", "")
+    trace_id = (
+        supplied_trace_id
+        if re.fullmatch(r"[A-Za-z0-9._:-]{1,80}", supplied_trace_id)
+        else f"trdm-req-{uuid.uuid4().hex[:12]}"
+    )
     request.state.trace_id = trace_id
+    started = perf_counter()
     response = await call_next(request)
+    elapsed_ms = (perf_counter() - started) * 1000
     response.headers["X-Trace-Id"] = trace_id
+    response.headers["Server-Timing"] = f"app;dur={elapsed_ms:.2f}"
+    if elapsed_ms >= 500 and request.url.path in {
+        "/api/workspace/asset", "/api/assistant/v2/conversations", "/api/bot/trade-reviews",
+    }:
+        logger.info(
+            "Slow API read path=%s pid=%s trace_id=%s status=%s app_ms=%.2f",
+            request.url.path, os.getpid(), trace_id[:80], response.status_code, elapsed_ms,
+        )
     return response
 
 

@@ -132,6 +132,53 @@ def test_capacity_load_identity_and_error_gate():
     assert harness["stage_exceeds_latency_limit"]({}, {"workspace": 200}) == ["workspace"]
 
 
+def test_capacity_load_reports_backend_timing_and_slow_trace():
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    summary = harness["report"]("diagnostic", {
+        "workspace": [(200, 1200, 800, "trace-one"), (200, 100, 40, "trace-two")],
+    })["workspace"]
+    assert summary["backend_p95_ms"] == 800
+    assert summary["backend_timing_samples"] == 2
+    assert summary["slow_traces"][0] == {
+        "trace_id": "trace-one", "client_ms": 1200, "backend_ms": 800,
+    }
+
+
+def test_capacity_load_keeps_bearer_header_across_requests():
+    import time
+    from collections import defaultdict
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    stop = asyncio.Event()
+
+    class Client:
+        def __init__(self):
+            self.request_headers = []
+
+        async def request(self, _method, _path, *, headers, json):
+            self.request_headers.append(dict(headers))
+            if len(self.request_headers) == 2:
+                stop.set()
+            return SimpleNamespace(status_code=200, headers={
+                "server-timing": "app;dur=5.0", "x-trace-id": "trace-from-server",
+            })
+
+    client = Client()
+    results = defaultdict(list)
+    asyncio.run(harness["virtual_user"](
+        client, {"user_id": 42, "access_token": "fixture-token"},
+        time.monotonic() + 1, 0.01, None, results, stop,
+    ))
+
+    assert client.request_headers == [
+        {"Authorization": "Bearer fixture-token"},
+        {"Authorization": "Bearer fixture-token"},
+    ]
+    assert sum(map(len, results.values())) == 2
+    assert all(sample[2:] == (5.0, "trace-from-server") for route in results.values() for sample in route)
+
+
 def test_capacity_load_operator_gate_requires_explicit_continue(monkeypatch):
     harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
     monkeypatch.setattr("builtins.input", lambda prompt: "no")

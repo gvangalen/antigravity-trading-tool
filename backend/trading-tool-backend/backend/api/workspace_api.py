@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.infrastructure.database import get_db
+from backend.infrastructure.database import get_db, measure_read_connection_acquire
 from backend.services.workspace_data_service import WorkspaceDataService
 from backend.utils.auth_utils import get_current_user
 
@@ -11,6 +11,7 @@ router = APIRouter()
 
 @router.get("/workspace/asset")
 async def get_asset_workspace(
+    request: Request,
     symbol: str = Query("BTC", min_length=1, max_length=20),
     market_period: str = Query("day", regex="^(day|week|month|quarter)$"),
     macro_period: str = Query("day", regex="^(day|week|month|quarter)$"),
@@ -24,6 +25,7 @@ async def get_asset_workspace(
         for item in watchlist_symbols.split(",")
         if item.strip()
     ]
+    await measure_read_connection_acquire(db, route="workspace", trace_id=getattr(request.state, "trace_id", None))
     service = WorkspaceDataService(db)
     return await service.get_asset_workspace(
         int(current_user["id"]),
