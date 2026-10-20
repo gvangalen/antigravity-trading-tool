@@ -4,9 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-tradereview: gecontroleerde fixtureprijs (21 oktober 2026)
+
+Phase: `LOCAL_CANDIDATE_VALIDATED`, nog niet gedeployed. De diagnoseversie
+uit [PR #477](https://github.com/gvangalen/antigravity-trading-tool/pull/477)
+is live op `3933ee87a2d68dde02aebbac88bd6a7a94720bb2`; vijf PR- en
+main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39517296357)
+slaagden. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en die
+SHA. Onafhankelijke [QA-run 39517479852](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39517479852)
+kwam niet aan de dossiercontrole toe: de beschermde Paper-uitvoering stopte
+veilig omdat een actuele, gecontroleerde EUR-prijs ontbrak. QA-status
+`INCOMPLETE`, verdict `NOT_ACCEPTED`, gesaniteerd artifact SHA-256
+`3bf33fb12528c85ff223be1c4aef45076eeceb346c8022af144820fca0e5537f`.
+Twee fixture-execution-calls, nul Live-trading-calls en nul live-botactivaties
+zijn gemeten.
+
+De gesloten-review-fixture test de Paper-ledger-naar-dossierketen, niet de
+live koersaanvoer. De lokale kandidaat geeft alleen tijdens de twee
+uitvoeringen voor het inactieve, sleutelvrije QA-kindaccount een gecontroleerde
+EUR-testkoers aan de bestaande Paper-uitvoeringsfunctie. De processcope wordt
+direct daarna hersteld; markttabellen, applicatieworkers en productprijsregels
+blijven ongewijzigd. Dit bewijst bij slagen geen automatische Paper-aankoop op
+een echte actuele koers. De afwijzing bij ontbrekende EUR-prijs blijft apart
+veiligheidbewijs.
+
+Gerichte fixture-regressie **6/6** en root backend **3575 geslaagd,
+3 bestaande skips**. Selector-, actie-, frontend- en mobiele productcode zijn
+ongewijzigd ten opzichte van de voorafgaande live kandidaat; de daar gemeten
+16/16 actiecontracten, 19/19 adapters en echte Responses 20/20 + 109/109
+blijven de betreffende releasepoorten.
+
 ## Gesloten Paper-tradereview: veldspecifieke diagnose (21 oktober 2026)
 
-Phase: `PR_CI_PENDING`, nog niet gedeployed. Diagnosebranch
+Phase: `LIVE_QA_NOT_ACCEPTED`. Diagnosebranch
 `codex/closed-paper-review-diagnostics`, codecommit `095e3dec2` en
 [PR #477](https://github.com/gvangalen/antigravity-trading-tool/pull/477).
 [PR #475](https://github.com/gvangalen/antigravity-trading-tool/pull/475)
