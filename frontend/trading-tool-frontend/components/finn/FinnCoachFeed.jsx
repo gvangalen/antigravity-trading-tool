@@ -113,8 +113,8 @@ export default function FinnCoachFeed({ onDiscuss }) {
                 {item.symbol ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{item.symbol}</span> : null}
               </div>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
-              <time className="mt-1 block text-xs text-slate-400" dateTime={item.updated_at}>
-                {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.updated_at))}
+              <time className="mt-1 block text-xs text-slate-400" dateTime={item.created_at}>
+                {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}
               </time>
             </div>
             {item.status === "unread" || item.status === "read" ? (
