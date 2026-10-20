@@ -9,18 +9,37 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 Phase: `LOCAL_IN_PROGRESS`, niet gedeployed. De aparte cutover-checkout verplaatst
 de deterministische botuitvoering uit `ai_agents`, laat web en mobiel
 V2-voorstellen via dezelfde eigenaargebonden lees-, publicatie-, bevestigings-
-en uitvoeringsroute afhandelen, en verwijdert de oude assistent-actie- en
-statusendpoints. De niet meer aangeroepen eerste-dashboardbriefingtaken zijn
+en uitvoeringsroute afhandelen, en verwijdert de oude assistent-actie-, status-
+en chatsessie-endpoints. De V2-uitvoeringsroute roept de oude `FinnPlanService`
+niet meer aan. De niet meer aangeroepen eerste-dashboardbriefingtaken zijn
 uit de onboarding-worker en queue-registratie gehaald; workerobservatie volgt
 nu de coachfeed- en rapportgeneratie. De gesprek-, score-, feed- en
-rapportbronnen blijven bestaan.
+rapportbronnen blijven bestaan. De oude `FinnPlanService` en Mission Control-
+UI-code hebben geen actieve productie-aanroepers meer, maar staan nog in de
+repository met historische tests en zijn nog niet fysiek verwijderd. Web- en
+mobiele dashboardprojecties lezen de actuele `reported_scores` nu rechtstreeks
+uit dezelfde Score 2.0-beoordeling als Analyse en FINN; de oude parallelle
+`get_scores_for_symbol`-uitlezing en ongebruikte `market_data/interpreted`-route
+met een fictieve scorefallback zijn verwijderd.
 
-Build-bewijs voor deze lokale stand: backend **3943 geslaagd, 3 bestaande
-skips**; webbuild, typecheck, i18n-lint, 15 i18n-tests en 27 commandchecks
-geslaagd; mobiele typecheck, 14 chattests, webbundle en lint met 0 errors
-geslaagd. De mobiele lintwaarschuwingen zijn bestaand. Nog open: dode
-Mission Control-code verwijderen, lokale actiecontractmatrix en echte
-Responses-proef opnieuw draaien, CI/deployment en onafhankelijke ingelogde
+Build-bewijs voor deze lokale stand: backend **3949 geslaagd, 3 bestaande
+skips**; webbuild, typecheck, i18n-lint, i18n-tests, 27 commandchecks,
+8 voorsteltests en `audit:high` geslaagd. Mobiele typecheck, 16 chattests,
+web-, iOS- en Android-bundels, en lint met 0 errors geslaagd; de 110
+lintwaarschuwingen zijn bestaand. De lokale workeractiecontractmatrix
+slaagde met **16/16 contracten en 19/19 adaptertests**; de echte
+Responses-ontwikkelproef slaagde met **20/20** operatie- en veldmatches.
+Een eerste regressierun vond één direct-order-fout; na reparatie slaagde de
+echte `gpt-6-luna` Responses-regressie met **109/109** operatie- en
+veldmatches, zonder provider-, schema-, parse- of validatiefout. Een aparte
+review vond dat mobiele destructieve voorstellen alleen een object-ID en
+handmatige orders alleen het asset konden tonen. Het volledige orderveld staat
+nu in de reviewprojectie; mobiele bevestiging van delete-, activatie-,
+deactivatie- en rebalancevoorstellen blijft uitgeschakeld totdat een
+eigenaargeverifieerde doelnaam en concreet gevolg in de review staan. De
+gerichte mobiele reviewtests (16/16) en backendprojectietests (8/8) slagen.
+Nog open: dode Mission Control-code met
+vervangende V2-dekking verwijderen, CI/deployment en onafhankelijke ingelogde
 web- en mobiele QA. Deze lokale stand is geen live-acceptatie.
 
 ## Weekreflectie voor alle gebruikers
