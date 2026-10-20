@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mobiele FINN-feed en gesloten Paper-reflectie (21 oktober 2026)
 
-Phase: `LOCAL_CANDIDATE_VALIDATED`, nog niet gedeployed of onafhankelijk live
-geaccepteerd. Branch: `codex/mobile-finn-feed-cutover`.
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #471](https://github.com/gvangalen/antigravity-trading-tool/pull/471)
+is gemerged als productcommit `dda19dce00d6a42b53fac580e39273df4232aa78`
+vanaf kandidaat `8b97a103ca6c2562b4366e602428e37a40b50dbc`.
 
 De mobiele werkruimtes tonen dezelfde eigenaargebonden coachfeed in plaats van
 een pagina-afhankelijke Today-briefing. Het oude lege briefingcontract is uit
@@ -32,8 +33,18 @@ en regression **109/109** (SHA-256
 `75407be96f65207d8d34b3fdb2ea3a4a08a6aedb8174ea61a82ea32075660b29`),
 beide zonder provider-, schema-, parse-, validatie- of timeoutfalen.
 
-CI, Auto Deploy, publieke backend/frontend-SHA en onafhankelijke native
-mobiele acceptatie ontbreken nog. De bestaande QA-agent moet daarnaast via de
+Alle vijf [PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39508735324)
+en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39509082075)
+slaagden. De eerste overlappende
+[Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39509289816)
+faalde op een SHA-mismatch met de voorgaande release. De opvolgende
+[Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39509360845)
+slaagde. Publieke backend-health en frontend-buildinfo gaven daarna beide
+HTTP 200 en exact `dda19dce00d6a42b53fac580e39273df4232aa78`.
+Een latere status-only commit kan de publieke SHA veranderen; QA bindt aan
+de dan actuele gelijke backend/frontend-SHA.
+
+Onafhankelijke native mobiele acceptatie ontbreekt nog. De bestaande QA-agent moet daarnaast via de
 beschermde fixture één gecontroleerde Paper-aankoop en volledige verkoop tot
 het blijvende tradereviewdossier en FINN-reflectie volgen. Build heeft die
 fixture niet aangeroepen. Exchange-import en Live-orders vallen buiten deze
@@ -47,7 +58,7 @@ en de onbereikbare Mission Control/Today-presentatie zijn uit de actieve
 webroute verwijderd. Scoreberekening, dataverzameling, rapportage,
 botuitvoering en trade-review blijven gespecialiseerde ondersteunende
 services, geen zelfstandige gesprekscoaches. De mobiele legacy-briefingvorm
-en native mobiele acceptatie zijn nog niet afgerond.
+is in PR #471 verwijderd; native mobiele acceptatie is nog niet afgerond.
 
 Na [PR #466](https://github.com/gvangalen/antigravity-trading-tool/pull/466)
 is de taalwisselreparatie gemerged als `19ddf25faf4b71d40c7f0855f1b586f669e82ba7`.
