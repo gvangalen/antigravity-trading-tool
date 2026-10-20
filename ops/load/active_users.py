@@ -217,6 +217,21 @@ async def run(args, fixtures):
                                  steady_results=steady_results, steady_started=steady_started)
                     for fixture in fixtures[:users]
                 ))
+            except asyncio.CancelledError:
+                # asyncio.run translates the operator's first Ctrl-C into
+                # cancellation. Keep the partial route evidence even when a
+                # database or host stop gate interrupts the stage.
+                stop_event.set()
+                report(f"{users} users / interrupted ramp + steady", results)
+                report(f"{users} users / interrupted steady interval", steady_results)
+                print(json.dumps({
+                    "stage_aborted": {
+                        "users": users,
+                        "reason": "operator_interrupt",
+                        "steady_seconds_observed": round(max(0, time.monotonic() - steady_started), 2),
+                    }
+                }), flush=True)
+                raise
             finally:
                 monitor.cancel()
                 await asyncio.gather(monitor, return_exceptions=True)
