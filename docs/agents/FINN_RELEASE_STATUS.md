@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-tradereview: veldspecifieke diagnose (21 oktober 2026)
 
-Phase: `LOCAL_DIAGNOSTIC_CANDIDATE`, nog niet gedeployed. [PR #475](https://github.com/gvangalen/antigravity-trading-tool/pull/475)
+Phase: `PR_CI_PENDING`, nog niet gedeployed. Diagnosebranch
+`codex/closed-paper-review-diagnostics`, codecommit `095e3dec2` en
+[PR #477](https://github.com/gvangalen/antigravity-trading-tool/pull/477).
+[PR #475](https://github.com/gvangalen/antigravity-trading-tool/pull/475)
 is op product-SHA `a7445f2344426424fc758bf5ea58b7a6d4ec92cb` live gezet.
 Alle vijf PR- en main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39515842618)
 slaagden; publieke backend-health en frontend-buildinfo gaven beide HTTP 200
