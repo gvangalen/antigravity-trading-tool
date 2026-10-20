@@ -1,8 +1,20 @@
 # 1000 active users: implementation and release plan
 
-Latest verified production baseline on 2026-10-20: backend health and frontend
-build info both returned HTTP 200 and SHA
-`465b3191d78d86e7b381714efe31114add9f29a4`. The scaled topology has
+Most recent measured production runtime on 2026-10-20: backend health and
+frontend build info both returned HTTP 200 and SHA
+`159b03390060e279c81e7db16f63c7bc1de10623`. Independent QA's 100:120
+and 500:120 read stages passed with all 1,308 and 6,462 GETs returning HTTP
+200. Steady workspace/FINN/review p95 was 39/9/32 ms at 100 users and
+51/15/16 ms at 500. The 1,000-user stage stopped under the former count-only
+idle-transaction gate before its steady interval completed. Sampled idle
+counts were 1, 3, 16 over 32 seconds, but individual transactions were at
+most 0.5 seconds old, none persisted across samples, no queries were blocked,
+PostgreSQL peaked at 45/100 connections, and idle count returned to zero
+within eight seconds of stop. Filtered access logs showed 6,302 read-route
+responses, all HTTP 200, without reliable latency data. QA deactivated every
+synthetic account and removed all private token files. The 1,000-user stage
+remains unaccepted and must be rerun under the refined gate below.
+The scaled topology has
 two API workers and separate critical/market/scoring/AI/FINN workers.
 Independent QA owner canaries passed for workspace and FINN conversation
 content; trade-review body ownership remains unproven because canary lists
@@ -147,10 +159,15 @@ age, application name, and blocking relationships as well as the total count.
 Abort a stage immediately on an idle transaction older than 60 seconds, a
 blocked writer or execution-critical query, fewer than 20 usable free
 PostgreSQL connections, or rising HTTP errors or queue age. Also abort if the
-same idle transaction persists and ages across two samples at least 10 seconds
-apart, or if the idle count exceeds its pre-stage baseline in three successive
-samples spanning at least 20 seconds. A single subsecond transaction that is
-gone at the next sample is not a stop signal. After task activity settles,
+same idle transaction (same PID and `xact_start`) persists and ages across two
+samples at least 10 seconds apart. An idle count above baseline for three
+successive samples spanning at least 20 seconds is a warning: promptly resample
+the individual transaction identities and ages, connection headroom, blocked
+queries, route errors, and queue age while the stage is running. Stop the stage
+if those checks cannot establish that the hard gates remain clear. Short transactions
+with new `xact_start` values are expected during concurrent reads and do not
+trigger a count-only stop. Stop if that investigation finds a persistent
+transaction or another hard gate. After task activity settles,
 confirm that the idle count returns to its pre-stage baseline before starting
 the next load stage. A 1000-active-user claim requires a sustained stage
 meeting these provisional gates: workspace p95 at most 2 seconds, FINN-conversation

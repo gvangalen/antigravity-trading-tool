@@ -243,6 +243,54 @@ def test_capacity_load_reports_steady_samples_before_error_abort(monkeypatch, ca
     assert reports[1]["routes"]["trade_reviews"]["statuses"] == {"500": 1}
 
 
+def test_capacity_load_reports_partial_routes_on_operator_cancel(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    scope = harness["run"].__globals__
+    started = asyncio.Event()
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+    async def identity(_client, _fixtures):
+        pass
+
+    async def pending(_client, _fixture, _deadline, _think, _chat, results, _stop,
+                      initial_spread_seconds=0, steady_results=None, steady_started=None):
+        results["workspace"].append((200, 25))
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setitem(scope, "verify_identity", identity)
+    monkeypatch.setitem(scope, "virtual_user", pending)
+    monkeypatch.setattr(scope["httpx"], "AsyncClient", lambda **_: Client())
+    args = SimpleNamespace(
+        max_users=1, base_url="http://127.0.0.1:8000", timeout=1,
+        include_chat=False, stages="1:120", think_seconds=0.01,
+        p95_limits={"workspace": 2000}, between_stage_pause_seconds=0,
+        allow_production=False,
+    )
+
+    async def cancel():
+        task = asyncio.create_task(harness["run"](args, [{"user_id": 7, "access_token": "fixture"}]))
+        await asyncio.wait_for(started.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(cancel())
+    reports = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert reports[0]["routes"]["workspace"]["statuses"] == {"200": 1}
+    assert reports[0]["stage"].endswith("interrupted ramp + steady")
+    assert reports[1]["stage"].endswith("interrupted steady interval")
+    assert reports[2]["stage_aborted"]["reason"] == "operator_interrupt"
+
+
 def test_capacity_load_rejects_nonfinite_production_latency_gate(monkeypatch):
     import sys
 
