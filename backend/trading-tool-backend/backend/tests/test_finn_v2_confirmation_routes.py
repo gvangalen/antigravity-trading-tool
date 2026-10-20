@@ -94,10 +94,10 @@ def test_execution_replay_does_not_consume_a_second_mutation_rate_slot(monkeypat
 
     assert result["status"] == "already_executed"
     assert calls == []
-    assert invalidated_users == [7]
+    assert invalidated_users == []
 
 
-def test_v2_execution_invalidates_the_finn_plan_runtime_projection(monkeypatch):
+def test_v2_execution_does_not_call_retired_finn_plan_projection(monkeypatch):
     monkeypatch.setattr(
         "backend.api.ai_assistant_api.execute_rate_limiter.check_rate_limit",
         lambda *args, **kwargs: None,
@@ -134,4 +134,4 @@ def test_v2_execution_invalidates_the_finn_plan_runtime_projection(monkeypatch):
         )
     )
 
-    assert invalidated_users == [7]
+    assert invalidated_users == []

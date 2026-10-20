@@ -272,12 +272,6 @@ def _apply_assistant_rate_limit(
     return ip_addr, user_limit
 
 
-def _new_finn_plan_service(db: AsyncSession, *, trace_id: Optional[str] = None):
-    from backend.services.finn_plan_service import FinnPlanService
-
-    return FinnPlanService(db, trace_id=trace_id)
-
-
 @router.post("/assistant/chat", response_model=AssistantChatResponse)
 async def assistant_chat(
     request: AssistantChatRequest,
@@ -917,7 +911,4 @@ async def assistant_v2_execute_proposal(
             expected_payload_hash=request.expected_payload_hash,
         )
     ).dict()
-    # FINN Today reads its owner-scoped projection directly on each request.
-    from backend.services.finn_plan_service import FinnPlanService
-    FinnPlanService.invalidate_runtime_caches_for_user(current_user["id"])
     return result
