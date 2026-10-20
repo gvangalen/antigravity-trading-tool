@@ -9,6 +9,9 @@ from unittest.mock import AsyncMock, patch
 from backend.infrastructure.repositories.asset_catalog_repository import AssetCatalogRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
+from backend.services.macro_data_service import MacroDataService
+from backend.services.market_data_service import MarketDataService
+from backend.services.technical_data_service import TechnicalDataService
 from backend.services.workspace_data_service import (
     WorkspaceDataService,
     _aggregate_by_name,
@@ -680,7 +683,7 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
 
     quote = ExpiringQuote()
     service = object.__new__(WorkspaceDataService)
-    service.session = object()
+    service.session = SimpleNamespace(execute=AsyncMock())
     service.market = SimpleNamespace(get_latest_snapshot=AsyncMock(return_value=quote))
     service.macro = SimpleNamespace()
     service.technical = SimpleNamespace()
@@ -700,6 +703,9 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
         def __init__(self, _session):
             pass
 
+        async def get_asset(self, _symbol):
+            return {"asset_class": "crypto"}
+
         async def get_assets(self, _symbols):
             quote.expired = True
             return {"BTC": {"display_name": "Bitcoin", "asset_class": "crypto"}}
@@ -710,6 +716,28 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
     assert result["quote"]["price"] == 64000.0
     assert result["quote"]["change_24h"] == 1.5
     assert result["quote"]["volume"] == 1200.0
+    for method in (service._market_rows, service._macro_rows, service._technical_rows):
+        assert method.await_args.kwargs["asset_class"] == "crypto"
+
+
+def test_prefetched_workspace_asset_class_skips_isolated_scope_reads():
+    async def check():
+        for service_class in (MarketDataService, MacroDataService, TechnicalDataService):
+            service = service_class(AsyncMock())
+            service._get_asset_scope = AsyncMock(side_effect=AssertionError("nested asset lookup"))
+            repository = SimpleNamespace(list_scope_configs=AsyncMock(return_value=[]))
+            if isinstance(service, TechnicalDataService):
+                service.repository = repository
+            else:
+                service.preference_repository = repository
+            result = await service.resolve_effective_preferences(
+                7, symbol="BTC", asset_class="crypto",
+            )
+            assert result["asset_class"] == "crypto"
+            service._get_asset_scope.assert_not_awaited()
+            repository.list_scope_configs.assert_awaited_once()
+
+    asyncio.run(check())
 
 
 def test_asset_catalog_read_failure_rolls_back_before_default_fallback():
