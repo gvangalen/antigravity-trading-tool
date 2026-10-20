@@ -156,12 +156,26 @@ def test_capacity_load_stops_active_stage_on_error_or_latency():
     async def check():
         stop = asyncio.Event()
         results = defaultdict(list)
+        steady_results = defaultdict(list)
         await asyncio.wait_for(harness["virtual_user"](
             FailingClient(), {"user_id": 42, "access_token": "fixture"},
             time.monotonic() + 30, 10, None, results, stop,
+            steady_results=steady_results, steady_started=time.monotonic() - 1,
         ), timeout=1)
         assert stop.is_set()
         assert sum(map(len, results.values())) == 1
+        assert sum(map(len, steady_results.values())) == 1
+
+        ramp_results = defaultdict(list)
+        ramp_steady_results = defaultdict(list)
+        ramp_stop = asyncio.Event()
+        await harness["virtual_user"](
+            FailingClient(), {"user_id": 44, "access_token": "fixture"},
+            time.monotonic() + 30, 10, None, ramp_results, ramp_stop,
+            steady_results=ramp_steady_results, steady_started=time.monotonic() + 30,
+        )
+        assert sum(map(len, ramp_results.values())) == 1
+        assert not ramp_steady_results
 
         # A stopped stage must not start a delayed virtual user request.
         delayed_results = defaultdict(list)

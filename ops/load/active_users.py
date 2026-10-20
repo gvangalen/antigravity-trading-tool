@@ -51,7 +51,7 @@ def percentile(values, fraction):
 
 
 async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results, stop_event,
-                       initial_spread_seconds=0):
+                       initial_spread_seconds=0, steady_results=None, steady_started=None):
     rng = random.Random(fixture["user_id"])
     headers = {"Authorization": f"Bearer {fixture['access_token']}"}
     choices = list(ROUTES)
@@ -69,6 +69,7 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
                 name, method, path, _ = ROUTES[0]
             else:
                 chat_budget["remaining"] -= 1
+        started_at = time.monotonic()
         started = time.perf_counter()
         try:
             response = await client.request(
@@ -79,7 +80,10 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
             status = response.status_code
         except httpx.HTTPError:
             status = 0
-        results[name].append((status, (time.perf_counter() - started) * 1000))
+        sample = (status, (time.perf_counter() - started) * 1000)
+        results[name].append(sample)
+        if steady_results is not None and steady_started is not None and started_at >= steady_started:
+            steady_results[name].append(sample)
         if not 200 <= status < 300:
             stop_event.set()
             break
@@ -196,27 +200,31 @@ async def run(args, fixtures):
                 raise ValueError("Each stage needs positive duration and one distinct fixture per active user")
             await verify_identity(client, fixtures[:users])
             results = defaultdict(list)
+            steady_results = defaultdict(list)
             stop_event = asyncio.Event()
             latency_abort_routes = []
             # Keep the requested duration after the final fixture has joined;
             # the deterministic first-request spread is a separate ramp.
-            deadline = time.monotonic() + args.think_seconds + seconds
+            steady_started = time.monotonic() + args.think_seconds
+            deadline = steady_started + seconds
             monitor = asyncio.create_task(monitor_stage(
                 results, args.p95_limits, deadline, stop_event, latency_abort_routes,
             ))
             try:
                 await asyncio.gather(*(
                     virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results,
-                                 stop_event, initial_spread_seconds=args.think_seconds)
+                                 stop_event, initial_spread_seconds=args.think_seconds,
+                                 steady_results=steady_results, steady_started=steady_started)
                     for fixture in fixtures[:users]
                 ))
             finally:
                 monitor.cancel()
                 await asyncio.gather(monitor, return_exceptions=True)
-            summary = report(f"{users} users / {seconds}s steady (+{args.think_seconds:g}s ramp)", results)
+            all_summary = report(f"{users} users / ramp + {seconds}s steady", results)
             reject_aborted_stage(latency_abort_routes)
-            if stage_has_blocking_errors(summary):
+            if stage_has_blocking_errors(all_summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")
+            summary = report(f"{users} users / {seconds}s steady p95", steady_results)
             exceeded = stage_exceeds_latency_limit(summary, args.p95_limits)
             if exceeded:
                 raise RuntimeError(f"Load stage exceeded p95 limits for {', '.join(exceeded)}; refusing a higher stage")
