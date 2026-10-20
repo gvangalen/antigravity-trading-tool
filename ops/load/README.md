@@ -24,7 +24,11 @@ The harness accepts the exact production origin `https://tradamind.com` with
 `--allow-production`, or a loopback origin for local checks. Before each stage
 it verifies `/api/auth/me` returns the expected account ID and email for every
 fixture. The default profile mixes authenticated workspace, FINN conversation,
-and trade-review reads with ten seconds of average think time. It stops before
+and trade-review reads with ten seconds of average think time. Each fixture's
+first request is spread deterministically across that think-time window, so
+the stage measures concurrently active users without a synchronized login
+burst. The configured stage duration starts after this ramp, so `1000:300`
+allows 300 seconds with all fixtures active after the ten-second ramp. It stops before
 the next stage on any non-2xx response or timeout and reports successful and
 all-response p95 separately. Production runs require explicit p95 limits for all three routes and at least
 30 seconds between stages. The example uses conservative exploratory stop
@@ -32,8 +36,9 @@ limits; an operator must also inspect worker restarts, queue age, database
 headroom and host memory during each pause. A multi-stage production run
 requires an interactive terminal and the operator must type `CONTINUE` after
 each pause. The script refuses escalation if any route is unmeasured or exceeds
-its all-response p95 limit. During a stage, any non-2xx response or timeout
-stops new requests immediately; a route with at least 20 samples above its
+its steady-phase all-response p95 limit. The harness reports all-phase status
+counts and a separate steady-phase latency summary. During a stage, any non-2xx response or timeout
+stops new requests immediately; a route with at least 20 steady-phase samples above its
 p95 limit also stops the stage. Requests already in flight can finish. It never submits orders. To include
 controlled FINN chat, use separately approved accounts and add
 `--include-chat --max-chat-requests 50`; the provisioned capacity fixture tokens
