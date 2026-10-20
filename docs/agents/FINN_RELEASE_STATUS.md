@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-tradereview: gecontroleerde fixtureprijs (21 oktober 2026)
 
-Phase: `LOCAL_CANDIDATE_VALIDATED`, nog niet gedeployed. De diagnoseversie
+Phase: `PR_CI_PENDING`, nog niet gedeployed. Kandidaatbranch
+`codex/closed-paper-review-controlled-quote`, codecommit `59bbdc76e` en
+[PR #478](https://github.com/gvangalen/antigravity-trading-tool/pull/478).
+De diagnoseversie
 uit [PR #477](https://github.com/gvangalen/antigravity-trading-tool/pull/477)
 is live op `3933ee87a2d68dde02aebbac88bd6a7a94720bb2`; vijf PR- en
 main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39517296357)
