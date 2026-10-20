@@ -96,6 +96,27 @@ def test_pm2_config_keeps_finn_isolated_and_bounds_background_queues():
     assert "exceeds budget" in result.stderr
 
 
+def test_tracked_production_profile_selects_budgeted_scaled_topology():
+    shared_ecosystem = Path(__file__).resolve().parents[4] / "ops" / "deploy" / "ecosystem.shared.js"
+    script = (
+        "const c=require(process.argv[1]);"
+        "console.log(JSON.stringify({topology:c.WORKER_TOPOLOGY,"
+        "api:c.API_WORKERS,db:c.configuredDbMaximum,"
+        "apps:c.createEcosystem('production').apps.map(x=>x.name)}));"
+    )
+    env = os.environ.copy()
+    for name in ("TRADAMIND_WORKER_TOPOLOGY", "API_WORKERS", "DB_CONNECTION_BUDGET"):
+        env.pop(name, None)
+    result = subprocess.run(["node", "-e", script, str(shared_ecosystem)],
+                            env=env, text=True, capture_output=True, check=True)
+    config = json.loads(result.stdout)
+    assert config["topology"] == "scaled"
+    assert config["api"] == 2
+    assert config["db"] == 70
+    assert len(config["apps"]) == 9
+    assert "celery-worker-execution-critical" in config["apps"]
+
+
 def test_worker_concurrency_is_centralized_in_shared_ecosystem_config():
     from pathlib import Path
 
