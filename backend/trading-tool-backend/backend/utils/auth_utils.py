@@ -6,7 +6,7 @@ from typing import Dict, Any
 
 import jwt
 from jwt import PyJWTError
-from fastapi import Cookie, Header, HTTPException, status
+from fastapi import Cookie, Header, HTTPException, Request, status
 import bcrypt
 from dotenv import load_dotenv
 
@@ -83,9 +83,17 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def decode_token(token: str, *, verify_exp: bool = True) -> Dict[str, Any]:
+CAPACITY_FIXTURE_ROUTES = frozenset({
+    "/api/workspace/asset",
+    "/api/assistant/v2/conversations",
+    "/api/bot/trade-reviews",
+})
+
+
+def decode_token(token: str, *, verify_exp: bool = True,
+                 allow_capacity_fixture: bool = False) -> Dict[str, Any]:
     try:
-        return jwt.decode(
+        payload = jwt.decode(
             token,
             SECRET_KEY,
             algorithms=[ALGORITHM],
@@ -93,6 +101,9 @@ def decode_token(token: str, *, verify_exp: bool = True) -> Dict[str, Any]:
         )
     except PyJWTError as e:
         raise ValueError(f"Invalid token: {e}")
+    if "capacity_fixture" in payload and not allow_capacity_fixture:
+        raise ValueError("Capacity fixture token is not valid for this operation")
+    return payload
 
 
 # =========================================================
@@ -100,6 +111,7 @@ def decode_token(token: str, *, verify_exp: bool = True) -> Dict[str, Any]:
 # =========================================================
 
 async def get_current_user(
+    request: Request,
     access_token: str = Cookie(default=None),
     authorization: str = Header(default=None),
 ):
@@ -116,7 +128,7 @@ async def get_current_user(
         )
 
     try:
-        payload = decode_token(token)
+        payload = decode_token(token, allow_capacity_fixture=True)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -135,6 +147,17 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing subject",
         )
+
+    if "capacity_fixture" in payload:
+        fixture = payload["capacity_fixture"]
+        if (
+            not isinstance(fixture, dict)
+            or fixture.get("kind") != "read_only_load_v1"
+            or request.method != "GET"
+            or request.url.path not in CAPACITY_FIXTURE_ROUTES
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Capacity fixture token is restricted to read-only load routes")
 
     return {
         "id": int(user_id),

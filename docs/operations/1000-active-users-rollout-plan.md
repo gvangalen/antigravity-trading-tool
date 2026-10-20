@@ -23,7 +23,9 @@ cases on unchanged selector code. CI passed all five jobs on the first merged
 candidate; CI on the later feed-merged commit is pending. See
 `docs/agents/FINN_RELEASE_STATUS.md`
 for artifact hashes. These changes are not deployed or capacity-proven. The
-live environment has no 1000-account fixture file yet.
+live environment has no 1000-account fixture file yet. A marked account
+provisioner is prepared but has not been run against production; its tokens
+are restricted to the three read routes in the load harness.
 
 ## Release 1: correctness on the current main branch
 
@@ -74,7 +76,7 @@ read-heavy stages at 100, 500, and 1000 simultaneous users. Record route p50,
 p95, 5xx and 429 counts, queue depth and age, RSS and CPU, PostgreSQL
 connections and slow queries, and provider errors. Abort escalation on rising
 error or queue-age trends. A 1000-active-user claim requires a sustained stage
-meeting these provisional gates: workspace p95 at most 2 seconds, FINN-state
+meeting these provisional gates: workspace p95 at most 2 seconds, FINN-conversation
 and trade-review reads p95 at most 1 second, under 0.1% 5xx responses, no
 normal-traffic 429s, no growing queue age, and at least 20 database connections
 of headroom. Confirm the thresholds with product/operations before the test.

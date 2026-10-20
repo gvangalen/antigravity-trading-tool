@@ -17,7 +17,7 @@ import httpx
 
 ROUTES = (
     ("workspace", "GET", "/api/workspace/asset?symbol=BTC&watchlist_symbols=BTC,ETH", 5),
-    ("finn_state", "GET", "/api/assistant/finn/state", 2),
+    ("finn_conversations", "GET", "/api/assistant/v2/conversations", 2),
     ("trade_reviews", "GET", "/api/bot/trade-reviews?limit=20", 1),
 )
 

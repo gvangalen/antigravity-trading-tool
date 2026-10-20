@@ -49,7 +49,15 @@ vCPU, 7.75 GiB RAM and PostgreSQL `max_connections=100`; the historical 1 GB
 host note does not describe the current machine. Independent QA, Security and
 Architecture reviews, deployment identity checks, and an authenticated
 1000-distinct-account sustained load test are still outstanding. No file with
-1000 test accounts exists on this workspace.
+1000 test accounts exists on this workspace. A controlled production-account
+provisioner has now been prepared, but has not run on production. Its
+20-minute default tokens allow only the three read routes in the load harness;
+the nonexistent FINN state route in the initial harness was replaced with the
+existing FINN conversation listing. A local PostgreSQL cycle created three
+marked accounts, issued three distinct 0600-file tokens, then deactivated
+all three; the private token file was removed. The backend suite on this
+candidate passed **3534 tests, 3 skips** after these additions. These checks
+are Build evidence, not independent live acceptance.
 
 ## FINN 2.0 agentuitfasering
 
