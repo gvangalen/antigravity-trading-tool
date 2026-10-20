@@ -258,6 +258,21 @@ def test_closed_paper_review_fixture_restores_rollout_after_projection_error(mon
     assert os.getenv("FINN_TRADE_REVIEW_USER_IDS") == "7"
 
 
+def test_closed_paper_dossier_failure_identifies_only_safe_field_names():
+    from backend.scripts.probe_protected_closed_paper_review import _dossier_incomplete_fields
+
+    detail = {
+        "execution_environment": "paper", "fills": [{}, {}],
+        "entry_qty": 0, "pnl_eur_before_fees": 0,
+        "analysis_status": "ready", "analysis_json": {"summary": "private text"},
+    }
+    assert _dossier_incomplete_fields(detail) == []
+    detail.update({"fills": [{}], "analysis_status": "failed", "analysis_json": None})
+    assert _dossier_incomplete_fields(detail) == [
+        "fill_count", "analysis_status_failed", "analysis_json",
+    ]
+
+
 def test_protected_stale_paper_contract_identifies_the_failed_safety_boundary():
     path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_protected_score2_stale_paper.py"
     spec = importlib.util.spec_from_file_location("protected_stale_probe_contract", path)

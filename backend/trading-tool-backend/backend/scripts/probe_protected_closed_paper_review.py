@@ -50,6 +50,26 @@ def _process_review_for_fixture(user_id: int) -> None:
             raise RuntimeError("closed_paper_review_analysis_failed")
 
 
+def _dossier_incomplete_fields(detail: dict) -> list[str]:
+    """Name failed QA checks without disclosing the fixture's trade contents."""
+    failed = []
+    if detail.get("execution_environment") != "paper":
+        failed.append("execution_environment")
+    if len(detail.get("fills") or []) != 2:
+        failed.append("fill_count")
+    if detail.get("entry_qty") is None:
+        failed.append("entry_qty")
+    if detail.get("pnl_eur_before_fees") is None:
+        failed.append("pnl_eur_before_fees")
+    status = str(detail.get("analysis_status") or "missing")
+    if status != "ready":
+        known = {"pending", "running", "failed", "unavailable", "missing"}
+        failed.append(f"analysis_status_{status if status in known else 'unknown'}")
+    if not detail.get("analysis_json"):
+        failed.append("analysis_json")
+    return failed
+
+
 def _close_paper_position(user_id: int, bot_id: int, buy_decision_id: int) -> None:
     from backend.engine.trading_bot_execution import _auto_execute_decision, _persist_bot_order
 
@@ -115,13 +135,9 @@ async def _read_review(user_id: int) -> dict:
                 raise RuntimeError("closed_paper_review_duplicate")
             review_id = int(items[0]["id"])
             detail = await reviews.get_review(user_id, review_id)
-            if (detail.get("execution_environment") != "paper"
-                    or len(detail.get("fills") or []) != 2
-                    or detail.get("entry_qty") is None
-                    or detail.get("pnl_eur_before_fees") is None
-                    or detail.get("analysis_status") != "ready"
-                    or not detail.get("analysis_json")):
-                raise RuntimeError("closed_paper_review_dossier_incomplete")
+            incomplete_fields = _dossier_incomplete_fields(detail)
+            if incomplete_fields:
+                raise RuntimeError("closed_paper_review_dossier_incomplete:" + ",".join(incomplete_fields))
             await reviews.set_lesson(user_id, review_id, "Ik controleer mijn exitplan na iedere Paper-trade.")
             reread = await reviews.get_review(user_id, review_id)
             lesson = reread.get("lesson") or {}
