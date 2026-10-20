@@ -1,4 +1,7 @@
+import asyncio
 import logging
+import os
+from time import perf_counter
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
@@ -7,7 +10,7 @@ from pydantic import BaseModel, Field, condecimal, conlist
 from sqlalchemy import text
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.infrastructure.database import get_db
+from backend.infrastructure.database import get_db, measure_read_connection_acquire
 from backend.utils.auth_utils import get_current_user
 from backend.utils.rate_limit import SharedRateLimiter, client_ip
 from backend.services.bot_service import BotService
@@ -427,11 +430,25 @@ async def list_finn_trade_reviews(
         completed_reflection_week(selected=week_start)
     except ValueError:
         raise HTTPException(422, "Kies een afgeronde kalenderweek vanaf maandag") from None
-    review_rate_limiter.check_rate_limit(f"trade_review_list:{current_user['id']}", limit=30)
+    rate_started = perf_counter()
+    await asyncio.to_thread(
+        review_rate_limiter.check_rate_limit,
+        f"trade_review_list:{current_user['id']}", limit=30,
+    )
+    rate_ms = (perf_counter() - rate_started) * 1000
+    if rate_ms >= 100:
+        logger.info(
+            "Slow review rate limit pid=%s trace_id=%s rate_limit_wall_ms=%.2f",
+            os.getpid(), str(getattr(getattr(request, "state", None), "trace_id", ""))[:80], rate_ms,
+        )
     if not trade_review_enabled(current_user["id"]):
         return {"status": "disabled", "items": [], "total": 0,
                 "weekly": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0,
                            "patterns": []}, "excluded": {}, "projection_pending": False}
+    await measure_read_connection_acquire(
+        db, route="trade_reviews",
+        trace_id=getattr(getattr(request, "state", None), "trace_id", None),
+    )
     return await FinnTradeReviewService(db).list_reviews(current_user["id"], limit, offset, week_start)
 
 

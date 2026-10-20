@@ -2,6 +2,7 @@ import collections
 import hashlib
 import ipaddress
 import os
+import threading
 import time
 from typing import Optional
 
@@ -64,16 +65,19 @@ class SharedRateLimiter:
         self.window_seconds = window_seconds
         self.namespace = namespace
         self._client = None
+        self._client_lock = threading.Lock()
         self._local = InMemoryRateLimiter(requests_limit, window_seconds)
 
     def _redis(self):
         if self._client is None:
-            import redis
+            with self._client_lock:
+                if self._client is None:
+                    import redis
 
-            url = os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL")
-            if not url:
-                raise RuntimeError("Shared rate limiting requires REDIS_URL or CELERY_BROKER_URL")
-            self._client = redis.from_url(url, socket_connect_timeout=1, socket_timeout=1)
+                    url = os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL")
+                    if not url:
+                        raise RuntimeError("Shared rate limiting requires REDIS_URL or CELERY_BROKER_URL")
+                    self._client = redis.from_url(url, socket_connect_timeout=1, socket_timeout=1)
         return self._client
 
     def check_rate_limit(

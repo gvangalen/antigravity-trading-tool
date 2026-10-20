@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+from time import perf_counter
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -130,3 +131,19 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
+async def measure_read_connection_acquire(session: AsyncSession, *, route: str, trace_id: str | None = None) -> float:
+    """Measure pool wait, pre-ping and connection setup on a read request."""
+    if not hasattr(session, "connection"):
+        # Some API contract tests use an execute-only session stand-in.
+        return 0.0
+    started = perf_counter()
+    await session.connection()
+    elapsed_ms = (perf_counter() - started) * 1000
+    if elapsed_ms >= 100:
+        logging.info(
+            "Slow API DB connection acquisition route=%s pid=%s trace_id=%s connection_acquire_ms=%.2f pool=%s",
+            route, os.getpid(), (trace_id or "")[:80], elapsed_ms, engine.pool.status(),
+        )
+    return round(elapsed_ms, 2)
