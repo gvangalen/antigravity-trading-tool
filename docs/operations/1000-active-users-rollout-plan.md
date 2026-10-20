@@ -4,9 +4,13 @@ Baseline checked on 2026-10-20: the production backend and frontend both report
 `e26a1b4d049a1aa57bd19f96503e2b79155fbe99`. That commit records the
 FINN V2 cutover deployment; the product code baseline is its parent `191c1199`.
 The production ecosystem configuration records worker OOMs from an earlier
-multi-process layout on a 1 GB host. The current live host size has not been
-measured from this workspace. Verify its actual RAM and CPU before choosing a
-worker topology or a server upgrade.
+multi-process layout on a 1 GB host. A read-only SSH check on 2026-10-20 of
+the host serving the current production SHA found 4 vCPU and 8,125,916 KiB
+(7.75 GiB) RAM, with 6,054 MiB available and no swap at idle. PostgreSQL
+reported `max_connections=100` and 19 active connections. PM2 showed five
+online compact-profile processes. These point-in-time observations establish
+that the current host is larger than the historical one; they do not prove
+capacity under load.
 
 The clean `active-users-main` worktree contains the Release 1 code changes,
 cluster metrics, a read-only load harness, and database pool reductions. Local
@@ -36,8 +40,8 @@ capacity-proven. The live environment has no 1000-account fixture file yet.
 1. Add cluster-wide Redis metrics for request latency, retry and dispatcher
    counters. Keep the deep health endpoint diagnostic rather than a frequent
    request-path or strict readiness check.
-2. Measure actual production memory, CPU, queue age, database connection
-   ceiling, and provider quotas. Budget every proposed API and worker process.
+2. Recheck production memory, CPU, queue age, database connection occupancy,
+   and provider quotas under load. Budget every proposed API and worker process.
 3. Select `scaled` in `ops/deploy/capacity_profile.json` only after verifying
    the current host or host group has enough RAM. The deploy preflight rejects
    a scaled topology below 6 GiB RAM. The scaled profile gives execution,
@@ -49,8 +53,8 @@ capacity-proven. The live environment has no 1000-account fixture file yet.
 
 ## Release and capacity gate
 
-Build a clean candidate from current `origin/main`; measure the actual live host
-before enabling a multi-worker topology. Complete the
+Build a clean candidate from current `origin/main`; measure live resource
+headroom under load before enabling a multi-worker topology. Complete the
 applicable FINN local action-contract, provider, backend, frontend, and CI
 gates before Auto Deploy. After deploy, Build checks only deployment success,
 backend HTTP 200, frontend build info, and matching SHA. Independent QA owns
