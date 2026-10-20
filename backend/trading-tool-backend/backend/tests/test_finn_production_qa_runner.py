@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import socket
 import ssl
@@ -202,6 +203,59 @@ def test_closed_paper_review_profile_requires_authorization_and_preserves_eviden
     assert "_close_paper_position" in source
     assert "list_reviews" in source and "set_lesson" in source and "get_review" in source
     assert "passed=False" in source
+
+
+def test_closed_paper_review_fixture_scopes_real_projection_jobs(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.celery_task import finn_trade_review_task as task
+
+    seen = []
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "off")
+    monkeypatch.delenv("FINN_TRADE_REVIEW_USER_IDS", raising=False)
+
+    def project():
+        seen.append(("project", os.getenv("FINN_TRADE_REVIEW_ROLLOUT"), os.getenv("FINN_TRADE_REVIEW_USER_IDS")))
+        return 1
+
+    def analyze():
+        seen.append(("analyze", os.getenv("FINN_TRADE_REVIEW_ROLLOUT"), os.getenv("FINN_TRADE_REVIEW_USER_IDS")))
+        return 1
+
+    monkeypatch.setattr(task.project_dirty_trade_reviews, "run", project)
+    monkeypatch.setattr(task.analyze_pending_trade_reviews, "run", analyze)
+    probe._process_review_for_fixture(42)
+    assert seen == [("project", "allowlist", "42"), ("analyze", "allowlist", "42")]
+    assert os.getenv("FINN_TRADE_REVIEW_ROLLOUT") == "off"
+    assert os.getenv("FINN_TRADE_REVIEW_USER_IDS") is None
+
+
+def test_closed_paper_review_qa_report_marks_attempt_before_fixture_error():
+    from backend.scripts.run_finn_production_qa import run_protected_closed_paper_probe
+
+    report = {"safety": {"read_only_profile": True, "execution_calls": 0},
+              "qa_status": "NOT_STARTED", "outcome": "failed"}
+
+    def fail(_namespace):
+        raise RuntimeError("closed_paper_review_not_projected_once")
+
+    with pytest.raises(RuntimeError, match="closed_paper_review_not_projected_once"):
+        run_protected_closed_paper_probe(report, fail, "qa-test")
+    assert report["protected_profile_attempted"] is True
+    assert report["qa_status"] == "INCOMPLETE"
+    assert report["safety"] == {"read_only_profile": False, "execution_calls": 2}
+
+
+def test_closed_paper_review_fixture_restores_rollout_after_projection_error(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.celery_task import finn_trade_review_task as task
+
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
+    monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7")
+    monkeypatch.setattr(task.project_dirty_trade_reviews, "run", lambda: 0)
+    with pytest.raises(RuntimeError, match="closed_paper_review_projection_failed"):
+        probe._process_review_for_fixture(42)
+    assert os.getenv("FINN_TRADE_REVIEW_ROLLOUT") == "allowlist"
+    assert os.getenv("FINN_TRADE_REVIEW_USER_IDS") == "7"
 
 
 def test_protected_stale_paper_contract_identifies_the_failed_safety_boundary():

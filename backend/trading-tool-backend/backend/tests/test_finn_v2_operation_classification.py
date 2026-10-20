@@ -334,6 +334,28 @@ def test_explicit_mutation_object_role_outranks_entity_words_inside_its_name():
     assert result.selector_source == "registry_mutation_constraint"
 
 
+def test_explicit_indicator_configuration_deletion_uses_its_own_contract():
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("an explicit indicator configuration must not use a model selector")
+
+    classifier = FinnV2OperationClassificationService(structured_selector=ExplodingSelector())
+    for message in (
+        "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.",
+        "Remove my RSI indicator configuration for SOL.",
+    ):
+        result = classifier.classify(message=message)
+        assert result.operation_id == "delete_indicator_configuration"
+        assert result.selector_source == "registry_mutation_constraint"
+        assert FinnV2OperationClassificationValidator().validation_error(result) is None
+
+    negated = "Verwijder mijn technische RSI indicatorconfiguratie voor SOL niet; leg uit wat ze doet."
+    facts = classifier.preprocessor.preprocess(message=negated)
+    assert classifier._explicit_mutation_operation(
+        message=negated, facts=facts, workspace_hints=None, client_context=None,
+    ) is None
+
+
 def test_imperative_update_keeps_action_contract_when_followed_by_clarification_request():
     classifier = FinnV2OperationClassificationService()
     for message in (

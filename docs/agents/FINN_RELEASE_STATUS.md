@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-tradereview: beschermde projectie (21 oktober 2026)
+
+Phase: `LOCAL_CANDIDATE_VALIDATED`, nog niet gedeployed. Onafhankelijke QA op
+de stabiele product-SHA `00d94aa5042027dafa56183df16998bbe34f364a`
+bereikte twee Paper-uitvoeringsaanroepen in
+[run 39511158472](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39511158472),
+maar de reviewlijst bevatte daarna niet exact één dossier. QA gaf
+`NOT_ACCEPTED`; een FINN-analyse en reflectie waren niet bewezen. Het
+gesaniteerde QA-artifact heeft SHA-256
+`a331bcc55b3910ec98f845efd410c87fc8f0623c82b28494f8eaf1fe3588cde2`.
+Native mobiel bleef ongetest door de vergrendelde Mac.
+
+De oorzaak in de beschermde proef: de productieprojectieworker verwerkt
+alleen allowlisted gebruikers, terwijl de proef een nieuwe inactieve
+fixturegebruiker aanmaakt en onmiddellijk de reviewlijst leest. De kandidaat
+roept voor uitsluitend die fixture de bestaande productieprojectie- en
+Luna-analysetaken aan onder een proceslokale, tijdelijke allowlist en leest
+daarna het dossier terug. De normale rollout en periodieke worker blijven
+ongewijzigd. De proef onderscheidt voortaan een ontbrekend van een dubbel
+dossier en markeert een begonnen fixturetest niet meer als `NOT_STARTED`.
+
+Lokale metingen: root backend **3566 geslaagd, 3 bestaande skips**;
+gerichte reviewregressie **4/4**. De eerste actiematrix toonde daarnaast
+een wisselende modelkeuze bij de expliciete opdracht om een opgeslagen
+RSI-indicatorconfiguratie te verwijderen. Een gerichte registry-route voor die
+ondubbelzinnige configuratieterm voorkomt selectie van `delete_setup`; de
+bijbehorende regressietest slaagt. De volledige matrix op deze kandidaat
+slaagde **16/16**, plus **19/19** adaptertests (artifact SHA-256
+`4b38d7a5cc51d4ccb20c53ff7774c25dc3cfe2f580bd9edb8d1cbd2638955fc6`).
+De echte Luna/Responses-developmentproef slaagde **20/20**, zonder provider-,
+schema-, parse-, validatie- of timeoutfout (artifact SHA-256
+`22259230d67f9f4c9ae5a420fa418a6281beedad6dbeffecb9bbc04210f3fe78`).
+De echte Luna/Responses-regressie slaagde **109/109** zonder provider-,
+schema-, parse-, validatie- of timeoutfout (artifact SHA-256
+`857f78ecc286679b1465049098c2c91badc4172639b54764f13562775e82d859`).
+Webbuild, typecheck, i18n-lint/tests, commands,
+proposals en high-severity audit slaagden; mobiele typecheck, 16 chatproeven
+en lint zonder errors slaagden. Een eerste geïsoleerde actiematrix gaf
+**15/16** doordat een synthetische verwijdervraag voor een RSI-configuratie
+veilig maar verkeerd als setupverwijdering werd geclassificeerd (artifact
+SHA-256 `147cd04db38f5dd8f0218c83059f98ecf27f26fa80c2752328f8d3880e27f1f6`).
+De herhaling vóór die extra classifierfix gaf **16/16** en **19/19** adaptertests (artifact
+SHA-256 `91c99acda0cdc46648647019de8f6daa594ee7b0703d3bef12dc967521e20654`).
+De voorafgaande live kandidaat mat echte Responses-development **20/20** en
+regression **109/109** zonder provider- of validatiefouten. De 15/16-run
+blijft als rood bewijs bewaard en wordt niet als groen geteld.
+
+
 ## Mobiele FINN-feed en gesloten Paper-reflectie (21 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #471](https://github.com/gvangalen/antigravity-trading-tool/pull/471)

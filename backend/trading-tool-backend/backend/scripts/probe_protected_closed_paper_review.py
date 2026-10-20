@@ -8,9 +8,46 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import contextmanager
 from datetime import date, timedelta
 
 from backend.scripts import probe_protected_auto_paper_history as fixture
+
+
+@contextmanager
+def _fixture_review_rollout(user_id: int):
+    """Limit this runner process's review jobs to its inactive fixture owner."""
+    keys = ("FINN_TRADE_REVIEW_ROLLOUT", "FINN_TRADE_REVIEW_USER_IDS")
+    previous = {key: os.environ.get(key) for key in keys}
+    try:
+        os.environ["FINN_TRADE_REVIEW_ROLLOUT"] = "allowlist"
+        os.environ["FINN_TRADE_REVIEW_USER_IDS"] = str(user_id)
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _process_review_for_fixture(user_id: int) -> None:
+    """Run the production projection/analysis jobs for just this QA owner.
+
+    The regular workers use the deployed rollout allowlist and cannot see a
+    newly created inactive fixture child. Calling their actual task bodies
+    here avoids treating a one-minute beat delay as a product failure while
+    keeping the production workers' rollout unchanged.
+    """
+    from backend.celery_task.finn_trade_review_task import (
+        analyze_pending_trade_reviews, project_dirty_trade_reviews,
+    )
+
+    with _fixture_review_rollout(user_id):
+        if project_dirty_trade_reviews.run() != 1:
+            raise RuntimeError("closed_paper_review_projection_failed")
+        if analyze_pending_trade_reviews.run() != 1:
+            raise RuntimeError("closed_paper_review_analysis_failed")
 
 
 def _close_paper_position(user_id: int, bot_id: int, buy_decision_id: int) -> None:
@@ -72,14 +109,18 @@ async def _read_review(user_id: int) -> dict:
             reviews = FinnTradeReviewService(session)
             listing = await reviews.list_reviews(user_id, limit=10)
             items = listing.get("items") or []
+            if not items:
+                raise RuntimeError("closed_paper_review_missing")
             if len(items) != 1:
-                raise RuntimeError("closed_paper_review_not_projected_once")
+                raise RuntimeError("closed_paper_review_duplicate")
             review_id = int(items[0]["id"])
             detail = await reviews.get_review(user_id, review_id)
             if (detail.get("execution_environment") != "paper"
                     or len(detail.get("fills") or []) != 2
                     or detail.get("entry_qty") is None
-                    or detail.get("pnl_eur_before_fees") is None):
+                    or detail.get("pnl_eur_before_fees") is None
+                    or detail.get("analysis_status") != "ready"
+                    or not detail.get("analysis_json")):
                 raise RuntimeError("closed_paper_review_dossier_incomplete")
             await reviews.set_lesson(user_id, review_id, "Ik controleer mijn exitplan na iedere Paper-trade.")
             reread = await reviews.get_review(user_id, review_id)
@@ -116,6 +157,7 @@ def run(namespace: str) -> dict:
             conn.close()
         fixture._execute(user_id, bot_id, buy_decision_id)
         _close_paper_position(user_id, bot_id, buy_decision_id)
+        _process_review_for_fixture(user_id)
         result = asyncio.run(_read_review(user_id))
         return result
     finally:
