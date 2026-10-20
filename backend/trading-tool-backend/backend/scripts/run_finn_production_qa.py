@@ -1182,6 +1182,17 @@ def run_protected_portfolio_probe(report: Dict[str, Any], probe, namespace: str)
     report["qa_status"] = "COMPLETED"
 
 
+def run_protected_closed_paper_probe(report: Dict[str, Any], probe, namespace: str) -> None:
+    """Distinguish an attempted fixture from a preflight-only QA failure."""
+    report["safety"]["read_only_profile"] = False
+    report["safety"]["execution_calls"] = 2
+    report["qa_status"] = "INCOMPLETE"
+    report["protected_profile_attempted"] = True
+    report["closed_paper_trade_review"] = probe(namespace)
+    report["outcome"] = "passed"
+    report["qa_status"] = "COMPLETED"
+
+
 def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dict[str, int | bool]:
     """Report matrix completion independently from product correctness.
 
@@ -1868,11 +1879,7 @@ def main() -> int:
                     raise ValueError("closed_paper_review_fixture_not_authorized")
                 from backend.scripts.probe_protected_closed_paper_review import run as run_review_probe
 
-                report["safety"]["read_only_profile"] = False
-                report["safety"]["execution_calls"] = 2
-                report["closed_paper_trade_review"] = run_review_probe(fixture_namespace or "")
-                report["outcome"] = "passed"
-                report["qa_status"] = "COMPLETED"
+                run_protected_closed_paper_probe(report, run_review_probe, fixture_namespace or "")
             elif args.profile == "auto_paper_trade_history":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("auto_paper_fixture_manifest_forbidden")

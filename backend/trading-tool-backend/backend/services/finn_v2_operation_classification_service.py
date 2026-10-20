@@ -378,6 +378,21 @@ class FinnV2OperationClassificationService:
         """Resolve one explicit registry mutation without a provider round-trip."""
         entities = set(facts.explicit_entities).intersection({"setup", "strategy", "bot"})
         polarity = str(facts.action_polarity or "")
+        normalized_message = str(message or "").casefold()
+        if (
+            facts.discourse_act == "operation_request"
+            and polarity in {"delete", "remove"}
+            and "indicator_configuration" in facts.explicit_entities
+            and re.search(
+                r"\b(?:indicatorconfiguratie|indicator\s+configuration|"
+                r"indikator(?:en)?konfiguration)\b",
+                normalized_message,
+            )
+            and not re.search(r"\b(?:niet|not|nicht)\b", normalized_message)
+        ):
+            # A named indicator configuration is an exact action target, even
+            # when the model also sees a setup in the current workspace.
+            return "delete_indicator_configuration"
         # A direct change request remains an action even when its second
         # sentence asks FINN to clarify the target. The choice is still
         # owner-scoped and no write happens before proposal confirmation.
