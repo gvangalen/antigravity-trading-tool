@@ -71,6 +71,7 @@ write_release_metadata() {
   mv -f "$temporary_path" "$metadata_path"
 }
 write_release_metadata
+export TRADAMIND_BUILD_COMMIT_SHA="$(git rev-parse HEAD)"
 
 cd frontend/trading-tool-frontend
 rm -rf .next
@@ -200,13 +201,45 @@ stabilize_backend_app() {
 pm2 startOrReload "$PM2_CONFIG" --update-env
 check_pm2_apps_online
 stabilize_backend_app
-pm2 save --force
+node ops/deploy/check_finn_runtime_policy.js
 
 curl --max-time 10 -fsS -H 'Host: 127.0.0.1' "http://127.0.0.1:${BACKEND_PORT}/api/health"
 echo
-curl --max-time 45 -fsS -H 'Host: 127.0.0.1' "http://127.0.0.1:${BACKEND_PORT}/api/system/health" >/tmp/tradamind_rollback_deep_health.json
-cat /tmp/tradamind_rollback_deep_health.json
-echo
+deep_health_ready=false
+for attempt in $(seq 1 "${DEEP_HEALTH_ATTEMPTS:-6}"); do
+  if curl --max-time 45 -fsS -H 'Host: 127.0.0.1' "http://127.0.0.1:${BACKEND_PORT}/api/system/health" >/tmp/tradamind_rollback_deep_health.json 2>/dev/null; then
+    if python3 - <<'PY' && python3 ops/deploy/check_worker_queue_readiness.py /tmp/tradamind_rollback_deep_health.json
+import json
+import os
+import sys
+
+with open('/tmp/tradamind_rollback_deep_health.json', encoding='utf-8') as handle:
+    payload = json.load(handle)
+status = payload.get('status')
+blocking = [
+    name for name, data in (payload.get('components') or {}).items()
+    if (data or {}).get('status') in {'down', 'error'}
+]
+if blocking or status not in {'ok', 'degraded'} or (
+    status == 'degraded' and os.getenv('STRICT_DEEP_HEALTH', 'false').lower() in {'1', 'true', 'yes'}
+):
+    print(f'Rollback deep health gate failed: status={status} blocking={blocking}', file=sys.stderr)
+    sys.exit(1)
+print(f'Rollback deep health gate passed: status={status}')
+PY
+    then
+      deep_health_ready=true
+      break
+    fi
+  fi
+  echo "⏳ Rollback deep health not ready (attempt $attempt/${DEEP_HEALTH_ATTEMPTS:-6})..." >&2
+  sleep 10
+done
+if [ "$deep_health_ready" != true ]; then
+  echo "❌ Rollback deep health or Celery queue readiness failed." >&2
+  exit 1
+fi
+pm2 save --force
 curl --max-time 10 -fsSI "http://127.0.0.1:${FRONTEND_PORT}/report" | head -n 1
 
 mkdir -p "$DEPLOY_STATE_DIR"

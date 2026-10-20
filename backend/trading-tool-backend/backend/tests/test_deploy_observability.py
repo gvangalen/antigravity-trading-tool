@@ -268,6 +268,53 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
     assert "requiredPolicy" in source
 
 
+def test_finn_policy_gate_covers_every_scaled_worker_and_release_sha(tmp_path: Path) -> None:
+    checker = REPO_ROOT / "ops" / "deploy" / "check_finn_runtime_policy.js"
+    ecosystem = REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js"
+    fake_pm2 = tmp_path / "pm2"
+    fake_pm2.write_text('#!/bin/sh\ncat "$FAKE_PM2_PAYLOAD"\n', encoding="utf-8")
+    fake_pm2.chmod(0o700)
+    payload_path = tmp_path / "pm2.json"
+    for topology in ("compact", "scaled"):
+        env = os.environ.copy()
+        env.update({
+            "APP_ENV": "production",
+            "TRADAMIND_WORKER_TOPOLOGY": topology,
+            "TRADAMIND_BUILD_COMMIT_SHA": SHA,
+            "PM2_BIN": str(fake_pm2),
+            "FAKE_PM2_PAYLOAD": str(payload_path),
+        })
+        script = (
+            "const apps=require(process.argv[1]).createEcosystem('production').apps;"
+            "process.stdout.write(JSON.stringify(apps.map(app=>({name:app.name,"
+            "pm2_env:{env:{...app.env,TRADAMIND_BUILD_COMMIT_SHA:process.argv[2]}}}))));"
+        )
+        apps = json.loads(subprocess.run(
+            ["node", "-e", script, str(ecosystem), SHA], env=env,
+            check=True, capture_output=True, text=True,
+        ).stdout)
+        payload_path.write_text(json.dumps(apps), encoding="utf-8")
+        result = subprocess.run(["node", str(checker)], env=env, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout
+        if topology == "scaled":
+            target = next(app for app in apps if app["name"] == "celery-worker-execution-critical")
+            target["pm2_env"]["env"]["FINN_V2_WRITE_BLOCKED"] = "false"
+            payload_path.write_text(json.dumps(apps), encoding="utf-8")
+            assert subprocess.run(["node", str(checker)], env=env, capture_output=True).returncode == 1
+            target["pm2_env"]["env"]["FINN_V2_WRITE_BLOCKED"] = "true"
+            target["pm2_env"]["env"]["TRADAMIND_BUILD_COMMIT_SHA"] = "b" * 40
+            payload_path.write_text(json.dumps(apps), encoding="utf-8")
+            assert subprocess.run(["node", str(checker)], env=env, capture_output=True).returncode == 1
+
+
+def test_rollback_requires_policy_and_queue_readiness_before_success() -> None:
+    source = (REPO_ROOT / "ops" / "deploy" / "rollback_env.sh").read_text(encoding="utf-8")
+    assert "node ops/deploy/check_finn_runtime_policy.js" in source
+    assert "python3 ops/deploy/check_worker_queue_readiness.py" in source
+    assert source.index("check_worker_queue_readiness.py") < source.index("pm2 save --force")
+    assert "export TRADAMIND_BUILD_COMMIT_SHA=" in source
+
+
 def test_trade_review_rollout_reaches_api_and_workers_with_fail_closed_default() -> None:
     ecosystem = REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js"
     capacity_profile = json.loads((REPO_ROOT / "ops" / "deploy" / "capacity_profile.json").read_text())

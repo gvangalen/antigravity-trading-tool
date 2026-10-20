@@ -9,11 +9,10 @@ var path = require("path");
 var pm2Bin = process.env.PM2_BIN || path.join(
   process.env.HOME || "", ".nvm/versions/node/v20.19.5/bin/pm2"
 );
-var requiredApps = [
-  "backend",
-  "celery-worker-finn-interactive",
-  "celery-worker-default"
-];
+var environment = process.env.APP_ENV || "production";
+var requiredApps = require("./ecosystem.shared.js").createEcosystem(environment).apps
+  .map(function (app) { return app.name; })
+  .filter(function (name) { return name.startsWith("backend") || name.startsWith("celery-worker-"); });
 var requiredPolicy = {
   FINN_V2_PROPOSALS_ENABLED: "true",
   FINN_V2_CONFIRMATIONS_ENABLED: "true",
