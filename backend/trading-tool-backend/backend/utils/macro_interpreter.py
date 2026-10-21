@@ -279,16 +279,6 @@ def _sp500_dated_closes() -> dict[str, float]:
     except Exception:
         logger.warning("S&P 500 FRED reading unavailable; trying dated fallback")
 
-    provider = TwelveDataMacroProvider()
-    if provider.api_key:
-        try:
-            readings = provider.fetch_daily_history("SPX", limit=100)
-            selected = usable(readings)
-            if selected:
-                return selected
-        except Exception:
-            logger.warning("S&P 500 Twelve Data fallback unavailable")
-
     for endpoint in (YAHOO_SP500_GSPC_ALT, YAHOO_SP500_GSPC):
         try:
             payload = _fetch_json(f"{endpoint}?range=6mo&interval=1d", timeout=10)

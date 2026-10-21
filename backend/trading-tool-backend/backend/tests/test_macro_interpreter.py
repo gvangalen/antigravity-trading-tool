@@ -55,23 +55,40 @@ def test_sp500_uses_dated_fallback_when_fred_returns_maintenance_html(monkeypatc
 
     today = datetime.now(timezone.utc).date()
     yesterday = (today - timedelta(days=1)).isoformat()
-    earlier = (today - timedelta(days=6)).isoformat()
     monkeypatch.setattr(macro_interpreter, "_fetch_text", lambda *_args, **_kwargs: "<html>maintenance</html>")
-
-    class Provider:
-        api_key = "configured"
-
-        def fetch_daily_history(self, symbol, *, limit):
-            assert symbol == "SPX"
-            return {(today - timedelta(days=offset)).isoformat(): 5721.0 - offset
-                    for offset in range(6, 0, -1)}
-
-    monkeypatch.setattr(macro_interpreter, "TwelveDataMacroProvider", Provider)
+    stamps = [int(datetime.combine(today - timedelta(days=offset), datetime.min.time(), timezone.utc).timestamp())
+              for offset in range(6, 0, -1)]
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", lambda *_args, **_kwargs: {
+        "chart": {"result": [{"timestamp": stamps,
+                              "indicators": {"quote": [{"close": [5721.0 - offset for offset in range(6, 0, -1)]}]}}]}
+    })
     reading = fetch_macro_value("sp500", source="fred", link="fred:SP500")
     history = macro_interpreter.fetch_absolute_macro_history("sp500")
 
     assert reading == {"value": 5720.0, "observed_at": yesterday}
     assert len(history) == 6
+
+
+def test_sp500_skips_stale_fred_series_in_favour_of_recent_index_closes(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.utils import macro_interpreter
+
+    today = datetime.now(timezone.utc).date()
+    monkeypatch.setattr(macro_interpreter, "_fetch_text", lambda *_args, **_kwargs:
+                        "observation_date,SP500\n" + "\n".join(
+                            f"{today - timedelta(days=offset)},{5000 + offset}"
+                            for offset in range(20, 14, -1)
+                        ))
+    stamps = [int(datetime.combine(today - timedelta(days=offset), datetime.min.time(), timezone.utc).timestamp())
+              for offset in range(6, 0, -1)]
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", lambda *_args, **_kwargs: {
+        "chart": {"result": [{"timestamp": stamps,
+                              "indicators": {"quote": [{"close": [6000.0] * len(stamps)}]}}]}
+    })
+
+    assert fetch_macro_value("sp500", source="fred", link="fred:SP500") == {
+        "value": 6000.0, "observed_at": (today - timedelta(days=1)).isoformat(),
+    }
 
 
 def test_sp500_uses_second_yahoo_chart_host_without_twelve_data_key(monkeypatch):
