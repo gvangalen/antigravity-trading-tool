@@ -1778,11 +1778,20 @@ function AIAssistantContent({
   };
 
   const waivedDraftRules = (messageIndex, operationId) => {
-    const previousUser = messages.slice(0, messageIndex).reverse().find((item) => item.role === "user");
-    const reply = String(previousUser?.text || "").trim().toLowerCase().replace(/[.!\s]+$/, "");
-    return operationId === "create_setup"
-      ? /^(?:maak voorstel zonder deze voorwaarden|begin nieuw voorstel zonder eerdere voorwaarden|make proposal without these conditions|start new proposal without previous conditions|vorschlag ohne diese bedingungen erstellen|neuen vorschlag ohne vorherige bedingungen beginnen|(?:ja,?\s+)?(?:laat|schrap|verwijder)\s+(?:die|deze|beide|alle)\s+(?:voorwaarden|handelsvoorwaarden|regels)\s+(?:maar\s+)?weg)$/.test(reply)
-      : /^(?:maak strategievoorstel zonder deze automatische regels|begin nieuw strategievoorstel zonder eerdere regels|make strategy proposal without these automatic rules|start new strategy proposal without previous rules|strategieentwurf ohne diese automatischen regeln erstellen|neuen strategieentwurf ohne vorherige regeln beginnen)$/.test(reply);
+    const turns = messages.slice(0, messageIndex).filter((item) => item.role === "user");
+    const normalized = (item) => String(item?.text || "").trim().toLowerCase().replace(/[.!\s]+$/, "");
+    const waiverPattern = operationId === "create_setup"
+      ? /^(?:maak voorstel zonder deze voorwaarden|begin nieuw voorstel zonder eerdere voorwaarden|make proposal without these conditions|start new proposal without previous conditions|vorschlag ohne diese bedingungen erstellen|neuen vorschlag ohne vorherige bedingungen beginnen|(?:ja,?\s+)?(?:laat|schrap|verwijder)\s+(?:die|deze|beide|alle)\s+(?:voorwaarden|handelsvoorwaarden|regels)\s+(?:maar\s+)?weg)$/
+      : /^(?:maak strategievoorstel zonder deze automatische regels(?:[.;]\s*laat (?:alleen )?.+\sweg(?:[.;]\s*.*)?)?|begin nieuw strategievoorstel zonder eerdere regels|make strategy proposal without these automatic rules|start new strategy proposal without previous rules|strategieentwurf ohne diese automatischen regeln erstellen|neuen strategieentwurf ohne vorherige regeln beginnen)$/;
+    const waiverIndex = turns.findLastIndex((item) => waiverPattern.test(normalized(item)));
+    if (waiverIndex < 0) return null;
+    const freshRequest = operationId === "create_setup"
+      ? /^\s*(?:maak|create|erstelle)\b.+\b(?:nieuwe?|new)\b.+\b(?:setup|plan)\b/i
+      : /^\s*(?:maak|create|erstelle)\b.+\b(?:nieuwe?|new)\b.+\b(?:strategie|strategy)\b/i;
+    if (turns.slice(waiverIndex + 1).some((item) => freshRequest.test(String(item.text || "")))) return null;
+    const original = turns.slice(0, waiverIndex).reverse().find((item) => /(?:extra voorwaarden|extra regels|additional conditions|additional rules)\s*:/i.test(String(item.text || "")));
+    const omitted = String(original?.text || "").match(/(?:extra voorwaarden|extra regels|additional conditions|additional rules)\s*:\s*([^.!?\n]+)/i)?.[1]?.trim();
+    return omitted || true;
   };
 
   const renderV2SetupDraftCard = (message, messageIndex) => {
@@ -1805,6 +1814,7 @@ function AIAssistantContent({
       benchmark_score: at("dcaDraft.benchmarkSource", "eigen benchmark (markt + macro + technisch)"),
     };
     const isSmartDca = supplied.setup_type === "dca" && supplied.dca_amount_mode === "score_bands";
+    const omittedRules = waivedDraftRules(messageIndex, "create_setup");
     return (
       <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
         <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{at("draftCards.setupTitle", "Concept setup")}</div>
@@ -1828,7 +1838,7 @@ function AIAssistantContent({
           <p className="mt-2 text-xs">{at("dcaDraft.safetyNote", "Dit zijn geplande bedragen. Een ontbrekende score of veiligheidslimiet kan een aankoop tegenhouden of verlagen.")}</p>
         </div>}
         {supplied.setup_type === "dca" && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{at("dcaDraft.planOnly", "Bevestigen slaat de setup en strategie op. Er wordt geen bot gestart en geen aankoop gedaan.")}</p>}
-        {waivedDraftRules(messageIndex, "create_setup") && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{at("draftCards.waivedSetupRules", "De extra handelsvoorwaarden uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde setupvelden worden opgeslagen.")}</p>}
+        {omittedRules && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{typeof omittedRules === "string" ? at("draftCards.waivedRulesNamed", "Niet opgeslagen: {rules}.", { rules: omittedRules }) : at("draftCards.waivedSetupRules", "De extra handelsvoorwaarden uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde setupvelden worden opgeslagen.")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, "setup")}</div>
       </div>
@@ -1847,6 +1857,7 @@ function AIAssistantContent({
     const isBot = operationId === "create_bot";
     const isIndicator = indicatorOperations.includes(operationId);
     const isWatchlist = watchlistOperations.includes(operationId);
+    const omittedRules = isStrategy ? waivedDraftRules(messageIndex, "create_strategy") : null;
     const supplied = draft.supplied_inputs || {};
     const context = (message.actions || []).find((action) => action?.type === "v2_proposal")?.display_context || {};
     const linkedName = isStrategy ? supplied.setup_name || context.setup_name || at("draftCards.objectSetup", "Setup") : supplied.strategy_name || context.strategy_name || at("draftCards.objectStrategy", "Strategie");
@@ -1909,7 +1920,7 @@ function AIAssistantContent({
           ))}
         </dl>
         {isStrategy && supplied.setup_type !== "dca" && supplied.price_currency === "USD" && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{at("draftCards.usdLevelsPaperHold", "De koersniveaus zijn in USD. Een gekoppelde bot wacht met automatische uitvoering totdat een betrouwbare omrekening naar EUR beschikbaar is.")}</p>}
-        {isStrategy && waivedDraftRules(messageIndex, "create_strategy") && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{at("draftCards.waivedStrategyRules", "De extra automatische regels uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde strategievelden worden opgeslagen.")}</p>}
+        {isStrategy && omittedRules && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{typeof omittedRules === "string" ? at("draftCards.waivedRulesNamed", "Niet opgeslagen: {rules}.", { rules: omittedRules }) : at("draftCards.waivedStrategyRules", "De extra automatische regels uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde strategievelden worden opgeslagen.")}</p>}
         {isStrategy && supplied.setup_type === "dca" && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.dcaStrategyOnly", "Bevestigen slaat alleen deze extra strategie op onder de bestaande DCA-setup. Er wordt geen bot gestart en geen aankoop gedaan.")} {at("draftCards.dcaBotModeSeparate", ({ en: "Manual or automatic operation is set on a bot, not on this strategy.", de: "Manueller oder automatischer Betrieb wird am Bot eingestellt, nicht an dieser Strategie." }[locale] || "Handmatige of automatische uitvoering stel je bij een bot in, niet bij deze strategie."))}</p>}
         {isBot && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}

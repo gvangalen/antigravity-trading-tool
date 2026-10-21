@@ -88,16 +88,43 @@ def _explicit_setup_rule_waiver(message: str) -> bool:
     ))
 
 
-def _explicit_strategy_rule_waiver(message: str) -> bool:
+def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> bool:
     normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
-    return normalized in {
+    if normalized in {
         "maak strategievoorstel zonder deze automatische regels",
         "begin nieuw strategievoorstel zonder eerdere regels",
         "make strategy proposal without these automatic rules",
         "start new strategy proposal without previous rules",
         "strategieentwurf ohne diese automatischen regeln erstellen",
         "neuen strategieentwurf ohne vorherige regeln beginnen",
-    }
+    }:
+        return True
+    # An expanded waiver can retain ordinary price/amount fields, but may not
+    # retain a second unsupported automatic rule. Match the withdrawn clause
+    # against the original blocked request, rather than trusting a free-form
+    # "laat ... weg; behoud ..." continuation.
+    expanded = re.fullmatch(
+        r"maak strategievoorstel zonder deze automatische regels[.;]\s*"
+        r"laat alleen (.+?) weg[.;]\s*behoud (.+?)"
+        r"(?:[.;]\s*toon duidelijk op de kaart wat niet wordt opgeslagen)?",
+        normalized,
+    )
+    original_rules = re.search(
+        r"extra voorwaarden\s*:\s*([^.!?\n]+)",
+        re.sub(r"\s+", " ", str(original_message or "").casefold()),
+    )
+    if not expanded or not original_rules:
+        return False
+    def core_rules(value: str) -> str:
+        return re.sub(r"^(?:alleen na|alleen|na|de|het)\s+", "", value.strip())
+    if core_rules(expanded.group(1)) != core_rules(original_rules.group(1)):
+        return False
+    retained = re.sub(r"\s+en\s+", ", ", expanded.group(2))
+    return all(re.fullmatch(
+        r"(?:de opgegeven (?:usd|eur)-koersen|(?:entry|stop-loss|targets?)"
+        r"|€?\d+(?:[.,]\d+)? basisbedrag|\d+[hdw]|naam|"
+        r"(?:voorzichtige|gebalanceerde|agressieve) risicostijl)", part.strip(),
+    ) for part in retained.split(",") if part.strip())
 
 
 def _references_blocked_strategy_draft(message: str) -> bool:
@@ -123,7 +150,7 @@ def _discard_superseded_strategy_rule_block(context: dict, message: str) -> bool
     if not block:
         return False
     if (
-        _explicit_strategy_rule_waiver(message)
+        _explicit_strategy_rule_waiver(message, str(block.get("original_message") or ""))
         or _explicit_fresh_create_operation_request(message) != "create_strategy"
     ):
         return False
@@ -930,7 +957,7 @@ class FinnV2RunService:
             )
             context["locale"] = locale
             blocked_strategy = dict(context.get("strategy_rule_block") or {})
-            if blocked_strategy and _explicit_strategy_rule_waiver(message):
+            if blocked_strategy and _explicit_strategy_rule_waiver(message, str(blocked_strategy.get("original_message") or "")):
                 blocked_inputs = dict(blocked_strategy.get("captured_inputs") or {})
                 try:
                     setup_id = int(blocked_inputs.get("setup_id") or 0)
@@ -2342,7 +2369,7 @@ class FinnV2RunService:
 
                 if (
                     visible and strategy_rule_block
-                    and not _explicit_strategy_rule_waiver(run_message)
+                    and not _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
                     and _references_blocked_strategy_draft(run_message)
                 ):
                     # This is a continuation of an unsaved, blocked draft.
@@ -2576,7 +2603,7 @@ class FinnV2RunService:
                             strategy_inputs = dict(
                                 prepared.proposal_analysis.request_plan.operation_state.get("collected_inputs") or {}
                             )
-                            strategy_waiver = _explicit_strategy_rule_waiver(run_message)
+                            strategy_waiver = _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
                             if strategy_rule_block and not strategy_waiver:
                                 coverage = "unsupported_required_rule"
                             elif strategy_waiver:

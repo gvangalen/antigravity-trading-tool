@@ -5128,6 +5128,19 @@ def test_strategy_rule_waiver_requires_explicit_operation_choice():
     assert _explicit_strategy_rule_waiver(
         "Maak strategievoorstel zonder deze automatische regels"
     )
+    assert _explicit_strategy_rule_waiver(
+        "Maak strategievoorstel zonder deze automatische regels. "
+        "Laat alleen de stijgende 1D-trend en maximaal twee trades per dag weg; "
+        "behoud de opgegeven USD-koersen, €100 basisbedrag, 4H, naam en "
+        "voorzichtige risicostijl. Toon duidelijk op de kaart wat niet wordt opgeslagen.",
+        "Maak een strategie. Extra voorwaarden: alleen na stijgende 1D-trend "
+        "en maximaal twee trades per dag. Toon een concept.",
+    )
+    assert not _explicit_strategy_rule_waiver(
+        "Maak strategievoorstel zonder deze automatische regels; laat alleen het "
+        "1%-risico weg; behoud de RSI-instapregel",
+        "Extra voorwaarden: 1%-risico en RSI-instapregel.",
+    )
     assert not _explicit_strategy_rule_waiver(
         "Maak strategievoorstel zonder deze automatische regels, behalve RSI"
     )

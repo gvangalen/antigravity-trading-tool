@@ -425,6 +425,18 @@ class FinnV2OrchestratorService:
             **collected_inputs,
             **resolved,
         }
+        # The first proposal pass already parsed this quote unit from the
+        # user's own text. Target binding reruns operation-state resolution
+        # with an empty message for model-selected actions. Preserve only a
+        # currency proven explicit in that first pass; an inferred model unit
+        # must never enter the confirmation payload.
+        explicit_price_currency = (
+            {"price_currency": collected_inputs["price_currency"]}
+            if operation_id == "create_strategy"
+            and dict(operation_state.get("input_sources") or {}).get("price_currency") == "explicit"
+            and collected_inputs.get("price_currency") in {"EUR", "USD"}
+            else {}
+        )
         state = self.analysis.operation_state.resolve(
             contract=contract,
             message=(
@@ -439,7 +451,7 @@ class FinnV2OrchestratorService:
             # Canonical resolver output is owner-scoped trusted context. It
             # must be allowed to satisfy an ID slot during disambiguation even
             # though arbitrary selector values are ignored on guided turns.
-            derived_inputs=resolved,
+            derived_inputs={**resolved, **explicit_price_currency},
             verified_action_inputs=(
                 {"strategy_id": collected_inputs["strategy_id"]}
                 if operation_id == "create_bot"

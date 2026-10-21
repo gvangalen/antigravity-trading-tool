@@ -3983,6 +3983,7 @@
     "usdLevelsPaperHold": "Die Kursniveaus sind in USD. Ein verknüpfter Bot wartet mit der automatischen Ausführung, bis eine zuverlässige Umrechnung in EUR verfügbar ist.",
     "waivedSetupRules": "Auf deinen Wunsch wurden die zusätzlichen Handelsbedingungen aus deiner früheren Anfrage weggelassen. Nur die hier gezeigten Setup-Felder werden gespeichert.",
     "waivedStrategyRules": "Auf deinen Wunsch wurden die zusätzlichen automatischen Regeln aus deiner früheren Anfrage weggelassen. Nur die hier gezeigten Strategiefelder werden gespeichert.",
+    "waivedRulesNamed": "Nicht gespeichert: {rules}.",
     "dcaBotModeSeparate": "Den manuellen oder automatischen Betrieb stellst du am Bot ein, nicht an dieser Strategie.",
     "dcaAmountCalculation": "Betragsberechnung",
     "dcaRiskNotApplicable": "Keine Einstellung einer DCA-Strategie",
