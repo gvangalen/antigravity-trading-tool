@@ -6,7 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: huidige grens (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`; nog geen nieuwe deployment. De
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De gerichte cutover-reparatie is via
+[PR #512](https://github.com/gvangalen/antigravity-trading-tool/pull/512)
+gemerged als product-SHA `b2c2364429b125fe9e2cf8b8ff1d9255ad2beb1d`.
+[Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39582692401)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39583030879)
+slaagden. Op 21 oktober 2026 gaven
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` elk HTTP 200 en exact deze SHA.
+Dit is Build-identiteitsbewijs; een onafhankelijke ingelogde QA-verdict
+ontbreekt nog. De
 opruiming van de oude mobiele briefingresten is als [PR #511](https://github.com/gvangalen/antigravity-trading-tool/pull/511)
 gemerged. Auto Deploy slaagde en publieke backend-health en frontend-buildinfo
 gaven beide HTTP 200 op `83beb016eb2782a12abb0560d0b8300ac4414dd7`.
@@ -41,8 +50,8 @@ geen opslag of order. De volledige lokale workeractiecontractmatrix slaagde
 **16/16**, plus **19/19** adaptertests; artifact SHA-256
 `2ef752e9f38301e0b0a288698482017693e13cb1fee7e282506e308147c75554`.
 De matrix registreert nul brokerorders, nul Live-bots en nul
-productieverbindingen. Deze bewijzen zijn lokaal; CI, Auto Deploy en
-onafhankelijke ingelogde QA moeten nog volgen.
+productieverbindingen. Deze worker- en providerbewijzen zijn lokaal;
+onafhankelijke ingelogde QA moet nog volgen.
 
 ## Mobiele resten van de oude briefing verwijderd (21 oktober 2026)
 
