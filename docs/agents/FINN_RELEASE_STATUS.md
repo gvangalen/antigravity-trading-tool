@@ -6,9 +6,12 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Score 2.0-bot en oude marktagenten (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED`. Branch
-`codex/score2-bot-risk-cutover`, gebaseerd op main `4eb233599`.
-Deze kandidaat is **niet gedeployed** en heeft nog geen onafhankelijke
+Phase: `LIVE_QA_PENDING`. [PR #485](https://github.com/gvangalen/antigravity-trading-tool/pull/485)
+is gemerged op `ba3734def342d622b47aa705a234418fc439d524`. Alle vijf
+[main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39527204955)
+zijn geslaagd; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39527489475)
+is geslaagd. Publieke backend-health en frontend-buildinfo gaven HTTP 200
+en beide exact die SHA. Deze statuswijziging zelf heeft nog geen onafhankelijke
 live-QA-uitspraak. De bestaande FINN 2.0-chat, coachfeed en gedeelde
 rapportcontext blijven de actieve coachroutes. De bot gebruikt nu alleen
 de eigenaar- en assetgebonden Score 2.0-componenten en opgeslagen
@@ -36,7 +39,8 @@ operatie, entiteit, asset, polariteit, gespreksverwijzing, verduidelijking,
 ontbrekende invoer, off-topic en niet-ondersteunde operaties. Provider-,
 schema-, timeout-, parse- en validatiefoutpercentages waren 0; artifact
 SHA-256 `00a1723fe2391f76016053f3c95457adf7c56229f9a1892e0fa75a318a2daa9a`.
-CI, Auto Deploy, publieke SHA-controle en geauthenticeerde QA volgen.
+De geauthenticeerde QA-matrix volgt op de live kandidaat; geen Live-order
+is uitgevoerd tijdens Build-validatie.
 
 ## Gesloten Paper-reflectie: alleen bewijsselectie (21 oktober 2026)
 
