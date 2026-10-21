@@ -4,9 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-tradereview: AI-beschikbaarheid (21 oktober 2026)
+
+Phase: `LOCAL_DIAGNOSTIC_CANDIDATE`, nog niet gedeployed. De gecontroleerde
+fixtureprijs uit [PR #478](https://github.com/gvangalen/antigravity-trading-tool/pull/478)
+is live op `879b66e4a9bb38be992a8a615e593f766c1bf5f3`. Alle vijf PR- en
+main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39518640581)
+slaagden; publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+dezelfde SHA. Onafhankelijke [QA-run 39518870435](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39518870435)
+bereikte Paper-uitvoering en één gesloten dossier, maar de analyse bleef
+`unavailable` zonder opgeslagen analyse. De veilige foutcode was
+`closed_paper_review_dossier_incomplete:analysis_status_unavailable,analysis_json`.
+QA-status `INCOMPLETE`, verdict `NOT_ACCEPTED`, gesaniteerd artifact SHA-256
+`a902f894a5ceda0e6426012a967309daaad51cc3d2c0799e7b416e46011d3dd7`.
+Twee Paper-fixture-uitvoeringen, nul Live-trading-calls en nul
+live-botactivaties zijn gemeten.
+
+De lokale diagnosekandidaat laat de beschermde proef bij een OpenAI-fout
+uitsluitend een vaste categorie melden (configuratie, limiet, quota,
+authenticatie, model, timeout, verbinding of provider). De oorspronkelijke
+providerfout, prompt en modelantwoord worden niet in het QA-rapport gezet.
+De productanalyse en de normale modelaanroep blijven ongewijzigd.
+Gerichte regressie **7/7** en root backend **3576 geslaagd,
+3 bestaande skips**. De productroutes voor chat, score, acties en rapporten
+zijn ongewijzigd ten opzichte van de vorige live SHA.
+
 ## Gesloten Paper-tradereview: gecontroleerde fixtureprijs (21 oktober 2026)
 
-Phase: `PR_CI_PENDING`, nog niet gedeployed. Kandidaatbranch
+Phase: `LIVE_QA_NOT_ACCEPTED`. Kandidaatbranch
 `codex/closed-paper-review-controlled-quote`, codecommit `59bbdc76e` en
 [PR #478](https://github.com/gvangalen/antigravity-trading-tool/pull/478).
 De diagnoseversie
