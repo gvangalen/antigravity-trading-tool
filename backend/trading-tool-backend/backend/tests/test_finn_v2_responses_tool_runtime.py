@@ -4531,6 +4531,37 @@ def test_open_usd_strategy_name_and_target_correction_preserves_other_fields():
     assert saved["setup_id"] == 42
 
 
+def test_target_only_correction_keeps_prior_base_amount_despite_model_price_confusion():
+    prior_inputs = {
+        "setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H",
+        "name": "BTC QA Adapt", "execution_mode": "fixed", "base_amount": 100,
+        "entry": 84000, "stop_loss": 79800, "targets": [93000],
+        "price_currency": "USD", "risk_profile": "conservative",
+    }
+    call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_strategy", "draft_intent": "new", "inputs": {
+            "base_amount": 92400, "entry": 1, "stop_loss": 2, "targets": [93000],
+        }},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Verander alleen het target van 93.000 USD naar 92.400 USD. Behoud overige kaartvelden.",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-usd-strategy", "status": "cancelled",
+            "operation_id": "create_strategy", "previous_asset": "BTC",
+            "requested_instrument": "BTC", "corrected_fields": {"targets": [92400]},
+            "prior_inputs": prior_inputs,
+        }}, verified_asset=None,
+    )
+    saved = analysis.request_plan.operation_state["collected_inputs"]
+    assert saved["base_amount"] == 100.0
+    assert saved["entry"] == 84000.0
+    assert saved["stop_loss"] == 79800.0
+    assert saved["targets"] == [92400.0]
+    assert saved["price_currency"] == "USD"
+
+
 @pytest.mark.parametrize("message", [
     "Maak een DCA-strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
     "Maak een strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
@@ -5312,6 +5343,19 @@ def test_expanded_strategy_waiver_matches_original_unsupported_rules_only():
     assert _explicit_strategy_rule_waiver(consent, priced_original)
     assert _explicit_strategy_rule_waiver(
         consent, priced_original.replace("een tweede Paper-strategie", "een Paper-strategie"),
+    )
+    assert _explicit_strategy_rule_waiver(
+        consent.replace("vaste prijzen, naam", "vaste prijzen in USD, naam"),
+        priced_original.replace("een tweede Paper-strategie", "een Paper-strategie"),
+    )
+    assert not _explicit_strategy_rule_waiver(
+        consent.replace("vaste prijzen, naam", "vaste prijzen in EUR, naam"),
+        priced_original,
+    )
+    assert _explicit_strategy_rule_waiver(
+        "Maak strategievoorstel zonder deze automatische regels. Laat alleen de "
+        "stijgende 1D-trend en maximaal twee trades per dag weg; de rest moet gelijk blijven.",
+        priced_original.replace("een tweede Paper-strategie", "een Paper-strategie"),
     )
     assert not _explicit_strategy_rule_waiver(
         consent, original.replace("twee trades per dag.", "twee trades per dag en RSI-instapregel."),

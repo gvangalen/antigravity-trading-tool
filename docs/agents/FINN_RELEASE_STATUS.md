@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: voorstelcorrectie en expliciete waiver (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE_PENDING`. Onafhankelijke QA gaf `NOT_ACCEPTED` op
+publieke backend- en frontend-SHA `44b959a4300dd00d2444921a0619a961d9568f03`.
+De schone USD-strategie, naam-/targetcorrectie, gezamenlijke teruglezing en
+weigering van een verplichte RSI-regel slaagden. De uitgebreide waiver werd
+onterecht als aankoopintentie afgewezen. Na Aanpassen verzamelde een nieuw
+strategievoorstel drie targets uit de conceptnaam, het oude target en het
+nieuwe target; QA annuleerde die kaart. De FOMO-coachreactie noemde een
+wekelijks bedrag zonder de exacte naam van het gebruikte opgeslagen plan.
+Er is geen bot geactiveerd of order uitgevoerd.
+
+De lokale reparatie verwerkt bij een targetvervanging uitsluitend de nieuwe
+waarde als getypeerd contractveld. Bij een correctie van alleen het target
+behoudt de geverifieerde vorige kaart basisbedrag, entry, stop en koersvaluta,
+ook als het model andere bedragen voorstelt. Gemengde koersvaluta maken de
+kaart onvolledig en niet bevestigbaar. De waiver leest toestemming tegen de
+twee oorspronkelijk geblokkeerde regels en behoudt de geverifieerde USD-
+koersvaluta. Security herhaalde de gemengde-valuta- en fout-modelbedragrepro
+en vond na herstel geen P1 in deze smalle grens. FINN's read-only coachantwoord
+heeft geen nieuwe zware antwoordcontrole gekregen.
+
+De exacte QA-zinnen leveren via de lokale API, Celery-worker en echte
+Responses-provider een USD-concept met één target 92.400 en behoud van
+entry 84.000, stop 79.800 en basisbedrag €100; er is lokaal niets bevestigd.
+De volledige backend-suite slaagde met **3706 tests, 4 bestaande skips**.
+De lokale werkermatrix slaagde **16/16** actiecontracten en **19/19**
+adaptertests; artifact SHA-256
+`70a5920bc205959451dec0a26bc3d6512f846ae7ce5088a54075dafbbf146a12`.
+De echte Luna/Responses-ontwikkelset slaagde **20/20** zonder provider-,
+schema-, parse-, timeout- of validatiefout; artifact SHA-256
+`a8bc490dd58c8e8702aacfa2548c57a0e9ad58ab281e69f526d0f1c85fef44f4`.
+De regressieset slaagde **109/109** onder dezelfde foutcategorieën; artifact
+SHA-256 `01595f38dc773a6f3a38313ae34eb66ccf6c8a8680826b986d49a20d530041a3`.
+Webtypecheck, i18n-lint, i18n-, command- en voorsteltests en de
+productiebuild slaagden. `audit:high` slaagde en meldde één bestaande moderate
+Next.js-advisory.
+De FOMO-bronvermelding blijft een afzonderlijk te beoordelen coachpunt.
+Dit is nog geen deploy- of onafhankelijke QA-acceptatieclaim.
+
 ## FINN-agent-cutover: valuta en meervoudige teruglezing (21 oktober 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. De bestaande onafhankelijke QA-agent gaf

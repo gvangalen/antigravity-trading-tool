@@ -270,7 +270,19 @@ class FinnResponsesProposalSelection:
             # A verified correction to the open draft is the owner's newest
             # instruction. The model may echo stale fields from the cancelled
             # card; those cannot override the corrected name or values.
-            inputs.update(dict(correction.get("corrected_fields") or {}))
+            corrected_fields = dict(correction.get("corrected_fields") or {})
+            typed_fields = self.states.explicit_inputs(
+                contract=contract, message=message, explicit_asset=None,
+            )
+            if contract.operation_id == "create_strategy":
+                # A proposal correction reuses prior_inputs through derived
+                # state, but supplied model inputs otherwise win over them.
+                # Retain untouched financial fields from the cancelled card.
+                for field in ("base_amount", "entry", "stop_loss", "targets", "price_currency"):
+                    if (field in correction_inputs and field not in corrected_fields
+                            and field not in typed_fields):
+                        inputs[field] = correction_inputs[field]
+            inputs.update(corrected_fields)
             if correction.get("corrected_name"):
                 inputs["name"] = str(correction["corrected_name"])
         raw_asset = inputs.get("asset") or inputs.get("symbol")
