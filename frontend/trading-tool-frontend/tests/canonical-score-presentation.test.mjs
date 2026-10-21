@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { indicatorSourceFreshness, validatedDayEvidence } from "../lib/workspace/canonicalScorePresentation.mjs";
+import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "../lib/workspace/canonicalScorePresentation.mjs";
 
 test("an old row score cannot become a visible current indicator score", () => {
   const evidence = { dxy: { score: 100, source_observed_at: "2026-09-22T00:00:00Z" } };
@@ -20,4 +20,11 @@ test("source freshness remains current when scoring is unavailable", () => {
   assert.equal(indicatorSourceFreshness({ status: "available", stale: false }), "current");
   assert.equal(indicatorSourceFreshness({ status: "available", stale: true }), "stale");
   assert.equal(indicatorSourceFreshness({ status: "insufficient_data" }), "unavailable");
+});
+
+test("the stored decimal benchmark is displayed consistently with FINN", () => {
+  assert.equal(formatBenchmarkScore(33.333, "nl"), "33,3");
+  assert.equal(formatBenchmarkScore(33.333, "en"), "33.3");
+  assert.equal(formatBenchmarkScore(40, "de"), "40");
+  assert.equal(formatBenchmarkScore(null, "nl"), "—");
 });

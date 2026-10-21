@@ -32,6 +32,7 @@ import { fetchBotConfigs } from "@/lib/api/botApi";
 import { deleteSetup, fetchActiveSetup, fetchSetupMarketMatches } from "@/lib/api/setups";
 import { getSetupId } from "@/lib/setup/activeSetup";
 import { formatSetupScoreConditions } from "@/lib/setup/scoreConditionSummary.mjs";
+import { formatBenchmarkScore } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
 const COPY = {
@@ -415,12 +416,13 @@ function SetupMatchStatus({ match, copy, loading = false }) {
 }
 
 function BenchmarkStatus({ match, copy }) {
+  const { locale } = useTranslation();
   if (match?.benchmark_score === null || match?.benchmark_score === undefined) return null;
   const score = Number(match.benchmark_score);
   if (!Number.isFinite(score)) return null;
   return (
     <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300">
-      {copy.benchmarkScore} {Math.round(score)}/100
+      {copy.benchmarkScore} {formatBenchmarkScore(score, locale)}/100
     </span>
   );
 }

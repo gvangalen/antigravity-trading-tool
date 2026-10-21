@@ -3592,7 +3592,8 @@
       "botDecision": {
         "cardTitle": "Trade action",
         "defaultBotName": "Trading bot",
-        "defaultReason": "No action was taken because the criteria were not met.",
+        "defaultReason": "No explanation was recorded for this saved bot decision.",
+        "noRecordedDecision": "No bot decision was recorded for this report. See the bot status above for what is known.",
         "botLabel": "Bot",
         "actionLabel": "Action",
         "confidenceLabel": "Confidence",

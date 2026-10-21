@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency } from "@/lib/i18n";
+import { recordedBotDecision } from "@/lib/report/botDecisionPresentation.mjs";
 
 /* =======================================================
    Bot Decision — REPORT (V2 PRO REFINED)
@@ -17,30 +18,28 @@ export default function BotDecisionReportCard({ snapshot }) {
   const copy = t?.reports?.blocks?.botDecision || {};
   const actionLabels = copy.actionLabels || {};
 
-  // 1) Normaliseer snapshot
-  let safeSnapshot = snapshot ?? {};
+  const safeSnapshot = recordedBotDecision(snapshot);
 
-  if (typeof safeSnapshot === "string") {
-    try {
-      safeSnapshot = JSON.parse(safeSnapshot);
-    } catch (e) {
-      safeSnapshot = {};
-    }
-  }
-
-  if (Array.isArray(safeSnapshot)) {
-    safeSnapshot = safeSnapshot[0] ?? {};
+  if (!safeSnapshot) {
+    return (
+      <ReportCard title={copy.cardTitle} icon={<Bot size={16} />}>
+        <p className="text-sm leading-relaxed text-secondary">{copy.noRecordedDecision}</p>
+      </ReportCard>
+    );
   }
 
   // 2) Defaults
   const {
     bot_name = copy.defaultBotName,
-    action = "hold",
+    action,
     confidence = null,
     amount_eur = null,
     setup_match = null,
-    reason = copy.defaultReason,
+    reason,
   } = safeSnapshot || {};
+  const reasonText = typeof reason === "string" && reason.trim()
+    ? reason.trim()
+    : copy.defaultReason;
 
   const normalizedAction =
     typeof action === "string" ? action.toLowerCase() : "hold";
@@ -134,7 +133,7 @@ export default function BotDecisionReportCard({ snapshot }) {
               </span>
            </div>
            <div className="text-[14px] text-dim leading-relaxed italic bg-card p-4 rounded-xl border border-slate-50 shadow-inner-light">
-             {reason}
+             {reasonText}
            </div>
         </div>
 

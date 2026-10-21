@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Rapport- en benchmarkuitleg na Score 2.0-cutover (21 oktober 2026)
+
+Phase: `LOCAL_FIX_CANDIDATE`. Deze batch corrigeert twee bevindingen uit de
+onafhankelijke Score 2.0/Paper-herkeuring. Een dagrapport zonder opgeslagen
+botbeslissing toont geen verzonnen `Houd vast` of reden "criteria niet bereikt"
+meer; het rapport maakt ook duidelijk dat een botbudget geen vastgesteld
+kassaldo is. Analyse en Mijn Plan tonen de opgeslagen benchmarkscore met
+maximaal één decimaal, zodat `33,3` niet als `33` wordt gepresenteerd.
+
+Gemeten lokale controles: root backend **3593 geslaagd, 4 skips**;
+gerichte rapporttests **16 geslaagd**; frontend build, typecheck, i18n-lint,
+i18n-tests (**23**), command-tests (**27**), proposal-tests (**8**),
+setup-tests (**9**) en high-audit zijn geslaagd. Eén echte
+`gpt-6-luna`/Responses-rapportproef met synthetische eigenaargebonden feiten
+gaf met draaiende lokale database HTTP 200 en alle acht secties. Het rapport
+behield de benchmark `33,3`, noemde de Paper-bot gepauzeerd en behandelde
+onbekend kassaldo als onbekend. De code is nog niet gedeployed of onafhankelijk
+live geaccepteerd. De eerdere drie Paper/Score 2.0-QA-runs blijven het bewijs
+voor de onderliggende botcutover, niet voor deze nieuwe presentatiecorrectie.
+
 ## Score 2.0-bot en oude marktagenten (21 oktober 2026)
 
 Phase: `QA_ACCEPTED_SCOPED`. [PR #485](https://github.com/gvangalen/antigravity-trading-tool/pull/485)

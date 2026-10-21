@@ -3609,7 +3609,8 @@
       "botDecision": {
         "cardTitle": "Handelsaktion",
         "defaultBotName": "Trading-Bot",
-        "defaultReason": "Es wurde keine Aktion ausgeführt, da die Kriterien nicht erfüllt wurden.",
+        "defaultReason": "Für diese gespeicherte Bot-Entscheidung wurde keine Begründung erfasst.",
+        "noRecordedDecision": "Für diesen Bericht wurde keine Bot-Entscheidung erfasst. Der Bot-Status oben zeigt, was bekannt ist.",
         "botLabel": "Bot",
         "actionLabel": "Aktion",
         "confidenceLabel": "Konfidenz",

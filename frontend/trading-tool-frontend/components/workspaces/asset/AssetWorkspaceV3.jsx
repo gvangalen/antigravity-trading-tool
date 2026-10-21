@@ -45,7 +45,7 @@ import {
   toTradingViewSymbol,
 } from "../../../../../shared/tradingViewConfig";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
-import { indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
@@ -1808,6 +1808,7 @@ function ActiveAssetCard({
   combinedSummary,
   conditionOptions,
   isDailyBenchmark,
+  locale,
   onSelectAsset,
   ui,
 }) {
@@ -1871,7 +1872,7 @@ function ActiveAssetCard({
           <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <strong className="text-lg font-black text-slate-950">{situation}</strong>
             <span className="text-xs font-bold text-slate-600">
-              {isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore}: {combinedSummary.score === null ? "—" : `${Math.round(combinedSummary.score)}/100`}
+              {isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore}: {combinedSummary.score === null ? "—" : `${formatBenchmarkScore(combinedSummary.score, locale)}/100`}
             </span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{ui.benchmarkExplanation}</p>
@@ -2942,6 +2943,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         combinedSummary={combinedSummary}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
+        locale={locale}
         onSelectAsset={() => openSearch({ mode: "asset" })}
         ui={ui}
       />

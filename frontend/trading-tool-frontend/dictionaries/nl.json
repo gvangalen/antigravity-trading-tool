@@ -3593,7 +3593,8 @@
       "botDecision": {
         "cardTitle": "Handelsactie",
         "defaultBotName": "Handelsbot",
-        "defaultReason": "Geen actie: criteria niet bereikt.",
+        "defaultReason": "Bij deze opgeslagen botbeslissing is geen toelichting vastgelegd.",
+        "noRecordedDecision": "Voor dit rapport is geen botbeslissing vastgelegd. Bekijk de botstatus hierboven voor wat nu bekend is.",
         "botLabel": "Bot",
         "actionLabel": "Actie",
         "confidenceLabel": "Vertrouwen",
