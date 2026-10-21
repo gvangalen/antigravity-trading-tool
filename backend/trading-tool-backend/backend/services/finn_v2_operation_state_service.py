@@ -1442,10 +1442,16 @@ class FinnV2OperationStateService:
         # after "naam" into a user-chosen title.
         if FinnV2OperationStateService._requests_name_prompt(text):
             return None
+        named_correction = re.search(
+            r"\b(?:naam|name)\s+(?:naar|to)\s*[\"'“‘]([^\"'”’]{2,80})[\"'”’]",
+            text, re.IGNORECASE,
+        )
+        if named_correction:
+            return named_correction.group(1).strip() or None
         quoted = re.search(
             r"\b(?:met\s+(?:de\s+)?naam|naam|name|named|called|"
-            r"noem\s+(?:hem|haar|het|(?:de|het|een)\s+(?:setup|strategie|plan|bot)))"
-            r"\s*(?:is|:|=)?\s*([\"'“‘])([\w .-]{2,80})[\"'”’]",
+            r"noem\s+(?:hem|haar|het|(?:deze|dit|de|het|een)\s+(?:nieuwe?\s+)?(?:setup|strategie|plan|bot)))"
+            r"\s*(?:exact\s+)?(?:is|:|=)?\s*([\"'“‘])([\w .-]{2,80})[\"'”’]",
             text, re.IGNORECASE,
         )
         if quoted:
@@ -1453,15 +1459,16 @@ class FinnV2OperationStateService:
         named = re.search(
             r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|dem\s+namen|met\s+de\s+naam|namens|genannt|"
             r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
-            r"noem\s+(?:hem|haar|het|deze|dit|(?:de|het|een)\s+(?:(?:nieuw|nieuwe)\s+)?(?:setup|strategie|plan|bot))|"
+            r"noem\s+(?:hem|haar|het|(?:deze|dit|de|het|een)\s+(?:(?:nieuw|nieuwe)\s+)?(?:setup|strategie|plan|bot)|deze|dit)|"
             r"ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
-            r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
-            r"\s*(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
+            r"hij\s+heet|het\s+heet|naam\s+van\s+(?:alleen\s+)?(?:dit|deze)\s+concept|"
+            r"naam|name|titel|title)\b"
+            r"\s*(?:exact\s+)?(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
             r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|"
             r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
             r"\s+(?:en|and|und)\s+(?:zet|set|gebruik|use|verwende|nutze|stel|setze)\b|"
             r"\s+(?:en|and|und)\s+(?:risico|risk|risiko)\b|"
-            r"[\"'”’]?[,;.!?\n]|[\"'”’]?$)",
+            r"[\"'”’]?[:,;.!?\n]|[\"'”’]?$)",
             text,
             re.IGNORECASE,
         )
@@ -1477,6 +1484,9 @@ class FinnV2OperationStateService:
             return None
         if not re.search(
             r"\b(?:noem\s+(?:de|het|een)\s+(?:setup|strategie|plan|bot)|"
+            r"noem\s+(?:deze|dit)\s+(?:nieuwe?\s+)?(?:setup|strategie|plan|bot)|"
+            r"naam\s+van\s+(?:alleen\s+)?(?:dit|deze)\s+concept|"
+            r"wijzig\b.{0,100}\bnaam\s+naar|"
             r"(?:de|the)\s+(?:naam|name)\s+(?:is|moet|should)|"
             r"(?:corrigeer|correct|correctie)\s+(?:de|the)?\s*(?:naam|name))\b",
             message, re.I,

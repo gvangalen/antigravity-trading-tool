@@ -1430,6 +1430,24 @@ def test_explicit_draft_rename_reads_name_without_followup_command():
     assert parser.explicit_draft_rename("de naam is alleen Apple DCA Nieuwe QA") == "Apple DCA Nieuwe QA"
     assert parser.explicit_draft_rename("Noem de setup Apple DCA Nieuwe QA. Toon de kaart, bevestig niets.") == "Apple DCA Nieuwe QA"
     assert parser.explicit_draft_rename("Wat vind je van de naam Apple DCA Nieuwe QA?") is None
+    assert parser.explicit_draft_rename(
+        'Wijzig in dit nog niet opgeslagen voorstel alleen de naam naar "BTC QA Correctie 51CA B" '
+        'en het target naar 92.400 USD.'
+    ) == "BTC QA Correctie 51CA B"
+    assert parser.explicit_draft_rename(
+        "Naam van alleen dit concept: BTC QA Correctie 51CA B."
+    ) == "BTC QA Correctie 51CA B"
+
+
+def test_strategy_name_extraction_handles_colon_and_exact_correction():
+    parser = FinnV2OperationStateService
+    assert parser._name_input_from_text(
+        "Maak voor setup BTC QA Cutover C5E3 een nieuwe strategie met naam "
+        "BTC QA Correctie 51CA A: BTC 4H, vast bedrag €100."
+    ) == "BTC QA Correctie 51CA A"
+    assert parser._name_input_from_text(
+        "Noem deze nieuwe strategie exact BTC QA Correctie 51CA A."
+    ) == "BTC QA Correctie 51CA A"
 
 
 def test_clarification_follow_up_persists_the_requested_change():
