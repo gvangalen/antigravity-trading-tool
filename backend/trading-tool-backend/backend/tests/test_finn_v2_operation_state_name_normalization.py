@@ -721,6 +721,19 @@ def test_trade_price_currency_reads_explicit_global_quote():
     ) == "USD"
 
 
+def test_trade_target_clause_stops_before_euro_execution_amount():
+    assert FinnV2OperationStateService._strategy_trade_inputs(
+        "Vaste entry 84.000 USD, stop-loss 79.800 USD, "
+        "target 92.400 USD, basisbedrag €100 per uitvoering."
+    )["targets"] == [92400.0]
+
+
+def test_strategy_name_stops_before_risk_follow_up():
+    assert FinnV2OperationStateService._name_input_from_text(
+        "naam BTC QA USD CA357 en risico voorzichtig blijven staan."
+    ) == "BTC QA USD CA357"
+
+
 @pytest.mark.parametrize(
     ("operation_id", "message", "expected"),
     (

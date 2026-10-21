@@ -6,7 +6,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De herstelbatch is via
+Phase: `LOCAL_REPAIR_IN_PROGRESS`. De onafhankelijke ingelogde QA op de
+publieke backend- en frontend-SHA `ca357b84280ea5f2d3e34966d3388470a675482b`
+gaf `NOT_ACCEPTED`. Gewone read-only coaching over FOMO, scores, plan en
+Paper-budget werkte. Het eerste bevestigbare strategievoorstel met expliciete
+USD-entry, stop en target toonde deze bedragen echter als EUR. Bij een
+vervolgvoorstel kwam het basisbedrag ook ten onrechte in de targetlijst en kon
+een naamcorrectie de instructietekst als naam opnemen. Geen van deze onveilige
+kaarten is bevestigd. De huidige lokale reparatie bewaart de expliciet
+herkende koersvaluta bij de tweede eigenaargebonden oplossingsstap en scherpt
+de extractie van targets en namen aan. Een volzinsamenvatting van de expliciete
+keuze om niet-opslagbare regels weg te laten wordt nu als waiver herkend; de
+kaart noemt de weggelaten regels. Deze kandidaat is nog niet live of door QA
+goedgekeurd.
+
+De eerdere herstelbatch is via
 [PR #516](https://github.com/gvangalen/antigravity-trading-tool/pull/516)
 gemerged als product-SHA `f9ce455a49a78303a39889c468679dc57af5114e`.
 [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39598093367),
@@ -45,7 +59,8 @@ Luna/Responses-ontwikkelset slaagde **20/20**; artifact SHA-256
 De echte Luna/Responses-regressieset slaagde **109/109** zonder misclassificatie;
 artifact SHA-256 `8956af897fe0210d3f91bb6a0d10b3f6332fdb14348f54749b0e05cc2da016a8`.
 Security vond na een gerichte hercontrole geen resterende blokkade in de
-koersvalutagrens. De onafhankelijke ingelogde live QA staat nog open.
+koersvalutagrens. De latere onafhankelijke ingelogde live QA gaf het hierboven
+beschreven `NOT_ACCEPTED`-oordeel.
 
 De onafhankelijke QA op eerdere publieke backend- en
 frontend-SHA `c5e3008e97d833f05f0703e73b86a45ce51e61a0` gaf

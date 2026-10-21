@@ -3841,6 +3841,7 @@
     "usdLevelsPaperHold": "The price levels are in USD. A linked bot waits before automatic execution until a reliable EUR conversion is available.",
     "waivedSetupRules": "At your request, the additional trade conditions from your earlier request were left out. Only the setup fields shown here will be saved.",
     "waivedStrategyRules": "At your request, the additional automatic rules from your earlier request were left out. Only the strategy fields shown here will be saved.",
+    "waivedRulesNamed": "Not saved: {rules}.",
     "dcaBotModeSeparate": "Manual or automatic operation is set on a bot, not on this strategy.",
     "dcaAmountCalculation": "Amount calculation",
     "dcaRiskNotApplicable": "Not a setting on a DCA strategy",

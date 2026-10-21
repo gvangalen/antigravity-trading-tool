@@ -860,6 +860,56 @@ def test_responses_guided_slot_survives_owner_reference_resolution():
     assert state["next_missing_input"] == "dca_frequency"
 
 
+def test_explicit_usd_quote_survives_owner_reference_resolution():
+    message = (
+        "Maak een nieuwe strategie met naam BTC QA USD C357B voor mijn bestaande setup "
+        "BTC QA Cutover C5E3. BTC op 4H, vast bedrag €100 per uitvoering, "
+        "entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD, "
+        "risico voorzichtig. Toon eerst de conceptkaart."
+    )
+    selected = FinnResponsesProposalSelection().from_call(
+        call=FinnResponsesToolCatalog().validate(
+            "create_or_update_trade_plan_proposal",
+            {"operation_id": "create_strategy", "inputs": {
+                "name": "BTC QA USD C357B", "setup_id": 42, "execution_mode": "fixed",
+                "entry": 84000, "stop_loss": 79800, "targets": [92400],
+                "base_amount": 100, "risk_profile": "conservative",
+            }},
+        ),
+        message=message, conversation_context={}, verified_asset="BTC",
+        verified_parent_setup={"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"},
+    )
+    assert selected.request_plan.operation_state["input_sources"]["price_currency"] == "explicit"
+    service = FinnV2OrchestratorService(session=object())
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={"setup_id": 42})
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=message, analysis=selected,
+        conversation_context={}, model_selected=True,
+    ))
+    assert resolved.request_plan.operation_state["collected_inputs"]["price_currency"] == "USD"
+
+
+def test_model_only_price_currency_is_not_promoted_during_owner_resolution():
+    message = "Maak een strategie met naam BTC zonder genoemde koersvaluta."
+    selected = FinnResponsesProposalSelection().from_call(
+        call=FinnResponsesToolCatalog().validate(
+            "create_or_update_trade_plan_proposal",
+            {"operation_id": "create_strategy", "inputs": {
+                "name": "BTC", "setup_id": 42, "price_currency": "USD",
+            }},
+        ),
+        message=message, conversation_context={}, verified_asset="BTC",
+        verified_parent_setup={"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"},
+    )
+    service = FinnV2OrchestratorService(session=object())
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={"setup_id": 42})
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=message, analysis=selected,
+        conversation_context={}, model_selected=True,
+    ))
+    assert "price_currency" not in resolved.request_plan.operation_state["collected_inputs"]
+
+
 def test_orchestrator_runs_policy_reasoning_and_verifier_for_visible_run_without_shadow_flags():
     run = SimpleNamespace(
         id="run-2",

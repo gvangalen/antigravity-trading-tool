@@ -3942,6 +3942,7 @@
     "usdLevelsPaperHold": "De koersniveaus zijn in USD. Een gekoppelde bot wacht met automatische uitvoering totdat een betrouwbare omrekening naar EUR beschikbaar is.",
     "waivedSetupRules": "De extra handelsvoorwaarden uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde setupvelden worden opgeslagen.",
     "waivedStrategyRules": "De extra automatische regels uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde strategievelden worden opgeslagen.",
+    "waivedRulesNamed": "Niet opgeslagen: {rules}.",
     "dcaBotModeSeparate": "Handmatige of automatische uitvoering stel je bij een bot in, niet bij deze strategie.",
     "dcaAmountCalculation": "Bedragberekening",
     "dcaRiskNotApplicable": "Geen instelling van een DCA-strategie",

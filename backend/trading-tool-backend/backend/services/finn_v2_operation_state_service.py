@@ -1319,7 +1319,9 @@ class FinnV2OperationStateService:
             r"(?:zijn|are|sind|:|=|op|at)?\s*"
             r"(.+?)(?=,?\s+(?:(?:and|en|und)\s+)?(?:(?:maximaal|max(?:imum)?|maximum|höchstens)\s+"
             r"\d+(?:[.,]\d+)?\s*(?:procent|percent|%|prozent)\s+)?(?:risk(?:\s*profile|\s*style)?|"
-            r"risico(?:profiel|stijl|regel)?|risikoprofil|risikostil)\b|[!?\n]|\.(?:\s|$)|$)",
+            r"risico(?:profiel|stijl|regel)?|risikoprofil|risikostil|"
+            r"basis(?:bedrag|inleg)|base\s*amount|grundbetrag|betrag|bedrag)\b|"
+            r"[!?\n]|\.(?:\s|$)|$)",
             text,
             re.IGNORECASE,
         )
@@ -1458,6 +1460,7 @@ class FinnV2OperationStateService:
             r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|"
             r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
             r"\s+(?:en|and|und)\s+(?:zet|set|gebruik|use|verwende|nutze|stel|setze)\b|"
+            r"\s+(?:en|and|und)\s+(?:risico|risk|risiko)\b|"
             r"[\"'”’]?[,;.!?\n]|[\"'”’]?$)",
             text,
             re.IGNORECASE,
