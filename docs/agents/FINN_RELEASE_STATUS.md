@@ -4,7 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
-## FINN-agent-cutover: huidige grens (21 oktober 2026)
+## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. De onafhankelijke QA op publieke backend- en
+frontend-SHA `c5e3008e97d833f05f0703e73b86a45ce51e61a0` gaf
+`NOT_ACCEPTED`. Bij de expliciete keuze om niet-opslagbare setupvoorwaarden
+weg te laten, eindigde het gesprek in een terminale fout. Een vervolgvraag
+over hetzelfde nog niet opgeslagen strategieconcept werd gelezen als wijziging
+van een opgeslagen strategie. Gewone FINN-coachvragen en de overige geteste
+lees- en actiegrenzen werkten; dit is geen volledige coachacceptatie.
+
+De setupfout is lokaal teruggeleid tot een geblokkeerde `create_setup`-draft
+met een kandidaatveld buiten het actiecontract. De herstelroute filtert nu
+op toegestane velden en bouwt de draft opnieuw op uit alleen die velden.
+Voor Smart DCA blijven ook de getypeerde scorestaffels behouden. Alleen een
+daadwerkelijk wijzigingsverzoek over een geblokkeerd strategieconcept volgt
+de conceptverduidelijking; een gewone uitlegvraag blijft bij de coachroute.
+De gerichte tests en de volledige backend-suite slaagden lokaal: **3678
+geslaagd, 4 bestaande skips**; de actieadaptertests **19/19**. Een
+synthetische eigenaargebonden workerproef op de exacte twee setupbeurten gaf
+eerst een niet-bevestigbare verduidelijking en daarna een BTC-voorstel met
+de oorspronkelijke naam en 4H, zonder terminale fout, opslag of order.
+Een aparte tweebeurtige workerproef hield de niet-opgeslagen strategie na
+een expliciete extra handelsregel geblokkeerd; er verscheen geen kaart of
+wijziging van een opgeslagen strategie. De echte Luna/Responses-ontwikkelset
+slaagde **20/20** met nul provider-, schema-, parser-, time-out- of
+validatiefouten.
+De volledige lokale werkermatrix slaagde **16/16** contracten (artifact
+SHA-256 `5618b878a58c37ebfe3d5215f074d9e953e457b3b5ec76b075a38f8e68f138bf`),
+met nul brokerorders, nul Live-bots en nul productieverbindingen. De echte
+Luna/Responses-ontwikkelset slaagde **20/20** (artifact SHA-256
+`6531c443ed766a3f548cb855d6d4941f2e5686a976a65ee412ef7209d4c38b5d`)
+en de regressieset **109/109** (artifact SHA-256
+`7010e97352546da1a921c8032982ead80bf30d5f72b3742a5f680db24b29eb88`),
+zonder provider-, schema-, parser-, time-out- of validatiefout. Security en
+Architecture vonden geen concrete grens- of contractblokkade in de herstelde
+code. Er is nog geen nieuwe kandidaat
+gedeployed of onafhankelijk live beoordeeld.
+
+## FINN-agent-cutover: vorige kandidaat (21 oktober 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De gerichte cutover-reparatie is via
 [PR #512](https://github.com/gvangalen/antigravity-trading-tool/pull/512)
