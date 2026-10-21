@@ -18,7 +18,8 @@ meldt twee beoogde Paper-executies, maar die telling wordt vóór de fixture
 gezet en bewijst op zichzelf niet dat beide fills plaatsvonden. Er zijn nul
 Live-aanroepen geregistreerd. Artifact SHA-256
 `f9ed9a7df978f69870d119cd177c97a1f0916619caefcfff9e485f467ac6aeb5`.
-De huidige lokale kandidaat `codex/finn-review-probe-phase` voegt een vaste,
+De [PR #499](https://github.com/gvangalen/antigravity-trading-tool/pull/499)
+is gemerged als `e1fb54e64cbe8b6694888fe6f705fe7f361f9f35` en voegt een vaste,
 gesaniteerde fasecode aan dit beschermde foutpad toe, zodat de volgende
 onafhankelijke run de breuk kan lokaliseren. Hij verandert geen productantwoord,
 actiecontract, Paper-uitvoering of gebruikersgegevens. De chat-QA-uitkomst
@@ -36,8 +37,16 @@ De geïsoleerde lokale workeractiecontractmatrix sloot **16/16** contracten af,
 met nul brokerorders, Live-aanroepen of productieverbindingen; adaptertests
 **19/19**. Matrixartifact SHA-256
 `eed859453f3b623f6216be53362dea75fe8958e5890290454cc012f643604663`.
-Dit is nog geen live QA-verdict.
-Security vond na een herstel van de cleanup-fout geen resterende blocker.
+Security en Architecture vonden na herstel van de cleanup-fout en de
+uitvoeringsteller geen resterende blocker. Alle vijf
+[PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39546716179)
+en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39546943352)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39547151751)
+slaagde; publieke backend-health en frontend-buildinfo gaven beide HTTP 200
+en exact `e1fb54e64cbe8b6694888fe6f705fe7f361f9f35`. Onafhankelijke live
+QA op deze kandidaat staat nog open; lokale en publieke controles zijn geen
+vervanging daarvoor. Een status-only documentcommit kan de publieke SHA
+veranderen; QA bindt aan de dan actuele, gelijke backend- en frontend-SHA.
 
 De daaropvolgende [PR #497](https://github.com/gvangalen/antigravity-trading-tool/pull/497)
 is gemerged als `6237191d5c9c8400fcec7d9ed7110c1450ec8582`.
