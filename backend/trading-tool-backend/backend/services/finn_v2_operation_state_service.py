@@ -1443,11 +1443,19 @@ class FinnV2OperationStateService:
         if FinnV2OperationStateService._requests_name_prompt(text):
             return None
         named_correction = re.search(
-            r"\b(?:naam|name)\s+(?:naar|to)\s*[\"'“‘]([^\"'”’]{2,80})[\"'”’]",
+            r"\b(?:conceptnaam|naam|name)\s+(?:exact\s+)?(?:naar|to)\s*[\"'“‘]([^\"'”’]{2,80})[\"'”’]",
             text, re.IGNORECASE,
         )
         if named_correction:
             return named_correction.group(1).strip() or None
+        direct_correction = re.search(
+            r"\b(?:conceptnaam\s+exact\s+naar|de\s+nieuwe\s+naam\s+is\s+exact)\s+"
+            r"[\"'“‘]?([\w .-]{2,80}?)[\"'”’]?"
+            r"(?=\s+en\s+(?:het\s+)?target\b|[.!?]|$)",
+            text, re.IGNORECASE,
+        )
+        if direct_correction:
+            return direct_correction.group(1).strip(" .\"'“”‘’") or None
         quoted = re.search(
             r"\b(?:met\s+(?:de\s+)?naam|naam|name|named|called|"
             r"noem\s+(?:hem|haar|het|(?:deze|dit|de|het|een)\s+(?:nieuwe?\s+)?(?:setup|strategie|plan|bot)))"
@@ -1462,7 +1470,7 @@ class FinnV2OperationStateService:
             r"noem\s+(?:hem|haar|het|(?:deze|dit|de|het|een)\s+(?:(?:nieuw|nieuwe)\s+)?(?:setup|strategie|plan|bot)|deze|dit)|"
             r"ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
             r"hij\s+heet|het\s+heet|naam\s+van\s+(?:alleen\s+)?(?:dit|deze)\s+concept|"
-            r"naam|name|titel|title)\b"
+            r"(?:conceptnaam|naam|name|titel|title))\b"
             r"\s*(?:exact\s+)?(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
             r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|"
             r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
@@ -1486,7 +1494,8 @@ class FinnV2OperationStateService:
             r"\b(?:noem\s+(?:de|het|een)\s+(?:setup|strategie|plan|bot)|"
             r"noem\s+(?:deze|dit)\s+(?:nieuwe?\s+)?(?:setup|strategie|plan|bot)|"
             r"naam\s+van\s+(?:alleen\s+)?(?:dit|deze)\s+concept|"
-            r"wijzig\b.{0,100}\bnaam\s+naar|"
+            r"(?:wijzig|verander|pas)\b.{0,120}\b(?:conceptnaam|naam)\s+(?:exact\s+)?naar|"
+            r"(?:de|the)\s+nieuwe\s+(?:conceptnaam|naam)\s+is|"
             r"(?:de|the)\s+(?:naam|name)\s+(?:is|moet|should)|"
             r"(?:corrigeer|correct|correctie)\s+(?:de|the)?\s*(?:naam|name))\b",
             message, re.I,

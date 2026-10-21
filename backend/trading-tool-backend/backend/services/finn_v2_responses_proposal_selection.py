@@ -266,6 +266,13 @@ class FinnResponsesProposalSelection:
                 correction_inputs["symbol"] = correction_target
             if correction.get("corrected_name"):
                 correction_inputs["name"] = str(correction["corrected_name"])
+        if same_target_field_revision:
+            # A verified correction to the open draft is the owner's newest
+            # instruction. The model may echo stale fields from the cancelled
+            # card; those cannot override the corrected name or values.
+            inputs.update(dict(correction.get("corrected_fields") or {}))
+            if correction.get("corrected_name"):
+                inputs["name"] = str(correction["corrected_name"])
         raw_asset = inputs.get("asset") or inputs.get("symbol")
         supplied_asset = resolve_catalog_symbol(raw_asset) or ""
         if awaiting_instrument and supplied_asset == old_asset:

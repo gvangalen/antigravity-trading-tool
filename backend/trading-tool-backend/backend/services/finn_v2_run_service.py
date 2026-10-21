@@ -92,7 +92,7 @@ def _priced_two_rule_strategy_request(message: str):
     """Recognize one positive plan request with two named unsupported rules."""
     numeric = r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)"
     return re.fullmatch(
-        r"maak voor mijn opgeslagen setup [\w -]+ een tweede paper-strategie "
+        r"maak voor mijn opgeslagen setup [\w -]+ een (?:tweede )?paper-strategie "
         r"met naam [\w -]+\. [a-z]{2,8} \d+[hdw], vast bedrag €[\d.,]+, "
         rf"entry (?P<entry>{numeric}) (?P<entry_currency>usd|eur), "
         rf"stop-loss (?P<stop>{numeric}) (?P<stop_currency>usd|eur), "
