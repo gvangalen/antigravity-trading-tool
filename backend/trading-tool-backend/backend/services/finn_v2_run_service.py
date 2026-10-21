@@ -49,7 +49,7 @@ from backend.services.finn_v2_responses_front_door import (
     _explicit_fresh_create_operation_request,
     _previous_guided_name_suggestion,
 )
-from backend.services.finn_v2_responses_loop import FinnResponsesError
+from backend.services.finn_v2_responses_loop import FinnResponsesError, FinnResponsesResult
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
@@ -80,7 +80,11 @@ def _explicit_setup_rule_waiver(message: str) -> bool:
         "start new proposal without previous conditions",
         "vorschlag ohne diese bedingungen erstellen",
         "neuen vorschlag ohne vorherige bedingungen beginnen",
-    }
+    } or bool(re.fullmatch(
+        r"(?:ja,?\s+)?(?:laat|schrap|verwijder)\s+(?:die|deze|beide|alle)\s+"
+        r"(?:voorwaarden|handelsvoorwaarden|regels)\s+(?:maar\s+)?weg",
+        normalized,
+    ))
 
 
 def _proposal_from_blocked_setup(block: dict):
@@ -755,6 +759,31 @@ class FinnV2RunService:
                 conversation_locale=client_locale or cursor.get("locale"),
             )
             context["locale"] = locale
+            blocked_setup = dict(context.get("setup_rule_block") or {})
+            if blocked_setup and _explicit_setup_rule_waiver(message):
+                # A click or an unambiguous reply to our own owner-bound choice
+                # is a continuation of the saved draft. Route it before the
+                # provider and generic clarification selector: those may treat
+                # the short choice as a standalone, incomplete create request.
+                restored = _proposal_from_blocked_setup(blocked_setup)
+                if restored is not None:
+                    return FinnResponsesFrontDoorResult(
+                        response=FinnResponsesResult(
+                            text={
+                                "en": "I am preparing the setup draft without those conditions.",
+                                "de": "Ich bereite den Setupentwurf ohne diese Bedingungen vor.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Ik bereid het setupvoorstel zonder die voorwaarden voor."),
+                            response_id=f"verified-setup-waiver-{run_id}",
+                            tool_trace=({
+                                "name": "verified_setup_waiver", "status": "completed",
+                                "result": {"operation_id": "create_setup"},
+                            },),
+                            response_id_reusable=False,
+                        ),
+                        proposal_analysis=restored,
+                        locale=locale,
+                    ), message
             previous_response = None
             # Keep verified conversation facts across a language switch. Only
             # the provider continuation belongs to the previous language.

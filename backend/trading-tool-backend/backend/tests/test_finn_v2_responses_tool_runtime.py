@@ -4965,6 +4965,8 @@ def test_setup_rule_coverage_does_not_truncate_late_required_condition():
     ("Start new proposal without previous conditions", True),
     ("Vorschlag ohne diese Bedingungen erstellen", True),
     ("Neuen Vorschlag ohne vorherige Bedingungen beginnen", True),
+    ("Ja, laat die voorwaarden weg", True),
+    ("Schrap alle handelsvoorwaarden weg", True),
     ("Ja, laat de trendvoorwaarde weg", False),
     ("Maak voorstel zonder deze voorwaarden, behalve de 1D-trend", False),
     ("Nee, maak voorstel zonder deze voorwaarden", False),
