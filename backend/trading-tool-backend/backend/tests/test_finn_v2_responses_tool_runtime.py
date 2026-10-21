@@ -80,6 +80,11 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
     "Wat weet je zeker over mijn gesloten Paper-trade-review #123 en wat was "
     "het resultaat? Alleen lezen, geen voorstel of aankoop.",
     "Kun je review #123 teruglezen en de bevestigde les noemen?",
+    "Wat weet je zeker over mijn zojuist gesloten Paper-trade en het resultaat? "
+    "Alleen sparren, geen voorstel of aankoop.",
+    "What can you verify about my recently closed Paper trade and its result? "
+    "Read only; do not propose a trade.",
+    "Wat was het resultaat van mijn laatste Paper-trade? Geen voorstel of actie.",
 ])
 def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     catalog = FinnResponsesToolCatalog()
@@ -128,6 +133,23 @@ def test_closed_trade_review_read_does_not_override_a_removal_request():
     front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
     asyncio.run(front.run(
         message="Lees mijn trade-review #123 en verwijder die daarna.",
+        instructions=front._model_led_instructions("nl"), conversation_context={},
+        verified_asset=None,
+    ))
+    assert not fake.requests or fake.requests[0]["tool_choice"] != {
+        "type": "function", "name": "get_closed_trade_review",
+    }
+
+
+def test_recent_closed_trade_read_does_not_override_a_removal_request():
+    fake = FakeResponses(response("no-read", text="Ik kan dit dossier niet verwijderen."))
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="recent-closed-review-remove", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    asyncio.run(front.run(
+        message="Verwijder mijn zojuist gesloten Paper-trade en de review.",
         instructions=front._model_led_instructions("nl"), conversation_context={},
         verified_asset=None,
     ))
