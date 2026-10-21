@@ -1,6 +1,36 @@
 # 1000 active users: implementation and release plan
 
-Most recent measured production runtime on 2026-10-20: backend health and
+## Current verified scope (2026-10-21)
+
+Independent QA accepted a public `1000:120` mixed-read stage on exact
+production SHA `0073a4098cd30bf0a66dbc735c717be26d3deb21`. All 1,000
+fixture identities matched; all 13,047 HTTP requests succeeded. Steady p95
+was 75.19 ms for workspace (7,472 requests), 32.97 ms for FINN conversation
+lists (2,928), and 39.37 ms for enabled trade-review lists (1,527). Two
+public review-body canaries confirmed the enabled route. PostgreSQL retained
+at least 58 usable free connections, queues and lock waiters remained at
+zero, PM2 processes had no restarts, and available memory stayed above
+4,600 MiB. QA verified the deployed SHA before and after the stage,
+deactivated all 1,000 fixtures, and removed private tokens; review and order
+rows from the campaign were zero. The 100/500 stages passed on earlier SHAs
+with unchanged GET routes. This is evidence for 1,000 concurrently active
+**read-heavy** users, not 1,000 provider-backed FINN chat users or trade
+execution capacity.
+
+The remaining chat scenario is explicit: 1,000 users each sending one FINN
+message every five minutes, about 200 arrivals per minute. The load runner
+supports an evenly spread `--chat-interval-seconds 300` schedule, but the
+current read-only fixtures cannot call chat. A live provider-backed run still
+requires distinct chat-authorized accounts, a provider-side hard USD spending
+cap, approved model budget, provider quota confirmation, and an independently
+reviewed worker/database capacity increase. The current two interactive
+worker slots are below the roughly 30-slot arithmetic floor calculated from
+the observed 6.12-second mean worker time at 70% target utilization; this
+floor is a sizing estimate, not a passed throughput measurement.
+
+## Earlier measurement history
+
+Earlier measured production runtime on 2026-10-20: backend health and
 frontend build info both returned HTTP 200 and SHA
 `159b03390060e279c81e7db16f63c7bc1de10623`. Independent QA's 100:120
 and 500:120 read stages passed with all 1,308 and 6,462 GETs returning HTTP

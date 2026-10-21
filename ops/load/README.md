@@ -83,6 +83,24 @@ allow at least 20 per production stage. It reserves 20 for each earlier stage
 and the remaining requests for the last stage. The provisioned capacity fixture
 tokens are restricted to four read routes and return 403 for chat. The script prints only
 route-level status counts and latency summaries; it does not print tokens.
+For the defined one-message-per-user-per-five-minutes scenario, add
+`--chat-interval-seconds 300` and use at least a 300-second steady stage.
+The runner spreads each user's first chat evenly over that interval, then
+schedules further chats every 300 seconds. A `1000:300` stage schedules exactly
+1000 client-side chat POST attempts, 200 planned starts per minute. Compare
+the `cap-` trace timestamps with Nginx ingress timestamps to verify actual
+server arrivals per minute; HTTPX connection-pool wait can shift ingress.
+Some terminal results can finish after the 300-second arrival window, so
+continue sampling queue age and worker occupancy through the drain. One
+300-second cycle alone does not prove sustained long-term throughput. Set
+`--max-chat-requests` to at least the sum of planned stage turns (1600 for
+`100:300,500:300,1000:300`); the runner rejects a smaller cap before reading
+the token file or sending traffic. It reports chat schedule lag and defaults
+to a 5-second p95 stop limit, adjustable with
+`--max-chat-schedule-lag-ms`. Every planned turn must be sent and reach a
+verified terminal result for that stage to pass. The separate provider-side
+hard USD cap remains mandatory. This cadence mode needs chat-authorized
+accounts and is not compatible with the read-only capacity fixture tokens.
 The identity preflight detects account-token mixups, but a separate owner-canary
 test is still needed to prove isolation within workspace, FINN, and review bodies.
 
@@ -218,9 +236,9 @@ chat turns from the response body and terminal run state: FINN can report an
 unavailable result in an HTTP 200 response, so status codes alone are
 insufficient. This optional mixed profile selects chat with weight 1 of 9 at
 roughly ten seconds average think time, or about 0.67 chats per user per minute
-until its request cap is consumed. It does not simulate the five-minute chat
-interval used in the sizing example below; define and implement that workload
-separately before claiming its capacity.
+until its request cap is consumed. Use `--chat-interval-seconds 300` for the
+defined five-minute scenario; the random mixed profile is exploratory and
+cannot establish that scenario's capacity.
 
 On 2026-10-21, production SHA `8b028675c331495cc6a53b15670946f6056e697a`
 had two FINN interactive prefork children. Among 192 completed visible FINN

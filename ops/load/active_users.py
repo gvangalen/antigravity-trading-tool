@@ -145,43 +145,11 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
                 name, method, path, _ = ROUTES[0]
             else:
                 chat_budget["remaining"] -= 1
-        started_at = time.monotonic()
-        started = time.perf_counter()
-        request_started_utc = time.time()
-        sent_trace_id = f"cap-{uuid.uuid4().hex[:16]}"
-        response = None
-        outcome = "ok"
-        try:
-            response = await client.request(
-                method, path, headers={"Authorization": authorization, "X-Trace-Id": sent_trace_id},
-                json={"query": "Explain the current BTC market context in general terms.",
-                      "context": {"page": "load_fixture", "symbol": "BTC"}} if name == "finn_chat" else None,
-            )
-            status = response.status_code
-        except httpx.HTTPError:
-            status = 0
-        if name == "finn_chat" and response is not None and status == 200:
-            outcome = await chat_turn_outcome(
-                client, response, authorization, chat_terminal_timeout_seconds, stop_event,
-            )
-        backend_ms = None
-        trace_id = sent_trace_id
-        if response is not None:
-            response_headers = getattr(response, "headers", {})
-            trace_id = response_headers.get("x-trace-id") or sent_trace_id
-            timing = response_headers.get("server-timing", "")
-            if timing.startswith("app;dur="):
-                try:
-                    backend_ms = max(0.0, float(timing.removeprefix("app;dur=")))
-                except ValueError:
-                    pass
-        sample = (status, (time.perf_counter() - started) * 1000, backend_ms, trace_id,
-                  round(request_started_utc, 6), round(time.time(), 6), outcome)
-        results[name].append(sample)
-        if steady_results is not None and steady_started is not None and started_at >= steady_started:
-            steady_results[name].append(sample)
-        if not 200 <= status < 300 or outcome != "ok":
-            stop_event.set()
+        if not await record_request(
+            client, authorization, name, method, path, results, stop_event,
+            steady_results=steady_results, steady_started=steady_started,
+            chat_terminal_timeout_seconds=chat_terminal_timeout_seconds,
+        ):
             break
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=rng.uniform(
@@ -189,6 +157,100 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
             ))
         except asyncio.TimeoutError:
             pass
+
+
+async def record_request(client, authorization, name, method, path, results, stop_event,
+                         *, steady_results=None, steady_started=None,
+                         chat_terminal_timeout_seconds=60, scheduled_for=None):
+    started_at = time.monotonic()
+    started = time.perf_counter()
+    request_started_utc = time.time()
+    sent_trace_id = f"cap-{uuid.uuid4().hex[:16]}"
+    response = None
+    outcome = "ok"
+    try:
+        response = await client.request(
+            method, path, headers={"Authorization": authorization, "X-Trace-Id": sent_trace_id},
+            json={"query": "Explain the current BTC market context in general terms.",
+                  "context": {"page": "load_fixture", "symbol": "BTC"}} if name == "finn_chat" else None,
+        )
+        status = response.status_code
+    except httpx.HTTPError:
+        status = 0
+    if name == "finn_chat" and response is not None:
+        if status == 200:
+            outcome = await chat_turn_outcome(
+                client, response, authorization, chat_terminal_timeout_seconds, stop_event,
+            )
+        else:
+            outcome = "http_unverified"
+    backend_ms = None
+    trace_id = sent_trace_id
+    if response is not None:
+        response_headers = getattr(response, "headers", {})
+        trace_id = response_headers.get("x-trace-id") or sent_trace_id
+        timing = response_headers.get("server-timing", "")
+        if timing.startswith("app;dur="):
+            try:
+                backend_ms = max(0.0, float(timing.removeprefix("app;dur=")))
+            except ValueError:
+                pass
+    sample = (status, (time.perf_counter() - started) * 1000, backend_ms, trace_id,
+              round(request_started_utc, 6), round(time.time(), 6), outcome,
+              round(max(0, started_at - scheduled_for) * 1000, 2) if scheduled_for is not None else None)
+    results[name].append(sample)
+    if steady_results is not None and steady_started is not None and started_at >= steady_started:
+        steady_results[name].append(sample)
+    if not 200 <= status < 300 or outcome != "ok":
+        stop_event.set()
+        return False
+    return True
+
+
+def chat_due_offset(index, users, interval):
+    return interval * (index + 0.5) / users
+
+
+def planned_chat_count(users, seconds, interval):
+    """Count evenly spaced user turns strictly inside a steady stage."""
+    if users < 1 or seconds < 1 or not math.isfinite(interval) or interval <= 0:
+        raise ValueError("Chat cadence requires positive users, duration and finite interval")
+    full_cycles = int(seconds // interval)
+    remainder = seconds - full_cycles * interval
+    return users * full_cycles + sum(
+        chat_due_offset(index, users, interval) < remainder for index in range(users)
+    )
+
+
+async def scheduled_chat_user(client, fixture, index, users, interval, steady_started, deadline,
+                              chat_budget, results, steady_results, stop_event,
+                              chat_terminal_timeout_seconds, max_schedule_lag_ms=5000):
+    authorization = f"Bearer {fixture['access_token']}"
+    due = steady_started + chat_due_offset(index, users, interval)
+    while due < deadline and not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=max(0, due - time.monotonic()))
+        except asyncio.TimeoutError:
+            pass
+        if stop_event.is_set():
+            break
+        now = time.monotonic()
+        if now >= deadline or (now - due) * 1000 > max_schedule_lag_ms:
+            # A delayed generator fails closed instead of catching up with
+            # paid calls after the planned arrival window.
+            stop_event.set()
+            break
+        if chat_budget["remaining"] <= 0:
+            stop_event.set()
+            break
+        chat_budget["remaining"] -= 1
+        if not await record_request(
+            client, authorization, "finn_chat", "POST", "/api/assistant/chat", results, stop_event,
+            steady_results=steady_results, steady_started=steady_started,
+            chat_terminal_timeout_seconds=chat_terminal_timeout_seconds, scheduled_for=due,
+        ):
+            break
+        due += interval
 
 
 def identity_matches(response, fixture):
@@ -230,6 +292,7 @@ def report(label, results):
         latencies = [sample[1] for sample in samples if 200 <= sample[0] < 300]
         statuses = Counter(str(sample[0]) for sample in samples)
         backend_latencies = [sample[2] for sample in samples if len(sample) > 2 and sample[2] is not None]
+        schedule_lags = [sample[7] for sample in samples if len(sample) > 7 and sample[7] is not None]
         slow_traces = [
             {"trace_id": sample[3], "client_ms": round(sample[1], 2), "backend_ms": sample[2],
              "start_utc_epoch": sample[4] if len(sample) > 4 else None,
@@ -246,6 +309,7 @@ def report(label, results):
             "p95_all_ms": percentile([sample[1] for sample in samples], 0.95),
             "backend_p95_ms": percentile(backend_latencies, 0.95),
             "backend_timing_samples": len(backend_latencies),
+            "schedule_lag_p95_ms": percentile(schedule_lags, 0.95),
             "slow_traces": slow_traces,
             "max_ms": round(max(latencies), 2) if latencies else None,
         }
@@ -353,11 +417,30 @@ def chat_stage_quotas(max_requests, stage_count, *, production):
     return [minimum] * (stage_count - 1) + [max_requests - minimum * (stage_count - 1)]
 
 
+def cadence_stage_quotas(max_requests, stages, interval, *, production):
+    quotas = []
+    for stage in stages:
+        users_raw, seconds_raw = stage.split(":", 1)
+        count = planned_chat_count(int(users_raw), int(seconds_raw), interval)
+        if count < 1:
+            raise ValueError("Chat cadence needs at least one scheduled turn per stage")
+        if production and count < 20:
+            raise ValueError("Production chat cadence needs at least 20 scheduled turns per stage")
+        quotas.append(count)
+    if sum(quotas) > max_requests:
+        raise ValueError(f"Chat cadence schedules {sum(quotas)} turns, above --max-chat-requests={max_requests}")
+    return quotas
+
+
 async def run(args, fixtures):
     limits = httpx.Limits(max_connections=max(100, args.max_users + 50), max_keepalive_connections=args.max_users)
     async with httpx.AsyncClient(base_url=args.base_url, timeout=args.timeout, limits=limits) as client:
         stages = args.stages.split(",")
-        chat_quotas = (chat_stage_quotas(args.max_chat_requests, len(stages), production=args.allow_production)
+        chat_interval = getattr(args, "chat_interval_seconds", None)
+        chat_quotas = (cadence_stage_quotas(args.max_chat_requests, stages, chat_interval,
+                                            production=args.allow_production)
+                       if args.include_chat and chat_interval is not None else
+                       chat_stage_quotas(args.max_chat_requests, len(stages), production=args.allow_production)
                        if args.include_chat else None)
         for stage_index, stage in enumerate(stages):
             chat_budget = {"remaining": chat_quotas[stage_index]} if chat_quotas is not None else None
@@ -380,15 +463,25 @@ async def run(args, fixtures):
             ))
             generator_monitor = asyncio.create_task(monitor_generator(generator_samples))
             chat_options = ({"chat_terminal_timeout_seconds": args.chat_terminal_timeout_seconds}
-                            if args.include_chat else {})
+                            if args.include_chat and chat_interval is None else {})
             try:
-                await asyncio.gather(*(
-                    virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results,
+                read_tasks = [
+                    virtual_user(client, fixture, deadline, args.think_seconds,
+                                 chat_budget if chat_interval is None else None, results,
                                  stop_event, initial_spread_seconds=args.think_seconds,
                                  steady_results=steady_results, steady_started=steady_started,
                                  **chat_options)
                     for fixture in fixtures[:users]
-                ))
+                ]
+                chat_tasks = [
+                    scheduled_chat_user(
+                        client, fixture, index, users, chat_interval, steady_started, deadline,
+                        chat_budget, results, steady_results, stop_event,
+                        args.chat_terminal_timeout_seconds, args.max_chat_schedule_lag_ms,
+                    )
+                    for index, fixture in enumerate(fixtures[:users])
+                ] if chat_interval is not None and args.include_chat else []
+                await asyncio.gather(*read_tasks, *chat_tasks)
             except asyncio.CancelledError:
                 # asyncio.run translates the operator's first Ctrl-C into
                 # cancellation. Keep the partial route evidence even when a
@@ -415,6 +508,12 @@ async def run(args, fixtures):
             reject_aborted_stage(latency_abort_routes)
             if stage_has_blocking_errors(all_summary):
                 raise RuntimeError("Load stage had non-2xx or timeout responses; refusing a higher stage")
+            if chat_interval is not None and args.include_chat:
+                chat_summary = summary.get("finn_chat", {})
+                if chat_summary.get("requests") != chat_quotas[stage_index]:
+                    raise RuntimeError("Chat cadence delivered fewer turns than scheduled")
+                if chat_summary["schedule_lag_p95_ms"] > args.max_chat_schedule_lag_ms:
+                    raise RuntimeError("Chat cadence exceeded schedule-lag p95 limit")
             exceeded = stage_exceeds_latency_limit(summary, args.p95_limits)
             if exceeded:
                 raise RuntimeError(f"Load stage exceeded p95 limits for {', '.join(exceeded)}; refusing a higher stage")
@@ -435,6 +534,8 @@ def main():
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--include-chat", action="store_true")
     parser.add_argument("--max-chat-requests", type=int, default=0)
+    parser.add_argument("--chat-interval-seconds", type=float)
+    parser.add_argument("--max-chat-schedule-lag-ms", type=float, default=5000)
     parser.add_argument("--max-chat-p95-ms", type=float)
     parser.add_argument("--chat-terminal-timeout-seconds", type=float, default=60)
     parser.add_argument("--provider-hard-cap-usd", type=float)
@@ -451,6 +552,14 @@ def main():
         parser.error(str(exc))
     if args.include_chat and args.max_chat_requests < 1:
         parser.error("FINN chat load requires --max-chat-requests with an explicit positive budget")
+    if args.chat_interval_seconds is not None and not args.include_chat:
+        parser.error("Chat cadence requires --include-chat")
+    if args.chat_interval_seconds is not None and (
+        not math.isfinite(args.chat_interval_seconds) or args.chat_interval_seconds < 1
+    ):
+        parser.error("Chat interval must be finite and at least 1 second")
+    if not math.isfinite(args.max_chat_schedule_lag_ms) or args.max_chat_schedule_lag_ms <= 0:
+        parser.error("Chat schedule-lag p95 limit must be finite and positive")
     if args.include_chat and args.allow_production and args.max_chat_p95_ms is None:
         parser.error("Production FINN chat load requires --max-chat-p95-ms")
     if args.include_chat and args.allow_production and (
@@ -482,6 +591,16 @@ def main():
         "trade_reviews": args.max_reviews_p95_ms,
         "finn_chat": args.max_chat_p95_ms if args.include_chat else None,
     }.items() if value is not None}
+    args.max_users = max(int(item.split(":", 1)[0]) for item in args.stages.split(","))
+    if args.include_chat:
+        try:
+            if args.chat_interval_seconds is None:
+                chat_stage_quotas(args.max_chat_requests, len(args.stages.split(",")), production=args.allow_production)
+            else:
+                cadence_stage_quotas(args.max_chat_requests, args.stages.split(","),
+                                     args.chat_interval_seconds, production=args.allow_production)
+        except ValueError as exc:
+            parser.error(str(exc))
     fixtures = json.loads(args.fixtures.read_text())
     if not isinstance(fixtures, list) or not fixtures or any(
         not isinstance(item, dict) or not item.get("user_id") or not item.get("access_token")
@@ -490,12 +609,6 @@ def main():
         parser.error("Fixture file must contain distinct user_id and access_token objects")
     if len({item["user_id"] for item in fixtures}) != len(fixtures):
         parser.error("Fixture user IDs must be unique")
-    args.max_users = max(int(item.split(":", 1)[0]) for item in args.stages.split(","))
-    if args.include_chat:
-        try:
-            chat_stage_quotas(args.max_chat_requests, len(args.stages.split(",")), production=args.allow_production)
-        except ValueError as exc:
-            parser.error(str(exc))
     if len(fixtures) < args.max_users:
         parser.error("Provide a distinct fixture for every user in the largest stage")
     try:
