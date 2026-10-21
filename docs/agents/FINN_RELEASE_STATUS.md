@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-tradereview: tweede modelpoging (21 oktober 2026)
+
+Phase: `LOCAL_FIX_CANDIDATE`. Na [PR #480](https://github.com/gvangalen/antigravity-trading-tool/pull/480)
+zijn backend-health en frontend-buildinfo HTTP 200 op SHA
+`629a4ea2f166c87e9b1aa7047fd8177bda532686`. De gecombineerde
+main-CI en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39520108028)
+slaagden. De bestaande onafhankelijke QA-agent draaide één beschermde
+[herkeuring 39520295886](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39520295886).
+De projectie bereikte één gesloten Paper-dossier, maar de analyse stopte op
+`closed_paper_review_ai_unavailable:rate_limit`; QA-status `INCOMPLETE`,
+verdict `NOT_ACCEPTED`. Gesaniteerd artifact SHA-256
+`3aea232b8dc01cfbd276f05905e848facce1f5ced7c20f6e56041c43220f2102`.
+Twee Paper-uitvoeringsaanroepen, nul Live-trading-calls en nul live-botactivaties.
+Fills in het dossier, analyse en een leesbare les zijn daarmee nog niet bewezen.
+
+De analysemethode staat maximaal twee modelpogingen voor dezelfde afgesloten
+trade toe, maar de generieke limiet voor geplande taken staat op één aanroep
+per review per uur. De lokale kandidaat geeft uitsluitend
+`finn_trade_review` twee eigenaar- en reviewgebonden slots; rapporten en de
+FINN-chat behouden hun bestaande limieten. De beschermde QA-diagnose maakt
+een lokale slotafwijzing voortaan apart herkenbaar van een provider-429.
+De vorige veilige categorie `rate_limit` alleen bewijst nog niet welke van
+die twee grenzen werd geraakt.
+Gerichte limiet- en diagnosecontrole **2/2** en root backend **3579 geslaagd,
+3 bestaande skips**.
+
 ## Gesloten Paper-tradereview: AI-beschikbaarheid (21 oktober 2026)
 
 Phase: `LOCAL_DIAGNOSTIC_CANDIDATE`, nog niet gedeployed. De gecontroleerde

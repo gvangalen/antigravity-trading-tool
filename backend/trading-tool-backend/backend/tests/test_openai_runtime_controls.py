@@ -3,8 +3,32 @@ from types import SimpleNamespace
 
 from backend.services.report_service import ReportService
 from backend.services import ai_availability_service
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils import openai_client as openai_module
 from backend.utils.openai_client import StructuredOutputSpec
+
+
+def test_closed_trade_review_gets_two_scoped_model_attempts(monkeypatch):
+    slots = []
+
+    def acquire(scope, *, scheduled=False, limit_override=None):
+        slots.append((scope, scheduled, limit_override))
+        return True
+
+    monkeypatch.setattr(openai_module, "acquire_ai_call_slot", acquire)
+    with ai_usage_context(user_id=41, entry_point="finn_trade_review",
+                          symbol="237", run_kind="scheduled"):
+        assert openai_module._rate_limit_allows_call() is True
+        assert openai_module._rate_limit_allows_call() is True
+    with ai_usage_context(user_id=41, entry_point="daily_report_task",
+                          symbol="237", run_kind="scheduled"):
+        assert openai_module._rate_limit_allows_call() is True
+
+    assert slots == [
+        ("finn_trade_review:41:237", True, 2),
+        ("finn_trade_review:41:237", True, 2),
+        ("daily_report_task:41:237", True, None),
+    ]
 
 
 def test_usage_telemetry_failure_does_not_invalidate_provider_success(monkeypatch):
