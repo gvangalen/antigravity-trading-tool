@@ -284,6 +284,7 @@ try:
         import backend.celery_task.technical_task
         import backend.celery_task.store_daily_scores_task
         import backend.celery_task.setup_task
+        import backend.celery_task.regime_memory_task
         import backend.celery_task.trading_bot_task
         import backend.celery_task.bot_reconciliation_task
         import backend.celery_task.portfolio_snapshot_task

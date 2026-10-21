@@ -72,7 +72,9 @@ def test_retired_regime_memory_is_absent_and_daily_report_uses_repository_bounda
     )
 
     assert not (BACKEND_ROOT / "ai_core" / "regime_memory.py").exists()
-    assert not (BACKEND_ROOT / "celery_task" / "regime_memory_task.py").exists()
+    regime_task = (BACKEND_ROOT / "celery_task" / "regime_memory_task.py").read_text(encoding="utf-8")
+    assert "retired_regime_agent" in regime_task
+    assert "get_regime_memory" not in regime_task
     assert not (BACKEND_ROOT / "infrastructure" / "repositories" / "regime_memory_repository.py").exists()
     assert "from backend.utils.db import" not in daily_report_source
     assert "get_db_connection" not in daily_report_source
