@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gewone vraag over gesloten Paper-review — herstelkandidaat (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De onafhankelijke beschermde herkeuring
+[39553606527](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39553606527)
+op `c96216cb2977d639e87a9be80c7a0ea074284d34` eindigde `NOT_ACCEPTED`.
+De eerste gewone FINN-chatbeurt werd wel voltooid, maar riep de eigenaargebonden
+dossierlezing niet aan (`closed_paper_review_chat_evidence_missing`); de
+lesvervolgvraag werd niet begonnen. De twee Paper-uitvoeringsstappen in dat
+rapport zijn geen bewijs voor gesloten fills. Het gesaniteerde artifact heeft
+SHA-256 `d8e3ca0cd67500e15fbd3f2931afffd9cbfe169ab4ab253a8275af52395de2c8`.
+
+De oorzaak is dat een expliciet reviewnummer alleen een verplichte lezing
+veroorzaakte wanneer de zin met een leeswerkwoord begon. De herstelkandidaat
+herkent ook gewone vragen met dat nummer. Mutatieverzoeken blijven uitgesloten
+en de tool leest uitsluitend het dossier van de ingelogde eigenaar. Drie
+formuleringsvarianten zijn aan de gerichte regressie toegevoegd. De volledige
+backend-suite slaagde lokaal: **3641 tests, vier bestaande skips**. Een echte
+Luna/Responses-proef voltooide vijf gewone reviewvragen en vijf lesvervolgvragen;
+iedere beurt las hetzelfde synthetische eigenaargebonden dossier en eindigde
+zonder voorstel. Security vond geen eigenaar- of actiegrensprobleem. De
+geïsoleerde lokale workeractiecontractmatrix sloot **16/16** contracten af,
+met nul brokerorders, Live-aanroepen of productieverbindingen; adaptertests
+**19/19**. Matrixartifact SHA-256:
+`cf4e957667bfd51127db2ece0dfd27f93ab2c6d9e78b4e6bc3735fd0ed668aa9`.
+De echte Responses-ontwikkelset slaagde met **20/20** operatie- en
+veldmatches, zonder provider-, schema-, parse- of validatiefout (artifact
+SHA-256 `1dd67a9229e2177f4f2cbf886328af6f4ee0b20ab1a6081318f18654004786b6`).
+De webbuild, typecheck, i18n-lint, i18n-, command-, voorstel- en setuptests
+en `audit:high` slaagden; de audit meldt één moderate advisory en geen high
+of critical. De echte Responses-regressie slaagde met **109/109** operatie-
+en veldmatches en nul provider-, schema-, parse- of validatiefouten
+(artifact SHA-256
+`ae66364e4f4306139cf7515daf398e37fd9fdfa5b381d9f8ddf8daaa967fd7e0`).
+CI, deployment en onafhankelijke live QA staan voor deze
+herstelkandidaat nog open; dit is geen acceptatieclaim.
+
 ## Gesloten Paper-review in gewone FINN-chat — kandidaat (21 oktober 2026)
 
 Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. De kandidaat is gemerged via

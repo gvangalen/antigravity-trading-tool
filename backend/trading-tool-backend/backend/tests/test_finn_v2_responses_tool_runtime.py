@@ -74,7 +74,14 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
     ).verifier_status == "not_run"
 
 
-def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read():
+@pytest.mark.parametrize("message", [
+    "Lees mijn trade-review #123 en mijn bevestigde les terug. Wat staat daarin? "
+    "Alleen teruglezen; geen voorstel of actie.",
+    "Wat weet je zeker over mijn gesloten Paper-trade-review #123 en wat was "
+    "het resultaat? Alleen lezen, geen voorstel of aankoop.",
+    "Kun je review #123 teruglezen en de bevestigde les noemen?",
+])
+def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     catalog = FinnResponsesToolCatalog()
     assert catalog.validate("get_closed_trade_review", {}).read_tools == ("read_review_history",)
     assert next(tool for tool in catalog.definitions() if tool["name"] == "get_closed_trade_review")["parameters"]["properties"] == {}
@@ -101,8 +108,7 @@ def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read():
 
     front.reads = read
     result = asyncio.run(front.run(
-        message="Lees mijn trade-review #123 en mijn bevestigde les terug. Wat staat daarin? "
-                "Alleen teruglezen; geen voorstel of actie.",
+        message=message,
         instructions=front._model_led_instructions("nl"), conversation_context={},
         verified_asset=None,
     ))
