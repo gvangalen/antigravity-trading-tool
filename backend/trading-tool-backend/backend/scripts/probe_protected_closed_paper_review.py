@@ -15,6 +15,16 @@ from datetime import date, timedelta
 from backend.scripts import probe_protected_auto_paper_history as fixture
 
 
+class ClosedPaperChatTurnFailure(RuntimeError):
+    """Carry only bounded terminal metadata out of the protected chat probe."""
+
+    def __init__(self, turn: str, envelope):
+        super().__init__(f"closed_paper_review_chat_{turn}_failed")
+        self.terminal_status = getattr(envelope, "status", None)
+        self.typed_error_code = getattr(envelope, "error_code", None)
+        self.response_present = getattr(envelope, "response", None) is not None
+
+
 @contextmanager
 def _fixture_review_rollout(user_id: int):
     """Limit this runner process's review jobs to its inactive fixture owner."""
@@ -281,7 +291,7 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
         )
         response = first.response
         if first.status != "completed" or response is None:
-            raise RuntimeError("closed_paper_review_chat_first_turn_failed")
+            raise ClosedPaperChatTurnFailure("first_turn", first)
         if (response.proposal_id or response.confirmation_required
                 or (first.policy and first.policy.execute_allowed)):
             raise RuntimeError("closed_paper_review_chat_unexpected_action")
@@ -298,7 +308,7 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
         )
         response = second.response
         if second.status != "completed" or response is None:
-            raise RuntimeError("closed_paper_review_chat_followup_failed")
+            raise ClosedPaperChatTurnFailure("followup", second)
         if (second.conversation_id != first.conversation_id or response.proposal_id
                 or response.confirmation_required or (second.policy and second.policy.execute_allowed)):
             raise RuntimeError("closed_paper_review_chat_followup_context_or_action")
