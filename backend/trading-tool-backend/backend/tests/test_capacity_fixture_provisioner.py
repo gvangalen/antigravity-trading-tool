@@ -249,6 +249,90 @@ def test_capacity_fixture_email_is_accepted_by_auth_response_schema():
     assert parse_obj_as(EmailStr, email) == email
 
 
+def test_enabled_review_diagnostic_requires_real_enabled_empty_body():
+    from types import SimpleNamespace
+    from backend.scripts.probe_capacity_enabled_reviews import enabled_empty_review
+
+    enabled = {"items": [], "total": 0, "weekly": {"status": "complete", "week_start": "2026-10-12"}}
+    assert enabled_empty_review(SimpleNamespace(status_code=200, json=lambda: enabled))
+    assert not enabled_empty_review(SimpleNamespace(status_code=200, json=lambda: {
+        **enabled, "status": "disabled",
+    }))
+    assert not enabled_empty_review(SimpleNamespace(status_code=200, json=lambda: {"items": [], "total": 0}))
+    assert not enabled_empty_review(SimpleNamespace(status_code=503, json=lambda: enabled))
+
+
+def test_enabled_review_process_override_is_restored(monkeypatch):
+    from backend.scripts.probe_capacity_enabled_reviews import process_local_review_rollout
+
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
+    monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7")
+    with process_local_review_rollout():
+        assert os.environ["FINN_TRADE_REVIEW_ROLLOUT"] == "all"
+        assert "FINN_TRADE_REVIEW_USER_IDS" not in os.environ
+    assert os.environ["FINN_TRADE_REVIEW_ROLLOUT"] == "allowlist"
+    assert os.environ["FINN_TRADE_REVIEW_USER_IDS"] == "7"
+
+
+def test_enabled_review_interim_latency_abort_stays_latched():
+    import time
+    from backend.scripts.probe_capacity_enabled_reviews import monitor_stage, percentile
+
+    samples = [(200, 2000.0, True)] * 20
+    stop = asyncio.Event()
+    aborted = []
+    asyncio.run(monitor_stage(samples, 1000, time.monotonic() + 0.01, stop, aborted))
+    assert stop.is_set() and aborted == ["interim_steady_p95_breach"]
+    samples.extend([(200, 10.0, True)] * 500)
+    assert percentile([sample[1] for sample in samples], 0.95) == 10.0
+    assert aborted == ["interim_steady_p95_breach"]
+
+
+def test_enabled_review_identity_preflight_times_out_hanging_inprocess_request():
+    from backend.scripts.probe_capacity_enabled_reviews import identity_preflight
+
+    class HangingClient:
+        async def get(self, *_args, **_kwargs):
+            await asyncio.Event().wait()
+
+    started = __import__("time").monotonic()
+    with pytest.raises(RuntimeError, match="Identity preflight failed"):
+        asyncio.run(identity_preflight(HangingClient(), [{
+            "user_id": 1, "email": "capacity+review-check-0001@load.example",
+            "access_token": "test-token",
+        }], timeout=0.02))
+    assert __import__("time").monotonic() - started < 1
+
+
+def test_enabled_review_resource_stop_gates_are_concrete():
+    from copy import deepcopy
+    from backend.scripts.probe_capacity_enabled_reviews import resource_stop_reason
+
+    baseline = {"db_free": 50, "lock_waiters": 0, "long_idle_transactions": 0,
+                "mem_available_mib": 4096, "queues": {
+                    "execution_critical": {"depth": 0, "oldest_age_seconds": None},
+                    "finn_interactive": {"depth": 0, "oldest_age_seconds": None},
+                }}
+    assert resource_stop_reason(baseline, baseline, minimum_db_free=43) is None
+    for change, reason in [
+        ({"db_free": 19}, "database_headroom"),
+        ({"lock_waiters": 1}, "database_lock_or_long_transaction"),
+        ({"long_idle_transactions": 1}, "database_lock_or_long_transaction"),
+        ({"mem_available_mib": 1000}, "host_memory"),
+    ]:
+        snapshot = {**baseline, **change}
+        assert resource_stop_reason(snapshot, baseline) == reason
+    queued = deepcopy(baseline)
+    queued["queues"]["execution_critical"] = {"depth": 6, "oldest_age_seconds": 5}
+    assert resource_stop_reason(queued, baseline) == "critical_queue_depth"
+    aging = deepcopy(baseline)
+    aging["queues"]["finn_interactive"] = {"depth": 1, "oldest_age_seconds": 31}
+    assert resource_stop_reason(aging, baseline) == "queue_age_growth"
+    unknown = deepcopy(baseline)
+    unknown["queues"]["execution_critical"] = {"depth": 1, "oldest_age_seconds": None}
+    assert resource_stop_reason(unknown, baseline) == "queue_age_unavailable"
+
+
 def test_capacity_load_origin_rejects_unapproved_token_destinations():
     validate = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))["validate_base_url"]
     assert validate("http://127.0.0.1:8000", allow_production=False) == "http://127.0.0.1:8000"

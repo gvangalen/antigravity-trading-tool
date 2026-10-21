@@ -105,6 +105,49 @@ message and marker fields and refuses to cascade-delete runs with dependent rows
 Production trade reviews currently use a separate allowlist; this canary
 does not claim review-body isolation or real review-list capacity.
 
+### Enabled trade-review read diagnostic
+
+The public load profile measures the disabled review response for capacity
+fixtures while production uses an allowlist. To measure the enabled read path
+without changing the deployed rollout, use
+`backend.scripts.probe_capacity_enabled_reviews` on the production host in an
+isolated process. It sends authenticated requests through the deployed FastAPI
+app using `httpx.ASGITransport`; only that process sees a temporary `all`
+rollout mode. It makes no provider or trade calls, requires exact marked
+accounts with no reviews, and rejects a disabled or malformed response. The
+operator must verify the exact deployed SHA and inspect PostgreSQL connections,
+host memory and latency during each stage. Example after creating and issuing
+1000 fresh fixtures with the provisioner:
+
+```bash
+python -m backend.scripts.probe_capacity_enabled_reviews \
+  --campaign capacity-review-oct21 --fixtures /secure/private-directory/review-fixtures.json \
+  --expected-db-host "$DB_HOST" --expected-db-port "$DB_PORT" \
+  --expected-db-name "$DB_NAME" \
+  --stages 100:60,500:60,1000:120 --max-p95-ms 1000 \
+  --allow-production --allow-process-local-rollout
+```
+
+Set `APP_ENV=production` and `TRADAMIND_BUILD_SERVICE=backend` in this
+isolated command's environment; the runner refuses any other profile.
+Use an interactive terminal for multiple stages. The process asks for
+`CONTINUE` before escalation and stops on any non-200, disabled response,
+timeout or steady-phase p95 breach. It samples PostgreSQL activity, Redis
+queue depth/age and host available memory before and every two seconds during
+each stage. Every preflight reserves all still unopened diagnostic pool slots
+(at most 23 total) plus 20 usable PostgreSQL connections; reserved server
+slots are excluded from the free count. All
+stages stop below 20 free slots, on a lock waiter or an idle transaction older
+than ten seconds, under 1 GiB available memory, or on the stated queue
+growth/age thresholds. If any resource cannot be sampled, the stage stops.
+The operator must still inspect worker health, CPU, and application errors at
+each pause. Deactivate the exact campaign and remove
+its private token file immediately afterward. This diagnostic measures one
+in-process API instance with real middleware, Redis limiter and database
+queries; it does not prove Nginx or multiple API-process capacity, nor
+positive trade-review-content isolation. The public 1000-user test and the
+two-owner content canary provide separate evidence for those surfaces.
+
 ## Prepare distinct fixture accounts
 
 `backend/scripts/provision_capacity_fixtures.py` creates at most 1000 marked
