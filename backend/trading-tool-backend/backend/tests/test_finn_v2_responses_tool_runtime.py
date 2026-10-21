@@ -5448,19 +5448,138 @@ def test_new_strategy_request_supersedes_blocked_draft_but_waiver_does_not():
     )
     assert unnamed == prior
     fresh = dict(prior)
-    assert _discard_superseded_strategy_rule_block(
+    assert not _discard_superseded_strategy_rule_block(
         fresh, "Maak een nieuwe Paper-strategie voor mijn opgeslagen BTC-setup. "
         "Naam: Strategie B. Toon eerst het voorstel."
     )
-    assert "strategy_rule_block" not in fresh
-    assert "active_guided_operation" not in fresh
-    assert "responses_clarification" not in fresh
+    assert fresh == prior
+    qualified = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        qualified,
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie B. BTC 4H, vast bedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD en voorzichtig risico. "
+        "Toon het concept, sla niets op zonder bevestiging.",
+    )
+    assert qualified == prior
+    explicitly_independent = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        explicitly_independent,
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie B. BTC 4H, vast bedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD en voorzichtig risico, "
+        "zonder automatische regels uit het vorige concept. Toon eerst het voorstel.",
+    )
+    assert explicitly_independent == prior
+    pending = {
+        **prior,
+        "pending_independent_strategy": {
+            "name": "Strategie B", "message": (
+                "Maak een nieuwe Strategie B met bedrag €100, entry 84000 USD, "
+                "stop-loss 79800 USD en target 92400 USD."
+            ),
+            "source_run_id": "earlier-run",
+        },
+    }
+    for negated in (
+        "Niet: begin onafhankelijk nieuw strategievoorstel zonder eerdere automatische regels",
+        '"Begin onafhankelijk nieuw strategievoorstel zonder eerdere automatische regels" bedoel ik niet',
+        "Begin onafhankelijk nieuw strategievoorstel zonder eerdere automatische regels. Houd de trendfilter aan.",
+    ):
+        unsafe = dict(pending)
+        assert not _discard_superseded_strategy_rule_block(unsafe, negated)
+        assert unsafe == pending
+    accepted = dict(pending)
+    assert _discard_superseded_strategy_rule_block(
+        accepted,
+        "Begin onafhankelijk nieuw strategievoorstel zonder eerdere automatische regels",
+    )
+    assert "strategy_rule_block" not in accepted
+    assert accepted["pending_independent_strategy"] == pending["pending_independent_strategy"]
+    incomplete_pending = dict(pending)
+    incomplete_pending["pending_independent_strategy"] = {
+        "name": "Strategie B", "message": "Maak een nieuwe Strategie B, zonder eerdere regels.",
+        "source_run_id": "earlier-run",
+    }
+    assert not _discard_superseded_strategy_rule_block(
+        incomplete_pending,
+        "Begin onafhankelijk nieuw strategievoorstel zonder eerdere automatische regels",
+    )
+    assert "strategy_rule_block" in incomplete_pending
+    inherited = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        inherited,
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie B. De handelsregels blijven gelijk aan mijn vorige concept.",
+    )
+    assert inherited == prior
+    inherited_en = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        inherited_en,
+        "Create a new strategy named Strategy B with the same rules as the previous draft.",
+    )
+    assert inherited_en == prior
+    for suffix in (
+        "Gebruik de regels van dit concept.",
+        "Behoud alle bestaande handelsregels.",
+    ):
+        carried = dict(prior)
+        assert not _discard_superseded_strategy_rule_block(
+            carried,
+            "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+            f"met naam Strategie B. {suffix}",
+        )
+        assert carried == prior
+    independent = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        independent,
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie B, zonder eerdere regels. Toon eerst het voorstel.",
+    )
+    assert independent == prior
+    retained_limit = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        retained_limit,
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie B. BTC 4H, vast bedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD. Zonder eerdere regels, "
+        "maar blijf bij maximaal twee trades per dag.",
+    )
+    assert retained_limit == prior
+    retained_filter = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        retained_filter,
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie B. BTC 4H, vast bedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD. Houd de trendfilter aan.",
+    )
+    assert retained_filter == prior
+    for suffix in (
+        "Houd daarnaast de oude handelsregel aan.",
+        "De eerdere instapregel blijft gelden.",
+        "Houd de trendfilter aan.",
+        "Behoud dezelfde scoregrens.",
+    ):
+        retained_after_waiver = dict(prior)
+        assert not _discard_superseded_strategy_rule_block(
+            retained_after_waiver,
+            "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+            "met naam Strategie B, zonder eerdere regels. " + suffix,
+        )
+        assert retained_after_waiver == prior
+    same_qualified = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        same_qualified,
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie A. Toon het concept.",
+    )
+    assert same_qualified == prior
     unnamed_prior = {"strategy_rule_block": {"captured_inputs": {}},
                      "active_guided_operation": {"operation_id": "create_strategy"}}
-    assert _discard_superseded_strategy_rule_block(
+    assert not _discard_superseded_strategy_rule_block(
         unnamed_prior, "Maak een nieuwe Paper-strategie. Naam: Strategie B."
     )
-    assert "strategy_rule_block" not in unnamed_prior
+    assert "strategy_rule_block" in unnamed_prior
 
 
 def test_strategy_rule_coverage_detects_unstored_dynamic_rule():

@@ -137,6 +137,17 @@ def _explicit_fresh_create_operation_request(message: str) -> str | None:
         message, re.I,
     ):
         return operation
+    # The named setup may precede the new strategy object: "Maak voor mijn
+    # opgeslagen setup X een tweede Paper-strategie ...". In that form the
+    # first indefinite noun is the parent, not the requested object.
+    if operation == "create_strategy" and re.match(
+        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
+        r"[^.!?]{0,160}\b(?:een|a|an|ein(?:e|en|er|es)?)\s+"
+        r"(?:(?:tweede|nieuwe|andere|second|new|another|zweite|neue)\s+)?"
+        r"(?:paper[-\s]+)?(?:strategie|strategy)\b",
+        message, re.I,
+    ):
+        return operation
     return None
 
 

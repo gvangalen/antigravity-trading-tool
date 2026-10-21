@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: protected QA on 260d846 (21 October 2026)
+
+Phase: `LOCAL_REPAIR_IN_PROGRESS`; the current public SHA is **not accepted**.
+The existing independent QA Agent ran the user-authorized protected production
+matrix on backend and frontend SHA `260d84607ab149ea01e245d9f7787fe1d6aafc8e`.
+[Workflow 39659501506](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39659501506)
+finished with `NOT_ACCEPTED`: five operation mismatches in the eight read-only
+turns (`w01_read_setup`, `w02_unsupported_rules`, `w03_explicit_waiver`,
+`w04_new_strategy_after_waiver`, `w05_change_open_target`). No proposal was
+confirmed and no order or Live-bot action was made. The published sanitized
+artifact records terminal `READ` without an operation ID for w01/w03/w05 and
+`strategy_rule_not_captured` clarification for w02/w04. It does not contain
+answer text or the phase needed to attribute every mismatch to a specific
+model, selector, verifier, or runtime step. QA also observed an Analyse 502,
+market-intelligence 404, duplicate coachfeed updates, and partial portfolio
+cash with unknown total. These remain open observations, not explained by the
+local strategy repair below.
+
+Build reproduced one generic strategy-continuation defect in an isolated local
+runtime: a new named strategy after a blocked draft could be classified as a
+setup or remain bound to the old unsupported rules. The local change routes the
+new strategy correctly and requires a separate, exact user choice before an
+independent strategy can discard old automatic rules. A request that carries
+old rules or lacks complete typed fields remains blocked. Security reviewed the
+current diff read-only and found no concrete P1/P2 issue. The change remains
+in an isolated local worktree; it has **not been deployed or independently
+accepted**. Other QA mismatches
+remain unresolved; a local green check is not a release verdict.
+
+Measured local evidence for this repair: full backend `3707 passed, 4 skipped`;
+worker-driven action contracts `16/16` with zero broker orders, Live calls or
+production connections (artifact SHA-256
+`b44862eadba2ba49768ce4da3d810c4637c30d3b114d703301556fc7e8d7d817`).
+The four-turn synthetic API/Celery/real-Responses regression passed all eight
+checks: blocked and inherited rules stayed non-confirmable; a complete distinct
+strategy required an explicit independent choice; that choice produced a
+`create_strategy` proposal without saving a strategy (artifact SHA-256
+`884f07f9f2a0dd2788ff44d974bad6fa579f95ea4a070e2f06607389613e8307`).
+The real-provider selector development set passed `20/20` with no provider,
+schema, parse, timeout or validation failure (artifact SHA-256
+`10e030f7c45c59561e2be160881a703deca3c75954073501cfbfe76a90f9511e`).
+Web typecheck, i18n lint/tests, command/proposal tests, production build and
+high-severity audit passed; the audit still reports one moderate Next.js
+advisory. These checks do not resolve the five protected QA mismatches or the
+separate Analyse, intelligence, feed and portfolio observations.
+
 ## FINN-agent-cutover: toestemming na geblokkeerde strategie (21 oktober 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. De bestaande onafhankelijke QA-agent gaf
