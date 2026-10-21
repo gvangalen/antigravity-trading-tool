@@ -8,15 +8,16 @@ import styles from "./MarketConditionPicker.module.css";
 
 const CONDITION_ICONS = [ArrowDownRight, ArrowDownRight, MoveRight, ArrowUpRight, ArrowUpRight];
 
-export default function MarketConditionPicker({ choice, onChange, copy = {}, symbol = "", disabled = false, existingLimits = false, previousChoice = null, allowOff = true, children }) {
+export default function MarketConditionPicker({ choice, onChange, copy = {}, symbol = "", disabled = false, existingLimits = false, previousChoice = null, allowOff = true, isDca = false, children }) {
   const selected = MARKET_CONDITIONS.find((item) => item.id === choice);
-  const [advancedOpen, setAdvancedOpen] = useState(choice === "custom" || choice === "off");
+  const [advancedOpen, setAdvancedOpen] = useState(choice === "custom" || (choice === "off" && !isDca));
   const advancedId = useId();
   const radioName = useId();
+  const showScoreOptions = !isDca || choice !== "off";
 
   useEffect(() => {
-    if (choice === "custom" || choice === "off") setAdvancedOpen(true);
-  }, [choice]);
+    if (choice === "custom" || (choice === "off" && !isDca)) setAdvancedOpen(true);
+  }, [choice, isDca]);
 
   const selectedTitle = selected
     ? copy.options?.[selected.id]?.title
@@ -36,8 +37,34 @@ export default function MarketConditionPicker({ choice, onChange, copy = {}, sym
 
   return (
     <fieldset disabled={disabled} className={`min-w-0 ${styles.container}`}>
-      <legend className="text-2xl font-black tracking-tight text-slate-950">{copy.title}</legend>
-      <p className="mt-2 mb-6 max-w-2xl text-sm leading-relaxed text-slate-600">{copy.help}</p>
+      <legend className="text-2xl font-black tracking-tight text-slate-950">{isDca ? copy.dcaTitle : copy.title}</legend>
+      <p className="mt-2 mb-6 max-w-2xl text-sm leading-relaxed text-slate-600">{isDca ? copy.dcaHelp : copy.help}</p>
+
+      {isDca && allowOff ? (
+        <div className="mb-6 grid gap-3 sm:grid-cols-2">
+          <label className={`flex cursor-pointer items-start gap-4 rounded-xl border px-4 py-4 focus-within:ring-2 focus-within:ring-blue-200 ${choice === "off" ? "border-blue-600 bg-blue-50/80" : "border-slate-200 bg-white hover:border-blue-300"}`}>
+            <input type="radio" name={`${radioName}-dca-mode`} checked={choice === "off"} onChange={() => onChange("off")} className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600" />
+            <span>
+              <strong className="block text-sm font-bold text-slate-900">{copy.standardDcaTitle}</strong>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-600">{copy.standardDcaDescription}</span>
+              {existingLimits && choice === "off" ? <span className="mt-2 block text-xs font-semibold text-amber-800">{copy.offClearsExisting}</span> : null}
+            </span>
+          </label>
+          <label className={`flex cursor-pointer items-start gap-4 rounded-xl border px-4 py-4 focus-within:ring-2 focus-within:ring-blue-200 ${choice !== "off" ? "border-blue-600 bg-blue-50/80" : "border-slate-200 bg-white hover:border-blue-300"}`}>
+            <input type="radio" name={`${radioName}-dca-mode`} checked={choice !== "off"} onChange={() => { if (choice === "off") onChange(null); }} className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600" />
+            <span>
+              <strong className="block text-sm font-bold text-slate-900">{copy.marketDcaTitle}</strong>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-600">{copy.marketDcaDescription}</span>
+            </span>
+          </label>
+        </div>
+      ) : null}
+
+      {isDca && choice === "off" ? (
+        <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm leading-relaxed text-slate-700">{copy.standardDcaDetail}</p>
+      ) : null}
+
+      {showScoreOptions ? <>
 
       <div className={styles.columns}>
         <div className="min-w-0 space-y-2">
@@ -97,7 +124,7 @@ export default function MarketConditionPicker({ choice, onChange, copy = {}, sym
                 <span className="mt-1 block text-xs leading-relaxed text-slate-600">{copy.customDescription}</span>
               </span>
             </label>
-            {allowOff ? (
+            {allowOff && !isDca ? (
               <label className={`flex cursor-pointer items-center gap-4 rounded-xl border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-blue-200 ${choice === "off" ? "border-blue-600 bg-blue-50/80" : "border-slate-200 bg-white hover:border-blue-300"}`}>
                 <input type="radio" name={radioName} checked={choice === "off"} onChange={() => onChange("off")} className="h-5 w-5 shrink-0 accent-blue-600" />
                 <span className="min-w-0">
@@ -122,6 +149,7 @@ export default function MarketConditionPicker({ choice, onChange, copy = {}, sym
         <p className="mt-3 max-w-3xl">{copy.advancedHelp}</p>
         {selected ? <p className="mt-2">{copy.scoreExplanation?.replace("{min}", selected.min).replace("{max}", selected.max)}</p> : null}
       </details>
+      </> : null}
     </fieldset>
   );
 }

@@ -3273,6 +3273,13 @@
     "marketConditions": {
       "title": "Wanneer past deze setup?",
       "help": "Kies bij welke waarde van jouw benchmarkscore deze setup mag meedoen.",
+      "dcaTitle": "Hoe wil je periodiek kopen?",
+      "dcaHelp": "Begin met een vast ritme zonder scorevoorwaarde, of voeg een marktvoorwaarde toe.",
+      "standardDcaTitle": "Standaard DCA",
+      "standardDcaDescription": "Beoordeel op de gekozen dag een aankoop, ongeacht de benchmarkscore.",
+      "standardDcaDetail": "Er wordt geen scoregrens opgeslagen. Je strategie bepaalt het bedrag; saldo en veiligheidslimieten kunnen een order nog tegenhouden.",
+      "marketDcaTitle": "DCA met marktvoorwaarden",
+      "marketDcaDescription": "Kies hieronder wanneer de benchmarkscore een aankoop toelaat. Een scoregestuurd bedrag stel je apart in bij de strategie.",
       "summaryTitle": "Jouw keuze",
       "summaryEmptyTitle": "Kies een marktsituatie",
       "summaryEmptyBody": "Je ziet hier wat jouw keuze voor deze setup betekent.",
