@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: toestemming na geblokkeerde strategie (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. De bestaande onafhankelijke QA-agent gaf
+Phase: `LIVE_CANDIDATE_QA_PENDING`. De bestaande onafhankelijke QA-agent gaf
 `NOT_ACCEPTED` op publieke backend- en frontend-SHA
 `c3de87372c62414b043ae8965c00be7f858c8f47`. De eerste aanvraag met
 twee niet-ondersteunde automatische regels werd terecht geblokkeerd. De
@@ -36,7 +36,15 @@ extra-risicovarianten geen concrete nieuwe blokkade. De volledige echte
 Luna/Responses-regressie slaagt **109/109** zonder provider-, schema-,
 timeout-, parse- of validatiefout; artifact SHA-256
 `893f68e55eb634a666ad62e0a3cbe79c6f43a2fea60a91a7e5dc9bfaa8a25e2d`.
-CI en deployment staan nog open; er is vanuit deze reparatie niets gedeployed.
+De productreparatie is via [PR #530](https://github.com/gvangalen/antigravity-trading-tool/pull/530)
+gemerged als product-SHA `bf4060e50930ffc529e99459aa8734d3e21848eb`.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39653893662),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39654341933)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39654712235)
+slaagden. Publieke backend-health en frontend-buildinfo gaven elk HTTP 200
+en exact de product-SHA. Dit is Build-identiteitsbewijs, geen onafhankelijke
+live QA-acceptatie. Na deze statuscommit wordt de uiteindelijke publieke SHA
+opnieuw gecontroleerd voordat de bestaande QA-agent hertest.
 
 ## FINN-agent-cutover: voorstelcorrectie en expliciete waiver (21 oktober 2026)
 
