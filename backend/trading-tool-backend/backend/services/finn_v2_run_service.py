@@ -130,11 +130,17 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
         r"maak strategievoorstel zonder deze automatische regels[.;]\s*"
         r"ik geef expliciet toestemming om alleen de stijgende 1d-trendvoorwaarde "
         r"en de limiet van (\w+) trades per dag weg te laten[.;]\s*"
-        r"behoud de eerder opgegeven vaste prijzen, naam, basisbedrag en "
+        r"behoud de eerder opgegeven vaste prijzen(?: in (?P<retained_currency>usd|eur))?, naam, basisbedrag en "
         r"risicostijl[.;]\s*dit is geen koopopdracht",
         normalized,
     )
-    if original_prose and expanded_prose:
+    short_prose = re.fullmatch(
+        r"maak strategievoorstel zonder deze automatische regels[.;]\s*"
+        r"laat alleen de stijgende 1d-trend en maximaal (\w+) trades per dag "
+        r"weg[.;]\s*de rest moet gelijk blijven",
+        normalized,
+    )
+    if original_prose and (expanded_prose or short_prose):
         # This expanded consent names only two withdrawn rules. Accept it only
         # for the fully recognized request shape; a keyword denylist could
         # silently discard an additional rule phrased in new words.
@@ -146,10 +152,18 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
             "toon het concept.",
             "toon het concept, sla niets op zonder bevestiging.",
         }
+        retained_currency = expanded_prose.group("retained_currency") if expanded_prose else None
+        currency_matches = not retained_currency or bool(
+            priced_request and all(
+                priced_request.group(field) == retained_currency
+                for field in ("entry_currency", "stop_currency", "target_currency")
+            )
+        )
         return bool(
-            original_prose.group(1) == expanded_prose.group(1)
+            original_prose.group(1) == (expanded_prose or short_prose).group(1)
             and (simple_prefix or priced_request)
             and safe_suffix
+            and currency_matches
         )
     # An expanded waiver can retain ordinary price/amount fields, but may not
     # retain a second unsupported automatic rule. Match the withdrawn clause

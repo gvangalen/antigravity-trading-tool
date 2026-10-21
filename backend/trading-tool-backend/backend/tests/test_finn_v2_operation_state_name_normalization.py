@@ -728,6 +728,52 @@ def test_trade_target_clause_stops_before_euro_execution_amount():
     )["targets"] == [92400.0]
 
 
+def test_open_strategy_target_replacement_does_not_copy_draft_name_or_old_level():
+    message = (
+        "Verander alleen het target van dit open strategievoorstel BTC QA Adapt 44B "
+        "van 93.000 USD naar 92.400 USD. Behoud naam, setup, entry 84.000 USD, "
+        "stop-loss 79.800 USD, €100 en voorzichtig risico. Bevestig niets."
+    )
+    assert FinnV2OperationStateService._strategy_trade_inputs(message)["targets"] == [92400.0]
+    assert FinnV2OperationStateService._strategy_trade_inputs(
+        "Verwijder target 44 en 93.000; laat uitsluitend 92.400 USD als enig target staan."
+    )["targets"] == [92400.0]
+    assert FinnV2OperationStateService._strategy_trade_inputs(
+        "Mijn targets zijn [82.000, 86.000] USD en mijn risico is voorzichtig."
+    )["targets"] == [82000.0, 86000.0]
+
+
+def test_target_replacement_cannot_reinterpret_new_quote_as_execution_amount():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    message = "Verander alleen het target van 93.000 USD naar 92.400 EUR. Behoud het basisbedrag."
+    extracted = service.explicit_inputs(contract=contract, message=message, explicit_asset=None)
+    assert extracted["targets"] == [92400.0]
+    assert extracted["price_currency"] == "MIXED"
+    assert "base_amount" not in extracted
+
+    original = service.resolve(
+        contract=contract, message="Maak een vaste strategie. Alle koersniveaus zijn in USD.", explicit_asset="BTC",
+        conversation_context={}, supplied_inputs={
+            "setup_id": 42, "name": "BTC test", "execution_mode": "fixed",
+            "base_amount": 100, "risk_profile": "balanced", "entry": 84000,
+            "stop_loss": 79800, "targets": [93000], "price_currency": "USD",
+        }, model_tool_inputs=True,
+    )
+    proposed = original.copy(update={"status": "proposed", "open_proposal_id": "proposal-1"})
+    revised = service.resolve(
+        contract=contract, message=message, explicit_asset=None,
+        conversation_context={
+            "active_guided_operation": proposed.dict(),
+            "proposal_revision": {"proposal_id": "proposal-1", "operation_id": "create_strategy"},
+        },
+        supplied_inputs={"targets": [92400], "base_amount": 92400}, model_tool_inputs=True,
+    )
+    assert revised.status == "collecting"
+    assert revised.collected_inputs["base_amount"] == 100
+    assert not any(field in revised.collected_inputs for field in ("entry", "stop_loss", "targets", "price_currency"))
+
+
 def test_strategy_name_stops_before_risk_follow_up():
     assert FinnV2OperationStateService._name_input_from_text(
         "naam BTC QA USD CA357 en risico voorzichtig blijven staan."

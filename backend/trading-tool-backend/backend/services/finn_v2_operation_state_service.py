@@ -275,11 +275,19 @@ class FinnV2OperationStateService:
                 existing is not None
                 and key in collected
                 and key != requested_slot
-                and not permits_existing_field_changes
+                and (
+                    not permits_existing_field_changes
+                    or (
+                        contract.operation_id == "create_strategy"
+                        and key in {"base_amount", "entry", "stop_loss", "targets", "price_currency"}
+                        and key not in explicit
+                    )
+                )
             ):
                 # The model output is a candidate extraction. During a typed
                 # guided turn it cannot reinterpret a number for the pending
-                # slot as a replacement for an already persisted field.
+                # slot as a replacement for an existing financial field.
+                # Even an explicit correction only changes the named fields.
                 continue
             if key in accepted_inputs and not self._is_missing(value):
                 canonical = self._canonical_input(key, value)
@@ -926,7 +934,7 @@ class FinnV2OperationStateService:
                     "benutzerdefiniert": "custom",
                 }.get(mode, mode)
             amount_match = re.search(
-                r"(?:\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of|naar|to|auf)?\s*(?:€|eur|euros?|euro|\$)?\s*(\d+(?:[.,]\d+)?))|(?:\b(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)\b)",
+                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of|naar|to|auf)?\s*(?:€|eur|euros?|euro|\$)?\s*(\d+(?:[.,]\d+)?)",
                 lowered,
             )
             if amount_match is None:
@@ -939,7 +947,28 @@ class FinnV2OperationStateService:
                 )
             if amount_match is None:
                 amount_match = re.search(
+                    r"\b(?:vast(?:e)?|fixed|fest(?:e)?)\s+"
+                    r"(?:uitvoering|aankoop|execution|trade|ausf.hrung)\s+"
+                    r"(?:van|of|von|voor|for)?\s*(?:€|eur|euros?|euro|\$)?\s*"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)?",
+                    lowered,
+                )
+            if amount_match is None:
+                amount_match = re.search(
                     r"(?:€|eur)\s*(\d+(?:[.,]\d+)?)\s*per\s+(?:uitvoering|aankoop|trade)",
+                    lowered,
+                )
+            # A bare currency amount next to entry/stop/target is a price
+            # level, not evidence for the strategy's EUR execution amount.
+            # Preserve a prior base amount during corrections; ask for it on
+            # new drafts if the user did not label it.
+            trade_price_fields = self._strategy_trade_inputs(text)
+            if amount_match is None and not any(
+                field in trade_price_fields for field in ("entry", "stop_loss", "targets")
+            ):
+                amount_match = re.search(
+                    r"(?:\b(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)\b|"
+                    r"(?:€|\$)\s*(\d+(?:[.,]\d+)?))",
                     lowered,
                 )
             if amount_match:
@@ -1316,8 +1345,9 @@ class FinnV2OperationStateService:
                 values[field] = cls._numeric_value(match.group(1))
         targets = re.search(
             r"\b(?:targets?|koersdoelen?|take[- ]?profits?|ziele?n?)\s*"
-            r"(?:zijn|are|sind|:|=|op|at)?\s*"
-            r"(.+?)(?=,?\s+(?:(?:and|en|und)\s+)?(?:(?:maximaal|max(?:imum)?|maximum|höchstens)\s+"
+            r"(?:zijn|is|are|sind|ist|:|=|op|at)?\s*"
+            r"(\[?\s*(?:€|\$|eur|usd)?\s*\d+(?:[.,]\d+)?(?:\.(?!\s|$)|[^.!?\n])*?)"
+            r"(?=,?\s+(?:(?:and|en|und)\s+)?(?:(?:maximaal|max(?:imum)?|maximum|höchstens)\s+"
             r"\d+(?:[.,]\d+)?\s*(?:procent|percent|%|prozent)\s+)?(?:risk(?:\s*profile|\s*style)?|"
             r"risico(?:profiel|stijl|regel)?|risikoprofil|risikostil|"
             r"basis(?:bedrag|inleg)|base\s*amount|grundbetrag|betrag|bedrag)\b|"
@@ -1329,6 +1359,25 @@ class FinnV2OperationStateService:
             numbers = re.findall(r"\d+(?:[.,]\d+)?", targets.group(1))
             if numbers:
                 values["targets"] = [cls._numeric_value(number) for number in numbers]
+        # In a correction, numbers before "naar" identify the old target or
+        # even the draft name (for example "44B"). They are not new targets.
+        # The owner's explicit replacement must win over that broad initial
+        # extraction, including a follow-up that says "only this target".
+        replacement = re.search(
+            r"\b(?:target|koersdoel|take[- ]?profit|ziel)\b[^!?\n]{0,180}?"
+            r"\b(?:van|from|von)\s*\d+(?:[.,]\d+)?\s*(?:usd|eur|€|\$)?\s+"
+            r"(?:naar|to|auf)\s*(?:€|\$|eur|usd)?\s*(\d+(?:[.,]\d+)?)",
+            text, re.IGNORECASE,
+        )
+        only_target = re.search(
+            r"\b(?:uitsluitend|alleen|only|nur)\s*(\d+(?:[.,]\d+)?)"
+            r"\s*(?:usd|eur|€|\$)?\s+(?:als\s+)?(?:enig|enige|sole|only|einziges?)\s+"
+            r"(?:target|koersdoel|take[- ]?profit|ziel)",
+            text, re.IGNORECASE,
+        )
+        chosen_target = only_target or replacement
+        if chosen_target:
+            values["targets"] = [cls._numeric_value(chosen_target.group(1))]
         risk_prefix = re.search(
             r"\b((?:maximaal|max(?:imum)?|maximum|höchstens)\s+\d+(?:[.,]\d+)?\s*"
             r"(?:procent|percent|%|prozent))\s+(?:risk|risico|risiko)\b",
@@ -1390,6 +1439,18 @@ class FinnV2OperationStateService:
         for match in level.finditer(text):
             token = match.group("before") or match.group("after")
             if token:
+                currencies.add(FinnV2OperationStateService._currency_token(token))
+        # A target correction carries both an old and a new price. Inspect
+        # both quotes; otherwise "target van 93.000 USD naar 92.400 EUR"
+        # can silently keep USD while accepting the EUR number as USD.
+        replacement = re.compile(
+            r"\b(?:targets?|koersdoelen?|take[- ]?profits?|ziele?n?)\b[^.!?\n]{0,180}?"
+            r"\b(?:van|from|von)\s*(?:€|\$|usd|eur)?\s*\d[\d.,]*\s*(?:usd|eur|dollars?|euros?|€|\$)?\s+"
+            r"(?:naar|to|auf)\s*(?:€|\$|usd|eur)?\s*\d[\d.,]*\s*(?:usd|eur|dollars?|euros?|€|\$)?",
+            re.IGNORECASE,
+        )
+        for match in replacement.finditer(text):
+            for token in re.findall(r"\b(?:usd|eur|dollars?|euros?)\b|[$€]", match.group(0), re.IGNORECASE):
                 currencies.add(FinnV2OperationStateService._currency_token(token))
         return "MIXED" if len(currencies) > 1 else next(iter(currencies)) if currencies else None
 
