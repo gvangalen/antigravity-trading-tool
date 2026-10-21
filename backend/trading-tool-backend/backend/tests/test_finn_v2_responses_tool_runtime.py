@@ -40,7 +40,8 @@ from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_run_service import (
     FinnV2RunService, _simple_coach_experiment_enabled, _raw_coach_experiment_enabled,
-    _minimal_read_answer, _minimal_read_answers_enabled,
+    _minimal_read_answer, _minimal_read_answers_enabled, _explicit_setup_rule_waiver,
+    _proposal_from_blocked_setup,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
@@ -4915,6 +4916,78 @@ class FakeResponses:
         if isinstance(result, Exception):
             raise result
         return result
+
+
+@pytest.mark.parametrize("verdict", ["none", "unsupported_required_rule", "unclear"])
+def test_setup_rule_coverage_checks_full_request_against_enforced_fields(verdict):
+    fake = FakeResponses(response("coverage-1", text=json.dumps({"verdict": verdict})))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    result = asyncio.run(guard.setup_rule_coverage(
+        message=(
+            "Maak een BTC swing-setup voor 4H. Gebruik 1D voor de trend. "
+            "Ik wil alleen instappen als die trend stijgt en de markt niet onder druk staat."
+        ),
+        collected_inputs={"setup_type": "trade", "symbol": "BTC", "timeframe": "4H", "name": "BTC Swing"},
+    ))
+    assert result == verdict
+    sent = json.loads(fake.requests[0]["input"])
+    assert "alleen instappen" in sent["latest_user_request"]
+    assert sent["captured_setup_fields"]["timeframe"] == "4H"
+    assert fake.requests[0]["store"] is False
+    assert fake.requests[0]["tool_choice"] == "none"
+
+
+def test_setup_rule_coverage_fails_closed_when_provider_cannot_classify():
+    fake = FakeResponses(RuntimeError("provider unavailable"))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    assert asyncio.run(guard.setup_rule_coverage(
+        message="Maak een setup", collected_inputs={"symbol": "BTC"},
+    )) == "unclear"
+
+
+def test_setup_rule_coverage_does_not_truncate_late_required_condition():
+    fake = FakeResponses(response("coverage-1", text='{"verdict":"unsupported_required_rule"}'))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    message = "Maak een BTC-setup. " + ("Context over mijn plan. " * 150) + (
+        "Ik stap alleen in als de 1D-trend stijgt."
+    )
+    assert len(message) > 3000
+    assert asyncio.run(guard.setup_rule_coverage(
+        message=message, collected_inputs={"symbol": "BTC", "timeframe": "4H"},
+    )) == "unsupported_required_rule"
+    assert fake.requests[0]["input"].find("1D-trend stijgt") >= 3000
+
+
+@pytest.mark.parametrize("answer, expected", [
+    ("Maak voorstel zonder deze voorwaarden", True),
+    ("Begin nieuw voorstel zonder eerdere voorwaarden", True),
+    ("Make proposal without these conditions", True),
+    ("Start new proposal without previous conditions", True),
+    ("Vorschlag ohne diese Bedingungen erstellen", True),
+    ("Neuen Vorschlag ohne vorherige Bedingungen beginnen", True),
+    ("Ja, laat de trendvoorwaarde weg", False),
+    ("Maak voorstel zonder deze voorwaarden, behalve de 1D-trend", False),
+    ("Nee, maak voorstel zonder deze voorwaarden", False),
+])
+def test_setup_rule_block_requires_unambiguous_withdrawal(answer, expected):
+    assert _explicit_setup_rule_waiver(answer) is expected
+
+
+def test_blocked_setup_choice_restores_latest_partial_draft_without_old_identity():
+    analysis = _proposal_from_blocked_setup({
+        "original_message": "Maak een BTC setup met een stijgende 1D-trend.",
+        "draft_message": "Maak een nieuwe ETH DCA-setup voor elke vrijdag met €50 per aankoop.",
+        "captured_inputs": {
+            "setup_type": "dca", "symbol": "ETH", "dca_frequency": "weekly",
+            "dca_day": "friday", "base_amount": 50, "dca_amount_mode": "fixed",
+        },
+    })
+    state = analysis.request_plan.operation_state
+    assert state["collected_inputs"]["symbol"] == "ETH"
+    assert state["collected_inputs"]["base_amount"] == 50
+    assert "name" not in state["collected_inputs"]
+    assert "timeframe" not in state["collected_inputs"]
+    assert state["missing_required_inputs"] == ["timeframe", "name"]
 
 
 def test_model_led_feed_follow_up_receives_pending_change_in_provider_prompt():
