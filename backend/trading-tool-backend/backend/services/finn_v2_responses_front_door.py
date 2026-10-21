@@ -42,6 +42,7 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
+from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,22 @@ def _previous_guided_name_suggestion(
         if result.get("operation_id") == operation_id:
             name = str(result.get("suggested_name") or "").strip()
             return name or None
+    return None
+
+
+def _verified_previous_closed_review_id(previous_response: Mapping[str, Any] | None) -> int | None:
+    """Carry one closed dossier only from the preceding verified owner read."""
+    if (previous_response or {}).get("terminal_status") != "completed":
+        return None
+    for call in reversed((previous_response or {}).get("tool_trace") or []):
+        if call.get("name") != "get_closed_trade_review" or call.get("status") != "completed":
+            continue
+        for item in (call.get("result") or {}).get("results") or []:
+            if item.get("scope") != "read_review_history" or item.get("status") != "completed":
+                continue
+            ids = (item.get("data") or {}).get("closed_trade_review_ids") or []
+            if len(ids) == 1 and type(ids[0]) is int and ids[0] > 0:
+                return ids[0]
     return None
 
 
@@ -801,7 +818,30 @@ class FinnResponsesFrontDoor:
             message=message, facts=request_facts,
             workspace_hints=None, client_context=None,
         )
-        is_read_request = request_facts.action_polarity == "read" and not imperative_operation
+        explicit_closed_review_read = bool(
+            ReviewToolAdapter.requested_review_id(message) is not None
+            and re.match(r"\s*(?:lees|read|lies|toon|show|zeige)\b", message, re.I)
+            and request_facts.action_polarity not in {
+                "create", "update", "remove", "execute", "activate", "deactivate",
+            }
+            and not imperative_operation
+        )
+        previous_closed_review_id = _verified_previous_closed_review_id(previous_response)
+        contextual_closed_review_read = bool(
+            previous_closed_review_id is not None
+            and re.search(
+                r"\b(?:deze|die|this|diese)\s+(?:bevestigde|confirmed|bestätigte)\s+"
+                r"(?:les|lesson|lektion)\b",
+                message, re.I,
+            )
+            and request_facts.action_polarity == "read"
+            and not imperative_operation
+        )
+        if contextual_closed_review_read and isinstance(self.reads, FinnResponsesReadExecutor):
+            self.reads.verified_review_id = previous_closed_review_id
+        # "bevestigde les" describes a stored lesson; it is not an instruction
+        # to confirm an action. Keep this explicit dossier request read-only.
+        is_read_request = (request_facts.action_polarity == "read" and not imperative_operation) or explicit_closed_review_read
         if request_facts.action_polarity == "execute" and not imperative_operation:
             # An execution request without a supported action contract must
             # never be converted into an unrelated proposal by tool selection.
@@ -2809,7 +2849,10 @@ class FinnResponsesFrontDoor:
             locale=locale,
             force_read_repair=force_read_repair,
             required_read_tool_name=(
-                "get_saved_setup_inventory"
+                "get_closed_trade_review"
+                if (explicit_closed_review_read or contextual_closed_review_read)
+                and pending_operation is None and not resuming_clarification
+                else "get_saved_setup_inventory"
                 if normalized_inventory_read and pending_operation is None
                 and not resuming_clarification else None
             ),
