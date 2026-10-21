@@ -6,8 +6,36 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade → FINN-chat (21 oktober 2026)
 
+Laatste onafhankelijke QA op live `c4ba576a1eb42d240dad6525391bcd0ff1cb4567`:
+[run 39540408664](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39540408664)
+eindigde `NOT_ACCEPTED`. De eerste gewone FINN-chatbeurt werd nu voltooid,
+maar gebruikte geen `review_history`-bewijs bij een expliciet genoemd
+trade-reviewnummer. De tweede beurt werd niet uitgevoerd. Twee Paper-executies,
+nul Live-aanroepen. Gesaniteerd artifact SHA-256
+`b888036b82bd7795431c3e7a867bb6a1054fd801da426974b8bd751af8384349`.
+De huidige lokale kandidaat `codex/finn-review-read-routing` maakt bij een
+expliciete alleen-lezen vraag naar review `#N` de bestaande eigenaargebonden
+dossierlezing verplicht voordat FINN antwoordt. Een bevestigde les blijft
+gebruikerscontext, geen bevestigingsopdracht. De vervolgbeurt herleest precies
+dat ene dossier op basis van een eerder voltooid, eigenaar- en gesprekgebonden
+antwoord. Security en Architecture vonden geen blocker. De volledige
+backend-suite slaagde **3610 tests, vier bestaande skips**; webbuild,
+typecheck, i18n- en command-/voorsteltests slaagden. De echte
+Luna/Responses-developmentset slaagde **20/20** (artifact SHA-256
+`48e907f63d29893e6880d60216e5786dc2afe1e4b830f508e55714e0fcb9b66c`),
+de echte regressieset **109/109** (SHA-256
+`d28c2132990477ea6b143c2981d89dd027b87eedb1e3b907991f7764e9656d7e`),
+beide met operatienauwkeurigheid 1,0. De geïsoleerde workeractiecontractmatrix
+slaagde op de definitieve code **16/16**, met **19/19** adaptertests; artifact
+SHA-256 `a11b08d5b211b6205bc5cb3bc44ef95dc9daf1924f56eece96258668ced0f0be`.
+Een afzonderlijke echte Luna/Responses-proef met de
+exacte eerste reviewvraag leverde één voltooide `get_closed_trade_review`-lezing,
+een inhoudelijk antwoord en nul voorstellen op (synthetisch lokaal dossier,
+geen claim over de productie-eigenaar). Onafhankelijke live QA volgt pas na
+deployment.
+
 Phase: `QA_NOT_ACCEPTED` voor de chatuitbreiding; laatste geteste productie-SHA
-`627025d79ef65be0120fff8ed4133b95ed5951bc`. De eerste kandidaat was
+`c4ba576a1eb42d240dad6525391bcd0ff1cb4567`. De eerste kandidaat was
 `495873bec102f0368cddd69c1d286d339fe81530`. [PR #494](https://github.com/gvangalen/antigravity-trading-tool/pull/494)
 is gemerged; alle vijf PR- en main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39537460230)
 slaagden. Backend-health en frontend-buildinfo gaven HTTP 200 en dezelfde SHA.

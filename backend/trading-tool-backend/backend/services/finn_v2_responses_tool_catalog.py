@@ -104,6 +104,9 @@ class FinnResponsesToolCatalog:
         self.read_tools["get_current_asset_scores"] = ("read_active_asset", "read_asset_scores")
         self.read_tools["get_setup_market_matches"] = ("read_setup_market_matches",)
         self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
+        # An explicitly named closed-trade dossier needs only its owner-scoped
+        # review, not the unrelated daily report bundled in decision history.
+        self.read_tools["get_closed_trade_review"] = ("read_review_history",)
         self.evaluation_contracts = {
             contract.operation_id: contract
             for contract in self.registry.list()
@@ -295,6 +298,11 @@ class FinnResponsesToolCatalog:
                 "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
                 "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
             }
+            if name == "get_closed_trade_review":
+                # The server extracts the review ID from the original user
+                # message and checks ownership. A model-supplied asset filter
+                # could hide that exact dossier, so this tool has no inputs.
+                properties = {}
             if name in {"get_portfolio_and_exposure", "get_saved_bots"}:
                 properties["environment"] = {
                     "type": ["string", "null"], "enum": ["paper", "live", None],
@@ -541,6 +549,8 @@ class FinnResponsesToolCatalog:
             return FinnResponsesToolCall(name, None, {}, (), (), ())
         if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
+            if name == "get_closed_trade_review":
+                allowed = set()
             if name in {"get_portfolio_and_exposure", "get_saved_bots"}:
                 allowed.add("environment")
             if name in self.evaluation_contracts:

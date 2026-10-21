@@ -697,9 +697,13 @@ class FinnV2ToolExecutionService:
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.report_adapter.execute(user_id=user_id, asset=asset_state["asset"], selector=selector)
         if tool_name == "read_review_history":
+            message_review_id = self.review_adapter.requested_review_id(getattr(run, "message", ""))
+            verified_review_id = selector.get("_verified_review_id")
             return await self.review_adapter.execute(
                 user_id=user_id, asset=selector.get("asset"), selector=selector,
-                review_id=self.review_adapter.requested_review_id(getattr(run, "message", "")),
+                review_id=message_review_id or (
+                    verified_review_id if type(verified_review_id) is int and verified_review_id > 0 else None
+                ),
             )
         raise LookupError("tool_unknown")
 

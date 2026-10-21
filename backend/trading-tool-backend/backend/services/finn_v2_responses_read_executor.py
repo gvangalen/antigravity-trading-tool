@@ -66,6 +66,7 @@ class FinnResponsesReadExecutor:
         self.run_id = run_id
         self.session_factory = session_factory
         self.reads = FinnV2ToolExecutionService(session) if session is not None else None
+        self.verified_review_id: int | None = None
 
     async def __call__(self, call: FinnResponsesToolCall) -> dict[str, Any]:
         if call.name == "answer_directly":
@@ -90,18 +91,22 @@ class FinnResponsesReadExecutor:
         results: list[dict[str, Any]] = []
         shared_state: dict[str, Any] = {}
         for read_tool in call.read_tools:
+            selector = call.inputs
+            if (read_tool == "read_review_history" and call.name == "get_closed_trade_review"
+                    and self.verified_review_id is not None):
+                selector = {**call.inputs, "_verified_review_id": self.verified_review_id}
             if getattr(self, "session_factory", None) is not None:
                 async with self.session_factory() as session:
                     result = await FinnV2ToolExecutionService(session).execute_tool(
                         run_id=self.run_id, user_id=self.user_id, tool_name=read_tool,
-                        selector=call.inputs, shared_state=shared_state,
+                        selector=selector, shared_state=shared_state,
                     )
                     data = to_json_safe(result.result) if result.success else None
                     as_of = str(result.as_of) if getattr(result, "as_of", None) else self._as_of(data)
             else:
                 result = await self.reads.execute_tool(
                     run_id=self.run_id, user_id=self.user_id, tool_name=read_tool,
-                    selector=call.inputs, shared_state=shared_state,
+                    selector=selector, shared_state=shared_state,
                 )
                 data = to_json_safe(result.result) if result.success else None
                 as_of = str(result.as_of) if getattr(result, "as_of", None) else self._as_of(data)

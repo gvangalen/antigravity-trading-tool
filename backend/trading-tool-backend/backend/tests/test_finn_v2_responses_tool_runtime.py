@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.finn_v2_tools import ToolExecutionResult
 from backend.services.finn_v2_responses_loop import (
     FinnResponsesError, FinnResponsesLoop, _read_only_stop_loss_coaching,
     _saved_confirmation_readback, _hypothetical_trade_reflection, _public_answer_only,
@@ -18,6 +19,7 @@ from backend.services.finn_v2_responses_tool_catalog import (
     _PROPOSAL_OPERATIONS,
 )
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
+from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
@@ -70,6 +72,114 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
         mode="READ", content="Een direct antwoord.", response_source="v2_runtime",
         verifier_status="not_run",
     ).verifier_status == "not_run"
+
+
+def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read():
+    catalog = FinnResponsesToolCatalog()
+    assert catalog.validate("get_closed_trade_review", {}).read_tools == ("read_review_history",)
+    assert next(tool for tool in catalog.definitions() if tool["name"] == "get_closed_trade_review")["parameters"]["properties"] == {}
+    with pytest.raises(FinnResponsesToolError, match="read_arguments_invalid"):
+        catalog.validate("get_closed_trade_review", {"asset": "BTC"})
+    fake = FakeResponses(
+        response("dossier-read", calls=[tool_call("review-call", "get_closed_trade_review", {})]),
+        response("dossier-answer", text="In trade-review #123 staat je bevestigde les over je exitplan."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="closed-review-123", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_review_history", "status": "completed",
+            "data": {"closed_trade_review_ids": [123],
+                     "items": ["Bevestigde gesloten trade #123; bevestigde les: exitplan"]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Lees mijn trade-review #123 en mijn bevestigde les terug. Wat staat daarin? "
+                "Alleen teruglezen; geen voorstel of actie.",
+        instructions=front._model_led_instructions("nl"), conversation_context={},
+        verified_asset=None,
+    ))
+    assert fake.requests[0]["tool_choice"] == {
+        "type": "function", "name": "get_closed_trade_review",
+    }
+    assert [call.name for call in calls] == ["get_closed_trade_review"]
+    assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_review_history"
+
+
+def test_closed_trade_review_read_does_not_override_a_removal_request():
+    fake = FakeResponses(response("no-read", text="Ik kan dit dossier niet verwijderen."))
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="closed-review-remove", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    asyncio.run(front.run(
+        message="Lees mijn trade-review #123 en verwijder die daarna.",
+        instructions=front._model_led_instructions("nl"), conversation_context={},
+        verified_asset=None,
+    ))
+    assert not fake.requests or fake.requests[0]["tool_choice"] != {
+        "type": "function", "name": "get_closed_trade_review",
+    }
+
+
+def test_confirmed_lesson_followup_rereads_the_verified_dossier():
+    fake = FakeResponses(
+        response("lesson-read", calls=[tool_call("review-call", "get_closed_trade_review", {})]),
+        response("lesson-answer", text="Je les noemt je exitplan; het oorspronkelijke plan is niet vastgelegd."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="closed-review-followup", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+    front.reads.reads.execute_tool = AsyncMock(return_value=ToolExecutionResult(
+        tool_name="read_review_history", status="completed", success=True,
+        result={"closed_trade_review_ids": [123],
+                "items": ["Bevestigde gesloten trade #123; bevestigde les: exitplan; oorspronkelijk plan niet vastgelegd"]},
+        entity_type="review_history",
+    ))
+    prior = {"terminal_status": "completed", "answer": "In review #123 staat je exitplan.",
+             "tool_trace": [{"name": "get_closed_trade_review", "status": "completed",
+                             "result": {"results": [{"scope": "read_review_history", "status": "completed",
+                                                    "data": {"closed_trade_review_ids": [123]}}]}}]}
+    result = asyncio.run(front.run(
+        message="Wat kan ik van deze bevestigde les leren? Herhaal de les en zeg "
+                "of mijn oorspronkelijke plan is vastgelegd. Alleen sparren.",
+        instructions=front._model_led_instructions("nl"), conversation_context={},
+        verified_asset=None, previous_response=prior,
+    ))
+    assert fake.requests[0]["tool_choice"] == {
+        "type": "function", "name": "get_closed_trade_review",
+    }
+    assert front.reads.reads.execute_tool.await_args.kwargs["selector"] == {"_verified_review_id": 123}
+    assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_review_history"
+
+
+@pytest.mark.parametrize("message, expected_id", [
+    ("Wat kan ik van deze les leren?", 123),
+    ("Lees trade-review #456", 456),
+])
+def test_review_tool_uses_explicit_id_before_verified_prior_id(message, expected_id):
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=lambda text: 456 if "#456" in text else None,
+        execute=AsyncMock(return_value={"data": {"closed_trade_review_ids": [expected_id]}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7,
+        selector={"_verified_review_id": 123},
+        run=SimpleNamespace(message=message), shared_state={},
+    ))
+    assert service.review_adapter.execute.await_args.kwargs["review_id"] == expected_id
+    assert service.review_adapter.execute.await_args.kwargs["user_id"] == 7
 
 
 def test_raw_coach_baseline_cannot_be_enabled_outside_local_fixture(monkeypatch):
