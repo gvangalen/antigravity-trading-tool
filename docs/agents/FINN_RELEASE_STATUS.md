@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade → FINN-chat (21 oktober 2026)
 
-Phase: `QA_NOT_ACCEPTED` voor de chatuitbreiding op productie-SHA
+Phase: `QA_NOT_ACCEPTED` voor de chatuitbreiding; laatste geteste productie-SHA
+`627025d79ef65be0120fff8ed4133b95ed5951bc`. De eerste kandidaat was
 `495873bec102f0368cddd69c1d286d339fe81530`. [PR #494](https://github.com/gvangalen/antigravity-trading-tool/pull/494)
 is gemerged; alle vijf PR- en main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39537460230)
 slaagden. Backend-health en frontend-buildinfo gaven HTTP 200 en dezelfde SHA.
@@ -25,7 +26,22 @@ voegt uitsluitend een gesaniteerde terminalcategorie, toegestane foutcode en
 `response_present` toe bij een mislukte beurt. De 90 gerichte runnertests
 en de volledige backend-suite (3605 geslaagd, vier bestaande skips) slagen.
 Security vond geen blootstelling van fixture- of providerdata. Deze kandidaat
-is nog niet gedeployed of onafhankelijk getest.
+is via [PR #495](https://github.com/gvangalen/antigravity-trading-tool/pull/495)
+gemerged en gedeployed op `627025d79ef65be0120fff8ed4133b95ed5951bc`.
+Backend en frontend gaven HTTP 200 en die SHA; alle PR- en main-CI-controles
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39538972113)
+slaagden. Dezelfde onafhankelijke QA-agent deed één beschermde
+[herproef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39539181259):
+`NOT_ACCEPTED`; eerste FINN-beurt `unavailable`, `response_present=true`,
+maar `typed_error_code=other`. De tweede beurt bleef ongetest. Het artifact
+heeft SHA-256
+`02d0414e7bc3b49ed404140e59d67d4ebd03ef3a67d343aa7ec45f803652a7c4`.
+De beschikbare QA-workflowlogs geven geen nauwkeuriger veilige foutcode.
+De volgende lokale kandidaat verbreedt uitsluitend de expliciete lijst van
+statische Responses-foutcodes voor dit gesaniteerde diagnoseveld; de fout is
+nog niet inhoudelijk gerepareerd. Gerichte runnertests **90/90**, volledige
+backend-suite **3605 geslaagd, vier bestaande skips**. Security vond geen
+privétekst-lek of wijziging van een actiegrens.
 
 De onafhankelijke QA-agent bevestigde de voorafgaande gesloten Paper-tradereview op
 `fd9642afac6eb128eba7818a2f42af111030bb8d` via de beschermde

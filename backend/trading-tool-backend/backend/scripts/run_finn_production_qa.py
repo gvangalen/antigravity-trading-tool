@@ -78,16 +78,34 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
         "clarification_required", "unavailable", "downgraded", "rejected",
         "blocked", "completed", "failed", "canceled",
     }
+    # These are literal internal codes from FinnResponsesError and the owned
+    # lifecycle terminalizer. Never publish an arbitrary error_code string.
     known_codes = {
         "selector_phase_timeout", "lifecycle_deadline_exceeded", "orchestrator_failed",
-        "responses_provider_quota_unavailable", "responses_provider_unavailable",
-        "runtime_contract_terminal_projection_missing",
+        "responses_provider_quota_unavailable", "responses_provider_unconfigured",
+        "responses_provider_timeout", "responses_provider_error",
+        "responses_lifecycle_budget_exhausted", "responses_tool_round_limit",
+        "responses_tool_call_limit", "responses_incomplete", "responses_empty_answer",
+        "responses_missing_id", "responses_missing_call_id", "responses_duplicate_call_id",
+        "responses_selection_missing", "responses_internal_preamble_without_answer",
+        "responses_conditional_next_step_invalid", "responses_conditional_next_step_incomplete",
+        "responses_priority_process_invalid", "responses_priority_process_incomplete",
+        "responses_conditional_process_invalid", "responses_conditional_process_incomplete",
+        "responses_limited_evaluation_invalid", "responses_limited_evaluation_invalid_focus",
+        "responses_next_decision_invalid", "responses_next_decision_incomplete",
+        "guided_proposal_tool_call_required", "guided_turn_continuation_unverified",
+        "proposal_tool_validation_failed", "financial_execution_not_available",
+        "live_bot_activation_disabled", "runtime_contract_terminal_projection_missing",
     }
     status = getattr(error, "terminal_status", None)
     code = getattr(error, "typed_error_code", None)
+    safe_code = (code if code in known_codes else
+                 "responses_limited_evaluation_incomplete" if isinstance(code, str)
+                 and code.startswith("responses_limited_evaluation_incomplete:") else
+                 "other" if code else "none")
     return {
         "terminal_status": status if status in known_statuses else "unknown",
-        "typed_error_code": code if code in known_codes else "other" if code else "none",
+        "typed_error_code": safe_code,
         "response_present": getattr(error, "response_present", None) is True,
     }
 

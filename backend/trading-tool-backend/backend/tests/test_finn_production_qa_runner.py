@@ -259,6 +259,15 @@ def test_closed_paper_review_chat_terminal_diagnostic_is_bounded():
     assert diagnostic == {"terminal_status": "unknown", "typed_error_code": "other",
                           "response_present": False}
     assert "private" not in json.dumps(diagnostic)
+    envelope.status = "unavailable"
+    envelope.error_code = "responses_provider_timeout"
+    assert module.safe_closed_paper_chat_diagnostic(
+        ClosedPaperChatTurnFailure("first_turn", envelope)
+    )["typed_error_code"] == "responses_provider_timeout"
+    envelope.error_code = "responses_limited_evaluation_incomplete:private-field"
+    assert module.safe_closed_paper_chat_diagnostic(
+        ClosedPaperChatTurnFailure("first_turn", envelope)
+    )["typed_error_code"] == "responses_limited_evaluation_incomplete"
 
 
 def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(monkeypatch):
