@@ -4,6 +4,18 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Mobiele resten van de oude briefing verwijderd (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De mobiele code had nog twee
+niet-aangeroepen briefingcomponenten en een label voor
+`daily_briefing_ready`. De backend verstuurt dat gebeurtenistype niet meer;
+de actieve mobiele coachfeed leest `/api/assistant/feed`. Deze kandidaat
+verwijdert alleen die drie dode mobiele resten. Mobiele typecheck, lint
+(nul errors, 89 bestaande waarschuwingen) en iOS-bundel zijn lokaal geslaagd.
+Dit levert geen native runtimeacceptatie op: de Mac was tijdens inspectie
+vergrendeld. De coachfeed, chatroute en push-afhandeling voor actieve typen
+blijven ongewijzigd.
+
 ## Gesloten-tradebewijs in FINN-antwoord — herstelkandidaat (21 oktober 2026)
 
 Phase: `TARGETED_LIVE_QA_ACCEPTED`; volledige coachacceptatie blijft open. De onafhankelijke beschermde
