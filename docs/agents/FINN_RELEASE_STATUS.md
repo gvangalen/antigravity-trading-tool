@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Recente gesloten Paper-trade zonder reviewnummer — herstelkandidaat (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De onafhankelijke herkeuring
+[39556895361](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39556895361)
+op `0e5d797534d36db4dc9e431d6a02eb46d9da59fa` eindigde `NOT_ACCEPTED`.
+De eerste gewone FINN-chatbeurt werd voltooid, maar het antwoord bevatte geen
+geverifieerd `review_history`-bewijs (`closed_paper_review_chat_evidence_missing`);
+de lesvervolgvraag werd niet begonnen. Het gesaniteerde artifact heeft SHA-256
+`c8fe44a7e1d9da68b07a5120727b46bbc54859c60fba049a8fda7865b3f7a8c7`.
+Het artifact toont geen tool-call-status voor die beurt; of de tool werkelijk
+is aangeroepen en wat de exacte prompt was, is daaruit niet vast te stellen.
+Twee begonnen Paper-uitvoeringsstappen bewijzen geen afzonderlijke fills;
+Live-aanroepen en -activaties waren nul.
+
+De vorige fix verplichtte de dossierlezing bij een expliciet reviewnummer.
+Deze kandidaat dekt ook gewone verwijzingen naar een gesloten of laatste
+Paper-trade zonder nummer: de bestaande eigenaargebonden recente-dossierlezing
+wordt dan vereist. Mutatieverzoeken zijn uitgesloten. Gerichte tests voor
+Nederlandse en Engelse formuleringen en de mutatiegrens slagen. De lokale
+synthetische echte Luna/Responses-proef leest bij een gewone vraag zonder
+nummer de getypeerde review, noemt het bewezen EUR-resultaat en voltooit de
+lesvervolgvraag zonder voorstel: vijf eerste beurten en vijf vervolgbeurten
+waren voltooid, telkens met dossierlezing. De volledige backend-suite slaagde
+met **3645 tests, vier bestaande skips**. Security vond in deze verbrede
+read-only route geen eigenaar-, actie- of prompt-injectionblokker; dit is
+geen acceptatieclaim. Webbuild, typecheck, i18n-lint, i18n-, command-,
+voorstel- en setuptests en `audit:high` slaagden; de audit meldt één
+moderate advisory en geen high of critical.
+De echte Responses-ontwikkelset slaagde met **20/20** operatie- en
+veldmatches en nul provider-, schema-, parse- of validatiefouten (artifact
+SHA-256 `04e5b1644a0975207259c7537b7e9a8ef509f7193d3a679d221949f38a047163`).
+De geïsoleerde lokale workeractiecontractmatrix sloot **16/16** contracten af,
+met nul brokerorders, Live-aanroepen of productieverbindingen; adaptertests
+**19/19**. Matrixartifact SHA-256:
+`f3c129a2d140f41448d780c21fb4e833c789836cd71b454b96e282e584e0a332`.
+De echte Responses-regressie slaagde met **109/109** operatie- en veldmatches
+en nul provider-, schema-, parse- of validatiefouten (artifact SHA-256
+`9069d86e054232c17db9d91a721e52b80031f6db5108a7c34b0734a8b71290d4`).
+CI, deployment en onafhankelijke ingelogde live QA staan nog open.
+
 ## Gewone vraag over gesloten Paper-review — herstelkandidaat (21 oktober 2026)
 
 Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. De onafhankelijke beschermde herkeuring

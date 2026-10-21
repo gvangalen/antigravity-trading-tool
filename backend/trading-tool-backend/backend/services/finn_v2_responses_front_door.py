@@ -819,7 +819,18 @@ class FinnResponsesFrontDoor:
             workspace_hints=None, client_context=None,
         )
         explicit_closed_review_read = bool(
-            ReviewToolAdapter.requested_review_id(message) is not None
+            (ReviewToolAdapter.requested_review_id(message) is not None
+             or "review" in request_facts.explicit_entities
+             or re.search(
+                 r"\b(?:gesloten|afgesloten|afgeronde?|closed|completed|geschlossenen?)\s+"
+                 r"(?:(?:paper|live)\s*[- ]?)?(?:trade|positie|position)\b",
+                 message, re.I,
+             )
+             or re.search(
+                 r"\b(?:laatste|recentste|recent|last|latest)\s+"
+                 r"(?:(?:paper|live)\s*[- ]?)?trade\b",
+                 message, re.I,
+             ))
             and request_facts.action_polarity not in {
                 "create", "update", "remove", "execute", "activate", "deactivate",
             }
