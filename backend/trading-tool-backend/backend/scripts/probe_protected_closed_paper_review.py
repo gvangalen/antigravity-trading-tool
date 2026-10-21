@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from contextlib import contextmanager
 from datetime import date, timedelta
 
@@ -193,7 +194,7 @@ def _close_paper_position(user_id: int, bot_id: int, buy_decision_id: int) -> No
         conn.close()
 
 
-async def _read_review(user_id: int) -> dict:
+async def _read_review(user_id: int) -> tuple[dict, int]:
     from backend.infrastructure.database import async_session_factory, engine
     from backend.services.finn_trade_review_service import FinnTradeReviewService
 
@@ -219,12 +220,123 @@ async def _read_review(user_id: int) -> dict:
                 raise RuntimeError("closed_paper_lesson_not_readable")
             return {"result": "PASS", "environment": "paper",
                     "closed_positions": 1, "fills": 2,
-                    "dossier_readable": True, "lesson_confirmed_and_readable": True}
+                    "dossier_readable": True, "lesson_confirmed_and_readable": True}, review_id
     finally:
         await engine.dispose()
 
 
-def run(namespace: str) -> dict:
+async def _chat_turn(user_id: int, message: str, *, conversation_id: str | None = None):
+    """Run the real FINN worker body for the rollout-isolated fixture owner."""
+    from backend.celery_task.finn_v2_task import _process_finn_v2_run
+    from backend.infrastructure.database import async_session_factory
+    from backend.schemas.finn_v2_schema import AgentRunRequest
+    from backend.services.finn_v2_gateway_service import FinnV2GatewayService
+
+    request_id = f"finn-qa-review-{uuid.uuid4().hex}"
+    async with async_session_factory() as session:
+        gateway = FinnV2GatewayService(session)
+        run = await gateway.create_run(
+            user_id=user_id,
+            request=AgentRunRequest(message=message, conversation_id=conversation_id,
+                                    transport="chat", client_context={"surface": "qa_closed_paper_review"}),
+            request_path="/api/assistant/chat", request_id=request_id,
+            trace_id=f"finn-qa-review-trace-{uuid.uuid4().hex}",
+        )
+        run_id = run.id
+        await session.commit()
+    # The production worker's own rollout does not include this new inactive
+    # child user. Run the same task body within this bounded QA process, as the
+    # existing projection/analysis probe does, rather than changing rollout.
+    await _process_finn_v2_run(run_id=run_id, owner=f"qa-review:{uuid.uuid4().hex}")
+    async with async_session_factory() as session:
+        gateway = FinnV2GatewayService(session)
+        persisted = await gateway.get_run(run_id=run_id, user_id=user_id)
+        return await gateway.run_service.envelope_from_run(persisted)
+
+
+async def _has_responses_exchange(user_id: int, run_id: str, conversation_id: str) -> bool:
+    """Check the owner-bound Responses exchange for this exact chat turn."""
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
+
+    async with async_session_factory() as session:
+        contract = await FinnV2RuntimeContractRepository(session).get_for_run(run_id=run_id)
+        if contract is None or contract.user_id != user_id or contract.conversation_id != conversation_id:
+            return False
+        exchange = (contract.state_json or {}).get("responses_exchange") or {}
+        return bool(exchange.get("response_id") and exchange.get("answer"))
+
+
+async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
+    """Require a substantive read-only chat answer and a contextual follow-up."""
+    from backend.infrastructure.database import engine
+
+    try:
+        first = await _chat_turn(
+            user_id,
+            f"Lees mijn trade-review #{review_id} en mijn bevestigde les terug. "
+            "Wat staat daarin? Alleen teruglezen; geen voorstel of actie.",
+        )
+        response = first.response
+        if first.status != "completed" or response is None:
+            raise RuntimeError("closed_paper_review_chat_first_turn_failed")
+        if (response.proposal_id or response.confirmation_required
+                or (first.policy and first.policy.execute_allowed)):
+            raise RuntimeError("closed_paper_review_chat_unexpected_action")
+        if not any(item.entity_type == "review_history" for item in response.evidence):
+            raise RuntimeError("closed_paper_review_chat_evidence_missing")
+        if "exitplan" not in response.content.casefold():
+            raise RuntimeError("closed_paper_review_chat_lesson_missing")
+
+        second = await _chat_turn(
+            user_id,
+            "Wat kan ik van deze bevestigde les leren? Herhaal de les en zeg "
+            "of mijn oorspronkelijke plan is vastgelegd. Alleen sparren.",
+            conversation_id=first.conversation_id,
+        )
+        response = second.response
+        if second.status != "completed" or response is None:
+            raise RuntimeError("closed_paper_review_chat_followup_failed")
+        if (second.conversation_id != first.conversation_id or response.proposal_id
+                or response.confirmation_required or (second.policy and second.policy.execute_allowed)):
+            raise RuntimeError("closed_paper_review_chat_followup_context_or_action")
+        if not any(item.entity_type == "review_history" for item in response.evidence):
+            raise RuntimeError("closed_paper_review_chat_followup_evidence_missing")
+        if not await _has_responses_exchange(user_id, second.run_id, second.conversation_id):
+            raise RuntimeError("closed_paper_review_chat_responses_exchange_missing")
+        followup = response.content.casefold()
+        if ("exitplan" not in followup or "plan" not in followup
+                or not any(term in followup for term in ("niet", "onbekend", "ontbreekt"))):
+            raise RuntimeError("closed_paper_review_chat_followup_context_missing")
+        return {"result": "PASS", "turns": 2, "owner_scoped_review_evidence": True,
+                "confirmed_lesson_readable": True, "followup_same_conversation": True,
+                "action_proposals": 0, "dispatch_mode": "in_process_production_task_body"}
+    finally:
+        await engine.dispose()
+
+
+def _assert_fixture_orders_unchanged(user_id: int, bot_id: int) -> None:
+    """The two deliberate Paper fills must be the only orders after chat."""
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT COUNT(*), COUNT(*) FILTER (
+                       WHERE execution_environment IS DISTINCT FROM 'paper'
+                          OR status IS DISTINCT FROM 'filled')
+                   FROM bot_orders WHERE user_id=%s AND bot_id=%s""",
+                (user_id, bot_id),
+            )
+            total, unexpected = cur.fetchone()
+        if int(total) != 2 or int(unexpected) != 0:
+            raise RuntimeError("closed_paper_review_chat_order_state_changed")
+    finally:
+        conn.close()
+
+
+def run(namespace: str, *, include_chat: bool = False) -> dict:
     if os.getenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE") != "1":
         raise RuntimeError("closed_paper_review_fixture_not_authorized")
     bound = fixture._require_protected_run(namespace)
@@ -248,7 +360,11 @@ def run(namespace: str) -> dict:
             fixture._execute(user_id, bot_id, buy_decision_id)
             _close_paper_position(user_id, bot_id, buy_decision_id)
         _process_review_for_fixture(user_id)
-        result = asyncio.run(_read_review(user_id))
+        result, review_id = asyncio.run(_read_review(user_id))
+        if include_chat:
+            with _fixture_review_rollout(user_id):
+                result["finn_chat"] = asyncio.run(_read_review_in_chat(user_id, review_id))
+            _assert_fixture_orders_unchanged(user_id, bot_id)
         return result
     finally:
         if user_id is not None and bot_id is not None:
