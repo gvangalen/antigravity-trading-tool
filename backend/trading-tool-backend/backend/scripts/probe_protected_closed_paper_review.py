@@ -383,8 +383,8 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
     try:
         first = await _chat_turn(
             user_id,
-            f"Lees mijn trade-review #{review_id} en mijn bevestigde les terug. "
-            "Wat staat daarin? Alleen teruglezen; geen voorstel of actie.",
+            "Wat weet je over mijn laatst afgesloten Paper-trade en de les die ik "
+            "daarbij heb bevestigd? Alleen teruglezen; geen voorstel of actie.",
         )
         response = first.response
         if first.status != "completed" or response is None:

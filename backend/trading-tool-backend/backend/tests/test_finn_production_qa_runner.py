@@ -430,7 +430,8 @@ def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(mo
     assert result["result"] == "PASS" and result["action_proposals"] == 0
     assert result["dispatch_mode"] == "in_process_production_task_body"
     assert calls[0][1] is None and calls[1][1] == "conv-1"
-    assert "trade-review #123" in calls[0][2]
+    assert "laatst afgesloten Paper-trade" in calls[0][2]
+    assert "123" not in calls[0][2]
 
     responses[:] = [types.SimpleNamespace(
         status="completed", conversation_id="conv-1", policy=None,
