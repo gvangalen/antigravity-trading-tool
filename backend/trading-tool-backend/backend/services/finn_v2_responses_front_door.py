@@ -117,7 +117,11 @@ def _explicit_create_operation_request(message: str) -> str | None:
     ) or re.match(r"^\s*maak\s+geen\b", message, re.I):
         return None
     facts = FinnV2RequestPreprocessorService().preprocess(message=message)
-    if facts.action_polarity != "create" or facts.discourse_act != "operation_request":
+    # A named recent parent makes this a contextual follow-up, even when the
+    # user explicitly asks to create a new child object.
+    if facts.action_polarity != "create" or facts.discourse_act not in {
+        "operation_request", "contextual_follow_up",
+    }:
         return None
     return FinnV2OperationClassificationService._explicit_guided_create_operation(
         message=message, facts=facts,
@@ -1087,7 +1091,7 @@ class FinnResponsesFrontDoor:
         # create a strategy are still ordinary coach turns.
         if (
             request_facts.action_polarity == "create"
-            and request_facts.discourse_act == "operation_request"
+            and request_facts.discourse_act in {"operation_request", "contextual_follow_up"}
             and not pending_operation
             and not conversation_context.get("proposal_correction_result")
             and _explicit_strategy_proposal_request(message)

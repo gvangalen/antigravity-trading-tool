@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: huidige grens (21 oktober 2026)
+
+Phase: `LOCAL_REPAIR_INCOMPLETE`; geen nieuwe kandidaat of deployment. De
+opruiming van de oude mobiele briefingresten is als [PR #511](https://github.com/gvangalen/antigravity-trading-tool/pull/511)
+gemerged. Auto Deploy slaagde en publieke backend-health en frontend-buildinfo
+gaven beide HTTP 200 op `83beb016eb2782a12abb0560d0b8300ac4414dd7`.
+De bestaande onafhankelijke QA-agent gaf voor de bredere desktopcutover
+`NOT_ACCEPTED`: een BTC-setupvoorstel verloor gevraagde kwalitatieve
+trend-/marktvoorwaarden en een aansluitende strategieaanvraag na de opgeslagen
+setup gaf geen concept. Scores en rapport bleven in die proef consistent.
+
+De strategie-uitval is lokaal teruggeleid tot de classificatie van een
+expliciete aanmaak na een genoemde, recent opgeslagen setup als contextuele
+vervolgvraag. De gerichte regressie is groen. Security bevestigde echter dat
+de setupaanvraag een structurele voorstelintegriteitsgrens raakt: vrije
+kwalitatieve instapvoorwaarden passen niet in het huidige afdwingbare
+setupcontract. Een trefwoordblokkade dekt equivalente formuleringen niet
+betrouwbaar. Daarom is de experimentele blokkade teruggenomen en wordt deze
+batch niet vrijgegeven. De volledige backend-suite was vóór die terugname
+groen (3650 tests, vier bestaande skips), de lokale actiecontractmatrix
+**16/16** zonder Live-acties, de echte Responses-ontwikkelset **20/20** en
+de webbuild groen. De regressieproviderset is bewust onderbroken zodra de
+Security-blokkade vaststond. Deze metingen vormen geen releasepoort voor een
+later herstelde batch; die moet opnieuw worden gevalideerd.
+
 ## Mobiele resten van de oude briefing verwijderd (21 oktober 2026)
 
 Phase: `LOCAL_VALIDATED_AWAITING_CI`. De mobiele code had nog twee

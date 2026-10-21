@@ -4474,6 +4474,34 @@ def test_new_strategy_request_does_not_fill_an_older_setup_question():
     )
 
 
+def test_strategy_creation_after_named_recent_setup_is_a_new_proposal_request():
+    message = (
+        "Maak bij de zojuist opgeslagen setup BTC QA Cutover 2110 een paper-strategie "
+        "met naam BTC QA Cutover Strategie 2110. Basisbedrag €80 per aankoop. "
+        "Entry alleen na 4H-bevestiging in de richting van de 1D-trend, "
+        "invalidatie als die dagtrend breekt, maximaal 1% risico per trade. "
+        "Laat eerst het concept zien; bevestig nog niets."
+    )
+    assert _explicit_create_operation_request(message) == "create_strategy"
+    assert _explicit_strategy_proposal_request(message)
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.run_id = "recent-parent-strategy"
+    front.user_id = 12
+    front.reads = SimpleNamespace(session_factory=None)
+    front.relevance_guard = None
+    front.proposals = SimpleNamespace(
+        registry=FinnV2OperationRegistry(),
+        from_call=Mock(return_value=SimpleNamespace(
+            request_plan=SimpleNamespace(operation_id="create_strategy")
+        )),
+    )
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "create_strategy"
+    assert front.proposals.from_call.call_args.kwargs["call"].operation_id == "create_strategy"
+
+
 @pytest.mark.parametrize("message,expected", [
     ("Maak een DCA-setup voor BTC.", "create_setup"),
     ("Maak een Paper-bot voor mijn strategie.", "create_bot"),

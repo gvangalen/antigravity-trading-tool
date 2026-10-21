@@ -580,6 +580,16 @@ class FinnV2OperationClassificationService:
             return None
         if "bot" in facts.explicit_entities and facts.action_polarity == "activate":
             return None
+        # The setup can be a named parent rather than the requested object.
+        # Allow that parent phrase before an indefinite strategy target,
+        # without promoting a bare mention of an existing strategy to CREATE.
+        if re.search(
+            r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b"
+            r"[^.!?]{0,160}\b(?:een|a|an|ein(?:e|en|er|es)?)\s+"
+            r"(?:paper[-\s]+)?(?:strategie|strategy)\b",
+            text,
+        ):
+            return "create_strategy"
         create_target_patterns = (
             ("create_bot", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\b(?:bot|automation)\b"),
             ("create_strategy", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\b(?:strategie|strategy)\b"),
