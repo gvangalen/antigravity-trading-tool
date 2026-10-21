@@ -81,6 +81,30 @@ route-level status counts and latency summaries; it does not print tokens.
 The identity preflight detects account-token mixups, but a separate owner-canary
 test is still needed to prove isolation within workspace, FINN, and review bodies.
 
+### Positive two-owner content check
+
+For workspace and FINN conversation lists, create **two** new accounts with
+the capacity provisioner, explicitly passing `--count 2` to `plan`, `create`,
+`issue`, and `deactivate`; issue their tokens into a private 0700 directory.
+Run `python -m backend.scripts.probe_capacity_owner_canary seed` from
+`backend/trading-tool-backend` with the same campaign and verified DB host,
+port and name, plus `--allow-production --apply` in production. It refuses
+accounts with existing watchlist or FINN content, then inserts distinct XRP
+and ADA watchlist rows and one visible, provider-free FINN conversation per
+owner. Run `python3 ops/load/owner_canary.py --base-url https://tradamind.com
+--fixtures /secure/path/two-owner-tokens.json --campaign CAMPAIGN
+--allow-production` from the repo root. The probe reads each owner's identity,
+workspace asset without a caller-supplied watchlist, and conversation list;
+it fails if the other owner's symbol or conversation appears. No response
+bodies or tokens are printed.
+
+After the probe, run `python -m backend.scripts.probe_capacity_owner_canary cleanup` with
+the same target flags and `--allow-production --apply`, then deactivate the
+two marked accounts and delete the token file. Cleanup verifies exact owner,
+message and marker fields and refuses to cascade-delete runs with dependent rows.
+Production trade reviews currently use a separate allowlist; this canary
+does not claim review-body isolation or real review-list capacity.
+
 ## Prepare distinct fixture accounts
 
 `backend/scripts/provision_capacity_fixtures.py` creates at most 1000 marked

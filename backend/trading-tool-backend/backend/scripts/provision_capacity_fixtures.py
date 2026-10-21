@@ -199,9 +199,8 @@ def main() -> int:
     if (args.expected_db_host != db_host or args.expected_db_name != db_name
             or args.expected_db_port != db_port):
         parser.error("Configured database target does not match the expected host, port and name")
-    environment = os.getenv("APP_ENV", "development").lower()
-    if (environment == "production" or db_host not in {"127.0.0.1", "localhost", "::1"}) and not args.allow_production:
-        parser.error("Production fixture operations require --allow-production")
+    if args.action != "plan" and not args.allow_production:
+        parser.error("Fixture writes require explicit --allow-production on every database target")
     if args.action != "plan" and not args.apply:
         parser.error("This action requires --apply")
     if args.action == "issue" and args.output is None:
