@@ -1579,6 +1579,18 @@ class FinnResponsesAnswerVerifier:
         for item in evidence:
             if item.get("status") == "completed":
                 monetary_fields(item.get("data"))
+                if item.get("scope") == "read_linked_strategy":
+                    strategy = item.get("data") or {}
+                    if isinstance(strategy, dict):
+                        quote = strategy.get("price_currency") or strategy.get("currency")
+                        if quote in {"EUR", "USD"}:
+                            levels = (
+                                strategy.get("entry"), strategy.get("stop_loss"),
+                                *(strategy.get("targets") or []),
+                            )
+                            for level in levels:
+                                if level is not None:
+                                    grounded.update(cls._currency_amounts(f"{level} {quote}"))
         return claims <= grounded
 
     @staticmethod
@@ -1749,6 +1761,13 @@ class FinnResponsesAnswerVerifier:
             and item.get("status") == "completed"
             and isinstance(item.get("data"), dict)
         ]
+        # A model may read the same saved strategy twice while checking a
+        # follow-up. Repeated evidence is still one strategy, so it must not
+        # trigger the multi-strategy row-name requirement.
+        strategies = list({
+            (data.get("setup_id"), data.get("strategy_id"), data.get("name")): data
+            for data in strategies
+        }.values())
         if not strategies:
             return True
         if selected_setup_id is not None:
@@ -1760,16 +1779,107 @@ class FinnResponsesAnswerVerifier:
                     r"\b(?:entry|instap|stop(?:-loss)?|targets?|doelen?|niveaus?|levels?)\b"
                     r"[^.!?]{0,30}\d", answer, re.I,
                 ))
-        saved: set[Decimal] = set()
-        for data in strategies:
+        def strategy_levels(data: dict[str, Any]) -> set[Decimal]:
+            values: set[Decimal] = set()
             for value in (data.get("entry"), data.get("stop_loss"), *(data.get("targets") or [])):
                 try:
-                    saved.add(Decimal(str(value)))
+                    values.add(Decimal(str(value)))
                 except (InvalidOperation, TypeError):
                     continue
+            return values
+
+        saved = set().union(*(strategy_levels(data) for data in strategies))
         if not saved:
             return True
         plain_answer = re.sub(r"[*_`]", "", answer)
+        def table_level_kind(heading: str) -> str | None:
+            label = heading.casefold().strip()
+            if re.match(r"^(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\b", label):
+                return "entry"
+            if re.match(r"^(?:stop(?:[- ]?loss|prijs)?|sl)\b", label):
+                return "stop"
+            if re.match(r"^(?:targets?|(?:koers)?doel(?:en)?|price targets?|"
+                        r"take[- ]?profit|tp|ziele?)\b", label):
+                return "target"
+            return None
+
+        table_header: list[str] | None = None
+        for line in plain_answer.splitlines():
+            if "|" not in line:
+                table_header = None
+                continue
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if not cells or all(re.fullmatch(r":?-{2,}:?", cell) for cell in cells):
+                continue
+            if any(table_level_kind(cell) for cell in cells) and not any(
+                re.fullmatch(r"[€$]?\s*\d[\d.,]*(?:\s*(?:EUR|USD))?", cell, re.I)
+                for cell in cells
+            ):
+                table_header = cells
+                continue
+            if table_header is None or len(cells) != len(table_header):
+                continue
+            named = [data for data in strategies if data.get("name") and
+                     any(str(data["name"]).casefold() == cell.casefold() for cell in cells)]
+            if len(named) != 1:
+                has_identity_column = any(re.search(
+                    r"\b(?:strategie|strategy|plan|naam|name|bot)\b", heading, re.I,
+                ) for heading in table_header)
+                if len(strategies) != 1 or has_identity_column:
+                    # A level table without a single owner-bound row name
+                    # cannot safely compare multiple saved strategies.
+                    return False
+                named = strategies
+            data = named[0]
+            quote = str(data.get("price_currency") or data.get("currency") or "").upper()
+            for heading, cell in zip(table_header, cells):
+                key = heading.casefold()
+                kind = table_level_kind(heading)
+                if kind is None and re.search(r"\d", cell) and not re.search(
+                    r"\b(?:strategie|strategy|plan|naam|name|setup|"
+                    r"basisbedrag|base amount|amount|bedrag|inleg|investment|"
+                    r"score|weging|weight|ratio|risico|risk|r/r|id)\b",
+                    key, re.I,
+                ):
+                    # An unknown numeric trade column could be another
+                    # price level. Do not silently skip it in a comparison.
+                    return False
+                stated_quote = (
+                    "EUR" if cell.casefold() in {"€", "eur", "euro", "euros"} else
+                    "USD" if cell.casefold() in {"$", "usd", "dollar", "dollars"} else
+                    None
+                )
+                if quote in {"EUR", "USD"} and stated_quote and stated_quote != quote:
+                    # The row's quote unit remains a quote claim even when
+                    # the column is titled Quote or Munteenheid.
+                    return False
+                if kind is None:
+                    continue
+                expected = (
+                    [data.get("entry")] if kind == "entry" else
+                    [data.get("stop_loss")] if kind == "stop" else
+                    data.get("targets") or []
+                )
+                expected_values: set[Decimal] = set()
+                for value in expected:
+                    try:
+                        expected_values.add(Decimal(str(value)))
+                    except (InvalidOperation, TypeError):
+                        continue
+                for token in re.findall(r"(?<![\w])\d[\d.,]*", cell):
+                    normalized = token.replace(".", "").replace(",", "") if re.search(
+                        r"[.,]\d{3}(?:[.,]\d{3})*$", token,
+                    ) else token.replace(",", ".")
+                    try:
+                        if Decimal(normalized) not in expected_values:
+                            return False
+                    except InvalidOperation:
+                        continue
+                if quote in {"EUR", "USD"} and (
+                    (re.search(r"€|\bEUR\b", cell, re.I) and quote != "EUR") or
+                    (re.search(r"\$|\bUSD\b", cell, re.I) and quote != "USD")
+                ):
+                    return False
         labelled = list(re.finditer(
             r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?|stop(?:[- ]?loss)?|"
             r"targets?|doelen?|koersdoelen?|ziele?|niveaus?|levels?)\b"
@@ -1793,6 +1903,38 @@ class FinnResponsesAnswerVerifier:
             if isinstance(target, dict) and target.get("reward_to_risk") is not None
         }
         for match in (*labelled, *price_pairs):
+            claim_strategies = strategies
+            if len(strategies) > 1:
+                # A comparison must bind each asserted level to the named
+                # strategy in its own row/sentence. A pooled set of levels
+                # would accept swapped targets from two valid rows.
+                line_start = plain_answer.rfind("\n", 0, match.start()) + 1
+                line_end = plain_answer.find("\n", match.end())
+                line = plain_answer[line_start:line_end if line_end >= 0 else len(plain_answer)]
+                named = [data for data in strategies if data.get("name") and
+                         str(data["name"]).casefold() in line.casefold()]
+                unique = {(data.get("setup_id"), data.get("strategy_id"), data.get("name"))
+                          for data in named}
+                if len(unique) != 1:
+                    return False
+                claim_strategies = named[:1]
+            claim_saved = set().union(*(strategy_levels(data) for data in claim_strategies))
+            claim_currency = str(claim_strategies[0].get("price_currency") or
+                                 claim_strategies[0].get("currency") or "").upper()
+            if claim_currency in {"EUR", "USD"}:
+                before_number = plain_answer[match.start():match.start(1)]
+                after_number = plain_answer[match.end(1):match.end(1) + 12]
+                stated = set()
+                if re.search(r"[€]\s*$|\bEUR\s*$", before_number, re.I) or re.match(
+                    r"\s*(?:€|EUR\b|euros?\b)", after_number, re.I,
+                ):
+                    stated.add("EUR")
+                if re.search(r"[$]\s*$|\bUSD\s*$", before_number, re.I) or re.match(
+                    r"\s*(?:[$]|USD\b|dollars?\b)", after_number, re.I,
+                ):
+                    stated.add("USD")
+                if stated and stated != {claim_currency}:
+                    return False
             prefix = re.split(
                 r"[,;.!?\n|]", plain_answer[max(0, match.start() - 55):match.start()]
             )[-1]
@@ -1838,7 +1980,7 @@ class FinnResponsesAnswerVerifier:
                 # same number without distance context remains a price claim.
                 distance_values = {
                     Decimal(str(value))
-                    for data in strategies
+                    for data in claim_strategies
                     for geometry in [data.get("level_geometry")]
                     if isinstance(geometry, dict) and geometry.get("status") == "completed"
                     for value in (
@@ -1889,10 +2031,10 @@ class FinnResponsesAnswerVerifier:
                     level = Decimal(normalized)
                 except InvalidOperation:
                     continue
-                if level not in saved and match in labelled:
+                if level not in claim_saved and match in labelled:
                     derived = {
                         Decimal(str(value))
-                        for data in strategies
+                        for data in claim_strategies
                         for geometry in [data.get("level_geometry")]
                         if isinstance(geometry, dict) and geometry.get("status") == "completed"
                         for value in (
@@ -1916,7 +2058,9 @@ class FinnResponsesAnswerVerifier:
                         )
                     ):
                         continue
-                if level not in saved and token not in user_message:
+                # A number repeated from the user's question is not evidence
+                # that it belongs to this saved strategy.
+                if level not in claim_saved:
                     return False
         return True
 

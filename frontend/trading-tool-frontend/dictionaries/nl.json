@@ -3965,7 +3965,7 @@
     "fieldBudget": "Budget",
     "fieldCadence": "Frequentie",
     "checking": "Even controleren…",
-    "adjustRequest": "Ik wil dit {object}voorstel aanpassen.",
+    "adjustQuestion": "Wat wil je in dit voorstel wijzigen?",
     "thisObject": "deze {object}",
     "fieldExecution": "Uitvoering",
     "fieldScoreSource": "Scorebron",

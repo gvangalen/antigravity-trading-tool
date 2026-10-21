@@ -4006,7 +4006,7 @@
     "fieldBudget": "Budget",
     "fieldCadence": "Häufigkeit",
     "checking": "Einen Moment, ich prüfe das…",
-    "adjustRequest": "Ich möchte diesen Vorschlag für {object} anpassen.",
+    "adjustQuestion": "Was möchtest du an diesem Vorschlag ändern?",
     "thisObject": "dieses {object}",
     "fieldExecution": "Ausführung",
     "fieldScoreSource": "Scorequelle",

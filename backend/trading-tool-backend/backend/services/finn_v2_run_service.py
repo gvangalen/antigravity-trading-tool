@@ -303,11 +303,19 @@ def _proposal_from_blocked_strategy(block: dict, verified_parent_setup: dict[str
         "create_or_update_trade_plan_proposal",
         {"operation_id": "create_strategy", "inputs": inputs},
     )
+    restored_message = f"Naam: {inputs['name']}" if inputs.get("name") else ""
+    if inputs.get("price_currency") in {"EUR", "USD"}:
+        # This unit was recovered from all three explicitly labelled prices
+        # in the owner's blocked request. State resolution deliberately
+        # rejects a model-supplied unit unless the message carries it.
+        restored_message = (
+            f"{restored_message}. Alle koersniveaus in {inputs['price_currency']}"
+        ).strip(". ")
     return FinnResponsesProposalSelection().from_call(
         call=restored_call,
         # The original prose contains relative percentages that the generic
         # numeric extractor could misread as absolute stop/target prices.
-        message=(f"Naam: {inputs['name']}" if inputs.get("name") else ""),
+        message=restored_message,
         conversation_context={},
         verified_asset=str(inputs.get("symbol") or "") or None,
         verified_parent_setup=verified_parent_setup,
@@ -1525,6 +1533,9 @@ class FinnV2RunService:
                 "from a different setup recently created in this conversation. A newly saved setup "
                 "is not necessarily the active plan. Never silently treat one setup's amount as the "
                 "user's overall budget or as an amount shared by all saved setups. "
+                "If several saved plans could fit the user's question, do not select one silently. "
+                "Either identify the exact setup and strategy that supplied a cited amount, or ask "
+                "which saved plan the user wants to discuss. "
                 "For a standalone question about current indicators, use the indicator and relevant "
                 "market tools; do not fetch the active plan or ask which setup is meant unless the user "
                 "asks how those indicators affect a specific plan. "
