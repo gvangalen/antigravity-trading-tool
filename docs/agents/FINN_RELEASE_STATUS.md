@@ -6,7 +6,42 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De reparatie is via
+Phase: `LOCAL_VALIDATED_READY_FOR_PR`. De onafhankelijke ingelogde QA op de
+publieke backend- en frontend-SHA `51ca7ba2f86dba988c43cb4f4dce061cc231c374`
+gaf `NOT_ACCEPTED` voor de volledige meerbeurtige strategieflow. Een schone
+USD-aanvraag, bevestiging, directe lijstupdate en teruglezing na refresh
+slaagden. Ook de read-only FOMO-coaching slaagde. De uitgebreide toestemming
+om de niet-opslagbare 1D-trend en daglimiet weg te laten werd echter gelezen
+als aankoopvraag; de korte aangeboden waiver werkte pas na herhaalde
+slotvragen. Een correctie van naam en target op een open strategieconcept
+behield een foutieve naam of leverde geen nieuwe bevestigbare kaart. Die
+onveilige correctiekaart is niet opgeslagen. De huidige lokale reparatie
+verbindt de uitgebreide toestemming aan de oorspronkelijke regelzin, herkent
+de exacte naam in aanvraag en correctie, en noemt de weggelaten regels op de
+kaart. Deze reparatie is nog niet live of door QA geaccepteerd.
+
+Build heeft de laatste lokale batch gericht herhaald op de vaste USD-prijzen,
+naam- en targetcorrecties, expliciete waiver en de afwijzing van extra of
+relatieve handelsregels. De volledige backend-suite slaagde met **3698 tests,
+4 bestaande skips**. De definitieve lokale werkermatrix slaagde **16/16**
+actiecontracten en **19/19** adaptertests zonder brokerorder,
+Live-bot of productieverbinding; artifact SHA-256
+`154487ac966f907317064fb19eab95c406a7bc4089ce208bc25d67ceb8485738`.
+De echte Luna/Responses-ontwikkelset slaagde **20/20**, artifact SHA-256
+`736d03de7a505c84c490cba50ddb35594e62bbdfc3733cabaeb953686cc14a0a`.
+Een eerste 109-case regressierun eindigde **108/109** door één tijdelijke
+providerverbindingsfout. De volledige herhaling slaagde **109/109**, zonder
+provider-, schema-, timeout-, parse- of validatiefout; artifact SHA-256
+`c48adde6b58baebec77e6dfd5bd4fbaf791f79b3220ecf52ffd8612238e07804`.
+Security vond na de gerichte reparaties
+geen resterende concrete P1 in de uitgebreide waiver of het herstel van
+vaste koersen. Dit is lokaal bewijs, geen live acceptatie.
+De frontend-typecheck, i18n-lint, 23 i18n-tests, 27 command-tests,
+8 voorsteltests, productiebuild en `audit:high` slaagden; npm meldt één
+bestaande moderate Next.js-advisory. De onafhankelijke live hertest moet de
+meerbeurtige strategieflow nog bevestigen.
+
+De vorige reparatie is via
 [PR #520](https://github.com/gvangalen/antigravity-trading-tool/pull/520)
 gemerged als product-SHA `1849b9a1003ea04dbca1a8525a674084ef748de0`.
 [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39613988258),

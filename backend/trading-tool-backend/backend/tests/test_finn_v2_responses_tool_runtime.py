@@ -4446,6 +4446,44 @@ def test_same_asset_dca_strategy_correction_preserves_owner_parent_and_name():
     assert state["collected_inputs"]["base_amount"] == 75
 
 
+def test_open_usd_strategy_name_and_target_correction_preserves_other_fields():
+    message = (
+        'Wijzig in dit nog niet opgeslagen voorstel alleen de naam naar '
+        '"BTC QA Correctie 51CA B" en het target naar 92.400 USD. '
+        'Behoud de overige kaartvelden.'
+    )
+    call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_strategy", "draft_intent": "new", "inputs": {}},
+    )
+    prior_inputs = {
+        "setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H",
+        "name": "nieuwe strategie exact BTC QA Correctie 51CA A",
+        "execution_mode": "fixed", "base_amount": 100,
+        "entry": 84000, "stop_loss": 79800, "targets": [93000],
+        "price_currency": "USD", "risk_profile": "conservative",
+    }
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call, message=message,
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "old-usd-strategy", "status": "cancelled",
+            "operation_id": "create_strategy", "previous_asset": "BTC",
+            "requested_instrument": "BTC",
+            "corrected_name": "BTC QA Correctie 51CA B",
+            "corrected_fields": {"targets": [92400]},
+            "prior_inputs": {**prior_inputs, "name": "BTC QA Correctie 51CA B", "targets": [92400]},
+        }}, verified_asset=None,
+    )
+    saved = analysis.request_plan.operation_state["collected_inputs"]
+    assert saved["name"] == "BTC QA Correctie 51CA B"
+    assert saved["targets"] == [92400.0]
+    assert saved["price_currency"] == "USD"
+    assert saved["entry"] == 84000.0
+    assert saved["stop_loss"] == 79800.0
+    assert saved["base_amount"] == 100.0
+    assert saved["setup_id"] == 42
+
+
 @pytest.mark.parametrize("message", [
     "Maak een DCA-strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
     "Maak een strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
@@ -5124,6 +5162,45 @@ def test_blocked_strategy_cannot_restore_percent_before_label_or_indicator_numbe
     assert not {"entry", "stop_loss", "targets", "risk_profile"} & safe.keys()
 
 
+def test_blocked_strategy_restores_user_stated_fixed_usd_levels_after_waiver():
+    message = (
+        "Maak voor mijn opgeslagen setup BTC QA Cutover C5E3 een tweede "
+        "Paper-strategie met naam BTC QA USD Waiver 51CA. BTC 4H, vast "
+        "bedrag €100, entry 84.000 USD, stop-loss 79.800 USD, target "
+        "92.400 USD en voorzichtig risico. Ik wil daarnaast alleen handelen "
+        "bij stijgende 1D-trend en maximaal twee trades per dag. Toon het "
+        "concept, sla niets op zonder bevestiging."
+    )
+    safe = _safe_blocked_strategy_inputs(message, {
+        "setup_id": 42, "symbol": "BTC", "timeframe": "4H", "base_amount": 100,
+        "entry": 1, "stop_loss": 2, "targets": [3],
+        "price_currency": "EUR", "risk_profile": "balanced",
+    })
+    assert safe["name"] == "BTC QA USD Waiver 51CA"
+    assert safe["entry"] == 84000
+    assert safe["stop_loss"] == 79800
+    assert safe["targets"] == [92400]
+    assert safe["price_currency"] == "USD"
+    assert safe["risk_profile"] == "conservative"
+
+
+def test_blocked_strategy_does_not_treat_currency_offsets_as_fixed_levels():
+    unsafe_inputs = {
+        "setup_id": 42, "name": "Relative", "symbol": "BTC", "base_amount": 100,
+        "entry": 80000, "stop_loss": 5, "targets": [10],
+        "price_currency": "USD",
+    }
+    for message in (
+        "Entry 80.000 USD, stop-loss 5 USD onder entry, target 10 USD boven entry. Alleen handelen bij stijgende trend.",
+        "Entry 5 USD boven MA200, stop-loss 4 USD, target 10 USD en voorzichtig risico.",
+        "Entry 80.000 USD plus 5%, stop-loss 79.000 USD, target 90.000 USD en voorzichtig risico.",
+        "Gebruik deze prijzen niet: entry 80.000 USD, stop-loss 79.000 USD, target 90.000 USD en voorzichtig risico. Ik wil alleen kopen als RSI stijgt.",
+        "Voorbeeld, geen plan: entry 80.000 USD, stop-loss 79.000 USD, target 90.000 USD en voorzichtig risico.",
+    ):
+        safe = _safe_blocked_strategy_inputs(message, unsafe_inputs)
+        assert not {"entry", "stop_loss", "targets", "price_currency"} & safe.keys()
+
+
 def test_strategy_rule_waiver_requires_explicit_operation_choice():
     assert _explicit_strategy_rule_waiver(
         "Maak strategievoorstel zonder deze automatische regels"
@@ -5145,6 +5222,50 @@ def test_strategy_rule_waiver_requires_explicit_operation_choice():
         "Maak strategievoorstel zonder deze automatische regels, behalve RSI"
     )
     assert not _explicit_strategy_rule_waiver("Ja, laat een regel weg")
+
+
+def test_expanded_strategy_waiver_matches_original_unsupported_rules_only():
+    original = (
+        "Maak voor mijn setup een strategie. Ik wil daarnaast alleen handelen "
+        "bij stijgende 1D-trend en maximaal twee trades per dag. Toon het concept."
+    )
+    consent = (
+        "Maak strategievoorstel zonder deze automatische regels. Ik geef expliciet "
+        "toestemming om alleen de stijgende 1D-trendvoorwaarde en de limiet van "
+        "twee trades per dag weg te laten. Behoud de eerder opgegeven vaste "
+        "prijzen, naam, basisbedrag en risicostijl. Dit is geen koopopdracht."
+    )
+    assert _explicit_strategy_rule_waiver(consent, original)
+    priced_original = (
+        "Maak voor mijn opgeslagen setup BTC QA Cutover C5E3 een tweede "
+        "Paper-strategie met naam BTC QA USD Waiver 51CA. BTC 4H, vast "
+        "bedrag €100, entry 84.000 USD, stop-loss 79.800 USD, target "
+        "92.400 USD en voorzichtig risico. Ik wil daarnaast alleen handelen "
+        "bij stijgende 1D-trend en maximaal twee trades per dag. Toon het "
+        "concept, sla niets op zonder bevestiging."
+    )
+    assert _explicit_strategy_rule_waiver(consent, priced_original)
+    assert not _explicit_strategy_rule_waiver(
+        consent, original.replace("twee trades per dag.", "twee trades per dag en RSI-instapregel."),
+    )
+    assert not _explicit_strategy_rule_waiver(
+        consent, original + " Ook wil ik alleen kopen bij RSI onder 30.",
+    )
+    assert not _explicit_strategy_rule_waiver(
+        consent, "Alleen kopen bij RSI onder 30. " + original,
+    )
+    for extra in (
+        "Koop pas na een volumepiek.",
+        "Koop bij koers boven het 200-daags gemiddelde.",
+        "Gebruik een trailing stop van 3%.",
+        "Enter after a bullish crossover.",
+    ):
+        assert not _explicit_strategy_rule_waiver(consent, original + " " + extra)
+        assert not _explicit_strategy_rule_waiver(consent, extra + " " + original)
+        assert not _explicit_strategy_rule_waiver(consent, priced_original + " " + extra)
+    assert not _explicit_strategy_rule_waiver(
+        consent.replace("twee trades per dag weg", "drie trades per dag weg"), original,
+    )
 
 
 def test_blocked_strategy_followup_names_unsaved_draft_not_saved_strategy():

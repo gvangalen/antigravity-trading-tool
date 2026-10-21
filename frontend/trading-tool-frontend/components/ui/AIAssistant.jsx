@@ -1782,15 +1782,15 @@ function AIAssistantContent({
     const normalized = (item) => String(item?.text || "").trim().toLowerCase().replace(/[.!\s]+$/, "");
     const waiverPattern = operationId === "create_setup"
       ? /^(?:maak voorstel zonder deze voorwaarden|begin nieuw voorstel zonder eerdere voorwaarden|make proposal without these conditions|start new proposal without previous conditions|vorschlag ohne diese bedingungen erstellen|neuen vorschlag ohne vorherige bedingungen beginnen|(?:ja,?\s+)?(?:laat|schrap|verwijder)\s+(?:die|deze|beide|alle)\s+(?:voorwaarden|handelsvoorwaarden|regels)\s+(?:maar\s+)?weg)$/
-      : /^(?:maak strategievoorstel zonder deze automatische regels(?:[.;]\s*laat (?:alleen )?.+\sweg(?:[.;]\s*.*)?)?|begin nieuw strategievoorstel zonder eerdere regels|make strategy proposal without these automatic rules|start new strategy proposal without previous rules|strategieentwurf ohne diese automatischen regeln erstellen|neuen strategieentwurf ohne vorherige regeln beginnen)$/;
+      : /^(?:maak strategievoorstel zonder deze automatische regels(?:[.;]\s*(?:laat (?:alleen )?.+\sweg(?:[.;]\s*.*)?|ik geef expliciet toestemming om alleen de stijgende 1d-trendvoorwaarde en de limiet van \w+ trades per dag weg te laten[.;]\s*behoud de eerder opgegeven vaste prijzen, naam, basisbedrag en risicostijl[.;]\s*dit is geen koopopdracht))?|begin nieuw strategievoorstel zonder eerdere regels|make strategy proposal without these automatic rules|start new strategy proposal without previous rules|strategieentwurf ohne diese automatischen regeln erstellen|neuen strategieentwurf ohne vorherige regeln beginnen)$/;
     const waiverIndex = turns.findLastIndex((item) => waiverPattern.test(normalized(item)));
     if (waiverIndex < 0) return null;
     const freshRequest = operationId === "create_setup"
       ? /^\s*(?:maak|create|erstelle)\b.+\b(?:nieuwe?|new)\b.+\b(?:setup|plan)\b/i
       : /^\s*(?:maak|create|erstelle)\b.+\b(?:nieuwe?|new)\b.+\b(?:strategie|strategy)\b/i;
     if (turns.slice(waiverIndex + 1).some((item) => freshRequest.test(String(item.text || "")))) return null;
-    const original = turns.slice(0, waiverIndex).reverse().find((item) => /(?:extra voorwaarden|extra regels|additional conditions|additional rules)\s*:/i.test(String(item.text || "")));
-    const omitted = String(original?.text || "").match(/(?:extra voorwaarden|extra regels|additional conditions|additional rules)\s*:\s*([^.!?\n]+)/i)?.[1]?.trim();
+    const original = turns.slice(0, waiverIndex).reverse().find((item) => /(?:extra voorwaarden|extra regels|additional conditions|additional rules)\s*:|ik wil daarnaast alleen handelen bij/i.test(String(item.text || "")));
+    const omitted = String(original?.text || "").match(/(?:(?:extra voorwaarden|extra regels|additional conditions|additional rules)\s*:|ik wil daarnaast alleen handelen bij)\s*([^.!?\n]+)/i)?.[1]?.trim().replace(/\s+en\s+maximaal\s+/i, "; maximaal ");
     return omitted || true;
   };
 

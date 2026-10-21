@@ -88,6 +88,23 @@ def _explicit_setup_rule_waiver(message: str) -> bool:
     ))
 
 
+def _priced_two_rule_strategy_request(message: str):
+    """Recognize one positive plan request with two named unsupported rules."""
+    numeric = r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)"
+    return re.fullmatch(
+        r"maak voor mijn opgeslagen setup [\w -]+ een tweede paper-strategie "
+        r"met naam [\w -]+\. [a-z]{2,8} \d+[hdw], vast bedrag €[\d.,]+, "
+        rf"entry (?P<entry>{numeric}) (?P<entry_currency>usd|eur), "
+        rf"stop-loss (?P<stop>{numeric}) (?P<stop_currency>usd|eur), "
+        rf"target (?P<target>{numeric}) (?P<target_currency>usd|eur) en "
+        r"(?P<risk>voorzichtig|gebalanceerd|agressief) risico\. "
+        r"ik wil daarnaast alleen handelen bij stijgende 1d-trend en "
+        r"maximaal (?P<limit>\w+) trades per dag\. "
+        r"toon het concept, sla niets op zonder bevestiging\.",
+        re.sub(r"\s+", " ", str(message or "").strip().casefold()),
+    )
+
+
 def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> bool:
     normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
     if normalized in {
@@ -99,6 +116,41 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
         "neuen strategieentwurf ohne vorherige regeln beginnen",
     }:
         return True
+    # The user may repeat our offered waiver while spelling out precisely
+    # which two unsupported conditions to drop. This form is accepted only
+    # when it matches the complete condition sentence in the blocked request
+    # and retains supported strategy fields; an extra rule cannot ride along.
+    original_text = re.sub(r"\s+", " ", str(original_message or "").casefold())
+    original_prose = re.search(
+        r"\bik wil daarnaast alleen handelen bij stijgende 1d-trend en "
+        r"maximaal (\w+) trades per dag(?:[.!?]|$)",
+        original_text,
+    )
+    expanded_prose = re.fullmatch(
+        r"maak strategievoorstel zonder deze automatische regels[.;]\s*"
+        r"ik geef expliciet toestemming om alleen de stijgende 1d-trendvoorwaarde "
+        r"en de limiet van (\w+) trades per dag weg te laten[.;]\s*"
+        r"behoud de eerder opgegeven vaste prijzen, naam, basisbedrag en "
+        r"risicostijl[.;]\s*dit is geen koopopdracht",
+        normalized,
+    )
+    if original_prose and expanded_prose:
+        # This expanded consent names only two withdrawn rules. Accept it only
+        # for the fully recognized request shape; a keyword denylist could
+        # silently discard an additional rule phrased in new words.
+        prefix = original_text[:original_prose.start()].strip()
+        suffix = original_text[original_prose.end():].strip()
+        simple_prefix = re.fullmatch(r"maak voor mijn setup een strategie\.", prefix)
+        priced_request = _priced_two_rule_strategy_request(original_message)
+        safe_suffix = suffix in {
+            "toon het concept.",
+            "toon het concept, sla niets op zonder bevestiging.",
+        }
+        return bool(
+            original_prose.group(1) == expanded_prose.group(1)
+            and (simple_prefix or priced_request)
+            and safe_suffix
+        )
     # An expanded waiver can retain ordinary price/amount fields, but may not
     # retain a second unsupported automatic rule. Match the withdrawn clause
     # against the original blocked request, rather than trusting a free-form
@@ -263,7 +315,7 @@ def _proposal_from_blocked_strategy(block: dict, verified_parent_setup: dict[str
 
 
 def _safe_blocked_strategy_inputs(message: str, inputs: dict[str, object]) -> dict[str, object]:
-    """Carry identity and amount, never derived execution levels, across a waiver."""
+    """Carry only directly stated fixed fields across a rule waiver."""
     safe = dict(inputs)
     # The proposal selector can omit a name while asking for unsupported
     # rules. Preserve only a name the user actually supplied, so accepting
@@ -271,12 +323,30 @@ def _safe_blocked_strategy_inputs(message: str, inputs: dict[str, object]) -> di
     explicit_name = FinnV2OperationStateService._name_input_from_text(message)
     if explicit_name and not safe.get("name"):
         safe["name"] = explicit_name
-    # Once a required automatic rule is unsupported, a candidate numeric
-    # extraction cannot prove which numbers were fixed prices. RSI 35 and
-    # "5% below entry" must never become entry=35 or stop_loss=5 after the
-    # user chooses to omit that rule. Ask for explicit fixed levels afresh.
-    for field in ("entry", "stop_loss", "targets", "risk_profile", "entry_type"):
+    # The model candidate can mistake RSI 35 or a 5%-below-entry rule for a
+    # fixed price. Recover levels only from a field-labelled absolute amount
+    # with an explicit currency in the user's own blocked request.
+    for field in ("entry", "stop_loss", "targets", "risk_profile", "entry_type", "price_currency"):
         safe.pop(field, None)
+    fixed_levels = _priced_two_rule_strategy_request(message)
+    if fixed_levels and len({fixed_levels.group(key) for key in (
+        "entry_currency", "stop_currency", "target_currency",
+    )}) == 1:
+        def amount(raw: str) -> float:
+            # A separated three-digit group is a thousands separator; a
+            # single comma otherwise denotes a decimal fraction.
+            return (float(re.sub(r"[.,]", "", raw)) if re.fullmatch(
+                r"\d{1,3}(?:[.,]\d{3})+", raw,
+            ) else float(raw.replace(",", ".")))
+        safe["price_currency"] = fixed_levels.group("entry_currency").upper()
+        safe["entry"] = amount(fixed_levels.group("entry"))
+        safe["stop_loss"] = amount(fixed_levels.group("stop"))
+        safe["targets"] = [amount(fixed_levels.group("target"))]
+        safe["risk_profile"] = {
+            "voorzichtig": "conservative",
+            "gebalanceerd": "balanced",
+            "agressief": "aggressive",
+        }[fixed_levels.group("risk")]
     return safe
 
 
