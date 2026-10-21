@@ -668,6 +668,12 @@ def _rate_limit_allows_call() -> bool:
         # The shared scheduled-call default of one per hour otherwise rejects
         # every prompt retry even when the briefing state permits it.
         limit_override = 3
+    elif context.get("entry_point") == "finn_trade_review":
+        # One closed-trade analysis may make one bounded repair call when the
+        # first evidence selection is invalid. Keep the slot scoped to the
+        # owner and review ID; the generic scheduled limit of one would reject
+        # that second call and leave a complete Paper dossier unavailable.
+        limit_override = 2
     allowed = acquire_ai_call_slot(scope, scheduled=scheduled, limit_override=limit_override)
     if not allowed:
         _log_openai_quota_skip("ai_rate_limited")

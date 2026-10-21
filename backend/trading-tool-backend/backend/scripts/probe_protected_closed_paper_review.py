@@ -103,6 +103,8 @@ def _controlled_fixture_paper_quote():
 def _safe_ai_error_category(error: object) -> str:
     """Reduce provider/configuration failures to a fixed non-sensitive code."""
     value = str(error or "").casefold()
+    if value == "ai_rate_limited":
+        return "local_rate_limit"
     if "ai_unavailable_configuration" in value or "api key" in value or "api_key" in value:
         return "configuration"
     if "ai_rate_limited" in value or "429" in value or "rate limit" in value:

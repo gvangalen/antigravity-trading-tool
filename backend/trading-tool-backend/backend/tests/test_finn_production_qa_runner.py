@@ -311,6 +311,7 @@ def test_closed_paper_ai_error_diagnostic_discloses_only_fixed_categories(monkey
         assert result["error"].startswith("secret request details")
     assert categories == ["rate_limit"]
     assert openai_client.ask_gpt_json_async is unavailable
+    assert probe._safe_ai_error_category("ai_rate_limited") == "local_rate_limit"
     assert probe._safe_ai_error_category("ai_unavailable_configuration") == "configuration"
     assert probe._safe_ai_error_category("unrecognized provider payload") == "provider"
 
