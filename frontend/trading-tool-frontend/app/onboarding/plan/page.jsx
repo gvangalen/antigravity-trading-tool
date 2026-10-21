@@ -504,12 +504,7 @@ export default function OnboardingPlanPage() {
           ) : null}
 
           <div className="mt-8 border-t border-slate-200 pt-8">
-            {!isTrade ? (
-              <p className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-relaxed text-slate-700">
-                {copy.dcaScoreExplanation}
-              </p>
-            ) : null}
-            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={symbol} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")}>
+            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={symbol} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")} isDca={!isTrade}>
               <div className="grid gap-3">
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <div className="mb-2 text-xs font-bold text-slate-700">{copy.benchmarkScoreLabel || "Jouw benchmarkscore"}</div>

@@ -334,7 +334,10 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
             type="button"
-            onClick={() => setFormData(p => ({ ...p, setupType: 'dca' }))}
+            onClick={() => {
+              setFormData(p => ({ ...p, setupType: 'dca' }));
+              if (!conditionChoice) setConditionChoice("off");
+            }}
             className={`
               flex items-start gap-4 p-5 rounded-2xl border-2 transition-all text-left
               ${formData.setupType === 'dca' 
@@ -462,7 +465,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
 
       {/* SCORES */}
       <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
-        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={formData.symbol || selectedAsset || initialData?.symbol} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade}>
+        <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={formData.symbol || selectedAsset || initialData?.symbol} disabled={loading} existingLimits={isEdit && hasSetupScoreConditions(initialData)} previousChoice={isEdit ? marketConditionChoiceFromSetup(initialData) : null} allowOff={isDca || legacyUnfilteredTrade} isDca={isDca}>
           <div className="space-y-5">
             <p className="text-xs text-[var(--text-soft)]">{copy[setupScoreOriginKey(isEdit, initialData, scoreConditionsTouched)]}</p>
             {scoreBlock(copy.benchmarkTitle || "Jouw benchmarkscore", benchmarkScore, updateScoreRange, copy.benchmarkDescription || "Het gewogen gemiddelde van Markt, Macro en Technisch.")}

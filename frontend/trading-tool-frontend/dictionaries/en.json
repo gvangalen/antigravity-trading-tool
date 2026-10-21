@@ -3272,6 +3272,13 @@
     "marketConditions": {
       "title": "When does this setup fit?",
       "help": "Choose which values of your benchmark score allow this setup to qualify.",
+      "dcaTitle": "How do you want to buy regularly?",
+      "dcaHelp": "Start with a fixed schedule without a score condition, or add a market condition.",
+      "standardDcaTitle": "Standard DCA",
+      "standardDcaDescription": "Assess a purchase on your chosen day regardless of the benchmark score.",
+      "standardDcaDetail": "No score limit is saved. Your strategy sets the amount; cash and safety limits can still prevent an order.",
+      "marketDcaTitle": "DCA with market conditions",
+      "marketDcaDescription": "Choose below when the benchmark score permits a purchase. Set a score-based amount separately in the strategy.",
       "summaryTitle": "Your choice",
       "summaryEmptyTitle": "Choose a market situation",
       "summaryEmptyBody": "You'll see what your choice means for this setup here.",

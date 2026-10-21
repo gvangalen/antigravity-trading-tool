@@ -3289,6 +3289,13 @@
     "marketConditions": {
       "title": "Wann passt dieses Setup?",
       "help": "Wähle, bei welchen Werten deines Benchmark-Scores dieses Setup infrage kommt.",
+      "dcaTitle": "Wie möchtest du regelmäßig kaufen?",
+      "dcaHelp": "Beginne mit einem festen Rhythmus ohne Scorebedingung oder ergänze eine Marktbedingung.",
+      "standardDcaTitle": "Standard-DCA",
+      "standardDcaDescription": "Prüfe am gewählten Tag einen Kauf, unabhängig vom Benchmark-Score.",
+      "standardDcaDetail": "Es wird keine Scoregrenze gespeichert. Deine Strategie bestimmt den Betrag; Guthaben und Sicherheitslimits können eine Order weiterhin verhindern.",
+      "marketDcaTitle": "DCA mit Marktbedingungen",
+      "marketDcaDescription": "Wähle unten, wann der Benchmark-Score einen Kauf erlaubt. Einen scoreabhängigen Betrag legst du separat in der Strategie fest.",
       "summaryTitle": "Deine Wahl",
       "summaryEmptyTitle": "Wähle eine Marktsituation",
       "summaryEmptyBody": "Hier siehst du, was deine Wahl für dieses Setup bedeutet.",
