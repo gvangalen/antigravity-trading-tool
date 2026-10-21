@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: voorstelcorrectie en expliciete waiver (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE_PENDING`. Onafhankelijke QA gaf `NOT_ACCEPTED` op
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Onafhankelijke QA gaf `NOT_ACCEPTED` op
 publieke backend- en frontend-SHA `44b959a4300dd00d2444921a0619a961d9568f03`.
 De schone USD-strategie, naam-/targetcorrectie, gezamenlijke teruglezing en
 weigering van een verplichte RSI-regel slaagden. De uitgebreide waiver werd
@@ -42,7 +42,16 @@ Webtypecheck, i18n-lint, i18n-, command- en voorsteltests en de
 productiebuild slaagden. `audit:high` slaagde en meldde één bestaande moderate
 Next.js-advisory.
 De FOMO-bronvermelding blijft een afzonderlijk te beoordelen coachpunt.
-Dit is nog geen deploy- of onafhankelijke QA-acceptatieclaim.
+De productreparatie is via [PR #528](https://github.com/gvangalen/antigravity-trading-tool/pull/528)
+gemerged als product-SHA `dfbe2d88f64f8fba36f5d63f1e60d57df97c700e`.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39648410380),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39649120158)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39649526233)
+slaagden. Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven elk HTTP 200 en exact de
+product-SHA. Dit is Build-identiteitsbewijs, geen onafhankelijke live QA-
+acceptatie. Na deze statuscommit wordt de uiteindelijke publieke SHA opnieuw
+gecontroleerd voordat de bestaande QA-agent wordt aangestuurd.
 
 ## FINN-agent-cutover: valuta en meervoudige teruglezing (21 oktober 2026)
 
