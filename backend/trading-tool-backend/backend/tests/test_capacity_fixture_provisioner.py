@@ -418,6 +418,7 @@ def test_capacity_load_keeps_bearer_header_across_requests():
 
 
 def test_chat_load_requires_a_verified_terminal_outcome_even_after_http_200():
+    from collections import defaultdict
     from types import SimpleNamespace
 
     harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
@@ -483,6 +484,19 @@ def test_chat_load_requires_a_verified_terminal_outcome_even_after_http_200():
     with pytest.raises(ValueError, match="at least 20 requests per stage"):
         harness["chat_stage_quotas"](50, 3, production=True)
 
+    class UnverifiedClient:
+        async def request(self, *_args, **_kwargs):
+            return SimpleNamespace(status_code=202, headers={})
+
+    result = defaultdict(list)
+    stop = asyncio.Event()
+    assert asyncio.run(harness["record_request"](
+        UnverifiedClient(), "Bearer private-token", "finn_chat", "POST",
+        "/api/assistant/chat", result, stop,
+    )) is False
+    assert stop.is_set()
+    assert result["finn_chat"][0][6] == "http_unverified"
+
 
 def test_chat_quota_is_reserved_for_steady_phase_after_ramp(monkeypatch):
     import time
@@ -530,6 +544,110 @@ def test_chat_quota_is_reserved_for_steady_phase_after_ramp(monkeypatch):
     assert len(all_results["workspace"]) > 0
     assert len(steady_results["finn_chat"]) == 3
     assert budget["remaining"] == 0
+
+
+def test_five_minute_chat_cadence_plans_exact_arrivals_and_budget():
+    from collections import Counter
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    assert harness["planned_chat_count"](1000, 120, 300) == 400
+    assert harness["planned_chat_count"](1000, 300, 300) == 1000
+    offsets = [harness["chat_due_offset"](index, 1000, 300) for index in range(1000)]
+    assert Counter(int(offset // 60) for offset in offsets) == {minute: 200 for minute in range(5)}
+    assert offsets == sorted(offsets)
+    assert harness["cadence_stage_quotas"](1600, ["100:300", "500:300", "1000:300"], 300,
+                                            production=True) == [100, 500, 1000]
+    with pytest.raises(ValueError, match="above --max-chat-requests"):
+        harness["cadence_stage_quotas"](999, ["1000:300"], 300, production=True)
+    with pytest.raises(ValueError, match="at least 20"):
+        harness["cadence_stage_quotas"](10, ["10:300"], 300, production=True)
+
+
+def test_scheduled_chat_starts_after_ramp_and_counts_verified_turns():
+    import time
+    from collections import defaultdict
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+
+    class Client:
+        def __init__(self):
+            self.tokens = []
+
+        async def request(self, method, path, *, headers, json):
+            assert (method, path) == ("POST", "/api/assistant/chat")
+            self.tokens.append(headers["Authorization"])
+            return SimpleNamespace(status_code=200, headers={}, json=lambda: {
+                "intent": "fact", "response": "Verified answer",
+                "state": {"current_flow": "finn_v2_visible", "run_id": "r1"},
+                "response_trace": {
+                    "run_id": "r1", "pipeline_version": "finn_v2",
+                    "response_source": "finn_v2_verified", "verifier_status": "passed",
+                    "delivery_envelope": {"status": "completed"},
+                },
+            })
+
+    async def exercise():
+        client = Client()
+        started = time.monotonic() + 0.05
+        budget = {"remaining": 3}
+        results, steady = defaultdict(list), defaultdict(list)
+        stop = asyncio.Event()
+        await asyncio.gather(*(
+            harness["scheduled_chat_user"](
+                client, {"user_id": index, "access_token": f"token-{index}"}, index, 3,
+                0.3, started, started + 0.3, budget, results, steady, stop, 1,
+            ) for index in range(3)
+        ))
+        return client, budget, results, steady, stop
+
+    client, budget, results, steady, stop = asyncio.run(exercise())
+    assert sorted(client.tokens) == ["Bearer token-0", "Bearer token-1", "Bearer token-2"]
+    assert budget["remaining"] == 0
+    assert not stop.is_set()
+    assert len(results["finn_chat"]) == len(steady["finn_chat"]) == 3
+    assert all(sample[6] == "ok" and sample[7] is not None for sample in results["finn_chat"])
+
+
+def test_scheduled_chat_never_catches_up_with_late_paid_requests():
+    import time
+    from collections import defaultdict
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+
+    class Client:
+        async def request(self, *_args, **_kwargs):
+            raise AssertionError("Late paid chat request must not be sent")
+
+    async def exercise(steady_started, deadline, lag_limit):
+        budget = {"remaining": 1}
+        stop = asyncio.Event()
+        await harness["scheduled_chat_user"](
+            Client(), {"access_token": "private-token"}, 0, 1, 1,
+            steady_started, deadline, budget, defaultdict(list), defaultdict(list),
+            stop, 1, lag_limit,
+        )
+        assert stop.is_set()
+        assert budget["remaining"] == 1
+
+    now = time.monotonic()
+    asyncio.run(exercise(now - 2, now - 1, 5000))
+    asyncio.run(exercise(time.monotonic() - 0.6, time.monotonic() + 1, 1))
+
+
+def test_cadence_budget_is_rejected_before_reading_fixture_file(monkeypatch):
+    import sys
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    monkeypatch.setattr(sys, "argv", [
+        "active_users.py", "--base-url", "http://127.0.0.1:8000",
+        "--fixtures", "/missing-private-file", "--stages", "1000:300",
+        "--include-chat", "--chat-interval-seconds", "300",
+        "--max-chat-requests", "999",
+    ])
+    with pytest.raises(SystemExit) as rejected:
+        harness["main"]()
+    assert rejected.value.code == 2
 
 
 def test_capacity_generator_requires_fd_headroom_for_production(monkeypatch):
