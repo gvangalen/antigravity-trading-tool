@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI_AFTER_QA_NOT_ACCEPTED`. De herstelbatch is via
+Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De herstelbatch is via
 [PR #516](https://github.com/gvangalen/antigravity-trading-tool/pull/516)
 gemerged als product-SHA `f9ce455a49a78303a39889c468679dc57af5114e`.
 [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39598093367),
@@ -26,7 +26,15 @@ neemt expliciete EUR/USD-koersvaluta op in het strategiecontract, de kaart en
 de teruglezing. Bij USD-koersniveaus houdt de bot automatische uitvoering tegen
 totdat een betrouwbare EUR-omrekening bestaat. De planlijst ververst na een
 bevestigde FINN-actie, en de kaart meldt een expliciet ingetrokken extra regel.
-Deze kandidaat is nog niet live. Lokaal: backend **3689 geslaagd, 4 bestaande
+De herstelkandidaat is via [PR #518](https://github.com/gvangalen/antigravity-trading-tool/pull/518)
+gemerged als product-SHA `056d8f103bf90d2cf24dfef5fbb445187c85aede`.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39607106664),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39607555720)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39607929295)
+slaagden. Backend-health en frontend-buildinfo gaven na deployment elk HTTP 200
+en exact die product-SHA. Dit is Build-identiteitsbewijs; onafhankelijke QA
+controleert de definitieve publieke SHA opnieuw voordat zij test. Lokaal:
+backend **3689 geslaagd, 4 bestaande
 skips**; webtypecheck, build, i18n-, command- en voorsteltests en
 `audit:high` geslaagd (één moderate Next.js-advisory). De volledige lokale
 werkermatrix slaagde **16/16** contracten en **19/19** adaptertests; artifact
@@ -37,7 +45,7 @@ Luna/Responses-ontwikkelset slaagde **20/20**; artifact SHA-256
 De echte Luna/Responses-regressieset slaagde **109/109** zonder misclassificatie;
 artifact SHA-256 `8956af897fe0210d3f91bb6a0d10b3f6332fdb14348f54749b0e05cc2da016a8`.
 Security vond na een gerichte hercontrole geen resterende blokkade in de
-koersvalutagrens. De productrelease en onafhankelijke live QA staan nog open.
+koersvalutagrens. De onafhankelijke ingelogde live QA staat nog open.
 
 De onafhankelijke QA op eerdere publieke backend- en
 frontend-SHA `c5e3008e97d833f05f0703e73b86a45ce51e61a0` gaf
