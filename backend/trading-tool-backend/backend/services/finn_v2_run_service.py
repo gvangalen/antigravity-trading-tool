@@ -100,6 +100,30 @@ def _explicit_strategy_rule_waiver(message: str) -> bool:
     }
 
 
+def _discard_superseded_strategy_rule_block(context: dict, message: str) -> bool:
+    """Only a demonstrably distinct new strategy supersedes a blocked draft."""
+    block = context.get("strategy_rule_block") or {}
+    if not block:
+        return False
+    if (
+        _explicit_strategy_rule_waiver(message)
+        or _explicit_fresh_create_operation_request(message) != "create_strategy"
+    ):
+        return False
+    old_name = str((block.get("captured_inputs") or {}).get("name") or "").strip().casefold()
+    new_name = str(FinnV2OperationStateService._name_input_from_text(message) or "").strip().casefold()
+    # A request about "that same strategy" may restate only one fixed field.
+    # Keep the unsupported-rule guard until a separate named object is clear.
+    if not new_name or (old_name and old_name == new_name):
+        return False
+    for key in (
+        "strategy_rule_block", "active_guided_operation",
+        "responses_clarification", "proposal_revision",
+    ):
+        context.pop(key, None)
+    return True
+
+
 def _proposal_from_blocked_setup(block: dict):
     """Rebuild the owner-bound draft without asking the model to choose a tool."""
     inputs = dict(block.get("captured_inputs") or {})
@@ -140,7 +164,7 @@ def _proposal_from_blocked_strategy(block: dict, verified_parent_setup: dict[str
 
 
 def _safe_blocked_strategy_inputs(message: str, inputs: dict[str, object]) -> dict[str, object]:
-    """Never turn a relative percent rule into a fixed price on continuation."""
+    """Carry identity and amount, never derived execution levels, across a waiver."""
     safe = dict(inputs)
     # The proposal selector can omit a name while asking for unsupported
     # rules. Preserve only a name the user actually supplied, so accepting
@@ -148,12 +172,12 @@ def _safe_blocked_strategy_inputs(message: str, inputs: dict[str, object]) -> di
     explicit_name = FinnV2OperationStateService._name_input_from_text(message)
     if explicit_name and not safe.get("name"):
         safe["name"] = explicit_name
-    if re.search(r"\b(?:stop(?:[- ]?loss)?|stopp?kurs)\b[^.!?\n]{0,70}\d+(?:[.,]\d+)?\s*%", message, re.I):
-        safe.pop("stop_loss", None)
-    if re.search(r"\b(?:target|targets|koersdoel|koersdoelen|ziel(?:kurs)?)\b[^.!?\n]{0,70}\d+(?:[.,]\d+)?\s*%", message, re.I):
-        safe.pop("targets", None)
-    if re.search(r"\b(?:maximaal|maximum|max|höchstens)\s*\d+(?:[.,]\d+)?\s*%\s*(?:risico|risk|risiko)", message, re.I):
-        safe.pop("risk_profile", None)
+    # Once a required automatic rule is unsupported, a candidate numeric
+    # extraction cannot prove which numbers were fixed prices. RSI 35 and
+    # "5% below entry" must never become entry=35 or stop_loss=5 after the
+    # user chooses to omit that rule. Ask for explicit fixed levels afresh.
+    for field in ("entry", "stop_loss", "targets", "risk_profile", "entry_type"):
+        safe.pop(field, None)
     return safe
 
 
@@ -2233,6 +2257,16 @@ class FinnV2RunService:
                         )
                         setup_rule_block = dict(context.get("setup_rule_block") or {})
                         strategy_rule_block = dict(context.get("strategy_rule_block") or {})
+                        if _discard_superseded_strategy_rule_block(context, run_message):
+                            # A new strategy request supersedes the blocked
+                            # draft. Otherwise the old waiver could restore
+                            # strategy A after the trader asked for B.
+                            await service.conversations.update_context(
+                                conversation_id=conversation_id, user_id=user_id,
+                                context=context,
+                            )
+                            await session.commit()
+                            strategy_rule_block = {}
 
                 prepared: FinnResponsesFrontDoorResult | None = None
                 if visible:

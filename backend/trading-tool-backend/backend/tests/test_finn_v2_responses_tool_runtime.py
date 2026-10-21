@@ -43,6 +43,7 @@ from backend.services.finn_v2_run_service import (
     _minimal_read_answer, _minimal_read_answers_enabled, _explicit_setup_rule_waiver,
     _proposal_from_blocked_setup, _explicit_strategy_rule_waiver,
     _proposal_from_blocked_strategy, _safe_blocked_strategy_inputs,
+    _discard_superseded_strategy_rule_block,
     _strategy_rule_is_unencoded,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
@@ -5016,11 +5017,11 @@ def test_relative_strategy_rules_cannot_be_recast_as_fixed_price_fields():
     safe = _safe_blocked_strategy_inputs(message, {
         "setup_id": 42, "setup_type": "trade", "name": "BTC QA", "symbol": "BTC", "timeframe": "4H",
         "execution_mode": "fixed", "base_amount": 80,
-        "stop_loss": 5, "targets": [10], "risk_profile": "balanced",
+        "entry": 35, "stop_loss": 5, "targets": [10], "risk_profile": "balanced",
     })
     assert safe["setup_id"] == 42
     assert safe["base_amount"] == 80
-    assert not {"stop_loss", "targets", "risk_profile"} & safe.keys()
+    assert not {"entry", "stop_loss", "targets", "risk_profile"} & safe.keys()
     analysis = _proposal_from_blocked_strategy({
         "original_message": message, "captured_inputs": safe,
     }, {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"})
@@ -5050,6 +5051,20 @@ def test_blocked_strategy_keeps_explicit_name_when_user_omits_unsupported_rules(
     assert "stop_loss" not in collected
 
 
+def test_blocked_strategy_cannot_restore_percent_before_label_or_indicator_number():
+    message = (
+        "Naam: RSI Strategie. Koop zodra RSI 35 omhoog kruist; "
+        "5% onder instap als stop-loss en 10% erboven als koersdoel."
+    )
+    safe = _safe_blocked_strategy_inputs(message, {
+        "setup_id": 42, "symbol": "BTC", "name": "RSI Strategie",
+        "base_amount": 80, "execution_mode": "fixed", "entry": 35,
+        "stop_loss": 5, "targets": [10], "risk_profile": "balanced",
+    })
+    assert safe["name"] == "RSI Strategie"
+    assert not {"entry", "stop_loss", "targets", "risk_profile"} & safe.keys()
+
+
 def test_strategy_rule_waiver_requires_explicit_operation_choice():
     assert _explicit_strategy_rule_waiver(
         "Maak strategievoorstel zonder deze automatische regels"
@@ -5058,6 +5073,46 @@ def test_strategy_rule_waiver_requires_explicit_operation_choice():
         "Maak strategievoorstel zonder deze automatische regels, behalve RSI"
     )
     assert not _explicit_strategy_rule_waiver("Ja, laat een regel weg")
+
+
+def test_new_strategy_request_supersedes_blocked_draft_but_waiver_does_not():
+    prior = {"strategy_rule_block": {"captured_inputs": {"name": "Strategie A"}},
+             "active_guided_operation": {"operation_id": "create_strategy"},
+             "responses_clarification": {"reason": "strategy_rule_not_captured"}}
+    choice = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        choice, "Maak strategievoorstel zonder deze automatische regels"
+    )
+    assert choice == prior
+    same = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        same, "Maak strategievoorstel met vaste stop-loss 72000 voor diezelfde strategie."
+    )
+    assert same == prior
+    renamed_same = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        renamed_same, "Maak een nieuw voorstel voor diezelfde strategie. Naam: Strategie A."
+    )
+    assert renamed_same == prior
+    unnamed = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        unnamed, "Maak een nieuwe strategie met vaste stop-loss 72000."
+    )
+    assert unnamed == prior
+    fresh = dict(prior)
+    assert _discard_superseded_strategy_rule_block(
+        fresh, "Maak een nieuwe Paper-strategie voor mijn opgeslagen BTC-setup. "
+        "Naam: Strategie B. Toon eerst het voorstel."
+    )
+    assert "strategy_rule_block" not in fresh
+    assert "active_guided_operation" not in fresh
+    assert "responses_clarification" not in fresh
+    unnamed_prior = {"strategy_rule_block": {"captured_inputs": {}},
+                     "active_guided_operation": {"operation_id": "create_strategy"}}
+    assert _discard_superseded_strategy_rule_block(
+        unnamed_prior, "Maak een nieuwe Paper-strategie. Naam: Strategie B."
+    )
+    assert "strategy_rule_block" not in unnamed_prior
 
 
 def test_strategy_rule_coverage_detects_unstored_dynamic_rule():
