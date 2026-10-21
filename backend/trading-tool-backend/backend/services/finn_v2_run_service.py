@@ -100,6 +100,23 @@ def _explicit_strategy_rule_waiver(message: str) -> bool:
     }
 
 
+def _references_blocked_strategy_draft(message: str) -> bool:
+    """Intercept direct draft edits, leaving hypothetical questions to FINN."""
+    normalized = str(message or "")
+    refers_to_draft = bool(re.search(
+        r"\b(?:ditzelfde|dit|dat|deze|this|the same|dieses|denselben)\s+"
+        r"(?:strategieconcept|strategievoorstel|strategiedraft|strategy\s+(?:draft|proposal)|"
+        r"strategieentwurf)\b",
+        normalized, re.IGNORECASE,
+    ))
+    requests_change = bool(re.match(
+        r"^\s*(?:voeg|zet|verander|wijzig|pas|add|include|change|update|"
+        r"ergänze|füge|ändere)\b",
+        normalized, re.IGNORECASE,
+    ))
+    return refers_to_draft and requests_change
+
+
 def _discard_superseded_strategy_rule_block(context: dict, message: str) -> bool:
     """Only a demonstrably distinct new strategy supersedes a blocked draft."""
     block = context.get("strategy_rule_block") or {}
@@ -126,19 +143,74 @@ def _discard_superseded_strategy_rule_block(context: dict, message: str) -> bool
 
 def _proposal_from_blocked_setup(block: dict):
     """Rebuild the owner-bound draft without asking the model to choose a tool."""
-    inputs = dict(block.get("captured_inputs") or {})
+    # A rejected model candidate can contain fields outside create_setup,
+    # such as market_condition=trend_defined. The explicit waiver drops that
+    # condition; replaying the unfiltered candidate raised a terminal tool
+    # error instead of restoring the valid draft.
+    allowed = set(FinnResponsesToolCatalog().registry.require_supported("create_setup").input_fields)
+    inputs = {
+        field: value for field, value in dict(block.get("captured_inputs") or {}).items()
+        if field in allowed
+    }
     if not inputs:
         return None
+    safe_message = _blocked_setup_replay_message(inputs)
     restored_call = FinnResponsesToolCatalog().validate(
         "create_or_update_trade_plan_proposal",
         {"operation_id": "create_setup", "inputs": inputs},
     )
     return FinnResponsesProposalSelection().from_call(
         call=restored_call,
-        message=str(block.get("draft_message") or block.get("original_message") or ""),
+        # The original prose still contains the withdrawn condition. Running
+        # its extraction again would reintroduce that rule after validation.
+        message=safe_message,
         conversation_context={},
         verified_asset=str(inputs.get("symbol") or "") or None,
     )
+
+
+def _blocked_setup_replay_message(inputs: dict[str, object]) -> str:
+    """Describe only typed fields so proposal extraction cannot revive waived rules."""
+    parts = []
+    if inputs.get("name"):
+        parts.append(f"Naam: {inputs['name']};")
+    if inputs.get("timeframe"):
+        parts.append(f"timeframe {inputs['timeframe']}.")
+    if str(inputs.get("setup_type") or "").casefold() == "dca":
+        frequency = str(inputs.get("dca_frequency") or "").casefold()
+        if frequency == "weekly":
+            weekdays = {
+                "monday": "maandag", "tuesday": "dinsdag", "wednesday": "woensdag",
+                "thursday": "donderdag", "friday": "vrijdag", "saturday": "zaterdag",
+                "sunday": "zondag",
+            }
+            day = weekdays.get(str(inputs.get("dca_day") or "").casefold())
+            parts.append(f"wekelijks op {day}." if day else "wekelijks.")
+        elif frequency == "monthly":
+            day = inputs.get("dca_month_day")
+            parts.append(f"maandelijks op dag {day}." if day is not None else "maandelijks.")
+        elif frequency == "daily":
+            parts.append("dagelijks.")
+        if inputs.get("base_amount") is not None:
+            parts.append(f"basisbedrag €{inputs['base_amount']} per uitvoering.")
+        mode = str(inputs.get("dca_amount_mode") or "").casefold()
+        if mode == "fixed":
+            parts.append("vast bedrag.")
+        elif mode == "score_bands":
+            parts.append("Smart DCA op de totale benchmarkscore.")
+            band_fields = (
+                "low_threshold", "high_threshold", "low_score_percent",
+                "mid_score_percent", "high_score_percent",
+            )
+            if all(inputs.get(field) is not None for field in band_fields):
+                parts.append(
+                    f"Onder score {inputs['low_threshold']} koop "
+                    f"{inputs['low_score_percent']}%, van {inputs['low_threshold']} "
+                    f"tot onder {inputs['high_threshold']} koop "
+                    f"{inputs['mid_score_percent']}%, vanaf {inputs['high_threshold']} "
+                    f"koop {inputs['high_score_percent']}%."
+                )
+    return " ".join(parts)
 
 
 def _proposal_from_blocked_strategy(block: dict, verified_parent_setup: dict[str, object]):
@@ -2267,6 +2339,65 @@ class FinnV2RunService:
                             )
                             await session.commit()
                             strategy_rule_block = {}
+
+                if (
+                    visible and strategy_rule_block
+                    and not _explicit_strategy_rule_waiver(run_message)
+                    and _references_blocked_strategy_draft(run_message)
+                ):
+                    # This is a continuation of an unsaved, blocked draft.
+                    # Do not send it through the generic update-strategy
+                    # selector, which would ask for a saved strategy and could
+                    # imply that unsupported execution rules are editable.
+                    locale = str(context.get("locale") or "nl").split("-")[0].lower()
+                    if locale == "en":
+                        question = (
+                            "This is still an unsaved strategy draft. I cannot enforce the "
+                            "automatic rules from this draft, including the rule you just "
+                            "added. Choose ‘Make strategy proposal without these automatic "
+                            "rules’ only if you want to omit them; otherwise I cannot show "
+                            "a confirmable proposal."
+                        )
+                        choice = "Make strategy proposal without these automatic rules"
+                    elif locale == "de":
+                        question = (
+                            "Dies ist noch ein ungespeicherter Strategieentwurf. Die "
+                            "automatischen Regeln, auch die eben ergänzte, kann ich so "
+                            "nicht ausführen. Wähle „Strategieentwurf ohne diese automatischen "
+                            "Regeln erstellen“ nur, wenn sie entfallen sollen; sonst kann ich "
+                            "keinen bestätigbaren Vorschlag zeigen."
+                        )
+                        choice = "Strategieentwurf ohne diese automatischen Regeln erstellen"
+                    else:
+                        question = (
+                            "Dit is nog een niet-opgeslagen strategieconcept. Ik kan de "
+                            "automatische regels, ook de regel die je net toevoegt, niet "
+                            "afdwingen. Kies ‘Maak strategievoorstel zonder deze automatische "
+                            "regels’ alleen als ze mogen vervallen; anders kan ik geen "
+                            "bevestigbaar voorstel tonen."
+                        )
+                        choice = "Maak strategievoorstel zonder deze automatische regels"
+                    async with async_session_factory() as session:
+                        conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                            conversation_id=conversation_id, user_id=user_id, for_update=True,
+                        )
+                        if conversation is None or conversation.last_run_id != run_id:
+                            raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                        await cls(session).complete_responses_read(
+                            run_id=run_id, user_id=user_id,
+                            response_id=f"verified-strategy-draft-followup-{run_id}",
+                            answer=FinnResponsesVerifiedAnswer(
+                                status="clarification_required", text=question,
+                                reason="strategy_rule_not_captured", evidence=(),
+                                clarification={
+                                    "question": question, "reason": "strategy_rule_not_captured",
+                                    "choices": [choice],
+                                },
+                            ),
+                            locale=locale,
+                        )
+                        await session.commit()
+                    return
 
                 prepared: FinnResponsesFrontDoorResult | None = None
                 if visible:

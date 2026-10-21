@@ -43,7 +43,7 @@ from backend.services.finn_v2_run_service import (
     _minimal_read_answer, _minimal_read_answers_enabled, _explicit_setup_rule_waiver,
     _proposal_from_blocked_setup, _explicit_strategy_rule_waiver,
     _proposal_from_blocked_strategy, _safe_blocked_strategy_inputs,
-    _discard_superseded_strategy_rule_block,
+    _discard_superseded_strategy_rule_block, _references_blocked_strategy_draft,
     _strategy_rule_is_unencoded,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
@@ -5007,6 +5007,65 @@ def test_blocked_setup_choice_restores_latest_partial_draft_without_old_identity
     assert state["missing_required_inputs"] == ["timeframe", "name"]
 
 
+def test_blocked_setup_waiver_discards_unstored_trend_condition_without_terminal_error():
+    original = (
+        "Maak een nieuwe BTC swing-setup met naam BTC QA Cutover C5E3. "
+        "Gebruik 4H voor entries en 1D voor de trend. Ik wil alleen instappen "
+        "als de dagtrend stijgt en de markt niet onder druk staat. "
+        "Toon eerst het concept; sla niets op zonder bevestiging."
+    )
+    analysis = _proposal_from_blocked_setup({
+        "original_message": original, "draft_message": original,
+        "captured_inputs": {
+            "name": "BTC QA Cutover C5E3", "symbol": "BTC", "timeframe": "4H",
+            "setup_type": "swing", "market_condition": "trend_defined",
+        },
+    })
+    collected = analysis.request_plan.operation_state["collected_inputs"]
+    assert collected["name"] == "BTC QA Cutover C5E3"
+    assert collected["symbol"] == "BTC"
+    assert collected["timeframe"] == "4H"
+    assert "market_condition" not in collected
+
+
+def test_blocked_dca_waiver_preserves_typed_cadence_and_amount():
+    analysis = _proposal_from_blocked_setup({
+        "original_message": "Koop alleen als de 1D-trend stijgt.",
+        "captured_inputs": {
+            "name": "BTC DCA QA", "symbol": "BTC", "timeframe": "1D",
+            "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+            "dca_amount_mode": "fixed", "base_amount": 100,
+            "market_condition": "trend_defined",
+        },
+    })
+    collected = analysis.request_plan.operation_state["collected_inputs"]
+    assert collected["name"] == "BTC DCA QA"
+    assert collected["dca_day"] == "friday"
+    assert collected["base_amount"] == 100
+    assert "market_condition" not in collected
+
+
+def test_blocked_smart_dca_waiver_preserves_score_bands():
+    analysis = _proposal_from_blocked_setup({
+        "captured_inputs": {
+            "name": "BTC Smart DCA QA", "symbol": "BTC", "timeframe": "1D",
+            "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+            "dca_amount_mode": "score_bands", "base_amount": 100,
+            "score_source": "benchmark_score", "low_threshold": 40,
+            "high_threshold": 70, "low_score_percent": 50,
+            "mid_score_percent": 100, "high_score_percent": 150,
+            "market_condition": "trend_defined",
+        },
+    })
+    collected = analysis.request_plan.operation_state["collected_inputs"]
+    assert collected["low_threshold"] == 40
+    assert collected["high_threshold"] == 70
+    assert collected["low_score_percent"] == 50
+    assert collected["mid_score_percent"] == 100
+    assert collected["high_score_percent"] == 150
+    assert "market_condition" not in collected
+
+
 def test_relative_strategy_rules_cannot_be_recast_as_fixed_price_fields():
     message = (
         "Maak een BTC-strategie met instapvoorwaarde RSI onder 35 na herstel "
@@ -5073,6 +5132,22 @@ def test_strategy_rule_waiver_requires_explicit_operation_choice():
         "Maak strategievoorstel zonder deze automatische regels, behalve RSI"
     )
     assert not _explicit_strategy_rule_waiver("Ja, laat een regel weg")
+
+
+def test_blocked_strategy_followup_names_unsaved_draft_not_saved_strategy():
+    assert _references_blocked_strategy_draft(
+        "Voeg aan ditzelfde strategieconcept ook maximaal twee trades per dag toe."
+    )
+    assert _references_blocked_strategy_draft("Add this to the same strategy draft.")
+    assert not _references_blocked_strategy_draft("Wijzig mijn opgeslagen strategie.")
+    assert not _references_blocked_strategy_draft("Kun je dit strategieconcept uitleggen?")
+    assert not _references_blocked_strategy_draft("Waarom is dit strategievoorstel geblokkeerd?")
+    assert not _references_blocked_strategy_draft(
+        "Als ik dit strategieconcept wijzig, blijft de RSI-regel behouden?"
+    )
+    assert not _references_blocked_strategy_draft(
+        "Maak dit strategieconcept duidelijker voor mij, wat ontbreekt er?"
+    )
 
 
 def test_new_strategy_request_supersedes_blocked_draft_but_waiver_does_not():
