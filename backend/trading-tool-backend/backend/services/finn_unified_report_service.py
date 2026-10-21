@@ -207,9 +207,9 @@ def _bot_status_section(facts: dict[str, Any], locale: str) -> str:
                       "de": "ist aktiv; ein Setup-Treffer belegt keinen ausgeführten Kauf"}
         parts.append(f"{name} {status.get(locale, status['en'])}.")
     budget_note = {
-        "nl": "Een botbudget is geen beschikbaar kassaldo.",
-        "en": "A bot budget is not available cash.",
-        "de": "Ein Bot-Budget ist kein verfügbares Guthaben.",
+        "nl": "Beschikbaar kassaldo is in dit rapport niet vastgesteld; een botbudget is alleen een limiet.",
+        "en": "Available cash has not been established in this report; a bot budget is only a limit.",
+        "de": "Verfügbares Guthaben wurde in diesem Bericht nicht festgestellt; ein Bot-Budget ist nur ein Limit.",
     }
     return " ".join([*parts, budget_note.get(locale, budget_note["en"])])
 

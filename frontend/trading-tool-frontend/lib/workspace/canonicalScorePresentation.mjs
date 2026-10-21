@@ -23,3 +23,10 @@ export function indicatorSourceFreshness(freshness) {
   if (freshness?.status !== "available") return "unavailable";
   return freshness.stale ? "stale" : "current";
 }
+
+export function formatBenchmarkScore(value, locale = "nl") {
+  if (value === null || value === undefined || value === "") return "—";
+  const score = Number(value);
+  if (!Number.isFinite(score)) return "—";
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score);
+}

@@ -429,6 +429,7 @@ def test_daily_report_keeps_saved_plan_and_unscored_indicators_without_stale_sco
     assert "RSI" in result["technical_analysis"]
     assert "ETH Paper staat gepauzeerd" in result["bot_strategy"]
     assert "criteria niet bereikt" not in result["bot_strategy"]
+    assert "Beschikbaar kassaldo is in dit rapport niet vastgesteld" in result["bot_strategy"]
     assert result["active_strategy"]["setup_name"] == "ETH maandelijkse DCA"
     assert result["macro_indicator_highlights"] == [{"indicator": "DXY", "symbol": "ETH"}]
     assert result["technical_indicator_highlights"] == [{"indicator": "RSI", "symbol": "ETH"}]
