@@ -6,7 +6,17 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. De onafhankelijke QA op publieke backend- en
+Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De herstelbatch is via
+[PR #516](https://github.com/gvangalen/antigravity-trading-tool/pull/516)
+gemerged als product-SHA `f9ce455a49a78303a39889c468679dc57af5114e`.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39598093367),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39598547617)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39598863179)
+slaagden. De publieke backend-health en frontend-buildinfo gaven elk HTTP 200
+en exact die product-SHA. Dit is Build-identiteitsbewijs; QA bevestigt de
+definitieve publieke SHA opnieuw na publicatie van dit statusdocument.
+
+De onafhankelijke QA op eerdere publieke backend- en
 frontend-SHA `c5e3008e97d833f05f0703e73b86a45ce51e61a0` gaf
 `NOT_ACCEPTED`. Bij de expliciete keuze om niet-opslagbare setupvoorwaarden
 weg te laten, eindigde het gesprek in een terminale fout. Een vervolgvraag
@@ -39,8 +49,7 @@ en de regressieset **109/109** (artifact SHA-256
 `7010e97352546da1a921c8032982ead80bf30d5f72b3742a5f680db24b29eb88`),
 zonder provider-, schema-, parser-, time-out- of validatiefout. Security en
 Architecture vonden geen concrete grens- of contractblokkade in de herstelde
-code. Er is nog geen nieuwe kandidaat
-gedeployed of onafhankelijk live beoordeeld.
+code. De ingelogde live herkeuring van deze kandidaat moet nog plaatsvinden.
 
 ## FINN-agent-cutover: vorige kandidaat (21 oktober 2026)
 
