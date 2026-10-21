@@ -250,14 +250,16 @@ def test_closed_paper_review_chat_terminal_diagnostic_is_bounded():
     assert module.safe_closed_paper_chat_error(error) == "closed_paper_review_chat_first_turn_failed"
     assert module.safe_closed_paper_chat_diagnostic(error) == {
         "terminal_status": "unavailable", "typed_error_code": "lifecycle_deadline_exceeded",
-        "response_present": False,
+        "response_present": False, "response_source": "other",
+        "verifier_status": "other", "evidence_present": False,
     }
     envelope.error_code = "private provider text and token"
     envelope.status = "private status"
     private = ClosedPaperChatTurnFailure("first_turn", envelope)
     diagnostic = module.safe_closed_paper_chat_diagnostic(private)
     assert diagnostic == {"terminal_status": "unknown", "typed_error_code": "other",
-                          "response_present": False}
+                          "response_present": False, "response_source": "other",
+                          "verifier_status": "other", "evidence_present": False}
     assert "private" not in json.dumps(diagnostic)
     envelope.status = "unavailable"
     envelope.error_code = "responses_provider_timeout"
@@ -268,6 +270,45 @@ def test_closed_paper_review_chat_terminal_diagnostic_is_bounded():
     assert module.safe_closed_paper_chat_diagnostic(
         ClosedPaperChatTurnFailure("first_turn", envelope)
     )["typed_error_code"] == "responses_limited_evaluation_incomplete"
+    envelope.response = types.SimpleNamespace(
+        response_source="v2_runtime", verifier_status="failed", evidence=[],
+    )
+    envelope.error_code = "responses_evidence_not_verified"
+    assert module.safe_closed_paper_chat_diagnostic(
+        ClosedPaperChatTurnFailure("first_turn", envelope)
+    ) == {
+        "terminal_status": "unavailable", "typed_error_code": "responses_evidence_not_verified",
+        "response_present": True, "response_source": "v2_runtime",
+        "verifier_status": "failed", "evidence_present": False,
+    }
+    error = ClosedPaperChatTurnFailure("first_turn", envelope)
+    error.review_read_diagnostic = {
+        "exchange_checkpoint": True, "progress_checkpoint": False,
+        "review_tool_seen": True, "review_tool_status": "partial",
+        "review_read_status": "unavailable", "review_read_reason": "tool_internal_error",
+    }
+    assert module.safe_closed_paper_chat_diagnostic(error)["review_read"] == error.review_read_diagnostic
+    error.review_read_diagnostic["review_read_reason"] = "private database detail"
+    assert module.safe_closed_paper_chat_diagnostic(error)["review_read"]["review_read_reason"] == "other"
+
+
+def test_closed_paper_review_read_diagnostic_only_exports_bounded_tool_status():
+    from backend.scripts.probe_protected_closed_paper_review import _bounded_review_read_diagnostic
+
+    result = _bounded_review_read_diagnostic({"responses_exchange": {
+        "response_id": "private-response-id", "answer": "private lesson text",
+        "tool_trace": [{"name": "get_closed_trade_review", "status": "error"},
+                       {"name": "get_closed_trade_review", "status": "partial",
+                        "arguments": {"private": "owner"}, "result": {"results": [
+                            {"scope": "read_review_history", "status": "unavailable",
+                             "reason": "tool_internal_error", "data": "private trade"},
+                        ]}}],
+    }})
+    assert result == {
+        "exchange_checkpoint": True, "progress_checkpoint": False,
+        "review_tool_seen": True, "review_tool_status": "partial",
+        "review_read_status": "unavailable", "review_read_reason": "tool_internal_error",
+    }
 
 
 def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(monkeypatch):

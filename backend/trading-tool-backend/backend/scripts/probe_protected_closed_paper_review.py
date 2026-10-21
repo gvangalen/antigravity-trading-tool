@@ -22,7 +22,59 @@ class ClosedPaperChatTurnFailure(RuntimeError):
         super().__init__(f"closed_paper_review_chat_{turn}_failed")
         self.terminal_status = getattr(envelope, "status", None)
         self.typed_error_code = getattr(envelope, "error_code", None)
-        self.response_present = getattr(envelope, "response", None) is not None
+        response = getattr(envelope, "response", None)
+        self.response_present = response is not None
+        self.response_source = getattr(response, "response_source", None)
+        self.verifier_status = getattr(response, "verifier_status", None)
+        self.evidence_count = len(getattr(response, "evidence", ()) or ())
+        self.review_read_diagnostic: dict[str, object] = {}
+
+
+def _bounded_review_read_diagnostic(state: dict) -> dict[str, object]:
+    """Summarize the private Responses checkpoint without exporting its facts."""
+    exchange = state.get("responses_exchange") or {}
+    progress = state.get("responses_progress") or {}
+    trace = exchange.get("tool_trace") or progress.get("tool_trace") or []
+    call = next((item for item in reversed(trace) if isinstance(item, dict)
+                 and item.get("name") == "get_closed_trade_review"), None)
+    result = (call or {}).get("result") or {}
+    review = next((item for item in result.get("results") or []
+                   if isinstance(item, dict) and item.get("scope") == "read_review_history"), None)
+    allowed_statuses = {"completed", "partial", "unavailable", "error", "failed"}
+    allowed_reasons = {"tool_internal_error", "tool_timeout", "source_unavailable",
+                       "review_not_found", "tool_execution_failed"}
+    call_status = (call or {}).get("status")
+    read_status = (review or {}).get("status")
+    read_reason = (review or {}).get("reason")
+    return {
+        "exchange_checkpoint": bool(exchange.get("response_id")),
+        "progress_checkpoint": bool(progress.get("response_id")),
+        "review_tool_seen": call is not None,
+        "review_tool_status": (call_status if isinstance(call_status, str) and call_status in allowed_statuses else "other")
+        if call else "missing",
+        "review_read_status": (read_status if isinstance(read_status, str) and read_status in allowed_statuses else "other")
+        if review else "missing",
+        "review_read_reason": (read_reason if isinstance(read_reason, str) and read_reason in allowed_reasons else "other")
+        if read_reason else "none",
+    }
+
+
+async def _review_read_diagnostic(user_id: int, run_id: str, conversation_id: str) -> dict[str, object]:
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            contract = await FinnV2RuntimeContractRepository(session).get_for_run(run_id=run_id)
+            if contract is None or contract.user_id != user_id or contract.conversation_id != conversation_id:
+                return {}
+            return _bounded_review_read_diagnostic(contract.state_json or {})
+    except Exception:
+        # This is optional diagnostics after a terminal failure. Preserve the
+        # original failure if the diagnostic read cannot reach the database.
+        return {}
 
 
 @contextmanager
@@ -291,7 +343,11 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
         )
         response = first.response
         if first.status != "completed" or response is None:
-            raise ClosedPaperChatTurnFailure("first_turn", first)
+            failure = ClosedPaperChatTurnFailure("first_turn", first)
+            failure.review_read_diagnostic = await _review_read_diagnostic(
+                user_id, first.run_id, first.conversation_id,
+            )
+            raise failure
         if (response.proposal_id or response.confirmation_required
                 or (first.policy and first.policy.execute_allowed)):
             raise RuntimeError("closed_paper_review_chat_unexpected_action")
@@ -308,7 +364,11 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
         )
         response = second.response
         if second.status != "completed" or response is None:
-            raise ClosedPaperChatTurnFailure("followup", second)
+            failure = ClosedPaperChatTurnFailure("followup", second)
+            failure.review_read_diagnostic = await _review_read_diagnostic(
+                user_id, second.run_id, second.conversation_id,
+            )
+            raise failure
         if (second.conversation_id != first.conversation_id or response.proposal_id
                 or response.confirmation_required or (second.policy and second.policy.execute_allowed)):
             raise RuntimeError("closed_paper_review_chat_followup_context_or_action")
