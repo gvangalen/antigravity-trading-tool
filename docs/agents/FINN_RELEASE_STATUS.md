@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beschermde QA-vraag zonder reviewnummer — herstelkandidaat (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De bestaande QA-agent bevestigde op
+`a2b3f9a5fe528cfbc28de076143288c185f0b246` dat backend en frontend
+dezelfde live SHA melden, maar startte de beschermde proef niet: de runner
+vroeg nog expliciet naar `trade-review #N` en kon zo de nieuwe route zonder
+nummer niet beoordelen. Dit is `QA BLOCKED / NOT STARTED`, geen productverdict.
+
+De beschermde runner stelt nu een gewone vraag naar de laatst afgesloten
+Paper-trade en de bevestigde les, zonder dossiernummer. De bestaande controles
+op eigenaargebonden `review_history`-bewijs, les, vervolg in hetzelfde gesprek,
+Responses-uitwisseling, nul voorstellen en ongewijzigde Paper-orders blijven
+staan. Een gerichte regressie controleert de exacte nieuwe vraag en verplichte
+dossierlezing. De volledige backend-suite slaagde met **3646 tests, vier
+bestaande skips**. Productcode en actiecontracten zijn in deze kandidaat niet
+gewijzigd; de eerder gemeten lokale echte Responses-proef van de productcode
+staat in de sectie hieronder. CI, deployment en onafhankelijke ingelogde
+live QA op de nieuwe runner staan nog open.
+
 ## Recente gesloten Paper-trade zonder reviewnummer — herstelkandidaat (21 oktober 2026)
 
 Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. De onafhankelijke herkeuring

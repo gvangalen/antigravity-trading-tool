@@ -85,6 +85,8 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
     "What can you verify about my recently closed Paper trade and its result? "
     "Read only; do not propose a trade.",
     "Wat was het resultaat van mijn laatste Paper-trade? Geen voorstel of actie.",
+    "Wat weet je over mijn laatst afgesloten Paper-trade en de les die ik "
+    "daarbij heb bevestigd? Alleen teruglezen; geen voorstel of actie.",
 ])
 def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     catalog = FinnResponsesToolCatalog()
