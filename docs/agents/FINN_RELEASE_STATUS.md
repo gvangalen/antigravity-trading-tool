@@ -6,9 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-review in gewone FINN-chat — kandidaat (21 oktober 2026)
 
-Phase: `BUILD_VALIDATED_NOT_DEPLOYED`; productie blijft op
-`72df4299b0a8de9fb021b984fe877d0bbe2e5d77` totdat deze kandidaat na CI
-wordt gedeployed. De onafhankelijke QA-run
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. De kandidaat is gemerged via
+[PR #501](https://github.com/gvangalen/antigravity-trading-tool/pull/501) als
+`cf22e0ca6e08d88d79302221167fb78fc1cd5eb2`. Alle vijf
+[PR-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39551624366)
+en vijf [main-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39551927426)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39552583451)
+slaagde. Publieke backend-health en frontend-buildinfo gaven daarna beide
+HTTP 200 en exact die merge-SHA. Een latere status-only documentcommit kan
+de publieke SHA opnieuw veranderen; onafhankelijke QA bindt aan de dan
+actuele, gelijke backend- en frontend-SHA. De voorafgaande onafhankelijke QA-run
 [39548142176](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39548142176)
 op die SHA eindigde `NOT_ACCEPTED`: de eigenaargebonden `get_closed_trade_review`
 was voltooid, maar de eerste gewone FINN-chatbeurt eindigde `unavailable` met
