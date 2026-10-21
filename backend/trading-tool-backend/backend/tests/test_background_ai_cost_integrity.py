@@ -37,7 +37,7 @@ def test_independent_ai_agent_schedules_are_retired():
     assert {"macro_ai", "market_ai", "technical_ai", "dispatch_strategy_snapshot",
             "run_master_score_ai"}.isdisjoint(schedule)
     assert "dispatch_finn_daily_report" in schedule
-    assert "dispatch_regime_memory" in schedule
+    assert "dispatch_regime_memory" not in schedule
 
 
 def test_deploy_does_not_run_agents_for_a_hardcoded_user():

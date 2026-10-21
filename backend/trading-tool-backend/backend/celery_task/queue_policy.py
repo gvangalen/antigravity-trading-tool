@@ -54,7 +54,6 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.setup_task.run_setup_agent_daily": "scoring",
     "backend.celery_task.trading_bot_task.run_daily_trading_bot": "execution_critical",
     "backend.celery_task.bot_reconciliation_task.reconcile_live_bot_orders": "execution_critical",
-    "backend.celery_task.regime_memory_task.run_regime_memory": "ai_generation",
     "backend.celery_task.daily_report_task.generate_daily_report": "ai_generation",
     "backend.celery_task.weekly_report_task.generate_weekly_report": "ai_generation",
     "backend.celery_task.monthly_report_task.generate_monthly_report": "ai_generation",
@@ -116,7 +115,6 @@ DISPATCH_WINDOW_SECONDS: Dict[str, int] = {
     "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot": 15 * 60,
     "backend.celery_task.setup_task.run_setup_agent_daily": 15 * 60,
     "backend.celery_task.trading_bot_task.run_daily_trading_bot": 15 * 60,
-    "backend.celery_task.regime_memory_task.run_regime_memory": 24 * 60 * 60,
     "backend.celery_task.daily_report_task.generate_daily_report": 24 * 60 * 60,
 }
 

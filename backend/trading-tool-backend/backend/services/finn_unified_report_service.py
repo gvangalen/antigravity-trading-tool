@@ -152,7 +152,7 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                             "targets": row.get("targets")}
                            for row in item.get("strategies") or []],
             "bots": [{"id": row.get("id"), "name": row.get("name"),
-                      "is_live": row.get("is_live")}
+                      "is_live": row.get("is_live"), "is_active": row.get("is_active")}
                      for row in item.get("bots") or []],
             "matches": [{"setup_id": row.get("setup_id"), "name": row.get("name"),
                          "symbol": row.get("symbol"), "timeframe": row.get("timeframe"),
@@ -164,8 +164,8 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
             "trader_context": context.get("trader_context"), "assets": assets}
 
 
-def _configured_highlights(facts: dict[str, Any], category: str) -> list[dict[str, Any]]:
-    return [{"indicator": name, "symbol": item["symbol"]}
+def _configured_highlights(facts: dict[str, Any], category: str, locale: str) -> list[dict[str, Any]]:
+    return [{"indicator": _report_indicator_label(name, locale), "symbol": item["symbol"]}
             for item in facts["assets"]
             for name in (item.get("configured_indicators") or {}).get(category, [])]
 
@@ -180,6 +180,38 @@ def _report_indicator_label(name: object, locale: str) -> str:
                "inflation_rate": "Inflationsrate", "cpi": "Verbraucherpreisindex"},
     }
     return translations.get(locale, translations["en"]).get(key) or indicator_display_name(name)
+
+
+def _bot_status_section(facts: dict[str, Any], locale: str) -> str:
+    bots = [bot for asset in facts["assets"] for bot in asset["bots"]]
+    if not bots:
+        return {
+            "nl": "Er is geen bot gekoppeld aan de opgeslagen plannen.",
+            "en": "No bot is linked to the saved plans.",
+            "de": "Mit den gespeicherten Plänen ist kein Bot verknüpft.",
+        }.get(locale, "No bot is linked to the saved plans.")
+    parts = []
+    for bot in bots:
+        name = str(bot.get("name") or "Bot").strip()
+        if bot.get("is_active") is False:
+            status = {"nl": "staat gepauzeerd en neemt nu geen beslissing",
+                      "en": "is paused and cannot make a decision now",
+                      "de": "ist pausiert und trifft derzeit keine Entscheidung"}
+        elif bot.get("is_live") is False:
+            status = {"nl": "staat in Paper; een setupmatch bewijst geen uitgevoerde aankoop",
+                      "en": "is in Paper; a setup match does not prove an executed purchase",
+                      "de": "läuft im Paper-Modus; ein Setup-Treffer belegt keinen ausgeführten Kauf"}
+        else:
+            status = {"nl": "is actief; een setupmatch bewijst geen uitgevoerde aankoop",
+                      "en": "is active; a setup match does not prove an executed purchase",
+                      "de": "ist aktiv; ein Setup-Treffer belegt keinen ausgeführten Kauf"}
+        parts.append(f"{name} {status.get(locale, status['en'])}.")
+    budget_note = {
+        "nl": "Een botbudget is geen beschikbaar kassaldo.",
+        "en": "A bot budget is not available cash.",
+        "de": "Ein Bot-Budget ist kein verfügbares Guthaben.",
+    }
+    return " ".join([*parts, budget_note.get(locale, budget_note["en"])])
 
 
 def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
@@ -263,6 +295,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     # generated prose or a fallback imply missing data when the benchmark is
     # complete and a saved boundary is simply not met.
     prose["setup_validation"] = fallbacks["setup_validation"]
+    # Bot activity must come from stored state, not model guesses about why a
+    # score match did or did not become an order.
+    prose["bot_strategy"] = _bot_status_section(facts, locale)
     if any(item["score_status"] != "available" for item in facts["assets"]):
         prose["outlook"] = fallbacks["outlook"]
     elif facts["assets"] and all(
@@ -276,7 +311,6 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     # The summary must not turn unavailable scores or saved plans into model
     # assertions. It uses the same owner-scoped names as the fact cards.
     prose["executive_summary"] = fallbacks["executive_summary"]
-    prose["bot_strategy"] = fallbacks["bot_strategy"]
     all_strategies = [row for item in facts["assets"] for row in item.get("strategies") or []]
     # ReportService deliberately hides historical AI setup scores unless each
     # stored match declares the measured Score 2.0 semantics. Preserve that
@@ -331,9 +365,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
                            for row in all_strategies]
         } if all_strategies else None),
         "bot_snapshot": None,
-        "market_indicator_highlights": _configured_highlights(facts, "market"),
-        "macro_indicator_highlights": _configured_highlights(facts, "macro"),
-        "technical_indicator_highlights": _configured_highlights(facts, "technical"),
+        "market_indicator_highlights": _configured_highlights(facts, "market", locale),
+        "macro_indicator_highlights": _configured_highlights(facts, "macro", locale),
+        "technical_indicator_highlights": _configured_highlights(facts, "technical", locale),
         "price": single_market_snapshot.get("price"),
         "change_24h": single_market_snapshot.get("change_24h"),
         "volume": single_market_snapshot.get("volume"),

@@ -252,12 +252,6 @@ celery_app.conf.beat_schedule = {
         crontab(minute="*/15"),
     ),
 
-    # Regime memory is a deterministic bot-risk input, not an AI narrator.
-    "dispatch_regime_memory": build_dispatch_schedule_entry(
-        "backend.celery_task.regime_memory_task.run_regime_memory",
-        crontab(hour=5, minute=10),
-    ),
-
     # FINN writes one report from the same owner-scoped facts used by chat and
     # Today. The independent AI insight/master-score schedules are retired.
     "dispatch_finn_daily_report": build_dispatch_schedule_entry(
@@ -292,7 +286,6 @@ try:
         import backend.celery_task.setup_task
         import backend.celery_task.trading_bot_task
         import backend.celery_task.bot_reconciliation_task
-        import backend.celery_task.regime_memory_task
         import backend.celery_task.portfolio_snapshot_task
         import backend.celery_task.portfolio_fx_task
         import backend.celery_task.finn_trade_review_task

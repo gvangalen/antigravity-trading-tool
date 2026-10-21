@@ -5,7 +5,7 @@ from backend.celery_task.setup_task import run_setup_agent_daily
 def test_only_finn_report_is_scheduled_from_ai_report_family():
     schedule = celery_app.conf.beat_schedule
     assert "dispatch_finn_daily_report" in schedule
-    assert "dispatch_regime_memory" in schedule
+    assert "dispatch_regime_memory" not in schedule
     assert {"macro_ai", "market_ai", "technical_ai",
             "dispatch_strategy_snapshot", "run_master_score_ai", "dispatch_daily_report"}.isdisjoint(schedule)
 

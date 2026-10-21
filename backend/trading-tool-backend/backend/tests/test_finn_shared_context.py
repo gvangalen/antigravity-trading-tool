@@ -386,12 +386,13 @@ def test_daily_report_keeps_saved_plan_and_unscored_indicators_without_stale_sco
             "strategies": [{"id": 9, "setup_id": 8, "name": "ETH DCA strategie",
                             "setup_name": "ETH maandelijkse DCA", "symbol": "ETH",
                             "timeframe": "1D", "entry": None, "base_amount": 120}],
-            "bots": [{"id": 10, "name": "ETH Paper", "is_live": False}],
+            "bots": [{"id": 10, "name": "ETH Paper", "is_live": False,
+                      "is_active": False}],
             "indicator_lookup_status": "available",
             "indicator_configuration": {
                 "market": [{"indicator": "Price", "enabled": True}],
-                "macro": [{"indicator": "DXY", "enabled": True}],
-                "technical": [{"indicator": "RSI", "enabled": True}],
+                "macro": [{"indicator": "dxy", "enabled": True}],
+                "technical": [{"indicator": "rsi", "enabled": True}],
             },
             "benchmark": {
                 "source_status": "stale_sources", "benchmark_score": None,
@@ -426,8 +427,11 @@ def test_daily_report_keeps_saved_plan_and_unscored_indicators_without_stale_sco
     assert "Prijs" in result["market_analysis"]
     assert "DXY" in result["macro_context"]
     assert "RSI" in result["technical_analysis"]
+    assert "ETH Paper staat gepauzeerd" in result["bot_strategy"]
+    assert "criteria niet bereikt" not in result["bot_strategy"]
     assert result["active_strategy"]["setup_name"] == "ETH maandelijkse DCA"
     assert result["macro_indicator_highlights"] == [{"indicator": "DXY", "symbol": "ETH"}]
+    assert result["technical_indicator_highlights"] == [{"indicator": "RSI", "symbol": "ETH"}]
     assert result["watchlist"][0]["benchmark"]["reported_scores"] == {
         "market_score": None, "macro_score": None, "technical_score": None,
     }

@@ -22,15 +22,11 @@ def calculate_position(
     *,
     setup: Dict[str, Any],
     scores: Dict[str, float],
-    regime_memory: Dict[str, Any] | None,
-    transition_risk: float | None,
 ) -> Dict[str, Any]:
 
     decision = decide_amount(
         setup=setup,
         scores=scores,
-        regime_memory=regime_memory,
-        transition_risk=transition_risk,
     )
 
     # -----------------------------

@@ -9,7 +9,6 @@ from backend.domain.setup_market_match import match_setup, match_setup_from_dail
 from backend.services.setup_market_match_service import SetupMarketMatchService
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
 from backend.services import finn_v2_tool_execution_service as execution_module
-from backend.engine.policy_engine import evaluate_policy
 from backend.engine.decision_engine import decide_amount
 from backend.services import setup_market_match_sync
 from backend.services.report_service import ReportService
@@ -365,15 +364,6 @@ def test_daily_preview_does_not_revive_legacy_setup_claims_from_metadata(monkeyp
         assert preview.get("best_setup") is None
         assert "geen geverifieerde Score 2.0-setupmatch" in preview["setup_validation"]
     report_module._daily_report_preview_cache.pop(991991, None)
-
-
-def test_setup_match_is_not_a_hard_bot_policy_gate():
-    policy = evaluate_policy(
-        scores={"market_score": 70, "macro_score": 70,
-                "technical_score": 70, "setup_score": 20},
-        transition_risk=0.2, market_pressure=0.6,
-    )
-    assert "buy" in policy["allowed_actions"]
 
 
 def test_missing_match_does_not_apply_weak_setup_size_penalty():

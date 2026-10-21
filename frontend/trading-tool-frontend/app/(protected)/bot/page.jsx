@@ -9,7 +9,6 @@ import { invalidateStrategyDataCaches, useStrategyData } from "@/hooks/useStrate
 import { useModal } from "@/components/modal/ModalProvider";
 import Drawer from "@/components/ui/Drawer";
 
-import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import BotFocusView from "@/components/bot/BotFocusView";
 import AddBotForm from "@/components/bot/AddBotForm";
 import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
@@ -184,11 +183,6 @@ function BotPageInner() {
   } = useBotData();
 
   const { strategies = [], setups = [], loadStrategies, loadSetups } = useStrategyData();
-
-  const {
-    data: marketIntelligence,
-    loading: loadingMarketIntelligence,
-  } = useMarketIntelligence();
 
   const botNeedsBot = status?.has_bot === false && bots.length === 0;
   const botStepComplete = Boolean(status?.has_bot || bots.length > 0);

@@ -288,10 +288,6 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
         "low_threshold": 40, "high_threshold": 70,
         "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
     })
-    monkeypatch.setattr(bot_brain, "get_regime_memory", lambda _user_id: None)
-    monkeypatch.setattr(bot_brain, "get_market_intelligence", lambda **_: {
-        "trend": {}, "state": {"market_pressure": 0.8, "transition_risk": 0.1}, "metrics": {},
-    })
     monkeypatch.setattr(bot_brain, "apply_guardrails", lambda **kwargs: {
         "allowed": True, "adjusted_amount_eur": kwargs["proposed_amount_eur"],
         "warnings": [], "blocked_by": None,
