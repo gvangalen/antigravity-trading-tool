@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `LOCAL_REPAIR_IN_PROGRESS`. De onafhankelijke ingelogde QA op de
+Phase: `BUILD_VALIDATED_AWAITING_DEPLOY`. De onafhankelijke ingelogde QA op de
 publieke backend- en frontend-SHA `ca357b84280ea5f2d3e34966d3388470a675482b`
 gaf `NOT_ACCEPTED`. Gewone read-only coaching over FOMO, scores, plan en
 Paper-budget werkte. Het eerste bevestigbare strategievoorstel met expliciete
@@ -17,8 +17,21 @@ kaarten is bevestigd. De huidige lokale reparatie bewaart de expliciet
 herkende koersvaluta bij de tweede eigenaargebonden oplossingsstap en scherpt
 de extractie van targets en namen aan. Een volzinsamenvatting van de expliciete
 keuze om niet-opslagbare regels weg te laten wordt nu als waiver herkend; de
-kaart noemt de weggelaten regels. Deze kandidaat is nog niet live of door QA
-goedgekeurd.
+kaart noemt de weggelaten regels. De definitieve lokale backend-suite slaagde
+**3693 tests, 4 bestaande skips**; de webtypecheck, i18n-, command- en
+voorsteltests, build en `audit:high` slaagden (één moderate Next.js-advisory).
+De lokale werkermatrix slaagde **16/16** actiecontracten en **19/19**
+adaptertests, zonder brokerorders, Live-bots of productieverbindingen;
+artifact SHA-256 `73085490bfe582bbdbfad0cad52ff681b7417ab4b38a7b549d87885bc666a124`.
+De echte Luna/Responses-ontwikkelset slaagde **20/20** met artifact SHA-256
+`a2d6a3ba0ee935b3a5391cc90ac3d845cea675e17c8f51483a32813171e5186c`.
+De regressieset slaagde **109/109** met nul provider-, schema-, parser-,
+timeout- of validatiefouten; artifact SHA-256
+`9bd78a59fde92f5944a16922de158937fbe7b9ac9ef9f36129306239c7332882`.
+De gerichte Security-hercontrole bevestigde dat een tegenstrijdige waiver
+wordt geweigerd en de expliciete QA-intrekking alleen met de oorspronkelijke
+geblokkeerde voorwaarden wordt gekoppeld. Deze kandidaat is nog niet live of
+door onafhankelijke QA goedgekeurd.
 
 De eerdere herstelbatch is via
 [PR #516](https://github.com/gvangalen/antigravity-trading-tool/pull/516)
