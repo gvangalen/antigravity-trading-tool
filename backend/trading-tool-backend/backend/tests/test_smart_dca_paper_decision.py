@@ -240,6 +240,20 @@ def test_saved_fixed_dca_from_strategy_editor_uses_its_exact_amount_rule(
     assert (saved.get("dca_amount_semantics") == "planned_exact") is expected_exact
 
 
+def test_non_eur_trade_levels_cannot_trigger_eur_paper_execution():
+    from backend.engine.trading_bot_execution import _hold_for_unconverted_trade_levels
+
+    proposed = {"action": "buy", "amount_eur": 100}
+    held = _hold_for_unconverted_trade_levels(
+        proposed, {"setup_type": "trade", "price_currency": "USD"},
+    )
+    assert held["action"] == "hold"
+    assert held["amount_eur"] == 0
+    assert held["guardrails_result"]["blocked_by"] == "strategy_price_currency_mismatch"
+    assert proposed["action"] == "buy"
+    assert _hold_for_unconverted_trade_levels(proposed, {"setup_type": "trade"}) == proposed
+
+
 @pytest.mark.parametrize("weights,expected", [
     ({"market_score": 1/3, "macro_score": 1/3, "technical_score": 1/3}, 100),
     ({"market_score": 0.8, "macro_score": 0.1, "technical_score": 0.1}, 50),

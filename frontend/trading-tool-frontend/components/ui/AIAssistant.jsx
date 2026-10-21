@@ -1777,6 +1777,14 @@ function AIAssistantContent({
     );
   };
 
+  const waivedDraftRules = (messageIndex, operationId) => {
+    const previousUser = messages.slice(0, messageIndex).reverse().find((item) => item.role === "user");
+    const reply = String(previousUser?.text || "").trim().toLowerCase().replace(/[.!\s]+$/, "");
+    return operationId === "create_setup"
+      ? /^(?:maak voorstel zonder deze voorwaarden|begin nieuw voorstel zonder eerdere voorwaarden|make proposal without these conditions|start new proposal without previous conditions|vorschlag ohne diese bedingungen erstellen|neuen vorschlag ohne vorherige bedingungen beginnen|(?:ja,?\s+)?(?:laat|schrap|verwijder)\s+(?:die|deze|beide|alle)\s+(?:voorwaarden|handelsvoorwaarden|regels)\s+(?:maar\s+)?weg)$/.test(reply)
+      : /^(?:maak strategievoorstel zonder deze automatische regels|begin nieuw strategievoorstel zonder eerdere regels|make strategy proposal without these automatic rules|start new strategy proposal without previous rules|strategieentwurf ohne diese automatischen regeln erstellen|neuen strategieentwurf ohne vorherige regeln beginnen)$/.test(reply);
+  };
+
   const renderV2SetupDraftCard = (message, messageIndex) => {
     if (message?.draftCanceled || message?.draftExecuted) return null;
     const draft = message.setupDraft || message.state?.setup_draft;
@@ -1820,6 +1828,7 @@ function AIAssistantContent({
           <p className="mt-2 text-xs">{at("dcaDraft.safetyNote", "Dit zijn geplande bedragen. Een ontbrekende score of veiligheidslimiet kan een aankoop tegenhouden of verlagen.")}</p>
         </div>}
         {supplied.setup_type === "dca" && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{at("dcaDraft.planOnly", "Bevestigen slaat de setup en strategie op. Er wordt geen bot gestart en geen aankoop gedaan.")}</p>}
+        {waivedDraftRules(messageIndex, "create_setup") && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{at("draftCards.waivedSetupRules", "De extra handelsvoorwaarden uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde setupvelden worden opgeslagen.")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, "setup")}</div>
       </div>
@@ -1846,7 +1855,7 @@ function AIAssistantContent({
       : isBot
         ? `Paper · ${at("draftCards.linkedToName", "gekoppeld aan {name}", { name: linkedName })}`
         : [supplied.asset || context.symbol, isIndicator ? ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
-    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
+    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", price_currency: "valuta koersniveaus", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const formatValue = (value) => formatDraftCardValue(value, locale);
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
@@ -1864,7 +1873,11 @@ function AIAssistantContent({
           [supplied.low_threshold != null ? at("draftCards.fieldScoreBelow", "Score onder {threshold}", { threshold: supplied.low_threshold }) : at("draftCards.fieldLowScore", "Lage score"), dcaBand(supplied.low_score_percent)],
           [supplied.low_threshold != null && supplied.high_threshold != null ? at("draftCards.fieldScoreBetween", "Score {low} tot onder {high}", { low: supplied.low_threshold, high: supplied.high_threshold }) : at("draftCards.fieldMidScore", "Middenscore"), dcaBand(supplied.mid_score_percent)],
           [supplied.high_threshold != null ? at("draftCards.fieldScoreFrom", "Score vanaf {threshold}", { threshold: supplied.high_threshold }) : at("draftCards.fieldHighScore", "Hoge score"), dcaBand(supplied.high_score_percent)]]
-        : [[at("draftCards.fieldExecution", "Uitvoering"), [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? euro(supplied.base_amount) : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], [at("draftCards.fieldRisk", "Risico"), supplied.risk_profile]]
+        : [[at("draftCards.fieldExecution", "Uitvoering"), [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? euro(supplied.base_amount) : null].filter(Boolean).join(" · ")],
+          ["Entry", supplied.entry != null ? `${formatValue(supplied.entry)} ${supplied.price_currency || "EUR"}` : null],
+          ["Stop-loss", supplied.stop_loss != null ? `${formatValue(supplied.stop_loss)} ${supplied.price_currency || "EUR"}` : null],
+          ["Targets", supplied.targets?.length ? `${supplied.targets.map(formatValue).join(", ")} ${supplied.price_currency || "EUR"}` : null],
+          [at("draftCards.fieldRisk", "Risico"), supplied.risk_profile]]
       : isBot
         ? [[({ en: "Bot budget limit", de: "Bot-Budgetlimit" }[locale] || "Botbudgetlimiet"), supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null],
           [({ en: "Virtual Paper starting capital", de: "Virtuelles Paper-Startkapital" }[locale] || "Virtueel Paper-startkapitaal"), supplied.paper_initial_cash_eur ? `€${supplied.paper_initial_cash_eur}` : null]]
@@ -1895,6 +1908,8 @@ function AIAssistantContent({
             <div key={label} className="flex min-w-0 items-start justify-between gap-4 py-2 first:pt-0 last:pb-0"><dt className="shrink-0 text-slate-500 dark:text-slate-400">{label}</dt><dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{formatValue(value)}</dd></div>
           ))}
         </dl>
+        {isStrategy && supplied.setup_type !== "dca" && supplied.price_currency === "USD" && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{at("draftCards.usdLevelsPaperHold", "De koersniveaus zijn in USD. Een gekoppelde bot wacht met automatische uitvoering totdat een betrouwbare omrekening naar EUR beschikbaar is.")}</p>}
+        {isStrategy && waivedDraftRules(messageIndex, "create_strategy") && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{at("draftCards.waivedStrategyRules", "De extra automatische regels uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde strategievelden worden opgeslagen.")}</p>}
         {isStrategy && supplied.setup_type === "dca" && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.dcaStrategyOnly", "Bevestigen slaat alleen deze extra strategie op onder de bestaande DCA-setup. Er wordt geen bot gestart en geen aankoop gedaan.")} {at("draftCards.dcaBotModeSeparate", ({ en: "Manual or automatic operation is set on a bot, not on this strategy.", de: "Manueller oder automatischer Betrieb wird am Bot eingestellt, nicht an dieser Strategie." }[locale] || "Handmatige of automatische uitvoering stel je bij een bot in, niet bij deze strategie."))}</p>}
         {isBot && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}

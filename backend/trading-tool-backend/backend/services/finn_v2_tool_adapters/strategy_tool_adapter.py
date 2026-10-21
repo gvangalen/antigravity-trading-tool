@@ -9,7 +9,13 @@ from backend.engine.curve_engine import calculate_position_size
 
 class StrategyToolAdapter:
     async def execute(self, *, strategy: dict, resolution_source: str, **_kwargs):
-        raw_data = strategy.get("data") if isinstance(strategy.get("data"), dict) else {}
+        stored = strategy.get("data")
+        if isinstance(stored, str):
+            try:
+                stored = json.loads(stored)
+            except (TypeError, ValueError):
+                stored = {}
+        raw_data = stored if isinstance(stored, dict) else {}
         targets = strategy.get("targets")
         if isinstance(targets, str):
             targets = [item.strip() for item in targets.split(",") if item.strip()]
@@ -25,6 +31,7 @@ class StrategyToolAdapter:
             execution_mode=strategy.get("execution_mode"),
             risk_profile=strategy.get("risk_profile"),
             entry=strategy.get("entry"),
+            price_currency=raw_data.get("price_currency", strategy.get("price_currency", "EUR")),
             entry_type=self._entry_type(strategy, raw_data),
             stop_loss=strategy.get("stop_loss"),
             targets=targets,

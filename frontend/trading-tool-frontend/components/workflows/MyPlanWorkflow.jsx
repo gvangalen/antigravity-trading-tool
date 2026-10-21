@@ -543,10 +543,12 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     };
 
     window.addEventListener("focus", refreshIfVisible);
+    window.addEventListener("finn-refresh-requested", refreshPlanWorkspace);
     document.addEventListener("visibilitychange", refreshIfVisible);
 
     return () => {
       window.removeEventListener("focus", refreshIfVisible);
+      window.removeEventListener("finn-refresh-requested", refreshPlanWorkspace);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
   }, [activeSymbol, loadSetups, loadStrategies]);

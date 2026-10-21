@@ -67,12 +67,19 @@ class StrategyService:
     UPDATE_ALLOWED_FIELDS = frozenset({
         "name", "symbol", "timeframe", "execution_mode", "base_amount", "decision_curve",
         "decision_curve_name", "decision_curve_id", "entry", "entry_type",
-        "trade_execution_mode", "targets", "stop_loss", "explanation",
+        "trade_execution_mode", "targets", "stop_loss", "price_currency", "explanation",
         "ai_explanation", "risk_profile", "automation", "tags", "favorite",
     })
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = StrategyRepository(db_session)
+
+    @staticmethod
+    def _validated_price_currency(value: Any) -> str:
+        currency = str(value).strip().upper()
+        if currency not in {"EUR", "USD"}:
+            raise HTTPException(422, "Ongeldige valuta voor koersniveaus")
+        return currency
 
     def _format_strategy_row(self, row: dict) -> Optional[dict]:
         if not row:
@@ -143,6 +150,7 @@ class StrategyService:
             "timeframe_source": data.get("timeframe_source"),
 
             "entry": entry,
+            "price_currency": data.get("price_currency", "EUR"),
             "entry_type": entry_type,
             "trade_execution_mode": entry_type,
             "targets": targets,
@@ -220,6 +228,7 @@ class StrategyService:
         commit: bool = True,
     ):
         raw_data = self.normalize_strategy_payload(raw_data)
+        raw_data["price_currency"] = self._validated_price_currency(raw_data.get("price_currency", "EUR"))
         execution_mode = payload.execution_mode.lower()
         if execution_mode not in ["fixed", "custom"]:
             raise HTTPException(400, "Ongeldige execution_mode")
@@ -327,6 +336,7 @@ class StrategyService:
             "symbol": strategy.get("symbol"),
             "timeframe": strategy.get("timeframe"),
             "entry": strategy.get("entry"),
+            "price_currency": strategy.get("price_currency", "EUR"),
             "entry_type": strategy.get("entry_type"),
             "trade_execution_mode": strategy.get("trade_execution_mode"),
             "targets": strategy.get("targets"),
@@ -352,6 +362,8 @@ class StrategyService:
 
     async def update_strategy(self, strategy_id: int, raw_data: dict, user_id: int):
         raw_data = self.normalize_strategy_payload(raw_data)
+        if "price_currency" in raw_data:
+            raw_data["price_currency"] = self._validated_price_currency(raw_data["price_currency"])
         unknown_fields = set(raw_data).difference(self.UPDATE_ALLOWED_FIELDS)
         if unknown_fields:
             raise HTTPException(400, f"Niet-toegestane strategievelden: {', '.join(sorted(unknown_fields))}")
@@ -369,6 +381,7 @@ class StrategyService:
             },
             **raw_data,
         }
+        merged_data["price_currency"] = self._validated_price_currency(merged_data.get("price_currency", "EUR"))
         execution_mode = (merged_data.get("execution_mode") or "").lower()
         if execution_mode not in ["fixed", "custom"]:
             raise HTTPException(400, "Ongeldige execution_mode")

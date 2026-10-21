@@ -33,7 +33,7 @@ class FinnResponsesToolRelevanceGuard:
             key: value for key, value in collected_inputs.items()
             if key in {
                 "setup_id", "name", "symbol", "timeframe", "execution_mode",
-                "base_amount", "entry", "stop_loss", "targets", "risk_profile",
+                "base_amount", "entry", "stop_loss", "targets", "price_currency", "risk_profile",
                 "dca_amount_mode", "score_source", "low_threshold",
                 "high_threshold", "low_score_percent", "mid_score_percent",
                 "high_score_percent",

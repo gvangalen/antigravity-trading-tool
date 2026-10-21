@@ -639,6 +639,88 @@ def test_german_fixed_strategy_sentence_collects_contract_required_inputs():
     assert collected["base_amount"] == 100.0
 
 
+def test_trade_level_currency_is_independent_from_euro_execution_amount():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Maak een vaste strategie voor €100 per uitvoering met entry "
+                 "84.000 USD, stop-loss 79.800 USD en target 92.400 USD."),
+        explicit_asset="BTC",
+    )
+    assert collected["base_amount"] == 100.0
+    assert collected["price_currency"] == "USD"
+    assert collected["entry"] == 84000.0
+    assert collected["stop_loss"] == 79800.0
+    assert collected["targets"] == [92400.0]
+
+
+def test_guided_trade_price_answer_keeps_its_currency():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message="84.000 USD", explicit_asset=None,
+        continuation=True, requested_slot="entry",
+    )
+    assert collected == {"entry": 84000.0, "price_currency": "USD"}
+
+
+def test_mixed_trade_price_currencies_cannot_complete_a_confirmable_draft():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Entry 84.000 USD, stop-loss 79.800 EUR, target 92.400 USD.",
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"setup_id": 42, "name": "BTC test", "execution_mode": "fixed",
+                         "base_amount": 100, "risk_profile": "balanced", "price_currency": "USD"},
+        model_tool_inputs=True,
+    )
+    assert state.status == "collecting"
+    assert {"entry", "stop_loss", "targets"} <= set(state.missing_required_inputs)
+    assert not any(field in state.collected_inputs for field in ("entry", "stop_loss", "targets"))
+
+
+def test_guided_trade_rejects_currency_change_between_price_answers():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract, message="Entry 84.000 USD.", explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={"setup_id": 42, "name": "BTC test", "execution_mode": "fixed",
+                         "base_amount": 100, "risk_profile": "balanced"},
+        model_tool_inputs=True,
+    )
+    assert pending.collected_inputs["price_currency"] == "USD"
+    continued = service.resolve(
+        contract=contract, message="Stop-loss 79.800 EUR en target 92.400 USD.",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert continued.status == "collecting"
+    assert "entry" in continued.missing_required_inputs
+    assert "price_currency" not in continued.collected_inputs
+
+
+def test_trade_price_currency_reads_trailing_symbol():
+    assert FinnV2OperationStateService._explicit_trade_price_currency(
+        "entry 84.000 $, stop 79.800 $ en target 92.400 $"
+    ) == "USD"
+
+
+def test_trade_price_currency_reads_explicit_global_quote():
+    assert FinnV2OperationStateService._explicit_trade_price_currency(
+        "Alle koersniveaus zijn in USD: entry 84.000, stop-loss 79.800, target 92.400."
+    ) == "USD"
+    assert FinnV2OperationStateService._explicit_trade_price_currency(
+        "Alle koersniveaus zijn in USD: entry 84.000 EUR, stop-loss 79.800."
+    ) == "MIXED"
+    assert FinnV2OperationStateService._explicit_trade_price_currency(
+        "Alle koersniveaus zijn in $: entry 84.000, stop-loss 79.800, target 92.400."
+    ) == "USD"
+    assert FinnV2OperationStateService._explicit_trade_price_currency(
+        "Alle prijzen zijn in USD: entry 84.000, stop-loss 79.800, target 92.400."
+    ) == "USD"
+
+
 @pytest.mark.parametrize(
     ("operation_id", "message", "expected"),
     (

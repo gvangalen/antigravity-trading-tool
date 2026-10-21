@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De herstelbatch is via
+Phase: `LOCAL_VALIDATED_AWAITING_CI_AFTER_QA_NOT_ACCEPTED`. De herstelbatch is via
 [PR #516](https://github.com/gvangalen/antigravity-trading-tool/pull/516)
 gemerged als product-SHA `f9ce455a49a78303a39889c468679dc57af5114e`.
 [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39598093367),
@@ -15,6 +15,29 @@ en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/r
 slaagden. De publieke backend-health en frontend-buildinfo gaven elk HTTP 200
 en exact die product-SHA. Dit is Build-identiteitsbewijs; QA bevestigt de
 definitieve publieke SHA opnieuw na publicatie van dit statusdocument.
+
+De onafhankelijke live QA op document-SHA `a4afdfe840cb8ab68d6573fd1e288e66b31633cd`
+gaf `NOT_ACCEPTED`. De eerdere setup-waiver en strategie-vervolgflow
+werkten nu. De nieuwe blokkade: USD-entry, stop en target werden zonder
+valutalabel voorgesteld en na opslag als EUR uitgelegd. De planlijst bleef
+na opslaan tot een refresh verouderd. Het voorstel noemde ook niet
+expliciet dat een eerder ingetrokken extra regel ontbrak. De lokale kandidaat
+neemt expliciete EUR/USD-koersvaluta op in het strategiecontract, de kaart en
+de teruglezing. Bij USD-koersniveaus houdt de bot automatische uitvoering tegen
+totdat een betrouwbare EUR-omrekening bestaat. De planlijst ververst na een
+bevestigde FINN-actie, en de kaart meldt een expliciet ingetrokken extra regel.
+Deze kandidaat is nog niet live. Lokaal: backend **3689 geslaagd, 4 bestaande
+skips**; webtypecheck, build, i18n-, command- en voorsteltests en
+`audit:high` geslaagd (één moderate Next.js-advisory). De volledige lokale
+werkermatrix slaagde **16/16** contracten en **19/19** adaptertests; artifact
+SHA-256 `751d853bafbe114cd8e0c50534e07d4763debea8aded23c14014457b32682c10`,
+zonder brokerorders, Live-bots of productieverbindingen. De echte
+Luna/Responses-ontwikkelset slaagde **20/20**; artifact SHA-256
+`c350b47023a2ee9220d48b0699ed4b185c4c9bc7f35c974767593443292d5790`.
+De echte Luna/Responses-regressieset slaagde **109/109** zonder misclassificatie;
+artifact SHA-256 `8956af897fe0210d3f91bb6a0d10b3f6332fdb14348f54749b0e05cc2da016a8`.
+Security vond na een gerichte hercontrole geen resterende blokkade in de
+koersvalutagrens. De productrelease en onafhankelijke live QA staan nog open.
 
 De onafhankelijke QA op eerdere publieke backend- en
 frontend-SHA `c5e3008e97d833f05f0703e73b86a45ce51e61a0` gaf
@@ -49,7 +72,7 @@ en de regressieset **109/109** (artifact SHA-256
 `7010e97352546da1a921c8032982ead80bf30d5f72b3742a5f680db24b29eb88`),
 zonder provider-, schema-, parser-, time-out- of validatiefout. Security en
 Architecture vonden geen concrete grens- of contractblokkade in de herstelde
-code. De ingelogde live herkeuring van deze kandidaat moet nog plaatsvinden.
+code. De ingelogde live herkeuring staat hierboven; de uitkomst was `NOT_ACCEPTED`.
 
 ## FINN-agent-cutover: vorige kandidaat (21 oktober 2026)
 
