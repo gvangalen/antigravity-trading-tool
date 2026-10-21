@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import os
@@ -203,6 +204,170 @@ def test_closed_paper_review_profile_requires_authorization_and_preserves_eviden
     assert "_close_paper_position" in source
     assert "list_reviews" in source and "set_lesson" in source and "get_review" in source
     assert "passed=False" in source
+
+
+def test_closed_paper_review_chat_profile_keeps_fixture_gates_and_sanitizes_result(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.scripts.run_finn_production_qa import run_protected_closed_paper_probe
+
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "closed_paper_trade_review_chat" in module.ALLOWED_PROFILES
+    assert "closed_paper_trade_review_chat" in workflow and "closed_paper_trade_review_chat" in dispatch
+    assert '"$ALLOW_FIXTURE_ACTIONS" != "true"' in workflow
+    assert '"$ALLOW_SAFE_FIXTURE_EXECUTION" != "true"' in workflow
+    assert '"$allow_fixture_actions" != "true"' in dispatch
+    assert '"$allow_safe_fixture_execution" != "true"' in dispatch
+    monkeypatch.delenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE", raising=False)
+    with pytest.raises(RuntimeError, match="closed_paper_review_fixture_not_authorized"):
+        probe.run("qa-123456-1-abcd1234-5678abcd", include_chat=True)
+
+    report = {"safety": {"read_only_profile": True, "execution_calls": 0},
+              "qa_status": "NOT_STARTED", "outcome": "failed"}
+    def completed(namespace, *, include_chat):
+        assert namespace == "qa-test" and include_chat is True
+        return {"result": "PASS", "finn_chat": {"result": "PASS", "turns": 2,
+                                                  "confirmed_lesson_readable": True}}
+    run_protected_closed_paper_probe(report, completed, "qa-test", include_chat=True)
+    assert report["qa_status"] == "COMPLETED"
+    assert report["safety"] == {"read_only_profile": False, "execution_calls": 2}
+    assert "closed_paper_trade_review_chat" in report
+    assert "closed_paper_trade_review" not in report
+    assert "qa-test" not in json.dumps(report)
+    assert module.safe_closed_paper_chat_error(RuntimeError("closed_paper_review_chat_evidence_missing")) == "closed_paper_review_chat_evidence_missing"
+    assert module.safe_closed_paper_chat_error(RuntimeError("private prompt and provider detail")) == "closed_paper_review_chat_runtime_error"
+
+
+def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.infrastructure import database
+
+    async def dispose():
+        return None
+    monkeypatch.setattr(database, "engine", types.SimpleNamespace(dispose=dispose))
+    responses = [
+        types.SimpleNamespace(
+            status="completed", conversation_id="conv-1", policy=None,
+            response=types.SimpleNamespace(
+                proposal_id=None, confirmation_required=False,
+                evidence=[types.SimpleNamespace(entity_type="review_history")],
+                content="Je bevestigde les is je exitplan na iedere Paper-trade te controleren.",
+            ),
+        ),
+        types.SimpleNamespace(
+            status="completed", conversation_id="conv-1", policy=None,
+            response=types.SimpleNamespace(
+                proposal_id=None, confirmation_required=False,
+                evidence=[types.SimpleNamespace(entity_type="review_history")],
+                content="Je exitplan na iedere Paper-trade controleren is je les; het oorspronkelijke plan is niet bewezen.",
+            ),
+        ),
+    ]
+    calls = []
+    async def chat_turn(user_id, message, *, conversation_id=None):
+        calls.append((user_id, conversation_id, message))
+        return responses.pop(0)
+    monkeypatch.setattr(probe, "_chat_turn", chat_turn)
+    result = asyncio.run(probe._read_review_in_chat(42, 123))
+    assert result["result"] == "PASS" and result["action_proposals"] == 0
+    assert result["dispatch_mode"] == "in_process_production_task_body"
+    assert calls[0][1] is None and calls[1][1] == "conv-1"
+    assert "trade-review #123" in calls[0][2]
+
+    responses[:] = [types.SimpleNamespace(
+        status="completed", conversation_id="conv-1", policy=None,
+        response=types.SimpleNamespace(proposal_id=None, confirmation_required=False,
+                                       evidence=[], content="Een algemeen antwoord"),
+    )]
+    with pytest.raises(RuntimeError, match="closed_paper_review_chat_evidence_missing"):
+        asyncio.run(probe._read_review_in_chat(42, 123))
+
+    responses[:] = [types.SimpleNamespace(
+        status="completed", conversation_id="conv-1", policy=None,
+        response=types.SimpleNamespace(proposal_id=None, confirmation_required=False,
+                                       evidence=[types.SimpleNamespace(entity_type="review_history")],
+                                       content="Je bevestigde les is je exitplan na iedere Paper-trade te controleren."),
+    ), types.SimpleNamespace(
+        status="completed", conversation_id="conv-1", policy=None,
+        response=types.SimpleNamespace(proposal_id=None, confirmation_required=False,
+                                       evidence=[], content="Je exitplan staat niet in je oorspronkelijke plan."),
+    )]
+    with pytest.raises(RuntimeError, match="closed_paper_review_chat_followup_evidence_missing"):
+        asyncio.run(probe._read_review_in_chat(42, 123))
+
+
+def test_closed_paper_review_chat_runs_durable_owner_scoped_task_body(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.infrastructure import database
+    from backend.services import finn_v2_gateway_service as gateway_module
+    from backend.celery_task import finn_v2_task
+
+    calls = []
+    class Session:
+        async def commit(self):
+            calls.append("commit")
+    class Context:
+        async def __aenter__(self):
+            return Session()
+        async def __aexit__(self, *_args):
+            return None
+    class Gateway:
+        def __init__(self, _session):
+            self.run_service = types.SimpleNamespace(envelope_from_run=self.envelope_from_run)
+        async def create_run(self, *, user_id, request, **_kwargs):
+            calls.append(("create", user_id, request.message, request.conversation_id))
+            return types.SimpleNamespace(id="run-1")
+        async def get_run(self, *, run_id, user_id):
+            calls.append(("owner_read", run_id, user_id))
+            return types.SimpleNamespace(status="completed")
+        async def envelope_from_run(self, run):
+            return run
+    async def process(*, run_id, owner):
+        calls.append(("task_body", run_id, owner.startswith("qa-review:")))
+    monkeypatch.setattr(database, "async_session_factory", Context)
+    monkeypatch.setattr(gateway_module, "FinnV2GatewayService", Gateway)
+    monkeypatch.setattr(finn_v2_task, "_process_finn_v2_run", process)
+    result = asyncio.run(probe._chat_turn(42, "Lees mijn trade-review #123", conversation_id="conv-1"))
+    assert result.status == "completed"
+    assert calls[0] == ("create", 42, "Lees mijn trade-review #123", "conv-1")
+    assert calls[1] == "commit"
+    assert calls[2] == ("task_body", "run-1", True)
+    assert calls[3] == ("owner_read", "run-1", 42)
+
+
+def test_closed_paper_review_chat_rejects_additional_or_non_paper_orders(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+
+    class Connection:
+        def __init__(self, result):
+            self.result = result
+            self.params = None
+            self.closed = False
+        def cursor(self):
+            return self
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, query, params):
+            assert "FROM bot_orders" in query
+            self.params = params
+        def fetchone(self):
+            return self.result
+        def close(self):
+            self.closed = True
+
+    good = Connection((2, 0))
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: good)
+    probe._assert_fixture_orders_unchanged(42, 7)
+    assert good.params == (42, 7) and good.closed
+
+    bad = Connection((3, 1))
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: bad)
+    with pytest.raises(RuntimeError, match="closed_paper_review_chat_order_state_changed"):
+        probe._assert_fixture_orders_unchanged(42, 7)
+    assert bad.closed
 
 
 def test_closed_paper_review_fixture_scopes_real_projection_jobs(monkeypatch):

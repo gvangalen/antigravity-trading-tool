@@ -28,6 +28,7 @@ name: FINN Production QA
           - score2_positive_paper
           - score2_outside_paper
           - closed_paper_trade_review
+          - closed_paper_trade_review_chat
           - auto_paper_trade_history
           - portfolio_paper_fx
       manifest_id:
@@ -100,7 +101,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|closed_paper_trade_review|auto_paper_trade_history|portfolio_paper_fx)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -126,7 +127,7 @@ jobs:
             echo "The Score 2.0 match Paper probes require no manifest and explicit fixture and execution authorization." >&2
             exit 1
           fi
-          if [ "$QA_PROFILE" = "closed_paper_trade_review" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+          if [[ "$QA_PROFILE" =~ ^(closed_paper_trade_review|closed_paper_trade_review_chat)$ ]] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
             echo "The closed Paper review probe requires no manifest and explicit fixture and execution authorization." >&2
             exit 1
           fi
@@ -267,7 +268,7 @@ jobs:
           if [ "$qa_profile" = "auto_paper_trade_history" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=1
           fi
-          if [ "$qa_profile" = "closed_paper_trade_review" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
+          if [[ "$qa_profile" =~ ^(closed_paper_trade_review|closed_paper_trade_review_chat)$ ]] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=1
             export FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE=1
           fi

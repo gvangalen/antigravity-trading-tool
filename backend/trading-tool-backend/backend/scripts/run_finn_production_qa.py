@@ -41,9 +41,29 @@ ALLOWED_PROFILES = {
     "score2_positive_paper",
     "score2_outside_paper",
     "closed_paper_trade_review",
+    "closed_paper_trade_review_chat",
     "auto_paper_trade_history",
     "portfolio_paper_fx",
 }
+SAFE_CLOSED_PAPER_CHAT_ERRORS = frozenset({
+    "closed_paper_review_fixture_not_authorized",
+    "closed_paper_review_chat_first_turn_failed",
+    "closed_paper_review_chat_unexpected_action",
+    "closed_paper_review_chat_evidence_missing",
+    "closed_paper_review_chat_lesson_missing",
+    "closed_paper_review_chat_followup_failed",
+    "closed_paper_review_chat_followup_context_or_action",
+    "closed_paper_review_chat_followup_evidence_missing",
+    "closed_paper_review_chat_followup_context_missing",
+    "closed_paper_review_chat_order_state_changed",
+})
+
+
+def safe_closed_paper_chat_error(error: Exception) -> str:
+    """Never upload a gateway/provider/driver exception's private details."""
+    code = str(error)
+    return code if code in SAFE_CLOSED_PAPER_CHAT_ERRORS else "closed_paper_review_chat_runtime_error"
+
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh", "database_evidence_unavailable"}
@@ -1182,13 +1202,15 @@ def run_protected_portfolio_probe(report: Dict[str, Any], probe, namespace: str)
     report["qa_status"] = "COMPLETED"
 
 
-def run_protected_closed_paper_probe(report: Dict[str, Any], probe, namespace: str) -> None:
+def run_protected_closed_paper_probe(report: Dict[str, Any], probe, namespace: str,
+                                     *, include_chat: bool = False) -> None:
     """Distinguish an attempted fixture from a preflight-only QA failure."""
     report["safety"]["read_only_profile"] = False
     report["safety"]["execution_calls"] = 2
     report["qa_status"] = "INCOMPLETE"
     report["protected_profile_attempted"] = True
-    report["closed_paper_trade_review"] = probe(namespace)
+    key = "closed_paper_trade_review_chat" if include_chat else "closed_paper_trade_review"
+    report[key] = probe(namespace, include_chat=True) if include_chat else probe(namespace)
     report["outcome"] = "passed"
     report["qa_status"] = "COMPLETED"
 
@@ -1872,14 +1894,17 @@ def main() -> int:
                 )
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
-            elif args.profile == "closed_paper_trade_review":
+            elif args.profile in {"closed_paper_trade_review", "closed_paper_trade_review_chat"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("closed_paper_review_fixture_manifest_forbidden")
                 if os.getenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE") != "1":
                     raise ValueError("closed_paper_review_fixture_not_authorized")
                 from backend.scripts.probe_protected_closed_paper_review import run as run_review_probe
 
-                run_protected_closed_paper_probe(report, run_review_probe, fixture_namespace or "")
+                run_protected_closed_paper_probe(
+                    report, run_review_probe, fixture_namespace or "",
+                    include_chat=args.profile == "closed_paper_trade_review_chat",
+                )
             elif args.profile == "auto_paper_trade_history":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("auto_paper_fixture_manifest_forbidden")
@@ -2007,7 +2032,10 @@ def main() -> int:
                     else "failed"
                 )
     except (RuntimeError, ValueError) as error:
-        report["error_category"] = str(error)
+        report["error_category"] = (
+            safe_closed_paper_chat_error(error)
+            if args.profile == "closed_paper_trade_review_chat" else str(error)
+        )
         if report["error_category"] in {"fixture_namespace_required", "fixture_namespace_invalid"}:
             report["outcome"] = "blocked"
             report["qa_status"] = "QA BLOCKED / NOT STARTED"

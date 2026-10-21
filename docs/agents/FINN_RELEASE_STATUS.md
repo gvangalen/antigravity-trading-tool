@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-trade → FINN-chat (21 oktober 2026)
+
+Phase: `LOCAL_QA_PROFILE_CANDIDATE` op branch
+`codex/finn-review-chat-probe`, nog niet live getest. De onafhankelijke
+QA-agent bevestigde de voorafgaande gesloten Paper-tradereview op
+`fd9642afac6eb128eba7818a2f42af111030bb8d` via de beschermde
+[QA-run](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39522742378):
+twee Paper-fills werden precies één eigenaargebonden gesloten dossier, met
+opgeslagen FINN-analyse en een later teruggelezen bevestigde les. Er waren
+nul Live-aanroepen. Het gesaniteerde artifact had SHA-256
+`94964ed2439b073cb5dc3cb7591fc1091af45804599e24977c99440a673029c5`.
+Dat verdict bewees nog geen gewone FINN-chat over dezelfde les. Een latere
+read-only browserpoging kon die stap niet doen: het browseraccount had geen
+gesloten trade en was terecht gescheiden van de beschermde fixture-eigenaar.
+
+De huidige Build-kandidaat voegt daarom een afzonderlijk beschermd QA-profiel
+`closed_paper_trade_review_chat` toe. Dit hergebruikt de bestaande Paper- en
+reviewfixture, voert daarna twee FINN V2-chatbeurten op dezelfde eigenaar en
+hetzelfde gesprek uit, en vereist reviewbewijs, de bevestigde les en geen
+actievoorstel. De FINN-taakcode draait binnen het geïsoleerde QA-proces zodat
+de tijdelijke review-allowlist uitsluitend voor de inactieve fixture-eigenaar
+geldt; dit bewijst de productlevenscyclus maar niet de Celery-brokerhandoff.
+Het QA-rapport bevat alleen vaste statussen en tellingen. Build heeft de
+beschermde QA-run niet uitgevoerd. Gerichte runnertests: **88/88**; de volledige
+backend-suite vóór de extra orderinvariant: **3598 geslaagd, vier bestaande
+skips**. De geïsoleerde lokale workeractiecontractmatrix
+slaagde inmiddels **16/16**, met **19/19** adaptertests; artifact SHA-256
+`a7470c2d59efa85ab6836dd24ae662644b7229b4c6a497c7d082594e4f2df655`.
+De echte `gpt-6-luna`/Responses-developmentproef slaagde **20/20** met
+operatienauwkeurigheid 1,0 en nul provider-, schema-, parse-, validatie- of
+timeoutfouten; artifact SHA-256
+`3a86168dc3bce3208a6c59990325d46d075a76ab15ebdeb6b29c5d370b1f9138`.
+De afzonderlijke regressieset loopt nog.
+Security- en Architecture-herbeoordelingen vonden geen blocker in deze
+lokale delta. Architecture noteerde als bewijsgrens dat de taakcode in dit
+beschermde profiel direct draait en niet via de Celery-broker wordt afgeleverd.
+
 ## Rapport- en benchmarkuitleg na Score 2.0-cutover (21 oktober 2026)
 
 Phase: `QA_ACCEPTED_SCOPED` voor de rapport-/benchmarkpresentatie en de
