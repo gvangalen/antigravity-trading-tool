@@ -1437,6 +1437,13 @@ def test_explicit_draft_rename_reads_name_without_followup_command():
     assert parser.explicit_draft_rename(
         "Naam van alleen dit concept: BTC QA Correctie 51CA B."
     ) == "BTC QA Correctie 51CA B"
+    assert parser.explicit_draft_rename(
+        "Verander de conceptnaam exact naar BTC QA Correctie 51CA B en het target naar 92.400 USD."
+    ) == "BTC QA Correctie 51CA B"
+    assert parser.explicit_draft_rename(
+        "Ja, pas alleen het nog niet bevestigde voorstel aan. "
+        "De nieuwe naam is exact BTC QA Correctie 51CA B. Het target blijft gelijk."
+    ) == "BTC QA Correctie 51CA B"
 
 
 def test_strategy_name_extraction_handles_colon_and_exact_correction():

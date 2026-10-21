@@ -4454,7 +4454,9 @@ def test_open_usd_strategy_name_and_target_correction_preserves_other_fields():
     )
     call = FinnResponsesToolCatalog().validate(
         "create_or_update_trade_plan_proposal",
-        {"operation_id": "create_strategy", "draft_intent": "new", "inputs": {}},
+        {"operation_id": "create_strategy", "draft_intent": "new", "inputs": {
+            "name": "BTC QA Correctie 51CA A", "targets": [93000],
+        }},
     )
     prior_inputs = {
         "setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H",
@@ -4465,7 +4467,9 @@ def test_open_usd_strategy_name_and_target_correction_preserves_other_fields():
     }
     analysis = FinnResponsesProposalSelection().from_call(
         call=call, message=message,
-        conversation_context={"proposal_correction_result": {
+        conversation_context={"active_guided_operation": {
+            "operation_id": "create_strategy", "collected_inputs": prior_inputs,
+        }, "proposal_correction_result": {
             "proposal_id": "old-usd-strategy", "status": "cancelled",
             "operation_id": "create_strategy", "previous_asset": "BTC",
             "requested_instrument": "BTC",
@@ -5182,6 +5186,15 @@ def test_blocked_strategy_restores_user_stated_fixed_usd_levels_after_waiver():
     assert safe["targets"] == [92400]
     assert safe["price_currency"] == "USD"
     assert safe["risk_profile"] == "conservative"
+    ordinary_paper_request = message.replace("een tweede Paper-strategie", "een Paper-strategie")
+    ordinary_safe = _safe_blocked_strategy_inputs(ordinary_paper_request, {
+        "setup_id": 42, "symbol": "BTC", "timeframe": "4H", "base_amount": 100,
+    })
+    assert {key: ordinary_safe[key] for key in (
+        "name", "entry", "stop_loss", "targets", "price_currency", "risk_profile"
+    )} == {key: safe[key] for key in (
+        "name", "entry", "stop_loss", "targets", "price_currency", "risk_profile"
+    )}
 
 
 def test_blocked_strategy_does_not_treat_currency_offsets_as_fixed_levels():
@@ -5245,6 +5258,9 @@ def test_expanded_strategy_waiver_matches_original_unsupported_rules_only():
         "concept, sla niets op zonder bevestiging."
     )
     assert _explicit_strategy_rule_waiver(consent, priced_original)
+    assert _explicit_strategy_rule_waiver(
+        consent, priced_original.replace("een tweede Paper-strategie", "een Paper-strategie"),
+    )
     assert not _explicit_strategy_rule_waiver(
         consent, original.replace("twee trades per dag.", "twee trades per dag en RSI-instapregel."),
     )

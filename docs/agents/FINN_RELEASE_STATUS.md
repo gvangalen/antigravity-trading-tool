@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: tweede meerbeurtige reparatie (21 oktober 2026)
+
+Phase: `LOCAL_REPAIR_IN_PROGRESS`. De bestaande onafhankelijke QA-agent gaf
+`NOT_ACCEPTED` op publieke backend- en frontend-SHA
+`ca26687cfc472ac929cab3bb237e7259e41c44f0`. Een schone USD-strategie,
+bevestiging, lijstupdate en teruglezing na refresh slaagden. Gewone read-only
+FOMO-coaching slaagde ook. In de volledige waiverroute werd een expliciete
+toestemming bij de formulering "een Paper-strategie" niet herkend, waardoor
+eerder opgegeven vaste koersniveaus opnieuw werden gevraagd. Bij een
+naam- en targetcorrectie bleef de oude naam op een nieuwe bevestigbare kaart;
+de vervolgpoging eindigde in een generieke fout. De onjuiste kaart is niet
+bevestigd.
+
+De lokale reparatie herkent dezelfde volledig begrensde strategieaanvraag
+met of zonder "tweede", leest beide door QA gebruikte naamcorrectiezinnen en
+geeft geverifieerde correcties op hetzelfde concept voorrang boven verouderde
+modelvelden. De oude kaart wordt vóór de vervangingspoging ingetrokken. De
+gerichte regressies slagen (890 tests); de volledige backend-suite slaagt met
+**3698 tests, 4 bestaande skips**. De lokale werkermatrix slaagt **16/16**
+actiecontracten en **19/19** adaptertests zonder brokerorder of Live-bot;
+artifact SHA-256 `ac5048a631ababa974a3e7292c85802062cd301355e0ea0d85475bdeb5d8168e`.
+De echte Luna/Responses-ontwikkelset slaagt **20/20**; artifact SHA-256
+`21eb9f9b027a982cfb3b8e24d4b8f915de404157061667299f2ee0804f555b78`.
+De echte Luna/Responses-regressie slaagt **109/109**, zonder provider-, schema-,
+timeout-, parse- of validatiefout; artifact SHA-256
+`22683628c93722f3406bf3c9ab95f6708f06079344a2374bd81d8f6791c0ecdf`.
+De webtypecheck, i18n-lint en tests, command- en voorsteltests, productiebuild
+en `audit:high` slagen; de audit meldt één bestaande moderate Next.js-advisory.
+Security vond in de smalle diff geen concrete nieuwe blokkade. Deze wijziging
+is nog niet live en niet door QA geaccepteerd.
+
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. De onafhankelijke ingelogde QA op de
