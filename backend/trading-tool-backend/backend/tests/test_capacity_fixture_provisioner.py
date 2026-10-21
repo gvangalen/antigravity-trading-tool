@@ -135,12 +135,13 @@ def test_capacity_load_identity_and_error_gate():
 def test_capacity_load_reports_backend_timing_and_slow_trace():
     harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
     summary = harness["report"]("diagnostic", {
-        "workspace": [(200, 1200, 800, "trace-one"), (200, 100, 40, "trace-two")],
+        "workspace": [(200, 1200, 800, "trace-one", 123.1, 124.3), (200, 100, 40, "trace-two", 125.1, 125.2)],
     })["workspace"]
     assert summary["backend_p95_ms"] == 800
     assert summary["backend_timing_samples"] == 2
     assert summary["slow_traces"][0] == {
         "trace_id": "trace-one", "client_ms": 1200, "backend_ms": 800,
+        "start_utc_epoch": 123.1, "end_utc_epoch": 124.3,
     }
 
 
@@ -171,12 +172,36 @@ def test_capacity_load_keeps_bearer_header_across_requests():
         time.monotonic() + 1, 0.01, None, results, stop,
     ))
 
-    assert client.request_headers == [
-        {"Authorization": "Bearer fixture-token"},
-        {"Authorization": "Bearer fixture-token"},
-    ]
+    assert all(item["Authorization"] == "Bearer fixture-token" for item in client.request_headers)
+    assert len({item["X-Trace-Id"] for item in client.request_headers}) == 2
+    assert all(item["X-Trace-Id"].startswith("cap-") for item in client.request_headers)
     assert sum(map(len, results.values())) == 2
-    assert all(sample[2:] == (5.0, "trace-from-server") for route in results.values() for sample in route)
+    assert all(sample[2:4] == (5.0, "trace-from-server") for route in results.values() for sample in route)
+    assert all(sample[4] <= sample[5] for route in results.values() for sample in route)
+
+
+def test_capacity_generator_requires_fd_headroom_for_production(monkeypatch):
+    import resource
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    monkeypatch.setattr(resource, "getrlimit", lambda _kind: (1024, 1048576))
+    with pytest.raises(ValueError, match="at least 1128 open file descriptors"):
+        harness["generator_fd_limits"](1000, production=True)
+    assert harness["generator_fd_limits"](1000, production=False)["soft"] == 1024
+    monkeypatch.setattr(resource, "getrlimit", lambda _kind: (4096, 1048576))
+    assert harness["generator_fd_limits"](1000, production=True)["soft"] == 4096
+
+
+def test_capacity_generator_diagnostics_summarize_local_pressure():
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    summary = harness["generator_report"]([
+        {"event_loop_lag_ms": 2, "process_cpu_pct": 10, "open_fds": 200},
+        {"event_loop_lag_ms": 80, "process_cpu_pct": 120, "open_fds": 900},
+    ])
+    assert summary == {
+        "samples": 2, "event_loop_lag_p95_ms": 80, "event_loop_lag_max_ms": 80,
+        "process_cpu_p95_pct": 120, "open_fds_max": 900,
+    }
 
 
 def test_capacity_load_operator_gate_requires_explicit_continue(monkeypatch):
@@ -285,9 +310,10 @@ def test_capacity_load_reports_steady_samples_before_error_abort(monkeypatch, ca
     with pytest.raises(RuntimeError, match="non-2xx"):
         asyncio.run(harness["run"](args, [{"user_id": 7, "access_token": "fixture"}]))
     reports = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    assert len(reports) == 2
-    assert reports[0]["routes"]["trade_reviews"]["statuses"] == {"500": 1}
+    assert len(reports) == 3
+    assert "generator" in reports[0]
     assert reports[1]["routes"]["trade_reviews"]["statuses"] == {"500": 1}
+    assert reports[2]["routes"]["trade_reviews"]["statuses"] == {"500": 1}
 
 
 def test_capacity_load_reports_partial_routes_on_operator_cancel(monkeypatch, capsys):
