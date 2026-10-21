@@ -96,6 +96,12 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
         "guided_proposal_tool_call_required", "guided_turn_continuation_unverified",
         "proposal_tool_validation_failed", "financial_execution_not_available",
         "live_bot_activation_disabled", "runtime_contract_terminal_projection_missing",
+        "responses_evidence_not_verified", "no_evidence_available", "source_unavailable",
+        "trading_outcome_claim_unverified", "saved_entity_type_unverified",
+        "personal_fit_not_established", "turn_contract_mismatch",
+        "user_condition_bypass_blocked", "current_market_claim_unverified",
+        "saved_action_claim_unverified",
+        "responses_tool_execution_failed",
     }
     status = getattr(error, "terminal_status", None)
     code = getattr(error, "typed_error_code", None)
@@ -103,11 +109,43 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
                  "responses_limited_evaluation_incomplete" if isinstance(code, str)
                  and code.startswith("responses_limited_evaluation_incomplete:") else
                  "other" if code else "none")
-    return {
+    diagnostic = {
         "terminal_status": status if status in known_statuses else "unknown",
         "typed_error_code": safe_code,
         "response_present": getattr(error, "response_present", None) is True,
+        "response_source": (
+            getattr(error, "response_source", None)
+            if getattr(error, "response_source", None) in {"v2_runtime", "foundation_placeholder"}
+            else "other"
+        ),
+        "verifier_status": (
+            getattr(error, "verifier_status", None)
+            if getattr(error, "verifier_status", None) in {"passed", "failed", "not_run"}
+            else "other"
+        ),
+        "evidence_present": bool(getattr(error, "evidence_count", 0)),
     }
+    private_read = getattr(error, "review_read_diagnostic", None) or {}
+    if isinstance(private_read, dict) and private_read:
+        def bounded(value, allowed):
+            return value if isinstance(value, str) and value in allowed else "other"
+
+        diagnostic["review_read"] = {
+            "exchange_checkpoint": private_read.get("exchange_checkpoint") is True,
+            "progress_checkpoint": private_read.get("progress_checkpoint") is True,
+            "review_tool_seen": private_read.get("review_tool_seen") is True,
+            "review_tool_status": bounded(private_read.get("review_tool_status"), {
+                "completed", "partial", "unavailable", "error", "failed", "missing", "other"
+            }),
+            "review_read_status": bounded(private_read.get("review_read_status"), {
+                "completed", "partial", "unavailable", "error", "failed", "missing", "other"
+            }),
+            "review_read_reason": bounded(private_read.get("review_read_reason"), {
+                "tool_internal_error", "tool_timeout", "source_unavailable",
+                "review_not_found", "tool_execution_failed", "none", "other"
+            }),
+        }
+    return diagnostic
 
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}

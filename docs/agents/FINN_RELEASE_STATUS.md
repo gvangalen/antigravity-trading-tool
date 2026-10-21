@@ -6,6 +6,26 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade → FINN-chat (21 oktober 2026)
 
+De daaropvolgende [PR #497](https://github.com/gvangalen/antigravity-trading-tool/pull/497)
+is gemerged als `6237191d5c9c8400fcec7d9ed7110c1450ec8582`.
+Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39542618819)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39542822078)
+slaagden. Publieke backend-health en frontend-buildinfo gaven ieder HTTP 200
+en exact die SHA. De onafhankelijke QA-agent deed één beschermde
+[herproef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39543046850):
+`NOT_ACCEPTED`. De eerste chatbeurt eindigde `unavailable`, met aanwezige
+response en veilige foutcategorie `other`; de reviewlezing en tweede beurt
+zijn daardoor niet bewezen. Er waren twee gecontroleerde Paper-executies en
+nul Live-aanroepen. Gesaniteerd artifact SHA-256
+`865b0abeb645db3f09f8cb13fe9105b0eae9e63e659f232c120a7b0f6013cc58`.
+De lokale diagnosekandidaat `codex/finn-review-chat-terminal-diagnostics`
+voegt uitsluitend begrensde terminal- en read-toolstatussen toe aan het
+beschermde QA-artifact. Zij leest de private Responses-checkpoint voor exact
+de eigenaar, conversatie en run, maar exporteert geen dossierinhoud, ID of
+modeltekst. De gerichte runnertests slagen **91/91** en de volledige
+backend-suite **3611 geslaagd, vier bestaande skips**. Dit is nog geen
+inhoudelijke reparatie of nieuw live verdict.
+
 Laatste onafhankelijke QA op live `c4ba576a1eb42d240dad6525391bcd0ff1cb4567`:
 [run 39540408664](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39540408664)
 eindigde `NOT_ACCEPTED`. De eerste gewone FINN-chatbeurt werd nu voltooid,
@@ -35,7 +55,7 @@ geen claim over de productie-eigenaar). Onafhankelijke live QA volgt pas na
 deployment.
 
 Phase: `QA_NOT_ACCEPTED` voor de chatuitbreiding; laatste geteste productie-SHA
-`c4ba576a1eb42d240dad6525391bcd0ff1cb4567`. De eerste kandidaat was
+`6237191d5c9c8400fcec7d9ed7110c1450ec8582`. De eerste kandidaat was
 `495873bec102f0368cddd69c1d286d339fe81530`. [PR #494](https://github.com/gvangalen/antigravity-trading-tool/pull/494)
 is gemerged; alle vijf PR- en main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39537460230)
 slaagden. Backend-health en frontend-buildinfo gaven HTTP 200 en dezelfde SHA.
