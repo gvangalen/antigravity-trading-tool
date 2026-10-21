@@ -153,7 +153,6 @@ export function routeForNotification(data: MobileNotificationData): Notification
 }
 
 function notificationTitle(type: string, symbol: string) {
-  if (type === 'daily_briefing_ready') return 'Daily briefing ready';
   if (type === 'bot_action_ready') return `${symbol} bot decision ready`;
   if (type === 'risk_warning') return `${symbol} risk warning`;
   if (type === 'strategy_invalidated') return `${symbol} strategy needs review`;
