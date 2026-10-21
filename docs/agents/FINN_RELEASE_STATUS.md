@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten-tradebewijs in FINN-antwoord — herstelkandidaat (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. De onafhankelijke beschermde
+Phase: `TARGETED_LIVE_QA_ACCEPTED`; volledige coachacceptatie blijft open. De onafhankelijke beschermde
 [QA-run 39564101579](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39564101579)
 op `25d8be89e561d048bcdff28f2c2152ff216b3fdd` eindigde `NOT ACCEPTED`.
 De eerste gewone vraag zonder reviewnummer kreeg geen geverifieerd
@@ -33,8 +33,22 @@ operatieaccuracy 1,0 en nul provider-, schema-, parse-, validatie- of
 timeoutfouten (artifact SHA-256
 `a8a633a4a154dee9b511df5d9001af557ba94ae66afed62c550307b0f2060f4b`).
 De onafhankelijke Security-review vond geen concrete blocker voor deze
-begrensde bewijsprojectie. CI, deployment en onafhankelijke live QA staan
-nog open.
+begrensde bewijsprojectie. [PR #509](https://github.com/gvangalen/antigravity-trading-tool/pull/509)
+is gemerged als `bf35518e9e3d0141378633635bbfadb4b9d0ba7d`. Alle vijf PR- en
+[main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39566817697)
+slaagden; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39567152930)
+slaagde. Publieke backend-health en frontend-buildinfo gaven ieder HTTP 200
+en dezelfde SHA. De bestaande onafhankelijke QA-agent voerde daarna de
+beschermde [live proef 39567427580](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39567427580)
+uit en gaf `ACCEPTED` voor dit profiel: twee gevulde Paper-orders, één
+gesloten dossier met bevestigde les, en twee gewone FINN-chatbeurten in
+hetzelfde gesprek met eigenaargebonden `review_history`-bewijs. De les werd
+teruggelezen; er waren nul voorstellen, extra orders, Live-tradingcalls of
+Live-botactivaties. Het gesaniteerde QA-artifact heeft SHA-256
+`08f343b8d6e6cacb256bdfe2ae62837e9ffc688440e8215b0b203c72ed90106e`.
+Deze proef vergelijkt de letterlijke EUR-resultaatzin in het chatantwoord
+niet afzonderlijk met het opgeslagen bedrag en is geen algemene browser-
+of coachacceptatie.
 
 ## Dossierlezing zonder nummer — begrensde QA-diagnostiek (21 oktober 2026)
 
