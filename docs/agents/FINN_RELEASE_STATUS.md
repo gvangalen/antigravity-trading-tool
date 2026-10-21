@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: huidige grens (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_PR`. De gerichte cutover-reparatie is via
+Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De gerichte cutover-reparatie is via
 [PR #512](https://github.com/gvangalen/antigravity-trading-tool/pull/512)
 gemerged als product-SHA `b2c2364429b125fe9e2cf8b8ff1d9255ad2beb1d`.
 [Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39582692401)
@@ -58,7 +58,8 @@ De matrix registreert nul brokerorders, nul Live-bots en nul
 productieverbindingen. Deze worker- en providerbewijzen zijn lokaal;
 een nieuwe onafhankelijke ingelogde QA op de herstelrelease moet nog volgen.
 
-De nieuwe lokale herstelbranch `codex/finn-cutover-guided-repair` hervat een exact gekozen setup-intrekking vóór
+De via [PR #514](https://github.com/gvangalen/antigravity-trading-tool/pull/514)
+gemergede herstelbatch hervat een exact gekozen setup-intrekking vóór
 de modelselector. Een strategie die automatische RSI-, relatieve stop-/doel-
 of procentuele risicoregels vraagt, krijgt geen bevestigbaar concept zolang
 die regels niet in het getypeerde contract passen. Na de expliciete keuze om
@@ -78,8 +79,15 @@ lokale werkermatrix slaagde **16/16**, plus **19/19** adaptertests; artifact
 SHA-256 `1b20710b4820419ddbedef5838e1c20dce110d7a40668923785d64a9c03e81b9`.
 De matrix noteerde nul brokerorders, nul Live-bots en nul productieverbindingen.
 Security en Architecture vonden na de laatste randgevalreparaties geen
-concrete grens- of lifecyclefout. Deze branch is **niet live**; onafhankelijke
-ingelogde QA volgt pas na CI, Auto Deploy en Build-identiteitscontrole.
+concrete grens- of lifecyclefout. De productmerge is
+`9d34aef67e43566bf3b0568c18270cb4fa92119e`; de PR-CI, main-CI en
+[Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39592218099)
+slaagden. Bij de Build-identiteitscontrole gaven backend-health en
+frontend-buildinfo elk HTTP 200 en die productmerge-SHA. Dit document
+verandert bij zijn eigen publicatie de deployment-SHA; de onafhankelijke QA
+controleert daarom eerst de definitieve publieke backend- en frontend-SHA.
+De ingelogde QA voor setupverduidelijking, strategievervolg, “Mijn Plan” en
+score-/Paper-pariteit is nog niet uitgevoerd op deze kandidaat.
 
 ## Mobiele resten van de oude briefing verwijderd (21 oktober 2026)
 
