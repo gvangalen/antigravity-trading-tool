@@ -6,7 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `BUILD_VALIDATED_AWAITING_DEPLOY`. De onafhankelijke ingelogde QA op de
+Phase: `LIVE_CANDIDATE_AWAITING_INDEPENDENT_QA`. De reparatie is via
+[PR #520](https://github.com/gvangalen/antigravity-trading-tool/pull/520)
+gemerged als product-SHA `1849b9a1003ea04dbca1a8525a674084ef748de0`.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39613988258),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39614425513)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39614773117)
+slaagden. Backend-health en frontend-buildinfo gaven na deployment elk HTTP
+200 en exact die product-SHA. Dit is Build-identiteitsbewijs; onafhankelijke
+QA controleert de definitieve publieke SHA opnieuw na publicatie van dit
+statusdocument.
+
+De onafhankelijke ingelogde QA op de vorige
 publieke backend- en frontend-SHA `ca357b84280ea5f2d3e34966d3388470a675482b`
 gaf `NOT_ACCEPTED`. Gewone read-only coaching over FOMO, scores, plan en
 Paper-budget werkte. Het eerste bevestigbare strategievoorstel met expliciete
@@ -30,8 +41,8 @@ timeout- of validatiefouten; artifact SHA-256
 `9bd78a59fde92f5944a16922de158937fbe7b9ac9ef9f36129306239c7332882`.
 De gerichte Security-hercontrole bevestigde dat een tegenstrijdige waiver
 wordt geweigerd en de expliciete QA-intrekking alleen met de oorspronkelijke
-geblokkeerde voorwaarden wordt gekoppeld. Deze kandidaat is nog niet live of
-door onafhankelijke QA goedgekeurd.
+geblokkeerde voorwaarden wordt gekoppeld. De ingelogde live herkeuring van
+deze kandidaat staat nog open; Build noemt hem nog niet geaccepteerd.
 
 De eerdere herstelbatch is via
 [PR #516](https://github.com/gvangalen/antigravity-trading-tool/pull/516)
