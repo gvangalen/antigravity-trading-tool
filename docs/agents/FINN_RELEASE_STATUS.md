@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Score 2.0-bot en oude marktagenten (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED`. Branch
+`codex/score2-bot-risk-cutover`, gebaseerd op main `4eb233599`.
+Deze kandidaat is **niet gedeployed** en heeft nog geen onafhankelijke
+live-QA-uitspraak. De bestaande FINN 2.0-chat, coachfeed en gedeelde
+rapportcontext blijven de actieve coachroutes. De bot gebruikt nu alleen
+de eigenaar- en assetgebonden Score 2.0-componenten en opgeslagen
+setupvoorwaarden voor scorebeslissingen; oude gebruikersbrede
+regime-/marktintelligentie kan koopgeschiktheid of bedrag niet wijzigen.
+De ongebruikte marktintelligentie-API, kaarten, hook en modules zijn
+verwijderd. Een no-op Celery-taak erkent uitsluitend nog al gepubliceerde
+regimeberichten tijdens de overgang; Beat plant die taak niet meer.
+
+Gemeten lokale poorten: root backend **3593 geslaagd, 3 bestaande skips**
+na rebase op `4eb233599`;
+frontend build, typecheck, i18n/command/proposal-tests en high-audit
+geslaagd; worker-gedreven actiematrix **16/16**, artifact SHA-256
+`375d472273a7ea5456eda2635d6c3a6a423dcbf1f5b458b20de1d58a88d0044f`;
+actieadapters **19/19**. Onafhankelijke Security- en Architecture-review
+vonden geen open blokker in de huidige lokale delta. De echte
+`gpt-6-luna`/Responses-ontwikkelset slaagde **20/20**, zonder provider-,
+schema-, parse-, validatie- of timeoutfout; artifact SHA-256
+`e740746428a69f39f0c8d69a37bb9233ca0b994d677650dc2f5fc78aab02c6c8`.
+Een afzonderlijke echte `gpt-6-luna`/Responses-aanroep voor het gedeelde
+dagrapport gaf HTTP 200 en alle acht vereiste secties voor drie synthetische,
+eigenaargebonden assetcontexten. De echte Responses-regressieset slaagde
+**109/109** met nauwkeurigheid 1,0 voor
+operatie, entiteit, asset, polariteit, gespreksverwijzing, verduidelijking,
+ontbrekende invoer, off-topic en niet-ondersteunde operaties. Provider-,
+schema-, timeout-, parse- en validatiefoutpercentages waren 0; artifact
+SHA-256 `00a1723fe2391f76016053f3c95457adf7c56229f9a1892e0fa75a318a2daa9a`.
+CI, Auto Deploy, publieke SHA-controle en geauthenticeerde QA volgen.
+
 ## Gesloten Paper-reflectie: alleen bewijsselectie (21 oktober 2026)
 
 Phase: `LOCAL_FIX_CANDIDATE`. [PR #481](https://github.com/gvangalen/antigravity-trading-tool/pull/481)
