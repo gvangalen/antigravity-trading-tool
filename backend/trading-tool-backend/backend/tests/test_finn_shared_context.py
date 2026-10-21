@@ -291,8 +291,9 @@ def test_daily_report_lists_multiple_linked_strategies_and_rejects_false_missing
         "bots": [],
     }]}
     monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    model_outlook = {"text": "De DXY- en RSI-waarden ontbreken nog, dus wacht af."}
     monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {
-        "outlook": "De DXY- en RSI-waarden ontbreken nog, dus wacht af."})
+        "outlook": model_outlook["text"]})
 
     report = reports.generate_unified_daily_report_sections(7)
 
@@ -305,6 +306,9 @@ def test_daily_report_lists_multiple_linked_strategies_and_rejects_false_missing
     assert "ontbreken" not in report["outlook"]
     assert "20/100" in report["macro_context"]
     assert "40/100" in report["technical_analysis"]
+
+    model_outlook["text"] = "Zonder RSI- en DXY-waarden kan ik geen beoordeling geven."
+    assert "Zonder RSI" not in reports.generate_unified_daily_report_sections(7)["outlook"]
 
 
 def test_multi_asset_report_keeps_btc_match_when_aapl_scores_are_missing(monkeypatch):
