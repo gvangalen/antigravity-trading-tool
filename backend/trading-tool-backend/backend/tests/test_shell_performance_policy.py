@@ -30,10 +30,11 @@ def test_legacy_assistant_events_route_is_retired_in_favor_of_coach_feed():
     assert "/api/assistant/feed?history=" in coach_feed_source
 
 
-def test_market_intelligence_cache_ttl_and_retired_mission_control_route():
-    intelligence_source = _read(BACKEND_ROOT / "services" / "intelligence_service.py")
+def test_retired_market_intelligence_and_mission_control_routes_are_absent():
     assistant_source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
+    market_source = _read(BACKEND_ROOT / "api" / "market_intelligence_api.py")
 
-    assert 'MARKET_INTELLIGENCE_CACHE_TTL_SECONDS' in intelligence_source
+    assert not (BACKEND_ROOT / "services" / "intelligence_service.py").exists()
+    assert '"/market/intelligence"' not in market_source
     assert '"/assistant/mission-control"' not in assistant_source
     assert "_mission_control_cache" not in assistant_source

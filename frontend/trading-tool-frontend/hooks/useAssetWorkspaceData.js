@@ -173,11 +173,6 @@ function buildWorkspaceFallback(symbol, periods, quote, daily) {
       reason: "workspace_request_timeout",
       date: null,
     },
-    regime: {
-      available: false,
-      data_status: "fallback",
-      reason: "workspace_request_timeout",
-    },
     generated_at: new Date().toISOString(),
     ai_calls: 0,
   };

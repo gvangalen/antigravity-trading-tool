@@ -1,6 +1,6 @@
 1:"$Sreact.fragment"
 a:I[57150,[],""]
-:HL["/_next/static/css/f6b9bf9b88ef9609.css","style"]
+:HL["/_next/static/css/9e94be7a6c73b772.css","style"]
 2:T1293,
 (function () {
   var VERSION = "static-export";
@@ -118,7 +118,7 @@ a:I[57150,[],""]
     if (shouldRecover(reason)) clearStaleApp(reason);
     else recoverMixedDeploy(reason);
   });
-})();0:{"P":null,"b":"static-export","p":"","c":["","admin","telemetry"],"i":false,"f":[[["",{"children":["(protected)",{"children":["admin",{"children":["telemetry",{"children":["__PAGE__",{}]}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/f6b9bf9b88ef9609.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["admin","$L6",{"children":["telemetry","$L7",{"children":["__PAGE__","$L8",{},null,false]},null,false]},null,false]},null,false]},null,false],"$L9",false]],"m":"$undefined","G":["$a",[]],"s":false,"S":true}
+})();0:{"P":null,"b":"static-export","p":"","c":["","admin","telemetry"],"i":false,"f":[[["",{"children":["(protected)",{"children":["admin",{"children":["telemetry",{"children":["__PAGE__",{}]}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/9e94be7a6c73b772.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["admin","$L6",{"children":["telemetry","$L7",{"children":["__PAGE__","$L8",{},null,false]},null,false]},null,false]},null,false]},null,false],"$L9",false]],"m":"$undefined","G":["$a",[]],"s":false,"S":true}
 c:I[69835,["5319","static/chunks/5319-36a1ade57528f891.js","3562","static/chunks/3562-66ceb62a6d3b7ea2.js","8111","static/chunks/8111-43d2397c8a007e1f.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","8731","static/chunks/8731-dd79ab6f5a353aa7.js","7177","static/chunks/app/layout-b3ff01631a0e81d3.js"],"default"]
 d:I[55038,["5319","static/chunks/5319-36a1ade57528f891.js","3562","static/chunks/3562-66ceb62a6d3b7ea2.js","8111","static/chunks/8111-43d2397c8a007e1f.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","8731","static/chunks/8731-dd79ab6f5a353aa7.js","7177","static/chunks/app/layout-b3ff01631a0e81d3.js"],"default"]
 e:I[9766,[],""]

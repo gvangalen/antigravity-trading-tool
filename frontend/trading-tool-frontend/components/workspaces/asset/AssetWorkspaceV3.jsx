@@ -44,7 +44,6 @@ import {
   normalizeTradingViewInterval,
   toTradingViewSymbol,
 } from "../../../../../shared/tradingViewConfig";
-import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
@@ -273,6 +272,7 @@ function getUiCopy(locale = "nl") {
       loadingMarket: "Loading market data...",
       loadingMacro: "Loading macro data...",
       loadingTechnical: "Loading technical data...",
+      loadingScores: "Loading scores...",
       indicatorAssessment: (label, direction, signal) => `${label} is ${direction.toLowerCase()} and currently gives a ${signal.toLowerCase()} signal.`,
       rsiAssessment: {
         high: "RSI supports momentum and confirms a stronger direction.",
@@ -455,6 +455,7 @@ function getUiCopy(locale = "nl") {
       loadingMarket: "Marktdaten werden geladen...",
       loadingMacro: "Makrodaten werden geladen...",
       loadingTechnical: "Technische Daten werden geladen...",
+      loadingScores: "Scores werden geladen...",
       indicatorAssessment: (label, direction, signal) => `${label} ist ${direction.toLowerCase()} und liefert derzeit ein ${signal.toLowerCase()} Signal.`,
       rsiAssessment: {
         high: "RSI unterstützt das Momentum und bestätigt eine stärkere Richtung.",
@@ -636,6 +637,7 @@ function getUiCopy(locale = "nl") {
     loadingMarket: "Marktdata laden...",
     loadingMacro: "Macrodata laden...",
     loadingTechnical: "Technische data laden...",
+    loadingScores: "Scores laden...",
     indicatorAssessment: (label, direction, signal) => `${label} ${direction.toLowerCase()} en geeft nu een ${signal.toLowerCase()} signaal.`,
     rsiAssessment: {
       high: "RSI ondersteunt het momentum en bevestigt een sterkere richting.",
@@ -1609,7 +1611,7 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
         {items.map((item) => {
           const tone = scoreTone(item.score, ui);
           const benchmarkCondition = item.id === "combined" ? marketConditionForScore(item.score) : null;
-          const summary = item.id === "combined"
+          const summary = loading && item.score === null ? ui.loadingScores : item.id === "combined"
             ? (benchmarkCondition ? conditionOptions?.[benchmarkCondition.id]?.title : ui.unavailable)
             : sections.find((section) => section.id === item.id)?.notConfigured
               ? ui.notConfigured
@@ -2862,10 +2864,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
         score: marketTimeframe === "day" ? normalizeScore(market?.score) : visibleScore(marketRows),
-        insight: buildSectionInsight("market", marketTimeframe === "day" ? market?.score : visibleScore(marketRows), ui, workspace?.daily?.market?.source_status, marketRows, marketNotConfigured),
+        insight: marketLoading ? ui.loadingMarket : buildSectionInsight("market", marketTimeframe === "day" ? market?.score : visibleScore(marketRows), ui, workspace?.daily?.market?.source_status, marketRows, marketNotConfigured),
         rows: marketRows,
         notConfigured: marketNotConfigured,
-        emptyState: marketNotConfigured ? ui.notConfigured : fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
+        emptyState: marketLoading ? ui.loadingMarket : marketNotConfigured ? ui.notConfigured : fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
         emptyAction: showEmptyAction(market?.score, marketRows, marketLoading) ? emptyActionButton("market") : null,
       },
       {
@@ -2874,10 +2876,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
         score: macroTimeframe === "day" ? normalizeScore(macro?.score) : visibleScore(macroRows),
-        insight: buildSectionInsight("macro", macroTimeframe === "day" ? macro?.score : visibleScore(macroRows), ui, workspace?.daily?.macro?.source_status, macroRows, macroNotConfigured),
+        insight: macroLoading ? ui.loadingMacro : buildSectionInsight("macro", macroTimeframe === "day" ? macro?.score : visibleScore(macroRows), ui, workspace?.daily?.macro?.source_status, macroRows, macroNotConfigured),
         rows: macroRows,
         notConfigured: macroNotConfigured,
-        emptyState: macroNotConfigured ? ui.notConfigured : fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
+        emptyState: macroLoading ? ui.loadingMacro : macroNotConfigured ? ui.notConfigured : fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
         emptyAction: showEmptyAction(macro?.score, macroRows, macroLoading) ? emptyActionButton("macro") : null,
       },
       {
@@ -2886,10 +2888,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
         score: technicalTimeframe === "day" ? normalizeScore(technical?.score) : visibleScore(technicalRows),
-        insight: buildSectionInsight("technical", technicalTimeframe === "day" ? technical?.score : visibleScore(technicalRows), ui, workspace?.daily?.technical?.source_status, technicalRows, technicalNotConfigured),
+        insight: technicalLoading ? ui.loadingTechnical : buildSectionInsight("technical", technicalTimeframe === "day" ? technical?.score : visibleScore(technicalRows), ui, workspace?.daily?.technical?.source_status, technicalRows, technicalNotConfigured),
         rows: technicalRows,
         notConfigured: technicalNotConfigured,
-        emptyState: technicalNotConfigured ? ui.notConfigured : fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
+        emptyState: technicalLoading ? ui.loadingTechnical : technicalNotConfigured ? ui.notConfigured : fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
         emptyAction: showEmptyAction(technical?.score, technicalRows, technicalLoading) ? emptyActionButton("technical") : null,
       },
     ];
@@ -2965,23 +2967,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         onToggle={() => setShowChart((current) => !current)}
         ui={ui}
       />
-
-      <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
-        <div className="mb-2.5 flex items-center">
-          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-            {ui.marketRegime}
-          </div>
-        </div>
-        <GlobalMarketDecisionCard
-          symbol={activeSymbol}
-          snapshot={{
-            data: workspace?.regime ?? null,
-            loading: workspaceLoading && !workspace,
-          }}
-          fallbackMessage={isFallbackWorkspace ? ui.fallbackReady : null}
-          compact
-        />
-      </section>
 
       <ScoreOverview
         market={{ score: sections.find((section) => section.id === "market")?.score ?? null }}

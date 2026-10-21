@@ -19,21 +19,17 @@ def test_api_modules_do_not_use_sync_session_query_patterns():
 
 def test_process_local_caches_are_disabled_or_removed_for_phase6():
     dashboard_source = _read(BACKEND_ROOT / "services" / "dashboard_service.py")
-    intelligence_source = _read(BACKEND_ROOT / "services" / "intelligence_service.py")
     macro_source = _read(BACKEND_ROOT / "services" / "macro_data_service.py")
     technical_source = _read(BACKEND_ROOT / "services" / "technical_data_service.py")
-    transition_source = _read(BACKEND_ROOT / "engine" / "transition_detector.py")
 
     assert "_overview_cache:" not in dashboard_source
     assert "self._overview_cache" not in dashboard_source
     assert "DashboardService._overview_cache" not in dashboard_source
     assert "DASHBOARD_OVERVIEW_CACHE_ENABLED" not in dashboard_source
-    assert "INTELLIGENCE_SERVICE_CACHE_ENABLED" not in intelligence_source
-    assert "_cache = {}" not in intelligence_source
+    assert not (BACKEND_ROOT / "services" / "intelligence_service.py").exists()
     assert "_cache = {}" not in macro_source
     assert "_cache = {}" not in technical_source
-    assert "lru_cache" not in transition_source
-    assert "@lru_cache" not in transition_source
+    assert not (BACKEND_ROOT / "engine" / "transition_detector.py").exists()
 
 
 def test_psycopg2_usage_is_limited_to_explicit_legacy_boundaries():
@@ -69,25 +65,21 @@ def test_legacy_script_database_module_is_compatibility_wrapper():
     assert "from backend.utils.db import get_db_connection" in source
 
 
-def test_regime_memory_and_daily_report_use_repository_boundaries():
-    regime_source = _read(BACKEND_ROOT / "ai_core" / "regime_memory.py")
+def test_retired_regime_memory_is_absent_and_daily_report_uses_repository_boundary():
     daily_report_source = _read(BACKEND_ROOT / "celery_task" / "daily_report_task.py")
-    regime_repo_source = _read(
-        BACKEND_ROOT / "infrastructure" / "repositories" / "regime_memory_repository.py"
-    )
     daily_report_repo_source = _read(
         BACKEND_ROOT / "infrastructure" / "repositories" / "daily_report_repository.py"
     )
 
-    for source in (regime_source, daily_report_source):
-        assert "from backend.utils.db import" not in source
-        assert "get_db_connection" not in source
-        assert "jsonb_param" not in source
-
-    assert "RegimeMemoryRepository" in regime_source
+    assert not (BACKEND_ROOT / "ai_core" / "regime_memory.py").exists()
+    regime_task = (BACKEND_ROOT / "celery_task" / "regime_memory_task.py").read_text(encoding="utf-8")
+    assert "retired_regime_agent" in regime_task
+    assert "get_regime_memory" not in regime_task
+    assert not (BACKEND_ROOT / "infrastructure" / "repositories" / "regime_memory_repository.py").exists()
+    assert "from backend.utils.db import" not in daily_report_source
+    assert "get_db_connection" not in daily_report_source
+    assert "jsonb_param" not in daily_report_source
     assert "DailyReportWriteRepository" in daily_report_source
-    assert "bindparam" in regime_repo_source
-    assert "type_=JSONB" in regime_repo_source
     assert "bindparam" in daily_report_repo_source
     assert "type_=JSONB" in daily_report_repo_source
 

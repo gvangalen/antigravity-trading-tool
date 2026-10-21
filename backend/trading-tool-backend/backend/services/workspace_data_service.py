@@ -11,14 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 
 from backend.infrastructure.models import MacroData, MarketData, Watchlist
-from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
-from backend.services.intelligence_service import IntelligenceService
 from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_service import MarketDataService
 from backend.services.score_service import ScoreService
@@ -404,7 +402,6 @@ class WorkspaceDataService:
         self.scores = ScoreRepository(session)
         self.users = UserRepository(session)
         self.score_service = ScoreService(self.scores, self.users)
-        self.intelligence = IntelligenceService(IntelligenceRepository(session))
 
     async def get_asset_workspace(
         self,
@@ -460,10 +457,6 @@ class WorkspaceDataService:
             lambda: self._resolve_quote_map(list(dict.fromkeys([symbol, *normalized_watchlist_symbols]))),
         )
         quote_snapshot = quote_map.get(symbol, {})
-        regime = await measure(
-            "regime",
-            lambda: self.intelligence.get_market_intelligence(user_id, symbol, allow_compute=False),
-        )
         master = await measure("master_score", lambda: self.score_service.get_master_score(user_id, symbol))
         daily = await measure("daily_scores", lambda: self._daily_scores(user_id, symbol))
         session = getattr(self, "session", None)
@@ -526,10 +519,6 @@ class WorkspaceDataService:
                 selected_assessment=getattr(self.score_service, "last_master_assessment", None),
             ),
         )
-        finn_snapshot = await measure(
-            "finn_snapshot",
-            lambda: self._build_finn_snapshot(user_id, symbol, master_payload, regime, daily),
-        )
         timings_ms["total"] = round((perf_counter() - total_started) * 1000, 2)
         if timings_ms["total"] > 500:
             logger.info(
@@ -561,8 +550,6 @@ class WorkspaceDataService:
             "daily": daily,
             "master": master_payload,
             "watchlist": watchlist_payload,
-            "regime": regime,
-            "finn": finn_snapshot,
             "timings_ms": timings_ms,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "ai_calls": 0,
@@ -694,92 +681,6 @@ class WorkspaceDataService:
                 continue
             quote_map[symbol] = _materialize_quote_snapshot(row)
         return quote_map
-
-    async def _build_finn_snapshot(
-        self,
-        user_id: int,
-        symbol: str,
-        master_payload: dict[str, Any],
-        regime: dict[str, Any] | None,
-        daily: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        if not hasattr(self.session, "execute"):
-            return {
-                "status": "unavailable",
-                "source": "workspace_snapshot",
-                "symbol": symbol,
-                "headline": None,
-                "summary": None,
-                "risk_summary": None,
-                "master_bias": master_payload.get("master_bias") or "–",
-                "master_risk": master_payload.get("master_risk") or "–",
-                "regime": "unknown",
-                "strongest_category": None,
-                "categories": {},
-                "freshness": _freshness(master_payload.get("date"), STALE_AFTER_SECONDS["day"], "workspace_snapshot"),
-                "as_of": _iso(master_payload.get("date")),
-            }
-        categories = ("market", "macro", "technical")
-        insights: dict[str, dict[str, Any]] = {}
-        latest_dates: list[Any] = []
-
-        for category in categories:
-            component = (daily or {}).get(category) or {}
-            if component.get("score") is None:
-                continue
-            insights[category] = {
-                "summary": component.get("interpretation") or "",
-                "bias": "–",
-                "risk": "–",
-                "score": _number(component.get("score")),
-                "as_of": _iso((daily or {}).get("calculated_at")),
-            }
-            if (daily or {}).get("calculated_at"):
-                latest_dates.append((daily or {})["calculated_at"])
-
-        master_summary = str(master_payload.get("summary") or "").strip()
-        master_date = master_payload.get("date")
-        freshness = _freshness(master_date, STALE_AFTER_SECONDS["day"], "workspace_snapshot")
-        regime_label = (
-            regime.get("regime_label")
-            or regime.get("label")
-            or regime.get("phase")
-            or regime.get("market_phase")
-            or "unknown"
-        ) if isinstance(regime, dict) else "unknown"
-        strongest_category = max(
-            (
-                (name, _number((daily or {}).get(name, {}).get("score")))
-                for name in categories
-            ),
-            key=lambda item: item[1] if item[1] is not None else float("-inf"),
-            default=(None, None),
-        )[0]
-
-        if master_summary:
-            headline = master_summary
-            summary = master_summary
-            status = "available"
-        else:
-            headline = None
-            summary = None
-            status = "unavailable"
-
-        return {
-            "status": status,
-            "source": "workspace_snapshot",
-            "symbol": symbol,
-            "headline": headline,
-            "summary": summary,
-            "risk_summary": master_payload.get("outlook") or None,
-            "master_bias": master_payload.get("master_bias") or "–",
-            "master_risk": master_payload.get("master_risk") or "–",
-            "regime": regime_label,
-            "strongest_category": strongest_category,
-            "categories": insights,
-            "freshness": freshness,
-            "as_of": _iso(master_date or (max(latest_dates) if latest_dates else None)),
-        }
 
     async def _async_empty_dict(self) -> dict[str, Any]:
         return {}

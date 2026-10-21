@@ -7,10 +7,8 @@ from typing import Any, Dict, Optional
 
 from backend.engine.position_engine import calculate_position
 from backend.domain.finn_dca_plan_contract import benchmark_score, is_confirmed_dca_amount_rule
-from backend.engine.market_intelligence_engine import get_market_intelligence
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.engine.trade_plan_engine import build_trade_plan
-from backend.ai_core.regime_memory import get_regime_memory
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -23,8 +21,6 @@ DEFAULT_ACTION_RULES = {
     "min_confidence_to_buy": 60.0,
     "min_confidence_to_watch": 40.0,
     "min_market_score_to_buy": 55.0,
-    "min_market_pressure_to_buy": 0.52,
-    "max_transition_risk_to_buy": 0.60,
     "entry_tolerance_pct": 0.01,   # 1% boven entry nog ok
     "chase_limit_pct": 0.03,       # >3% boven entry = niet jagen
 }
@@ -76,18 +72,6 @@ def _normalize_scores(scores: Dict[str, Any]) -> Dict[str, Any]:
         "_source_available": availability,
         "_benchmark_weights": scores.get("_benchmark_weights") or {},
     }
-
-
-def _classify_risk_state(transition_risk: float, pressure: float) -> str:
-    if transition_risk > 0.75:
-        return "unstable"
-    if transition_risk > 0.60:
-        return "transition"
-    if pressure < 0.40:
-        return "defensive"
-    if pressure > 0.70 and transition_risk < 0.30:
-        return "risk_on"
-    return "neutral"
 
 
 def _normalize_setup_type(setup: Dict[str, Any], snapshot: Dict[str, Any]) -> str:
@@ -192,8 +176,6 @@ def _build_action_decision(
     snapshot: Dict[str, Any],
     levels: Dict[str, Any],
     normalized_scores: Dict[str, Any],
-    market_pressure: float,
-    transition_risk: float,
     rules: Dict[str, float],
     live_price: Optional[float],
     final_amount: float,
@@ -213,8 +195,6 @@ def _build_action_decision(
     min_confidence_to_buy = _safe_float(rules.get("min_confidence_to_buy"), 60.0) or 60.0
     min_confidence_to_watch = _safe_float(rules.get("min_confidence_to_watch"), 40.0) or 40.0
     min_market_score_to_buy = _safe_float(rules.get("min_market_score_to_buy"), 55.0) or 55.0
-    min_market_pressure_to_buy = _safe_float(rules.get("min_market_pressure_to_buy"), 0.52) or 0.52
-    max_transition_risk_to_buy = _safe_float(rules.get("max_transition_risk_to_buy"), 0.60) or 0.60
     entry_tolerance_pct = _safe_float(rules.get("entry_tolerance_pct"), 0.01) or 0.01
     chase_limit_pct = _safe_float(rules.get("chase_limit_pct"), 0.03) or 0.03
 
@@ -259,22 +239,6 @@ def _build_action_decision(
             "action": "hold",
             "reason": f"Market score too weak ({market_score:.1f})",
             "intent_note": "Market score below buy threshold",
-            "confidence_score": confidence_score,
-        }
-
-    if market_pressure < min_market_pressure_to_buy:
-        return {
-            "action": "hold",
-            "reason": f"Market pressure too weak ({market_pressure:.2f})",
-            "intent_note": "Insufficient market participation",
-            "confidence_score": confidence_score,
-        }
-
-    if transition_risk > max_transition_risk_to_buy:
-        return {
-            "action": "hold",
-            "reason": f"Transition risk too high ({transition_risk:.2f})",
-            "intent_note": "Avoid unstable market state",
             "confidence_score": confidence_score,
         }
 
@@ -379,67 +343,20 @@ def run_bot_brain(
     snapshot = _extract_snapshot(portfolio_context)
     setup_type = _normalize_setup_type(setup, snapshot)
 
-    # -------------------------------------------------
-    # 1️⃣ Regime Memory
-    # -------------------------------------------------
-    regime_memory = None
-    regime_label = None
-    regime_confidence = None
-
-    try:
-        regime_memory = get_regime_memory(user_id)
-        if isinstance(regime_memory, dict):
-            regime_label = regime_memory.get("regime_label") or regime_memory.get("label")
-            regime_confidence = _safe_float(regime_memory.get("confidence"))
-    except Exception as e:
-        logger.warning("Regime memory unavailable: %s", e)
-
-    # -------------------------------------------------
-    # 2️⃣ Market Intelligence
-    # -------------------------------------------------
+    # The bot's score context is the owner- and asset-scoped Score 2.0
+    # snapshot. Old user-wide regime memory and historical daily-score
+    # overlays must not decide eligibility or silently alter order size.
     verified_benchmark = benchmark_score(
         normalized_scores,
         normalized_scores.get("_benchmark_weights") or {},
         normalized_scores.get("_source_available") or {},
     )
     score_evidence_complete = verified_benchmark is not None
-    if score_evidence_complete:
-        # This risk context may use historical metrics, but it only receives
-        # current verified Score 2.0 components. It is not a second score.
-        market_intelligence = get_market_intelligence(
-            user_id=user_id,
-            scores=normalized_scores,
-        )
-    else:
-        # Keep fixed DCA evaluation available without inventing a market
-        # score or passing stale values into the legacy risk-context engine.
-        market_intelligence = {
-            "source_status": "insufficient_score_evidence",
-            "trend": {}, "metrics": {},
-            "state": {"market_pressure": 0.5, "transition_risk": 0.5,
-                      "trend_strength": 0.5, "risk_environment": 0.5},
-        }
-    if not market_intelligence:
-        raise RuntimeError("market_intelligence_empty")
-
-    trend_block = market_intelligence.get("trend") or {}
-    state_block = market_intelligence.get("state") or {}
-    metrics_block = {key: value for key, value in (market_intelligence.get("metrics") or {}).items()
-                     if key != "setup_quality"}
-
-    market_cycle = market_intelligence.get("cycle")
-    temperature = market_intelligence.get("temperature")
-
-    short_trend = trend_block.get("short")
-    mid_trend = trend_block.get("mid")
-    long_trend = trend_block.get("long")
-
-    volatility_state = state_block.get("volatility_state")
-    structure_bias = state_block.get("structure_bias")
-    risk_environment = _safe_float(state_block.get("risk_environment"), 0.5) or 0.5
-    trend_strength = _safe_float(state_block.get("trend_strength"), 0.5) or 0.5
-    market_pressure = _safe_float(state_block.get("market_pressure"), 0.5) or 0.5
-    transition_risk = _safe_float(state_block.get("transition_risk"), 0.5) or 0.5
+    market_intelligence = {
+        "source_status": "available" if score_evidence_complete else "insufficient_score_evidence",
+        "source": "score_2_0",
+        "benchmark_score": verified_benchmark,
+    }
 
     # -------------------------------------------------
     # 3️⃣ Position Engine
@@ -448,8 +365,6 @@ def run_bot_brain(
         position = calculate_position(
             setup=setup,
             scores=normalized_scores,
-            regime_memory=regime_memory,
-            transition_risk=transition_risk,
         )
 
         base_amount = _safe_float(position.get("base_amount"), 0.0) or 0.0
@@ -498,11 +413,6 @@ def run_bot_brain(
     alerts_active = monitoring
 
     # -------------------------------------------------
-    # 5️⃣ Risk State
-    # -------------------------------------------------
-    risk_state = _classify_risk_state(transition_risk, market_pressure)
-
-    # -------------------------------------------------
     # 6️⃣ Action Decision
     # -------------------------------------------------
     setup_result = _build_action_decision(
@@ -510,8 +420,6 @@ def run_bot_brain(
         snapshot=snapshot,
         levels=levels,
         normalized_scores=normalized_scores,
-        market_pressure=market_pressure,
-        transition_risk=transition_risk,
         rules=rules,
         live_price=live_price,
         final_amount=suggested_amount,
@@ -570,19 +478,10 @@ def run_bot_brain(
         setup_intent_note = "Review the saved DCA plan before execution"
         confidence_score = 0.0
 
-    # snapshot confidence blijft leading, maar fallback op regime/market als leeg
+    # Snapshot confidence is the only confidence source. A missing value is
+    # not reconstructed from old regime or market-pressure estimates.
     if confidence_score <= 0:
-        confidence_parts = []
-        if isinstance(regime_confidence, (int, float)):
-            rc = float(regime_confidence)
-            if rc > 1:
-                rc = rc / 100.0
-            confidence_parts.append(_clamp(rc, 0.0, 1.0))
-
-        confidence_parts.append(_clamp(1.0 - transition_risk, 0.0, 1.0))
-        confidence_parts.append(_clamp(market_pressure, 0.0, 1.0))
-
-        confidence = round(sum(confidence_parts) / max(1, len(confidence_parts)), 3)
+        confidence = 0.0
     else:
         confidence = round(_clamp(confidence_score / 100.0, 0.0, 1.0), 3)
 
@@ -677,8 +576,7 @@ def run_bot_brain(
     # 9️⃣ 🔥 CONTEXT (GEEN SCORE)
     # -------------------------------------------------
     trade_context = {
-        "risk_environment": round(_clamp(risk_environment, 0.0, 1.0), 4) if score_evidence_complete else None,
-        "trend_strength_reference": round(_clamp(trend_strength, 0.0, 1.0), 4) if score_evidence_complete else None,
+        "benchmark_score_reference": verified_benchmark,
         "setup_score_reference": normalized_scores.get("setup_score"),
     }
 
@@ -713,7 +611,7 @@ def run_bot_brain(
     }
 
     brain_context = {
-        "regime": regime_label,
+        "regime": None,
         "reason": strategy_reason,
     }
 
@@ -741,23 +639,23 @@ def run_bot_brain(
         "setup_type": setup_type,
         "setup_intent_note": setup_intent_note,
 
-        "regime": regime_label,
-        "cycle": market_cycle,
-        "temperature": temperature,
+        "regime": None,
+        "cycle": None,
+        "temperature": None,
 
         "trend": {
-            "short": short_trend,
-            "mid": mid_trend,
-            "long": long_trend,
+            "short": None,
+            "mid": None,
+            "long": None,
         },
 
-        "market_pressure": round(_clamp(market_pressure, 0.0, 1.0), 4) if score_evidence_complete else None,
-        "transition_risk": round(_clamp(transition_risk, 0.0, 1.0), 4) if score_evidence_complete else None,
-        "volatility_state": volatility_state,
-        "trend_strength": round(_clamp(trend_strength, 0.0, 1.0), 4) if score_evidence_complete else None,
-        "structure_bias": structure_bias,
-        "risk_environment": risk_environment,
-        "risk_state": risk_state,
+        "market_pressure": None,
+        "transition_risk": None,
+        "volatility_state": None,
+        "trend_strength": None,
+        "structure_bias": None,
+        "risk_environment": None,
+        "risk_state": None,
 
         "base_amount": round(float(base_amount), 2),
         "exposure_multiplier": exposure_multiplier,
@@ -778,7 +676,7 @@ def run_bot_brain(
         "trade_plan": trade_plan,
 
         "metrics": {
-            **metrics_block,
+            "benchmark_score": verified_benchmark,
             "position_size": intent_position_size,
             "execution_position_size": execution_position_size,
         },
@@ -786,7 +684,6 @@ def run_bot_brain(
         "debug": {
             "scores": normalized_scores,
             "market_intelligence": market_intelligence,
-            "regime_memory": regime_memory,
             "decision_result": decision_result,
             "base_amount": base_amount,
             "suggested_amount": suggested_amount,

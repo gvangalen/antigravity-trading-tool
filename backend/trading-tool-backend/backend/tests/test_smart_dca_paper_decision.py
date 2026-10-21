@@ -11,18 +11,89 @@ from backend.engine.guardrails_engine import apply_guardrails
 
 @pytest.fixture
 def paper_engines(monkeypatch):
-    monkeypatch.setattr(bot_brain, "get_regime_memory", lambda user_id: None)
-    monkeypatch.setattr(bot_brain, "get_market_intelligence", lambda **kwargs: {
-        "trend": {}, "state": {
-            "market_pressure": 0.8, "transition_risk": 0.1,
-        }, "metrics": {},
-    })
     monkeypatch.setattr(bot_brain, "apply_guardrails", lambda **kwargs: {
         "allowed": kwargs["proposed_amount_eur"] > 0,
         "adjusted_amount_eur": kwargs["proposed_amount_eur"],
         "warnings": [], "blocked_by": None,
     })
     monkeypatch.setattr(bot_brain, "build_trade_plan", lambda **kwargs: {})
+
+
+def test_bot_decision_does_not_read_user_wide_legacy_regime(paper_engines):
+    _, strategy = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "ETH Smart", "base_amount": 100,
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+        "low_threshold": 40, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 150,
+    })
+    scores = {
+        "market_score": 80, "macro_score": 80, "technical_score": 80,
+        "_benchmark_weights": {key: 1 / 3 for key in
+                               ("market_score", "macro_score", "technical_score")},
+        "_source_available": {key: True for key in
+                              ("market_score", "macro_score", "technical_score")},
+    }
+
+    first = bot_brain.run_bot_brain(
+        user_id=1, setup={**strategy, "setup_type": "dca", "symbol": "ETH"},
+        scores=scores,
+    )
+    second = bot_brain.run_bot_brain(
+        user_id=2, setup={**strategy, "setup_type": "dca", "symbol": "ETH"},
+        scores=scores,
+    )
+
+    for decision in (first, second):
+        assert decision["action"] == "buy"
+        assert decision["amount_eur"] == 150
+        assert decision["exposure_multiplier"] == 1
+        assert decision["metrics"]["benchmark_score"] == 80
+        assert decision["market_pressure"] is None
+        assert decision["transition_risk"] is None
+        assert decision["debug"]["market_intelligence"]["source"] == "score_2_0"
+
+
+def test_trade_decision_uses_score2_and_still_passes_cash_guardrails(monkeypatch):
+    guardrail_calls = []
+
+    def guardrails(**kwargs):
+        guardrail_calls.append(kwargs)
+        return {
+            "allowed": kwargs["cash_balance_eur"] >= kwargs["proposed_amount_eur"] > 0,
+            "adjusted_amount_eur": kwargs["proposed_amount_eur"]
+            if kwargs["cash_balance_eur"] >= kwargs["proposed_amount_eur"] else 0,
+            "warnings": [], "blocked_by": "cash" if kwargs["cash_balance_eur"] == 0 else None,
+        }
+
+    monkeypatch.setattr(bot_brain, "apply_guardrails", guardrails)
+    monkeypatch.setattr(bot_brain, "build_trade_plan", lambda **kwargs: {})
+    setup = {"setup_type": "trade", "symbol": "ETH", "execution_mode": "fixed", "base_amount": 100}
+    scores = {
+        "market_score": 70, "macro_score": 70, "technical_score": 70,
+        "_benchmark_weights": {key: 1 / 3 for key in
+                               ("market_score", "macro_score", "technical_score")},
+        "_source_available": {key: True for key in
+                              ("market_score", "macro_score", "technical_score")},
+    }
+    strategy = {"setup_type": "trade", "confidence_score": 80,
+                "entry": 100, "stop_loss": 95, "targets": [110]}
+
+    ready = bot_brain.run_bot_brain(
+        user_id=1, setup=setup, scores=scores,
+        portfolio_context={"active_strategy": strategy, "live_price": 100,
+                           "cash_balance_eur": 1000, "portfolio_value_eur": 1000},
+    )
+    no_cash = bot_brain.run_bot_brain(
+        user_id=1, setup=setup, scores=scores,
+        portfolio_context={"active_strategy": strategy, "live_price": 100,
+                           "cash_balance_eur": 0, "portfolio_value_eur": 1000},
+    )
+
+    assert ready["action"] == "buy" and ready["amount_eur"] == 100
+    assert ready["metrics"]["benchmark_score"] == 70
+    assert ready["exposure_multiplier"] == 1
+    assert no_cash["action"] == "hold" and no_cash["amount_eur"] == 0
+    assert len(guardrail_calls) == 2
 
 
 @pytest.mark.parametrize("score,expected", [(20, 50), (50, 100), (80, 150)])
@@ -292,11 +363,6 @@ def test_fixed_dca_with_unknown_scores_keeps_amount_without_fake_score(paper_eng
 
 @pytest.mark.parametrize("mode,expected", [("fixed", 100), ("score_bands", 50)])
 def test_confirmed_dca_is_not_discounted_twice_by_the_macro_guardrail(monkeypatch, mode, expected):
-    monkeypatch.setattr(bot_brain, "get_regime_memory", lambda _user_id: None)
-    monkeypatch.setattr(bot_brain, "get_market_intelligence", lambda **_: {
-        "trend": {}, "state": {"market_pressure": 0.8, "transition_risk": 0.1},
-        "metrics": {},
-    })
     monkeypatch.setattr(bot_brain, "build_trade_plan", lambda **_: {})
     fields = {
         "setup_type": "dca", "name": "BTC confirmed", "base_amount": 100,
@@ -346,11 +412,6 @@ def test_confirmed_dca_is_not_discounted_twice_by_the_macro_guardrail(monkeypatc
 
 
 def test_positive_match_and_budget_do_not_create_paper_cash(monkeypatch):
-    monkeypatch.setattr(bot_brain, "get_regime_memory", lambda _user_id: None)
-    monkeypatch.setattr(bot_brain, "get_market_intelligence", lambda **_: {
-        "trend": {}, "state": {"market_pressure": 0.8, "transition_risk": 0.1},
-        "metrics": {},
-    })
     monkeypatch.setattr(bot_brain, "build_trade_plan", lambda **_: {})
     _, strategy = split_confirmed_dca_plan({
         "setup_type": "dca", "name": "ETH fixed", "dca_amount_mode": "fixed",

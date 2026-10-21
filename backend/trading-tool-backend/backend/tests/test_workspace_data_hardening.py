@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, patch
 
 from backend.infrastructure.repositories.asset_catalog_repository import AssetCatalogRepository
 from backend.services.asset_catalog_service import AssetCatalogService
-from backend.services.intelligence_service import IntelligenceService
 from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_service import MarketDataService
 from backend.services.technical_data_service import TechnicalDataService
@@ -321,81 +320,6 @@ def test_configured_indicator_pending_status_survives_workspace_projection():
     assert category["score"]["status"] == "insufficient_data"
 
 
-def test_intelligence_read_returns_insufficient_data_without_running_engine():
-    repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=None))
-    service = IntelligenceService(repository)
-    service.invalidate_cached_result(7, "BTC")
-
-    result = asyncio.run(service.get_market_intelligence(7, "BTC"))
-
-    assert result["available"] is False
-    assert result["data_status"] == "insufficient_data"
-    assert result["reason"] == "daily_scores_missing"
-    assert result["symbol"] == "BTC"
-
-
-def test_intelligence_read_only_mode_returns_pending_without_running_engine(monkeypatch):
-    daily_score = SimpleNamespace(
-        macro_score=50,
-        technical_score=55,
-        market_score=60,
-        setup_score=40,
-        report_date=date(2026, 8, 11),
-    )
-    repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=daily_score), db=object())
-    service = IntelligenceService(repository)
-    service.invalidate_cached_result(7, "BTC")
-    invoked = False
-
-    def fail_if_engine_runs(**_kwargs):
-        nonlocal invoked
-        invoked = True
-        raise AssertionError("market intelligence engine should not run in read-only mode")
-
-    monkeypatch.setattr("backend.services.intelligence_service.get_market_intelligence", fail_if_engine_runs)
-    monkeypatch.setattr(
-        "backend.services.setup_market_match_service.SetupMarketMatchService",
-        lambda _db: SimpleNamespace(for_asset=AsyncMock(return_value={
-            "source_status": "available", "matches": [], "benchmark_score": 55,
-        })),
-    )
-
-    result = asyncio.run(service.get_market_intelligence(7, "BTC", allow_compute=False))
-
-    assert invoked is False
-    assert result["available"] is False
-    assert result["data_status"] == "pending_refresh"
-    assert result["reason"] == "market_intelligence_not_warmed"
-    assert result["symbol"] == "BTC"
-
-
-def test_intelligence_uses_current_setup_match_without_legacy_daily_score(monkeypatch):
-    daily_score = SimpleNamespace(
-        macro_score=50, technical_score=60, market_score=70,
-        setup_score=99, report_date=date.today(),
-    )
-    repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=daily_score), db=object())
-    service = IntelligenceService(repository)
-    service.invalidate_cached_result(8, "ETH")
-    monkeypatch.setattr(
-        "backend.services.setup_market_match_service.SetupMarketMatchService",
-        lambda _db: SimpleNamespace(for_asset=AsyncMock(return_value={
-            "source_status": "available", "matches": [], "benchmark_score": 60,
-        })),
-    )
-    observed = {}
-
-    def engine(**kwargs):
-        observed.update(kwargs)
-        return {"metrics": {"setup_quality": 50}}
-
-    monkeypatch.setattr("backend.services.intelligence_service.get_market_intelligence", engine)
-    result = asyncio.run(service.get_market_intelligence(8, "ETH"))
-    assert observed["scores"]["setup"] == 50
-    assert result["metrics"]["setup_quality"] is None
-    assert result["setup_match_status"] == "no_active_match"
-
-
 def test_watchlist_uses_one_batch_for_quotes_and_scores_then_assesses_each_asset(monkeypatch):
     service = object.__new__(WorkspaceDataService)
     service.session = None
@@ -701,7 +625,8 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
     service.score_service = SimpleNamespace(
         get_master_score=AsyncMock(return_value=SimpleNamespace(dict=lambda: {"weights": {}, "date": None}))
     )
-    service.intelligence = SimpleNamespace(get_market_intelligence=AsyncMock(return_value=None))
+    service.intelligence = SimpleNamespace(get_market_intelligence=AsyncMock(
+        side_effect=AssertionError("Retired intelligence must not run for a workspace")))
     service._market_rows = AsyncMock(return_value=[])
     service._macro_rows = AsyncMock(return_value=[])
     service._technical_rows = AsyncMock(return_value=[])
@@ -725,6 +650,9 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
     assert result["quote"]["price"] == 64000.0
     assert result["quote"]["change_24h"] == 1.5
     assert result["quote"]["volume"] == 1200.0
+    assert "regime" not in result
+    assert "finn" not in result
+    service.intelligence.get_market_intelligence.assert_not_awaited()
     for method in (service._market_rows, service._macro_rows, service._technical_rows):
         assert method.await_args.kwargs["asset_class"] == "crypto"
     service.market.get_latest_snapshot.assert_awaited_once_with("BTC")
