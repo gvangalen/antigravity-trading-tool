@@ -138,6 +138,21 @@ class ReviewToolAdapter:
                     "pnl_basis": review["pnl_status"],
                     "has_original_plan": review["has_plan"],
                     "evidence_ids": review["evidence_ids"][:20],
+                    "confirmed_lesson": (
+                        {
+                            "lesson_text": re.sub(
+                                r"[\x00-\x1f\x7f]+", " ",
+                                str(review["confirmed_lesson"]["lesson_text"]),
+                            )[:500],
+                            "confirmed_at": review["confirmed_lesson"]["confirmed_at"],
+                            "evidence_revision": review["confirmed_lesson"].get("evidence_revision"),
+                            "source": "user_confirmed_reflection_not_trade_fact_or_original_plan",
+                        }
+                        if isinstance(review.get("confirmed_lesson"), dict)
+                        and review["confirmed_lesson"].get("lesson_text")
+                        and review["confirmed_lesson"].get("confirmed_at")
+                        else None
+                    ),
                 } for review in closed_reviews],
             ),
             "summary": {"title": "review_history", "kind": "bot_decisions_and_closed_trades", "asset": asset,

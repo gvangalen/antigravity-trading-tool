@@ -1251,10 +1251,12 @@ class FinnResponsesAnswerVerifier:
     def _currency_amounts(text: str) -> set[str]:
         amounts = set()
         for match in re.finditer(
-            r"(?:[€$]\s*([\d][\d.,]*)|([\d][\d.,]*)\s*(?:[€$]|\beuros?\b|\beur\b|\busd\b|\bdollars?\b))",
+            r"(?:[+−-]?\s*[€$]\s*[+−-]?\s*([\d][\d.,]*)|"
+            r"[+−-]?\s*\b(?:eur|usd)\b\s*[+−-]?\s*([\d][\d.,]*)|"
+            r"[+−-]?\s*([\d][\d.,]*)\s*(?:[€$]|\beuros?\b|\beur\b|\busd\b|\bdollars?\b))",
             text.casefold(),
         ):
-            value = (match.group(1) or match.group(2)).rstrip(".,")
+            value = (match.group(1) or match.group(2) or match.group(3)).rstrip(".,")
             if "," in value and "." in value:
                 decimal_separator = "," if value.rfind(",") > value.rfind(".") else "."
             elif "," in value or "." in value:
@@ -1271,6 +1273,122 @@ class FinnResponsesAnswerVerifier:
             except InvalidOperation:
                 pass
         return amounts
+
+    @classmethod
+    def _strip_verified_review_pnl_claims(
+        cls, answer: str, evidence: tuple[dict[str, Any], ...], message: str = "",
+    ) -> str | None:
+        """Remove only PnL amounts bound to the exact completed review row.
+
+        Other currency claims still pass through the ordinary amount verifier.
+        Narrative `items` and an unrelated review's PnL never ground a claim.
+        """
+        trades: dict[int, Decimal] = {}
+        for item in evidence:
+            if item.get("scope") != "read_review_history" or item.get("status") != "completed":
+                continue
+            data = item.get("data")
+            for trade in (data.get("closed_trades") or []) if isinstance(data, dict) else []:
+                if not isinstance(trade, dict) or type(trade.get("review_id")) is not int:
+                    continue
+                raw = trade.get("pnl_eur")
+                if not isinstance(raw, str):
+                    continue
+                try:
+                    pnl = Decimal(raw)
+                except InvalidOperation:
+                    continue
+                if pnl.is_finite():
+                    review_id = trade["review_id"]
+                    if review_id in trades and trades[review_id] != pnl:
+                        return None
+                    trades[review_id] = pnl
+        if not trades:
+            return answer
+
+        money = re.compile(
+            r"(?<!\w)(?P<prefix>[+−-]?\s*€\s*[+−-]?\s*)(?P<number>\d[\d.,]*)"
+            r"|(?<!\w)(?P<code_prefix>[+−-]?\s*EUR\s*[+−-]?\s*)(?P<code_number>\d[\d.,]*)"
+            r"|(?<!\w)(?P<suffix_sign>[+−-]?\s*)(?P<suffix_number>\d[\d.,]*)"
+            r"\s*(?:\beuros?\b|\beur\b)", re.I,
+        )
+        pnl_terms = re.compile(
+            r"\b(?:resultaat|result|ergebnis|pnl|winst|verlies|profit|loss|gain|"
+            r"rendement|opbrengst|gewinn|verlust|leverde|yielded|brachte)\b", re.I,
+        )
+        usd_amount = re.compile(
+            r"(?:\$\s*[+−-]?\s*\d|\bUSD\s*[+−-]?\s*\d|"
+            r"\d\s*(?:\$|\bUSD\b|\bdollars?\b))", re.I,
+        )
+        loss_terms = re.compile(r"\b(?:verlies|loss|verlust|negatief|negative)\b", re.I)
+        gain_terms = re.compile(r"\b(?:winst|profit|gain|gewinn|positief|positive)\b", re.I)
+        review_ref = re.compile(r"\b(?:trade[ -]?review|review|trade)\s*#\s*(\d+)\b", re.I)
+        review_is_only_source = all(
+            item.get("scope") == "read_review_history"
+            for item in evidence if item.get("status") == "completed"
+        )
+        asks_about_review_result = bool(re.search(
+            r"\b(?:review|trade|resultaat|result|ergebnis|pnl|winst|verlies|"
+            r"profit|loss|gain|rendement|opbrengst|gewinn|verlust)\b",
+            message, re.I,
+        ))
+        segments = re.split(r"(?<!\d)\.(?!\d)|[;!?\n]", answer)
+        checked: list[str] = []
+        for segment in segments:
+            matches = list(money.finditer(segment))
+            has_usd_amount = bool(usd_amount.search(segment))
+            if not matches and not has_usd_amount:
+                checked.append(segment)
+                continue
+            ids = {int(value) for value in review_ref.findall(segment)}
+            # A completed closed-review read exposes only one typed monetary
+            # fact: its EUR PnL. Do not let a value echoed from the user's
+            # question establish a different outcome via a synonym for
+            # "resultaat" (or a different currency).
+            if not (ids or pnl_terms.search(segment) or asks_about_review_result
+                    or (review_is_only_source and len(trades) == 1)):
+                checked.append(segment)
+                continue
+            # A completed review reports PnL in EUR. A user mentioning a USD
+            # amount does not establish a USD result for that review.
+            if has_usd_amount:
+                return None
+            if not matches:
+                checked.append(segment)
+                continue
+            if len(ids) > 1:
+                return None
+            review_id = next(iter(ids)) if ids else next(iter(trades)) if len(trades) == 1 else None
+            if review_id not in trades:
+                return None
+            recorded = trades[review_id]
+            loss = bool(loss_terms.search(segment)) and not bool(re.search(r"\b(?:geen|no|kein)\s+verlies\b", segment, re.I))
+            gain = bool(gain_terms.search(segment))
+            if loss and gain:
+                return None
+            for match in reversed(matches):
+                raw_number = (match.group("number") or match.group("code_number")
+                              or match.group("suffix_number") or "")
+                values = cls._currency_amounts("€" + raw_number)
+                if len(values) != 1:
+                    return None
+                magnitude = Decimal(next(iter(values)))
+                marker = (match.group("prefix") or match.group("code_prefix")
+                          or match.group("suffix_sign") or "")
+                explicit_negative = "-" in marker or "−" in marker
+                if magnitude != abs(recorded):
+                    return None
+                if recorded < 0 and not (explicit_negative or loss):
+                    return None
+                if recorded > 0 and (explicit_negative or loss):
+                    return None
+                if gain and recorded < 0:
+                    return None
+                if recorded == 0 and (gain or loss):
+                    return None
+                segment = segment[:match.start()] + segment[match.end():]
+            checked.append(segment)
+        return " ".join(checked)
 
     @staticmethod
     def _static_geometry_complete(
@@ -1405,7 +1523,9 @@ class FinnResponsesAnswerVerifier:
         # Their values are checked against the linked strategy separately by
         # _saved_strategy_levels_supported. Do not reject an otherwise grounded
         # readback just because the model formats a saved price with "€".
-        amount_answer = answer
+        amount_answer = cls._strip_verified_review_pnl_claims(answer, evidence, message)
+        if amount_answer is None:
+            return False
         if any(item.get("scope") == "read_linked_strategy" and item.get("status") == "completed"
                for item in evidence):
             level_amount = re.compile(
@@ -1416,7 +1536,7 @@ class FinnResponsesAnswerVerifier:
                 re.IGNORECASE,
             )
             amount_answer = level_amount.sub(
-                lambda match: match.group(0).replace(match.group("price"), "", 1), answer,
+                lambda match: match.group(0).replace(match.group("price"), "", 1), amount_answer,
             )
         claims = cls._currency_amounts(amount_answer)
         if not claims:
@@ -1826,12 +1946,20 @@ class FinnResponsesAnswerVerifier:
         *, answer: str, message: str, previous_answer: str = "",
         evidence: tuple[dict[str, Any], ...],
     ) -> bool:
+        def finite_decimal(value: str) -> bool:
+            try:
+                return Decimal(value).is_finite()
+            except InvalidOperation:
+                return False
+
         def units(text: str) -> set[str]:
             normalized = text.casefold()
             found = set()
-            if re.search(r"(?:€\s*\d|\d\s*€|\d\s*(?:eur|euros?)\b)", normalized):
+            if re.search(r"(?:€\s*[+−-]?\s*\d|\d\s*€|\d\s*(?:eur|euros?)\b|"
+                         r"\beur\s*[+−-]?\s*\d)", normalized):
                 found.add("EUR")
-            if re.search(r"(?:\$\s*\d|\d\s*\$|\d\s*(?:usd|dollars?)\b)", normalized):
+            if re.search(r"(?:\$\s*[+−-]?\s*\d|\d\s*\$|\d\s*(?:usd|dollars?)\b|"
+                         r"\busd\s*[+−-]?\s*\d)", normalized):
                 found.add("USD")
             return found
 
@@ -1852,7 +1980,16 @@ class FinnResponsesAnswerVerifier:
 
         for item in evidence:
             if item.get("status") == "completed":
-                collect_currency(item.get("data"))
+                data = item.get("data")
+                collect_currency(data)
+                if item.get("scope") == "read_review_history" and isinstance(data, dict):
+                    if any(
+                        isinstance(trade, dict)
+                        and isinstance(trade.get("pnl_eur"), str)
+                        and finite_decimal(trade["pnl_eur"])
+                        for trade in data.get("closed_trades") or []
+                    ):
+                        allowed.add("EUR")
         return claimed <= allowed
 
     async def _personal_advice_is_grounded(

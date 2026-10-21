@@ -11519,6 +11519,127 @@ def test_responses_money_claims_require_current_or_immediate_verified_evidence()
     )
 
 
+def test_closed_review_decimal_pnl_grounds_only_its_recorded_eur_amount():
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = ({
+        "scope": "read_review_history", "status": "completed",
+        "data": {"items": ["Narrative text: cash €900"], "closed_trades": [
+            {"review_id": 123, "pnl_eur": "0.00", "pnl_basis": "paper_cash_flow_including_simulated_costs"},
+        ]},
+    },)
+    answer = "Het vastgelegde Paper-resultaat van review #123 is €0."
+    assert verifier._amounts_supported(
+        answer=answer, message="Lees mijn review #123.", previous_answer="", evidence=evidence,
+    )
+    assert verifier._currency_units_supported(
+        answer=answer, message="Lees mijn review #123.", evidence=evidence,
+    )
+    assert not verifier._amounts_supported(
+        answer="Het resultaat was €900.", message="Lees mijn review #123.",
+        previous_answer="", evidence=evidence,
+    )
+    assert not verifier._amounts_supported(
+        answer="Het resultaat was €0.", message="Lees mijn review #123.",
+        previous_answer="", evidence=({**evidence[0], "status": "unavailable"},),
+    )
+    assert not verifier._currency_units_supported(
+        answer=answer, message="Lees mijn review #123.",
+        evidence=({**evidence[0], "data": {"closed_trades": [{"pnl_eur": "NaN"}]}},),
+    )
+
+
+@pytest.mark.parametrize("saved,answer,expected", [
+    ("-9.50", "Review #123 had een verlies van €9,50.", True),
+    ("-9.50", "Review #123 had een resultaat van -€9,50.", True),
+    ("-9.50", "Review #123 had een resultaat van €-9,50.", True),
+    ("-9.50", "Review #123 had een resultaat van €9,50.", False),
+    ("9.50", "Review #123 had winst van €9,50.", True),
+    ("9.50", "Review #123 had verlies van €9,50.", False),
+    ("9.50", "Review #123 had een resultaat van €-9,50.", False),
+    ("9.50", "Review #123 had een resultaat van €-900.", False),
+    ("0.00", "Review #123 had een Paper-resultaat van €0.", True),
+    ("-9.50", "Review #123 had een Paper-resultaat EUR -9,50.", True),
+    ("-9.50", "Review #123 had een Paper-resultaat EUR 900.", False),
+    ("-9.50", "Review #123 had een Paper-resultaat EUR 9,50.", False),
+    ("0.00", "Review #123 had €0 winst.", False),
+    ("0.00", "Review #123 had €0 verlies.", False),
+    ("5.00", "Review #123 leverde €90 op.", False),
+    ("5.00", "Review #123 leverde €5 op.", True),
+    ("5.00", "Review #123 had $90 resultaat.", False),
+    ("5.00", "Review #123 bracht €90 op.", False),
+    ("5.00", "Review #123 netted $90.", False),
+    ("5.00", "Review #123 resultaat €+900.", False),
+    ("5.00", "Review #123 resultaat EUR +900.", False),
+    ("5.00", "Review #123 resultaat €+5.", True),
+])
+def test_closed_review_pnl_sign_and_magnitude_must_match(saved, answer, expected):
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = ({"scope": "read_review_history", "status": "completed", "data": {
+        "closed_trades": [{"review_id": 123, "pnl_eur": saved}],
+    }},)
+    assert verifier._amounts_supported(
+        answer=answer, message="Lees review #123.", previous_answer="", evidence=evidence,
+    ) is expected
+
+
+def test_closed_review_result_cannot_be_grounded_by_the_users_wrong_amount():
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = ({"scope": "read_review_history", "status": "completed", "data": {
+        "closed_trades": [{"review_id": 123, "pnl_eur": "5.00"}],
+    }},)
+    for answer, question in (
+        ("Review #123 leverde €90 op.", "Was het resultaat €90?"),
+        ("Review #123 had $90 resultaat.", "Was het resultaat $90?"),
+        ("Review #123 bracht €90 op.", "Was het resultaat €90?"),
+        ("Review #123 netted $90.", "Was het resultaat $90?"),
+        ("Review #123 resultaat €+900.", "Wat was het resultaat?"),
+        ("Review #123 resultaat EUR +900.", "Wat was het resultaat?"),
+    ):
+        assert not verifier._amounts_supported(
+            answer=answer, message=question, previous_answer="", evidence=evidence,
+        )
+        if "$" in answer:
+            assert verifier._currency_units_supported(
+                answer=answer, message=question, evidence=evidence,
+            )  # The amount check, not a user-echoed unit, blocks the claim.
+
+
+def test_closed_review_result_stays_bound_when_other_evidence_is_present():
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = (
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "closed_trades": [{"review_id": 123, "pnl_eur": "5.00"}],
+        }},
+        {"scope": "read_bot_status", "status": "completed", "data": {"budget": 90}},
+    )
+    assert not verifier._amounts_supported(
+        answer="Dat bracht €90 op.", message="Was het resultaat €90?",
+        previous_answer="", evidence=evidence,
+    )
+
+
+def test_closed_review_pnl_cannot_be_attributed_to_another_review():
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = ({"scope": "read_review_history", "status": "completed", "data": {
+        "closed_trades": [
+            {"review_id": 123, "pnl_eur": "5.00"},
+            {"review_id": 456, "pnl_eur": "90.00"},
+        ],
+    }},)
+    for answer in (
+        "Review #123 had een resultaat van €90.",
+        "Het resultaat was €90.",
+        "Review #123 had een resultaat van €5 en review #456 van €90.",
+    ):
+        assert not verifier._amounts_supported(
+            answer=answer, message="Lees mijn reviews.", previous_answer="", evidence=evidence,
+        )
+    assert verifier._amounts_supported(
+        answer="Review #456 had een resultaat van €90.",
+        message="Lees mijn reviews.", previous_answer="", evidence=evidence,
+    )
+
+
 def test_saved_price_labels_do_not_turn_into_unverified_budget_claims():
     verifier = FinnResponsesAnswerVerifier()
     evidence = ({
