@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: huidige grens (21 oktober 2026)
 
-Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De gerichte cutover-reparatie is via
+Phase: `LOCAL_VALIDATED_AWAITING_PR`. De gerichte cutover-reparatie is via
 [PR #512](https://github.com/gvangalen/antigravity-trading-tool/pull/512)
 gemerged als product-SHA `b2c2364429b125fe9e2cf8b8ff1d9255ad2beb1d`.
 [Main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39582692401)
@@ -14,8 +14,13 @@ en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/r
 slaagden. Op 21 oktober 2026 gaven
 `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json` elk HTTP 200 en exact deze SHA.
-Dit is Build-identiteitsbewijs; een onafhankelijke ingelogde QA-verdict
-ontbreekt nog. De
+Dit is Build-identiteitsbewijs. De onafhankelijke ingelogde desktop-QA op de
+latere document-SHA `3335ddb2e663b6ac6d7c35c3d4dd27f531acc0c3`
+gaf `NOT_ACCEPTED`: de exacte keuze om niet-opslagbare setupvoorwaarden weg
+te laten eindigde in een terminale fout, een strategieaanvraag voor een
+opgeslagen setup gaf geen concept, en “Mijn Plan” werd als mogelijke
+setupnaam behandeld. Scores, dagrapport en Paper-status waren consistent.
+De
 opruiming van de oude mobiele briefingresten is als [PR #511](https://github.com/gvangalen/antigravity-trading-tool/pull/511)
 gemerged. Auto Deploy slaagde en publieke backend-health en frontend-buildinfo
 gaven beide HTTP 200 op `83beb016eb2782a12abb0560d0b8300ac4414dd7`.
@@ -51,7 +56,30 @@ geen opslag of order. De volledige lokale workeractiecontractmatrix slaagde
 `2ef752e9f38301e0b0a288698482017693e13cb1fee7e282506e308147c75554`.
 De matrix registreert nul brokerorders, nul Live-bots en nul
 productieverbindingen. Deze worker- en providerbewijzen zijn lokaal;
-onafhankelijke ingelogde QA moet nog volgen.
+een nieuwe onafhankelijke ingelogde QA op de herstelrelease moet nog volgen.
+
+De nieuwe lokale herstelbranch `codex/finn-cutover-guided-repair` hervat een exact gekozen setup-intrekking vóór
+de modelselector. Een strategie die automatische RSI-, relatieve stop-/doel-
+of procentuele risicoregels vraagt, krijgt geen bevestigbaar concept zolang
+die regels niet in het getypeerde contract passen. Na de expliciete keuze om
+ze weg te laten, leest de server de opgeslagen parent-setup opnieuw met de
+eigenaarsscope en houdt de opgegeven naam, asset en basisbedrag vast. Een
+lokale echte workerproef op de laatste bronstand doorliep achtereenvolgens
+de blokkade, de keuze en vaste entry 76.000 / stop 72.000 / targets 82.000
+en 86.000: pas op de derde beurt ontstond een voorstel. Een andere, expliciet
+nieuw benoemde strategie kan een eerder geblokkeerd concept vervangen; een
+vervolgvraag over dezelfde strategie houdt de blokkade vast. Er is daarbij
+niets bevestigd of uitgevoerd. De volledige backend-suite telt op deze stand
+**3674 geslaagd, 4 bestaande skips**; webbuild, webtypecheck, i18n-lint en
+-tests, command- en voorsteltests en `audit:high` slaagden (één moderate
+Next.js-advisory). De echte Responses-ontwikkelset slaagde **20/20** en de
+regressieset **109/109**, zonder provider-, schema- of parserfout. De volledige
+lokale werkermatrix slaagde **16/16**, plus **19/19** adaptertests; artifact
+SHA-256 `1b20710b4820419ddbedef5838e1c20dce110d7a40668923785d64a9c03e81b9`.
+De matrix noteerde nul brokerorders, nul Live-bots en nul productieverbindingen.
+Security en Architecture vonden na de laatste randgevalreparaties geen
+concrete grens- of lifecyclefout. Deze branch is **niet live**; onafhankelijke
+ingelogde QA volgt pas na CI, Auto Deploy en Build-identiteitscontrole.
 
 ## Mobiele resten van de oude briefing verwijderd (21 oktober 2026)
 

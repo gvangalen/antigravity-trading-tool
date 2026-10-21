@@ -41,7 +41,10 @@ from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_run_service import (
     FinnV2RunService, _simple_coach_experiment_enabled, _raw_coach_experiment_enabled,
     _minimal_read_answer, _minimal_read_answers_enabled, _explicit_setup_rule_waiver,
-    _proposal_from_blocked_setup,
+    _proposal_from_blocked_setup, _explicit_strategy_rule_waiver,
+    _proposal_from_blocked_strategy, _safe_blocked_strategy_inputs,
+    _discard_superseded_strategy_rule_block,
+    _strategy_rule_is_unencoded,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
@@ -4458,6 +4461,7 @@ def test_explicit_strategy_draft_request_accepts_domain_modifiers(message):
     "Maak een DCA-strategie voor mijn setup?",
     "Wat als ik een DCA-strategie maak?",
     "Maak geen strategie voor mijn ETH-setup.",
+    "Maak geen Paper-strategie voor mijn BTC-setup.",
     "Vergelijk mijn DCA-strategie met mijn tradeplan.",
 ])
 def test_strategy_draft_request_does_not_capture_coaching(message):
@@ -4501,6 +4505,17 @@ def test_strategy_creation_after_named_recent_setup_is_a_new_proposal_request():
     ))
     assert result.proposal_analysis.request_plan.operation_id == "create_strategy"
     assert front.proposals.from_call.call_args.kwargs["call"].operation_id == "create_strategy"
+
+
+def test_paper_strategy_request_with_relative_rules_remains_an_action_request():
+    message = (
+        "Maak een Paper-strategie voor mijn opgeslagen setup BTC QA Cutover 2110. "
+        "Naam: BTC QA Strategie 3335. BTC, 4H, vast bedrag €80 per uitvoering, "
+        "instapvoorwaarde RSI onder 35 na herstel boven 35, stop-loss 5% onder "
+        "instap, koersdoel 10% boven instap, maximaal 1% risico per trade. "
+        "Toon eerst het voorstel en sla niets op zonder mijn bevestiging."
+    )
+    assert _explicit_strategy_proposal_request(message)
 
 
 @pytest.mark.parametrize("message,expected", [
@@ -4965,6 +4980,8 @@ def test_setup_rule_coverage_does_not_truncate_late_required_condition():
     ("Start new proposal without previous conditions", True),
     ("Vorschlag ohne diese Bedingungen erstellen", True),
     ("Neuen Vorschlag ohne vorherige Bedingungen beginnen", True),
+    ("Ja, laat die voorwaarden weg", True),
+    ("Schrap alle handelsvoorwaarden weg", True),
     ("Ja, laat de trendvoorwaarde weg", False),
     ("Maak voorstel zonder deze voorwaarden, behalve de 1D-trend", False),
     ("Nee, maak voorstel zonder deze voorwaarden", False),
@@ -4988,6 +5005,127 @@ def test_blocked_setup_choice_restores_latest_partial_draft_without_old_identity
     assert "name" not in state["collected_inputs"]
     assert "timeframe" not in state["collected_inputs"]
     assert state["missing_required_inputs"] == ["timeframe", "name"]
+
+
+def test_relative_strategy_rules_cannot_be_recast_as_fixed_price_fields():
+    message = (
+        "Maak een BTC-strategie met instapvoorwaarde RSI onder 35 na herstel "
+        "boven 35, stop-loss 5% onder instap, koersdoel 10% boven instap, "
+        "maximaal 1% risico per trade."
+    )
+    assert _strategy_rule_is_unencoded(message)
+    safe = _safe_blocked_strategy_inputs(message, {
+        "setup_id": 42, "setup_type": "trade", "name": "BTC QA", "symbol": "BTC", "timeframe": "4H",
+        "execution_mode": "fixed", "base_amount": 80,
+        "entry": 35, "stop_loss": 5, "targets": [10], "risk_profile": "balanced",
+    })
+    assert safe["setup_id"] == 42
+    assert safe["base_amount"] == 80
+    assert not {"entry", "stop_loss", "targets", "risk_profile"} & safe.keys()
+    analysis = _proposal_from_blocked_strategy({
+        "original_message": message, "captured_inputs": safe,
+    }, {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"})
+    assert analysis.request_plan.operation_id == "create_strategy"
+    assert analysis.request_plan.operation_state["collected_inputs"]["name"] == "BTC QA"
+    assert {"entry", "stop_loss", "targets", "risk_profile"} <= set(
+        analysis.request_plan.operation_state["missing_required_inputs"]
+    )
+
+
+def test_blocked_strategy_keeps_explicit_name_when_user_omits_unsupported_rules():
+    message = (
+        "Maak een Paper-strategie voor mijn opgeslagen setup BTC Plan. "
+        "Naam: BTC QA Strategie 3335. BTC, 4H, vast bedrag €80 per uitvoering, "
+        "stop-loss 5% onder instap en maximaal 1% risico per trade."
+    )
+    safe = _safe_blocked_strategy_inputs(message, {
+        "setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H",
+        "base_amount": 80, "execution_mode": "fixed", "stop_loss": 5,
+    })
+    assert safe["name"] == "BTC QA Strategie 3335"
+    analysis = _proposal_from_blocked_strategy({"captured_inputs": safe}, {
+        "setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H",
+    })
+    collected = analysis.request_plan.operation_state["collected_inputs"]
+    assert collected["name"] == "BTC QA Strategie 3335"
+    assert "stop_loss" not in collected
+
+
+def test_blocked_strategy_cannot_restore_percent_before_label_or_indicator_number():
+    message = (
+        "Naam: RSI Strategie. Koop zodra RSI 35 omhoog kruist; "
+        "5% onder instap als stop-loss en 10% erboven als koersdoel."
+    )
+    safe = _safe_blocked_strategy_inputs(message, {
+        "setup_id": 42, "symbol": "BTC", "name": "RSI Strategie",
+        "base_amount": 80, "execution_mode": "fixed", "entry": 35,
+        "stop_loss": 5, "targets": [10], "risk_profile": "balanced",
+    })
+    assert safe["name"] == "RSI Strategie"
+    assert not {"entry", "stop_loss", "targets", "risk_profile"} & safe.keys()
+
+
+def test_strategy_rule_waiver_requires_explicit_operation_choice():
+    assert _explicit_strategy_rule_waiver(
+        "Maak strategievoorstel zonder deze automatische regels"
+    )
+    assert not _explicit_strategy_rule_waiver(
+        "Maak strategievoorstel zonder deze automatische regels, behalve RSI"
+    )
+    assert not _explicit_strategy_rule_waiver("Ja, laat een regel weg")
+
+
+def test_new_strategy_request_supersedes_blocked_draft_but_waiver_does_not():
+    prior = {"strategy_rule_block": {"captured_inputs": {"name": "Strategie A"}},
+             "active_guided_operation": {"operation_id": "create_strategy"},
+             "responses_clarification": {"reason": "strategy_rule_not_captured"}}
+    choice = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        choice, "Maak strategievoorstel zonder deze automatische regels"
+    )
+    assert choice == prior
+    same = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        same, "Maak strategievoorstel met vaste stop-loss 72000 voor diezelfde strategie."
+    )
+    assert same == prior
+    renamed_same = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        renamed_same, "Maak een nieuw voorstel voor diezelfde strategie. Naam: Strategie A."
+    )
+    assert renamed_same == prior
+    unnamed = dict(prior)
+    assert not _discard_superseded_strategy_rule_block(
+        unnamed, "Maak een nieuwe strategie met vaste stop-loss 72000."
+    )
+    assert unnamed == prior
+    fresh = dict(prior)
+    assert _discard_superseded_strategy_rule_block(
+        fresh, "Maak een nieuwe Paper-strategie voor mijn opgeslagen BTC-setup. "
+        "Naam: Strategie B. Toon eerst het voorstel."
+    )
+    assert "strategy_rule_block" not in fresh
+    assert "active_guided_operation" not in fresh
+    assert "responses_clarification" not in fresh
+    unnamed_prior = {"strategy_rule_block": {"captured_inputs": {}},
+                     "active_guided_operation": {"operation_id": "create_strategy"}}
+    assert _discard_superseded_strategy_rule_block(
+        unnamed_prior, "Maak een nieuwe Paper-strategie. Naam: Strategie B."
+    )
+    assert "strategy_rule_block" not in unnamed_prior
+
+
+def test_strategy_rule_coverage_detects_unstored_dynamic_rule():
+    fake = FakeResponses(response("coverage-1", text='{"verdict":"unsupported_required_rule"}'))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    result = asyncio.run(guard.strategy_rule_coverage(
+        message="Enter only after RSI crosses 35.",
+        collected_inputs={"entry": 76000, "stop_loss": 72000, "targets": [82000]},
+    ))
+    assert result == "unsupported_required_rule"
+    sent = json.loads(fake.requests[0]["input"])
+    assert sent["captured_strategy_fields"]["entry"] == 76000
+    assert fake.requests[0]["tool_choice"] == "none"
 
 
 def test_model_led_feed_follow_up_receives_pending_change_in_provider_prompt():
