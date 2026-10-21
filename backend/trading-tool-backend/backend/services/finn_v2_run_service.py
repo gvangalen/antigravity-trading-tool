@@ -47,6 +47,7 @@ from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, FinnResponsesFrontDoorResult,
     _explicit_create_operation_request,
     _explicit_fresh_create_operation_request,
+    _explicit_strategy_proposal_request,
     _previous_guided_name_suggestion,
 )
 from backend.services.finn_v2_responses_loop import FinnResponsesError, FinnResponsesResult
@@ -87,6 +88,18 @@ def _explicit_setup_rule_waiver(message: str) -> bool:
     ))
 
 
+def _explicit_strategy_rule_waiver(message: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
+    return normalized in {
+        "maak strategievoorstel zonder deze automatische regels",
+        "begin nieuw strategievoorstel zonder eerdere regels",
+        "make strategy proposal without these automatic rules",
+        "start new strategy proposal without previous rules",
+        "strategieentwurf ohne diese automatischen regeln erstellen",
+        "neuen strategieentwurf ohne vorherige regeln beginnen",
+    }
+
+
 def _proposal_from_blocked_setup(block: dict):
     """Rebuild the owner-bound draft without asking the model to choose a tool."""
     inputs = dict(block.get("captured_inputs") or {})
@@ -102,6 +115,67 @@ def _proposal_from_blocked_setup(block: dict):
         conversation_context={},
         verified_asset=str(inputs.get("symbol") or "") or None,
     )
+
+
+def _proposal_from_blocked_strategy(block: dict, verified_parent_setup: dict[str, object]):
+    """Restore only typed, owner-bound fields from a blocked strategy draft."""
+    inputs = dict(block.get("captured_inputs") or {})
+    if not inputs or not verified_parent_setup.get("setup_id"):
+        return None
+    inputs.pop("setup_id", None)
+    inputs.pop("setup_type", None)
+    restored_call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_strategy", "inputs": inputs},
+    )
+    return FinnResponsesProposalSelection().from_call(
+        call=restored_call,
+        # The original prose contains relative percentages that the generic
+        # numeric extractor could misread as absolute stop/target prices.
+        message=(f"Naam: {inputs['name']}" if inputs.get("name") else ""),
+        conversation_context={},
+        verified_asset=str(inputs.get("symbol") or "") or None,
+        verified_parent_setup=verified_parent_setup,
+    )
+
+
+def _safe_blocked_strategy_inputs(message: str, inputs: dict[str, object]) -> dict[str, object]:
+    """Never turn a relative percent rule into a fixed price on continuation."""
+    safe = dict(inputs)
+    # The proposal selector can omit a name while asking for unsupported
+    # rules. Preserve only a name the user actually supplied, so accepting
+    # the offered omission continues the same draft instead of starting over.
+    explicit_name = FinnV2OperationStateService._name_input_from_text(message)
+    if explicit_name and not safe.get("name"):
+        safe["name"] = explicit_name
+    if re.search(r"\b(?:stop(?:[- ]?loss)?|stopp?kurs)\b[^.!?\n]{0,70}\d+(?:[.,]\d+)?\s*%", message, re.I):
+        safe.pop("stop_loss", None)
+    if re.search(r"\b(?:target|targets|koersdoel|koersdoelen|ziel(?:kurs)?)\b[^.!?\n]{0,70}\d+(?:[.,]\d+)?\s*%", message, re.I):
+        safe.pop("targets", None)
+    if re.search(r"\b(?:maximaal|maximum|max|höchstens)\s*\d+(?:[.,]\d+)?\s*%\s*(?:risico|risk|risiko)", message, re.I):
+        safe.pop("risk_profile", None)
+    return safe
+
+
+def _strategy_rule_is_unencoded(message: str) -> bool:
+    """High-confidence relative/dynamic rules cannot become fixed prices."""
+    dynamic_entry = bool(re.search(
+        r"\b(?:instapvoorwaarde|instapregel|entry\s*(?:rule|condition)|"
+        r"einstiegsbedingung)\b[^.!?\n]{0,110}\b(?:rsi|trend|moving\s+average|"
+        r"ma\s*\d+|kruis|cross|bevestiging|confirmation)\b",
+        message, re.I,
+    ))
+    relative_level = bool(re.search(
+        r"\b(?:stop(?:[- ]?loss)?|koersdoel|target|targets|zielkurs)\b"
+        r"[^.!?\n]{0,70}\d+(?:[.,]\d+)?\s*%",
+        message, re.I,
+    ))
+    percent_risk = bool(re.search(
+        r"\b(?:maximaal|maximum|max|höchstens)\s*\d+(?:[.,]\d+)?\s*%\s*"
+        r"(?:risico|risk|risiko)\b",
+        message, re.I,
+    ))
+    return dynamic_entry or relative_level or percent_risk
 
 
 def _simple_coach_experiment_enabled() -> bool:
@@ -759,6 +833,43 @@ class FinnV2RunService:
                 conversation_locale=client_locale or cursor.get("locale"),
             )
             context["locale"] = locale
+            blocked_strategy = dict(context.get("strategy_rule_block") or {})
+            if blocked_strategy and _explicit_strategy_rule_waiver(message):
+                blocked_inputs = dict(blocked_strategy.get("captured_inputs") or {})
+                try:
+                    setup_id = int(blocked_inputs.get("setup_id") or 0)
+                except (TypeError, ValueError):
+                    setup_id = 0
+                setup = (
+                    await FinnV2EntityResolutionService(session).setups.get_setup_by_id(
+                        setup_id, user_id,
+                    ) if setup_id else None
+                )
+                verified_parent = {
+                    "setup_id": setup_id,
+                    "setup_type": str(setup.get("setup_type") or "").lower(),
+                    "symbol": setup.get("symbol"),
+                    "timeframe": setup.get("timeframe"),
+                } if setup else {}
+                restored = _proposal_from_blocked_strategy(blocked_strategy, verified_parent)
+                if restored is not None:
+                    return FinnResponsesFrontDoorResult(
+                        response=FinnResponsesResult(
+                            text={
+                                "en": "I am preparing the strategy draft without those automatic rules.",
+                                "de": "Ich bereite den Strategieentwurf ohne diese automatischen Regeln vor.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Ik bereid het strategievoorstel zonder die automatische regels voor."),
+                            response_id=f"verified-strategy-waiver-{run_id}",
+                            tool_trace=({
+                                "name": "verified_strategy_waiver", "status": "completed",
+                                "result": {"operation_id": "create_strategy"},
+                            },),
+                            response_id_reusable=False,
+                        ),
+                        proposal_analysis=restored,
+                        locale=locale,
+                    ), message
             blocked_setup = dict(context.get("setup_rule_block") or {})
             if blocked_setup and _explicit_setup_rule_waiver(message):
                 # A click or an unambiguous reply to our own owner-bound choice
@@ -934,7 +1045,9 @@ class FinnV2RunService:
         pending_guided = FinnV2OperationStateService.pending_operation_id(context)
         if not pending_guided:
             context.pop("guided_target_asset_constraint", None)
-        requested_create = _explicit_create_operation_request(message)
+        requested_create = _explicit_create_operation_request(message) or (
+            "create_strategy" if _explicit_strategy_proposal_request(message) else None
+        )
         if pending_guided and requested_create and (
             requested_create != pending_guided
             or _explicit_fresh_create_operation_request(message)
@@ -2113,11 +2226,13 @@ class FinnV2RunService:
                     run_message = run.message
                     conversation_id = run.conversation_id
                     setup_rule_block = {}
+                    strategy_rule_block = {}
                     if visible and conversation_id:
                         context = await service.conversations.get_context(
                             conversation_id=conversation_id, user_id=user_id,
                         )
                         setup_rule_block = dict(context.get("setup_rule_block") or {})
+                        strategy_rule_block = dict(context.get("strategy_rule_block") or {})
 
                 prepared: FinnResponsesFrontDoorResult | None = None
                 if visible:
@@ -2285,6 +2400,105 @@ class FinnV2RunService:
                                         raise RuntimeContractConflictError("setup_rule_block_conversation_stale")
                                     context = dict(conversation.context_json or {})
                                     context.pop("setup_rule_block", None)
+                                    await FinnV2ConversationRepository(session).update_context(
+                                        conversation_id=conversation_id, user_id=user_id, context=context,
+                                    )
+                                    await session.commit()
+                        if (
+                            prepared.proposal_analysis is not None
+                            and prepared.proposal_analysis.request_plan.operation_id == "create_strategy"
+                        ):
+                            strategy_inputs = dict(
+                                prepared.proposal_analysis.request_plan.operation_state.get("collected_inputs") or {}
+                            )
+                            strategy_waiver = _explicit_strategy_rule_waiver(run_message)
+                            if strategy_rule_block and not strategy_waiver:
+                                coverage = "unsupported_required_rule"
+                            elif strategy_waiver:
+                                coverage = "none"
+                            elif _strategy_rule_is_unencoded(run_message):
+                                coverage = "unsupported_required_rule"
+                            else:
+                                coverage = await FinnResponsesToolRelevanceGuard(
+                                    openai_client.async_client
+                                ).strategy_rule_coverage(
+                                    message=message, collected_inputs=strategy_inputs,
+                                )
+                            if coverage != "none":
+                                locale = prepared.locale or "nl"
+                                if locale.startswith("en"):
+                                    question = (
+                                        "This strategy requests an automatic entry, stop, target or risk rule "
+                                        "that I cannot enforce from this draft. I can use fixed entry, stop "
+                                        "and target prices plus a risk style. Choose ‘Make strategy proposal "
+                                        "without these automatic rules’ only if you want to omit the other "
+                                        "rules; I will still ask for missing fixed prices."
+                                )
+                                    choice = "Make strategy proposal without these automatic rules"
+                                elif locale.startswith("de"):
+                                    question = (
+                                        "Diese Strategie enthält automatische Einstiegs-, Stopp-, Ziel- oder "
+                                        "Risikoregeln, die ich so nicht ausführen kann. Ich kann feste "
+                                        "Einstiegs-, Stopp- und Zielkurse sowie einen Risikostil speichern. "
+                                        "Wähle „Strategieentwurf ohne diese automatischen Regeln erstellen“ "
+                                        "nur, wenn die anderen Regeln entfallen sollen."
+                                    )
+                                    choice = "Strategieentwurf ohne diese automatischen Regeln erstellen"
+                                else:
+                                    question = (
+                                        "Deze strategie vraagt om een automatische instap-, stop-, doel- of "
+                                        "risicoregel die ik zo niet kan vastleggen. Ik kan vaste entry-, "
+                                        "stop- en targetprijzen en een risicostijl gebruiken. Kies ‘Maak "
+                                        "strategievoorstel zonder deze automatische regels’ alleen als ik "
+                                        "de andere regels mag weglaten; ontbrekende vaste prijzen vraag ik "
+                                        "daarna nog uit."
+                                    )
+                                    choice = "Maak strategievoorstel zonder deze automatische regels"
+                                clarification = FinnResponsesVerifiedAnswer(
+                                    status="clarification_required", text=question,
+                                    reason="strategy_rule_not_captured", evidence=(),
+                                    clarification={
+                                        "question": question, "reason": "strategy_rule_not_captured",
+                                        "choices": [choice],
+                                    },
+                                )
+                                async with async_session_factory() as session:
+                                    conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                                        conversation_id=conversation_id, user_id=user_id, for_update=True,
+                                    )
+                                    if conversation is None or conversation.last_run_id != run_id:
+                                        raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                                    context = dict(conversation.context_json or {})
+                                    context["strategy_rule_block"] = {
+                                        "operation_id": "create_strategy",
+                                        "original_message": str(strategy_rule_block.get("original_message") or run_message),
+                                        "captured_inputs": (
+                                            dict(strategy_rule_block.get("captured_inputs") or {})
+                                            if strategy_rule_block else
+                                            _safe_blocked_strategy_inputs(run_message, strategy_inputs)
+                                        ),
+                                        "draft_message": str(strategy_rule_block.get("draft_message") or run_message),
+                                    }
+                                    await FinnV2ConversationRepository(session).update_context(
+                                        conversation_id=conversation_id, user_id=user_id, context=context,
+                                    )
+                                    await cls(session).complete_responses_read(
+                                        run_id=run_id, user_id=user_id,
+                                        response_id=prepared.response.response_id,
+                                        answer=clarification,
+                                        previous_response=prepared.previous_response,
+                                        locale=prepared.locale,
+                                    )
+                                return
+                            if strategy_rule_block:
+                                async with async_session_factory() as session:
+                                    conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                                        conversation_id=conversation_id, user_id=user_id, for_update=True,
+                                    )
+                                    if conversation is None or conversation.last_run_id != run_id:
+                                        raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                                    context = dict(conversation.context_json or {})
+                                    context.pop("strategy_rule_block", None)
                                     await FinnV2ConversationRepository(session).update_context(
                                         conversation_id=conversation_id, user_id=user_id, context=context,
                                     )

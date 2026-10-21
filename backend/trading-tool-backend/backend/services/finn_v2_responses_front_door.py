@@ -141,7 +141,26 @@ def _explicit_fresh_create_operation_request(message: str) -> str | None:
 
 
 def _explicit_strategy_proposal_request(message: str) -> bool:
-    return _explicit_create_operation_request(message) == "create_strategy"
+    if _explicit_create_operation_request(message) == "create_strategy":
+        return True
+    # The request preprocessor can read "Paper-strategie" or "per uitvoering"
+    # as contextual/execute language. A clear imperative to prepare a new
+    # strategy still belongs to the create_strategy contract. This does not
+    # authorize saving or a Paper order.
+    text = str(message or "").strip()
+    if not text or "?" in text:
+        return False
+    if re.match(
+        r"^(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\s+"
+        r"(?:geen|niet|no|not|keine?|nicht)\b",
+        text, re.I,
+    ):
+        return False
+    return bool(re.match(
+        r"^(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
+        r"[^.!?\n]{0,200}\bstrateg(?:ie|y)\b",
+        text, re.I,
+    ))
 
 
 def _explicit_rule_transfer_assets(message: str) -> tuple[str, str] | None:
@@ -1090,10 +1109,7 @@ class FinnResponsesFrontDoor:
         # not make the model skip the proposal tool. Questions about how to
         # create a strategy are still ordinary coach turns.
         if (
-            request_facts.action_polarity == "create"
-            and request_facts.discourse_act in {"operation_request", "contextual_follow_up"}
-            and not pending_operation
-            and not conversation_context.get("proposal_correction_result")
+            not conversation_context.get("proposal_correction_result")
             and _explicit_strategy_proposal_request(message)
             and not unsupported_catalog_pair_mention(message)
         ):
