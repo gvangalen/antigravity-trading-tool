@@ -947,7 +947,11 @@
       "continueLabel": "Verder naar Mijn Plan",
       "continuingLabel": "Mijn Plan openen…",
       "loadError": "Laden van de analyse-onboarding is mislukt. Probeer het opnieuw.",
-      "saveError": "Opslaan van deze analyse-stap is mislukt. Probeer het opnieuw."
+      "saveError": "Opslaan van deze analyse-stap is mislukt. Probeer het opnieuw.",
+      "syncFailed": "Deze indicator is opgeslagen, maar de bronmeting kon niet worden opgehaald. Probeer het opnieuw of kies een andere indicator; deze stap is nog niet afgerond.",
+      "syncRuleMissing": "Deze indicator heeft een meting, maar geen geldige scoreregel. Kies voorlopig een andere indicator; deze stap is nog niet afgerond.",
+      "pendingEyebrow": "Keuzes opgeslagen",
+      "pendingScore": "De score of actualiteit van een gekozen indicator is nog niet bevestigd. Probeer de indicator opnieuw te synchroniseren; tot die tijd kan je niet verder naar Mijn plan."
     },
     "planOnboardingStep": {
       "dcaScoreExplanation": "Het DCA-ritme bepaalt wanneer een aankoop wordt beoordeeld. Scoregrenzen zijn optioneel: buiten die grenzen wacht een gekoppelde bot. Zonder grenzen blijft het ritme staan, maar andere controles kunnen een aankoop nog tegenhouden. Een ontbrekende score is geen koopsignaal.",

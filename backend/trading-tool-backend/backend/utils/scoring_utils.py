@@ -199,8 +199,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
         # Import here: interpreters also use scoring_utils for rule lookups.
         from backend.utils.macro_interpreter import normalize_macro_value_with_history
         from backend.utils.market_interpreter import normalize_market_value_with_history
-        from backend.utils.technical_interpreter import normalize_technical_value
-        normalizers = {"technical": normalize_technical_value}
+        from backend.utils.technical_interpreter import normalize_technical_value_for_rules
         for indicator, (value, observed_at) in data.items():
             logger.info(f"DEBUG: Scoring {category} indicator: {indicator} = {value}")
             if category == "market":
@@ -208,7 +207,9 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             elif category == "macro":
                 normalized_value = normalize_macro_value_with_history(conn, user_id, indicator, value)
             else:
-                normalized_value = normalizers[category](indicator, value)
+                normalized_value = normalize_technical_value_for_rules(
+                    conn, indicator, value, user_id, symbol,
+                )
             if normalized_value is None:
                 return {"scores": {}, "total_score": None, "top_contributors": [],
                         "source_status": "insufficient_indicator_history"}

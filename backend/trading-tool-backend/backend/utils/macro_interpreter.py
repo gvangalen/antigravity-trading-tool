@@ -27,6 +27,7 @@ YAHOO_DXY_HEADERS = {"User-Agent": "Mozilla/5.0"}
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start_date}"
 YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
+YAHOO_SP500_GSPC_ALT = "https://query2.finance.yahoo.com/v8/finance/chart/%5EGSPC"
 YAHOO_SP500 = "https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX"
 YAHOO_VIX = "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX"
 YAHOO_GOLD = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F"
@@ -241,6 +242,77 @@ def _fred_json_result(payload: dict, *, inflation: bool) -> dict:
     )
 
 
+def _sp500_dated_closes() -> dict[str, float]:
+    """Use dated S&P 500 closes; tolerate a FRED maintenance page or outage."""
+    today = datetime.now(timezone.utc).date()
+    cutoff = today - timedelta(days=90)
+
+    def usable(rows: dict[str, float]) -> dict[str, float]:
+        complete = {}
+        for day, raw_value in rows.items():
+            try:
+                parsed_day = date.fromisoformat(str(day)[:10])
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if cutoff <= parsed_day < today and math.isfinite(value) and value > 0:
+                complete[parsed_day.isoformat()] = value
+        if len(complete) < 5 or today - date.fromisoformat(max(complete)) > timedelta(days=4):
+            return {}
+        return complete
+
+    try:
+        text = _fetch_text(_fred_csv_url("SP500"), timeout=20)
+        fred_rows = _extract_csv_rows(text)
+        readings = {}
+        for day, raw_value in fred_rows:
+            try:
+                parsed_day = date.fromisoformat(day)
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value) and value > 0:
+                readings[parsed_day.isoformat()] = value
+        selected = usable(readings)
+        if selected:
+            return selected
+    except Exception:
+        logger.warning("S&P 500 FRED reading unavailable; trying dated fallback")
+
+    provider = TwelveDataMacroProvider()
+    if provider.api_key:
+        try:
+            readings = provider.fetch_daily_history("SPX", limit=100)
+            selected = usable(readings)
+            if selected:
+                return selected
+        except Exception:
+            logger.warning("S&P 500 Twelve Data fallback unavailable")
+
+    for endpoint in (YAHOO_SP500_GSPC_ALT, YAHOO_SP500_GSPC):
+        try:
+            payload = _fetch_json(f"{endpoint}?range=6mo&interval=1d", timeout=10)
+            chart = (payload.get("chart", {}).get("result") or [{}])[0]
+            timestamps = chart.get("timestamp") or []
+            closes = ((chart.get("indicators", {}).get("quote") or [{}])[0]
+                      .get("close") or [])
+            readings = {}
+            for stamp, raw_value in zip(timestamps, closes):
+                try:
+                    day = datetime.fromtimestamp(int(stamp), timezone.utc).date()
+                    value = float(raw_value)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if math.isfinite(value) and value > 0:
+                    readings[day.isoformat()] = value
+            selected = usable(readings)
+            if selected:
+                return selected
+        except Exception:
+            logger.warning("S&P 500 Yahoo fallback unavailable")
+    return {}
+
+
 def fetch_absolute_macro_history(name: str, *, days: int = 90) -> list[tuple[datetime, float]]:
     """Fetch real dated observations for absolute macro score normalization.
 
@@ -258,7 +330,9 @@ def fetch_absolute_macro_history(name: str, *, days: int = 90) -> list[tuple[dat
     source = definition["source"]
     link = definition["link"]
     raw: dict[str, float] = {}
-    if source == "fred":
+    if indicator == "sp500" and source == "fred":
+        raw = _sp500_dated_closes()
+    elif source == "fred":
         series_id = str(link).split(":", 1)[1]
         csv_text = _fetch_text(_fred_csv_url(series_id), timeout=20)
         for day, value in _extract_csv_rows(csv_text):
@@ -412,6 +486,13 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     use_twelve_data = source_lower == "twelve_data" or link_lower.startswith("twelve_data:")
     effective_source = source
     effective_link = link
+
+    if normalized == "sp500" and source_lower == "fred":
+        readings = _sp500_dated_closes()
+        if not readings:
+            return {"value": None}
+        day = max(readings)
+        return {"value": readings[day], "observed_at": day}
 
     twelve_data_provider = TwelveDataMacroProvider()
     if normalized == "dxy" and source_lower == "yahoo":

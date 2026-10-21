@@ -32,6 +32,8 @@ import {
 } from "@/lib/api/technical";
 import { buildOnboardingAssetPreferencePatch, normalizeOnboardingAsset } from "@/lib/onboardingAsset";
 import { restoreOnboardingIndicator } from "@/lib/onboardingIndicatorSelection.mjs";
+import { classifyOnboardingIndicatorSync, classifyOnboardingWorkspaceChoice } from "@/lib/onboardingIndicatorSync.mjs";
+import { fetchAssetWorkspace } from "@/lib/api/workspace";
 
 const ASSET_CLASS_LABELS = {
   crypto: "Crypto",
@@ -71,12 +73,6 @@ function normalizeName(value) {
 
 function getOptionLabel(option, indicatorNames = {}) {
   return String(indicatorNames[normalizeName(option?.name)] || option?.display_name || option?.name || "").trim();
-}
-
-function isDuplicateIndicatorError(err) {
-  const status = Number(err?.status);
-  const body = String(err?.body || "");
-  return status === 409 || /al toegevoegd|already added|already exists|conflict/i.test(body);
 }
 
 function buildSinglePreferencePayload(option) {
@@ -311,6 +307,7 @@ export default function OnboardingAnalysisPage() {
   const [continuing, setContinuing] = useState(false);
   const [savingKey, setSavingKey] = useState(null);
   const [error, setError] = useState(null);
+  const [pendingScores, setPendingScores] = useState({});
 
   const [assetQuery, setAssetQuery] = useState("");
   const [assetResults, setAssetResults] = useState([]);
@@ -342,6 +339,7 @@ export default function OnboardingAnalysisPage() {
   const macroDone = Boolean(selectedMacro);
   const technicalDone = Boolean(selectedTechnical);
   const allDone = assetDone && marketDone && macroDone && technicalDone;
+  const hasPendingScore = Object.values(pendingScores).some(Boolean);
 
   useEffect(() => {
     if (pathname !== "/onboarding/analysis") return;
@@ -361,6 +359,7 @@ export default function OnboardingAnalysisPage() {
     setContinuing(false);
     setSavingKey(null);
     setError(null);
+    setPendingScores({});
   }, [pathname]);
 
   useEffect(() => {
@@ -433,13 +432,14 @@ export default function OnboardingAnalysisPage() {
         setCatalogLoading(true);
         setError(null);
 
-        const [marketNames, macroNames, technicalNames, marketPrefs, macroPrefs, technicalPrefs] = await Promise.all([
+        const [marketNames, macroNames, technicalNames, marketPrefs, macroPrefs, technicalPrefs, workspace] = await Promise.all([
           getMarketIndicatorNames().catch(() => []),
           getMacroIndicatorNames().catch(() => []),
           getTechnicalIndicatorNames().catch(() => []),
-          marketStepDone ? getMarketPreferences({ symbol }).catch(() => null) : null,
-          macroStepDone ? getMacroPreferences({ symbol }).catch(() => null) : null,
-          technicalStepDone ? getTechnicalPreferences({ symbol }).catch(() => null) : null,
+          getMarketPreferences({ symbol }).catch(() => null),
+          getMacroPreferences({ symbol }).catch(() => null),
+          getTechnicalPreferences({ symbol }).catch(() => null),
+          fetchAssetWorkspace(symbol).catch(() => null),
         ]);
 
         if (cancelled) return;
@@ -454,12 +454,23 @@ export default function OnboardingAnalysisPage() {
         // Resume only indicator choices actually confirmed in onboarding for
         // this asset. A catalog entry or a default preference alone is not a
         // completed user choice.
-        const savedMarket = restoreOnboardingIndicator(marketPrefs, marketOptions, marketStepDone);
-        const savedMacro = restoreOnboardingIndicator(macroPrefs, macroOptions, macroStepDone);
-        const savedTechnical = restoreOnboardingIndicator(technicalPrefs, technicalOptions, technicalStepDone);
+        const restoredMarket = restoreOnboardingIndicator(marketPrefs, marketOptions, true);
+        const restoredMacro = restoreOnboardingIndicator(macroPrefs, macroOptions, true);
+        const restoredTechnical = restoreOnboardingIndicator(technicalPrefs, technicalOptions, true);
+        const marketState = classifyOnboardingWorkspaceChoice(workspace, "market", restoredMarket?.name);
+        const macroState = classifyOnboardingWorkspaceChoice(workspace, "macro", restoredMacro?.name);
+        const technicalState = classifyOnboardingWorkspaceChoice(workspace, "technical", restoredTechnical?.name);
+        const savedMarket = marketState === "failed" || marketState === "missing_rule" ? null : restoredMarket;
+        const savedMacro = macroState === "failed" || macroState === "missing_rule" ? null : restoredMacro;
+        const savedTechnical = technicalState === "failed" || technicalState === "missing_rule" ? null : restoredTechnical;
         setSelectedMarket(savedMarket);
         setSelectedMacro(savedMacro);
         setSelectedTechnical(savedTechnical);
+        setPendingScores({
+          market: Boolean(savedMarket && marketState !== "ready"),
+          macro: Boolean(savedMacro && macroState !== "ready"),
+          technical: Boolean(savedTechnical && technicalState !== "ready"),
+        });
         setOpenSelector(savedMarket ? (savedMacro ? (savedTechnical ? null : "technical") : "macro") : "market");
         hydratedSelectionsSymbolRef.current = symbol;
       } catch (err) {
@@ -479,7 +490,7 @@ export default function OnboardingAnalysisPage() {
   }, [symbol, assetStepDone, marketStepDone, macroStepDone, technicalStepDone]);
 
   const goToPlan = () => {
-    if (!symbol || continuing) return;
+    if (!symbol || continuing || hasPendingScore || !allDone) return;
     setContinuing(true);
     router.push(`/onboarding/plan?onboarding=1&step=plan&symbol=${encodeURIComponent(symbol)}`);
   };
@@ -552,6 +563,11 @@ export default function OnboardingAnalysisPage() {
       await persistSelectedAsset(asset);
       hydratedAssetSymbolRef.current = asset?.symbol || null;
       setSelectedAssetChoice(asset);
+      setSelectedMarket(null);
+      setSelectedMacro(null);
+      setSelectedTechnical(null);
+      hydratedSelectionsSymbolRef.current = null;
+      setPendingScores({});
       setAssetQuery(asset?.symbol || "");
       setSearchOpen(false);
       setOpenSelector("market");
@@ -572,11 +588,27 @@ export default function OnboardingAnalysisPage() {
       setError(null);
       const assetClass = selectedAssetChoice?.asset_class || null;
       const indicators = buildSinglePreferencePayload(option);
+      let result;
+      let syncState;
+
+      const verifyChoice = async (category) => {
+        const workspace = await fetchAssetWorkspace(symbol).catch(() => null);
+        const workspaceState = classifyOnboardingWorkspaceChoice(workspace, category, option.name);
+        return workspaceState === "unknown" ? "pending_score" : workspaceState;
+      };
 
       if (kind === "market") {
         await updateMarketPreferences({ symbol, assetClass, indicators });
-        await syncMarketPreferences(symbol, { resetExisting: true });
-        if (!status?.has_market) await completeStep("market");
+        result = await syncMarketPreferences(symbol, { resetExisting: true });
+        syncState = classifyOnboardingIndicatorSync(result, option.name);
+        if (syncState === "ready") syncState = await verifyChoice("market");
+        if (syncState === "failed" || syncState === "missing_rule") {
+          setSelectedMarket(null);
+          setPendingScores((current) => ({ ...current, market: false }));
+          setError(syncState === "missing_rule" ? copy.syncRuleMissing : copy.syncFailed);
+          return;
+        }
+        if (syncState === "ready" && !status?.has_market) await completeStep("market");
         setSelectedMarket(option);
         setMarketQuery("");
         setOpenSelector("macro");
@@ -584,8 +616,16 @@ export default function OnboardingAnalysisPage() {
 
       if (kind === "macro") {
         await updateMacroPreferences({ symbol, assetClass, indicators });
-        await syncMacroPreferences(symbol, { resetExisting: true });
-        if (!status?.has_macro) await completeStep("macro");
+        result = await syncMacroPreferences(symbol, { resetExisting: true });
+        syncState = classifyOnboardingIndicatorSync(result, option.name);
+        if (syncState === "ready") syncState = await verifyChoice("macro");
+        if (syncState === "failed" || syncState === "missing_rule") {
+          setSelectedMacro(null);
+          setPendingScores((current) => ({ ...current, macro: false }));
+          setError(syncState === "missing_rule" ? copy.syncRuleMissing : copy.syncFailed);
+          return;
+        }
+        if (syncState === "ready" && !status?.has_macro) await completeStep("macro");
         setSelectedMacro(option);
         setMacroQuery("");
         setOpenSelector("technical");
@@ -593,38 +633,25 @@ export default function OnboardingAnalysisPage() {
 
       if (kind === "technical") {
         await updateTechnicalPreferences({ symbol, assetClass, indicators });
-        await syncTechnicalPreferences(symbol, { resetExisting: true });
-        if (!status?.has_technical) await completeStep("technical");
+        result = await syncTechnicalPreferences(symbol, { resetExisting: true });
+        syncState = classifyOnboardingIndicatorSync(result, option.name);
+        if (syncState === "ready") syncState = await verifyChoice("technical");
+        if (syncState === "failed" || syncState === "missing_rule") {
+          setSelectedTechnical(null);
+          setPendingScores((current) => ({ ...current, technical: false }));
+          setError(syncState === "missing_rule" ? copy.syncRuleMissing : copy.syncFailed);
+          return;
+        }
+        if (syncState === "ready" && !status?.has_technical) await completeStep("technical");
         setSelectedTechnical(option);
         setTechnicalQuery("");
         setOpenSelector(null);
       }
+      setPendingScores((current) => ({
+        ...current,
+        [kind]: syncState === "pending_score",
+      }));
     } catch (err) {
-      if (isDuplicateIndicatorError(err)) {
-        if (kind === "market") {
-          setSelectedMarket(option);
-          setMarketQuery("");
-          setOpenSelector("macro");
-          if (!status?.has_market) await completeStep("market");
-        }
-
-        if (kind === "macro") {
-          setSelectedMacro(option);
-          setMacroQuery("");
-          setOpenSelector("technical");
-          if (!status?.has_macro) await completeStep("macro");
-        }
-
-        if (kind === "technical") {
-          setSelectedTechnical(option);
-          setTechnicalQuery("");
-          setOpenSelector(null);
-          if (!status?.has_technical) await completeStep("technical");
-        }
-
-        return;
-      }
-
       console.error(`Failed to add ${kind} onboarding indicator`, err);
       setError(copy.saveError || "Saving this analysis step failed. Please try again.");
     } finally {
@@ -825,11 +852,11 @@ export default function OnboardingAnalysisPage() {
       ) : null}
 
       {allDone ? (
-        <div className="mt-6 rounded-[28px] border border-emerald-200 bg-emerald-50/80 p-5">
+        <div className={`mt-6 rounded-[28px] border p-5 ${hasPendingScore ? "border-amber-200 bg-amber-50/80" : "border-emerald-200 bg-emerald-50/80"}`}>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">
-                {copy.successEyebrow || "Analysis ready"}
+              <div className={`text-[10px] font-black uppercase tracking-[0.22em] ${hasPendingScore ? "text-amber-800" : "text-emerald-700"}`}>
+                {hasPendingScore ? (copy.pendingEyebrow || "Choices saved") : (copy.successEyebrow || "Analysis ready")}
               </div>
               <div className="mt-2 text-lg font-black tracking-tight text-slate-950">
                 {copy.successTitle || "Your first analysis base is saved"}
@@ -837,6 +864,11 @@ export default function OnboardingAnalysisPage() {
               <p className="mt-2 text-sm font-semibold text-slate-600">
                 {copy.successMessage || "You selected one asset plus one market, macro, and technical indicator. Review the summary below and continue to My Plan when you're ready."}
               </p>
+              {hasPendingScore ? (
+                <p className="mt-2 text-sm font-semibold text-amber-800">
+                  {copy.pendingScore || "The score or freshness of a selected indicator has not been confirmed yet. Sync it again before continuing to My Plan."}
+                </p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
                   {selectedAssetChoice?.symbol}
@@ -856,7 +888,7 @@ export default function OnboardingAnalysisPage() {
             <button
               type="button"
               onClick={goToPlan}
-              disabled={continuing}
+              disabled={continuing || hasPendingScore}
               className="shrink-0 rounded-full bg-blue-600 px-6 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {continuing

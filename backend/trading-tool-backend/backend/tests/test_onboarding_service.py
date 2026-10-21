@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import backend.infrastructure.repositories.onboarding_repository as onboarding_repository_module
@@ -95,6 +96,22 @@ def test_get_status_dict_backfills_legacy_completion_from_existing_user_data():
     assert status.has_strategy is True
     assert status.has_bot is True
     assert status.onboarding_complete is True
+
+
+def test_completed_analysis_flags_do_not_validate_a_failed_replacement():
+    repo = FakeOnboardingRepository(
+        steps=[SimpleNamespace(step_key=key, completed=True, pipeline_started=False)
+               for key in ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")],
+        inferred_completed={
+            "profile": True, "asset": True, "market": False, "macro": False,
+            "technical": False, "setup": True, "strategy": True, "bot": True,
+        },
+    )
+    status = asyncio.run(OnboardingService(repo).get_status_dict(user_id=42))
+    assert status.has_market is False
+    assert status.has_macro is False
+    assert status.has_technical is False
+    assert status.phases_completed["analysis"] is False
 
 
 def test_get_status_dict_only_backfills_missing_legacy_steps():
@@ -427,8 +444,14 @@ def test_onboarding_repository_reads_canonical_symbol_scoped_indicator_configura
 
     monkeypatch.setattr(onboarding_repository_module, "TechnicalDataRepository", _CanonicalRepository)
     class _ScalarResult:
+        def __init__(self, value=False):
+            self.value = value
+
         def scalar(self):
-            return False
+            return self.value
+
+        def first(self):
+            return SimpleNamespace(value=42, score=60, source_observed_at=datetime.now(timezone.utc), interpretation="Validated") if self.value else None
 
     class _Session:
         async def get(self, model, user_id):
@@ -436,6 +459,11 @@ def test_onboarding_repository_reads_canonical_symbol_scoped_indicator_configura
             return SimpleNamespace(ai_preferences={"selected_asset": "BTC"})
 
         async def execute(self, query, params=None):
+            sql = str(query)
+            if "market_data_indicators" in sql or "technical_indicators" in sql:
+                assert params["symbol"] == "BTC"
+                assert params["name"] in ("volume", "rsi")
+                return _ScalarResult(True)
             return _ScalarResult()
 
     repo = OnboardingRepository(_Session())
@@ -443,4 +471,54 @@ def test_onboarding_repository_reads_canonical_symbol_scoped_indicator_configura
     state = asyncio.run(repo.infer_onboarding_state(user_id=42))
 
     assert state["has_market"] is True
+    assert state["has_technical"] is True
+
+
+def test_onboarding_repository_uses_latest_scored_row_without_reopening_stale_completion(monkeypatch):
+    from datetime import timedelta
+
+    class Configured:
+        def __init__(self, _session):
+            pass
+
+        async def get_configured_indicator_names(self, _user_id, *, symbol):
+            assert symbol == "BTC"
+            return {"market": ["change_24h"], "macro": ["sp500"], "technical": ["rsi"]}
+
+    monkeypatch.setattr(onboarding_repository_module, "TechnicalDataRepository", Configured)
+
+    class Result:
+        def __init__(self, row=None):
+            self.row = row
+
+        def scalar(self):
+            return False
+
+        def first(self):
+            return self.row
+
+    class Session:
+        async def get(self, _model, _user_id):
+            return SimpleNamespace(ai_preferences={"selected_asset": "BTC"})
+
+        async def execute(self, query, params=None):
+            sql = str(query)
+            if "FROM market_data_indicators" in sql:
+                assert "ORDER BY timestamp DESC, id DESC" in sql
+                # An older scored row exists, but the latest failed refresh has no score.
+                return Result(SimpleNamespace(value=2.5, score=None, source_observed_at=datetime.now(timezone.utc)))
+            if "FROM technical_indicators" in sql:
+                # A previously scored choice stays complete when its runtime source ages.
+                return Result(SimpleNamespace(value=58, score=70,
+                                              source_observed_at=datetime.now(timezone.utc) - timedelta(days=3),
+                                              interpretation="Validated"))
+            if "FROM macro_data" in sql:
+                return Result(SimpleNamespace(value=6000, score=50,
+                                              source_observed_at=datetime.now(timezone.utc),
+                                              interpretation="Fallback bucket rule (auto)."))
+            return Result()
+
+    state = asyncio.run(OnboardingRepository(Session()).infer_onboarding_state(user_id=42))
+    assert state["has_market"] is False
+    assert state["has_macro"] is False
     assert state["has_technical"] is True

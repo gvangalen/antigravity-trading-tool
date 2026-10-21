@@ -673,9 +673,10 @@ class MarketDataService:
         await self.session.commit()
         await self.session.refresh(saved_record)
 
-        # Onboarding afronden
-        from backend.services.onboarding_service import mark_step_completed
-        await mark_step_completed(int(user_id), "market", self.session)
+        # A missing scoring rule must not silently complete onboarding.
+        if not missing_rule:
+            from backend.services.onboarding_service import mark_step_completed
+            await mark_step_completed(int(user_id), "market", self.session)
 
         return MarketDataIndicatorResponse.from_orm(saved_record)
 
