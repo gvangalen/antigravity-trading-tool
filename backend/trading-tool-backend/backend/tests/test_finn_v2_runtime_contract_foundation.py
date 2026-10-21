@@ -27,7 +27,7 @@ from backend.domain.finn_v2_runtime_contract import (
 )
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
-from backend.services.finn_v2_run_service import FinnV2RunService
+from backend.services.finn_v2_run_service import FinnV2RunService, _verified_closed_review_evidence
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 
@@ -92,6 +92,55 @@ def test_read_only_bot_turn_keeps_the_owner_verified_setup_for_next_score_questi
     service.runtime_contracts.record_verified_setup_subject.assert_awaited_once_with(
         run_id=run.id, user_id=7, subject=subject,
     )
+
+
+def test_completed_owner_review_read_persists_only_verified_dossier_references():
+    run = SimpleNamespace(
+        id="review-turn", conversation_id="conversation-1", trace_id="trace-1",
+        user_id=7, status="planned", message="Wat weet je over mijn laatst afgesloten Paper-trade?",
+        client_context_json={},
+    )
+    service = FinnV2RunService.__new__(FinnV2RunService)
+    service.runs = SimpleNamespace(
+        get_by_id_for_user=AsyncMock(return_value=run), update_status=AsyncMock(),
+    )
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=AsyncMock(return_value=SimpleNamespace(state_json={
+            "responses_exchange": {"answer_kind": "free_text", "tool_trace": [], "turn_contract": {}},
+        })),
+        record_verified_setup_subject=AsyncMock(),
+        materialize_terminal=AsyncMock(return_value=SimpleNamespace(terminal_projection_json={})),
+    )
+    service.traces = SimpleNamespace(append_event=AsyncMock())
+    service.conversations = SimpleNamespace(set_responses_cursor=AsyncMock())
+    service._trace_payload = lambda *_args, **_kwargs: {}
+    service._commit_session_if_possible = AsyncMock()
+    verified_review = {
+        "scope": "read_review_history", "status": "completed",
+        "source": "bot_decisions_and_finn_trade_reviews",
+        "data": {"closed_trade_review_ids": [123], "closed_trades": [
+            {"review_id": 123, "confirmed_lesson": {"lesson_text": "private lesson"}},
+        ]},
+    }
+    asyncio.run(service.complete_responses_read(
+        run_id=run.id, user_id=7, response_id="response-review",
+        answer=FinnResponsesVerifiedAnswer(
+            "completed", "Je bevestigde een les bij je laatste Paper-trade.", None,
+            (verified_review,),
+        ),
+    ))
+    response = service.runtime_contracts.materialize_terminal.call_args.kwargs["response"]
+    assert response["evidence"] == [{
+        "entity_type": "review_history", "entity_id": "123",
+        "source": "bot_decisions_and_finn_trade_reviews", "owned_by_user": True,
+    }]
+    assert "private lesson" not in json.dumps(response)
+    assert service.runs.update_status.call_args.kwargs["response_json"]["evidence"] == response["evidence"]
+    assert _verified_closed_review_evidence(({**verified_review, "status": "unavailable"},)) == []
+    assert _verified_closed_review_evidence(({
+        **verified_review,
+        "data": {"closed_trade_review_ids": [123], "closed_trades": [{"review_id": 999}]},
+    },)) == []
 
 
 def _selected_strategy_state():

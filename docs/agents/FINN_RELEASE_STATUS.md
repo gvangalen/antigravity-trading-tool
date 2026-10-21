@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten-tradebewijs in FINN-antwoord — herstelkandidaat (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De onafhankelijke beschermde
+[QA-run 39564101579](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39564101579)
+op `25d8be89e561d048bcdff28f2c2152ff216b3fdd` eindigde `NOT ACCEPTED`.
+De eerste gewone vraag zonder reviewnummer kreeg geen geverifieerd
+`review_history`-bewijs; de lesvervolgvraag werd niet bereikt. De begrensde
+diagnostiek toont `review_tool_seen=true`, `review_tool_status=completed` en
+`review_read_status=completed`: de eigenaargebonden lezing werkte, maar haar
+bewijs werd niet in de terminale chatrespons gepubliceerd. Het gesaniteerde
+artifact heeft SHA-256
+`cc3a2095f79d0beb37764429e41a0778f8a43e7ff367539c70b8817518eaeb19`.
+Live-aanroepen en -activaties waren nul.
+
+De productcode sloeg bij een voltooid Responses-antwoord `evidence=[]` op,
+ook als de verifier een afgesloten-tradedossier had gelezen. Deze kandidaat
+projecteert alleen een dossierverwijzing uit een voltooide, eigenaargebonden
+`read_review_history`-bron naar de terminale respons. Zij publiceert geen
+lesinhoud, uitvoeringen, portefeuillewaarden of modeltekst in die verwijzing.
+Een persistentietest controleert de bron en sluit een ontbrekend of afwijkend
+dossier uit; de volledige backend-suite slaagde met **3648 tests, vier
+bestaande skips**. De echte lokale Luna/Responses-ontwikkelset slaagde
+**20/20** met operatieaccuracy 1,0 (artifact SHA-256
+`c11bfae85d3de4b440892c1b160d625ea1435595b6623d12069f9f55e3c398f2`).
+De echte lokale Luna/Responses-regressieset slaagde **109/109** met
+operatieaccuracy 1,0 en nul provider-, schema-, parse-, validatie- of
+timeoutfouten (artifact SHA-256
+`a8a633a4a154dee9b511df5d9001af557ba94ae66afed62c550307b0f2060f4b`).
+De onafhankelijke Security-review vond geen concrete blocker voor deze
+begrensde bewijsprojectie. CI, deployment en onafhankelijke live QA staan
+nog open.
+
 ## Dossierlezing zonder nummer — begrensde QA-diagnostiek (21 oktober 2026)
 
 Phase: `LOCAL_VALIDATED_AWAITING_CI`. De beschermde onafhankelijke
