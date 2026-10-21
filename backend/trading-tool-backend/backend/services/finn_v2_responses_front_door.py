@@ -820,7 +820,6 @@ class FinnResponsesFrontDoor:
         )
         explicit_closed_review_read = bool(
             ReviewToolAdapter.requested_review_id(message) is not None
-            and re.match(r"\s*(?:lees|read|lies|toon|show|zeige)\b", message, re.I)
             and request_facts.action_polarity not in {
                 "create", "update", "remove", "execute", "activate", "deactivate",
             }
