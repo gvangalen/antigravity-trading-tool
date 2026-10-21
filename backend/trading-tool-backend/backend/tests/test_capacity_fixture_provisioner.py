@@ -89,6 +89,159 @@ def test_capacity_load_routes_exist_and_match_token_scope():
     assert configured <= available
 
 
+def test_owner_canary_seed_binds_rows_to_two_exact_marked_users(monkeypatch):
+    from contextlib import nullcontext
+    from backend.scripts import probe_capacity_owner_canary as canary
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def one(self):
+            return {"watchlists": 0, "conversations": 0, "runs": 0}
+
+    class Connection:
+        def __init__(self):
+            self.writes = []
+
+        def execute(self, statement, params):
+            sql = str(statement)
+            if "SELECT" in sql:
+                return Result()
+            self.writes.append((sql, dict(params)))
+            return Result()
+
+    connection = Connection()
+    monkeypatch.setattr(canary, "sync_engine", type("Engine", (), {"begin": lambda _self: nullcontext(connection)})())
+    monkeypatch.setattr(canary, "checked_rows", lambda *_args, **_kwargs: {
+        fixtures.fixture_email("owner-check", 1): {"id": 101, "is_active": True},
+        fixtures.fixture_email("owner-check", 2): {"id": 202, "is_active": True},
+    })
+    result = canary.seed("owner-check")
+    assert result["seeded_users"] == 2
+    assert len(connection.writes) == 6
+    assert [params["user_id"] for _, params in connection.writes] == [101, 101, 101, 202, 202, 202]
+    assert [params["symbol"] for sql, params in connection.writes if "INSERT INTO watchlists" in sql] == ["XRP", "ADA"]
+
+
+def test_owner_canary_public_probe_rejects_cross_account_content(monkeypatch):
+    monkeypatch.syspath_prepend(str(fixtures.REPO_ROOT / "ops/load"))
+    probe = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/owner_canary.py"))
+    valid_workspace = {"watchlist": {"rows": [{"symbol": "XRP"}]}}
+    own = [{"id": "capacity-owner-owner-check-1",
+            "title": "Capacity owner canary owner-check account 1"}]
+    probe["assert_owner_content"](1, "owner-check", valid_workspace, own)
+    with pytest.raises(RuntimeError, match="workspace watchlist isolation"):
+        probe["assert_owner_content"](1, "owner-check", {"watchlist": {"rows": [{"symbol": "ADA"}]}}, own)
+    with pytest.raises(RuntimeError, match="FINN conversation isolation"):
+        probe["assert_owner_content"](1, "owner-check", valid_workspace, own + [
+            {"id": "capacity-owner-owner-check-2", "title": "another owner's title"},
+        ])
+
+
+def test_owner_canary_cleanup_refuses_changed_run_before_delete(monkeypatch):
+    from contextlib import nullcontext
+    from backend.scripts import probe_capacity_owner_canary as canary
+
+    class Result:
+        def __init__(self, row=None, count=None):
+            self.row = row
+            self.count = count
+
+        def mappings(self):
+            return self
+
+        def one_or_none(self):
+            return self.row
+
+        def scalar_one(self):
+            return self.count
+
+    class Connection:
+        def execute(self, statement, params):
+            sql = str(statement)
+            if sql.lstrip().startswith("DELETE"):
+                pytest.fail("Cleanup must not delete any row after a changed run")
+            if "FROM finn_v2_runs" in sql and "FOR UPDATE" in sql:
+                return Result({"user_id": params["user_id"],
+                               "conversation_id": params["conversation_id"],
+                               "message": params["message"], "status": "running"})
+            if "FROM finn_v2_conversations" in sql:
+                return Result(None)
+            if "COUNT(*) FROM finn_v2_runs" in sql:
+                return Result(count=1)
+            if "FROM watchlists" in sql:
+                return Result(None)
+            raise AssertionError(sql)
+
+    connection = Connection()
+    monkeypatch.setattr(canary, "sync_engine", type("Engine", (), {"begin": lambda _self: nullcontext(connection)})())
+    monkeypatch.setattr(canary, "checked_rows", lambda *_args, **_kwargs: {
+        fixtures.fixture_email("owner-check", 1): {"id": 101},
+        fixtures.fixture_email("owner-check", 2): {"id": 202},
+    })
+    with pytest.raises(RuntimeError, match="Canary run changed"):
+        canary.cleanup("owner-check")
+
+
+def test_owner_canary_run_dependency_blocks_cleanup(monkeypatch):
+    from backend.scripts import probe_capacity_owner_canary as canary
+
+    class Result:
+        def __init__(self, rows=None, count=None):
+            self.rows = rows
+            self.count = count
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return self.rows
+
+        def scalar_one(self):
+            return self.count
+
+    class Connection:
+        dialect = type("Dialect", (), {"identifier_preparer": type("Preparer", (), {"quote": staticmethod(lambda name: f'"{name}"')})()})()
+
+        def execute(self, statement, params=None):
+            sql = str(statement)
+            if "pg_constraint" in sql:
+                return Result(rows=[{"schema_name": "public", "table_name": "finn_v2_run_traces", "columns": ["run_id"]}])
+            if '"finn_v2_run_traces"' in sql:
+                return Result(count=1)
+            raise AssertionError(sql)
+
+    with pytest.raises(RuntimeError, match="dependent rows"):
+        canary.assert_no_run_dependents(Connection(), "capacity-owner-run-owner-check-1")
+
+
+@pytest.mark.parametrize("module_name,action", [
+    ("probe_capacity_owner_canary", "seed"),
+    ("probe_capacity_owner_canary", "cleanup"),
+    ("provision_capacity_fixtures", "create"),
+    ("provision_capacity_fixtures", "issue"),
+    ("provision_capacity_fixtures", "deactivate"),
+])
+def test_capacity_mutations_require_explicit_production_flag(monkeypatch, capsys, module_name, action):
+    import importlib
+    import sys
+
+    module = importlib.import_module(f"backend.scripts.{module_name}")
+    args = [module_name, action, "--campaign", "owner-check",
+        "--expected-db-host", module.db_host,
+        "--expected-db-port", module.db_port,
+        "--expected-db-name", module.db_name,
+        "--apply"]
+    if module_name == "provision_capacity_fixtures":
+        args.extend(["--count", "2"])
+    monkeypatch.setattr(sys, "argv", args)
+    with pytest.raises(SystemExit) as exit_info:
+        module.main()
+    assert exit_info.value.code == 2
+    assert "--allow-production" in capsys.readouterr().err
+
+
 def test_capacity_fixture_email_is_accepted_by_auth_response_schema():
     from pydantic import EmailStr, parse_obj_as
 
