@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Recente gesloten Paper-trade zonder reviewnummer — herstelkandidaat (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. De onafhankelijke herkeuring
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. De onafhankelijke herkeuring
 [39556895361](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39556895361)
 op `0e5d797534d36db4dc9e431d6a02eb46d9da59fa` eindigde `NOT_ACCEPTED`.
 De eerste gewone FINN-chatbeurt werd voltooid, maar het antwoord bevatte geen
@@ -42,7 +42,15 @@ met nul brokerorders, Live-aanroepen of productieverbindingen; adaptertests
 De echte Responses-regressie slaagde met **109/109** operatie- en veldmatches
 en nul provider-, schema-, parse- of validatiefouten (artifact SHA-256
 `9069d86e054232c17db9d91a721e52b80031f6db5108a7c34b0734a8b71290d4`).
-CI, deployment en onafhankelijke ingelogde live QA staan nog open.
+De wijziging is via [PR #505](https://github.com/gvangalen/antigravity-trading-tool/pull/505)
+gemerged als `47ba1860f19fdde66e476bb5994bdb1d16c98297`. De vijf PR-CI-
+en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39559315743)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39559612769)
+slaagde. Publieke backend-health en frontend-buildinfo gaven daarna beide
+HTTP 200 en exact deze merge-SHA. Onafhankelijke ingelogde live QA staat nog
+open; dit is geen acceptatieclaim. Een latere status-only documentcommit kan
+de publieke SHA veranderen; QA bindt aan de dan actuele, gelijke backend- en
+frontend-SHA.
 
 ## Gewone vraag over gesloten Paper-review — herstelkandidaat (21 oktober 2026)
 
