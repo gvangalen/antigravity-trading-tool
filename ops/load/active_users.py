@@ -7,9 +7,12 @@ import argparse
 import asyncio
 import json
 import math
+import os
 import random
+import resource
 import sys
 import time
+import uuid
 from collections import Counter, defaultdict
 from pathlib import Path
 from urllib.parse import urlparse
@@ -53,7 +56,7 @@ def percentile(values, fraction):
 async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results, stop_event,
                        initial_spread_seconds=0, steady_results=None, steady_started=None):
     rng = random.Random(fixture["user_id"])
-    headers = {"Authorization": f"Bearer {fixture['access_token']}"}
+    authorization = f"Bearer {fixture['access_token']}"
     choices = list(ROUTES)
     if chat_budget is not None:
         choices.append(("finn_chat", "POST", "/api/assistant/chat", 1))
@@ -71,10 +74,12 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
                 chat_budget["remaining"] -= 1
         started_at = time.monotonic()
         started = time.perf_counter()
+        request_started_utc = time.time()
+        sent_trace_id = f"cap-{uuid.uuid4().hex[:16]}"
         response = None
         try:
             response = await client.request(
-                method, path, headers=headers,
+                method, path, headers={"Authorization": authorization, "X-Trace-Id": sent_trace_id},
                 json={"query": "Explain the current BTC market context in general terms.",
                       "context": {"page": "load_fixture", "symbol": "BTC"}} if name == "finn_chat" else None,
             )
@@ -82,17 +87,18 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
         except httpx.HTTPError:
             status = 0
         backend_ms = None
-        trace_id = None
+        trace_id = sent_trace_id
         if response is not None:
             response_headers = getattr(response, "headers", {})
-            trace_id = response_headers.get("x-trace-id")
+            trace_id = response_headers.get("x-trace-id") or sent_trace_id
             timing = response_headers.get("server-timing", "")
             if timing.startswith("app;dur="):
                 try:
                     backend_ms = max(0.0, float(timing.removeprefix("app;dur=")))
                 except ValueError:
                     pass
-        sample = (status, (time.perf_counter() - started) * 1000, backend_ms, trace_id)
+        sample = (status, (time.perf_counter() - started) * 1000, backend_ms, trace_id,
+                  round(request_started_utc, 6), round(time.time(), 6))
         results[name].append(sample)
         if steady_results is not None and steady_started is not None and started_at >= steady_started:
             steady_results[name].append(sample)
@@ -147,7 +153,9 @@ def report(label, results):
         statuses = Counter(str(sample[0]) for sample in samples)
         backend_latencies = [sample[2] for sample in samples if len(sample) > 2 and sample[2] is not None]
         slow_traces = [
-            {"trace_id": sample[3], "client_ms": round(sample[1], 2), "backend_ms": sample[2]}
+            {"trace_id": sample[3], "client_ms": round(sample[1], 2), "backend_ms": sample[2],
+             "start_utc_epoch": sample[4] if len(sample) > 4 else None,
+             "end_utc_epoch": sample[5] if len(sample) > 5 else None}
             for sample in sorted(samples, key=lambda item: item[1], reverse=True)
             if len(sample) > 3 and sample[3]
         ][:5]
@@ -196,6 +204,42 @@ async def monitor_stage(results, limits, deadline, stop_event, latency_abort_rou
                 return
 
 
+async def monitor_generator(samples, interval=0.5):
+    """Sample load-process scheduling and file descriptors without request data."""
+    loop = asyncio.get_running_loop()
+    previous_wall = loop.time()
+    previous_cpu = time.process_time()
+    while True:
+        expected = loop.time() + interval
+        await asyncio.sleep(interval)
+        now = loop.time()
+        cpu = time.process_time()
+        open_fds = None
+        for fd_directory in ("/proc/self/fd", "/dev/fd"):
+            try:
+                open_fds = len(os.listdir(fd_directory))
+                break
+            except OSError:
+                continue
+        samples.append({
+            "event_loop_lag_ms": round(max(0, now - expected) * 1000, 2),
+            "process_cpu_pct": round(max(0, cpu - previous_cpu) / max(now - previous_wall, 0.001) * 100, 2),
+            "open_fds": open_fds,
+        })
+        previous_wall, previous_cpu = now, cpu
+
+
+def generator_report(samples):
+    fd_samples = [sample["open_fds"] for sample in samples if sample["open_fds"] is not None]
+    return {
+        "samples": len(samples),
+        "event_loop_lag_p95_ms": percentile([sample["event_loop_lag_ms"] for sample in samples], 0.95),
+        "event_loop_lag_max_ms": max((sample["event_loop_lag_ms"] for sample in samples), default=None),
+        "process_cpu_p95_pct": percentile([sample["process_cpu_pct"] for sample in samples], 0.95),
+        "open_fds_max": max(fd_samples, default=None),
+    }
+
+
 def reject_aborted_stage(latency_abort_routes):
     if latency_abort_routes:
         raise RuntimeError(
@@ -207,6 +251,16 @@ def require_operator_continue(next_stage):
     answer = input(f"Inspect host, DB and queue metrics. Type CONTINUE for {next_stage}: ")
     if answer.strip() != "CONTINUE":
         raise RuntimeError("Operator declined the next load stage")
+
+
+def generator_fd_limits(max_users, *, production):
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if production and soft < max_users + 128:
+        raise ValueError(
+            f"Load generator needs at least {max_users + 128} open file descriptors "
+            f"(soft={soft}, hard={hard}); raise the shell's ulimit -n before running"
+        )
+    return {"soft": soft, "hard": hard}
 
 
 async def run(args, fixtures):
@@ -224,6 +278,7 @@ async def run(args, fixtures):
             steady_results = defaultdict(list)
             stop_event = asyncio.Event()
             latency_abort_routes = []
+            generator_samples = []
             # Keep the requested duration after the final fixture has joined;
             # the deterministic first-request spread is a separate ramp.
             steady_started = time.monotonic() + args.think_seconds
@@ -231,6 +286,7 @@ async def run(args, fixtures):
             monitor = asyncio.create_task(monitor_stage(
                 steady_results, args.p95_limits, deadline, stop_event, latency_abort_routes,
             ))
+            generator_monitor = asyncio.create_task(monitor_generator(generator_samples))
             try:
                 await asyncio.gather(*(
                     virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results,
@@ -255,7 +311,10 @@ async def run(args, fixtures):
                 raise
             finally:
                 monitor.cancel()
-                await asyncio.gather(monitor, return_exceptions=True)
+                generator_monitor.cancel()
+                await asyncio.gather(monitor, generator_monitor, return_exceptions=True)
+                print(json.dumps({"stage": f"{users} users", "generator": generator_report(generator_samples)}),
+                      flush=True)
             all_summary = report(f"{users} users / ramp + {seconds}s steady", results)
             summary = report(f"{users} users / observed steady interval", steady_results)
             reject_aborted_stage(latency_abort_routes)
@@ -320,6 +379,11 @@ def main():
     args.max_users = max(int(item.split(":", 1)[0]) for item in args.stages.split(","))
     if len(fixtures) < args.max_users:
         parser.error("Provide a distinct fixture for every user in the largest stage")
+    try:
+        limits = generator_fd_limits(args.max_users, production=args.allow_production)
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(json.dumps({"generator_fd_limit": limits}), flush=True)
     asyncio.run(run(args, fixtures))
 
 

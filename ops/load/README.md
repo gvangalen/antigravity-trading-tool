@@ -20,6 +20,40 @@ python3 ops/load/active_users.py \
   --allow-production
 ```
 
+For a 1000-user run, start the generator from a shell with `ulimit -n 4096`
+or a higher available soft limit. The harness rejects a production run when
+the soft file-descriptor limit is below the requested user count plus 128.
+It prints the effective limit, event-loop lag, generator CPU percentage and
+maximum open descriptors. Every synthetic request sends a unique `cap-` trace
+ID. The five slowest requests per route include UTC start/end epoch seconds,
+client duration, app duration and trace ID, without tokens or response bodies.
+
+To locate latency outside the app, install `nginx_capacity_timing.conf` once
+in the production Nginx `http` context and add the following directive to the
+actual `tradamind.com` `/api/` location for the bounded run. First inspect
+`nginx -T` and copy every effective standard `access_log` directive, including
+its path, format and options, into that location. Defining a log inside a
+location replaces inherited access logs. The current production config was
+observed using `/var/log/nginx/access.log`, so its example is:
+
+```nginx
+access_log /var/log/nginx/access.log;
+access_log /var/log/nginx/capacity_timing.log capacity_timing if=$capacity_trace;
+```
+
+Validate the rendered config with `nginx -t` before reloading, and confirm
+normal API requests still reach the standard log. The dedicated log records
+requests bearing a matching `cap-` trace header; that header is not proof of
+fixture identity. It contains no Authorization header, query string or
+response body. Restrict access to the dedicated file, monitor its size during
+the bounded run, and remove the temporary logging after diagnosis.
+For the same trace ID, Nginx request start is approximately
+`end_utc_epoch - request_s`; compare that with the harness request start to
+separate delay before Nginx from proxy/upstream delay. Compare
+`upstream_connect_s`, `upstream_header_s`, `upstream_response_s` and app time
+to locate the remaining wait. The operator should also sample generator FD
+and socket counts and host CPU during the stage.
+
 The harness accepts the exact production origin `https://tradamind.com` with
 `--allow-production`, or a loopback origin for local checks. Before each stage
 it verifies `/api/auth/me` returns the expected account ID and email for every
