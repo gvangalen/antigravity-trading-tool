@@ -51,6 +51,8 @@ from backend.services.finn_v2_responses_front_door import (
 )
 from backend.services.finn_v2_responses_loop import FinnResponsesError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
+from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
+from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -66,6 +68,36 @@ from backend.utils import openai_client
 
 
 logger = logging.getLogger(__name__)
+
+
+def _explicit_setup_rule_waiver(message: str) -> bool:
+    """Only a specific reply can withdraw an unresolved required setup rule."""
+    normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
+    return normalized in {
+        "maak voorstel zonder deze voorwaarden",
+        "begin nieuw voorstel zonder eerdere voorwaarden",
+        "make proposal without these conditions",
+        "start new proposal without previous conditions",
+        "vorschlag ohne diese bedingungen erstellen",
+        "neuen vorschlag ohne vorherige bedingungen beginnen",
+    }
+
+
+def _proposal_from_blocked_setup(block: dict):
+    """Rebuild the owner-bound draft without asking the model to choose a tool."""
+    inputs = dict(block.get("captured_inputs") or {})
+    if not inputs:
+        return None
+    restored_call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_setup", "inputs": inputs},
+    )
+    return FinnResponsesProposalSelection().from_call(
+        call=restored_call,
+        message=str(block.get("draft_message") or block.get("original_message") or ""),
+        conversation_context={},
+        verified_asset=str(inputs.get("symbol") or "") or None,
+    )
 
 
 def _simple_coach_experiment_enabled() -> bool:
@@ -2049,6 +2081,14 @@ class FinnV2RunService:
                         raise LookupError("FINN V2 run not found")
                     visible = service._is_visible_run(run)
                     run_shadow = service.tools.flags.should_run_block4_shadow(user_id)
+                    run_message = run.message
+                    conversation_id = run.conversation_id
+                    setup_rule_block = {}
+                    if visible and conversation_id:
+                        context = await service.conversations.get_context(
+                            conversation_id=conversation_id, user_id=user_id,
+                        )
+                        setup_rule_block = dict(context.get("setup_rule_block") or {})
 
                 prepared: FinnResponsesFrontDoorResult | None = None
                 if visible:
@@ -2068,6 +2108,158 @@ class FinnV2RunService:
                         read_repair_used = False
                         minimal_read_used = False
                         final_response_id: str | None = None
+                        if setup_rule_block and _explicit_setup_rule_waiver(run_message):
+                            # The offered choice belongs to the persisted
+                            # owner-scoped draft. Do not depend on another
+                            # model tool selection to recover that draft.
+                            restored_analysis = _proposal_from_blocked_setup(setup_rule_block)
+                            if restored_analysis is not None:
+                                prepared = replace(prepared, proposal_analysis=restored_analysis)
+                        if (
+                            prepared.proposal_analysis is not None
+                            and prepared.proposal_analysis.request_plan.operation_id == "create_setup"
+                        ):
+                            # A fresh complete request can replace the draft
+                            # fields, but cannot implicitly waive an earlier
+                            # unsupported condition. The user must choose the
+                            # explicit withdrawal before any card is released.
+                            active_block = setup_rule_block
+                            setup_inputs = dict(
+                                prepared.proposal_analysis.request_plan.operation_state.get("collected_inputs") or {}
+                            )
+                            fresh_setup_request = (
+                                _explicit_fresh_create_operation_request(run_message) == "create_setup"
+                            )
+                            waiver = _explicit_setup_rule_waiver(run_message)
+                            coverage_message = message
+                            if active_block.get("original_message") and not waiver:
+                                coverage_message = (
+                                    "Unresolved required setup condition from this conversation: "
+                                    + str(active_block["original_message"])
+                                    + "\nCurrent user request: " + message
+                                )
+                            coverage = (
+                                "none" if waiver else
+                                await FinnResponsesToolRelevanceGuard(
+                                    openai_client.async_client
+                                ).setup_rule_coverage(
+                                    message=coverage_message, collected_inputs=setup_inputs,
+                                )
+                            )
+                            if active_block and not waiver:
+                                # A new model verdict cannot silently release
+                                # a condition already found missing from this
+                                # draft. The user can explicitly withdraw it.
+                                coverage = "unsupported_required_rule"
+                            if coverage != "none":
+                                locale = prepared.locale or "nl"
+                                if locale == "en":
+                                    question = (
+                                        "Your request includes a trading condition I cannot enforce with this "
+                                        "setup. Choose ‘Make proposal without these conditions’ if I should "
+                                        "omit them. Otherwise I cannot offer a confirmable setup yet."
+                                    ) if coverage == "unsupported_required_rule" else (
+                                        "Should the condition you mentioned be enforced by the setup? "
+                                        "Please clarify before I prepare a proposal."
+                                    )
+                                elif locale == "de":
+                                    question = (
+                                        "Deine Anfrage enthält eine Handelsbedingung, die dieses Setup nicht "
+                                        "verbindlich prüfen kann. Wähle „Vorschlag ohne diese Bedingungen "
+                                        "erstellen“, wenn sie entfallen sollen. Andernfalls kann ich noch "
+                                        "kein bestätigbares Setup anbieten."
+                                    ) if coverage == "unsupported_required_rule" else (
+                                        "Soll die genannte Bedingung vom Setup verbindlich geprüft werden? "
+                                        "Bitte kläre das, bevor ich einen Vorschlag vorbereite."
+                                    )
+                                else:
+                                    question = (
+                                        "Je noemt een handelsvoorwaarde die deze setup niet automatisch kan "
+                                        "controleren. Kies ‘Maak voorstel zonder deze voorwaarden’ als ik die "
+                                        "mag weglaten. Anders kan ik nog geen bevestigbare setup aanbieden."
+                                    ) if coverage == "unsupported_required_rule" else (
+                                        "Moet de genoemde voorwaarde door de setup worden gecontroleerd? "
+                                        "Verduidelijk dat voordat ik een voorstel maak."
+                                    )
+                                if active_block and fresh_setup_request:
+                                    if locale == "en":
+                                        question = (
+                                            "I see your new setup request, but the earlier condition cannot be "
+                                            "enforced here. Choose ‘Start new proposal without previous conditions’ "
+                                            "to review the new draft without that condition."
+                                        )
+                                    elif locale == "de":
+                                        question = (
+                                            "Ich sehe deinen neuen Setupwunsch, aber die frühere Bedingung "
+                                            "kann hier nicht verbindlich geprüft werden. Wähle „Neuen Vorschlag "
+                                            "ohne vorherige Bedingungen beginnen“, um den neuen Entwurf anzusehen."
+                                        )
+                                    else:
+                                        question = (
+                                            "Ik zie je nieuwe setupverzoek, maar de eerdere voorwaarde "
+                                            "kan ik hier niet afdwingen. Kies ‘Begin nieuw voorstel zonder eerdere "
+                                            "voorwaarden’ om het nieuwe concept zonder die voorwaarde te bekijken."
+                                        )
+                                choice = (
+                                    "Start new proposal without previous conditions" if locale == "en" else
+                                    "Neuen Vorschlag ohne vorherige Bedingungen beginnen" if locale == "de" else
+                                    "Begin nieuw voorstel zonder eerdere voorwaarden"
+                                ) if active_block and fresh_setup_request else (
+                                    "Make proposal without these conditions" if locale == "en" else
+                                    "Vorschlag ohne diese Bedingungen erstellen" if locale == "de" else
+                                    "Maak voorstel zonder deze voorwaarden"
+                                )
+                                clarification = FinnResponsesVerifiedAnswer(
+                                    status="clarification_required", text=question,
+                                    reason="setup_rule_not_captured", evidence=(),
+                                    clarification={
+                                        "question": question, "reason": "setup_rule_not_captured",
+                                        "choices": [choice],
+                                    },
+                                )
+                                async with async_session_factory() as session:
+                                    conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                                        conversation_id=conversation_id, user_id=user_id, for_update=True,
+                                    )
+                                    if conversation is None or conversation.last_run_id != run_id:
+                                        raise RuntimeContractConflictError("setup_rule_block_conversation_stale")
+                                    context = dict(conversation.context_json or {})
+                                    context["setup_rule_block"] = {
+                                        "operation_id": "create_setup",
+                                        "original_message": str(active_block.get("original_message") or run_message),
+                                        "captured_inputs": (
+                                            setup_inputs if fresh_setup_request else
+                                            dict(active_block.get("captured_inputs") or setup_inputs)
+                                        ),
+                                        "draft_message": (
+                                            run_message if fresh_setup_request else
+                                            str(active_block.get("draft_message") or run_message)
+                                        ),
+                                    }
+                                    await FinnV2ConversationRepository(session).update_context(
+                                        conversation_id=conversation_id, user_id=user_id, context=context,
+                                    )
+                                    await cls(session).complete_responses_read(
+                                        run_id=run_id, user_id=user_id,
+                                        response_id=prepared.response.response_id,
+                                        answer=clarification,
+                                        previous_response=prepared.previous_response,
+                                        locale=prepared.locale,
+                                    )
+                                return
+                            if setup_rule_block:
+                                async with async_session_factory() as session:
+                                    conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                                        conversation_id=conversation_id, user_id=user_id, for_update=True,
+                                    )
+                                    if conversation is None or conversation.last_run_id != run_id:
+                                        raise RuntimeContractConflictError("setup_rule_block_conversation_stale")
+                                    context = dict(conversation.context_json or {})
+                                    context.pop("setup_rule_block", None)
+                                    await FinnV2ConversationRepository(session).update_context(
+                                        conversation_id=conversation_id, user_id=user_id, context=context,
+                                    )
+                                    await session.commit()
                         if prepared.proposal_analysis is None:
                             responses_stage_started = monotonic()
                             logger.info(

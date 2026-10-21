@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: huidige grens (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`; nog geen nieuwe deployment. De
+opruiming van de oude mobiele briefingresten is als [PR #511](https://github.com/gvangalen/antigravity-trading-tool/pull/511)
+gemerged. Auto Deploy slaagde en publieke backend-health en frontend-buildinfo
+gaven beide HTTP 200 op `83beb016eb2782a12abb0560d0b8300ac4414dd7`.
+De bestaande onafhankelijke QA-agent gaf voor de bredere desktopcutover
+`NOT_ACCEPTED`: een BTC-setupvoorstel verloor gevraagde kwalitatieve
+trend-/marktvoorwaarden en een aansluitende strategieaanvraag na de opgeslagen
+setup gaf geen concept. Scores en rapport bleven in die proef consistent.
+
+De strategie-uitval is lokaal teruggeleid tot de classificatie van een
+expliciete aanmaak na een genoemde, recent opgeslagen setup als contextuele
+vervolgvraag. Een gerichte regressie is toegevoegd. Voor setups controleert
+een begrensde Responses-classificatie nu of de gevraagde automatische
+handelsvoorwaarde in het getypeerde contract staat. Ontbreekt die, dan ontstaat
+geen bevestigbare kaart. Een exact gekozen intrekking herstelt het getypeerde
+concept uit de eigenaargebonden conversatie; een nieuw concept erft geen oude
+naam of timeframe. De gewone coachantwoorden gebruiken deze voorstelcontrole
+niet. Security en Architecture vonden na reparaties geen concrete grens- of
+statusfout in de lokale code; dat is geen live QA-verdict.
+
+Gemeten lokale validatie voor deze lopende kandidaat: backend **3664 geslaagd,
+4 bestaande skips**; webbuild, webtypecheck, i18n-lint/-tests, command- en
+voorsteltests en `audit:high` geslaagd (één moderate Next.js-advisory).
+De echte Responses-selectie slaagde op de ontwikkelset **20/20** en
+regressieset **109/109**, zonder provider-, schema- of time-outfouten. Een
+synthetische eigenaargebonden workerproef op de definitieve bronstand gaf op
+de oorspronkelijke BTC-vraag een niet-bevestigbare verduidelijking en na de
+expliciete keuze een BTC-voorstel met de oorspronkelijke naam en 4H.
+Een afzonderlijke proef met een aansluitend onvolledig ETH-verzoek
+bleef eveneens niet-bevestigbaar; na expliciete intrekking vroeg FINN om 1D en
+de naam en maakte pas daarna een ETH-DCA-voorstel met vrijdag en €50. Er was
+geen opslag of order. De volledige lokale workeractiecontractmatrix slaagde
+**16/16**, plus **19/19** adaptertests; artifact SHA-256
+`2ef752e9f38301e0b0a288698482017693e13cb1fee7e282506e308147c75554`.
+De matrix registreert nul brokerorders, nul Live-bots en nul
+productieverbindingen. Deze bewijzen zijn lokaal; CI, Auto Deploy en
+onafhankelijke ingelogde QA moeten nog volgen.
+
 ## Mobiele resten van de oude briefing verwijderd (21 oktober 2026)
 
 Phase: `LOCAL_VALIDATED_AWAITING_CI`. De mobiele code had nog twee
