@@ -303,7 +303,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     elif facts["assets"] and all(
         all(value is not None for value in item["scores"].values())
         for item in facts["assets"]
-    ) and re.search(r"\b(?:ontbre\w*|miss\w*|fehl\w*|unavailable)\b", prose["outlook"], re.I):
+    ) and re.search(r"\b(?:ontbre\w*|zonder|miss\w*|without|fehl\w*|ohne|unavailable)\b", prose["outlook"], re.I):
         # A complete scored snapshot must not end with an unsupported claim
         # that its measurements are missing. Keep the model for interpretation
         # while deriving data availability from typed Score 2.0 facts.

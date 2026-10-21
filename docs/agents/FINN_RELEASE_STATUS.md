@@ -6,7 +6,26 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Rapport- en benchmarkuitleg na Score 2.0-cutover (21 oktober 2026)
 
-Phase: `LOCAL_FIX_CANDIDATE`. Deze batch corrigeert twee bevindingen uit de
+Phase: `LOCAL_FIX_CANDIDATE` voor de vooruitblik; de voorafgaande twee
+presentatiecorrecties zijn `QA_ACCEPTED_SCOPED`. [PR #489](https://github.com/gvangalen/antigravity-trading-tool/pull/489)
+is gemerged op `1dc808a784724b1e2951504572824fa2072f5ec0`. Alle vijf
+[PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39530925876)
+en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39531251388)
+zijn geslaagd; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39531543033)
+is geslaagd. Publieke backend-health en frontend-buildinfo gaven beide HTTP
+200 en exact die SHA. De bestaande onafhankelijke QA-agent accepteerde de
+gerichte NL-herkeuring: geen verzonnen botbeslissing, gepauzeerde Paper-bot
+en onbekend kassaldo correct onderscheiden; Analyse, Mijn Plan, rapport en
+FINN toonden voor BTC dezelfde componenten `40/40/40` en benchmark `40`.
+Er was geen Live-order of botactivatie. EN/DE en bredere onboarding- en
+multi-planflown zijn hiermee niet afgetekend. QA vond nog een P2:
+de modelvooruitblik zei "zonder RSI- en DXY-waarden" terwijl Analyse die
+metingen liet zien. De lokale vervolgcorrectie wijst zulke afwezigheidsclaims
+bij complete actuele Score 2.0-componenten af. Gerichte rapporttests **16/16**
+en root backend **3593 geslaagd, 4 skips** na deze correctie. Deze laatste
+correctie is nog niet live beoordeeld.
+
+Deze batch corrigeert twee bevindingen uit de
 onafhankelijke Score 2.0/Paper-herkeuring. Een dagrapport zonder opgeslagen
 botbeslissing toont geen verzonnen `Houd vast` of reden "criteria niet bereikt"
 meer; het rapport maakt ook duidelijk dat een botbudget geen vastgesteld
@@ -20,8 +39,8 @@ setup-tests (**9**) en high-audit zijn geslaagd. Eén echte
 `gpt-6-luna`/Responses-rapportproef met synthetische eigenaargebonden feiten
 gaf met draaiende lokale database HTTP 200 en alle acht secties. Het rapport
 behield de benchmark `33,3`, noemde de Paper-bot gepauzeerd en behandelde
-onbekend kassaldo als onbekend. De code is nog niet gedeployed of onafhankelijk
-live geaccepteerd. De eerdere drie Paper/Score 2.0-QA-runs blijven het bewijs
+onbekend kassaldo als onbekend. De code is nog niet onafhankelijk live
+geaccepteerd. De eerdere drie Paper/Score 2.0-QA-runs blijven het bewijs
 voor de onderliggende botcutover, niet voor deze nieuwe presentatiecorrectie.
 
 ## Score 2.0-bot en oude marktagenten (21 oktober 2026)
