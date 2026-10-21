@@ -272,9 +272,20 @@ def test_prior_lesson_change_invalidates_transitive_cached_analyses():
     "Je kunt de volgende keer gerust je inzet verdubbelen.",
     "Zet morgen twee keer zoveel kapitaal in.",
 ])
-def test_ai_rejects_forward_trade_directives(text):
-    with pytest.raises(ValueError):
-        validate_analysis(_analysis(text), {"fill:1"})
+def test_ai_discards_forward_trade_directives_from_unused_model_prose(text):
+    result = validate_analysis(_analysis(text), {"fill:1"})
+    assert text not in str(result)
+    assert result["observations"][0]["evidence_ids"] == ["fill:1"]
+
+
+def test_closed_review_accepts_selection_only_and_rejects_fabricated_evidence():
+    selection = {"observations": [{"theme": "evidence_gap", "evidence_ids": ["fill:1"]}],
+                 "visual_signal": None, "prior_lesson_review_id": None}
+    result = validate_analysis(selection, {"fill:1"})
+    assert result["observations"][0]["theme"] == "evidence_gap"
+    selection["observations"][0]["evidence_ids"] = ["fill:999"]
+    with pytest.raises(ValueError, match="Ungrounded analysis observation"):
+        validate_analysis(selection, {"fill:1"})
 
 
 def test_ai_accepts_evidence_linked_retrospective_observation():

@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import re
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -32,19 +31,17 @@ SYSTEM_ROLE = (
     "Bij exchange-reviews is volledige sluiting door de gebruiker bevestigd; "
     "presenteer dat nooit als door de exchange bewezen. Maak geen "
     "claim over pixels die je niet goed kunt lezen. Noem onzekerheid bij ontbrekend "
-    "plan of chart. Antwoord in het "
-    "Nederlands als JSON met summary, observations (array van {text,evidence_ids,theme}), "
-    "uncertainty, question. Gebruik alleen de exacte meegegeven evidence_ids. "
-    "De server toont uitsluitend vaste retrospectieve teksten bij jouw gekozen themes "
-    "en evidence_ids; vrije tekstvelden worden niet aan de gebruiker getoond. "
+    "plan of chart. Antwoord uitsluitend als JSON met observations (array van "
+    "{theme,evidence_ids}), visual_signal en prior_lesson_review_id. "
+    "Gebruik alleen de exacte meegegeven evidence_ids. De server schrijft de "
+    "zichtbare retrospectieve tekst bij jouw gekozen themes en evidence_ids. "
     "Als een screenshot is meegegeven, kies visual_signal uit "
     "entry_exit_markers, risk_level_marked, upward_move, downward_move, unclear. "
     "Kies unclear als de afbeelding niet duidelijk leesbaar is of je twijfelt. "
     "Zonder screenshot geef je visual_signal als null. "
     "Bij een gebruikersvraag: kies als eerste observation het thema dat de vraag "
     "het best raakt. Kies evidence_ids die werkelijk over dat thema gaan. "
-    "Voor een gebruikersvraag volstaan observation-thema's met evidence_ids; "
-    "summary, uncertainty, question en vrije observation-tekst zijn dan optioneel. "
+    "Ook voor een gebruikersvraag volstaan observation-thema's met evidence_ids. "
     "Als een eerder bevestigde gebruikersles relevant is, geef prior_lesson_review_id "
     "als exact een van de meegegeven review_id waarden; anders null. "
     "Theme is een van plan_followed, risk, timing, exit_process, evidence_gap, other."
@@ -82,50 +79,6 @@ VISUAL_SIGNAL_TEMPLATES = {
     "downward_move": "De screenshot lijkt een neerwaartse prijsbeweging te tonen. Dit bewijst op zichzelf niet of de trade volgens plan is uitgevoerd.",
     "unclear": "De screenshot is niet duidelijk genoeg om er een betrouwbare visuele observatie aan te verbinden.",
 }
-FORWARD_ADVICE = re.compile(
-    r"^\s*(?:koop|buy|kaufe|sell|verkoop|verkaufe|open|plaats|place|ga\s+long|go\s+long)\b|"
-    r"\b(?:koop|kopen|buy|buying|kauf|kaufe|kaufen|sell|selling|verkoop|verkopen|verkauf|verkaufe|verkaufen|long|short|leverage|hefboom|hebel|"
-    r"entry|instap|einstieg)\b.{0,70}\b(?:morgen|tomorrow|jetzt|now|vandaag|today|next|volgende|nächste|"
-    r"heute|nu|moet|should|solltest|zou|aan|up|in)\b|"
-    r"\b(?:morgen|tomorrow|jetzt|now|vandaag|today|next|volgende|nächste|heute|nu|"
-    r"moet|should|solltest|zou)\b.{0,70}\b(?:koop|kopen|buy|buying|kauf|kaufe|kaufen|sell|selling|verkoop|verkopen|verkauf|verkaufe|verkaufen|"
-    r"long|short|leverage|hefboom|hebel)\b|"
-    r"\b(?:maximale?\s+leverage|max(?:imum)?\s+leverage|leveraged\s+trade|"
-    r"open\s+(?:a\s+)?(?:long|short)|plaats\s+(?:een\s+)?order|place\s+(?:an?\s+)?order)\b",
-    re.IGNORECASE,
-)
-DIRECTIVE_CUE = re.compile(
-    r"\b(?:ik\s+raad(?:\s+je)?\s+aan|je\s+(?:kunt|kan|zou|moet)|"
-    r"volgende\s+keer|op\s+dit\s+moment|i\s+recommend|you\s+(?:can|could|should)|"
-    r"next\s+time|ich\s+rate|du\s+(?:kannst|solltest))\b",
-    re.IGNORECASE,
-)
-POSITION_INCREASE = re.compile(
-    r"\b(?:positie|position|einsatz|inzet|size|sizing|exposure|risico|risk|trade)\b"
-    r".{0,70}\b(?:vergroten?|verhoog|verdubbel|increase|double|raise|boost|erhöh|verdopp)\w*\b|"
-    r"\b(?:vergroot|verhoog|verdubbel|increase|double|raise|boost|erhöh|verdopp)\w*\b"
-    r".{0,70}\b(?:positie|position|einsatz|inzet|size|sizing|exposure|risico|risk|trade)\b",
-    re.IGNORECASE,
-)
-FUTURE_CAPITAL_DIRECTIVE = re.compile(
-    r"\b(?:zet|gebruik|put|use|set|investier|invest)\w*\b.{0,90}"
-    r"\b(?:morgen|tomorrow|nächste|volgende|next)\b.{0,90}"
-    r"\b(?:kapitaal|capital|geld|money|einsatz|inzet|stake)\b|"
-    r"\b(?:morgen|tomorrow|nächste|volgende|next)\b.{0,90}"
-    r"\b(?:meer|more|doppelt|dubbel|twice|double|twee\s+keer)\b.{0,90}"
-    r"\b(?:kapitaal|capital|geld|money|einsatz|inzet|stake)\b",
-    re.IGNORECASE,
-)
-
-
-def _reject_trade_directives(value: str) -> None:
-    if FORWARD_ADVICE.search(value) or FUTURE_CAPITAL_DIRECTIVE.search(value) or any(
-        DIRECTIVE_CUE.search(sentence) and POSITION_INCREASE.search(sentence)
-        for sentence in re.split(r"[.!?\n]", value)
-    ):
-        raise ValueError("Forward trade directive in retrospective analysis")
-
-
 def evidence_context(review: dict) -> tuple[dict, set[str]]:
     all_fills = review.get("fills") or []
     fills = (all_fills[:MAX_AI_FILLS // 2] + all_fills[-MAX_AI_FILLS // 2:]
@@ -290,26 +243,15 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
                       question_mode: bool = False) -> dict:
     if not isinstance(raw, dict) or raw.get("error"):
         raise ValueError("AI unavailable")
-    summary = raw.get("summary")
-    uncertainty = raw.get("uncertainty")
-    question = raw.get("question")
     observations = raw.get("observations")
-    # These prose fields are never shown. A follow-up only needs a grounded
-    # theme/evidence selection; rejecting it for discarded wording caused
-    # otherwise answerable questions to fail with HTTP 503.
-    if not question_mode and not all(isinstance(v, str) and 1 <= len(v) <= 1500 for v in (summary, uncertainty, question)):
-        raise ValueError("Invalid analysis response")
-    if not question_mode:
-        for value in (summary, uncertainty, question):
-            _reject_trade_directives(value)
+    # Only selections are used. Model prose is never shown or stored, so its
+    # wording cannot invalidate an otherwise grounded closed-trade analysis.
     if not isinstance(observations, list) or not observations or len(observations) > 6:
         raise ValueError("Invalid analysis observations")
     checked = []
     for observation in observations:
-        if not isinstance(observation, dict) or (not question_mode and not isinstance(observation.get("text"), str)):
+        if not isinstance(observation, dict):
             raise ValueError("Invalid analysis observation")
-        if not question_mode:
-            _reject_trade_directives(observation["text"])
         refs = observation.get("evidence_ids")
         theme = observation.get("theme")
         if theme not in THEMES or not isinstance(refs, list) or not refs or any(ref not in allowed for ref in refs):
@@ -409,13 +351,8 @@ async def _validated_model_analysis(context: dict, allowed: set[str], *,
         "facts": context,
         "user_question_untrusted": question,
         "output_contract": {
-            "required_fields": (["observations", "visual_signal", "prior_lesson_review_id"]
-                                if question is not None else
-                                ["summary", "observations", "uncertainty", "question",
-                                 "visual_signal", "prior_lesson_review_id"]),
-            "observations": ("Kies 1 tot 3 thema's. Elke observatie heeft theme en een niet-lege evidence_ids-array. Vrije tekst is niet nodig."
-                             if question is not None else
-                             "Geef 1 tot 3 observaties. Elke observatie heeft text, theme en een niet-lege evidence_ids-array."),
+            "required_fields": ["observations", "visual_signal", "prior_lesson_review_id"],
+            "observations": "Kies 1 tot 3 thema's. Elke observatie heeft theme en een niet-lege evidence_ids-array. Geef geen vrije tekst.",
             "allowed_themes": permitted_themes,
             "allowed_evidence_ids": sorted(allowed),
             "evidence_rule": "Gebruik uitsluitend exacte IDs uit allowed_evidence_ids. Verzin geen IDs of thema's.",
