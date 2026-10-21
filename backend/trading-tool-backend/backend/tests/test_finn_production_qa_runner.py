@@ -297,6 +297,24 @@ def test_closed_paper_fixture_quote_is_scoped_to_protected_paper_execution(monke
     assert execution._get_live_price is original
 
 
+def test_closed_paper_ai_error_diagnostic_discloses_only_fixed_categories(monkeypatch):
+    import asyncio
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.utils import openai_client
+
+    async def unavailable(*_args, **_kwargs):
+        return {"error": "secret request details: Error code 429"}
+
+    monkeypatch.setattr(openai_client, "ask_gpt_json_async", unavailable)
+    with probe._capture_fixture_ai_errors() as categories:
+        result = asyncio.run(openai_client.ask_gpt_json_async(prompt="private prompt"))
+        assert result["error"].startswith("secret request details")
+    assert categories == ["rate_limit"]
+    assert openai_client.ask_gpt_json_async is unavailable
+    assert probe._safe_ai_error_category("ai_unavailable_configuration") == "configuration"
+    assert probe._safe_ai_error_category("unrecognized provider payload") == "provider"
+
+
 def test_protected_stale_paper_contract_identifies_the_failed_safety_boundary():
     path = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "probe_protected_score2_stale_paper.py"
     spec = importlib.util.spec_from_file_location("protected_stale_probe_contract", path)

@@ -46,7 +46,11 @@ def _process_review_for_fixture(user_id: int) -> None:
     with _fixture_review_rollout(user_id):
         if project_dirty_trade_reviews.run() != 1:
             raise RuntimeError("closed_paper_review_projection_failed")
-        if analyze_pending_trade_reviews.run() != 1:
+        with _capture_fixture_ai_errors() as ai_errors:
+            analyzed = analyze_pending_trade_reviews.run()
+        if ai_errors:
+            raise RuntimeError("closed_paper_review_ai_unavailable:" + ai_errors[0])
+        if analyzed != 1:
             raise RuntimeError("closed_paper_review_analysis_failed")
 
 
@@ -94,6 +98,47 @@ def _controlled_fixture_paper_quote():
         yield
     finally:
         execution._get_live_price = original
+
+
+def _safe_ai_error_category(error: object) -> str:
+    """Reduce provider/configuration failures to a fixed non-sensitive code."""
+    value = str(error or "").casefold()
+    if "ai_unavailable_configuration" in value or "api key" in value or "api_key" in value:
+        return "configuration"
+    if "ai_rate_limited" in value or "429" in value or "rate limit" in value:
+        return "rate_limit"
+    if "quota" in value or "budget" in value:
+        return "quota"
+    if "authentication" in value or "401" in value:
+        return "authentication"
+    if "model" in value and ("not found" in value or "does not exist" in value):
+        return "model"
+    if "timeout" in value or "timed out" in value:
+        return "timeout"
+    if "connection" in value or "network" in value:
+        return "connection"
+    return "provider"
+
+
+@contextmanager
+def _capture_fixture_ai_errors():
+    """Observe only safe error categories during this QA process's analysis."""
+    from backend.utils import openai_client
+
+    original = openai_client.ask_gpt_json_async
+    categories: list[str] = []
+
+    async def capture(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        if isinstance(result, dict) and result.get("error"):
+            categories.append(_safe_ai_error_category(result["error"]))
+        return result
+
+    try:
+        openai_client.ask_gpt_json_async = capture
+        yield categories
+    finally:
+        openai_client.ask_gpt_json_async = original
 
 
 def _close_paper_position(user_id: int, bot_id: int, buy_decision_id: int) -> None:
