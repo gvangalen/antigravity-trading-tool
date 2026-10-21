@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_READY_FOR_PR`. De onafhankelijke ingelogde QA op de
+Phase: `LIVE_CANDIDATE_QA_PENDING`. De onafhankelijke ingelogde QA op de
 publieke backend- en frontend-SHA `51ca7ba2f86dba988c43cb4f4dce061cc231c374`
 gaf `NOT_ACCEPTED` voor de volledige meerbeurtige strategieflow. Een schone
 USD-aanvraag, bevestiging, directe lijstupdate en teruglezing na refresh
@@ -15,10 +15,19 @@ om de niet-opslagbare 1D-trend en daglimiet weg te laten werd echter gelezen
 als aankoopvraag; de korte aangeboden waiver werkte pas na herhaalde
 slotvragen. Een correctie van naam en target op een open strategieconcept
 behield een foutieve naam of leverde geen nieuwe bevestigbare kaart. Die
-onveilige correctiekaart is niet opgeslagen. De huidige lokale reparatie
+onveilige correctiekaart is niet opgeslagen. De gedeployde reparatie
 verbindt de uitgebreide toestemming aan de oorspronkelijke regelzin, herkent
 de exacte naam in aanvraag en correctie, en noemt de weggelaten regels op de
-kaart. Deze reparatie is nog niet live of door QA geaccepteerd.
+kaart. Deze reparatie is live, maar nog niet door QA geaccepteerd.
+
+De batch is via [PR #522](https://github.com/gvangalen/antigravity-trading-tool/pull/522)
+gemerged als product-SHA `dc5073a90f2c3d5594358e25caea97e526dcf2d9`.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39622888849),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39623377791)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39623727097)
+slaagden. Backend-health en frontend-buildinfo gaven na deployment elk HTTP
+200 en exact die product-SHA. De documentcommit verandert de uiteindelijke
+publieke SHA; Build controleert die opnieuw voordat QA begint.
 
 Build heeft de laatste lokale batch gericht herhaald op de vaste USD-prijzen,
 naam- en targetcorrecties, expliciete waiver en de afwijzing van extra of
