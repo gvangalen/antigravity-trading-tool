@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: tweede meerbeurtige reparatie (21 oktober 2026)
 
-Phase: `LOCAL_REPAIR_IN_PROGRESS`. De bestaande onafhankelijke QA-agent gaf
+Phase: `LIVE_CANDIDATE_QA_PENDING`. De bestaande onafhankelijke QA-agent gaf
 `NOT_ACCEPTED` op publieke backend- en frontend-SHA
 `ca26687cfc472ac929cab3bb237e7259e41c44f0`. Een schone USD-strategie,
 bevestiging, lijstupdate en teruglezing na refresh slaagden. Gewone read-only
@@ -32,8 +32,15 @@ timeout-, parse- of validatiefout; artifact SHA-256
 `22683628c93722f3406bf3c9ab95f6708f06079344a2374bd81d8f6791c0ecdf`.
 De webtypecheck, i18n-lint en tests, command- en voorsteltests, productiebuild
 en `audit:high` slagen; de audit meldt één bestaande moderate Next.js-advisory.
-Security vond in de smalle diff geen concrete nieuwe blokkade. Deze wijziging
-is nog niet live en niet door QA geaccepteerd.
+Security vond in de smalle diff geen concrete nieuwe blokkade. De reparatie
+is via [PR #524](https://github.com/gvangalen/antigravity-trading-tool/pull/524)
+gemerged als product-SHA `1f37719448c7dfcc87720ef1f318b7b5636a030b`.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39630295285),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39630645001)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39631077147)
+slaagden. Publieke backend-health en frontend-buildinfo gaven na deployment
+beide HTTP 200 en exact die product-SHA. Dit is Build-identiteitsbewijs; de
+onafhankelijke live hertest van de definitieve SHA staat nog open.
 
 ## FINN-agent-cutover: herstel na onafhankelijke QA (21 oktober 2026)
 
