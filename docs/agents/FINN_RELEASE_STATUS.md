@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gesloten Paper-review in gewone FINN-chat — kandidaat (21 oktober 2026)
+
+Phase: `BUILD_VALIDATED_NOT_DEPLOYED`; productie blijft op
+`72df4299b0a8de9fb021b984fe877d0bbe2e5d77` totdat deze kandidaat na CI
+wordt gedeployed. De onafhankelijke QA-run
+[39548142176](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39548142176)
+op die SHA eindigde `NOT_ACCEPTED`: de eigenaargebonden `get_closed_trade_review`
+was voltooid, maar de eerste gewone FINN-chatbeurt eindigde `unavailable` met
+`responses_evidence_not_verified`; de lesvervolgvraag werd niet bereikt. Het
+gesaniteerde artifact heeft SHA-256
+`51be2951ca5b1fb5241de7e30dc90f6c78ff06d0d2f174124b1b3ced375ccb44`.
+
+Lokaal is de oorzaak gereproduceerd: Luna/Responses las het dossier en gaf
+vijfmaal een inhoudelijk eerste antwoord, maar de eigen antwoordcontrole
+verwierp het bewezen EUR-resultaat omdat het eigenaargebonden `pnl_eur` als
+decimale tekst wordt aangeleverd. Deze kandidaat geeft de bevestigde les
+apart en getypeerd door, gemarkeerd als gebruikersreflectie in plaats van
+oorspronkelijk plan of bewezen tradefeit. De verifier bindt een genoemd
+resultaat aan exact review-ID, EUR-bedrag en teken; een bedrag uit de vraag,
+een andere review of valuta kan dat niet vervangen. De definitieve lokale
+Luna/Responses-proef voltooide vijf eerste beurten en vijf lesvervolgvragen,
+alle met dezelfde eigenaargebonden dossierlezing en zonder voorstel.
+
+Op de definitieve code slaagde de volledige backend-suite: **3639 geslaagd,
+vier bestaande skips**. Webbuild, typecheck, i18n-/command-/voorstel-/setuptests,
+i18n-lint en `audit:high` slaagden; de audit meldt één moderate advisory,
+geen high of critical. De geïsoleerde workeractiecontractmatrix sloot
+**16/16** contracten af en de adaptertests **19/19**, met nul brokerorders,
+Live-aanroepen en productieverbindingen; artifact SHA-256
+`dbec6a48d2d982a7934e7574b8d8a94799dce7009e141d5eedbc0602f5e7c285`.
+De echte selector-developmentset slaagde **20/20** (artifact SHA-256
+`b2a42f26f6a7d6f5d4cb333fa3f1fac2be2473adebecfb77c279fcec33f3a63f`)
+en de regressieset **109/109**, operatienauwkeurigheid 1,0 (artifact SHA-256
+`62a9174ee5a168c482a7d0eb668261033357cbc7166a0ccc142b0a90f9636f5d`).
+Security en Architecture vonden na onafhankelijke herbeoordeling geen concrete
+blocker. Dit is lokale validatie; de beschermde QA-fixture en onafhankelijke
+live acceptatie blijven bij de bestaande QA-agent.
+
 ## Gesloten Paper-trade → FINN-chat (21 oktober 2026)
 
 De diagnose-only [PR #498](https://github.com/gvangalen/antigravity-trading-tool/pull/498)

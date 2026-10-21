@@ -321,6 +321,13 @@ class LatestReportData(BaseModel):
     top_setups: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class ConfirmedTradeLessonEvidenceData(BaseModel):
+    lesson_text: str
+    confirmed_at: str
+    evidence_revision: Optional[int] = None
+    source: str = "user_confirmed_reflection_not_trade_fact_or_original_plan"
+
+
 class ClosedTradeEvidenceData(BaseModel):
     review_id: int
     symbol: str
@@ -333,6 +340,7 @@ class ClosedTradeEvidenceData(BaseModel):
     pnl_basis: str
     has_original_plan: bool
     evidence_ids: List[str] = Field(default_factory=list)
+    confirmed_lesson: Optional[ConfirmedTradeLessonEvidenceData] = None
 
 
 class ReviewHistoryData(BaseModel):
