@@ -241,7 +241,9 @@ def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
     if (
         "entry" in fields
         and contract.get("saved_subject_reference")
-        and "read_linked_strategy" not in (contract.get("attempted_scopes") or [])
+        and not {"read_linked_strategy", "read_linked_strategies"}.intersection(
+            contract.get("attempted_scopes") or []
+        )
     ):
         return "linked_strategy_not_checked"
     if contract.get("answer_type") == "weigh" and {"stop_distance", "position_size"} <= set(fields):

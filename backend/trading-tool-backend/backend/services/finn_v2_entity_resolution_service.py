@@ -784,6 +784,7 @@ class FinnV2EntityResolutionService:
         user_id: int,
         selector: Dict[str, Any],
         message: str,
+        skip_entities: frozenset[str] = frozenset(),
     ) -> Dict[str, Any]:
         """Resolve exact owner-scoped names for read-tool context.
 
@@ -799,6 +800,10 @@ class FinnV2EntityResolutionService:
             "bot": self.bots.get_bot_configs,
         }
         for entity, loader in repositories.items():
+            if entity in skip_entities:
+                # A collection read needs the parent, not one selected child.
+                # Two explicitly named children are expected in comparisons.
+                continue
             id_field = f"{entity}_id"
             # An explicitly selected name is validated by the owner-scoped
             # resolver below. A second name mentioned only to exclude it must

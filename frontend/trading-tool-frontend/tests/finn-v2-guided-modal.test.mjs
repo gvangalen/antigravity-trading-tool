@@ -67,6 +67,12 @@ test("keeps confirmation controls inside a single calm draft card", () => {
   assert.doesNotMatch(source, /onPointerUp=/);
 });
 
+test("adjusting an open proposal asks for the change without submitting a new request", () => {
+  assert.match(source, /draftCards\.adjustQuestion/);
+  assert.match(source, /composerInputRef\.current\?\.focus\?\.\(\)/);
+  assert.doesNotMatch(source, /handleChat\(at\("draftCards\.adjustRequest"/);
+});
+
 test("update cards use the immutable server proposal snapshot", () => {
   assert.match(source, /fetchFinnV2Proposal\(verified\.proposal_id\)/);
   assert.match(source, /before_state: immutableProposalState\?\.before_state/);

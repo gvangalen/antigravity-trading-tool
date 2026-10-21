@@ -69,6 +69,24 @@ def test_explicit_strategy_selector_survives_excluded_name_in_message():
     assert "strategy_id" not in selected
 
 
+def test_strategy_collection_selector_keeps_parent_when_two_children_are_named():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    service.setups = _FakeSetupRepo()
+    service.bots = _FakeBotRepo()
+    message = "Lees Matrix Strategy en Other Strategy bij mijn BTC-setup terug."
+    with pytest.raises(LookupError, match="strategy_ambiguous"):
+        asyncio.run(service.enrich_tool_selector_from_message(
+            user_id=388, selector={"setup_id": 293}, message=message,
+        ))
+    selected = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=388, selector={"setup_id": 293}, message=message,
+        skip_entities=frozenset({"strategy"}),
+    ))
+    assert selected["setup_id"] == 293
+    assert "strategy_id" not in selected
+
+
 class _FakeBotRepo:
     async def get_bot_config(self, user_id, bot_id):
         if user_id == 388 and bot_id == 170:

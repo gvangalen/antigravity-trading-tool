@@ -3864,7 +3864,7 @@
     "fieldBudget": "Budget",
     "fieldCadence": "Frequency",
     "checking": "Checking…",
-    "adjustRequest": "I want to edit this {object} proposal.",
+    "adjustQuestion": "What would you like to change in this proposal?",
     "thisObject": "this {object}",
     "fieldExecution": "Execution",
     "fieldScoreSource": "Score source",

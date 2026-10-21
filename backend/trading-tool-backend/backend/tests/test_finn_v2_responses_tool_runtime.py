@@ -1919,6 +1919,49 @@ def test_saved_entry_question_requires_linked_strategy_read_before_absence_claim
     ) is None
 
 
+def test_saved_multi_strategy_entry_question_accepts_owner_scoped_collection_read():
+    contract = {
+        "targets": [{"name": "BTC QA Setup", "strategy": {}}],
+        "requested_fields": ["entry"],
+        "saved_subject_reference": True,
+        "attempted_scopes": ["read_active_setup", "read_linked_strategies"],
+        "answer_type": "explain",
+    }
+    assert turn_contract_gap(
+        contract, "Bij BTC QA Setup hebben Strategie A en Strategie B elk een opgeslagen entry.",
+    ) is None
+    assert turn_contract_gap(
+        {**contract, "attempted_scopes": ["read_active_setup"]},
+        "Bij BTC QA Setup zie ik geen entry.",
+    ) == "linked_strategy_not_checked"
+
+
+def test_multi_strategy_table_prices_are_grounded_as_prices_not_new_cash():
+    evidence = tuple({
+        "scope": "read_linked_strategy", "status": "completed",
+        "data": {
+            "setup_id": 42, "strategy_id": index, "name": name,
+            "base_amount": 100, "entry": entry, "stop_loss": stop,
+            "targets": [target], "price_currency": "USD",
+        },
+    } for index, name, entry, stop, target in (
+        (1, "Strategy A", 84000, 79800, 93000),
+        (2, "Strategy B", 84000, 79800, 92400),
+    ))
+    answer = (
+        "Strategy A: basisbedrag €100, entry 84.000 USD, stop-loss 79.800 USD, "
+        "target 93.000 USD. Strategy B: basisbedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD."
+    )
+    assert FinnResponsesAnswerVerifier._amounts_supported(
+        answer=answer, message="Lees beide strategieën", previous_answer="", evidence=evidence,
+    )
+    assert not FinnResponsesAnswerVerifier._saved_strategy_levels_supported(
+        answer.replace("92.400 USD", "95.000 USD"), evidence,
+        "Lees beide strategieën",
+    )
+
+
 def test_verified_single_inventory_row_becomes_durable_ordinal_subject():
     row = {"setup_id": 42, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"}
     previous = {
@@ -5195,6 +5238,15 @@ def test_blocked_strategy_restores_user_stated_fixed_usd_levels_after_waiver():
     )} == {key: safe[key] for key in (
         "name", "entry", "stop_loss", "targets", "price_currency", "risk_profile"
     )}
+    restored = _proposal_from_blocked_strategy(
+        {"captured_inputs": ordinary_safe},
+        {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"},
+    )
+    restored_inputs = restored.request_plan.operation_state["collected_inputs"]
+    assert restored_inputs["price_currency"] == "USD"
+    assert restored_inputs["entry"] == 84000
+    assert restored_inputs["stop_loss"] == 79800
+    assert restored_inputs["targets"] == [92400]
 
 
 def test_blocked_strategy_does_not_treat_currency_offsets_as_fixed_levels():
@@ -11457,6 +11509,105 @@ def test_saved_level_claims_cannot_borrow_prices_from_another_btc_strategy():
                         both_strategies, "Wat staat bij dat plan?", selected_setup_id=42)
     assert supports("Je opgeslagen entry is 76.000 en de stop-loss 72.000.",
                     both_strategies, "Wat staat bij dat plan?", selected_setup_id=42)
+
+
+def test_saved_strategy_comparison_binds_levels_and_quote_currency_to_each_row():
+    verifier = FinnResponsesAnswerVerifier
+    evidence = ({"scope": "read_linked_strategies", "status": "completed", "data": {
+        "setup_id": 42, "strategies": [
+            {"setup_id": 42, "strategy_id": 1, "name": "Strategy A",
+             "entry": 84000, "stop_loss": 79800, "targets": [93000], "price_currency": "USD"},
+            {"setup_id": 42, "strategy_id": 2, "name": "Strategy B",
+             "entry": 84000, "stop_loss": 79800, "targets": [92400], "price_currency": "USD"},
+        ],
+    }},)
+    expanded = verifier._expand_linked_strategy_collections(evidence)
+    valid = "Strategy A: target 93.000 USD.\nStrategy B: target 92.400 USD."
+    swapped = "Strategy A: target 92.400 USD.\nStrategy B: target 93.000 USD."
+    wrong_currency = "Strategy A: target 93.000 EUR.\nStrategy B: target 92.400 USD."
+    assert verifier._saved_strategy_levels_supported(valid, expanded, "Vergelijk de strategieën.")
+    assert not verifier._saved_strategy_levels_supported(swapped, expanded, "Vergelijk de strategieën.")
+    assert not verifier._saved_strategy_levels_supported(
+        swapped, expanded,
+        "Klopt het dat Strategy A target 92.400 USD heeft en Strategy B target 93.000 USD?",
+    )
+    assert not verifier._saved_strategy_levels_supported(wrong_currency, expanded, "Vergelijk de strategieën.")
+    assert not verifier._saved_strategy_levels_supported(
+        "Strategy A: target €93.000.\nStrategy B: target 92.400 USD.",
+        expanded, "Vergelijk de strategieën.",
+    )
+    table = (
+        "| Strategie | Entry | Stop-loss | Target | Valuta |\n"
+        "|---|---:|---:|---:|---|\n"
+        "| Strategy A | 84.000 | 79.800 | 93.000 | USD |\n"
+        "| Strategy B | 84.000 | 79.800 | 92.400 | USD |"
+    )
+    assert verifier._saved_strategy_levels_supported(table, expanded, "Vergelijk de strategieën.")
+    assert not verifier._saved_strategy_levels_supported(
+        table.replace("| 93.000 | USD |", "| 92.400 | USD |", 1),
+        expanded, "Vergelijk de strategieën.",
+    )
+    assert not verifier._saved_strategy_levels_supported(
+        table.replace("| 93.000 | USD |", "| 93.000 | EUR |", 1),
+        expanded, "Vergelijk de strategieën.",
+    )
+    alternate_headers = table.replace("| Strategie |", "| Plan |").replace(
+        "| Target |", "| Koersdoel |",
+    )
+    assert verifier._saved_strategy_levels_supported(
+        alternate_headers, expanded, "Vergelijk de strategieën.",
+    )
+    assert not verifier._saved_strategy_levels_supported(
+        alternate_headers.replace("| 93.000 | USD |", "| 92.400 | EUR |", 1),
+        expanded, "Vergelijk de strategieën.",
+    )
+    trading_headers = table.replace("| Strategie |", "| Plan |").replace(
+        "| Stop-loss | Target | Valuta |", "| SL | TP | Quote |",
+    )
+    assert verifier._saved_strategy_levels_supported(
+        trading_headers, expanded, "Vergelijk de strategieën.",
+    )
+    assert not verifier._saved_strategy_levels_supported(
+        trading_headers.replace("| 93.000 | USD |", "| 92.400 | EUR |", 1),
+        expanded, "Vergelijk de strategieën.",
+    )
+    for wrong_quote in ("€", "Euro"):
+        assert not verifier._saved_strategy_levels_supported(
+            trading_headers.replace("| 93.000 | USD |", f"| 93.000 | {wrong_quote} |", 1),
+            expanded, "Vergelijk de strategieën.",
+        )
+    wrong_named_row = (
+        "| Plan | Entry | Stop-loss | Target | Valuta |\n"
+        "|---|---:|---:|---:|---|\n"
+        "| Strategy B | 84.000 | 79.800 | 93.000 | USD |"
+    )
+    assert not verifier._saved_strategy_levels_supported(
+        wrong_named_row, (expanded[1],), "Lees Strategy A.",
+    )
+    assert not verifier._saved_strategy_levels_supported(
+        trading_headers.replace("| 79.800 | 93.000 |", "| 70.000 | 93.000 |", 1),
+        expanded, "Vergelijk de strategieën.",
+    )
+    assert not verifier._saved_strategy_levels_supported(
+        table.replace("| Target |", "| Take profit |" ).replace(
+            "| 93.000 | USD |", "| 92.400 | USD |", 1,
+        ), expanded, "Vergelijk de strategieën.",
+    )
+
+
+def test_repeated_read_of_one_strategy_does_not_require_a_comparison_row_name():
+    evidence = ({"scope": "read_linked_strategy", "status": "completed", "data": {
+        "setup_id": 42, "strategy_id": 7, "name": "Matrix Update Strategie",
+        "entry": "100", "stop_loss": "90", "targets": ["120"],
+        "price_currency": "EUR", "base_amount": 120,
+    }},)
+    answer = (
+        "Volgens de opgeslagen strategie is de basisinleg €120. "
+        "De entry (€100), stop-loss (€90) en target (€120) staan daar ook opgeslagen."
+    )
+    assert FinnResponsesAnswerVerifier._saved_strategy_levels_supported(
+        answer, evidence * 2, "Wat heb je zojuist veranderd en wat bleef gelijk?",
+    )
 
 
 def test_saved_level_guard_distinguishes_typed_stop_distance_from_stop_price():

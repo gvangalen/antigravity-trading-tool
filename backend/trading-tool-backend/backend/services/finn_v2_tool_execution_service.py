@@ -192,6 +192,8 @@ class FinnV2ToolExecutionService:
                 user_id=user_id,
                 selector=selector,
                 message=run_context.message,
+                **({"skip_entities": frozenset({"strategy"})}
+                   if tool_name in {"read_active_setup", "read_linked_strategies"} else {}),
             )
         selector = self._with_workspace_setup_reference(
             selector=selector,

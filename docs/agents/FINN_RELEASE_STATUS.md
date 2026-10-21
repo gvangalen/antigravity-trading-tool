@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: valuta en meervoudige teruglezing (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. De bestaande onafhankelijke QA-agent gaf
+`NOT_ACCEPTED` op publieke backend- en frontend-SHA
+`a233c84711dd5fbddf8ad4b669fdf9757be41042`. De uitgebreide waiver werd
+nu herkend en de twee weggelaten regels stonden op de kaart, maar de
+oorspronkelijke USD-koersen verschenen als EUR. QA bevestigde die kaart niet.
+De naam- en targetcorrectie werkte wel; een schone USD-strategie bleef na
+bevestiging en refresh staan. De knop Aanpassen van de foutieve kaart leidde
+naar een verkeerd DCA-gesprek. Een samengestelde leesvraag over twee
+opgeslagen strategieën eindigde in een generieke fout, terwijl elk afzonderlijk
+wel gelezen kon worden. Read-only FOMO-coaching deed geen voorstel of aankoop,
+maar noemde een bedrag zonder het bedoelde plan te benoemen.
+
+De lokale reparatie bewaart de strikt uit de oorspronkelijke aanvraag
+herkende koersvaluta in het waiverconcept. De exacte twee-beurtige aanvraag
+gaf via de lokale worker en echte Responses-provider een bevestigbaar
+USD-concept met entry 84.000, stop 79.800, target 92.400, basisbedrag €100 en
+de genoemde weggelaten regels; er is niets bevestigd. Aanpassen vraagt nu in
+de chat welk veld de gebruiker wil wijzigen en verstuurt geen nieuwe
+modelopdracht. De meervoudige leesroute kiest geen willekeurige strategie;
+de exacte combinatievraag kreeg via dezelfde lokale runtime een inhoudelijk
+antwoord met twee strategieën. De antwoordcontrole bindt koersniveaus en
+valuta per strategie, ook in tabellen met alternatieve kolomnamen; Security
+herhaalde de verwisselde-doelen-, verkeerde-rij- en USD→EUR-repro's en vond
+na herstel geen concrete blokkade in die grens.
+
+De definitieve lokale backend-suite slaagde met **3703 tests en 4 bestaande
+skips**. Webtypecheck, i18n-lint, i18n-, command-, voorstel- en
+gesprekskaarttests, productiebuild en `audit:high` slaagden. De audit meldt
+één bestaande moderate Next.js-advisory. De lokale werkermatrix slaagde
+**16/16** actiecontracten en **19/19** adaptertests zonder brokerorder,
+Live-bot of productieverbinding; artifact SHA-256
+`17a0efc96ac59029755f5afdf887defe3aed6a733dbb743c05443f57d0e1da20`.
+Een tussenrun was **15/16**: de bevestigde strategie werd twee keer gelezen,
+waarna de verifier één strategie als een meervoudige vergelijking behandelde
+en het correcte vervolgantwoord afwees. De ontdubbeling is lokaal met een
+gerichte regressie afgedekt en de definitieve worker-herhaling bevat weer
+een voltooid vervolgantwoord; die rode run geldt niet als releasebewijs.
+De echte Luna/Responses-ontwikkelset slaagde **20/20** zonder provider-,
+schema-, timeout-, parse- of validatiefout; artifact SHA-256
+`3f77ac87882daf8f0fcaf71a348363b7c3e6a344d95cde72977772f44b2cbd5e`.
+De echte Luna/Responses-regressie slaagde **109/109** zonder provider-,
+schema-, timeout-, parse- of validatiefout; artifact SHA-256
+`23473b1221543b391f7031971b119b6cb30aacff2e5345681d80d7692802a589`.
+Een nieuwe onafhankelijke live hertest staat nog open.
+Deze batch is nog niet live.
+
 ## FINN-agent-cutover: tweede meerbeurtige reparatie (21 oktober 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. De bestaande onafhankelijke QA-agent gaf
