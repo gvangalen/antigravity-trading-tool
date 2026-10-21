@@ -5348,6 +5348,33 @@ def test_expanded_strategy_waiver_matches_original_unsupported_rules_only():
         consent.replace("vaste prijzen, naam", "vaste prijzen in USD, naam"),
         priced_original.replace("een tweede Paper-strategie", "een Paper-strategie"),
     )
+    live_original = priced_original.replace("een tweede Paper-strategie", "een Paper-strategie").replace(
+        "BTC QA USD Waiver 51CA", "BTC QA Waiver C3DE",
+    )
+    live_consent = (
+        "Maak strategievoorstel zonder deze automatische regels. Ik geef expliciet "
+        "toestemming om uitsluitend de stijgende 1D-trendvoorwaarde en de limiet "
+        "van twee trades per dag weg te laten. Behoud mijn eerdere naam BTC QA "
+        "Waiver C3DE, setup BTC QA Cutover C5E3, BTC 4H, vast €100, entry "
+        "84.000 USD, stop-loss 79.800 USD, target 92.400 USD en voorzichtig "
+        "risico. Dit is geen koopopdracht; toon eerst alleen de conceptkaart."
+    )
+    assert _explicit_strategy_rule_waiver(live_consent, live_original)
+    assert not _explicit_strategy_rule_waiver(
+        live_consent.replace("target 92.400 USD", "target 92.400 EUR"), live_original,
+    )
+    for changed in (
+        live_consent.replace("BTC 4H", "ETH 4H"),
+        live_consent.replace("BTC 4H", "BTC 1D"),
+        live_consent.replace("voorzichtig risico.", "voorzichtig risico en risico 1%."),
+        live_consent.replace("voorzichtig risico.", "voorzichtig risico en target 2%."),
+        live_consent.replace("voorzichtig risico.", "voorzichtig risico en stop-loss 5%."),
+    ):
+        assert not _explicit_strategy_rule_waiver(changed, live_original)
+    assert not _explicit_strategy_rule_waiver(
+        live_consent.replace("voorzichtig risico.", "voorzichtig risico en RSI boven 35."),
+        live_original,
+    )
     assert not _explicit_strategy_rule_waiver(
         consent.replace("vaste prijzen, naam", "vaste prijzen in EUR, naam"),
         priced_original,

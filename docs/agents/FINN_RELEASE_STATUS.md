@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: toestemming na geblokkeerde strategie (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De bestaande onafhankelijke QA-agent gaf
+`NOT_ACCEPTED` op publieke backend- en frontend-SHA
+`c3de87372c62414b043ae8965c00be7f858c8f47`. De eerste aanvraag met
+twee niet-ondersteunde automatische regels werd terecht geblokkeerd. De
+expliciete vervolgtoestemming met herhaalde naam, setup, asset, timeframe,
+bedrag en USD-koersen kreeg ten onrechte alleen een koopweigering in plaats
+van een strategieconcept. De latere QA-matrix werd niet afgerond doordat de
+ingelogde browsersessie verliep; deze kandidaat is dus niet geaccepteerd.
+
+De oorzaak was een match op de volledige formulering van de toestemming. De
+nieuwe grens controleert de oorspronkelijke geblokkeerde aanvraag, precies
+welke twee regels mogen vervallen, en de herhaalde ondersteunde velden. Een
+veranderde asset, timeframe, naam, koers, valuta of extra procentregel wordt
+niet stilzwijgend genegeerd. Dit is een actiecontractcontrole; er is geen
+nieuwe zware antwoordcontrole voor read-only coaching toegevoegd. De exacte
+twee QA-beurten leveren lokaal via API, Celery-worker en echte Luna/Responses
+een USD-concept op met één target, zonder bevestiging of opslag. De volledige
+backend-suite slaagt met **3706 tests en 4 bestaande skips**. De echte
+Responses-ontwikkelset slaagt **20/20**, artifact SHA-256
+`7fc934c4867dd1a65ddce5175c06b9d86b3307c710b4624d6451dff5f4771191`.
+De lokale API/Celery-actiematrix slaagt **16/16** en de adaptertests **19/19**,
+zonder brokerorder, Live-bot of productieverbinding; artifact SHA-256
+`d300939acdfe3de1e6761ba3c4a16fe3f2992fd586c6dfc78126ab595c239ec9`.
+Webtypecheck, i18n-lint en tests, command- en voorsteltests, productiebuild
+en `audit:high` slagen; de audit meldt één bestaande moderate Next.js-advisory.
+Security vond na de negatief geteste asset-, timeframe-, koers-, valuta- en
+extra-risicovarianten geen concrete nieuwe blokkade. De volledige echte
+Luna/Responses-regressie slaagt **109/109** zonder provider-, schema-,
+timeout-, parse- of validatiefout; artifact SHA-256
+`893f68e55eb634a666ad62e0a3cbe79c6f43a2fea60a91a7e5dc9bfaa8a25e2d`.
+CI en deployment staan nog open; er is vanuit deze reparatie niets gedeployed.
+
 ## FINN-agent-cutover: voorstelcorrectie en expliciete waiver (21 oktober 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. Onafhankelijke QA gaf `NOT_ACCEPTED` op

@@ -93,7 +93,7 @@ def _priced_two_rule_strategy_request(message: str):
     numeric = r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)"
     return re.fullmatch(
         r"maak voor mijn opgeslagen setup [\w -]+ een (?:tweede )?paper-strategie "
-        r"met naam [\w -]+\. [a-z]{2,8} \d+[hdw], vast bedrag €[\d.,]+, "
+        r"met naam [\w -]+\. (?P<asset>[a-z]{2,8}) (?P<timeframe>\d+[hdw]), vast bedrag €[\d.,]+, "
         rf"entry (?P<entry>{numeric}) (?P<entry_currency>usd|eur), "
         rf"stop-loss (?P<stop>{numeric}) (?P<stop_currency>usd|eur), "
         rf"target (?P<target>{numeric}) (?P<target_currency>usd|eur) en "
@@ -126,21 +126,16 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
         r"maximaal (\w+) trades per dag(?:[.!?]|$)",
         original_text,
     )
-    expanded_prose = re.fullmatch(
+    consent = re.fullmatch(
         r"maak strategievoorstel zonder deze automatische regels[.;]\s*"
-        r"ik geef expliciet toestemming om alleen de stijgende 1d-trendvoorwaarde "
-        r"en de limiet van (\w+) trades per dag weg te laten[.;]\s*"
-        r"behoud de eerder opgegeven vaste prijzen(?: in (?P<retained_currency>usd|eur))?, naam, basisbedrag en "
-        r"risicostijl[.;]\s*dit is geen koopopdracht",
+        r"(?:ik geef expliciet toestemming om (?:alleen|uitsluitend) de "
+        r"stijgende 1d-trendvoorwaarde en de limiet van (?P<consent_limit>\w+) "
+        r"trades per dag weg te laten|laat alleen de stijgende 1d-trend en "
+        r"maximaal (?P<short_limit>\w+) trades per dag weg)[.;]\s*"
+        r"(?P<retention>.+)",
         normalized,
     )
-    short_prose = re.fullmatch(
-        r"maak strategievoorstel zonder deze automatische regels[.;]\s*"
-        r"laat alleen de stijgende 1d-trend en maximaal (\w+) trades per dag "
-        r"weg[.;]\s*de rest moet gelijk blijven",
-        normalized,
-    )
-    if original_prose and (expanded_prose or short_prose):
+    if original_prose and consent:
         # This expanded consent names only two withdrawn rules. Accept it only
         # for the fully recognized request shape; a keyword denylist could
         # silently discard an additional rule phrased in new words.
@@ -152,18 +147,83 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
             "toon het concept.",
             "toon het concept, sla niets op zonder bevestiging.",
         }
-        retained_currency = expanded_prose.group("retained_currency") if expanded_prose else None
-        currency_matches = not retained_currency or bool(
-            priced_request and all(
-                priced_request.group(field) == retained_currency
-                for field in ("entry_currency", "stop_currency", "target_currency")
-            )
+        retention = consent.group("retention")
+        retention = re.sub(
+            r"[.;]\s*dit is geen koopopdracht(?:[.;]\s*toon eerst alleen de conceptkaart)?$",
+            "", retention,
         )
+        retention = re.sub(r"[.;]\s*toon eerst alleen de conceptkaart$", "", retention)
+        if retention == "de rest moet gelijk blijven":
+            retained_facts_match = True
+        elif retention.startswith("behoud ") and (priced_request or simple_prefix):
+            # Accept only complete preservation clauses. The typed extractor
+            # below compares values, but it intentionally ignores unsupported
+            # rules; a free-form suffix could therefore silently lose one.
+            generic_retention = re.fullmatch(
+                r"behoud de eerder opgegeven vaste prijzen(?: in (?:usd|eur))?, "
+                r"naam, basisbedrag en risicostijl",
+                retention,
+            )
+            detailed_retention = re.fullmatch(
+                r"behoud mijn eerdere naam [^,.;]+, setup [^,.;]+, "
+                r"[a-z]{2,8} \d+[hdw], vast €[\d.,]+, entry [\d.,]+ (?:usd|eur), "
+                r"stop-loss [\d.,]+ (?:usd|eur), target [\d.,]+ (?:usd|eur) "
+                r"en (?:voorzichtig|gebalanceerd|agressief) risico",
+                retention,
+            )
+            if not (generic_retention or detailed_retention):
+                return False
+            state = FinnV2OperationStateService()
+            contract = FinnV2OperationRegistry().require_supported("create_strategy")
+            original_fields = state.explicit_inputs(
+                contract=contract, message=original_message, explicit_asset=None,
+            )
+            repeated_fields = state.explicit_inputs(
+                contract=contract, message=retention, explicit_asset=None,
+            )
+            same_fields = all(
+                field not in original_fields or (
+                    str(original_fields[field]).casefold() == str(value).casefold()
+                    if field == "name" else original_fields[field] == value
+                )
+                for field, value in repeated_fields.items()
+            )
+            original_setup = re.search(
+                r"\bvoor mijn opgeslagen setup (.+?) een (?:tweede )?paper-strategie\b",
+                original_text,
+            )
+            repeated_setup = re.search(r"\bsetup ([^,.;]+)", retention)
+            same_setup = not repeated_setup or bool(
+                original_setup and repeated_setup.group(1).strip() == original_setup.group(1).strip()
+            )
+            repeated_timeframes = re.findall(r"\b\d+[hdw]\b", retention)
+            same_timeframe = not repeated_timeframes or bool(
+                priced_request and all(
+                    timeframe == priced_request.group("timeframe")
+                    for timeframe in repeated_timeframes
+                )
+            )
+            retained_currency = re.search(r"\bvaste prijzen in (usd|eur)\b", retention)
+            same_currency = not retained_currency or bool(
+                priced_request and all(
+                    priced_request.group(field) == retained_currency.group(1)
+                    for field in ("entry_currency", "stop_currency", "target_currency")
+                )
+            )
+            repeated_asset = re.search(r"\bsetup [^,.;]+, ([a-z]{2,8}) \d+[hdw]\b", retention)
+            same_asset = not repeated_asset or bool(
+                priced_request and repeated_asset.group(1) == priced_request.group("asset")
+            )
+            retained_facts_match = bool(
+                same_fields and same_setup and same_timeframe and same_currency and same_asset
+            )
+        else:
+            retained_facts_match = False
         return bool(
-            original_prose.group(1) == (expanded_prose or short_prose).group(1)
+            original_prose.group(1) == (consent.group("consent_limit") or consent.group("short_limit"))
             and (simple_prefix or priced_request)
             and safe_suffix
-            and currency_matches
+            and retained_facts_match
         )
     # An expanded waiver can retain ordinary price/amount fields, but may not
     # retain a second unsupported automatic rule. Match the withdrawn clause
