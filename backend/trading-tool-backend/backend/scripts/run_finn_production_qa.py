@@ -67,6 +67,31 @@ def safe_closed_paper_chat_error(error: Exception) -> str:
     return code if code in SAFE_CLOSED_PAPER_CHAT_ERRORS else "closed_paper_review_chat_runtime_error"
 
 
+def _safe_review_read_diagnostic(private_read: Any) -> Dict[str, Any] | None:
+    """Export only bounded tool states, never a dossier or model response."""
+    if not isinstance(private_read, dict) or not private_read:
+        return None
+
+    def bounded(value, allowed):
+        return value if isinstance(value, str) and value in allowed else "other"
+
+    return {
+        "exchange_checkpoint": private_read.get("exchange_checkpoint") is True,
+        "progress_checkpoint": private_read.get("progress_checkpoint") is True,
+        "review_tool_seen": private_read.get("review_tool_seen") is True,
+        "review_tool_status": bounded(private_read.get("review_tool_status"), {
+            "completed", "partial", "unavailable", "error", "failed", "missing", "other"
+        }),
+        "review_read_status": bounded(private_read.get("review_read_status"), {
+            "completed", "partial", "unavailable", "error", "failed", "missing", "other"
+        }),
+        "review_read_reason": bounded(private_read.get("review_read_reason"), {
+            "tool_internal_error", "tool_timeout", "source_unavailable",
+            "review_not_found", "tool_execution_failed", "none", "other"
+        }),
+    }
+
+
 def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None:
     """Expose terminal categories only, never a raw model/provider message."""
     if str(error) == "closed_paper_review_chat_phase_failed":
@@ -95,10 +120,16 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
         }
         phase = getattr(error, "phase", None)
         cause = getattr(error, "cause_code", None)
-        return {
+        result = {
             "phase": phase if phase in known_phases else "unknown",
             "cause_code": cause if cause in known_causes else "other",
         }
+        review_read = _safe_review_read_diagnostic(
+            getattr(error, "review_read_diagnostic", None)
+        )
+        if review_read:
+            result["review_read"] = review_read
+        return result
     if str(error) not in {
         "closed_paper_review_chat_first_turn_failed",
         "closed_paper_review_chat_followup_failed",
@@ -156,26 +187,11 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
         ),
         "evidence_present": bool(getattr(error, "evidence_count", 0)),
     }
-    private_read = getattr(error, "review_read_diagnostic", None) or {}
-    if isinstance(private_read, dict) and private_read:
-        def bounded(value, allowed):
-            return value if isinstance(value, str) and value in allowed else "other"
-
-        diagnostic["review_read"] = {
-            "exchange_checkpoint": private_read.get("exchange_checkpoint") is True,
-            "progress_checkpoint": private_read.get("progress_checkpoint") is True,
-            "review_tool_seen": private_read.get("review_tool_seen") is True,
-            "review_tool_status": bounded(private_read.get("review_tool_status"), {
-                "completed", "partial", "unavailable", "error", "failed", "missing", "other"
-            }),
-            "review_read_status": bounded(private_read.get("review_read_status"), {
-                "completed", "partial", "unavailable", "error", "failed", "missing", "other"
-            }),
-            "review_read_reason": bounded(private_read.get("review_read_reason"), {
-                "tool_internal_error", "tool_timeout", "source_unavailable",
-                "review_not_found", "tool_execution_failed", "none", "other"
-            }),
-        }
+    review_read = _safe_review_read_diagnostic(
+        getattr(error, "review_read_diagnostic", None)
+    )
+    if review_read:
+        diagnostic["review_read"] = review_read
     return diagnostic
 
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}

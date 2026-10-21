@@ -60,6 +60,7 @@ class ClosedPaperProbeStageFailure(RuntimeError):
     def __init__(self, phase: str, cause: Exception):
         super().__init__("closed_paper_review_chat_phase_failed")
         self.phase = phase if phase in self.ALLOWED_PHASES else "unknown"
+        self.review_read_diagnostic = getattr(cause, "review_read_diagnostic", None)
         code = str(cause)
         if code in self.ALLOWED_CAUSES:
             self.cause_code = code
@@ -397,7 +398,12 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
                 or (first.policy and first.policy.execute_allowed)):
             raise RuntimeError("closed_paper_review_chat_unexpected_action")
         if not any(item.entity_type == "review_history" for item in response.evidence):
-            raise RuntimeError("closed_paper_review_chat_evidence_missing")
+            failure = RuntimeError("closed_paper_review_chat_evidence_missing")
+            if getattr(first, "run_id", None):
+                failure.review_read_diagnostic = await _review_read_diagnostic(
+                    user_id, first.run_id, first.conversation_id,
+                )
+            raise failure
         if "exitplan" not in response.content.casefold():
             raise RuntimeError("closed_paper_review_chat_lesson_missing")
 
@@ -418,7 +424,12 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
                 or response.confirmation_required or (second.policy and second.policy.execute_allowed)):
             raise RuntimeError("closed_paper_review_chat_followup_context_or_action")
         if not any(item.entity_type == "review_history" for item in response.evidence):
-            raise RuntimeError("closed_paper_review_chat_followup_evidence_missing")
+            failure = RuntimeError("closed_paper_review_chat_followup_evidence_missing")
+            if getattr(second, "run_id", None):
+                failure.review_read_diagnostic = await _review_read_diagnostic(
+                    user_id, second.run_id, second.conversation_id,
+                )
+            raise failure
         if not await _has_responses_exchange(user_id, second.run_id, second.conversation_id):
             raise RuntimeError("closed_paper_review_chat_responses_exchange_missing")
         followup = response.content.casefold()

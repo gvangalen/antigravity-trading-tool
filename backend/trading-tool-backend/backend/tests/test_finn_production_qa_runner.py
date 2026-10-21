@@ -373,6 +373,35 @@ def test_closed_paper_review_chat_cleanup_failure_takes_priority(monkeypatch):
     }
 
 
+def test_closed_paper_evidence_failure_exports_only_bounded_tool_diagnostic():
+    from backend.scripts import probe_protected_closed_paper_review as probe
+
+    failure = RuntimeError("closed_paper_review_chat_evidence_missing")
+    failure.review_read_diagnostic = {
+        "exchange_checkpoint": True,
+        "progress_checkpoint": False,
+        "review_tool_seen": True,
+        "review_tool_status": "completed",
+        "review_read_status": "unavailable",
+        "review_read_reason": "review_not_found",
+        "private_review_id": 123,
+        "private_model_answer": "sensitive answer",
+    }
+    wrapped = probe.ClosedPaperProbeStageFailure("chat", failure)
+    assert _module().safe_closed_paper_chat_diagnostic(wrapped) == {
+        "phase": "chat",
+        "cause_code": "closed_paper_review_chat_evidence_missing",
+        "review_read": {
+            "exchange_checkpoint": True,
+            "progress_checkpoint": False,
+            "review_tool_seen": True,
+            "review_tool_status": "completed",
+            "review_read_status": "unavailable",
+            "review_read_reason": "review_not_found",
+        },
+    }
+
+
 def test_closed_paper_review_read_diagnostic_only_exports_bounded_tool_status():
     from backend.scripts.probe_protected_closed_paper_review import _bounded_review_read_diagnostic
 
