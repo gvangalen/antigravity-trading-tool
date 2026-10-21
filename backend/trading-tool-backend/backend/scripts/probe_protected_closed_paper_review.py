@@ -11,6 +11,7 @@ import os
 import uuid
 from contextlib import contextmanager
 from datetime import date, timedelta
+from typing import Callable
 
 from backend.scripts import probe_protected_auto_paper_history as fixture
 
@@ -28,6 +29,50 @@ class ClosedPaperChatTurnFailure(RuntimeError):
         self.verifier_status = getattr(response, "verifier_status", None)
         self.evidence_count = len(getattr(response, "evidence", ()) or ())
         self.review_read_diagnostic: dict[str, object] = {}
+
+
+class ClosedPaperProbeStageFailure(RuntimeError):
+    """Identify the failed protected phase without exporting its exception."""
+
+    ALLOWED_PHASES = frozenset({
+        "binding", "seed", "prepare_entry", "paper_buy", "paper_sell", "analysis",
+        "dossier", "chat", "orders", "cleanup",
+    })
+    ALLOWED_CAUSES = frozenset({
+        "closed_paper_entry_decision_missing", "closed_paper_open_fill_missing",
+        "closed_paper_sell_not_filled", "closed_paper_review_projection_failed",
+        "closed_paper_review_analysis_failed", "closed_paper_review_missing",
+        "closed_paper_review_duplicate", "closed_paper_lesson_not_readable",
+        "closed_paper_review_chat_unexpected_action",
+        "closed_paper_review_chat_evidence_missing",
+        "closed_paper_review_chat_lesson_missing",
+        "closed_paper_review_chat_followup_context_or_action",
+        "closed_paper_review_chat_followup_evidence_missing",
+        "closed_paper_review_chat_responses_exchange_missing",
+        "closed_paper_review_chat_followup_context_missing",
+        "closed_paper_review_chat_order_state_changed",
+    })
+    ALLOWED_AI_CAUSES = frozenset({
+        "local_rate_limit", "configuration", "rate_limit", "quota",
+        "authentication", "model", "timeout", "connection", "provider",
+    })
+
+    def __init__(self, phase: str, cause: Exception):
+        super().__init__("closed_paper_review_chat_phase_failed")
+        self.phase = phase if phase in self.ALLOWED_PHASES else "unknown"
+        code = str(cause)
+        if code in self.ALLOWED_CAUSES:
+            self.cause_code = code
+        elif code.startswith("closed_paper_review_ai_unavailable:"):
+            suffix = code.partition(":")[2]
+            self.cause_code = (
+                f"closed_paper_review_ai_unavailable:{suffix}"
+                if suffix in self.ALLOWED_AI_CAUSES else "other"
+            )
+        elif code.startswith("closed_paper_review_dossier_incomplete:"):
+            self.cause_code = "closed_paper_review_dossier_incomplete"
+        else:
+            self.cause_code = "other"
 
 
 def _bounded_review_read_diagnostic(state: dict) -> dict[str, object]:
@@ -406,13 +451,17 @@ def _assert_fixture_orders_unchanged(user_id: int, bot_id: int) -> None:
         conn.close()
 
 
-def run(namespace: str, *, include_chat: bool = False) -> dict:
+def run(namespace: str, *, include_chat: bool = False,
+        on_execution_attempt: Callable[[], None] | None = None) -> dict:
     if os.getenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE") != "1":
         raise RuntimeError("closed_paper_review_fixture_not_authorized")
-    bound = fixture._require_protected_run(namespace)
     user_id = bot_id = None
+    phase = "binding"
     try:
+        bound = fixture._require_protected_run(namespace)
+        phase = "seed"
         user_id, bot_id, buy_decision_id = fixture._seed(namespace, bound)
+        phase = "prepare_entry"
         conn = fixture._connection()
         try:
             with conn.cursor() as cur:
@@ -427,17 +476,38 @@ def run(namespace: str, *, include_chat: bool = False) -> dict:
         finally:
             conn.close()
         with _controlled_fixture_paper_quote():
+            phase = "paper_buy"
+            if on_execution_attempt is not None:
+                on_execution_attempt()
             fixture._execute(user_id, bot_id, buy_decision_id)
+            phase = "paper_sell"
+            if on_execution_attempt is not None:
+                on_execution_attempt()
             _close_paper_position(user_id, bot_id, buy_decision_id)
+        phase = "analysis"
         _process_review_for_fixture(user_id)
+        phase = "dossier"
         result, review_id = asyncio.run(_read_review(user_id))
         if include_chat:
+            phase = "chat"
             with _fixture_review_rollout(user_id):
                 result["finn_chat"] = asyncio.run(_read_review_in_chat(user_id, review_id))
+            phase = "orders"
             _assert_fixture_orders_unchanged(user_id, bot_id)
         return result
+    except Exception as error:
+        if include_chat and not isinstance(error, ClosedPaperChatTurnFailure):
+            raise ClosedPaperProbeStageFailure(phase, error) from None
+        raise
     finally:
         if user_id is not None and bot_id is not None:
             # Preserve this bounded synthetic evidence, but make execution
             # impossible even if dossier projection or readback fails.
-            fixture._finish(namespace, user_id, bot_id, passed=False)
+            try:
+                fixture._finish(namespace, user_id, bot_id, passed=False)
+            except Exception as error:
+                # Disabling the synthetic owner/bot takes priority over the
+                # earlier product failure: never hide a failed cleanup.
+                if include_chat:
+                    raise ClosedPaperProbeStageFailure("cleanup", error) from None
+                raise
