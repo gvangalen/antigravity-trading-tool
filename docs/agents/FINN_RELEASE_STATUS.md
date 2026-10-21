@@ -23,23 +23,29 @@ De huidige Build-kandidaat voegt daarom een afzonderlijk beschermd QA-profiel
 `closed_paper_trade_review_chat` toe. Dit hergebruikt de bestaande Paper- en
 reviewfixture, voert daarna twee FINN V2-chatbeurten op dezelfde eigenaar en
 hetzelfde gesprek uit, en vereist reviewbewijs, de bevestigde les en geen
-actievoorstel. De FINN-taakcode draait binnen het geïsoleerde QA-proces zodat
+actievoorstel. Het profiel controleert bovendien dat de tweede beurt een
+eigenaar- en gesprekgebonden Responses-resultaat heeft opgeslagen en dat de
+twee oorspronkelijke Paper-orders na het gesprek ongewijzigd zijn. De
+FINN-taakcode draait binnen het geïsoleerde QA-proces zodat
 de tijdelijke review-allowlist uitsluitend voor de inactieve fixture-eigenaar
 geldt; dit bewijst de productlevenscyclus maar niet de Celery-brokerhandoff.
 Het QA-rapport bevat alleen vaste statussen en tellingen. Build heeft de
-beschermde QA-run niet uitgevoerd. Gerichte runnertests: **88/88**; de volledige
-backend-suite vóór de extra orderinvariant: **3598 geslaagd, vier bestaande
-skips**. De geïsoleerde lokale workeractiecontractmatrix
+beschermde QA-run niet uitgevoerd. Gerichte runnertests: **89/89**; de volledige
+backend-suite: **3599 geslaagd, vier bestaande skips**. De geïsoleerde lokale workeractiecontractmatrix
 slaagde inmiddels **16/16**, met **19/19** adaptertests; artifact SHA-256
 `a7470c2d59efa85ab6836dd24ae662644b7229b4c6a497c7d082594e4f2df655`.
 De echte `gpt-6-luna`/Responses-developmentproef slaagde **20/20** met
 operatienauwkeurigheid 1,0 en nul provider-, schema-, parse-, validatie- of
 timeoutfouten; artifact SHA-256
 `3a86168dc3bce3208a6c59990325d46d075a76ab15ebdeb6b29c5d370b1f9138`.
-De afzonderlijke regressieset loopt nog.
-Security- en Architecture-herbeoordelingen vonden geen blocker in deze
-lokale delta. Architecture noteerde als bewijsgrens dat de taakcode in dit
-beschermde profiel direct draait en niet via de Celery-broker wordt afgeleverd.
+De afzonderlijke echte Luna/Responses-regressieset slaagde **109/109**, met
+operatienauwkeurigheid 1,0 en nul provider-, schema-, parse-, validatie- of
+timeoutfouten; artifact SHA-256
+`d2151b2dc6c04e43da212ea95802b25eedfaf31b8b9d76c3ece17324f9de7bd3`.
+Security en Architecture vonden geen blocker in deze lokale delta. Het
+beschermde profiel controleert de actuele Responses-route,
+maar attesteert de provider-modelidentiteit niet afzonderlijk. Ook draait de
+FINN-taakcode in dit profiel direct en wordt niet via de Celery-broker afgeleverd.
 
 ## Rapport- en benchmarkuitleg na Score 2.0-cutover (21 oktober 2026)
 

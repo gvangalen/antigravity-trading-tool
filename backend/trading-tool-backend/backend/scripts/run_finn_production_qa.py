@@ -54,6 +54,7 @@ SAFE_CLOSED_PAPER_CHAT_ERRORS = frozenset({
     "closed_paper_review_chat_followup_failed",
     "closed_paper_review_chat_followup_context_or_action",
     "closed_paper_review_chat_followup_evidence_missing",
+    "closed_paper_review_chat_responses_exchange_missing",
     "closed_paper_review_chat_followup_context_missing",
     "closed_paper_review_chat_order_state_changed",
 })

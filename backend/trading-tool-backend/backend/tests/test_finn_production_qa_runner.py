@@ -256,7 +256,7 @@ def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(mo
             ),
         ),
         types.SimpleNamespace(
-            status="completed", conversation_id="conv-1", policy=None,
+            status="completed", conversation_id="conv-1", policy=None, run_id="run-2",
             response=types.SimpleNamespace(
                 proposal_id=None, confirmation_required=False,
                 evidence=[types.SimpleNamespace(entity_type="review_history")],
@@ -269,6 +269,10 @@ def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(mo
         calls.append((user_id, conversation_id, message))
         return responses.pop(0)
     monkeypatch.setattr(probe, "_chat_turn", chat_turn)
+    async def has_responses_exchange(user_id, run_id, conversation_id):
+        assert (user_id, run_id, conversation_id) == (42, "run-2", "conv-1")
+        return True
+    monkeypatch.setattr(probe, "_has_responses_exchange", has_responses_exchange)
     result = asyncio.run(probe._read_review_in_chat(42, 123))
     assert result["result"] == "PASS" and result["action_proposals"] == 0
     assert result["dispatch_mode"] == "in_process_production_task_body"
@@ -295,6 +299,32 @@ def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(mo
     )]
     with pytest.raises(RuntimeError, match="closed_paper_review_chat_followup_evidence_missing"):
         asyncio.run(probe._read_review_in_chat(42, 123))
+
+
+def test_closed_paper_review_chat_checks_exact_responses_exchange(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+    from backend.infrastructure import database
+    from backend.infrastructure.repositories import finn_v2_runtime_contract_repository as contracts
+
+    class Context:
+        async def __aenter__(self):
+            return object()
+        async def __aexit__(self, *_args):
+            return None
+
+    row = types.SimpleNamespace(user_id=42, conversation_id="conv-1", state_json={
+        "responses_exchange": {"response_id": "resp-1", "answer": "Confirmed lesson"},
+    })
+    async def get_for_run(_self, *, run_id):
+        assert run_id == "run-2"
+        return row
+    monkeypatch.setattr(database, "async_session_factory", Context)
+    monkeypatch.setattr(contracts.FinnV2RuntimeContractRepository, "get_for_run", get_for_run)
+    assert asyncio.run(probe._has_responses_exchange(42, "run-2", "conv-1"))
+    assert not asyncio.run(probe._has_responses_exchange(43, "run-2", "conv-1"))
+    assert not asyncio.run(probe._has_responses_exchange(42, "run-2", "conv-other"))
+    row.state_json = {"responses_exchange": {"answer": "No provider response"}}
+    assert not asyncio.run(probe._has_responses_exchange(42, "run-2", "conv-1"))
 
 
 def test_closed_paper_review_chat_runs_durable_owner_scoped_task_body(monkeypatch):

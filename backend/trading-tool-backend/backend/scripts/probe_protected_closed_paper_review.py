@@ -254,6 +254,21 @@ async def _chat_turn(user_id: int, message: str, *, conversation_id: str | None 
         return await gateway.run_service.envelope_from_run(persisted)
 
 
+async def _has_responses_exchange(user_id: int, run_id: str, conversation_id: str) -> bool:
+    """Check the owner-bound Responses exchange for this exact chat turn."""
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
+
+    async with async_session_factory() as session:
+        contract = await FinnV2RuntimeContractRepository(session).get_for_run(run_id=run_id)
+        if contract is None or contract.user_id != user_id or contract.conversation_id != conversation_id:
+            return False
+        exchange = (contract.state_json or {}).get("responses_exchange") or {}
+        return bool(exchange.get("response_id") and exchange.get("answer"))
+
+
 async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
     """Require a substantive read-only chat answer and a contextual follow-up."""
     from backend.infrastructure.database import engine
@@ -289,6 +304,8 @@ async def _read_review_in_chat(user_id: int, review_id: int) -> dict:
             raise RuntimeError("closed_paper_review_chat_followup_context_or_action")
         if not any(item.entity_type == "review_history" for item in response.evidence):
             raise RuntimeError("closed_paper_review_chat_followup_evidence_missing")
+        if not await _has_responses_exchange(user_id, second.run_id, second.conversation_id):
+            raise RuntimeError("closed_paper_review_chat_responses_exchange_missing")
         followup = response.content.casefold()
         if ("exitplan" not in followup or "plan" not in followup
                 or not any(term in followup for term in ("niet", "onbekend", "ontbreekt"))):
