@@ -6,13 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Score 2.0-bot en oude marktagenten (21 oktober 2026)
 
-Phase: `LIVE_QA_PENDING`. [PR #485](https://github.com/gvangalen/antigravity-trading-tool/pull/485)
+Phase: `QA_ACCEPTED_SCOPED`. [PR #485](https://github.com/gvangalen/antigravity-trading-tool/pull/485)
 is gemerged op `ba3734def342d622b47aa705a234418fc439d524`. Alle vijf
 [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39527204955)
 zijn geslaagd; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39527489475)
 is geslaagd. Publieke backend-health en frontend-buildinfo gaven HTTP 200
-en beide exact die SHA. Deze statuswijziging zelf heeft nog geen onafhankelijke
-live-QA-uitspraak. De bestaande FINN 2.0-chat, coachfeed en gedeelde
+en beide exact die SHA. [Status-PR #486](https://github.com/gvangalen/antigravity-trading-tool/pull/486)
+is daarna als documentatie-only SHA `8c1925d21f828edd3a9eb07b00060e122ea30d14`
+met groene CI en Auto Deploy live gegaan; publieke backend en frontend gaven
+beide HTTP 200 en die SHA. De bestaande FINN 2.0-chat, coachfeed en gedeelde
 rapportcontext blijven de actieve coachroutes. De bot gebruikt nu alleen
 de eigenaar- en assetgebonden Score 2.0-componenten en opgeslagen
 setupvoorwaarden voor scorebeslissingen; oude gebruikersbrede
@@ -39,8 +41,23 @@ operatie, entiteit, asset, polariteit, gespreksverwijzing, verduidelijking,
 ontbrekende invoer, off-topic en niet-ondersteunde operaties. Provider-,
 schema-, timeout-, parse- en validatiefoutpercentages waren 0; artifact
 SHA-256 `00a1723fe2391f76016053f3c95457adf7c56229f9a1892e0fa75a318a2daa9a`.
-De geauthenticeerde QA-matrix volgt op de live kandidaat; geen Live-order
-is uitgevoerd tijdens Build-validatie.
+De bestaande onafhankelijke QA-agent gaf voor de gerichte Score 2.0-botcutover
+formeel `ACCEPTED` op `8c1925d21f828edd3a9eb07b00060e122ea30d14`:
+[geldige match met één gevulde Paper-order en ledger-entry](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39528548243)
+(gesaniteerd artifact SHA-256 `c97ec7868d1a2c86859d12c29c67bdcd323b4d024c80bf2e827d1b7c3a2178a8`),
+[verouderde bron zonder koop](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39528571726)
+(`d177797efeaf180ca650ad058b7d68a3e7b79c6c6c07888334e54b5536d8e05f`)
+en [buiten setupgrenzen zonder koop](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39528773401)
+(`57cd04a7f07d4caa7a7022ad023e37ec3a098b0f7087bdedd507b1328707f56e`).
+De eerste buiten-grenzenpoging raakte door een exclusieve fixture-lock geen
+productpad; de toegestane infrastructuurretry slaagde. Alle drie geslaagde
+runs hadden nul Live-trading-calls en nul Live-botactivaties. Analyse, Mijn Plan,
+het rapport en FINN waren voor het geteste BTC-plan scoreconsistent en hielden
+botbudget gescheiden van kassaldo. Dit verdict dekt niet de volledige
+onboarding, mobiel, meerdere plannen per asset, EN/DE of dubbele bevestiging.
+Kleine open uitlegpunten: het rapport onderscheidt scorematch, gepauzeerde
+botstatus en onbekend Paper-kassaldo nog niet scherp genoeg; totaalscore
+`33` versus `33,3` vraagt consequente afronding.
 
 ## Gesloten Paper-reflectie: alleen bewijsselectie (21 oktober 2026)
 
