@@ -225,18 +225,32 @@ def test_closed_paper_review_chat_profile_keeps_fixture_gates_and_sanitizes_resu
 
     report = {"safety": {"read_only_profile": True, "execution_calls": 0},
               "qa_status": "NOT_STARTED", "outcome": "failed"}
-    def completed(namespace, *, include_chat):
+    def completed(namespace, *, include_chat, on_execution_attempt):
         assert namespace == "qa-test" and include_chat is True
+        on_execution_attempt()
+        on_execution_attempt()
         return {"result": "PASS", "finn_chat": {"result": "PASS", "turns": 2,
                                                   "confirmed_lesson_readable": True}}
     run_protected_closed_paper_probe(report, completed, "qa-test", include_chat=True)
     assert report["qa_status"] == "COMPLETED"
-    assert report["safety"] == {"read_only_profile": False, "execution_calls": 2}
+    assert report["safety"] == {"read_only_profile": False, "execution_calls": 2,
+                                "execution_call_basis": "begun_paper_steps"}
     assert "closed_paper_trade_review_chat" in report
     assert "closed_paper_trade_review" not in report
     assert "qa-test" not in json.dumps(report)
     assert module.safe_closed_paper_chat_error(RuntimeError("closed_paper_review_chat_evidence_missing")) == "closed_paper_review_chat_evidence_missing"
     assert module.safe_closed_paper_chat_error(RuntimeError("private prompt and provider detail")) == "closed_paper_review_chat_runtime_error"
+
+    failed_report = {"safety": {"read_only_profile": True, "execution_calls": 0},
+                     "qa_status": "NOT_STARTED", "outcome": "failed"}
+    def fails_before_execution(namespace, *, include_chat, on_execution_attempt):
+        raise RuntimeError("closed_paper_review_chat_phase_failed")
+    with pytest.raises(RuntimeError):
+        run_protected_closed_paper_probe(
+            failed_report, fails_before_execution, "qa-test", include_chat=True,
+        )
+    assert failed_report["safety"]["execution_calls"] == 0
+    assert failed_report["safety"]["execution_call_basis"] == "begun_paper_steps"
 
 
 def test_closed_paper_review_chat_terminal_diagnostic_is_bounded():
@@ -290,6 +304,73 @@ def test_closed_paper_review_chat_terminal_diagnostic_is_bounded():
     assert module.safe_closed_paper_chat_diagnostic(error)["review_read"] == error.review_read_diagnostic
     error.review_read_diagnostic["review_read_reason"] = "private database detail"
     assert module.safe_closed_paper_chat_diagnostic(error)["review_read"]["review_read_reason"] == "other"
+
+
+def test_closed_paper_review_chat_prechat_phase_diagnostic_is_bounded(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+
+    module = _module()
+    monkeypatch.setenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE", "1")
+    monkeypatch.setattr(probe.fixture, "_require_protected_run", lambda namespace: object())
+
+    def seed_failure(namespace, bound):
+        raise RuntimeError("private fixture owner and database details")
+
+    monkeypatch.setattr(probe.fixture, "_seed", seed_failure)
+    with pytest.raises(probe.ClosedPaperProbeStageFailure) as caught:
+        probe.run("qa-test", include_chat=True)
+    error = caught.value
+    assert module.safe_closed_paper_chat_error(error) == "closed_paper_review_chat_phase_failed"
+    assert module.safe_closed_paper_chat_diagnostic(error) == {
+        "phase": "seed", "cause_code": "other",
+    }
+    assert "private" not in json.dumps(module.safe_closed_paper_chat_diagnostic(error))
+
+    known = probe.ClosedPaperProbeStageFailure(
+        "analysis", RuntimeError("closed_paper_review_ai_unavailable:rate_limit"),
+    )
+    assert module.safe_closed_paper_chat_diagnostic(known) == {
+        "phase": "analysis", "cause_code": "closed_paper_review_ai_unavailable:rate_limit",
+    }
+    unknown = probe.ClosedPaperProbeStageFailure(
+        "private-phase", RuntimeError("closed_paper_review_ai_unavailable:private"),
+    )
+    assert module.safe_closed_paper_chat_diagnostic(unknown) == {
+        "phase": "unknown", "cause_code": "other",
+    }
+
+    def binding_failure(namespace):
+        raise RuntimeError("private binding detail")
+
+    monkeypatch.setattr(probe.fixture, "_require_protected_run", binding_failure)
+    with pytest.raises(probe.ClosedPaperProbeStageFailure) as bound_failure:
+        probe.run("qa-test", include_chat=True)
+    assert module.safe_closed_paper_chat_diagnostic(bound_failure.value) == {
+        "phase": "binding", "cause_code": "other",
+    }
+
+
+def test_closed_paper_review_chat_cleanup_failure_takes_priority(monkeypatch):
+    from backend.scripts import probe_protected_closed_paper_review as probe
+
+    module = _module()
+    monkeypatch.setenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE", "1")
+    monkeypatch.setattr(probe.fixture, "_require_protected_run", lambda namespace: object())
+    monkeypatch.setattr(probe.fixture, "_seed", lambda namespace, bound: (1, 2, 3))
+
+    def fail_connection():
+        raise RuntimeError("private database failure")
+
+    def fail_cleanup(*args, **kwargs):
+        raise RuntimeError("private cleanup failure")
+
+    monkeypatch.setattr(probe.fixture, "_connection", fail_connection)
+    monkeypatch.setattr(probe.fixture, "_finish", fail_cleanup)
+    with pytest.raises(probe.ClosedPaperProbeStageFailure) as caught:
+        probe.run("qa-test", include_chat=True)
+    assert module.safe_closed_paper_chat_diagnostic(caught.value) == {
+        "phase": "cleanup", "cause_code": "other",
+    }
 
 
 def test_closed_paper_review_read_diagnostic_only_exports_bounded_tool_status():

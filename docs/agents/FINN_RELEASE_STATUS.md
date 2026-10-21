@@ -6,6 +6,39 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade → FINN-chat (21 oktober 2026)
 
+De diagnose-only [PR #498](https://github.com/gvangalen/antigravity-trading-tool/pull/498)
+is inmiddels gemerged en gedeployed als `2c2aca3c39a9555a0c6c1d2806e789194a706e3f`.
+PR-/main-CI en Auto Deploy slaagden; publieke backend en frontend gaven HTTP
+200 en deze SHA. De bestaande onafhankelijke QA-agent herhaalde het beschermde
+profiel in [run 39544803635](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39544803635).
+Uitkomst: `NOT_ACCEPTED`. Het profiel stopte met de gesaniteerde categorie
+`closed_paper_review_chat_runtime_error` vóór een terminale chatdiagnose;
+de foutfase en de eerste chatbeurt zijn dus niet vastgesteld. Het rapport
+meldt twee beoogde Paper-executies, maar die telling wordt vóór de fixture
+gezet en bewijst op zichzelf niet dat beide fills plaatsvonden. Er zijn nul
+Live-aanroepen geregistreerd. Artifact SHA-256
+`f9ed9a7df978f69870d119cd177c97a1f0916619caefcfff9e485f467ac6aeb5`.
+De huidige lokale kandidaat `codex/finn-review-probe-phase` voegt een vaste,
+gesaniteerde fasecode aan dit beschermde foutpad toe, zodat de volgende
+onafhankelijke run de breuk kan lokaliseren. Hij verandert geen productantwoord,
+actiecontract, Paper-uitvoering of gebruikersgegevens. De chat-QA-uitkomst
+telt voortaan alleen daadwerkelijk begonnen Paper-uitvoeringsstappen; een
+vroege fixturefout mag niet langer als twee calls worden gelezen. De 93 gerichte
+QA-runnertests en de volledige backend-suite (**3613 geslaagd, vier bestaande
+skips**) slaagden op de definitieve code. De frontendbuild, typecheck,
+i18n-/command-/voorsteltests en `audit:high` slaagden; de audit meldt één
+moderate advisory, geen high of critical. De echte Luna/Responses-selectorproeven
+slaagden: development **20/20** (artifact SHA-256
+`e7f37752090cf132a10744b6a4f897d73e298d3ede1d9c9b7b426bef9def2d59`)
+en regression **109/109** (SHA-256
+`130a13e936dbc564a4b4aeac4c5aee0533dce92f66bc01de0aa3992948f21263`).
+De geïsoleerde lokale workeractiecontractmatrix sloot **16/16** contracten af,
+met nul brokerorders, Live-aanroepen of productieverbindingen; adaptertests
+**19/19**. Matrixartifact SHA-256
+`eed859453f3b623f6216be53362dea75fe8958e5890290454cc012f643604663`.
+Dit is nog geen live QA-verdict.
+Security vond na een herstel van de cleanup-fout geen resterende blocker.
+
 De daaropvolgende [PR #497](https://github.com/gvangalen/antigravity-trading-tool/pull/497)
 is gemerged als `6237191d5c9c8400fcec7d9ed7110c1450ec8582`.
 Alle vijf PR- en [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39542618819)

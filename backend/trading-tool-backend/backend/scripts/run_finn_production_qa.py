@@ -57,6 +57,7 @@ SAFE_CLOSED_PAPER_CHAT_ERRORS = frozenset({
     "closed_paper_review_chat_responses_exchange_missing",
     "closed_paper_review_chat_followup_context_missing",
     "closed_paper_review_chat_order_state_changed",
+    "closed_paper_review_chat_phase_failed",
 })
 
 
@@ -68,6 +69,36 @@ def safe_closed_paper_chat_error(error: Exception) -> str:
 
 def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None:
     """Expose terminal categories only, never a raw model/provider message."""
+    if str(error) == "closed_paper_review_chat_phase_failed":
+        known_phases = {
+            "binding", "seed", "prepare_entry", "paper_buy", "paper_sell", "analysis",
+            "dossier", "chat", "orders", "cleanup",
+        }
+        known_causes = {
+            "closed_paper_entry_decision_missing", "closed_paper_open_fill_missing",
+            "closed_paper_sell_not_filled", "closed_paper_review_projection_failed",
+            "closed_paper_review_analysis_failed", "closed_paper_review_missing",
+            "closed_paper_review_duplicate", "closed_paper_lesson_not_readable",
+            "closed_paper_review_chat_unexpected_action",
+            "closed_paper_review_chat_evidence_missing",
+            "closed_paper_review_chat_lesson_missing",
+            "closed_paper_review_chat_followup_context_or_action",
+            "closed_paper_review_chat_followup_evidence_missing",
+            "closed_paper_review_chat_responses_exchange_missing",
+            "closed_paper_review_chat_followup_context_missing",
+            "closed_paper_review_chat_order_state_changed",
+            "closed_paper_review_dossier_incomplete",
+            *(f"closed_paper_review_ai_unavailable:{value}" for value in (
+                "local_rate_limit", "configuration", "rate_limit", "quota",
+                "authentication", "model", "timeout", "connection", "provider",
+            )),
+        }
+        phase = getattr(error, "phase", None)
+        cause = getattr(error, "cause_code", None)
+        return {
+            "phase": phase if phase in known_phases else "unknown",
+            "cause_code": cause if cause in known_causes else "other",
+        }
     if str(error) not in {
         "closed_paper_review_chat_first_turn_failed",
         "closed_paper_review_chat_followup_failed",
@@ -1289,11 +1320,22 @@ def run_protected_closed_paper_probe(report: Dict[str, Any], probe, namespace: s
                                      *, include_chat: bool = False) -> None:
     """Distinguish an attempted fixture from a preflight-only QA failure."""
     report["safety"]["read_only_profile"] = False
-    report["safety"]["execution_calls"] = 2
+    report["safety"]["execution_calls"] = 0
     report["qa_status"] = "INCOMPLETE"
     report["protected_profile_attempted"] = True
     key = "closed_paper_trade_review_chat" if include_chat else "closed_paper_trade_review"
-    report[key] = probe(namespace, include_chat=True) if include_chat else probe(namespace)
+    if include_chat:
+        report["safety"]["execution_call_basis"] = "begun_paper_steps"
+        def count_execution_attempt() -> None:
+            report["safety"]["execution_calls"] += 1
+
+        report[key] = probe(namespace, include_chat=True,
+                            on_execution_attempt=count_execution_attempt)
+    else:
+        # Preserve the existing count contract for the original fixture
+        # profile; only the new chat profile reports observed attempts.
+        report["safety"]["execution_calls"] = 2
+        report[key] = probe(namespace)
     report["outcome"] = "passed"
     report["qa_status"] = "COMPLETED"
 
