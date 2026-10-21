@@ -239,6 +239,28 @@ def test_closed_paper_review_chat_profile_keeps_fixture_gates_and_sanitizes_resu
     assert module.safe_closed_paper_chat_error(RuntimeError("private prompt and provider detail")) == "closed_paper_review_chat_runtime_error"
 
 
+def test_closed_paper_review_chat_terminal_diagnostic_is_bounded():
+    from backend.scripts.probe_protected_closed_paper_review import ClosedPaperChatTurnFailure
+
+    module = _module()
+    envelope = types.SimpleNamespace(
+        status="unavailable", error_code="lifecycle_deadline_exceeded", response=None,
+    )
+    error = ClosedPaperChatTurnFailure("first_turn", envelope)
+    assert module.safe_closed_paper_chat_error(error) == "closed_paper_review_chat_first_turn_failed"
+    assert module.safe_closed_paper_chat_diagnostic(error) == {
+        "terminal_status": "unavailable", "typed_error_code": "lifecycle_deadline_exceeded",
+        "response_present": False,
+    }
+    envelope.error_code = "private provider text and token"
+    envelope.status = "private status"
+    private = ClosedPaperChatTurnFailure("first_turn", envelope)
+    diagnostic = module.safe_closed_paper_chat_diagnostic(private)
+    assert diagnostic == {"terminal_status": "unknown", "typed_error_code": "other",
+                          "response_present": False}
+    assert "private" not in json.dumps(diagnostic)
+
+
 def test_closed_paper_review_chat_requires_review_evidence_lesson_and_context(monkeypatch):
     from backend.scripts import probe_protected_closed_paper_review as probe
     from backend.infrastructure import database

@@ -6,9 +6,28 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gesloten Paper-trade → FINN-chat (21 oktober 2026)
 
-Phase: `LOCAL_QA_PROFILE_CANDIDATE` op branch
-`codex/finn-review-chat-probe`, nog niet live getest. De onafhankelijke
-QA-agent bevestigde de voorafgaande gesloten Paper-tradereview op
+Phase: `QA_NOT_ACCEPTED` voor de chatuitbreiding op productie-SHA
+`495873bec102f0368cddd69c1d286d339fe81530`. [PR #494](https://github.com/gvangalen/antigravity-trading-tool/pull/494)
+is gemerged; alle vijf PR- en main-CI-controles en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39537460230)
+slaagden. Backend-health en frontend-buildinfo gaven HTTP 200 en dezelfde SHA.
+De bestaande QA-agent startte één beschermde [proef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39537761284).
+Die bereikte de eerste gewone FINN V2-chatbeurt na twee gecontroleerde
+Paper-executies en het dossier, maar er kwam geen voltooide chatresponse.
+Veilige foutcode: `closed_paper_review_chat_first_turn_failed`; de tweede beurt
+werd niet uitgevoerd. Nul Live-aanroepen of Live-botactivaties. Het gesaniteerde
+artifact heeft SHA-256
+`00cf608302f42c09ce3f14f983e5b9062394efdb2916b2388fdb7a79da59a6e4`.
+De terminale status en typed backendfout ontbreken in die versie van het
+artifact; de precieze oorzaak is dus nog niet vastgesteld.
+
+Een nieuwe lokale diagnosekandidaat op `codex/finn-paper-review-chat-diagnostics`
+voegt uitsluitend een gesaniteerde terminalcategorie, toegestane foutcode en
+`response_present` toe bij een mislukte beurt. De 90 gerichte runnertests
+en de volledige backend-suite (3605 geslaagd, vier bestaande skips) slagen.
+Security vond geen blootstelling van fixture- of providerdata. Deze kandidaat
+is nog niet gedeployed of onafhankelijk getest.
+
+De onafhankelijke QA-agent bevestigde de voorafgaande gesloten Paper-tradereview op
 `fd9642afac6eb128eba7818a2f42af111030bb8d` via de beschermde
 [QA-run](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39522742378):
 twee Paper-fills werden precies één eigenaargebonden gesloten dossier, met
@@ -19,7 +38,7 @@ Dat verdict bewees nog geen gewone FINN-chat over dezelfde les. Een latere
 read-only browserpoging kon die stap niet doen: het browseraccount had geen
 gesloten trade en was terecht gescheiden van de beschermde fixture-eigenaar.
 
-De huidige Build-kandidaat voegt daarom een afzonderlijk beschermd QA-profiel
+De gedeployde wijziging voegt daarom een afzonderlijk beschermd QA-profiel
 `closed_paper_trade_review_chat` toe. Dit hergebruikt de bestaande Paper- en
 reviewfixture, voert daarna twee FINN V2-chatbeurten op dezelfde eigenaar en
 hetzelfde gesprek uit, en vereist reviewbewijs, de bevestigde les en geen
@@ -28,7 +47,8 @@ eigenaar- en gesprekgebonden Responses-resultaat heeft opgeslagen en dat de
 twee oorspronkelijke Paper-orders na het gesprek ongewijzigd zijn. De
 FINN-taakcode draait binnen het geïsoleerde QA-proces zodat
 de tijdelijke review-allowlist uitsluitend voor de inactieve fixture-eigenaar
-geldt; dit bewijst de productlevenscyclus maar niet de Celery-brokerhandoff.
+geldt; een geslaagde proef zou de productlevenscyclus toetsen, maar niet de
+Celery-brokerhandoff.
 Het QA-rapport bevat alleen vaste statussen en tellingen. Build heeft de
 beschermde QA-run niet uitgevoerd. Gerichte runnertests: **89/89**; de volledige
 backend-suite: **3599 geslaagd, vier bestaande skips**. De geïsoleerde lokale workeractiecontractmatrix

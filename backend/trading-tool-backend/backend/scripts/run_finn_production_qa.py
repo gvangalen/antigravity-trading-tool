@@ -65,6 +65,32 @@ def safe_closed_paper_chat_error(error: Exception) -> str:
     code = str(error)
     return code if code in SAFE_CLOSED_PAPER_CHAT_ERRORS else "closed_paper_review_chat_runtime_error"
 
+
+def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None:
+    """Expose terminal categories only, never a raw model/provider message."""
+    if str(error) not in {
+        "closed_paper_review_chat_first_turn_failed",
+        "closed_paper_review_chat_followup_failed",
+    }:
+        return None
+    known_statuses = {
+        "created", "queued", "collecting", "planned", "reasoning", "verifying",
+        "clarification_required", "unavailable", "downgraded", "rejected",
+        "blocked", "completed", "failed", "canceled",
+    }
+    known_codes = {
+        "selector_phase_timeout", "lifecycle_deadline_exceeded", "orchestrator_failed",
+        "responses_provider_quota_unavailable", "responses_provider_unavailable",
+        "runtime_contract_terminal_projection_missing",
+    }
+    status = getattr(error, "terminal_status", None)
+    code = getattr(error, "typed_error_code", None)
+    return {
+        "terminal_status": status if status in known_statuses else "unknown",
+        "typed_error_code": code if code in known_codes else "other" if code else "none",
+        "response_present": getattr(error, "response_present", None) is True,
+    }
+
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh", "database_evidence_unavailable"}
@@ -2037,6 +2063,10 @@ def main() -> int:
             safe_closed_paper_chat_error(error)
             if args.profile == "closed_paper_trade_review_chat" else str(error)
         )
+        if args.profile == "closed_paper_trade_review_chat":
+            diagnostic = safe_closed_paper_chat_diagnostic(error)
+            if diagnostic is not None:
+                report["closed_paper_chat_terminal_diagnostic"] = diagnostic
         if report["error_category"] in {"fixture_namespace_required", "fixture_namespace_invalid"}:
             report["outcome"] = "blocked"
             report["qa_status"] = "QA BLOCKED / NOT STARTED"
