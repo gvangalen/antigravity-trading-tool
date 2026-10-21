@@ -74,9 +74,14 @@ its steady-phase all-response p95 limit. The harness reports all-phase status
 counts and a separate steady-phase latency summary. During a stage, any non-2xx response or timeout
 stops new requests immediately; a route with at least 20 steady-phase samples above its
 p95 limit also stops the stage. Requests already in flight can finish. It never submits orders. To include
-controlled FINN chat, use separately approved accounts and add
-`--include-chat --max-chat-requests 50`; the provisioned capacity fixture tokens
-are restricted to four read routes and return 403 for chat. The script prints only
+controlled FINN chat, use separately approved accounts and add `--include-chat`,
+`--max-chat-requests`, `--max-chat-p95-ms`, `--provider-hard-cap-usd` and
+`--confirm-provider-hard-cap`. First enforce the stated USD cap in the provider
+project, then confirm its value interactively. The runner does not meter
+provider spend; the request cap separately limits submitted POSTs and must
+allow at least 20 per production stage. It reserves 20 for each earlier stage
+and the remaining requests for the last stage. The provisioned capacity fixture
+tokens are restricted to four read routes and return 403 for chat. The script prints only
 route-level status counts and latency summaries; it does not print tokens.
 The identity preflight detects account-token mixups, but a separate owner-canary
 test is still needed to prove isolation within workspace, FINN, and review bodies.
@@ -199,10 +204,53 @@ queue-age thresholds, no unintended trade writes, no cross-account responses,
 and independent QA, Security, and Architecture review. This script measures
 HTTP behavior; it does not replace the worker-driven FINN release matrix.
 
+### FINN chat capacity boundary
+
+The read profile above does not send provider-backed FINN messages. A separate
+chat scenario must specify how often each active user sends a message, a
+maximum number of paid requests, and an API spending limit before it starts.
+Use distinct chat-authorized test accounts; the read-only capacity tokens are
+intentionally rejected by the chat route. Record provider rate/quota errors,
+the `finn_interactive` queue depth and oldest age, worker restarts, response
+latency, database headroom, and memory throughout the test. Stop on a growing
+queue, any safety-control error, or the agreed cost limit. Count successful
+chat turns from the response body and terminal run state: FINN can report an
+unavailable result in an HTTP 200 response, so status codes alone are
+insufficient. This optional mixed profile selects chat with weight 1 of 9 at
+roughly ten seconds average think time, or about 0.67 chats per user per minute
+until its request cap is consumed. It does not simulate the five-minute chat
+interval used in the sizing example below; define and implement that workload
+separately before claiming its capacity.
+
+On 2026-10-21, production SHA `8b028675c331495cc6a53b15670946f6056e697a`
+had two FINN interactive prefork children. Among 192 completed visible FINN
+runs in the prior seven days, the measured worker claim-to-completion mean
+was 6.12 seconds (p50 5.18 seconds, p95 13.27 seconds). This is an observed
+workload sample, not a saturated throughput test. At that mean, two occupied
+slots could finish about 20 similar runs per minute before allowing for
+queueing or failures. For a **defined scenario** of 1000 users sending one
+message every five minutes, arrivals would be 200 per minute. The arithmetic
+floor at 70% target worker utilization is
+`ceil(1000 × 6.12 / (300 × 0.70)) = 30` concurrent slots; actual sizing needs
+a staged provider-backed load test and quota checks. Do not interpret the
+1000-user read result as proof of this chat scenario.
+
+The measured host had 7.75 GiB RAM, PostgreSQL `max_connections=100`, and
+both PostgreSQL and the Celery Redis broker on loopback. The scaled profile's
+configured connection maximum is already 80. Increasing FINN concurrency
+requires a new memory and database connection budget; adding hosts also
+requires one shared, privately reachable PostgreSQL, Redis rate-limit store,
+Celery broker and Celery result backend. API and worker hosts must use the
+same JWT signing key and rollout settings. Verify provider quotas and total
+model spend before a full chat test or capacity promise. Keep the workload
+and p95/queue-age acceptance thresholds explicit when selecting the
+infrastructure size.
+
 Before adding API processes, budget database connections across every API and
-Celery process. An API process defaults to at most 15 async plus 3 sync
-connections; each worker child defaults to at most 2 async plus 2 sync
-connections. Include all worker children and leave headroom for
+Celery process. An API process defaults to at most 20 async plus 3 sync
+connections. A FINN worker child can use 1 async plus 2 sync connections;
+other worker children can use 2 async plus 2 sync. Include all worker
+children and leave headroom for
 administration and migrations. Horizontal hosts must share the same PostgreSQL,
 Redis rate-limit store, and Celery broker; local Redis on each host cannot provide
 clusterwide limits or queues.

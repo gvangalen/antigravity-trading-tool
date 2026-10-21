@@ -53,8 +53,79 @@ def percentile(values, fraction):
     return round(values[min(len(values) - 1, max(0, int(len(values) * fraction + 0.999999) - 1))], 2)
 
 
+def chat_response_state(response):
+    """Classify the visible FINN contract without logging its private body."""
+    try:
+        body = response.json()
+    except ValueError:
+        return "malformed", None
+    if not isinstance(body, dict):
+        return "malformed", None
+    state = body.get("state")
+    trace = body.get("response_trace")
+    if not isinstance(state, dict) or not isinstance(trace, dict):
+        return "malformed", None
+    flow = state.get("current_flow")
+    if flow in {"finn_v2_visible_failed", "finn_v2_visible_terminal_failed"} or body.get("intent") == "unavailable":
+        return "unavailable", None
+    run_id = state.get("run_id")
+    if not isinstance(run_id, str) or not run_id or len(run_id) > 128:
+        return "malformed", None
+    if trace.get("run_id") != run_id:
+        return "malformed", None
+    if flow == "finn_v2_visible_pending" and body.get("intent") == "processing":
+        return "pending", run_id
+    if (flow == "finn_v2_visible" and body.get("intent") != "unavailable"
+            and isinstance(body.get("response"), str) and body["response"].strip()
+            and trace.get("pipeline_version") == "finn_v2"
+            and trace.get("response_source") == "finn_v2_verified"
+            and trace.get("verifier_status") in {"passed", "repaired", "registry_grounded"}
+            and isinstance(trace.get("delivery_envelope"), dict)
+            and trace["delivery_envelope"].get("status") == "completed"
+            and not trace.get("error")):
+        return "ok", run_id
+    return "unavailable", run_id
+
+
+async def chat_turn_outcome(client, response, authorization, timeout_seconds, stop_event):
+    state, run_id = chat_response_state(response)
+    if state != "pending":
+        return state
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline and not stop_event.is_set():
+        await asyncio.sleep(min(2, max(0, deadline - time.monotonic())))
+        try:
+            polled = await client.get(
+                f"/api/assistant/v2/runs/{run_id}",
+                headers={"Authorization": authorization},
+            )
+            if polled.status_code != 200:
+                return "poll_http_error"
+            body = polled.json()
+        except (httpx.HTTPError, ValueError):
+            return "poll_error"
+        if not isinstance(body, dict) or body.get("run_id") != run_id:
+            return "poll_malformed"
+        status = body.get("status")
+        if status == "completed":
+            verified = body.get("response")
+            if (isinstance(verified, dict)
+                    and isinstance(verified.get("content"), str) and verified["content"].strip()
+                    and verified.get("mode") != "UNAVAILABLE"
+                    and verified.get("verifier_status") in {"passed", "repaired", "registry_grounded"}
+                    and not body.get("error_code")):
+                return "ok"
+            return "terminal_invalid"
+        if status in {"failed", "canceled", "blocked", "rejected", "unavailable", "downgraded", "clarification_required"}:
+            return "terminal_unsuccessful"
+        if status not in {"created", "queued", "collecting", "planned", "reasoning", "verifying"}:
+            return "poll_malformed"
+    return "interrupted" if stop_event.is_set() else "terminal_timeout"
+
+
 async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, results, stop_event,
-                       initial_spread_seconds=0, steady_results=None, steady_started=None):
+                       initial_spread_seconds=0, steady_results=None, steady_started=None,
+                       chat_terminal_timeout_seconds=60):
     rng = random.Random(fixture["user_id"])
     authorization = f"Bearer {fixture['access_token']}"
     choices = list(ROUTES)
@@ -68,7 +139,9 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
     while time.monotonic() < deadline and not stop_event.is_set():
         name, method, path, _ = rng.choices(choices, weights=[item[3] for item in choices])[0]
         if name == "finn_chat":
-            if chat_budget["remaining"] <= 0:
+            # Keep the paid per-stage quota for the measured steady interval.
+            if ((steady_started is not None and time.monotonic() < steady_started)
+                    or chat_budget["remaining"] <= 0):
                 name, method, path, _ = ROUTES[0]
             else:
                 chat_budget["remaining"] -= 1
@@ -77,6 +150,7 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
         request_started_utc = time.time()
         sent_trace_id = f"cap-{uuid.uuid4().hex[:16]}"
         response = None
+        outcome = "ok"
         try:
             response = await client.request(
                 method, path, headers={"Authorization": authorization, "X-Trace-Id": sent_trace_id},
@@ -86,6 +160,10 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
             status = response.status_code
         except httpx.HTTPError:
             status = 0
+        if name == "finn_chat" and response is not None and status == 200:
+            outcome = await chat_turn_outcome(
+                client, response, authorization, chat_terminal_timeout_seconds, stop_event,
+            )
         backend_ms = None
         trace_id = sent_trace_id
         if response is not None:
@@ -98,11 +176,11 @@ async def virtual_user(client, fixture, deadline, think_seconds, chat_budget, re
                 except ValueError:
                     pass
         sample = (status, (time.perf_counter() - started) * 1000, backend_ms, trace_id,
-                  round(request_started_utc, 6), round(time.time(), 6))
+                  round(request_started_utc, 6), round(time.time(), 6), outcome)
         results[name].append(sample)
         if steady_results is not None and steady_started is not None and started_at >= steady_started:
             steady_results[name].append(sample)
-        if not 200 <= status < 300:
+        if not 200 <= status < 300 or outcome != "ok":
             stop_event.set()
             break
         try:
@@ -162,6 +240,7 @@ def report(label, results):
         summary[name] = {
             "requests": len(samples),
             "statuses": dict(statuses),
+            "outcomes": dict(Counter(sample[6] if len(sample) > 6 else "ok" for sample in samples)),
             "p50_ms": percentile(latencies, 0.50),
             "p95_ms": percentile(latencies, 0.95),
             "p95_all_ms": percentile([sample[1] for sample in samples], 0.95),
@@ -177,6 +256,7 @@ def report(label, results):
 def stage_has_blocking_errors(summary):
     return any(
         any(not 200 <= int(code) < 300 for code in route["statuses"])
+        or any(outcome != "ok" for outcome in route.get("outcomes", {}))
         for route in summary.values()
     )
 
@@ -263,12 +343,24 @@ def generator_fd_limits(max_users, *, production):
     return {"soft": soft, "hard": hard}
 
 
+def chat_stage_quotas(max_requests, stage_count, *, production):
+    minimum = 20 if production else 1
+    if max_requests < minimum * stage_count:
+        raise ValueError(
+            f"FINN chat needs at least {minimum} requests per stage "
+            f"({minimum * stage_count} total)"
+        )
+    return [minimum] * (stage_count - 1) + [max_requests - minimum * (stage_count - 1)]
+
+
 async def run(args, fixtures):
     limits = httpx.Limits(max_connections=max(100, args.max_users + 50), max_keepalive_connections=args.max_users)
     async with httpx.AsyncClient(base_url=args.base_url, timeout=args.timeout, limits=limits) as client:
-        chat_budget = {"remaining": args.max_chat_requests} if args.include_chat else None
         stages = args.stages.split(",")
+        chat_quotas = (chat_stage_quotas(args.max_chat_requests, len(stages), production=args.allow_production)
+                       if args.include_chat else None)
         for stage_index, stage in enumerate(stages):
+            chat_budget = {"remaining": chat_quotas[stage_index]} if chat_quotas is not None else None
             users_raw, seconds_raw = stage.split(":", 1)
             users, seconds = int(users_raw), int(seconds_raw)
             if users < 1 or users > len(fixtures) or seconds < 1:
@@ -287,11 +379,14 @@ async def run(args, fixtures):
                 steady_results, args.p95_limits, deadline, stop_event, latency_abort_routes,
             ))
             generator_monitor = asyncio.create_task(monitor_generator(generator_samples))
+            chat_options = ({"chat_terminal_timeout_seconds": args.chat_terminal_timeout_seconds}
+                            if args.include_chat else {})
             try:
                 await asyncio.gather(*(
                     virtual_user(client, fixture, deadline, args.think_seconds, chat_budget, results,
                                  stop_event, initial_spread_seconds=args.think_seconds,
-                                 steady_results=steady_results, steady_started=steady_started)
+                                 steady_results=steady_results, steady_started=steady_started,
+                                 **chat_options)
                     for fixture in fixtures[:users]
                 ))
             except asyncio.CancelledError:
@@ -340,6 +435,10 @@ def main():
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--include-chat", action="store_true")
     parser.add_argument("--max-chat-requests", type=int, default=0)
+    parser.add_argument("--max-chat-p95-ms", type=float)
+    parser.add_argument("--chat-terminal-timeout-seconds", type=float, default=60)
+    parser.add_argument("--provider-hard-cap-usd", type=float)
+    parser.add_argument("--confirm-provider-hard-cap", action="store_true")
     parser.add_argument("--allow-production", action="store_true")
     parser.add_argument("--max-workspace-p95-ms", type=float)
     parser.add_argument("--max-finn-p95-ms", type=float)
@@ -352,12 +451,26 @@ def main():
         parser.error(str(exc))
     if args.include_chat and args.max_chat_requests < 1:
         parser.error("FINN chat load requires --max-chat-requests with an explicit positive budget")
+    if args.include_chat and args.allow_production and args.max_chat_p95_ms is None:
+        parser.error("Production FINN chat load requires --max-chat-p95-ms")
+    if args.include_chat and args.allow_production and (
+        args.provider_hard_cap_usd is None
+        or not math.isfinite(args.provider_hard_cap_usd)
+        or args.provider_hard_cap_usd <= 0
+        or not args.confirm_provider_hard_cap
+        or not sys.stdin.isatty()
+    ):
+        parser.error("Production FINN chat requires a provider-side hard USD cap, its value, confirmation and an interactive terminal")
+    if (not math.isfinite(args.chat_terminal_timeout_seconds)
+            or args.chat_terminal_timeout_seconds < 1):
+        parser.error("Chat terminal timeout must be finite and at least 1 second")
     if not math.isfinite(args.think_seconds) or args.think_seconds < (1 if args.allow_production else 0.01):
         parser.error("Think time must be finite and at least 1 second in production")
     thresholds = (args.max_workspace_p95_ms, args.max_finn_p95_ms, args.max_reviews_p95_ms)
     if args.allow_production and any(value is None for value in thresholds):
         parser.error("Production load requires explicit p95 limits for workspace, FINN and reviews")
-    if any(value is not None and (not math.isfinite(value) or value <= 0) for value in thresholds):
+    if any(value is not None and (not math.isfinite(value) or value <= 0)
+           for value in (*thresholds, args.max_chat_p95_ms)):
         parser.error("p95 limits must be finite positive numbers")
     if args.between_stage_pause_seconds < 0 or (args.allow_production and args.between_stage_pause_seconds < 30):
         parser.error("Production load requires at least 30 seconds between stages")
@@ -367,6 +480,7 @@ def main():
         "workspace": args.max_workspace_p95_ms,
         "finn_conversations": args.max_finn_p95_ms,
         "trade_reviews": args.max_reviews_p95_ms,
+        "finn_chat": args.max_chat_p95_ms if args.include_chat else None,
     }.items() if value is not None}
     fixtures = json.loads(args.fixtures.read_text())
     if not isinstance(fixtures, list) or not fixtures or any(
@@ -377,6 +491,11 @@ def main():
     if len({item["user_id"] for item in fixtures}) != len(fixtures):
         parser.error("Fixture user IDs must be unique")
     args.max_users = max(int(item.split(":", 1)[0]) for item in args.stages.split(","))
+    if args.include_chat:
+        try:
+            chat_stage_quotas(args.max_chat_requests, len(args.stages.split(",")), production=args.allow_production)
+        except ValueError as exc:
+            parser.error(str(exc))
     if len(fixtures) < args.max_users:
         parser.error("Provide a distinct fixture for every user in the largest stage")
     try:
@@ -384,6 +503,10 @@ def main():
     except ValueError as exc:
         parser.error(str(exc))
     print(json.dumps({"generator_fd_limit": limits}), flush=True)
+    if args.include_chat and args.allow_production:
+        expected = f"CAP {args.provider_hard_cap_usd:g}"
+        if input(f"Confirm the provider project's enforced USD spending cap by typing {expected}: ").strip() != expected:
+            parser.error("Provider hard-cap confirmation declined")
     asyncio.run(run(args, fixtures))
 
 

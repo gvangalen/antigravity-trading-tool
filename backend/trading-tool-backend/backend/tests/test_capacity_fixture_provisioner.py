@@ -417,6 +417,121 @@ def test_capacity_load_keeps_bearer_header_across_requests():
     assert all(sample[4] <= sample[5] for route in results.values() for sample in route)
 
 
+def test_chat_load_requires_a_verified_terminal_outcome_even_after_http_200():
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+    classify = harness["chat_response_state"]
+    response = lambda body: SimpleNamespace(status_code=200, json=lambda: body)
+    assert classify(response({
+        "intent": "unavailable", "state": {"current_flow": "finn_v2_visible_failed", "run_id": "r1"},
+        "response_trace": {"error": "provider_error"},
+    }))[0] == "unavailable"
+    assert classify(response({
+        "intent": "processing", "state": {"current_flow": "finn_v2_visible_pending", "run_id": "r1"},
+        "response_trace": {"run_id": "r1"},
+    })) == ("pending", "r1")
+    assert classify(response({
+        "intent": "fact", "response": "Verified answer",
+        "state": {"current_flow": "finn_v2_visible", "run_id": "r1"},
+        "response_trace": {
+            "run_id": "r1", "pipeline_version": "finn_v2",
+            "response_source": "finn_v2_verified", "verifier_status": "passed",
+            "delivery_envelope": {"status": "completed"},
+        },
+    })) == ("ok", "r1")
+    assert classify(response({
+        "intent": "fact", "response": "Unverified answer",
+        "state": {"current_flow": "finn_v2_visible", "run_id": "r1"},
+        "response_trace": {
+            "run_id": "r2", "pipeline_version": "finn_v2",
+            "response_source": "finn_v2_verified", "verifier_status": "passed",
+            "delivery_envelope": {"status": "completed"},
+        },
+    }))[0] == "malformed"
+
+    class Client:
+        def __init__(self, terminal):
+            self.terminal = terminal
+
+        async def get(self, path, *, headers):
+            assert path == "/api/assistant/v2/runs/r1"
+            assert headers == {"Authorization": "Bearer private-token"}
+            return response(self.terminal)
+
+    pending = response({
+        "intent": "processing", "state": {"current_flow": "finn_v2_visible_pending", "run_id": "r1"},
+        "response_trace": {"run_id": "r1"},
+    })
+    completed = {"run_id": "r1", "status": "completed", "response": {
+        "content": "Verified answer", "mode": "FACT", "verifier_status": "passed",
+    }}
+    assert asyncio.run(harness["chat_turn_outcome"](
+        Client(completed), pending, "Bearer private-token", 0.01, asyncio.Event(),
+    )) == "ok"
+    assert asyncio.run(harness["chat_turn_outcome"](
+        Client({"run_id": "r1", "status": "failed"}), pending,
+        "Bearer private-token", 0.01, asyncio.Event(),
+    )) == "terminal_unsuccessful"
+    summary = harness["report"]("semantic", {
+        "finn_chat": [(200, 10, None, "trace", 1, 2, "unavailable")],
+    })
+    assert summary["finn_chat"]["statuses"] == {"200": 1}
+    assert summary["finn_chat"]["outcomes"] == {"unavailable": 1}
+    assert harness["stage_has_blocking_errors"](summary)
+    assert harness["chat_stage_quotas"](65, 3, production=True) == [20, 20, 25]
+    with pytest.raises(ValueError, match="at least 20 requests per stage"):
+        harness["chat_stage_quotas"](50, 3, production=True)
+
+
+def test_chat_quota_is_reserved_for_steady_phase_after_ramp(monkeypatch):
+    import time
+    from collections import defaultdict
+    from types import SimpleNamespace
+
+    harness = runpy.run_path(str(fixtures.REPO_ROOT / "ops/load/active_users.py"))
+
+    class ChooseChat:
+        def choices(self, items, *, weights):
+            return [items[-1]]
+
+        def uniform(self, _minimum, _maximum):
+            return 0.001
+
+    monkeypatch.setattr(harness["virtual_user"].__globals__["random"], "Random", lambda _seed: ChooseChat())
+
+    class Client:
+        async def request(self, _method, path, *, headers, json):
+            if path != "/api/assistant/chat":
+                return SimpleNamespace(status_code=200, headers={})
+            return SimpleNamespace(status_code=200, headers={}, json=lambda: {
+                "intent": "fact", "response": "Verified answer",
+                "state": {"current_flow": "finn_v2_visible", "run_id": "r1"},
+                "response_trace": {
+                    "run_id": "r1", "pipeline_version": "finn_v2",
+                    "response_source": "finn_v2_verified", "verifier_status": "passed",
+                    "delivery_envelope": {"status": "completed"},
+                },
+            })
+
+    async def exercise():
+        now = time.monotonic()
+        all_results = defaultdict(list)
+        steady_results = defaultdict(list)
+        budget = {"remaining": 3}
+        await harness["virtual_user"](
+            Client(), {"user_id": 42, "access_token": "fixture"},
+            now + 0.09, 0.001, budget, all_results, asyncio.Event(),
+            steady_results=steady_results, steady_started=now + 0.03,
+        )
+        return all_results, steady_results, budget
+
+    all_results, steady_results, budget = asyncio.run(exercise())
+    assert len(all_results["workspace"]) > 0
+    assert len(steady_results["finn_chat"]) == 3
+    assert budget["remaining"] == 0
+
+
 def test_capacity_generator_requires_fd_headroom_for_production(monkeypatch):
     import resource
 
