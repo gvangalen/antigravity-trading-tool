@@ -131,6 +131,42 @@ def _minimal_read_answer(
     )
 
 
+def _verified_closed_review_evidence(
+    evidence: tuple[dict[str, Any], ...],
+) -> list[dict[str, Any]]:
+    """Expose a reference to an owner-read closed dossier, never its contents."""
+    references: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for item in evidence:
+        if (
+            item.get("scope") != "read_review_history"
+            or item.get("status") != "completed"
+            or item.get("source") != "bot_decisions_and_finn_trade_reviews"
+        ):
+            continue
+        data = item.get("data")
+        if not isinstance(data, dict):
+            continue
+        closed = {
+            trade.get("review_id")
+            for trade in data.get("closed_trades") or []
+            if isinstance(trade, dict) and type(trade.get("review_id")) is int
+        }
+        for review_id in data.get("closed_trade_review_ids") or []:
+            if type(review_id) is not int or review_id <= 0 or review_id not in closed or review_id in seen:
+                continue
+            references.append({
+                "entity_type": "review_history",
+                "entity_id": str(review_id),
+                "source": "bot_decisions_and_finn_trade_reviews",
+                "owned_by_user": True,
+            })
+            seen.add(review_id)
+            if len(references) == 5:
+                return references
+    return references
+
+
 def _simple_coach_structural_violations(
     *, text: str, tool_trace: tuple[dict[str, Any], ...], message: str,
     horizon_classification_question: bool = False,
@@ -387,7 +423,10 @@ class FinnV2RunService:
                 "not_run" if model_only_experiment else
                 "passed" if status in {"completed", "clarification_required"} else "failed"
             ),
-            "evidence": [],
+            "evidence": (
+                _verified_closed_review_evidence(answer.evidence)
+                if status == "completed" and not model_only_experiment else []
+            ),
             "uncertainty": [answer.reason] if answer.reason else [],
             "proposal_id": None,
             "confirmation_required": False,
