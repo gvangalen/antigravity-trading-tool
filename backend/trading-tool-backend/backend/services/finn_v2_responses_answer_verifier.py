@@ -1969,7 +1969,7 @@ class FinnResponsesAnswerVerifier:
         def collect_currency(value: Any) -> None:
             if isinstance(value, dict):
                 for key, item in value.items():
-                    if key in {"currency", "base_currency", "quote_currency"}:
+                    if key in {"currency", "price_currency", "base_currency", "quote_currency"}:
                         if str(item).upper() in {"EUR", "USD"}:
                             allowed.add(str(item).upper())
                     else:

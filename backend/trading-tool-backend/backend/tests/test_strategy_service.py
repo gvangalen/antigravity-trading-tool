@@ -226,6 +226,34 @@ def test_strategy_read_prefers_its_own_asset_and_timeframe_over_the_parent_setup
     assert formatted["timeframe_source"] == "explicit"
 
 
+def test_strategy_read_preserves_trade_level_currency_separately_from_euro_amount():
+    formatted = StrategyService(db_session=None)._format_strategy_row({
+        "id": 3, "setup_id": 77, "name": "BTC USD levels", "setup_type": "trade",
+        "execution_mode": "fixed", "base_amount": 100,
+        "data": {"entry": 84000, "stop_loss": 79800, "targets": [92400],
+                 "price_currency": "USD"},
+    })
+    assert formatted["price_currency"] == "USD"
+    assert formatted["entry"] == 84000
+    assert formatted["base_amount"] == 100
+
+    from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
+    evidence = asyncio.run(StrategyToolAdapter().execute(
+        strategy={**formatted, "data": {"price_currency": "USD"}},
+        resolution_source="explicit_name",
+    ))["data"]
+    assert evidence.price_currency == "USD"
+    assert evidence.currency == "EUR"
+
+
+@pytest.mark.parametrize("invalid", ["", "XXX", None])
+def test_strategy_rejects_invalid_price_currency_on_create_or_update(invalid):
+    with pytest.raises(HTTPException) as exc_info:
+        StrategyService._validated_price_currency(invalid)
+    assert exc_info.value.status_code == 422
+    assert StrategyService._validated_price_currency("usd") == "USD"
+
+
 def test_strategy_update_binds_numeric_targets_as_postgres_text_array():
     class _Result:
         rowcount = 1

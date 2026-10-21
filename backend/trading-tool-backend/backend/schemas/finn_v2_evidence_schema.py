@@ -177,6 +177,7 @@ class LinkedStrategyData(BaseModel):
     execution_mode: Optional[str] = None
     risk_profile: Optional[str] = None
     entry: Optional[str] = None
+    price_currency: Optional[str] = None
     entry_type: Optional[str] = None
     stop_loss: Optional[str] = None
     targets: List[str] = Field(default_factory=list)

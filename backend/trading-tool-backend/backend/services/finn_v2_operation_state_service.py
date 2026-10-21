@@ -226,6 +226,10 @@ class FinnV2OperationStateService:
         for key, value in (supplied_inputs or {}).items():
             if is_slot_turn:
                 continue
+            if contract.operation_id == "create_strategy" and key == "price_currency" and key not in explicit:
+                # A quote unit changes the meaning of every trade level. The
+                # model cannot infer it from an asset or market snapshot.
+                continue
             if (
                 key == "name" and model_tool_inputs
                 and contract.operation_id.startswith("create_")
@@ -374,6 +378,25 @@ class FinnV2OperationStateService:
                 provenance["strategy_id"] = {
                     "source": "verified_action_result", "state_revision": next_revision,
                 }
+        mixed_trade_currencies = (
+            contract.operation_id == "create_strategy"
+            and (
+                self._explicit_trade_price_currency(message) == "MIXED"
+                or (
+                    explicit.get("price_currency") in {"EUR", "USD"}
+                    and existing is not None
+                    and existing.collected_inputs.get("price_currency") in {"EUR", "USD"}
+                    and explicit["price_currency"] != existing.collected_inputs["price_currency"]
+                )
+            )
+        )
+        if mixed_trade_currencies:
+            # Values from different quotes cannot share one strategy. Discard
+            # all price levels and collect them again in one declared unit.
+            for field in ("entry", "stop_loss", "targets", "price_currency"):
+                collected.pop(field, None)
+                sources.pop(field, None)
+                provenance.pop(field, None)
         missing = [
             field
             for field in contract.required_inputs_for(collected)
@@ -674,6 +697,12 @@ class FinnV2OperationStateService:
             if slot_value is not None:
                 values[str(requested_slot)] = slot_value
                 if self._is_short_slot_answer(text, requested_slot=str(requested_slot)):
+                    if contract.operation_id == "create_strategy" and "price_currency" in accepted_inputs:
+                        currency = self._explicit_trade_price_currency(text)
+                        if not currency and requested_slot in {"entry", "stop_loss", "targets"}:
+                            currency = self._currency_token(text)
+                        if currency:
+                            values["price_currency"] = currency
                     return values
         if explicit_asset:
             for field in {"asset", "symbol"}.intersection(accepted_inputs):
@@ -908,6 +937,11 @@ class FinnV2OperationStateService:
                     r"(?:per\s+(?:uitvoering|execution|ausf.hrung)|each|je)?",
                     lowered,
                 )
+            if amount_match is None:
+                amount_match = re.search(
+                    r"(?:€|eur)\s*(\d+(?:[.,]\d+)?)\s*per\s+(?:uitvoering|aankoop|trade)",
+                    lowered,
+                )
             if amount_match:
                 raw_amount = next((group for group in amount_match.groups() if group), None)
                 if raw_amount:
@@ -925,6 +959,10 @@ class FinnV2OperationStateService:
                     values["name"] = natural_name.group(1).strip(" .\"'")
             strategy_values = self._strategy_trade_inputs(text)
             values.update({key: value for key, value in strategy_values.items() if key in accepted_inputs})
+            if "price_currency" in accepted_inputs:
+                currency = self._explicit_trade_price_currency(text)
+                if currency:
+                    values["price_currency"] = currency
         elif contract.operation_id == "create_bot" and "budget_total_eur" in accepted_inputs:
             if "name" not in values:
                 natural_name = re.search(
@@ -1210,10 +1248,10 @@ class FinnV2OperationStateService:
                 return parsed[field]
             if field in {"entry", "stop_loss", "base_amount"}:
                 number = re.search(r"-?\d+(?:[.,]\d+)?", value)
-                return float(number.group(0).replace(",", ".")) if number else None
+                return self._numeric_value(number.group(0)) if number else None
             if field == "targets":
                 numbers = re.findall(r"\d+(?:[.,]\d+)?", value)
-                return [float(number.replace(",", ".")) for number in numbers] or None
+                return [self._numeric_value(number) for number in numbers] or None
             if field == "risk_profile":
                 return self._canonical_risk_profile(value)
         return None
@@ -1324,6 +1362,41 @@ class FinnV2OperationStateService:
         if requested_field == "name" and text.strip():
             values["name"] = cls._name_input_from_text(text) or text.strip(" .\"'")
         return values
+
+    @staticmethod
+    def _explicit_trade_price_currency(text: str) -> Optional[str]:
+        """Read currency attached to a trade level, never the EUR base amount."""
+        level = re.compile(
+            r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?|stop(?:[- ]?loss)?|"
+            r"invalidatie|invalidation|invalidierung|targets?|koersdoelen?|"
+            r"take[- ]?profits?|ziele?n?)\b\s*(?:is|zijn|are|sind|:|=|op|at|bei|rond|around)?\s*"
+            r"(?P<before>\$|€|usd|eur|dollars?|euros?)?\s*"
+            r"\d[\d.,]*(?:\s*(?:and|en|und|,|\/|&|\+)\s*\d[\d.,]*)*\s*"
+            r"(?P<after>usd|eur|dollars?|euros?|\$|€)?",
+            re.IGNORECASE,
+        )
+        currencies = set()
+        global_quote = re.search(
+            r"\b(?:alle|all|sämtliche)?\s*(?:koersniveaus|prijsniveaus|prijzen|"
+            r"price\s+levels|prices|trade\s+levels|kursniveaus|preise)\b"
+            r"[^.!?\n]{0,35}?\b(?:in|zijn\s+in|are\s+in|sind\s+in)\s*"
+            r"(USD|EUR|dollars?|euros?|\$|€)(?!\w)",
+            text, re.IGNORECASE,
+        )
+        if global_quote:
+            currencies.add(FinnV2OperationStateService._currency_token(global_quote.group(1)))
+        for match in level.finditer(text):
+            token = match.group("before") or match.group("after")
+            if token:
+                currencies.add(FinnV2OperationStateService._currency_token(token))
+        return "MIXED" if len(currencies) > 1 else next(iter(currencies)) if currencies else None
+
+    @staticmethod
+    def _currency_token(text: str) -> Optional[str]:
+        token = re.search(r"(?:\b(?:USD|EUR|dollars?|euros?)\b|[$€])", text, re.I)
+        if not token:
+            return None
+        return "USD" if token.group(0).casefold().startswith(("usd", "dollar", "$")) else "EUR"
 
     @staticmethod
     def _structured_changed_fields(text: str) -> dict[str, object]:
@@ -1747,6 +1820,8 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _canonical_input(field: str, value: object) -> object:
+        if field == "price_currency":
+            return str(value).strip().upper() if str(value).strip().upper() in {"EUR", "USD"} else None
         if field in {"entry", "stop_loss", "base_amount"}:
             numeric = FinnV2OperationStateService._typed_numeric_value(value)
             return numeric if isinstance(numeric, (int, float)) and not isinstance(numeric, bool) else None

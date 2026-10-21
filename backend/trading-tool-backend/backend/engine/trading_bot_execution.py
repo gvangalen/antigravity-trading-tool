@@ -516,6 +516,23 @@ def _default_trade_plan(
 # =====================================================
 # ✅ Strategy setup payload (from DB) — single truth for bot_brain
 # =====================================================
+def _hold_for_unconverted_trade_levels(brain: Dict[str, Any], setup_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Never compare saved non-EUR trade levels with an EUR live price."""
+    if setup_payload.get("setup_type") != "trade" or str(setup_payload.get("price_currency", "EUR")).upper() == "EUR":
+        return brain
+    held = dict(brain)
+    held["action"] = "hold"
+    held["amount_eur"] = 0.0
+    held["guardrail_reason"] = "strategy_price_currency_mismatch"
+    held["guardrails_result"] = {
+        "allowed": False, "adjusted_amount_eur": 0.0,
+        "blocked_by": "strategy_price_currency_mismatch",
+        "reason": "De opgeslagen koersniveaus zijn niet in EUR; automatische uitvoering wacht op een betrouwbare omrekening.",
+        "warnings": ["strategy_price_currency_mismatch"], "guardrails": {},
+    }
+    return held
+
+
 def _get_strategy_setup_payload(
     conn,
     *,
@@ -591,6 +608,7 @@ def _get_strategy_setup_payload(
         "base_amount": base_amount,
         "execution_mode": execution_mode,
         "setup_type": normalized_type,
+        "price_currency": str(stored_data.get("price_currency", "EUR")).upper(),
     }
 
     if execution_mode == "custom":
@@ -1968,6 +1986,10 @@ def run_trading_bot_execution(
                 portfolio_context=portfolio_context,
             )
             brain = _enforce_setup_match_on_buy(brain, current_match, setup_payload)
+
+            # Live prices and sizing are EUR-denominated. A strategy whose
+            # levels were saved in USD must not compare them with EUR prices.
+            brain = _hold_for_unconverted_trade_levels(brain, setup_payload)
 
             if live_cash_error or (bot.get("is_live") and live_price is None):
                 reason_code = live_cash_error or "market_price_stale"

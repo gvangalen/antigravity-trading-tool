@@ -293,7 +293,7 @@ class FinnV2HardClaimBoundary:
                     source["data"] = {
                         key: data[key] for key in (
                             "name", "strategy_name", "symbol", "timeframe", "execution_mode",
-                            "base_amount", "entry", "stop_loss", "targets", "risk_profile",
+                            "base_amount", "entry", "stop_loss", "targets", "price_currency", "risk_profile",
                         ) if data.get(key) is not None
                     }
                 else:
