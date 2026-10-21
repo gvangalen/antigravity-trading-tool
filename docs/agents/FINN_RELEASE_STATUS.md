@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dossierlezing zonder nummer — begrensde QA-diagnostiek (21 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De beschermde onafhankelijke
+[QA-run 39562573998](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39562573998)
+op `ead753807e34361cb817f3f25453e3ce5f60db0e` gebruikte de juiste
+vraag zonder reviewnummer en eindigde `NOT ACCEPTED`. De eerste FINN-beurt
+was voltooid zonder actievoorstel, maar bevatte geen geverifieerd
+`review_history`-bewijs (`closed_paper_review_chat_evidence_missing`). De
+lesvervolgturn werd niet bereikt. Het gesaniteerde artifact heeft SHA-256
+`76612bde8fede54d8aaf111d94beef1f36448578ec9fed6fdbfa36d4314b7584`.
+Het artifact toont niet of de dossierleesactie daadwerkelijk is aangeroepen;
+de oorzaak is nog niet bewezen. Er waren nul Live-aanroepen of -activaties.
+
+Deze kandidaat voegt uitsluitend begrensde diagnostiek toe wanneer een
+voltooide chatbeurt dossierbewijs mist: of de eigenaargebonden leesactie is
+gezien, en haar getypeerde status en foutcategorie. Dossierinhoud, IDs en
+modelantwoord worden niet geëxporteerd. De bestaande acceptatieasserties
+blijven gelijk. De gerichte veilige-exporttest slaagt; de volledige
+backend-suite slaagde met **3647 tests, vier bestaande skips**. Productruntime,
+actiecontracten en de gebruikersvraag blijven ongewijzigd. CI, deployment en
+dezelfde onafhankelijke ingelogde QA-hertest staan nog open.
+
 ## Beschermde QA-vraag zonder reviewnummer — herstelkandidaat (21 oktober 2026)
 
 Phase: `LOCAL_VALIDATED_AWAITING_CI`. De bestaande QA-agent bevestigde op
