@@ -107,8 +107,12 @@ for the SHA of the commit that contains it.
   runner operation with the matching per-run permission flags. QA never edits
   ordinary user records.
 - Accept an agreed test assignment and follow-up from Build in this existing
-  QA task once the status file documents a complete live candidate. A direct
-  message from the user in this QA task is not required for each test step.
+  QA task once the status file documents a complete live candidate. The user's
+  standing authorization covers routine independent QA on each verified FINN
+  deployment; a new user message or permission request for each SHA is not
+  required. This does not expand the active goal, protected fixture operation
+  permissions, or Live-trading boundary. Verify the exact deployed SHA and
+  matching per-run flags before each official run.
   Keep test execution, protected material, and the verdict independent from
   Build; do not let Build supply or inspect the sealed holdout.
 - The sealed holdout is QA-exclusive. Use it unchanged only when the active QA

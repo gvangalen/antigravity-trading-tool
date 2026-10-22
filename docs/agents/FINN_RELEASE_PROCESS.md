@@ -17,8 +17,10 @@ Before deployment, Build must run the complete local worker-driven action
 matrix for affected action contracts, real-provider development/regression,
 and applicable backend/frontend suites. Build updates
 `FINN_RELEASE_STATUS.md` only with measured evidence. After documenting a
-complete live candidate, Build may assign the agreed independent test scope
-to the existing QA Agent and follow up in that same task. Build does not run
+complete live candidate, Build assigns the agreed independent test scope
+to the existing QA Agent and follows up in that same task. The user's standing
+authorization covers this routine handoff after each verified FINN deployment;
+Build does not ask again for permission for each SHA. Build does not run
 the official QA workflow, access the QA fixture, or access the QA-exclusive
 sealed holdout. The Build smoke fixture is optional diagnostic tooling, not a
 release gate.
@@ -80,13 +82,20 @@ precondition and never grants access to the QA fixture or sealed holdout.
 
 ## Independent Production QA
 
-The user sets the product goal and may direct the QA scope. Once the status
+The user sets the product goal and may direct the QA scope. The user has
+authorized Build to initiate the agreed independent QA after each verified
+FINN deployment without a new permission request for that SHA. Once the status
 file documents a complete live candidate with Build's local and deployment
-evidence, Build may send the agreed assignment to the existing QA Agent and
-follow up there. Reuse that agent and task across test steps and repair cycles;
+evidence, Build sends the assignment to the existing QA Agent and follows up
+there. Reuse that agent and task across test steps and repair cycles;
 do not create a new QA agent or task for each step. QA decides its own test
 execution and verdict independently. Build cannot invoke the protected QA
 runner or inspect QA-only fixtures, manifests, prompts, or the sealed holdout.
+The standing authorization does not expand the agreed QA scope or permit Live
+orders, changes to ordinary users, or new kinds of protected fixture writes.
+Those still require explicit user authorization. QA still checks the exact
+deployed SHA and the operation permissions required by its active goal and
+runner contract before every official run.
 QA reads the role instructions, this process, the status file, and its
 explicit QA goal; then uses the protected `FINN_QA_USER_ID` route to run
 the goal's authenticated preflight, runtime/dispatch checks, controlled

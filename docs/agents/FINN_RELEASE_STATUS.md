@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-agent-cutover: protected QA on 260d846 (22 October 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`; the public SHA `260d84607ab149ea01e245d9f7787fe1d6aafc8e`
+Phase: `LIVE_CANDIDATE_QA_PENDING`; the previous public SHA `260d84607ab149ea01e245d9f7787fe1d6aafc8e`
 remains **NOT_ACCEPTED**. The independent protected QA run on that SHA
 ([workflow 39659501506](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39659501506))
 reported five operation mismatches in eight read-only turns. Its sanitized
@@ -51,8 +51,18 @@ schema, parse, validation or timeout failures (artifact SHA-256
 The real Responses regression passed **109/109** with no provider, schema,
 parse, validation or timeout failures (artifact SHA-256
 `fd3c4537806f077a53a6645f9c7e2bb06ebb8937cf7f9d145ed9b86725dc5454`).
-CI, deployment and independent live QA have not yet occurred. These local
-results do not overturn the protected QA verdict.
+The repair was merged through [PR #534](https://github.com/gvangalen/antigravity-trading-tool/pull/534)
+as product commit `e2f1eebd465329a77fe2d8a55703be22d28d3061`.
+[PR CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39740952779),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39741927691)
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39742258559)
+completed successfully. Public backend health and frontend build-info both
+returned HTTP 200 and that exact SHA after deployment. A documentation-only
+follow-up to this status and the QA authorization process will produce a new
+deployment SHA without changing the product code. Independent QA must verify
+the actual public SHA before its run. Neither the Build evidence nor this
+documentation update overturns the earlier `NOT_ACCEPTED` verdict; the new
+candidate still awaits independent live QA.
 
 ## FINN-agent-cutover: toestemming na geblokkeerde strategie (21 oktober 2026)
 
