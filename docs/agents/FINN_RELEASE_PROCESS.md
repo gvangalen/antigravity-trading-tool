@@ -25,6 +25,14 @@ the official QA workflow, access the QA fixture, or access the QA-exclusive
 sealed holdout. The Build smoke fixture is optional diagnostic tooling, not a
 release gate.
 
+Before that QA handoff, Build waits for the **last** main CI and Auto Deploy
+triggered by the candidate or its status update to finish. The GitHub main
+commit, successful deploy run, public backend SHA, and public frontend SHA
+must all identify the same final revision, with no newer deployment pending.
+An earlier skipped Auto Deploy run does not satisfy this check when a later
+main CI completion can trigger another deploy. The QA Agent then tests that
+final public revision; Build does not change the active candidate during QA.
+
 ### QA
 
 QA owns independent test execution, QA test material, and the protected
