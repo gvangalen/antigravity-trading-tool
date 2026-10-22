@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN strategy continuity: six failed follow-ups (22 October 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE_PREP`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
+Phase: `PR_CI_PENDING`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
 on public SHA `45981b49ceac8ac4ac9d41e3bfede07216e731be` remains
 **NOT_ACCEPTED**: all 17 cases ran, 11 passed and six failed. With the user's
 authorization, the existing QA Agent disclosed only the six failing user
@@ -36,12 +36,17 @@ adapter checks, with zero broker orders, Live trading calls, Live bots or
 production connections (artifact SHA-256
 `2d7e88dc7892c556defe7dbe8cd3d79b4eb8cf7ddbd8369c7bf5f0c32d69660b`). Frontend
 typecheck, i18n lint/tests, command/proposal tests, production build and the
-high-severity audit passed; the audit still reports one moderate Next.js
-advisory. The real Responses development selector passed **20/20** and the
-regression selector **109/109**, each with zero provider, schema, timeout,
-parse or validation failures. Final-source provider reruns are in progress;
-no release candidate has been pushed or deployed. The previous
-production QA verdict remains `NOT_ACCEPTED`.
+high-severity audit passed after upgrading Next.js from 15.5.24 to 15.5.28;
+the production-dependency audit reports zero vulnerabilities. The final-source
+real Responses development selector passed **20/20** and regression selector
+**109/109**, each with zero provider, schema, timeout, parse or validation
+failures (artifact SHA-256 `ebca99c06e597b22fbcc64af3561452156d7671080443fa2a1206fa83b5a6d95`
+and `43c52162e9ca802b5408b31887f2b325fa09a0533e5e8ef53a5cdaa17be680ef`).
+The release candidate is [PR #545](https://github.com/gvangalen/antigravity-trading-tool/pull/545);
+its first CI identified the Next.js advisory, so the dependency was upgraded
+and the frontend gates rerun. CI, deployment, public SHA verification and
+independent live QA are still pending. The previous production QA verdict
+remains `NOT_ACCEPTED`.
 
 ## FINN strategy continuity: independent QA after setup prerequisite repair (22 October 2026)
 
