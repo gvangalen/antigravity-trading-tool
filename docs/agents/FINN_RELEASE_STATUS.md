@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN strategy continuity: remaining three follow-ups (22 October 2026)
 
-Phase: `RELEASE_CANDIDATE_LOCAL_VALIDATED`. Branch:
+Phase: `LIVE_CANDIDATE_QA_PENDING`. The repair branch was
 `codex/finn-strategy-continuity-followup-v4`. The independent protected
 [QA workflow 39825723618](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39825723618)
 ran all 17 cases on public SHA `2b42778b8c530cdbbdb5aa9305d224dbdb136226` and
@@ -46,6 +46,19 @@ high-severity audit passed on unchanged frontend source; the audit reported
 zero vulnerabilities. Security and Architecture found no concrete remaining
 P1/P2 in this repair. These Build checks do not constitute independent live
 acceptance.
+
+The repair merged through [PR #548](https://github.com/gvangalen/antigravity-trading-tool/pull/548)
+as product SHA `f46a6790a74686aa90e80ad5bea7153dff8f22d8`. Its
+[PR CI 39835256655](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39835256655),
+[main CI 39835714420](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39835714420),
+and [Auto Deploy 39836101825](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39836101825)
+all succeeded. Public backend health and frontend build-info each returned
+HTTP 200 and exactly that product SHA. This documentation-only status update
+will itself create a later public SHA. Build must wait for its final CI and
+Auto Deploy, verify both public SHAs and absence of a newer pending deploy,
+then hand off the unchanged 17-case scope to the same independent QA Agent.
+The previous `NOT_ACCEPTED` verdict remains until that authenticated live
+retest finishes.
 
 ## FINN strategy continuity: six failed follow-ups (22 October 2026)
 
