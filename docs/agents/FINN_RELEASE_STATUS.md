@@ -27,13 +27,14 @@ a separate second strategy draft, then withdrew the second USD card and
 prepared its EUR replacement with the same setup, name and amount. No card was
 confirmed, strategy saved, or order made.
 
-The final-code root backend suite passed **3718 tests, 4 existing skips**.
+After rebasing on the concurrent onboarding release, the final-code root
+backend suite passed **3733 tests, 4 existing skips**.
 Web typecheck, i18n lint/tests, command/proposal tests, production build and
 high-severity audit passed; the audit still reported one moderate Next.js
 advisory. The final-code local worker-driven action matrix passed **16/16**
 contracts and **19/19** adapter checks, with zero broker orders, Live calls,
 Live bots or production connections (artifact SHA-256
-`85c1460717ec89a716128e463cc88ffed201f5df1e8f8036cad2ef3827f527c6`).
+`9f72669fdefb4403a33eb4773fb646c9a08fa8e83565c173902c9b6983f5489d`).
 The real Responses development selector set passed **20/20** with zero
 provider/schema/parse/timeout/validation failures (artifact SHA-256
 `2be7594acf9159e94d72f8dbd1ddc1ee4b051a5e68b131a80a94f3ebf149baf8`).
