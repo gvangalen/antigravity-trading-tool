@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuity: six failed follow-ups (22 October 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE_PREP`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
+on public SHA `45981b49ceac8ac4ac9d41e3bfede07216e731be` remains
+**NOT_ACCEPTED**: all 17 cases ran, 11 passed and six failed. With the user's
+authorization, the existing QA Agent disclosed only the six failing user
+questions to Build; Build did not access the protected fixture or sealed
+holdout. The failures covered a saved-setup read, a bounded automatic-rule
+waiver, an independent second strategy, a correction of that open draft, an
+EUR re-entry, and current BTC levels without an active draft.
+
+This batch makes the saved-setup read select and record the read contract;
+retains only explicit fixed fields after the offered waiver of two unsupported
+automatic rules; starts a separately named strategy without inheriting rules;
+selects a uniquely named open card for correction and clarifies on an
+excluded card; and requires complete, single-currency levels for re-entry.
+Without an active draft, “dat BTC-concept” can collect stated prices but must
+ask which saved setup is meant. Both the first selection and the downstream
+owner resolver/snapshot now leave `setup_id` open rather than inheriting a
+recent ETH or BTC setup. The local owner-scoped FastAPI/Celery/Responses probes
+completed the A/B target and EUR continuation without confirmation or order;
+the adverse ETH→BTC probe collected BTC prices, left `setup_id` missing and
+asked for a saved setup without a proposal. Security and Architecture found
+no remaining concrete P1/P2 in this focused diff. These checks do not
+constitute independent live acceptance.
+
+The final-code backend suite passed **3778 tests, 4 existing skips**. The
+restarted worker-driven action matrix passed **16/16** contracts and **19/19**
+adapter checks, with zero broker orders, Live trading calls, Live bots or
+production connections (artifact SHA-256
+`2d7e88dc7892c556defe7dbe8cd3d79b4eb8cf7ddbd8369c7bf5f0c32d69660b`). Frontend
+typecheck, i18n lint/tests, command/proposal tests, production build and the
+high-severity audit passed; the audit still reports one moderate Next.js
+advisory. The real Responses development selector passed **20/20** and the
+regression selector **109/109**, each with zero provider, schema, timeout,
+parse or validation failures. Final-source provider reruns are in progress;
+no release candidate has been pushed or deployed. The previous
+production QA verdict remains `NOT_ACCEPTED`.
+
 ## FINN strategy continuity: independent QA after setup prerequisite repair (22 October 2026)
 
 Phase: `NOT_ACCEPTED`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)

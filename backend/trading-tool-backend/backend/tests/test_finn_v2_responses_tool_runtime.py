@@ -46,7 +46,7 @@ from backend.services.finn_v2_run_service import (
     _blocked_strategy_from_clarification, _positive_owner_setup_matches,
     _rejects_guided_strategy_parent,
     _strategy_rule_is_unencoded, _inherits_blocked_strategy_rules,
-    _explicitly_separates_new_strategy,
+    _explicitly_separates_new_strategy, _has_independent_strategy_inputs,
     _freeform_strategy_rule_waiver_inputs,
     _plain_setup_creation_request,
     _plain_strategy_execution_mode_reply,
@@ -56,6 +56,7 @@ from backend.services.finn_v2_run_service import (
     _references_blocked_strategy_draft,
     _asks_to_drop_blocked_strategy_rules, _strategy_price_currency_conflict,
     _reopen_strategy_for_new_price_currency, _complete_strategy_price_reentry,
+    _strategy_reentry_matches_saved_draft,
     _pure_strategy_price_reentry,
     _select_open_strategy_for_correction,
     _multiple_open_correction_requires_clarification,
@@ -5666,6 +5667,124 @@ def test_complete_new_strategy_can_explicitly_exclude_prior_blocked_rules():
     assert not _strategy_rule_is_unencoded(request)
 
 
+def test_independent_strategy_keeps_typed_fields_after_blocked_draft():
+    request = (
+        "Dit is een andere, zelfstandige strategie: Rustige Variant voor mijn "
+        "opgeslagen setup BTC QA Plan. Gebruik BTC 4H, €100 vast per uitvoering, "
+        "voorzichtig risico, entry 84.000 USD, stop 79.800 USD en target 93.000 USD. "
+        "Neem geen voorwaarden uit de vorige strategie over. Laat eerst alleen "
+        "het concept zien."
+    )
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    fields = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=request, explicit_asset=None,
+    )
+    assert {key: fields[key] for key in (
+        "name", "base_amount", "entry", "stop_loss", "targets", "price_currency",
+    )} == {
+        "name": "Rustige Variant", "base_amount": 100,
+        "entry": 84000, "stop_loss": 79800, "targets": [93000],
+        "price_currency": "USD",
+    }
+    assert _has_independent_strategy_inputs(request)
+    assert _explicit_strategy_proposal_request(request)
+    assert _explicit_fresh_create_operation_request(request) == "create_strategy"
+    assert _explicitly_separates_new_strategy(request)
+    assert not _inherits_blocked_strategy_rules(request)
+    assert _inherits_blocked_strategy_rules(request + " Maar behoud de vorige trendfilter.")
+
+
+def test_owner_stated_current_levels_include_dutch_doel_without_becoming_a_trade():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    fields = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Mijn huidige niveaus voor dat BTC-concept zijn entry 81.500 USD, "
+                 "stop 77.000 USD en doel 89.000 USD. Dit zijn de enige drie prijzen "
+                 "die je mag gebruiken. Maak alleen een concept, sla niets op."),
+        explicit_asset=None,
+    )
+    assert fields["entry"] == 81500
+    assert fields["stop_loss"] == 77000
+    assert fields["targets"] == [89000]
+    assert fields["price_currency"] == "USD"
+    assert _explicit_fresh_create_operation_request(
+        "Mijn huidige niveaus voor dat BTC-concept zijn entry 81.500 USD, "
+        "stop 77.000 USD en doel 89.000 USD. Dit zijn de enige drie prijzen "
+        "die je mag gebruiken. Maak alleen een concept, sla niets op."
+    ) is None
+    assert _complete_strategy_price_reentry(
+        "Mijn huidige niveaus voor dat BTC-concept zijn entry 81.500 USD, "
+        "stop 77.000 USD en doel 89.000 USD. Dit zijn de enige drie prijzen "
+        "die je mag gebruiken. Maak alleen een concept, sla niets op."
+    )
+    setup = {"name": "BTC QA Plan", "symbol": "BTC", "timeframe": "4H"}
+    prior = {"name": "Rustige Variant", "base_amount": 100.0}
+    assert not _strategy_reentry_matches_saved_draft(
+        "Mijn huidige niveaus voor dat ANDER-concept zijn entry 81.500 USD, "
+        "stop 77.000 USD en doel 89.000 USD. Dit zijn de enige drie prijzen "
+        "die je mag gebruiken. Maak alleen een concept, sla niets op.",
+        setup, prior, fields,
+    )
+
+
+def test_current_eur_levels_resume_only_the_named_owner_draft():
+    message = (
+        "Voor setup BTC QA Plan en strategie Rustige Variant zijn de actuele "
+        "koersniveaus allemaal in EUR: entry 75.000, stop-loss 71.000 en target "
+        "82.000. Behoud 4H, vast €100 en voorzichtig risico. Toon alleen de "
+        "gecorrigeerde conceptkaart."
+    )
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    fields = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
+    setup = {"name": "BTC QA Plan", "symbol": "BTC", "timeframe": "4H"}
+    prior = {"name": "Rustige Variant", "base_amount": 100.0,
+             "risk_profile": "conservative", "execution_mode": "fixed"}
+    assert _complete_strategy_price_reentry(message)
+    assert _strategy_reentry_matches_saved_draft(message, setup, prior, fields)
+    assert not _strategy_reentry_matches_saved_draft(
+        message.replace("Rustige Variant", "Andere Strategie"), setup, prior, fields,
+    )
+    assert not _strategy_reentry_matches_saved_draft(
+        message.replace("€100", "€200"), setup, prior,
+        FinnV2OperationStateService().explicit_inputs(
+            contract=contract, message=message.replace("€100", "€200"), explicit_asset=None,
+        ),
+    )
+    assert not _complete_strategy_price_reentry(
+        message + " Koop ook alleen na een bullish crossover."
+    )
+    assert not _complete_strategy_price_reentry(
+        "Mijn huidige koersniveaus zijn entry 85.000, stop-loss 80.000 "
+        "en target 95.000 EUR."
+    )
+    assert not _complete_strategy_price_reentry(
+        message.replace("target 82.000", "target 82.000 USD")
+    )
+
+
+def test_open_strategy_target_replacement_uses_only_the_new_level():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    message = (
+        "Pas alleen het nog niet opgeslagen concept Rustige Variant voor setup "
+        "BTC QA Plan aan: vervang target 93.000 USD door 92.400 USD. "
+        "Naam, 4H, €100, voorzichtig risico, entry 84.000 USD en stop "
+        "79.800 USD blijven gelijk. Bevestig niets."
+    )
+    fields = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
+    assert fields["targets"] == [92400]
+    assert fields["price_currency"] == "USD"
+    mixed = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Vervang target 93.000 USD door 92.400 EUR.",
+        explicit_asset=None,
+    )
+    assert mixed["price_currency"] == "MIXED"
+
+
 def test_rule_waiver_retains_only_explicit_same_currency_fixed_levels():
     request = (
         "Maak een Paper-strategie voor mijn opgeslagen setup BTC Breakout. "
@@ -5881,6 +6000,20 @@ def test_currency_correction_selects_only_a_uniquely_named_open_card():
     cards = [card("BTC Strategy A"), card("BTC Strategy B")]
     assert _select_open_strategy_for_correction(cards, "Pas BTC Strategy A aan naar EUR") is cards[0]
     assert _select_open_strategy_for_correction(cards, "Pas het open voorstel aan naar EUR") is None
+    assert _select_open_strategy_for_correction(
+        cards, "Niet BTC Strategy A; pas het target aan naar 95.000 USD."
+    ) is None
+    assert _select_open_strategy_for_correction(
+        cards, "Pas BTC Strategy B aan, niet BTC Strategy A."
+    ) is cards[1]
+    for rejected in (
+        "BTC Strategy A bedoel ik niet; pas het target aan naar 95.000 USD.",
+        "BTC Strategy A wil ik niet wijzigen; target 95.000 USD voor de andere.",
+        "Laat BTC Strategy A met rust, pas het target van de andere aan naar 95.000 USD.",
+    ):
+        assert _select_open_strategy_for_correction(cards, rejected) is None
+        assert _select_open_strategy_for_correction(cards[:1], rejected) is None
+        assert _multiple_open_correction_requires_clarification(cards[:1], None, rejected)
     assert _select_open_strategy_for_correction([card("BTC Strategy A"), card("BTC Strategy A")],
                                                 "Pas BTC Strategy A aan naar EUR") is None
 
@@ -5902,6 +6035,11 @@ def test_multiple_open_cards_fail_closed_for_quote_less_target_correction():
     assert _multiple_open_correction_requires_clarification(cards, None, "Pas het target aan naar 93.000")
     assert not _multiple_open_correction_requires_clarification(
         cards, selected, "Pas het target van BTC Strategy A aan naar 93.000 EUR",
+    )
+    assert not _multiple_open_correction_requires_clarification(
+        cards, selected,
+        "Pas alleen concept BTC Strategy A aan: vervang target 93.000 USD "
+        "door 92.400 USD. Bevestig niets.",
     )
     assert not _multiple_open_correction_requires_clarification(
         cards, selected,
@@ -5991,6 +6129,37 @@ def test_strategy_rule_waiver_requires_explicit_operation_choice():
         "Maak strategievoorstel zonder deze automatische regels, behalve RSI"
     )
     assert not _explicit_strategy_rule_waiver("Ja, laat een regel weg")
+
+
+def test_explicit_rule_withdrawal_preserves_all_fixed_fields_and_no_extra_rule():
+    original = (
+        "Maak voor mijn opgeslagen setup BTC QA Plan een Paper-strategie met naam "
+        "Rustige A. BTC 4H, vast bedrag €100, entry 84.000 USD, stop-loss "
+        "79.800 USD, target 92.400 USD en voorzichtig risico. Ik wil daarnaast "
+        "alleen handelen bij stijgende 1D-trend en maximaal twee trades per dag. "
+        "Toon het concept, sla niets op zonder bevestiging."
+    )
+    waiver = (
+        "Maak het voorstel voor Rustige A bij setup BTC QA Plan zonder uitsluitend "
+        "de stijgende 1D-trend en limiet van twee trades per dag. Ik geef daarvoor "
+        "expliciet toestemming. Bewaar BTC, 4H, vast €100, voorzichtig risico en "
+        "mijn vaste entry 84.000 USD, stop 79.800 USD en target 92.400 USD. "
+        "Alleen een concept, geen aankoop of opslag."
+    )
+    assert _explicit_strategy_rule_waiver(waiver, original)
+    for changed in (
+        waiver.replace("Rustige A", "Andere Naam"),
+        waiver.replace("BTC QA Plan", "Ander Plan"),
+        waiver.replace("BTC, 4H", "ETH, 4H"),
+        waiver.replace("vast €100", "vast €200"),
+        waiver.replace("92.400 USD", "92.400 EUR"),
+        waiver.replace("twee trades", "drie trades"),
+        waiver + " Koop ook alleen na een bullish crossover.",
+    ):
+        assert not _explicit_strategy_rule_waiver(changed, original)
+    assert not _explicit_strategy_rule_waiver(
+        waiver, original + " Koop ook alleen na een bullish crossover."
+    )
 
 
 def test_expanded_strategy_waiver_matches_original_unsupported_rules_only():
@@ -6564,6 +6733,9 @@ def test_guided_turn_boundary_separates_slot_answers_from_new_requests(
     ("Noem de nieuwe strategie ETH Extra Variant. Toon de kaart, bevestig niets.", "name", True),
     ("€50 per uitvoering, noem de strategie ETH Rustig en gebruik een vast bedrag.", "base_amount", True),
     ("€50 per uitvoering. Maak ook een nieuwe bot.", "base_amount", False),
+    ("Mijn huidige niveaus voor dat BTC-concept zijn entry 81.500 USD, "
+     "stop 77.000 USD en doel 89.000 USD. Maak alleen een concept, sla niets op.",
+     "entry", True),
 ])
 def test_persisted_guided_slot_answer_is_bound_before_model_context_switch(
     message, requested_slot, expected,

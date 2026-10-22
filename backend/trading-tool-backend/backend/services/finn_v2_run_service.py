@@ -57,6 +57,7 @@ from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCat
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_verified_setup_reference import (
@@ -109,6 +110,8 @@ def _priced_two_rule_strategy_request(message: str):
 
 def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> bool:
     normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
+    if _bounded_strategy_rule_waiver_inputs(message, original_message) is not None:
+        return True
     if _freeform_strategy_rule_waiver_inputs(message, original_message) is not None:
         return True
     if normalized in {
@@ -257,6 +260,71 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
     ) for part in retained.split(",") if part.strip())
 
 
+def _bounded_strategy_rule_waiver_inputs(
+    message: str, original_message: str,
+) -> dict[str, object] | None:
+    """Withdraw both known rules only when the complete blocked draft agrees.
+
+    The original request must match the closed fixed-field plus two-rule
+    grammar. A free-text waiver that retains or adds a third execution rule
+    cannot satisfy this boundary. The saved owner/parent is checked again by
+    the caller before any proposal is shown.
+    """
+    original = _priced_two_rule_strategy_request(original_message)
+    if original is None:
+        return None
+    numeric = r"\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?"
+    text = " ".join(str(message or "").strip().casefold().split())
+    consent = re.fullmatch(
+        r"maak het voorstel voor (?P<name>[\w -]+) bij setup (?P<setup>[\w -]+) "
+        r"zonder (?:uitsluitend|alleen) de stijgende 1d-trend en (?:de )?"
+        r"limiet van (?P<limit>\w+) trades per dag\. "
+        r"ik geef daarvoor expliciet toestemming\. "
+        rf"bewaar (?P<asset>[a-z]{{2,8}}), (?P<timeframe>\d+[hdw]), "
+        rf"vast €(?P<amount>{numeric}), "
+        r"(?P<risk>voorzichtig|gebalanceerd|agressief) risico en mijn vaste "
+        rf"entry (?P<entry>{numeric}) (?P<entry_currency>usd|eur), "
+        rf"stop(?:-loss)? (?P<stop>{numeric}) (?P<stop_currency>usd|eur) en "
+        rf"target (?P<target>{numeric}) (?P<target_currency>usd|eur)\. "
+        r"alleen een concept, geen aankoop of opslag\.?",
+        text,
+    )
+    if consent is None or consent.group("limit") != original.group("limit"):
+        return None
+    original_setup = re.search(
+        r"\bvoor mijn opgeslagen setup (.+?) een (?:tweede )?paper-strategie\b",
+        " ".join(str(original_message or "").casefold().split()),
+    )
+    original_name = re.search(
+        r"\bpaper-strategie met naam (.+?)\. ",
+        " ".join(str(original_message or "").casefold().split()),
+    )
+    if not original_setup or not original_name or (
+        consent.group("setup").strip() != original_setup.group(1).strip()
+        or consent.group("name").strip() != original_name.group(1).strip()
+        or consent.group("asset") != original.group("asset")
+        or consent.group("timeframe") != original.group("timeframe")
+        or len({consent.group(field) for field in (
+            "entry_currency", "stop_currency", "target_currency",
+        )}) != 1
+    ):
+        return None
+    state = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    before = state.explicit_inputs(
+        contract=contract, message=original_message, explicit_asset=None,
+    )
+    after = state.explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
+    required = {"base_amount", "entry", "stop_loss", "targets", "risk_profile", "price_currency"}
+    if not required.issubset(before) or not required.issubset(after):
+        return None
+    if any(before[key] != after[key] for key in required):
+        return None
+    return {key: after[key] for key in required}
+
+
 def _freeform_strategy_rule_waiver_inputs(
     message: str, original_message: str,
 ) -> dict[str, object] | None:
@@ -390,15 +458,45 @@ def _select_open_strategy_for_correction(
     open_items: list[tuple[object, object]], message: str,
 ) -> tuple[object, object] | None:
     strategies = [item for item in open_items if item[0].operation_type == "create_strategy"]
-    if len(open_items) == 1:
+    if len(open_items) == 1 and not _rejects_named_open_strategy(open_items, message):
         return strategies[0] if strategies else None
     named = []
     for item in strategies:
         fields = dict(dict(dict(item[0].payload_json or {}).get("change") or {}).get("strategy_fields") or {})
         name = str(fields.get("name") or "").strip()
-        if name and re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", message, re.IGNORECASE):
+        if not name:
+            continue
+        for match in re.finditer(r"(?<!\w)" + re.escape(name) + r"(?!\w)", message, re.IGNORECASE):
+            if _strategy_name_occurrence_rejected(message, match):
+                continue
             named.append(item)
+            break
     return named[0] if len(named) == 1 else None
+
+
+def _strategy_name_occurrence_rejected(message: str, match: re.Match[str]) -> bool:
+    before = message[max(0, match.start() - 40):match.start()]
+    after = message[match.end():match.end() + 55]
+    return bool(
+        re.search(r"\b(?:niet|geen|not|nicht|ohne)\s+(?:(?:de|het|the)\s+)?"
+                  r"(?:(?:strategie|strategy)\s+)?$", before, re.I)
+        or re.match(r"\s+(?:is|was|doe|bedoel)\s+(?:het\s+)?"
+                    r"(?:niet|geen|not|nicht)\b", after, re.I)
+        or re.match(r"\s*(?:bedoel\s+ik\s+niet|wil\s+ik\s+niet\s+wijzigen|"
+                    r"met\s+rust|(?:moet|mag)\s+[^.!?;]{0,25}\b(?:niet|geen)\b)", after, re.I)
+    )
+
+
+def _rejects_named_open_strategy(open_items: list[tuple[object, object]], message: str) -> bool:
+    for proposal, _ in open_items:
+        if proposal.operation_type != "create_strategy":
+            continue
+        fields = dict(dict(dict(proposal.payload_json or {}).get("change") or {}).get("strategy_fields") or {})
+        name = str(fields.get("name") or "").strip()
+        if name and any(_strategy_name_occurrence_rejected(message, match) for match in
+                        re.finditer(r"(?<!\w)" + re.escape(name) + r"(?!\w)", message, re.I)):
+            return True
+    return False
 
 
 def _multiple_open_correction_requires_clarification(
@@ -406,15 +504,24 @@ def _multiple_open_correction_requires_clarification(
     message: str,
 ) -> bool:
     """Never let a correction fall through to the newest of several cards."""
+    if selected_open is None and _rejects_named_open_strategy(open_items, message):
+        return True
     if len(open_items) <= 1:
         return False
     if selected_open is None:
         return True
-    origin = dict((selected_open[1].state_json or {}).get("guided_state") or {})
-    fields = dict(dict(dict(selected_open[0].payload_json or {}).get("change") or {}).get("strategy_fields") or {})
-    return not _strategy_price_currency_conflict(
-        {**fields, **dict(origin.get("collected_inputs") or {})}, message,
-    )
+    # With several cards a price edit must also state its quote. A named card
+    # and an explicit USD/EUR value identify one safe correction target.
+    if re.search(r"\b(?:entry|instap|stop|target|doel)\b[^.!?\n]{0,80}\d[\d.,]*", message, re.I):
+        quote = FinnV2OperationStateService._explicit_trade_price_currency(message)
+        if quote == "MIXED":
+            origin = dict((selected_open[1].state_json or {}).get("guided_state") or {})
+            fields = dict(dict(dict(selected_open[0].payload_json or {}).get("change") or {}).get("strategy_fields") or {})
+            return not _strategy_price_currency_conflict(
+                {**fields, **dict(origin.get("collected_inputs") or {})}, message,
+            )
+        return quote not in {"EUR", "USD"}
+    return False
 
 
 def _reopen_strategy_for_new_price_currency(
@@ -445,20 +552,92 @@ def _reopen_strategy_for_new_price_currency(
 
 
 def _complete_strategy_price_reentry(message: str) -> bool:
-    introduction = (
-        r"(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|actuele|huidige|new|current)?\s*"
-        r"(?:koersniveaus|prijsniveaus|prijzen|price\s+levels|prices)\s*"
-        r"(?:zijn|are|:|=)\s*"
-    )
-    if "?" in message or not re.match(
-        rf"^\s*(?:{introduction})?"
-        r"(?:(?:de|mijn|the|my|der|mein)\s+)?(?:nieuwe|new|neue[nr]?)?\s*"
-        r"(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\b", message, re.IGNORECASE,
-    ) or re.search(
-        r"\b(?:niet|geen|not|nicht|kein|nein|no|beispiel|voorbeeld|example|"
-        r"don't|dont|do\s+not|doesn't|shouldn't|mag\s+niet)\b", message, re.IGNORECASE,
+    if "?" in message or re.search(
+        r"\b(?:beispiel|voorbeeld|example|hypothetisch|hypothetical)\b|"
+        r"\b(?:niet|geen|not|nicht|don't|dont|do\s+not)\b"
+        r"[^.!?\n]{0,55}\b(?:entry|instap|stop|target|doel|koersniveaus|prijzen)\b",
+        message, re.IGNORECASE,
+    ) or _strategy_rule_is_unencoded(message):
+        return False
+    # A reply can name its owner-bound draft before listing prices. Do not
+    # require "entry" to be the first word, but require an affirmative claim
+    # that these are the current/new levels, not a passing example.
+    if not re.search(
+        r"\b(?:huidige|actuele|nieuwe|current|new)\s+"
+        r"(?:koersniveaus|prijsniveaus|prijzen|niveaus|price\s+levels|prices)\b|"
+        r"^\s*(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|new)?\s*entry\b",
+        message, re.IGNORECASE,
     ):
         return False
+    level_matches = list(re.finditer(
+        r"\b(entry|instap(?:prijs)?|einstieg(?:spreis)?|"
+        r"stop[- ]?loss|stop|invalidatie|invalidation|"
+        r"targets?|koersdoel(?:en)?|doel(?:en)?|take[- ]?profit)\b"
+        r"\s*(?:is|zijn|are|:|=|op|at|bei)?\s*"
+        r"(?:€|\$|eur|usd)?\s*\d[\d.,]*\s*(?:EUR|USD)?",
+        message, re.IGNORECASE,
+    ))
+    if len(level_matches) != 3 or re.search(
+        r"\b(?:onder|boven|below|above|plus|minus)\s+(?:de\s+)?"
+        r"(?:entry|instap|stop|target|doel|ma\s*\d+)\b|"
+        r"\b(?:entry|instap|stop|target|doel)\b[^.!?\n]{0,30}\b"
+        r"(?:onder|boven|below|above|plus|minus)\b",
+        message, re.IGNORECASE,
+    ):
+        return False
+    prefix = message[:level_matches[0].start()].strip()
+    # A currency on only one level must not silently apply to the other two.
+    # A shared currency is safe only when the user states it for *all* levels.
+    global_currency = re.search(
+        r"\b(?:allemaal|all)\s+in\s+(EUR|USD)\b", prefix, re.IGNORECASE,
+    )
+    level_currencies = []
+    for level in level_matches:
+        level_text = level.group(0)
+        stated = re.findall(r"(?<![A-Z])(?:EUR|USD)(?![A-Z])|[€$]", level_text, re.I)
+        currencies = {"EUR" if item.upper() == "EUR" or item == "€" else "USD"
+                      for item in stated}
+        if len(currencies) != 1 and not global_currency:
+            return False
+        if global_currency and currencies and currencies != {global_currency.group(1).upper()}:
+            return False
+        level_currencies.append(next(iter(currencies)) if currencies else None)
+    if not global_currency and len(set(level_currencies)) != 1:
+        return False
+    allowed_prefix = (
+        r"^(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|new)?$",
+        r"^(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|actuele|huidige|new|current)\s+"
+        r"(?:koersniveaus|prijsniveaus|prijzen|price\s+levels|prices)\s+"
+        r"(?:zijn|are|:|=)$",
+        r"^(?:voor|for)\s+setup\s+[^.!?\n]{2,100}?\s+"
+        r"(?:en|and)\s+(?:strategie|strategy)\s+[^.!?\n]{2,100}?\s+"
+        r"(?:zijn|are)\s+(?:de|the)?\s*(?:actuele|current|huidige)\s+"
+        r"(?:koersniveaus|price\s+levels|prijzen)\s+"
+        r"(?:allemaal|all)?\s*(?:in\s+(?:EUR|USD))?\s*:?$",
+        r"^(?:mijn|my)\s+(?:huidige|current)\s+"
+        r"(?:niveaus|levels|koersniveaus|prices)\s+"
+        r"(?:voor|for)\s+(?:dat|that|dit|this)\s+"
+        r"[A-Z0-9_-]{2,15}[- ](?:concept|draft)\s+(?:zijn|are)$",
+    )
+    if not any(re.fullmatch(pattern, prefix, re.I) for pattern in allowed_prefix):
+        return False
+    # Only non-trading presentation/retention instructions may follow the
+    # three levels. An unrelated fourth automatic rule must never disappear
+    # into the proposal just because it lacks a keyword known to the scorer.
+    suffix = message[level_matches[-1].end():].strip(" .!\n\t")
+    if suffix:
+        clauses = re.split(r"\.\s+(?=[A-ZÄÖÜ])", suffix)
+        permitted = (
+            r"^behoud\s+\d+[mhdw],\s+vast\s+€\s*\d+(?:[.,]\d+)?\s+en\s+"
+            r"(?:voorzichtig|gebalanceerd|agressief)\s+risico$",
+            r"^toon\s+(?:eerst\s+)?(?:alleen\s+)?(?:de\s+)?"
+            r"(?:gecorrigeerde\s+)?(?:conceptkaart|concept|voorstel)$",
+            r"^dit\s+zijn\s+de\s+enige\s+drie\s+prijzen\s+die\s+je\s+mag\s+gebruiken$",
+            r"^maak\s+alleen\s+een\s+concept,?\s+sla\s+niets\s+op$",
+        )
+        if any(not any(re.fullmatch(pattern, clause.strip(" .!"), re.I) for pattern in permitted)
+               for clause in clauses):
+            return False
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
     fields = FinnV2OperationStateService().explicit_inputs(
         contract=contract, message=message, explicit_asset=None,
@@ -466,6 +645,43 @@ def _complete_strategy_price_reentry(message: str) -> bool:
     return (
         all(key in fields for key in ("entry", "stop_loss", "targets"))
         and fields.get("price_currency") in {"USD", "EUR"}
+    )
+
+
+def _strategy_reentry_matches_saved_draft(
+    message: str, setup: dict[str, object], prior_inputs: dict[str, object],
+    stated_inputs: dict[str, object],
+) -> bool:
+    """A complete price reply may only resume its owner-bound open draft."""
+    named_draft = re.match(
+        r"^\s*voor\s+setup\s+(.+?)\s+en\s+strategie\s+(.+?)\s+"
+        r"zijn\s+(?:de\s+)?actuele\s+koersniveaus\b",
+        message, re.IGNORECASE,
+    )
+    if re.match(r"^\s*voor\s+setup\b", message, re.IGNORECASE) and not named_draft:
+        return False
+    if named_draft and (
+        named_draft.group(1).strip().casefold() != str(setup.get("name") or "").strip().casefold()
+        or named_draft.group(2).strip().casefold() != str(prior_inputs.get("name") or "").strip().casefold()
+    ):
+        return False
+    asset_draft = re.match(
+        r"^\s*(?:mijn|my)\s+(?:huidige|current)\s+(?:niveaus|levels|koersniveaus|prices)\s+"
+        r"(?:voor|for)\s+(?:dat|that|dit|this)\s+([A-Z0-9_-]{2,15})[- ](?:concept|draft)\b",
+        message, re.IGNORECASE,
+    )
+    if asset_draft and asset_draft.group(1).upper() != str(setup.get("symbol") or "").upper():
+        return False
+    stated_timeframes = {value.upper() for value in re.findall(r"\b\d+[mhdw]\b", message, re.I)}
+    if stated_timeframes and stated_timeframes != {str(setup.get("timeframe") or "").upper()}:
+        return False
+    stated_assets = mentioned_catalog_symbols(message)
+    if stated_assets and stated_assets != {str(setup.get("symbol") or "").upper()}:
+        return False
+    return not any(
+        key in stated_inputs and key in prior_inputs
+        and prior_inputs[key] != stated_inputs[key]
+        for key in ("base_amount", "risk_profile", "execution_mode")
     )
 
 
@@ -512,6 +728,11 @@ def _inherits_blocked_strategy_rules(message: str) -> bool:
         r"(?:strategie|strategy|concept|draft|entwurf)\s+"
         r"(?:over|along|mit)\b",
         normalized,
+    ) or re.search(
+        r"\bneem\s+geen\s+(?:regels?|voorwaarden)\s+uit\s+"
+        r"(?:de\s+)?(?:vorige|eerdere|oude)\s+"
+        r"(?:strategie|concept)\s+over\b",
+        normalized,
     )
     if no_carry:
         # Remove only the negated clause. Later sentences can still request
@@ -541,6 +762,17 @@ def _inherits_blocked_strategy_rules(message: str) -> bool:
         normalized,
     ):
         return True
+    if no_carry:
+        # The surrounding sentence may say "dit is een andere strategie";
+        # that reference does not inherit the earlier draft. A remaining
+        # explicit reference to the old *rules* still blocks separation.
+        return bool(re.search(
+            r"\b(?:dezelfde|vorige|eerdere|oude|same|previous|prior|old)\b"
+            r"[^.!?\n]{0,60}\b(?:regels?|voorwaarden|rules?|conditions?)\b|"
+            r"\b(?:regels?|voorwaarden|rules?|conditions?)\b"
+            r"[^.!?\n]{0,60}\b(?:dezelfde|vorige|eerdere|oude|same|previous|prior|old)\b",
+            normalized,
+        ))
     return bool(re.search(
         r"\b(?:dezelfde|hetzelfde|gelijke|vorige|eerdere|oude|bovenstaande|"
         r"dit|dat|huidige|bestaande|same|previous|prior|earlier|old|"
@@ -568,7 +800,10 @@ def _has_independent_strategy_inputs(message: str) -> bool:
     """Clear prior draft state only when the new trade rules stand on their own."""
     if _strategy_rule_is_unencoded(message):
         return False
-    inputs = FinnV2OperationStateService._strategy_trade_inputs(message)
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    inputs = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
     if {"entry", "stop_loss", "targets", "base_amount"}.issubset(inputs):
         return True
     return bool(
@@ -589,6 +824,11 @@ def _explicitly_separates_new_strategy(message: str) -> bool:
         r"\b(?:zonder|without|ohne)\s+(?:de\s+|the\s+|die\s+)?"
         r"(?:vorige|eerdere|oude|previous|prior|old|vorherigen?)\s+"
         r"(?:automatische\s+|automatic\s+)?(?:regels?|rules?|regeln?)\b",
+        message, re.I,
+    ) or re.search(
+        r"\b(?:neem\s+geen\s+(?:regels?|voorwaarden)|"
+        r"take\s+no\s+(?:rules?|conditions?))\s+uit\s+"
+        r"(?:de\s+)?(?:vorige|eerdere|oude)\s+(?:strategie|concept)\s+over\b",
         message, re.I,
     ))
 
@@ -1406,6 +1646,30 @@ class FinnV2RunService:
         await self.runtime_contracts.record_verified_setup_subject(
             run_id=run_id, user_id=user_id, subject=subject,
         )
+        if (
+            status == "completed" and subject
+            and (contract_before_terminal.state_json or {}).get("initial_operation_id") in {
+                None, "read_active_setup",
+            }
+            and FinnV2OperationClassificationService._is_explicit_saved_setup_read(
+                run.message, FinnV2RequestPreprocessorService().preprocess(message=run.message),
+            )
+            and any(
+                result.get("scope") == "read_active_setup" and result.get("status") == "completed"
+                for call in exchange.get("tool_trace") or []
+                for result in (call.get("result") or {}).get("results") or []
+                if isinstance(result, dict)
+            )
+        ):
+            # The Responses read loop bypasses the action selector. Publish
+            # its verified read contract so the public runtime trace reports
+            # the same operation that actually supplied the answer.
+            await self.runtime_contracts.record_initial_intent(
+                run_id=run_id, operation_id="read_active_setup", requested_mode="READ",
+            )
+            await self.runtime_contracts.record_final_operation(
+                run_id=run_id, operation_id="read_active_setup", mode="READ", reason=None,
+            )
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id, status=status, mode=response_json["mode"],
             response=response_json, error_code=answer.reason,
@@ -1487,6 +1751,13 @@ class FinnV2RunService:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
                 )
+                if latest_open is not None and FinnV2OperationStateService._is_explicit_correction(message):
+                    open_items = await FinnV2ProposalRepository(session).list_open_for_conversation(
+                        conversation_id=conversation_id, user_id=user_id,
+                    )
+                    selected_open = _select_open_strategy_for_correction(open_items, message)
+                    if selected_open is not None:
+                        latest_open = selected_open
                 if latest_open is not None:
                     origin_state = dict((latest_open[1].state_json or {}).get("guided_state") or {})
                     origin_inputs = dict(origin_state.get("collected_inputs") or {})
@@ -1661,7 +1932,7 @@ class FinnV2RunService:
             if (
                 guided_reentry.get("operation_id") == "create_strategy"
                 and guided_reentry.get("awaiting_price_currency_reentry")
-                and _pure_strategy_price_reentry(message)
+                and _complete_strategy_price_reentry(message)
             ):
                 # The withdrawn card supplied the owner-bound strategy and
                 # setup. The owner has now supplied all replacement prices.
@@ -1679,6 +1950,11 @@ class FinnV2RunService:
                     stated_prices = FinnV2OperationStateService().explicit_inputs(
                         contract=contract, message=message, explicit_asset=None,
                     )
+                    if not _strategy_reentry_matches_saved_draft(
+                        message, setup, prior_inputs, stated_prices,
+                    ):
+                        setup = None
+                if setup:
                     inputs = {
                         key: value for key, value in prior_inputs.items()
                         if key in contract.input_fields
@@ -1729,6 +2005,8 @@ class FinnV2RunService:
             if blocked_strategy and _explicit_strategy_rule_waiver(message, str(blocked_strategy.get("original_message") or "")):
                 blocked_inputs = dict(blocked_strategy.get("captured_inputs") or {})
                 repeated_fixed = _freeform_strategy_rule_waiver_inputs(
+                    message, str(blocked_strategy.get("original_message") or ""),
+                ) or _bounded_strategy_rule_waiver_inputs(
                     message, str(blocked_strategy.get("original_message") or ""),
                 )
                 if repeated_fixed:
@@ -3195,10 +3473,16 @@ class FinnV2RunService:
                                 open_items, selected_open, run_message,
                             ):
                                 language = str(context.get("locale") or "nl").split("-")[0].lower()
-                                question = {
-                                    "en": "Several proposals are open. Which strategy card do you want to correct? Name it exactly; no card has been changed.",
-                                    "de": "Mehrere Vorschläge sind offen. Welche Strategiekarte möchtest du ändern? Nenne den genauen Namen; keine Karte wurde geändert.",
-                                }.get(language, "Er staan meerdere voorstellen open. Welke strategiekaart wil je corrigeren? Noem de exacte naam; er is niets gewijzigd.")
+                                if len(open_items) == 1:
+                                    question = {
+                                        "en": "Which strategy do you want to change? You ruled out the open proposal; it has not been changed.",
+                                        "de": "Welche Strategie möchtest du ändern? Den offenen Vorschlag hast du ausgeschlossen; er wurde nicht geändert.",
+                                    }.get(language, "Welke strategie wil je aanpassen? Je hebt het open voorstel uitgesloten; er is niets gewijzigd.")
+                                else:
+                                    question = {
+                                        "en": "Several proposals are open. Which strategy card do you want to correct? Name it exactly; no card has been changed.",
+                                        "de": "Mehrere Vorschläge sind offen. Welche Strategiekarte möchtest du ändern? Nenne den genauen Namen; keine Karte wurde geändert.",
+                                    }.get(language, "Er staan meerdere voorstellen open. Welke strategiekaart wil je corrigeren? Noem de exacte naam; er is niets gewijzigd.")
                                 await service.complete_responses_read(
                                     run_id=run_id, user_id=user_id,
                                     response_id=f"verified-strategy-card-ambiguity-{run_id}",

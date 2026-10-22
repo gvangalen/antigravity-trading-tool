@@ -109,7 +109,7 @@ class FinnV2OperationClassificationService:
                     contract.operation_id, facts, "high", "feed_target_read_constraint",
                     (contract,), conversation_context=conversation_context,
                 )
-        if self._is_explicit_setup_collection_read(message):
+        if self._is_explicit_setup_collection_read(message) or self._is_explicit_saved_setup_read(message, facts):
             contract = self.registry.require_supported("read_active_setup")
             return self._result(
                 contract.operation_id,
@@ -484,6 +484,26 @@ class FinnV2OperationClassificationService:
         ))
 
     @staticmethod
+    def _is_explicit_saved_setup_read(message: str, facts: FinnV2PreprocessedRequest) -> bool:
+        """A direct saved-setup read stays a read even when its name says Plan.
+
+        Product names and the requested timeframe can look like create inputs
+        to the field extractor. Neither changes the user's read-only verb.
+        Resolution of the named setup still belongs to the owner-scoped tool.
+        """
+        if facts.action_polarity != "read" or facts.discourse_act != "information_request":
+            return False
+        normalized = " ".join(str(message or "").casefold().split())
+        return bool(re.search(
+            r"^(?:lees|read|lies)\b.{0,100}\b"
+            r"(?:opgeslagen|saved|gespeicherte[nr]?)\s+setup\b",
+            normalized,
+        )) and not bool(re.search(
+            r"\b(?:maak|creëer|create|erstelle|wijzig|verander|update|change|"
+            r"verwijder|delete|lösche)\b", normalized,
+        ))
+
+    @staticmethod
     def _is_score_explanation(message: str, facts: FinnV2PreprocessedRequest) -> bool:
         """Map an explicit score explanation to its sole registry contract."""
         text = str(message or "").casefold()
@@ -599,6 +619,17 @@ class FinnV2OperationClassificationService:
         for operation_id, pattern in create_target_patterns:
             if re.search(pattern, text):
                 return operation_id
+        if re.search(
+            r"\b(?:maak|create|erstelle)\s+(?:eerst\s+)?(?:alleen\s+)?"
+            r"(?:een\s+|a\s+|ein\s+)?(?:concept|voorstel|draft|proposal|entwurf)\b",
+            text,
+        ):
+            # Entry, stop and target are strategy fields. A request to make
+            # only their draft is still a create_strategy collection turn,
+            # even when the owner has not yet named the strategy or setup.
+            fields = FinnV2OperationStateService._strategy_trade_inputs(message)
+            if {"entry", "stop_loss", "targets"}.issubset(fields):
+                return "create_strategy"
         return None
 
     @staticmethod

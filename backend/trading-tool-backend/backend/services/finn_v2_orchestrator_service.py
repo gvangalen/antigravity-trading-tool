@@ -33,7 +33,9 @@ from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
-from backend.services.finn_v2_responses_front_door import _explicit_fresh_create_operation_request
+from backend.services.finn_v2_responses_front_door import (
+    _explicit_current_levels_strategy_concept, _explicit_fresh_create_operation_request,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -219,6 +221,12 @@ class FinnV2OrchestratorService:
         contract = FinnV2OperationRegistry().require_supported(operation_id)
         operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
         collected_inputs = dict(operation_state.get("collected_inputs") or {})
+        unbound_current_levels = bool(
+            model_selected and operation_id == "create_strategy"
+            and _explicit_current_levels_strategy_concept(message)
+            and dict(conversation_context.get("active_guided_operation") or {}).get("operation_id")
+            != "create_strategy"
+        )
         explicit_bot_strategy_choice = None
         if operation_id == "create_bot" and operation_state.get("target_choice_required"):
             # The first turn's semantic reference is deliberately unresolved.
@@ -409,6 +417,13 @@ class FinnV2OrchestratorService:
             resolved = {}
         if explicit_bot_strategy_choice is not None:
             resolved["strategy_id"] = explicit_bot_strategy_choice
+        if unbound_current_levels:
+            # "Dat BTC-concept" supplies prices and an asset, but does not
+            # identify a saved setup. Owner-scoped resolver and snapshot
+            # context must not turn the most recent setup into its parent.
+            resolved.pop("setup_id", None)
+            selectors.pop("setup_id", None)
+            collected_inputs.pop("setup_id", None)
         unresolved_guided_target = bool(
             guided_asset and entity_type and canonical_target is not None
             and canonical_target.resolution_status != "resolved"
@@ -426,6 +441,7 @@ class FinnV2OrchestratorService:
             and canonical_target is None
             and "target_resolution" not in selectors
             and not is_collection_read
+            and not unbound_current_levels
         ):
             return analysis
         supplied = {
@@ -452,7 +468,7 @@ class FinnV2OrchestratorService:
                 else ""
             ),
             explicit_asset=getattr(analysis, "explicit_asset", None),
-            conversation_context=conversation_context,
+            conversation_context={} if unbound_current_levels else conversation_context,
             supplied_inputs=supplied,
             model_tool_inputs=model_selected,
             # Canonical resolver output is owner-scoped trusted context. It
@@ -468,6 +484,8 @@ class FinnV2OrchestratorService:
             ),
         )
         resolved_operation_state = state.dict()
+        if unbound_current_levels:
+            resolved_operation_state["unbound_current_levels"] = True
         if operation_id == "create_strategy":
             previous_guided = dict(conversation_context.get("active_guided_operation") or {})
             if _explicit_fresh_create_operation_request(message) == "create_strategy":
@@ -519,7 +537,8 @@ class FinnV2OrchestratorService:
         return analysis.copy(
             update={
                 "request_plan": request_plan,
-                "explicit_setup_id": (resolved.get("setup_id") or selectors.get("setup_id") or getattr(analysis, "explicit_setup_id", None)),
+                "explicit_setup_id": (None if unbound_current_levels else
+                    (resolved.get("setup_id") or selectors.get("setup_id") or getattr(analysis, "explicit_setup_id", None))),
                 "explicit_strategy_id": (resolved.get("strategy_id") or selectors.get("strategy_id") or getattr(analysis, "explicit_strategy_id", None)),
                 "explicit_bot_id": (resolved.get("bot_id") or selectors.get("bot_id") or getattr(analysis, "explicit_bot_id", None)),
             }
@@ -919,6 +938,8 @@ class FinnV2OrchestratorService:
                 snapshot=snapshot,
                 execution_view=FinnV2RuntimeContractRepository.execution_view(runtime_contract),
             )
+            if dict(request_plan.operation_state or {}).get("unbound_current_levels"):
+                contextual_inputs.pop("setup_id", None)
             if contextual_inputs:
                 runtime_contract = await self.runtime_contracts.record_contextual_inputs(
                     run_id=run_id, supplied_inputs=contextual_inputs

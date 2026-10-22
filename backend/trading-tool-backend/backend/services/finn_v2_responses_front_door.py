@@ -133,6 +133,8 @@ def _explicit_fresh_create_operation_request(message: str) -> str | None:
     operation = _explicit_create_operation_request(message) or (
         "create_strategy" if _explicit_strategy_proposal_request(message) else None
     )
+    if operation == "create_strategy" and _independent_strategy_concept_request(message):
+        return operation
     if operation and re.match(
         r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\s+"
         r"(?:een|an?|ein(?:e|en|er|es)?|neu(?:e|en|er|es)?|new)\b",
@@ -160,6 +162,18 @@ def _explicit_fresh_create_operation_request(message: str) -> str | None:
     return None
 
 
+def _explicit_current_levels_strategy_concept(message: str) -> bool:
+    return bool(
+        "?" not in message and not _proposal_explicitly_excluded(message)
+        and re.match(r"^\s*(?:mijn|my)\s+(?:huidige|current)\s+"
+                     r"(?:niveaus|levels|koersniveaus|prices)\s+voor\s+"
+                     r"(?:dat|dit|that|this)\s+[A-Z0-9_-]+[- ](?:concept|draft)\b", message, re.I)
+        and all(re.search(rf"\b{label}\b\s*\d", message, re.I)
+                for label in ("entry", "stop", "doel"))
+        and re.search(r"\bmaak\s+alleen\s+een\s+concept\b", message, re.I)
+    )
+
+
 def _explicit_strategy_proposal_request(message: str) -> bool:
     if _explicit_create_operation_request(message) == "create_strategy":
         return True
@@ -182,6 +196,8 @@ def _explicit_strategy_proposal_request(message: str) -> bool:
         text, re.I,
     ):
         return False
+    if _independent_strategy_concept_request(text):
+        return True
     if re.match(r"^\s*(?:ik\s+wil|i\s+want|ich\s+(?:will|möchte))\b", text, re.I):
         return bool(re.search(
             r"\b(?:een|a|an|eine[nrms]?)\s+(?:(?:nieuwe|new|neue[nrms]?|paper)\s*[- ]?)*"
@@ -191,6 +207,25 @@ def _explicit_strategy_proposal_request(message: str) -> bool:
     return bool(re.match(
         r"^(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
         r"[^.!?\n]{0,200}\bstrateg(?:ie|y)(?:voorstel|concept|proposal|draft)?\b",
+        text, re.I,
+    ))
+
+
+def _independent_strategy_concept_request(message: str) -> bool:
+    """A declared new strategy with a draft request is a create, not a review."""
+    text = str(message or "").strip()
+    if "?" in text:
+        return False
+    return bool(re.match(
+        r"^(?:dit\s+is|this\s+is|das\s+ist)\s+(?:een|a|eine?)\s+"
+        r"(?:(?:andere|zelfstandige|nieuwe|separate|independent|new|"
+        r"andere|eigenständige|neue)\s*,?\s*){1,3}"
+        r"(?:paper[-\s]+)?(?:strategie|strategy)\s*:",
+        text, re.I,
+    ) and re.search(
+        r"\b(?:toon|show|zeige)\b[^.!?\n]{0,100}\b"
+        r"(?:concept|voorstel|draft|proposal|entwurf)\b|"
+        r"\blaat\b[^.!?\n]{0,60}\b(?:concept|voorstel)\s+zien\b",
         text, re.I,
     ))
 
@@ -635,6 +670,9 @@ class FinnResponsesFrontDoor:
         rejection_feedback: dict[str, Any] | None = None,
         feed_evidence: list[dict[str, Any]] | None = None,
     ) -> FinnResponsesFrontDoorResult:
+        active_strategy_draft = dict(conversation_context.get("active_guided_operation") or {}).get(
+            "operation_id"
+        ) == "create_strategy"
         if _explicit_fresh_create_operation_request(message) == "create_strategy":
             # Apply the same fresh-draft boundary before proposal selection as
             # in orchestration. A previous completed or collecting strategy
@@ -649,6 +687,34 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        if _explicit_current_levels_strategy_concept(message) and not active_strategy_draft:
+            contract = self.proposals.registry.require_supported("create_strategy")
+            mentioned_assets = mentioned_catalog_symbols(message)
+            stated_asset = next(iter(mentioned_assets)) if len(mentioned_assets) == 1 else None
+            # "Dat BTC-concept" names an asset, not one of the owner's setups.
+            # Without an active draft, a recent setup is not enough evidence
+            # to bind the new strategy, even if its asset happens to match.
+            supplied = FinnV2OperationStateService().explicit_inputs(
+                contract=contract, message=message, explicit_asset=stated_asset,
+            )
+            call = catalog.validate(
+                "create_or_update_trade_plan_proposal",
+                {"operation_id": "create_strategy", "inputs": supplied},
+            )
+            selected = self.proposals.from_call(
+                call=call, message=message, conversation_context={},
+                verified_asset=stated_asset,
+                verified_parent_setup={},
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Ik neem je actuele koersniveaus mee en vraag de ontbrekende strategiegegevens uit.",
+                    response_id=f"current-levels-strategy-{self.run_id}",
+                    tool_trace=({"name": "current_levels_strategy", "status": "completed",
+                                 "result": {"operation_id": "create_strategy"}},),
+                    response_id_reusable=False,
+                ), selected, previous_response, locale=locale,
+            )
         if corrected_guided_operation_id:
             contract = self.proposals.registry.require_supported(corrected_guided_operation_id)
             if contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:

@@ -191,6 +191,39 @@ def test_explicit_setup_collection_reads_use_registry_without_selector_provider(
     assert FinnV2OperationClassificationValidator().validation_error(result) is None
 
 
+@pytest.mark.parametrize("name", ("BTC Breakout", "BTC QA Plan", "ETH Rustige DCA"))
+def test_named_saved_setup_identity_and_timeframe_are_read_without_selector(name):
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("a direct saved-setup read has one registry contract")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector(),
+    ).classify(message=(
+        f"Lees mijn opgeslagen setup {name}: hoe heet die en welk timeframe heeft hij? "
+        "Doe verder niets."
+    ))
+    assert result.operation_id == "read_active_setup"
+    assert FinnV2OperationClassificationValidator().validation_error(result) is None
+
+
+def test_current_entry_stop_and_goal_with_explicit_draft_request_collect_strategy():
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("three typed trade levels plus a draft request have one contract")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector(),
+    ).classify(message=(
+        "Mijn huidige niveaus voor dat BTC-concept zijn entry 81.500 USD, "
+        "stop 77.000 USD en doel 89.000 USD. Dit zijn de enige drie prijzen "
+        "die je mag gebruiken. Maak alleen een concept, sla niets op."
+    ))
+    assert result.operation_id == "create_strategy"
+    assert {"setup_id", "name", "base_amount"}.issubset(result.selected_missing_inputs)
+    assert FinnV2OperationClassificationValidator().validation_error(result) is None
+
+
 @pytest.mark.parametrize("message", (
     "Wat zijn de gevolgen van die gekoppelde bot?",
     "Evaluate the risks of the linked bot.",

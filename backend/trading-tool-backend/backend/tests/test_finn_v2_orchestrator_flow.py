@@ -889,6 +889,38 @@ def test_explicit_usd_quote_survives_owner_reference_resolution():
     assert resolved.request_plan.operation_state["collected_inputs"]["price_currency"] == "USD"
 
 
+def test_current_levels_without_active_draft_cannot_inherit_recent_setup():
+    message = (
+        "Mijn huidige niveaus voor dat BTC-concept zijn entry 81.500 USD, "
+        "stop 77.000 USD en doel 89.000 USD. Dit zijn de enige drie prijzen "
+        "die je mag gebruiken. Maak alleen een concept, sla niets op."
+    )
+    selected = FinnResponsesProposalSelection().from_call(
+        call=FinnResponsesToolCatalog().validate(
+            "create_or_update_trade_plan_proposal",
+            {"operation_id": "create_strategy", "inputs": {
+                "symbol": "BTC", "entry": 81500, "stop_loss": 77000,
+                "targets": [89000], "price_currency": "USD",
+            }},
+        ),
+        message=message, conversation_context={}, verified_asset="BTC",
+        verified_parent_setup={},
+    )
+    service = FinnV2OrchestratorService(session=object())
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={"setup_id": 42})
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message=message, analysis=selected,
+        conversation_context={"previous_action_result": {
+            "entity_type": "setup", "entity_id": 42,
+        }}, model_selected=True,
+    ))
+    state = resolved.request_plan.operation_state
+    assert state["unbound_current_levels"] is True
+    assert "setup_id" not in state["collected_inputs"]
+    assert "setup_id" in state["missing_required_inputs"]
+    assert resolved.explicit_setup_id is None
+
+
 def test_model_only_price_currency_is_not_promoted_during_owner_resolution():
     message = "Maak een strategie met naam BTC zonder genoemde koersvaluta."
     selected = FinnResponsesProposalSelection().from_call(
