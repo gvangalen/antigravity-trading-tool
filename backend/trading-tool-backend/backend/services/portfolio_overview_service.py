@@ -44,20 +44,25 @@ def project_portfolio(
         isfinite(amount) and amount >= 0 for amount in live_allocations.values()
     ) and sum(live_allocations.values()) <= float(account["cash_eur"]) + 0.005
     unverified = any(row.get("unverified_ledger", False) for row in rows)
-    initialized = bool(rows) and all(row.get("portfolio_initialized", True) and not row.get("unverified_ledger", False) for row in rows)
-    priced = initialized and all(row.get("price_available", True) for row in rows)
+    funded_rows = [row for row in rows if row.get("portfolio_initialized", True)]
+    # An empty Paper bot contributes zero. It must remain visibly unfunded,
+    # but it cannot erase the known cash held by another Paper bot.
+    initialized = bool(funded_rows) and not unverified and all(
+        row.get("portfolio_initialized", True) for row in funded_rows
+    )
+    priced = initialized and all(row.get("price_available", True) for row in funded_rows)
     budget = sum(float(row.get("budget_total") or 0) for row in rows)
 
     # Paper cash is a funded virtual ledger balance. Live bot cash is not a
     # broker account balance and may be shared across several bots.
     cash = (
-        sum(float(row.get("cash") or 0) for row in rows)
+        sum(float(row.get("cash") or 0) for row in funded_rows)
         if initialized and not mixed and not live else None
     )
-    invested = sum(float(row.get("invested") or 0) for row in rows) if initialized else None
-    realized = sum(float(row.get("realized_pnl") or 0) for row in rows) if initialized else None
+    invested = sum(float(row.get("invested") or 0) for row in funded_rows) if initialized else None
+    realized = sum(float(row.get("realized_pnl") or 0) for row in funded_rows) if initialized else None
     position_value = (
-        sum(float(row.get("position_value") or 0) for row in rows)
+        sum(float(row.get("position_value") or 0) for row in funded_rows)
         if priced else None
     )
     equity = cash + position_value if cash is not None and position_value is not None else None
@@ -164,6 +169,8 @@ def project_portfolio(
         status = "missing_price"
     elif mixed:
         status = "mixed_environments"
+    elif len(funded_rows) != len(rows):
+        status = "partially_unfunded"
     else:
         status = "available"
 

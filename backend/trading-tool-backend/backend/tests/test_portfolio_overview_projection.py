@@ -36,7 +36,7 @@ def test_budget_and_missing_quote_never_become_value_or_cash():
     ]}, environment="paper")
     assert data.global_.total_budget_limit == 1000
     assert data.global_.total_equity is None
-    assert data.global_.cash_balance is None
+    assert data.global_.cash_balance == 80
     assert data.bots[0].cash_eur is None
     assert data.bots[1].position_value_eur is None
 
@@ -46,6 +46,18 @@ def test_budget_and_missing_quote_never_become_value_or_cash():
     assert funded.global_.cash_balance == 80
     assert funded.global_.total_equity is None
     assert funded.bots[0].result_eur is None
+
+
+def test_empty_unfunded_paper_bot_does_not_hide_known_funded_total():
+    data = project_portfolio({"read_at": READ_AT, "bots": [
+        _bot(129, cash=10000),
+        _bot(130, initialized=False),
+    ]}, environment="paper")
+    assert data.global_.cash_balance == 10000
+    assert data.global_.total_equity == 10000
+    assert data.valuation_status == "partially_unfunded"
+    assert data.bots[1].valuation_status == "unfunded"
+    assert data.bots[1].cash_eur is None
 
 
 def test_live_shared_broker_cash_is_not_attributed_to_multiple_bots():

@@ -2224,6 +2224,20 @@
     "budgetHint": "A limit is not cash or portfolio value.",
     "unreconciledLive": "The live account cannot yet be reconciled reliably with bot positions. Total value and available cash remain unknown.",
     "unfunded": "One or more bot portfolios have no assigned cash yet.",
+    "partiallyUnfunded": "A Paper bot has no assigned cash yet. The total shows the known value of funded bots.",
+    "unfundedBot": "No Paper cash yet",
+    "paperTransferTitle": "Transfer existing Paper cash",
+    "paperTransferHelp": "Move virtual euros between your Paper bots. Total Paper cash and bot budget limits stay the same.",
+    "paperTransferFrom": "From bot",
+    "paperTransferTo": "To bot",
+    "paperTransferChoose": "Choose a bot",
+    "paperTransferAmount": "Amount (€)",
+    "paperTransferRemaining": "Source bot cash after transfer",
+    "paperTransferConfirm": "I confirm this amount comes from the source bot’s existing Paper cash.",
+    "paperTransferInvalid": "Choose two of your Paper bots, confirm the transfer, and enter an amount available in the source bot.",
+    "paperTransferFailed": "The Paper transfer failed.",
+    "paperTransferSaving": "Transferring…",
+    "paperTransferSubmit": "Transfer Paper cash",
     "unverifiedLedger": "Older Paper trades lack a verified euro conversion. Their portfolio value remains unknown until reconciliation.",
     "unverifiedBot": "Valuation not yet verified",
     "missingPrice": "A position has no verified price in euros, so total value remains unknown.",
@@ -2443,6 +2457,8 @@
         "no_allocatable_size": "No valid purchase amount remains",
         "unsupported_live_currency": "Live bot orders use EUR only; change the bot currency before trading.",
         "market_price_stale": "No recent EUR market price is available for live execution.",
+        "strategy_price_currency_unconfirmed": "The currency of entry, stop-loss and targets has not been confirmed.",
+        "strategy_price_conversion_unavailable": "A recent USD/EUR conversion for the saved price levels is unavailable.",
         "insufficient_funds": "Insufficient available cash",
         "cash_unavailable": "Available exchange cash could not be checked.",
         "total_budget": "Bot budget limit reached",
@@ -2456,6 +2472,8 @@
         "unsupported_live_currency": "Set the bot currency to EUR and check again.",
         "execution_pending": "Wait for execution status; do not submit another order.",
         "market_price_stale": "Refresh the EUR market price and check again.",
+        "strategy_price_currency_unconfirmed": "Open the strategy, choose the correct price currency and save it again.",
+        "strategy_price_conversion_unavailable": "Wait for a verified USD/EUR rate and reassess the bot.",
         "executed": "Review the trade history and wait for the next bot cycle.",
         "skipped": "Wait for the next bot cycle.",
         "awaiting_exchange": "Wait for the exchange to confirm the order.",
@@ -2712,6 +2730,7 @@
       "lockedLabel": "Locked"
     },
     "history": {
+      "scoreBandBasis": "Setup score confirmed; no separate confidence calculated",
       "title": "Bot history",
       "reason": "Reason",
       "loading": "Loading history…",
@@ -2762,6 +2781,7 @@
       "delete": "Delete bot"
     },
     "decisionCard": {
+      "scoreBandBasis": "Setup score confirmed; no separate confidence calculated",
       "loading": "Bot is analyzing the market…",
       "insufficientData": "Insufficient data",
       "pipelineLabel": "Bot intelligence pipeline",
@@ -2862,6 +2882,7 @@
       "version": "Version"
     },
     "agentCard": {
+      "scoreBandBasis": "Setup score confirmed; no separate confidence calculated",
       "chartTimeframe": "Chart",
       "strategyTimeframe": "Strategy",
       "riskConservative": "Risk: Conservative",
@@ -3083,6 +3104,8 @@
     "tradePlanCard": {
       "loading": "Loading trade plan…",
       "executionPlan": "Execution plan",
+      "priceCurrency": "Price currency",
+      "convertedFrom": "converted from",
       "activeTargetStructure": "Active target structure",
       "livePrice": "Live price",
       "targetZone": "TARGET ZONE",
@@ -3484,6 +3507,11 @@
       "entryPlaceholder": "Entry",
       "targetsPlaceholder": "Targets (comma separated)",
       "stopLossPlaceholder": "Stop-loss",
+      "priceCurrencyLabel": "Currency of entry, stop-loss and targets",
+      "priceCurrencyChoose": "Choose the price currency",
+      "priceCurrencyUsd": "USD ($)",
+      "priceCurrencyEur": "EUR (€)",
+      "priceCurrencyHelp": "Confirm the currency of these price levels. The amount per execution remains in euros.",
       "amountPlaceholder": "Amount (€)",
       "amountPerExecutionLabel": "Base amount per execution (€)",
       "amountPerExecutionHelp": "For a fixed amount, this is paid each time. For a curve, this is the 100% base.",
@@ -3496,6 +3524,7 @@
       "saveButton": "Save"
     },
     "card": {
+      "priceCurrencyUnconfirmed": "currency unconfirmed",
       "fallbackName": "Strategy",
       "amountPerExecution": "Amount per execution",
       "analysisSuccess": "AI explanation updated.",

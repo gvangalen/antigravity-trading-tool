@@ -151,6 +151,7 @@ class StrategyService:
 
             "entry": entry,
             "price_currency": data.get("price_currency", "EUR"),
+            "price_currency_confirmed": bool(data.get("price_currency_confirmed")),
             "entry_type": entry_type,
             "trade_execution_mode": entry_type,
             "targets": targets,
@@ -228,7 +229,9 @@ class StrategyService:
         commit: bool = True,
     ):
         raw_data = self.normalize_strategy_payload(raw_data)
+        price_currency_explicit = "price_currency" in raw_data
         raw_data["price_currency"] = self._validated_price_currency(raw_data.get("price_currency", "EUR"))
+        raw_data["price_currency_confirmed"] = price_currency_explicit
         execution_mode = payload.execution_mode.lower()
         if execution_mode not in ["fixed", "custom"]:
             raise HTTPException(400, "Ongeldige execution_mode")
@@ -382,6 +385,8 @@ class StrategyService:
             **raw_data,
         }
         merged_data["price_currency"] = self._validated_price_currency(merged_data.get("price_currency", "EUR"))
+        if "price_currency" in raw_data:
+            merged_data["price_currency_confirmed"] = True
         execution_mode = (merged_data.get("execution_mode") or "").lower()
         if execution_mode not in ["fixed", "custom"]:
             raise HTTPException(400, "Ongeldige execution_mode")

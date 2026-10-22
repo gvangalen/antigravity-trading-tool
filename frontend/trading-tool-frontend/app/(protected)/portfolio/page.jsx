@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { fetchBotTrades, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, saveLiveCashAllocations } from "@/lib/api/botApi";
+import { fetchBotTrades, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, saveLiveCashAllocations, transferPaperCash } from "@/lib/api/botApi";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -28,6 +28,10 @@ function PortfolioPageInner() {
   const [cashDraft, setCashDraft] = useState({});
   const [cashSaveError, setCashSaveError] = useState(null);
   const [cashSaving, setCashSaving] = useState(false);
+  const [paperTransfer, setPaperTransfer] = useState({ source: "", target: "", amount: "", confirmed: false });
+  const [paperTransferSaving, setPaperTransferSaving] = useState(false);
+  const [paperTransferError, setPaperTransferError] = useState(null);
+  const transferKey = useRef(null);
 
   const money = useCallback((value) => known(value)
     ? formatCurrency(Number(value), locale, "EUR", { maximumFractionDigits: 2 })
@@ -103,6 +107,8 @@ function PortfolioPageInner() {
       ? copy.unverifiedLedger
     : overview?.valuation_status === "unfunded"
       ? copy.unfunded
+      : overview?.valuation_status === "partially_unfunded"
+        ? copy.partiallyUnfunded
       : overview?.valuation_status === "missing_price"
         ? copy.missingPrice
         : overview?.valuation_status === "empty" ? copy.empty : null;
@@ -143,6 +149,42 @@ function PortfolioPageInner() {
     }
   };
 
+  const updatePaperTransfer = (change) => {
+    transferKey.current = null;
+    setPaperTransfer((current) => ({ ...current, ...change, confirmed: false }));
+    setPaperTransferError(null);
+  };
+
+  const savePaperTransfer = async (event) => {
+    event.preventDefault();
+    const amount = Number(paperTransfer.amount.replace(",", "."));
+    const source = bots.find((bot) => bot.bot_id === Number(paperTransfer.source));
+    const target = bots.find((bot) => bot.bot_id === Number(paperTransfer.target));
+    if (!source || !target || source.bot_id === target.bot_id ||
+        !/^\d+(?:[.,]\d{1,2})?$/.test(paperTransfer.amount) ||
+        !Number.isFinite(amount) || amount <= 0 || amount > Number(source.cash_eur) ||
+        !paperTransfer.confirmed) {
+      setPaperTransferError(copy.paperTransferInvalid);
+      return;
+    }
+    setPaperTransferSaving(true);
+    setPaperTransferError(null);
+    try {
+      transferKey.current ||= crypto.randomUUID();
+      await transferPaperCash({
+        source_bot_id: source.bot_id, target_bot_id: target.bot_id,
+        amount_eur: amount, idempotency_key: transferKey.current,
+      });
+      transferKey.current = null;
+      setPaperTransfer({ source: "", target: "", amount: "", confirmed: false });
+      await load();
+    } catch (cause) {
+      setPaperTransferError(cause?.message || copy.paperTransferFailed);
+    } finally {
+      setPaperTransferSaving(false);
+    }
+  };
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-8 px-4 py-8 pb-28 text-slate-900 dark:text-slate-100 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -169,6 +211,50 @@ function PortfolioPageInner() {
       {statusMessage && !loading && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{statusMessage}</p>}
       {environment === "paper" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.paperMoney}</p>}
       {environment === "live" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.liveAttribution}</p>}
+
+      {environment === "paper" && bots.length > 1 && <form onSubmit={savePaperTransfer}
+        className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+        <h2 className="text-lg font-semibold">{copy.paperTransferTitle}</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{copy.paperTransferHelp}</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <label className="text-sm font-medium">{copy.paperTransferFrom}
+            <select required value={paperTransfer.source} onChange={(event) => updatePaperTransfer({ source: event.target.value })}
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700">
+              <option value="">{copy.paperTransferChoose}</option>
+              {bots.filter((bot) => known(bot.cash_eur) && Number(bot.cash_eur) > 0).map((bot) =>
+                <option key={bot.bot_id} value={bot.bot_id}>{bot.name} · {money(bot.cash_eur)}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium">{copy.paperTransferTo}
+            <select required value={paperTransfer.target} onChange={(event) => updatePaperTransfer({ target: event.target.value })}
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700">
+              <option value="">{copy.paperTransferChoose}</option>
+              {bots.filter((bot) => bot.bot_id !== Number(paperTransfer.source)).map((bot) =>
+                <option key={bot.bot_id} value={bot.bot_id}>{bot.name} · {bot.cash_eur == null ? copy.unfundedBot : money(bot.cash_eur)}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium">{copy.paperTransferAmount}
+            <input type="text" inputMode="decimal" required value={paperTransfer.amount}
+              onChange={(event) => updatePaperTransfer({ amount: event.target.value })}
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" />
+          </label>
+        </div>
+        {paperTransfer.source && paperTransfer.amount &&
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{copy.paperTransferRemaining}: {money(
+            Number(bots.find((bot) => bot.bot_id === Number(paperTransfer.source))?.cash_eur || 0) -
+            Number(paperTransfer.amount.replace(",", "."))
+          )}</p>}
+        <label className="mt-4 flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={paperTransfer.confirmed}
+            onChange={(event) => setPaperTransfer((current) => ({ ...current, confirmed: event.target.checked }))} />
+          {copy.paperTransferConfirm}
+        </label>
+        {paperTransferError && <p role="alert" className="mt-2 text-sm text-red-700">{paperTransferError}</p>}
+        <button type="submit" disabled={paperTransferSaving || !paperTransfer.confirmed}
+          className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {paperTransferSaving ? copy.paperTransferSaving : copy.paperTransferSubmit}
+        </button>
+      </form>}
 
       {environment === "live" && overview?.exchange_name && <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800" aria-label={copy.brokerAccount}>
         <h2 className="text-lg font-semibold">{copy.brokerAccount}: {overview.exchange_name}</h2>

@@ -20,7 +20,7 @@ class _Cursor:
         statement = " ".join(sql.lower().split())
         self.queries.append((statement, params))
         if "from bot_configs c" in statement:
-            self.rows = self.bots
+            self.rows = [row if len(row) == 8 else (*row, False) for row in self.bots]
         elif "from portfolio_fx_rates" in statement and "quote_currency in" in statement:
             self.rows = self.fx
         elif "from portfolio_fx_rates" in statement:
@@ -90,6 +90,16 @@ def test_unfunded_or_stale_fx_never_writes_partial_history():
     unfunded = _Cursor(bots=[(1, "ETH", False, None, None, False, None)], prices={}, fx=[])
     assert _snapshot_verified_paper(unfunded, 17, "1h", now) is False
     assert unfunded.snapshots == []
+
+
+def test_empty_paper_bot_does_not_hide_funded_history():
+    now = datetime.now(timezone.utc)
+    cursor = _Cursor(bots=[
+        (129, "BTC", True, 10000, 0, False, now, True),
+        (130, "AAPL", False, None, None, False, None, False),
+    ], prices={}, fx=[])
+    assert _snapshot_verified_paper(cursor, 17, "1h", now) is True
+    assert cursor.snapshots[0][3:7] == (10000.0, 10000.0, 0.0, 2)
 
 
 def test_twenty_assets_use_one_price_read_and_one_complete_snapshot():

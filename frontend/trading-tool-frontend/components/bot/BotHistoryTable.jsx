@@ -149,7 +149,9 @@ export default function BotHistoryTable({
 
                   {/* CONFIDENCE */}
                   <td>
-                    {confidenceLabels[confidence] || h.confidence || "—"}
+                    {h.decision_basis === "saved_setup_score_band"
+                      ? copy.scoreBandBasis
+                      : confidenceLabels[confidence] || h.confidence || "—"}
                   </td>
 
                   {/* STATUS */}

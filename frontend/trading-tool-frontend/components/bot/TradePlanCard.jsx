@@ -174,6 +174,8 @@ export default function TradePlanCard({
       stop_loss: normalizeStopLoss(raw.stop_loss),
       targets: normalizeTargets(raw.targets),
       risk: normalizeRisk(raw.risk),
+      price_currency: raw.price_currency || null,
+      source_price_currency: raw.source_price_currency || null,
     };
   }, [tradePlan, safeDecision]);
 
@@ -223,6 +225,10 @@ export default function TradePlanCard({
               {sideLabel}
             </div>
           </div>
+          {derived.price_currency && <p className="mt-1 text-xs text-muted">
+            {copy.priceCurrency}: {derived.price_currency}
+            {derived.source_price_currency && ` · ${copy.convertedFrom} ${derived.source_price_currency}`}
+          </p>}
         </div>
         
         {Number.isFinite(livePrice) && (

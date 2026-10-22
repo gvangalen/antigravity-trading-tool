@@ -81,7 +81,9 @@ export default function BotTodayProposal({
   const status = decision.status ?? "planned";
   const isFinal = status === "executed" || status === "skipped";
 
-  const confidence = decision.confidence ?? "low";
+  const confidence = decision?.decision_basis === "saved_setup_score_band"
+    ? copy.scoreBandBasis
+    : decision.confidence ?? "low";
 
   /* =====================================================
      EXPOSURE FRAMEWORK

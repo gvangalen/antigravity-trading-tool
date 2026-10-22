@@ -2,6 +2,7 @@ from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import bindparam, text
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 import json
 
 from backend.services.platform_metrics import increment_execution_safety_counter
@@ -406,6 +407,116 @@ class BotRepository:
             "amount_eur": amount_eur,
         })
         return True
+
+    async def transfer_paper_cash(
+        self, *, user_id: int, source_bot_id: int, target_bot_id: int,
+        amount_eur: str, idempotency_key: str,
+    ) -> dict:
+        """Move existing virtual cash atomically; the caller commits once."""
+        params = {"user_id": user_id, "source_bot_id": source_bot_id,
+                  "target_bot_id": target_bot_id, "amount_eur": amount_eur,
+                  "idempotency_key": idempotency_key}
+        await self.session.execute(text(
+            "SELECT pg_advisory_xact_lock(:user_id, hashtext(:idempotency_key))"
+        ), params)
+        prior = await self.session.execute(text("""
+            SELECT id, source_bot_id, target_bot_id, amount_eur
+            FROM paper_cash_transfers
+            WHERE user_id=:user_id AND idempotency_key=:idempotency_key
+        """), params)
+        existing = prior.fetchone()
+        if existing:
+            if (int(existing[1]) != source_bot_id or int(existing[2]) != target_bot_id
+                    or str(existing[3]) != amount_eur):
+                raise ValueError("paper_transfer_key_reused")
+            return {"transfer_id": int(existing[0]), "replayed": True}
+
+        bots = {}
+        for bot_id in sorted((source_bot_id, target_bot_id)):
+            result = await self.session.execute(text("""
+                SELECT b.id, b.is_live,
+                       COALESCE(NULLIF(UPPER(b.symbol), ''), NULLIF(UPPER(s.symbol), ''),
+                                NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), '')) AS symbol
+                FROM bot_configs b
+                LEFT JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+                LEFT JOIN setups st ON st.id=s.setup_id AND st.user_id=s.user_id
+                WHERE b.id=:bot_id AND b.user_id=:user_id
+                FOR UPDATE OF b
+            """), {"user_id": user_id, "bot_id": bot_id})
+            row = result.fetchone()
+            if not row or row[1] or not row[2]:
+                raise ValueError("paper_transfer_bot_invalid")
+            bots[bot_id] = str(row[2]).upper()
+
+        # A bot with an unverified historical ledger cannot receive a new
+        # allocation until its valuation is reconciled.
+        unverified = await self.session.execute(text("""
+            SELECT 1 WHERE EXISTS (
+                SELECT 1 FROM portfolio_unverified_paper_bots
+                WHERE user_id=:user_id AND bot_id IN (:source_bot_id, :target_bot_id)
+            ) OR EXISTS (
+                SELECT 1 FROM bot_ledger legacy
+                WHERE legacy.user_id=:user_id
+                  AND legacy.bot_id IN (:source_bot_id, :target_bot_id)
+                  AND legacy.entry_type='execute' AND legacy.valuation_version < 2
+            )
+            LIMIT 1
+        """), params)
+        if unverified.fetchone():
+            raise ValueError("paper_transfer_unverified_ledger")
+
+        for bot_id in sorted((source_bot_id, target_bot_id)):
+            await self.session.execute(text("""
+                SELECT cash_eur FROM bot_portfolios
+                WHERE user_id=:user_id AND bot_id=:bot_id AND symbol=:symbol
+                FOR UPDATE
+            """), {"user_id": user_id, "bot_id": bot_id, "symbol": bots[bot_id]})
+
+        debited = await self.session.execute(text("""
+            UPDATE bot_portfolios SET cash_eur=cash_eur-CAST(:amount_eur AS NUMERIC),
+                updated_at=NOW()
+            WHERE user_id=:user_id AND bot_id=:source_bot_id
+              AND symbol=:symbol AND cash_eur >= CAST(:amount_eur AS NUMERIC)
+            RETURNING cash_eur
+        """), {**params, "symbol": bots[source_bot_id]})
+        if debited.fetchone() is None:
+            raise ValueError("paper_transfer_insufficient_cash")
+        await self.session.execute(text("""
+            INSERT INTO bot_portfolios
+                (user_id, bot_id, symbol, cash_eur, position_qty, invested_eur,
+                 avg_entry, realized_pnl_eur, updated_at)
+            VALUES (:user_id, :target_bot_id, :symbol, CAST(:amount_eur AS NUMERIC),
+                    0, 0, 0, 0, NOW())
+            ON CONFLICT (bot_id, symbol) DO UPDATE SET
+                cash_eur=bot_portfolios.cash_eur+EXCLUDED.cash_eur,
+                updated_at=NOW()
+        """), {**params, "symbol": bots[target_bot_id]})
+        inserted = await self.session.execute(text("""
+            INSERT INTO paper_cash_transfers
+                (user_id, source_bot_id, target_bot_id, amount_eur, idempotency_key)
+            VALUES (:user_id, :source_bot_id, :target_bot_id,
+                    CAST(:amount_eur AS NUMERIC), :idempotency_key)
+            RETURNING id
+        """), params)
+        transfer_id = int(inserted.scalar_one())
+        for bot_id, symbol, direction in (
+            (source_bot_id, bots[source_bot_id], -1),
+            (target_bot_id, bots[target_bot_id], 1),
+        ):
+            await self.session.execute(text("""
+                INSERT INTO bot_ledger
+                    (user_id, bot_id, entry_type, symbol, cash_delta_eur,
+                     qty_delta, note, meta, ts)
+                VALUES (:user_id, :bot_id, 'paper_cash_transfer', :symbol,
+                        CAST(:cash_delta_eur AS NUMERIC), 0,
+                        'Overboeking bestaande virtuele Paper-kas', CAST(:meta AS JSONB), NOW())
+            """), {"user_id": user_id, "bot_id": bot_id, "symbol": symbol,
+                   "cash_delta_eur": str(Decimal(amount_eur) * direction),
+                   "meta": json.dumps({"transfer_id": transfer_id,
+                                       "idempotency_key": idempotency_key,
+                                       "other_bot_id": target_bot_id if direction < 0 else source_bot_id,
+                                       "currency": "EUR"})})
+        return {"transfer_id": transfer_id, "replayed": False}
 
     async def get_paper_cash(self, *, user_id: int, bot_id: int, symbol: str, lock: bool = False) -> float:
         """Read actual virtual cash; lock both rows before any Paper debit."""
@@ -884,7 +995,10 @@ class BotRepository:
                 c.name, 
                 COALESCE(p.symbol, NULLIF(UPPER(c.symbol), ''), st.symbol, 'BTC') AS symbol,
                 p.bot_id IS NOT NULL AS portfolio_initialized,
-                (u.bot_id IS NOT NULL OR (c.is_live=FALSE AND EXISTS (
+                (u.bot_id IS NOT NULL OR (c.is_live=FALSE AND p.bot_id IS NULL AND EXISTS (
+                    SELECT 1 FROM bot_ledger missing
+                    WHERE missing.user_id=c.user_id AND missing.bot_id=c.id
+                )) OR (c.is_live=FALSE AND EXISTS (
                     SELECT 1 FROM bot_ledger legacy
                     WHERE legacy.user_id=c.user_id AND legacy.bot_id=c.id
                       AND legacy.entry_type='execute' AND legacy.valuation_version < 2

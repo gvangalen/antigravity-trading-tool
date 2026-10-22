@@ -58,6 +58,13 @@ class FinnTradeQuestion(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
 
 
+class PaperCashTransferRequest(BaseModel):
+    source_bot_id: int = Field(gt=0)
+    target_bot_id: int = Field(gt=0)
+    amount_eur: condecimal(gt=0, max_digits=18, decimal_places=2)
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+
 def _apply_sensitive_order_rate_limit(*, user_id: int, request: Request, action_key: str) -> None:
     ip_addr = client_ip(request)
     order_rate_limiter.check_rate_limit(
@@ -109,6 +116,23 @@ async def delete_bot_config(
     service: BotService = Depends(get_bot_service)
 ):
     return await service.delete_bot_config(bot_id, current_user["id"])
+
+
+@router.post("/bot/paper/cash-transfer")
+async def transfer_paper_cash(
+    payload: PaperCashTransferRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service),
+):
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="paper_cash_transfer",
+    )
+    return await service.transfer_paper_cash(
+        user_id=current_user["id"], source_bot_id=payload.source_bot_id,
+        target_bot_id=payload.target_bot_id, amount_eur=payload.amount_eur,
+        idempotency_key=payload.idempotency_key,
+    )
 
 # ==========================================================
 # 📄 BOT DECISIONS (TODAY/HISTORY)

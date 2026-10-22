@@ -62,6 +62,7 @@ const StrategyForm = forwardRef(function StrategyForm({
       ? strategy.targets.map(t => typeof t === 'object' ? t.price : t).join(", ")
       : "",
     stop_loss: strategy?.stop_loss || "",
+    price_currency: strategy?.price_currency_confirmed ? strategy.price_currency : "",
 
     base_amount:
       strategy?.base_amount ||
@@ -96,6 +97,7 @@ const StrategyForm = forwardRef(function StrategyForm({
           ? strategy.targets.map(t => typeof t === 'object' ? t.price : t).join(", ")
           : "",
         stop_loss: strategy.stop_loss || "",
+        price_currency: strategy.price_currency_confirmed ? strategy.price_currency : "",
         base_amount: strategy.base_amount || strategy.amount || "",
         execution_mode: strategy.execution_mode || "fixed",
         decision_curve: strategy.decision_curve || null,
@@ -217,6 +219,7 @@ const StrategyForm = forwardRef(function StrategyForm({
         form.entry !== "" &&
         form.targetsText !== "" &&
         form.stop_loss !== ""
+        && (form.price_currency === "EUR" || form.price_currency === "USD")
       )
     );
 
@@ -293,6 +296,7 @@ const StrategyForm = forwardRef(function StrategyForm({
       payload.entry = form.entry !== "" ? Number(form.entry) : null;
       payload.targets = targets;
       payload.stop_loss = form.stop_loss !== "" ? Number(form.stop_loss) : null;
+      payload.price_currency = form.price_currency;
     }
 
     try {
@@ -385,6 +389,15 @@ const StrategyForm = forwardRef(function StrategyForm({
       {/* BREAKOUT */}
       {isTrade && (
         <>
+          <label className="block text-sm font-semibold">
+            <span className="mb-2 block">{copy.priceCurrencyLabel}</span>
+            <select name="price_currency" value={form.price_currency} onChange={handleChange} required className="input w-full">
+              <option value="">{copy.priceCurrencyChoose}</option>
+              <option value="USD">{copy.priceCurrencyUsd}</option>
+              <option value="EUR">{copy.priceCurrencyEur}</option>
+            </select>
+            <span className="mt-2 block text-xs font-normal text-secondary">{copy.priceCurrencyHelp}</span>
+          </label>
           <input
             name="entry"
             type="number"

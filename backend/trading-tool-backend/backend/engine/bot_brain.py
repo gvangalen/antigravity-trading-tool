@@ -180,6 +180,8 @@ def _build_action_decision(
     live_price: Optional[float],
     final_amount: float,
     planned_dca_amount: bool = False,
+    confirmed_trade_match: bool = False,
+    saved_trade_match_status: Optional[str] = None,
 ) -> Dict[str, Any]:
     confidence_score = _safe_float(
         snapshot.get("confidence_score") or snapshot.get("confidence"),
@@ -218,7 +220,19 @@ def _build_action_decision(
             "confidence_score": confidence_score,
         }
 
-    if confidence_score < min_confidence_to_watch:
+    if setup_type == "trade" and saved_trade_match_status and not confirmed_trade_match:
+        reasons = {
+            "outside_conditions": "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark.",
+            "insufficient_data": "Actuele benchmarkgegevens zijn onvoldoende voor deze trade.",
+            "unconfigured": "Deze setup heeft geen beoordeelbare scorevoorwaarden.",
+        }
+        return {
+            "action": "hold", "reason": reasons.get(saved_trade_match_status, "Setupmatch is niet bevestigd."),
+            "intent_note": "Controleer de opgeslagen scorevoorwaarden.",
+            "confidence_score": confidence_score,
+        }
+
+    if confidence_score < min_confidence_to_watch and not confirmed_trade_match:
         return {
             "action": "hold",
             "reason": f"Confidence too low ({confidence_score:.1f})",
@@ -234,7 +248,7 @@ def _build_action_decision(
             "confidence_score": confidence_score,
         }
 
-    if market_score < min_market_score_to_buy:
+    if market_score is not None and market_score < min_market_score_to_buy:
         return {
             "action": "hold",
             "reason": f"Market score too weak ({market_score:.1f})",
@@ -286,7 +300,7 @@ def _build_action_decision(
                 "confidence_score": confidence_score,
             }
 
-        if entry <= live_price <= upper_buy_zone and confidence_score >= min_confidence_to_buy:
+        if entry <= live_price <= upper_buy_zone and (confirmed_trade_match or confidence_score >= min_confidence_to_buy):
             return {
                 "action": "buy",
                 "reason": f"Trade setup confirmed near entry ({live_price:.2f} vs {entry:.2f})",
@@ -424,6 +438,12 @@ def run_bot_brain(
         live_price=live_price,
         final_amount=suggested_amount,
         planned_dca_amount=is_confirmed_dca_amount_rule(setup),
+        confirmed_trade_match=(
+            setup_type == "trade"
+            and setup.get("confirmed_trade_match") is True
+            and score_evidence_complete
+        ),
+        saved_trade_match_status=setup.get("saved_trade_match_status"),
     )
     if (
         setup_type == "dca"
