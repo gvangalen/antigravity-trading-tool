@@ -94,18 +94,47 @@ def _explicit_setup_rule_waiver(message: str) -> bool:
 def _priced_two_rule_strategy_request(message: str):
     """Recognize one positive plan request with two named unsupported rules."""
     numeric = r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)"
-    return re.fullmatch(
-        r"(?:maak|ik wil) voor mijn opgeslagen setup [\w -]+ een (?:tweede )?paper-strategie "
-        r"met naam [\w -]+\. (?P<asset>[a-z]{2,8}) (?P<timeframe>\d+[hdw]), vast bedrag €[\d.,]+, "
+    normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold())
+    matched = re.fullmatch(
+        r"(?:maak|ik wil) voor mijn opgeslagen setup [\w -]+ een (?:tweede |nieuwe )?paper-strategie "
+        rf"met naam (?P<name>[\w -]+)\. (?P<asset>[a-z]{{2,8}}) (?P<timeframe>\d+[hdw]), vast bedrag €(?P<amount>{numeric}), "
         rf"entry (?P<entry>{numeric}) (?P<entry_currency>usd|eur), "
         rf"stop-loss (?P<stop>{numeric}) (?P<stop_currency>usd|eur), "
         rf"target (?P<target>{numeric}) (?P<target_currency>usd|eur) en "
         r"(?P<risk>voorzichtig|gebalanceerd|agressief) risico\. "
         r"ik wil daarnaast alleen handelen bij stijgende 1d-trend en "
         r"maximaal (?P<limit>\w+) trades per dag\. "
-        r"toon het concept, sla niets op zonder bevestiging\.",
-        re.sub(r"\s+", " ", str(message or "").strip().casefold()),
+        r"toon (?:het|alleen een) concept(?:, sla niets op zonder bevestiging)?\.",
+        normalized,
     )
+    if matched is None:
+        # The same bounded request can be phrased as a single sentence with
+        # the strategy name directly after "Paper-strategie". Its final
+        # sentence explicitly refuses a confirmable card while the two rules
+        # cannot be stored. No other execution clause fits this grammar.
+        matched = re.fullmatch(
+            r"ik wil bij setup (?P<setup>[\w -]+) een paper-strategie "
+            rf"(?P<name>[\w -]+) op (?P<timeframe>\d+[hdw]), "
+            rf"€(?P<amount>{numeric}) vast per keer, "
+            r"(?P<risk>voorzichtig|gebalanceerd|agressief) risico, "
+            rf"entry (?P<entry>{numeric}) (?P<entry_currency>usd|eur), "
+            rf"stop(?:-loss)? (?P<stop>{numeric}) (?P<stop_currency>usd|eur) "
+            rf"en (?:doel|target) (?P<target>{numeric}) (?P<target_currency>usd|eur)\. "
+            r"vereis daarnaast een stijgende 1d-trend en maximaal (?P<limit>\w+) "
+            r"trades per dag\. "
+            r"geef nog geen bevestigbare kaart als je die automatische regels "
+            r"niet kunt bewaren\.",
+            normalized,
+        )
+    if matched and re.search(
+        r"\b(?:zodra|mits|wanneer|als|indien|if|when|unless|only|alleen|"
+        r"rsi|macd|adx|trend|score|signaal|signal|koop|buy|handel|trade)\b",
+        matched.group("name"), re.IGNORECASE,
+    ):
+        # A free-form name is not a quoted field. Conditional text inside it
+        # may be a third execution rule that the later waiver did not drop.
+        return None
+    return matched
 
 
 def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> bool:
@@ -196,7 +225,7 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
                 for field, value in repeated_fields.items()
             )
             original_setup = re.search(
-                r"\bvoor mijn opgeslagen setup (.+?) een (?:tweede )?paper-strategie\b",
+                r"\bvoor mijn opgeslagen setup (.+?) een (?:tweede |nieuwe )?paper-strategie\b",
                 original_text,
             )
             repeated_setup = re.search(r"\bsetup ([^,.;]+)", retention)
@@ -291,19 +320,21 @@ def _bounded_strategy_rule_waiver_inputs(
     )
     if consent is None or consent.group("limit") != original.group("limit"):
         return None
-    original_setup = re.search(
-        r"\bvoor mijn opgeslagen setup (.+?) een (?:tweede )?paper-strategie\b",
-        " ".join(str(original_message or "").casefold().split()),
-    )
-    original_name = re.search(
-        r"\bpaper-strategie met naam (.+?)\. ",
-        " ".join(str(original_message or "").casefold().split()),
-    )
-    if not original_setup or not original_name or (
-        consent.group("setup").strip() != original_setup.group(1).strip()
-        or consent.group("name").strip() != original_name.group(1).strip()
-        or consent.group("asset") != original.group("asset")
+    original_setup = original.groupdict().get("setup") or next((
+        match.group(1) for match in [re.search(
+            r"\bvoor mijn opgeslagen setup (.+?) een (?:tweede |nieuwe )?paper-strategie\b",
+            " ".join(str(original_message or "").casefold().split()),
+        )] if match
+    ), None)
+    original_asset = original.groupdict().get("asset")
+    if not original_setup or (
+        consent.group("setup").strip() != original_setup.strip()
+        or consent.group("name").strip() != original.group("name").strip()
+        or (original_asset is not None and original_asset != consent.group("asset"))
         or consent.group("timeframe") != original.group("timeframe")
+        or len({original.group(field) for field in (
+            "entry_currency", "stop_currency", "target_currency",
+        )}) != 1
         or len({consent.group(field) for field in (
             "entry_currency", "stop_currency", "target_currency",
         )}) != 1
@@ -317,12 +348,90 @@ def _bounded_strategy_rule_waiver_inputs(
     after = state.explicit_inputs(
         contract=contract, message=message, explicit_asset=None,
     )
+    # The alternate sentence says "€100 vast per keer", which the generic
+    # amount extractor does not currently treat as a strategy base amount.
+    # The bounded grammar above supplies that exact typed value instead.
+    before.update({
+        "base_amount": FinnV2OperationStateService._numeric_value(original.group("amount")),
+        "entry": FinnV2OperationStateService._numeric_value(original.group("entry")),
+        "stop_loss": FinnV2OperationStateService._numeric_value(original.group("stop")),
+        "targets": [FinnV2OperationStateService._numeric_value(original.group("target"))],
+        "risk_profile": {
+            "voorzichtig": "conservative", "gebalanceerd": "balanced",
+            "agressief": "aggressive",
+        }[original.group("risk")],
+        "price_currency": original.group("entry_currency").upper(),
+    })
     required = {"base_amount", "entry", "stop_loss", "targets", "risk_profile", "price_currency"}
     if not required.issubset(before) or not required.issubset(after):
         return None
     if any(before[key] != after[key] for key in required):
         return None
-    return {key: after[key] for key in required}
+    return {**{key: after[key] for key in required},
+            "name": consent.group("name"),
+            "symbol": consent.group("asset").upper(),
+            "timeframe": consent.group("timeframe").upper()}
+
+
+def _freeform_two_rule_strategy_name(message: str) -> str | None:
+    """Read the explicit name slot from the older closed two-rule grammar."""
+    text = " ".join(str(message or "").strip().split())
+    matched = re.fullmatch(
+        r"Maak een Paper-strategie voor mijn opgeslagen setup [\w -]+\. "
+        r"De strategie heet (?P<name>[\w -]+)\. Vast bedrag €[\d.,]+, "
+        r"(?:voorzichtig|gebalanceerd|agressief) risico, "
+        r"entry [\d.,]+ (?:USD|EUR), stop-loss [\d.,]+ (?:USD|EUR) "
+        r"en koersdoel [\d.,]+ (?:USD|EUR)\. "
+        r"Koop alleen bij een stijgende trend en niet als RSI zwak is\.",
+        text, re.I,
+    )
+    return matched.group("name") if matched else None
+
+
+def _strategy_request_after_bounded_waiver(original_message: str) -> str | None:
+    """Retain the entire original request except the two withdrawn rules."""
+    original = _priced_two_rule_strategy_request(original_message)
+    text = " ".join(str(original_message or "").strip().split())
+    if original is None:
+        if _freeform_two_rule_strategy_name(text) is None:
+            return None
+        suffix = r"\s+Koop alleen bij een stijgende trend en niet als RSI zwak is\."
+    elif original.groupdict().get("setup"):
+        suffix = (
+            r"\s+Vereis daarnaast een stijgende 1D-trend en maximaal \w+ "
+            r"trades per dag\. Geef nog geen bevestigbare kaart als je die "
+            r"automatische regels niet kunt bewaren\."
+        )
+    else:
+        suffix = (
+            r"\s+Ik wil daarnaast alleen handelen bij stijgende 1D-trend en "
+            r"maximaal \w+ trades per dag\. Toon (?:het|alleen een) concept"
+            r"(?:, sla niets op zonder bevestiging)?\."
+        )
+    residual, count = re.subn(suffix + r"\s*$", "", text, flags=re.IGNORECASE)
+    return residual if count == 1 else None
+
+
+def _bounded_waiver_name_confirmed(message: str, block: dict) -> bool:
+    """The prior clarification must have presented the exact prose name."""
+    original = str(block.get("original_message") or "")
+    parsed = _priced_two_rule_strategy_request(original)
+    freeform_name = _freeform_two_rule_strategy_name(original)
+    if parsed is None and freeform_name is None:
+        return True  # Other waiver forms retain their own stricter grammar.
+    if (
+        _bounded_strategy_rule_waiver_inputs(message, original) is None
+        and _freeform_strategy_rule_waiver_inputs(message, original) is None
+    ):
+        # A short generic waiver never confirms the unquoted strategy name or
+        # that precisely two rules (and no others) are being withdrawn.
+        return False
+    return bool(
+        block.get("name_boundary_prompted") is True
+        and str(block.get("prompted_name") or "").casefold()
+        == (parsed.group("name") if parsed else freeform_name).casefold()
+        and block.get("source_run_id")
+    )
 
 
 def _freeform_strategy_rule_waiver_inputs(
@@ -341,15 +450,7 @@ def _freeform_strategy_rule_waiver_inputs(
     # A shorthand waiver is safe only for this complete, bounded request
     # shape. Counting known keywords is not enough: a third condition can be
     # phrased without any of those keywords.
-    if re.fullmatch(
-        r"Maak een Paper-strategie voor mijn opgeslagen setup [\w -]+\. "
-        r"De strategie heet [\w -]+\. Vast bedrag €[\d.,]+, "
-        r"(?:voorzichtig|gebalanceerd|agressief) risico, "
-        r"entry [\d.,]+ (?:USD|EUR), stop-loss [\d.,]+ (?:USD|EUR) "
-        r"en koersdoel [\d.,]+ (?:USD|EUR)\. "
-        r"Koop alleen bij een stijgende trend en niet als RSI zwak is\.",
-        original, re.I,
-    ) is None:
+    if _freeform_two_rule_strategy_name(original) is None:
         return None
     automatic_rule_markers = re.findall(
         r"\b(?:koop|buy|kaufe|handel|handelen|trade)\s+(?:ook\s+)?"
@@ -454,6 +555,11 @@ def _strategy_price_currency_conflict(origin_inputs: dict[str, object], message:
     return original in {"EUR", "USD"} and proposed in {"EUR", "USD", "MIXED"} and proposed != original
 
 
+def _mixed_strategy_price_request(message: str) -> bool:
+    """A strategy draft cannot confirm price levels stated in different units."""
+    return FinnV2OperationStateService._explicit_trade_price_currency(message) == "MIXED"
+
+
 def _select_open_strategy_for_correction(
     open_items: list[tuple[object, object]], message: str,
 ) -> tuple[object, object] | None:
@@ -484,6 +590,44 @@ def _select_open_strategy_for_correction(
             named.append(item)
             break
     return named[0] if len(named) == 1 else None
+
+
+def _adjacent_open_strategy_for_mixed_correction(
+    open_items: list[tuple[object, object]], message: str, previous_run_id: str | None,
+) -> tuple[object, object] | None:
+    """Bind a vague mixed-unit correction only to the prior displayed card."""
+    if (
+        not previous_run_id
+        or not _mixed_strategy_price_request(message)
+        or re.fullmatch(
+            r"ik corrigeer het doel van de open kaart naar \d[\d.,]* "
+            r"(?:eur|usd), maar entry en stop staan nog in (?:usd|eur)\. "
+            r"trek een ongeldige oude kaart in en vraag wat je nodig hebt; "
+            r"bevestig of voer niets uit\.?",
+            " ".join(str(message or "").strip().casefold().split()),
+        ) is None
+        or _rejects_named_open_strategy(open_items, message)
+    ):
+        return None
+    # An explicit A-or-B mention is ambiguity, not permission to use the
+    # previous card as a tiebreaker. The fallback is only for an unnamed
+    # deictic "open card" reference.
+    for proposal, _ in open_items:
+        if proposal.operation_type != "create_strategy":
+            continue
+        fields = dict(dict(dict(proposal.payload_json or {}).get("change") or {}).get("strategy_fields") or {})
+        name = str(fields.get("name") or "").strip()
+        if name and any(
+            not _strategy_name_occurrence_rejected(message, match)
+            for match in re.finditer(r"(?<!\w)" + re.escape(name) + r"(?!\w)", message, re.I)
+        ):
+            return None
+    adjacent = [
+        item for item in open_items
+        if item[0].operation_type == "create_strategy"
+        and item[0].run_id == previous_run_id
+    ]
+    return adjacent[0] if len(adjacent) == 1 else None
 
 
 def _strategy_name_occurrence_rejected(message: str, match: re.Match[str]) -> bool:
@@ -1044,6 +1188,7 @@ def _blocked_strategy_from_clarification(
         "original_message": message,
         "captured_inputs": _safe_blocked_strategy_inputs(message, inputs),
         "draft_message": message,
+        "name_boundary_prompted": False,
     }
 
 
@@ -2113,6 +2258,44 @@ class FinnV2RunService:
                     ), message
             blocked_strategy = dict(context.get("strategy_rule_block") or {})
             if blocked_strategy and _explicit_strategy_rule_waiver(message, str(blocked_strategy.get("original_message") or "")):
+                prior_run_id = await session.scalar(
+                    select(FinnV2Run.id).where(
+                        FinnV2Run.conversation_id == conversation_id,
+                        FinnV2Run.user_id == user_id,
+                        FinnV2Run.created_at < run.created_at,
+                    ).order_by(FinnV2Run.created_at.desc()).limit(1)
+                )
+                stale_name_boundary = (
+                    not _bounded_waiver_name_confirmed(message, blocked_strategy)
+                    or (
+                        (
+                            _bounded_strategy_rule_waiver_inputs(
+                                message, str(blocked_strategy.get("original_message") or ""),
+                            ) is not None
+                            or _freeform_strategy_rule_waiver_inputs(
+                                message, str(blocked_strategy.get("original_message") or ""),
+                            ) is not None
+                        )
+                        and blocked_strategy.get("source_run_id") != prior_run_id
+                    )
+                )
+                if stale_name_boundary:
+                    context.pop("strategy_rule_block", None)
+                    await orchestrator.conversations.update_context(
+                        conversation_id=conversation_id, user_id=user_id, context=context,
+                    )
+                    await session.commit()
+                    return FinnResponsesFrontDoorResult(
+                        response=FinnResponsesResult(
+                            text={
+                                "en": "The earlier name and rule clarification is no longer linked to this turn. Please send the full strategy request again; I will clarify the name and rules before showing a card.",
+                                "de": "Die frühere Klärung von Name und Regeln ist nicht mehr mit dieser Nachricht verknüpft. Bitte sende die vollständige Strategieanfrage erneut; ich kläre Name und Regeln vor einer Karte.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "De eerdere verduidelijking over naam en regels hoort niet meer bij deze beurt. Stuur de volledige strategievraag opnieuw; ik controleer naam en regels voordat ik een kaart toon."),
+                            response_id=f"strategy-name-boundary-{run_id}",
+                            tool_trace=(), response_id_reusable=False,
+                        ), proposal_analysis=None, locale=locale,
+                    ), message
                 blocked_inputs = dict(blocked_strategy.get("captured_inputs") or {})
                 repeated_fixed = _freeform_strategy_rule_waiver_inputs(
                     message, str(blocked_strategy.get("original_message") or ""),
@@ -2137,6 +2320,55 @@ class FinnV2RunService:
                     "symbol": setup.get("symbol"),
                     "timeframe": setup.get("timeframe"),
                 } if setup else {}
+                if setup and (
+                    str(blocked_inputs.get("symbol") or setup.get("symbol") or "").upper()
+                    != str(setup.get("symbol") or "").upper()
+                    or str(blocked_inputs.get("timeframe") or setup.get("timeframe") or "").upper()
+                    != str(setup.get("timeframe") or "").upper()
+                ):
+                    verified_parent = {}
+                if repeated_fixed and verified_parent:
+                    residual = _strategy_request_after_bounded_waiver(
+                        str(blocked_strategy.get("original_message") or ""),
+                    )
+                    if residual is not None:
+                        # The name is an unquoted prose span. Inspect all of
+                        # it after removing only the two explicitly waived
+                        # rules, so an additional trading condition hidden
+                        # there cannot silently disappear into a draft name.
+                        await session.commit()  # Release the DB connection before the provider wait.
+                        remaining_rule = await FinnResponsesToolRelevanceGuard(
+                            openai_client.async_client,
+                        ).strategy_rule_coverage(
+                            message=residual, collected_inputs=blocked_inputs,
+                        )
+                        current_run = await orchestrator.runs.get_by_id_for_user(
+                            run_id=run_id, user_id=user_id,
+                        )
+                        current_conversation = await orchestrator.conversations.get_by_id_for_user(
+                            conversation_id=conversation_id, user_id=user_id,
+                        )
+                        if (
+                            current_run is None or current_run.status != "planned"
+                            or current_conversation is None
+                            or current_conversation.last_run_id != run_id
+                            or dict((current_conversation.context_json or {}).get("strategy_rule_block") or {}).get("source_run_id")
+                            != blocked_strategy.get("source_run_id")
+                        ):
+                            raise RuntimeContractConflictError("strategy_waiver_context_changed")
+                        if remaining_rule != "none":
+                            return FinnResponsesFrontDoorResult(
+                                response=FinnResponsesResult(
+                                    text={
+                                        "en": "I cannot verify that every remaining trading rule is represented. Please state the strategy name separately and list any rules you want enforced.",
+                                        "de": "Ich kann nicht prüfen, ob alle übrigen Handelsregeln erfasst sind. Bitte nenne den Strategienamen getrennt und liste die Regeln auf.",
+                                    }.get(locale.split("-")[0].lower(),
+                                          "Ik kan niet vaststellen of alle overige handelsregels zijn vastgelegd. Geef de strategienaam apart op en noem de regels die je wilt afdwingen."),
+                                    response_id=f"strategy-waiver-residual-rule-{run_id}",
+                                    tool_trace=(), response_id_reusable=False,
+                                ),
+                                proposal_analysis=None, locale=locale,
+                            ), message
                 restored = _proposal_from_blocked_strategy(blocked_strategy, verified_parent)
                 if restored is not None:
                     return FinnResponsesFrontDoorResult(
@@ -3579,6 +3811,21 @@ class FinnV2RunService:
                                     original, verified_setup=matches[0] if len(matches) == 1 else None,
                                 ) or {}
                                 if strategy_rule_block:
+                                    named_request = _priced_two_rule_strategy_request(original)
+                                    prompt_name = (
+                                        named_request.group("name") if named_request
+                                        else _freeform_two_rule_strategy_name(original)
+                                    )
+                                    prior_question = str(prior_clarification.get("question") or "")
+                                    if prompt_name and any(
+                                        quote in prior_question for quote in (
+                                            f"‘{prompt_name}’",
+                                            f"„{prompt_name}“",
+                                        )
+                                    ):
+                                        strategy_rule_block["name_boundary_prompted"] = True
+                                        strategy_rule_block["prompted_name"] = prompt_name
+                                        strategy_rule_block["source_run_id"] = getattr(previous_contract, "run_id", None)
                                     context["strategy_rule_block"] = strategy_rule_block
                                     await service.conversations.update_context(
                                         conversation_id=conversation_id, user_id=user_id, context=context,
@@ -3612,6 +3859,26 @@ class FinnV2RunService:
                                 conversation_id=conversation_id, user_id=user_id,
                             )
                             selected_open = _select_open_strategy_for_correction(open_items, run_message)
+                            if (
+                                selected_open is None
+                                and _mixed_strategy_price_request(run_message)
+                                and re.search(r"\b(?:open|huidige|laatste)\s+kaart\b", run_message, re.I)
+                                and not _rejects_named_open_strategy(open_items, run_message)
+                            ):
+                                # "The open card" refers only to a strategy
+                                # card created by the immediately preceding
+                                # owner/conversation run. Never select an
+                                # arbitrary newest card among several drafts.
+                                previous_run_id = await session.scalar(
+                                    select(FinnV2Run.id).where(
+                                        FinnV2Run.conversation_id == conversation_id,
+                                        FinnV2Run.user_id == user_id,
+                                        FinnV2Run.created_at < run.created_at,
+                                    ).order_by(FinnV2Run.created_at.desc()).limit(1)
+                                )
+                                selected_open = _adjacent_open_strategy_for_mixed_correction(
+                                    open_items, run_message, previous_run_id,
+                                )
                             if _multiple_open_correction_requires_clarification(
                                 open_items, selected_open, run_message,
                             ):
@@ -3920,7 +4187,10 @@ class FinnV2RunService:
 
                 if (
                     visible and strategy_rule_block
-                    and not _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
+                    and not (
+                        _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
+                        and _bounded_waiver_name_confirmed(run_message, strategy_rule_block)
+                    )
                     and (
                         _references_blocked_strategy_draft(run_message)
                         or _asks_to_drop_blocked_strategy_rules(run_message)
@@ -4012,6 +4282,15 @@ class FinnV2RunService:
                             run_message,
                             verified_setup=matches[0] if len(matches) == 1 else None,
                         )
+                        named_request = _priced_two_rule_strategy_request(run_message)
+                        prompt_name = (
+                            named_request.group("name") if named_request
+                            else _freeform_two_rule_strategy_name(run_message)
+                        )
+                        if prompt_name and len(matches) == 1:
+                            blocked["name_boundary_prompted"] = True
+                            blocked["prompted_name"] = prompt_name
+                            blocked["source_run_id"] = run_id
                         conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
                             conversation_id=conversation_id, user_id=user_id, for_update=True,
                         )
@@ -4041,6 +4320,16 @@ class FinnV2RunService:
                                 "de": "Dieser Entwurf enthält eine automatische Regel, die ich nicht speichern kann. Wähle die angebotene Option nur, wenn ich diese Regel weglassen darf; deine festen Angaben bleiben erhalten.",
                             }.get(locale.split("-")[0].lower(),
                                   "Dit concept bevat een automatische regel die ik niet kan opslaan. Kies de aangeboden optie alleen als die regel mag vervallen; je vaste gegevens blijven in het concept.")
+                            if prompt_name:
+                                name = prompt_name
+                                rules_en = "rising 1D trend and two-trades-per-day" if named_request else "rising trend and weak-RSI"
+                                rules_de = "steigenden 1D-Trend und zwei Trades pro Tag" if named_request else "steigenden Trend und schwachen RSI"
+                                rules_nl = "stijgende 1D-trend en limiet van twee trades per dag" if named_request else "stijgende trend en zwakke RSI"
+                                question = {
+                                    "en": f"I read ‘{name}’ as the strategy NAME, not an execution rule. I cannot store the {rules_en} rules. Repeat that exact name and setup if you want a draft without only those two rules; otherwise clarify the name and conditions.",
+                                    "de": f"Ich lese „{name}“ als Strategienamen, nicht als Ausführungsregel. Die Regeln für {rules_de} kann ich nicht speichern. Wiederhole Namen und Setup genau, wenn nur diese zwei Regeln entfallen sollen; sonst kläre Name und Bedingungen.",
+                                }.get(locale.split("-")[0].lower(),
+                                      f"Ik lees ‘{name}’ als de NAAM van de strategie, niet als handelsregel. De regels voor {rules_nl} kan ik niet opslaan. Herhaal precies die naam en setup als alleen deze twee regels mogen vervallen; verduidelijk anders de naam en voorwaarden.")
                             choices = [choice]
                         await cls(session).complete_responses_read(
                             run_id=run_id, user_id=user_id,
@@ -4232,6 +4521,39 @@ class FinnV2RunService:
                                     await session.commit()
                         if (
                             prepared.proposal_analysis is not None
+                            and prepared.proposal_analysis.request_plan.operation_id in {
+                                "create_strategy", "update_strategy",
+                            }
+                            and _mixed_strategy_price_request(run_message)
+                        ):
+                            # This check is independent of open-card routing and
+                            # model selection. Even if a correction was mistaken
+                            # for a new request, mixed quote units must never
+                            # reach an actionable proposal.
+                            language = str(prepared.locale or "nl").split("-")[0].lower()
+                            question = {
+                                "en": "The entry, stop and target use different price currencies. Give all three levels in one currency before I prepare a strategy proposal.",
+                                "de": "Einstieg, Stop-Loss und Kursziel verwenden unterschiedliche Kurswährungen. Nenne alle drei Werte in einer Währung, bevor ich einen Strategieentwurf erstelle.",
+                            }.get(language, "Entry, stop-loss en target gebruiken verschillende koersvaluta. Geef alle drie de niveaus in één valuta voordat ik een strategievoorstel maak.")
+                            async with async_session_factory() as session:
+                                await cls(session).complete_responses_read(
+                                    run_id=run_id, user_id=user_id,
+                                    response_id=prepared.response.response_id,
+                                    answer=FinnResponsesVerifiedAnswer(
+                                        status="clarification_required", text=question,
+                                        reason="strategy_price_currency_conflict", evidence=(),
+                                        clarification={
+                                            "question": question,
+                                            "reason": "strategy_price_currency_conflict",
+                                            "choices": [],
+                                        },
+                                    ),
+                                    previous_response=prepared.previous_response,
+                                    locale=prepared.locale,
+                                )
+                            return
+                        if (
+                            prepared.proposal_analysis is not None
                             and prepared.proposal_analysis.request_plan.operation_id == "create_strategy"
                         ):
                             strategy_inputs = dict(
@@ -4254,7 +4576,10 @@ class FinnV2RunService:
                                         setup_id, user_id,
                                     )
                                     owner_setup_name = str((owner_setup or {}).get("name") or "")
-                            strategy_waiver = _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
+                            strategy_waiver = (
+                                _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
+                                and _bounded_waiver_name_confirmed(run_message, strategy_rule_block)
+                            )
                             if strategy_rule_block and not strategy_waiver:
                                 coverage = "unsupported_required_rule"
                             elif strategy_waiver:
@@ -4311,6 +4636,22 @@ class FinnV2RunService:
                                         "daarna nog uit."
                                     )
                                     choice = "Maak strategievoorstel zonder deze automatische regels"
+                                original_rule_request = str(strategy_rule_block.get("original_message") or run_message)
+                                named_request = _priced_two_rule_strategy_request(original_rule_request)
+                                prompt_name = (
+                                    named_request.group("name") if named_request
+                                    else _freeform_two_rule_strategy_name(original_rule_request)
+                                )
+                                if prompt_name and owner_setup_name:
+                                    name = prompt_name
+                                    rules_en = "rising 1D trend and two-trades-per-day" if named_request else "rising trend and weak-RSI"
+                                    rules_de = "steigenden 1D-Trend und zwei Trades pro Tag" if named_request else "steigenden Trend und schwachen RSI"
+                                    rules_nl = "stijgende 1D-trend en limiet van twee trades per dag" if named_request else "stijgende trend en zwakke RSI"
+                                    question = {
+                                        "en": f"I read ‘{name}’ as the strategy NAME, not an execution rule. I cannot store the {rules_en} rules. Repeat that exact name and setup if you want a draft without only those two rules; otherwise clarify the name and conditions.",
+                                        "de": f"Ich lese „{name}“ als Strategienamen, nicht als Ausführungsregel. Die Regeln für {rules_de} kann ich nicht speichern. Wiederhole Namen und Setup genau, wenn nur diese zwei Regeln entfallen sollen; sonst kläre Name und Bedingungen.",
+                                    }.get(locale.split("-")[0].lower(),
+                                          f"Ik lees ‘{name}’ als de NAAM van de strategie, niet als handelsregel. De regels voor {rules_nl} kan ik niet opslaan. Herhaal precies die naam en setup als alleen deze twee regels mogen vervallen; verduidelijk anders de naam en voorwaarden.")
                                 clarification = FinnResponsesVerifiedAnswer(
                                     status="clarification_required", text=question,
                                     reason="strategy_rule_not_captured", evidence=(),
@@ -4335,6 +4676,9 @@ class FinnV2RunService:
                                             _safe_blocked_strategy_inputs(run_message, strategy_inputs)
                                         ),
                                         "draft_message": str(strategy_rule_block.get("draft_message") or run_message),
+                                        "name_boundary_prompted": bool(prompt_name and owner_setup_name),
+                                        "prompted_name": prompt_name if owner_setup_name else None,
+                                        "source_run_id": run_id,
                                     }
                                     await FinnV2ConversationRepository(session).update_context(
                                         conversation_id=conversation_id, user_id=user_id, context=context,

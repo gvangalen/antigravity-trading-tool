@@ -128,6 +128,15 @@ for the SHA of the commit that contains it.
   supporting artifacts and a fault batch where applicable. Do not test a
   different production SHA in the same official production run or initiate a
   repair loop.
+- On a failed FINN verdict, provide Build the exact failing questions,
+  necessary prior turns, expected and observed results, affected proposal
+  fields, tool/state evidence, run IDs and sanitized error/trace references
+  as one concrete fault batch. Share further case-specific diagnostics when
+  needed to reproduce the defect. Do this in the existing QA task without
+  per-case permission questions. Include a safety defect even when an
+  automated scorer marked its case green. Keep credentials, personal fixture
+  identifiers, protected manifest and complete sealed dataset QA-only. Do not
+  let Build inspect QA storage or influence the independent verdict.
 - For authenticated production QA, QA owns the protected `FINN_QA_USER_ID`
   fixture and uses the protected runner described in
   `docs/operations/finn-production-qa-runner.md`. QA performs the active
@@ -150,9 +159,12 @@ Stop and report when:
 When findings exist, report:
 
 1. findings by severity with file and line references where applicable
-2. test and verification coverage actually performed
-3. missing coverage or blocked checks
-4. residual risk
+2. for each failed FINN case, the exact failing question, expected and observed
+   outcome, relevant proposal fields and sanitized run/trace reference; provide
+   this actionable fault batch directly to Build without another permission step
+3. test and verification coverage actually performed
+4. missing coverage or blocked checks
+5. residual risk
 
 When no findings exist, explicitly say so and still report:
 

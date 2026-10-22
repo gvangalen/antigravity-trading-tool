@@ -5345,7 +5345,13 @@ def test_model_clarification_keeps_owner_scoped_strategy_draft_for_rule_waiver()
     assert blocked["captured_inputs"]["setup_id"] == 42
     assert blocked["captured_inputs"]["name"] == "Rustige BTC"
     assert blocked["captured_inputs"]["base_amount"] == 100
-    assert not {"entry", "stop_loss", "targets", "price_currency"} & blocked["captured_inputs"].keys()
+    # This closed request shape states all three USD levels positively, so
+    # the blocked draft can keep them while the two unsupported rules remain
+    # unconfirmed and cannot become an actionable proposal.
+    assert blocked["captured_inputs"]["entry"] == 84000
+    assert blocked["captured_inputs"]["stop_loss"] == 79800
+    assert blocked["captured_inputs"]["targets"] == [92400]
+    assert blocked["captured_inputs"]["price_currency"] == "USD"
     assert "trend" not in blocked["captured_inputs"]
     assert _explicit_strategy_rule_waiver(
         "Maak strategievoorstel zonder deze automatische regels", message,
@@ -5353,10 +5359,13 @@ def test_model_clarification_keeps_owner_scoped_strategy_draft_for_rule_waiver()
     restored = _proposal_from_blocked_strategy(
         blocked, {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"},
     )
-    assert restored.request_plan.operation_state["collected_inputs"]["setup_id"] == 42
-    assert "entry" not in restored.request_plan.operation_state["collected_inputs"]
-    assert restored.request_plan.operation_state["status"] == "collecting"
-    assert "entry" in restored.request_plan.operation_state["missing_required_inputs"]
+    restored_inputs = restored.request_plan.operation_state["collected_inputs"]
+    assert restored_inputs["setup_id"] == 42
+    assert restored_inputs["entry"] == 84000
+    assert restored_inputs["stop_loss"] == 79800
+    assert restored_inputs["targets"] == [92400]
+    assert restored.request_plan.operation_state["status"] == "complete"
+    assert not restored.request_plan.operation_state["missing_required_inputs"]
 
 
 def test_model_clarification_retains_strategy_requested_in_natural_language():
