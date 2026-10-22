@@ -44,6 +44,10 @@ from backend.services.finn_v2_run_service import (
     _proposal_from_blocked_setup, _explicit_strategy_rule_waiver,
     _proposal_from_blocked_strategy, _safe_blocked_strategy_inputs,
     _discard_superseded_strategy_rule_block, _references_blocked_strategy_draft,
+    _asks_to_drop_blocked_strategy_rules, _strategy_price_currency_conflict,
+    _reopen_strategy_for_new_price_currency, _complete_strategy_price_reentry,
+    _select_open_strategy_for_correction,
+    _multiple_open_correction_requires_clarification,
     _strategy_rule_is_unencoded,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
@@ -5278,6 +5282,190 @@ def test_blocked_strategy_restores_user_stated_fixed_usd_levels_after_waiver():
     assert restored_inputs["entry"] == 84000
     assert restored_inputs["stop_loss"] == 79800
     assert restored_inputs["targets"] == [92400]
+
+
+def test_blocked_strategy_does_not_recover_levels_from_unrecognized_or_negated_prose():
+    message = (
+        "Maak BTC Trend Plan voor mijn BTC setup. Met €100 vast per uitvoering: "
+        "entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD en voorzichtig risico. "
+        "Ik wil alleen handelen bij stijgende 1D-trend en maximaal twee trades per dag."
+    )
+    safe = _safe_blocked_strategy_inputs(message, {
+        "setup_id": 42, "symbol": "BTC", "base_amount": 100,
+        "entry": 1, "stop_loss": 2, "targets": [3], "price_currency": "EUR",
+    })
+    assert not {"entry", "stop_loss", "targets", "price_currency"} & safe.keys()
+    for rejected in (
+        "Niet deze niveaus: entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD.",
+        "Alle koersniveaus zijn EUR: entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD.",
+    ):
+        rejected_safe = _safe_blocked_strategy_inputs(rejected, {
+            "setup_id": 42, "symbol": "BTC", "entry": 1, "stop_loss": 2,
+            "targets": [3], "price_currency": "EUR",
+        })
+        assert not {"entry", "stop_loss", "targets", "price_currency"} & rejected_safe.keys()
+
+
+def test_free_text_rule_omission_requests_confirmation_without_releasing_proposal():
+    assert _asks_to_drop_blocked_strategy_rules(
+        "Laat de automatische 1D-trendfilter en de limiet van twee trades per dag weg. "
+        "Gebruik verder mijn €100, entry en stop."
+    )
+    assert not _explicit_strategy_rule_waiver(
+        "Laat de automatische 1D-trendfilter en de limiet van twee trades per dag weg. "
+        "Gebruik verder mijn €100, entry en stop."
+    )
+    assert not _asks_to_drop_blocked_strategy_rules("Waarom zou ik die trendfilter weglaten?")
+    assert not _asks_to_drop_blocked_strategy_rules("Laat de trendfilter aan staan.")
+
+
+def test_open_trade_proposal_target_correction_is_typed():
+    message = (
+        "Pas in het open voorstel alleen het target aan naar 93.000 USD. "
+        "Toon de aangepaste kaart; bevestig niets."
+    )
+    state = FinnV2OperationStateService()
+    assert state._is_explicit_correction(message)
+    fields = state.explicit_inputs(
+        contract=FinnV2OperationRegistry().require_supported("create_strategy"),
+        message=message, explicit_asset=None,
+    )
+    assert fields == {"targets": [93000], "price_currency": "USD"}
+    euro = message.replace("USD", "EUR")
+    assert state.explicit_inputs(
+        contract=FinnV2OperationRegistry().require_supported("create_strategy"),
+        message=euro, explicit_asset=None,
+    ) == {"targets": [93000], "price_currency": "EUR"}
+    assert not _strategy_price_currency_conflict({"price_currency": "USD"}, message)
+    assert _strategy_price_currency_conflict({"price_currency": "USD"}, euro)
+    assert not _strategy_price_currency_conflict({"price_currency": "USD"}, "Wat betekent mijn target?")
+    assert _strategy_price_currency_conflict(
+        {"price_currency": "USD"},
+        "Pas in het open voorstel alleen het koersdoel aan naar 93.000 euro.",
+    )
+
+
+def test_currency_switch_reopens_only_strategy_price_slots():
+    origin = {
+        "operation_id": "create_strategy", "contract_version": "2.0",
+        "collected_inputs": {
+            "setup_id": 42, "name": "BTC Trend Plan", "symbol": "BTC",
+            "base_amount": 100, "entry": 84000, "stop_loss": 79800,
+            "targets": [92400], "price_currency": "USD",
+        },
+    }
+    guided = _reopen_strategy_for_new_price_currency(origin, {
+        "change": {"strategy_fields": dict(origin["collected_inputs"])}
+    })
+    assert guided["collected_inputs"] == {
+        "setup_id": 42, "name": "BTC Trend Plan", "symbol": "BTC", "base_amount": 100,
+    }
+    assert guided["missing_required_inputs"] == ["entry", "stop_loss", "targets"]
+    assert guided["awaiting_price_currency_reentry"] is True
+    assert FinnV2OperationStateService.pending_operation_id({"active_guided_operation": guided}) == "create_strategy"
+    without_guided_fields = _reopen_strategy_for_new_price_currency({}, {
+        "change": {"strategy_fields": dict(origin["collected_inputs"])}
+    })
+    assert without_guided_fields["collected_inputs"]["name"] == "BTC Trend Plan"
+    assert FinnV2OperationStateService.pending_operation_id({
+        "active_guided_operation": without_guided_fields,
+    }) == "create_strategy"
+    mismatched_origin = {
+        **origin, "collected_inputs": {**origin["collected_inputs"], "setup_id": 99},
+    }
+    assert _reopen_strategy_for_new_price_currency(
+        mismatched_origin, {"change": {"strategy_fields": dict(origin["collected_inputs"])}}
+    )["collected_inputs"]["setup_id"] == 42
+    assert _complete_strategy_price_reentry(
+        "De nieuwe entry is 75.000 EUR, de stop-loss is 71.000 EUR en het target is 82.000 EUR."
+    )
+    assert not _complete_strategy_price_reentry(
+        "Voorbeeld, geen plan: entry 75.000 EUR, stop-loss 71.000 EUR, target 82.000 EUR."
+    )
+    assert not _complete_strategy_price_reentry("Ik bedoel de entry 75.000 EUR.")
+    assert not _complete_strategy_price_reentry(
+        "Bitte diese Preise nicht verwenden: Entry 84.000 EUR, stop-loss 79.800 EUR, target 92.400 EUR."
+    )
+    assert not _complete_strategy_price_reentry(
+        "Don't use these prices: Entry 84,000 EUR, stop-loss 79,800 EUR, target 92,400 EUR."
+    )
+
+
+def test_currency_correction_selects_only_a_uniquely_named_open_card():
+    from types import SimpleNamespace
+
+    def card(name):
+        return (SimpleNamespace(
+            operation_type="create_strategy",
+            payload_json={"change": {"strategy_fields": {"name": name}}},
+        ), object())
+
+    cards = [card("BTC Strategy A"), card("BTC Strategy B")]
+    assert _select_open_strategy_for_correction(cards, "Pas BTC Strategy A aan naar EUR") is cards[0]
+    assert _select_open_strategy_for_correction(cards, "Pas het open voorstel aan naar EUR") is None
+    assert _select_open_strategy_for_correction([card("BTC Strategy A"), card("BTC Strategy A")],
+                                                "Pas BTC Strategy A aan naar EUR") is None
+
+
+def test_multiple_open_cards_fail_closed_for_quote_less_target_correction():
+    def card(name):
+        return (SimpleNamespace(
+            operation_type="create_strategy",
+            payload_json={"change": {"strategy_fields": {
+                "name": name, "price_currency": "USD",
+            }}},
+        ), SimpleNamespace(state_json={}))
+
+    cards = [card("BTC Strategy A"), card("BTC Strategy B")]
+    message = "Pas het target van BTC Strategy A aan naar 93.000"
+    selected = _select_open_strategy_for_correction(cards, message)
+    assert selected is cards[0]
+    assert _multiple_open_correction_requires_clarification(cards, selected, message)
+    assert _multiple_open_correction_requires_clarification(cards, None, "Pas het target aan naar 93.000")
+    assert not _multiple_open_correction_requires_clarification(
+        cards, selected, "Pas het target van BTC Strategy A aan naar 93.000 EUR",
+    )
+
+
+def test_price_reentry_parent_ignores_recent_different_setup(monkeypatch):
+    bound = []
+
+    class Resolver:
+        def __init__(self, _session):
+            self.setups = SimpleNamespace(get_setup_by_id=self.get_setup_by_id)
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            bound.append((setup_id, user_id))
+            return {"setup_type": "trade", "symbol": "BTC", "timeframe": "1D"} if setup_id == 42 else None
+
+        async def resolve_canonical_target(self, **_kwargs):
+            raise AssertionError("Recent setup B must not override proposal parent A")
+
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.user_id = 7
+    front.reads = SimpleNamespace(session_factory=session_factory)
+    context = {
+        "active_guided_operation": {
+            "operation_id": "create_strategy", "awaiting_price_currency_reentry": True,
+            "collected_inputs": {"setup_id": 42},
+        },
+        "recent_action_results": {"setup": {
+            "entity_type": "setup", "result_status": "succeeded", "entity_id": 99,
+        }},
+    }
+    parent = asyncio.run(front._verified_strategy_parent(
+        message="De entry is 75.000 EUR, stop-loss 71.000 EUR, target 82.000 EUR",
+        conversation_context=context,
+    ))
+    assert bound == [(42, 7)]
+    assert parent == {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "1D"}
 
 
 def test_blocked_strategy_does_not_treat_currency_offsets_as_fixed_levels():
