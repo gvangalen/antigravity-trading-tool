@@ -586,6 +586,7 @@ class FinnV2OperationClassificationService:
         if re.search(
             r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b"
             r"[^.!?]{0,160}\b(?:een|a|an|ein(?:e|en|er|es)?)\s+"
+            r"(?:(?:tweede|nieuwe|andere|second|new|another|zweite|neue)\s+)?"
             r"(?:paper[-\s]+)?(?:strategie|strategy)\b",
             text,
         ):

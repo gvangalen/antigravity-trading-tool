@@ -137,6 +137,17 @@ def _explicit_fresh_create_operation_request(message: str) -> str | None:
         message, re.I,
     ):
         return operation
+    # The named setup may precede the new strategy object: "Maak voor mijn
+    # opgeslagen setup X een tweede Paper-strategie ...". In that form the
+    # first indefinite noun is the parent, not the requested object.
+    if operation == "create_strategy" and re.match(
+        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
+        r"[^.!?]{0,160}\b(?:een|a|an|ein(?:e|en|er|es)?)\s+"
+        r"(?:(?:tweede|nieuwe|andere|second|new|another|zweite|neue)\s+)?"
+        r"(?:paper[-\s]+)?(?:strategie|strategy)\b",
+        message, re.I,
+    ):
+        return operation
     return None
 
 
@@ -555,6 +566,19 @@ class FinnResponsesFrontDoor:
         guided_inputs = dict(guided.get("collected_inputs") or {}) if guided.get("operation_id") == "create_strategy" else {}
         async with session_factory() as session:
             resolver = FinnV2EntityResolutionService(session)
+            if guided.get("awaiting_price_currency_reentry") and guided_inputs.get("setup_id"):
+                # This ID came from an owner-scoped proposal that was just
+                # withdrawn. Recent conversation references must not rebind
+                # its replacement strategy to a different setup.
+                setup = await resolver.setups.get_setup_by_id(guided_inputs["setup_id"], self.user_id)
+                if not setup:
+                    return {}
+                return {
+                    "setup_id": guided_inputs["setup_id"],
+                    "setup_type": str(setup.get("setup_type") or "").lower(),
+                    "symbol": setup.get("symbol"),
+                    "timeframe": setup.get("timeframe"),
+                }
             target = await resolver.resolve_canonical_target(
                 user_id=self.user_id, entity_type="setup", message=message,
                 conversation_context=dict(conversation_context),
@@ -608,6 +632,11 @@ class FinnResponsesFrontDoor:
                 ),
                 message=message, conversation_context=conversation_context,
                 verified_asset=verified_asset,
+                verified_parent_setup=(
+                    await self._verified_strategy_parent(
+                        message=message, conversation_context=conversation_context,
+                    ) if contract.operation_id == "create_strategy" else {}
+                ),
             )
             return FinnResponsesFrontDoorResult(
                 FinnResponsesResult(

@@ -45,6 +45,24 @@ class FinnV2ProposalRepository(FinnV2RepositoryTransactionMixin):
         )
         return result.first()
 
+    async def list_open_for_conversation(
+        self, *, conversation_id: str, user_id: int,
+    ) -> list[tuple[FinnV2Proposal, FinnV2RuntimeContract]]:
+        """Return every unexpired owner-bound card before correcting one."""
+        result = await self.session.execute(
+            select(FinnV2Proposal, FinnV2RuntimeContract)
+            .join(FinnV2RuntimeContract, FinnV2RuntimeContract.run_id == FinnV2Proposal.run_id)
+            .where(
+                FinnV2Proposal.user_id == user_id,
+                FinnV2RuntimeContract.user_id == user_id,
+                FinnV2RuntimeContract.conversation_id == conversation_id,
+                FinnV2Proposal.status.in_(("draft", "pending_confirmation")),
+                FinnV2Proposal.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(FinnV2Proposal.created_at.desc())
+        )
+        return list(result.all())
+
     async def get_by_idempotency_key_for_user(self, *, idempotency_key: str, user_id: int) -> Optional[FinnV2Proposal]:
         result = await self.session.execute(
             select(FinnV2Proposal).where(

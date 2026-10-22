@@ -1367,6 +1367,10 @@ class FinnV2OrchestratorService:
         if not guided_state and (
             previous_state.get("terminal_status") in {"failed", "unavailable"}
             or prior_suggested_name
+            or (
+                previous_state.get("terminal_status") == "clarification_required"
+                and previous_clarification.get("reason") == "strategy_price_currency_conflict"
+            )
         ):
             # A failed turn or a name suggestion has no new guided draft to
             # persist. The owner-scoped conversation projection holds the
