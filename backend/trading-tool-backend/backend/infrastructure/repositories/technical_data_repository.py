@@ -2,7 +2,7 @@ from json import dumps
 from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, delete, Date, text
+from sqlalchemy import bindparam, select, and_, func, delete, Date, text
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -360,7 +360,7 @@ class TechnicalDataRepository:
 
         conditions = [
             "user_id = :user_id",
-            "indicator = :indicator",
+            "LOWER(indicator) = LOWER(:indicator)",
         ]
         params: dict[str, Any] = {
             "user_id": user_id,
@@ -533,7 +533,7 @@ class TechnicalDataRepository:
 
         conditions = [
             "user_id = :user_id",
-            "indicator = :indicator",
+            "LOWER(indicator) = LOWER(:indicator)",
         ]
         params: dict[str, Any] = {
             "user_id": user_id,
@@ -550,12 +550,7 @@ class TechnicalDataRepository:
                 params["symbol"] = normalized_symbol
 
         await self.session.execute(
-            text(
-                f"""
-                DELETE FROM user_indicator_configs
-                WHERE {" AND ".join(conditions)}
-                """
-            ),
+            text(f"DELETE FROM user_indicator_configs WHERE {' AND '.join(conditions)}"),
             params,
         )
 
@@ -608,15 +603,16 @@ class TechnicalDataRepository:
             else:
                 conditions.append("symbol = :symbol")
                 params["symbol"] = normalized_symbol
-        await self.session.execute(
-            text(
-                f"""
-                DELETE FROM user_indicator_configs
-                WHERE {" AND ".join(conditions)}
-                """
-            ),
-            params,
-        )
+        retained = list(dict.fromkeys(str(indicator).strip().lower() for indicator, _ in indicators))
+        delete_query = f"DELETE FROM user_indicator_configs WHERE {' AND '.join(conditions)}"
+        if retained:
+            # Keep matching rows, including owner config_json scoring curves.
+            delete_query += " AND LOWER(indicator) NOT IN :retained"
+            params["retained"] = retained
+        statement = text(delete_query)
+        if retained:
+            statement = statement.bindparams(bindparam("retained", expanding=True))
+        await self.session.execute(statement, params)
 
         created: List[UserIndicatorConfig] = []
         for indicator, priority in indicators:
@@ -670,7 +666,7 @@ class TechnicalDataRepository:
                 WHERE user_id = :user_id
                   AND symbol = :symbol
                   AND category = :category
-                  AND indicator = :indicator
+                  AND LOWER(indicator) = LOWER(:indicator)
                 """
             ),
             {
@@ -706,7 +702,7 @@ class TechnicalDataRepository:
             symbol=normalized_symbol,
         )
         columns = await self._get_user_config_columns()
-        conditions = ["user_id = :user_id", "indicator = :indicator"]
+        conditions = ["user_id = :user_id", "LOWER(indicator) = LOWER(:indicator)"]
         params: dict[str, Any] = {"user_id": user_id, "indicator": indicator}
         if "category" in columns:
             conditions.append("category = :category")

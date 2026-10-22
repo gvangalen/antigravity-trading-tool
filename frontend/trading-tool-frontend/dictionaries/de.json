@@ -947,7 +947,11 @@
       "continueLabel": "Weiter zu Mein Plan",
       "continuingLabel": "Mein Plan wird geöffnet…",
       "loadError": "Das Laden dieses Analyse-Onboardings ist fehlgeschlagen. Bitte versuche es erneut.",
-      "saveError": "Das Speichern dieses Analyseschritts ist fehlgeschlagen. Bitte versuche es erneut."
+      "saveError": "Das Speichern dieses Analyseschritts ist fehlgeschlagen. Bitte versuche es erneut.",
+      "syncFailed": "Der Indikator wurde gespeichert, aber der Quellwert konnte nicht abgerufen werden. Versuche es erneut oder wähle einen anderen Indikator; dieser Schritt ist noch nicht abgeschlossen.",
+      "syncRuleMissing": "Dieser Indikator hat einen Messwert, aber keine gültige Bewertungsregel. Wähle vorerst einen anderen Indikator; dieser Schritt ist noch nicht abgeschlossen.",
+      "pendingEyebrow": "Auswahl gespeichert",
+      "pendingScore": "Der Score oder die Aktualität eines gewählten Indikators ist noch nicht bestätigt. Versuche, ihn erneut zu synchronisieren; bis dahin kannst du nicht zu Mein Plan fortfahren."
     },
     "planOnboardingStep": {
       "dcaScoreExplanation": "Der DCA-Rhythmus bestimmt, wann ein Kauf geprüft wird. Score-Grenzen sind optional: Außerhalb dieser Grenzen wartet ein verknüpfter Bot. Ohne Grenzen bleibt der Rhythmus bestehen, aber andere Prüfungen können einen Kauf verhindern. Ein fehlender Score ist kein Kaufsignal.",

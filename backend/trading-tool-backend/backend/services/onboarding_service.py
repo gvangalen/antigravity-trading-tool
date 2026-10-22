@@ -104,6 +104,11 @@ class OnboardingService:
             STEP_FLAG_MAP[s]: completed.get(s, False)
             for s in DEFAULT_STEPS
         }
+        # A completed flag alone cannot validate a changed indicator choice.
+        # Reconcile analysis steps with the currently configured scored row.
+        for step in ("market", "macro", "technical"):
+            flag = STEP_FLAG_MAP[step]
+            status_kwargs[flag] = bool(status_kwargs[flag] and inferred_state.get(flag))
         phases_completed = self._build_phase_completion_map(status_kwargs, inferred_state)
         phases_unlocked = self._build_phase_unlock_map(phases_completed)
         phase_missing = self._build_phase_missing_map(status_kwargs, inferred_state)

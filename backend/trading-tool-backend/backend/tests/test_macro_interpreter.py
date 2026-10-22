@@ -29,9 +29,14 @@ class _ResponseText:
 
 
 def test_sp500_fred_returns_last_csv_value(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    today = datetime.now(timezone.utc).date()
     def fake_fetch_text(url, timeout=20):
         assert url == _fred_csv_url("SP500")
-        return "observation_date,SP500\n2026-08-05,7721.70\n2026-08-06,7733.85\n"
+        return "observation_date,SP500\n" + "\n".join(
+            f"{today - timedelta(days=offset)},{7733.85 - offset}"
+            for offset in range(6, 0, -1)
+        ) + "\n"
 
     monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
 
@@ -41,13 +46,82 @@ def test_sp500_fred_returns_last_csv_value(monkeypatch):
         link="fred:SP500",
     )
 
-    assert result == {"value": 7733.85, "observed_at": "2026-08-06"}
+    assert result == {"value": 7732.85, "observed_at": (today - timedelta(days=1)).isoformat()}
+
+
+def test_sp500_uses_dated_fallback_when_fred_returns_maintenance_html(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.utils import macro_interpreter
+
+    today = datetime.now(timezone.utc).date()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    monkeypatch.setattr(macro_interpreter, "_fetch_text", lambda *_args, **_kwargs: "<html>maintenance</html>")
+    stamps = [int(datetime.combine(today - timedelta(days=offset), datetime.min.time(), timezone.utc).timestamp())
+              for offset in range(6, 0, -1)]
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", lambda *_args, **_kwargs: {
+        "chart": {"result": [{"timestamp": stamps,
+                              "indicators": {"quote": [{"close": [5721.0 - offset for offset in range(6, 0, -1)]}]}}]}
+    })
+    reading = fetch_macro_value("sp500", source="fred", link="fred:SP500")
+    history = macro_interpreter.fetch_absolute_macro_history("sp500")
+
+    assert reading == {"value": 5720.0, "observed_at": yesterday}
+    assert len(history) == 6
+
+
+def test_sp500_skips_stale_fred_series_in_favour_of_recent_index_closes(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.utils import macro_interpreter
+
+    today = datetime.now(timezone.utc).date()
+    monkeypatch.setattr(macro_interpreter, "_fetch_text", lambda *_args, **_kwargs:
+                        "observation_date,SP500\n" + "\n".join(
+                            f"{today - timedelta(days=offset)},{5000 + offset}"
+                            for offset in range(20, 14, -1)
+                        ))
+    stamps = [int(datetime.combine(today - timedelta(days=offset), datetime.min.time(), timezone.utc).timestamp())
+              for offset in range(6, 0, -1)]
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", lambda *_args, **_kwargs: {
+        "chart": {"result": [{"timestamp": stamps,
+                              "indicators": {"quote": [{"close": [6000.0] * len(stamps)}]}}]}
+    })
+
+    assert fetch_macro_value("sp500", source="fred", link="fred:SP500") == {
+        "value": 6000.0, "observed_at": (today - timedelta(days=1)).isoformat(),
+    }
+
+
+def test_sp500_uses_second_yahoo_chart_host_without_twelve_data_key(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.utils import macro_interpreter
+
+    yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
+    stamps = [int(datetime.combine(yesterday - timedelta(days=offset), datetime.min.time(), timezone.utc).timestamp())
+              for offset in range(5, -1, -1)]
+    monkeypatch.setattr(macro_interpreter, "_fetch_text", lambda *_args, **_kwargs: "<html>maintenance</html>")
+    monkeypatch.setattr(macro_interpreter, "TwelveDataMacroProvider", lambda: type("Provider", (), {"api_key": ""})())
+    urls = []
+
+    def fake_fetch_json(url, timeout=10):
+        urls.append(url)
+        return {"chart": {"result": [{"timestamp": stamps,
+                                    "indicators": {"quote": [{"close": [7753.17] * len(stamps)}]}}]}}
+
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", fake_fetch_json)
+    reading = fetch_macro_value("sp500", source="fred", link="fred:SP500")
+    assert reading == {"value": 7753.17, "observed_at": yesterday.isoformat()}
+    assert urls == [f"{macro_interpreter.YAHOO_SP500_GSPC_ALT}?range=6mo&interval=1d"]
 
 
 def test_sp500_legacy_fred_json_url_returns_last_value(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    today = datetime.now(timezone.utc).date()
     def fake_fetch_text(url, timeout=20):
         assert url == _fred_csv_url("SP500")
-        return "observation_date,SP500\n2026-08-05,7723.55\n2026-08-06,7709.96\n"
+        return "observation_date,SP500\n" + "\n".join(
+            f"{today - timedelta(days=offset)},{7709.96 + offset}"
+            for offset in range(6, 0, -1)
+        ) + "\n"
 
     monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
 
@@ -57,7 +131,7 @@ def test_sp500_legacy_fred_json_url_returns_last_value(monkeypatch):
         link="https://api.stlouisfed.org/fred/series/observations?series_id=SP500&api_key=old-key&file_type=json",
     )
 
-    assert result == {"value": 7709.96, "observed_at": "2026-08-06"}
+    assert result == {"value": 7710.96, "observed_at": (today - timedelta(days=1)).isoformat()}
 
 
 def test_vix_fred_skips_blank_rows(monkeypatch):

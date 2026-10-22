@@ -389,8 +389,10 @@ class MacroDataService:
         )
         saved_record = await self.repository.add_macro_data(record)
 
-        # Mark onboarding
-        await self._mark_onboarding(user_id, "macro")
+        # Dated history can be pending, but a missing rule is a configuration
+        # error and must not mark the choice as ready.
+        if scored.get("rule_origin") not in {"missing", "generated_fallback"}:
+            await self._mark_onboarding(user_id, "macro")
 
         return MacroAddResponse(
             message=f"Indicator '{indicator_name}' opgeslagen.",

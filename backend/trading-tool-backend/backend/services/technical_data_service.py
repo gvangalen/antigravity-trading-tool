@@ -20,7 +20,7 @@ from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.technical_indicator_provider_registry import TechnicalIndicatorProviderRegistry
 from backend.services.providers.twelve_data_technical_indicator_adapter import TechnicalSourceRateLimited
 from backend.utils.technical_interpreter import calculate_rsi, fetch_technical_value
-from backend.utils.technical_interpreter import normalize_technical_value
+from backend.utils.technical_interpreter import normalize_technical_value_for_rules
 from backend.utils.scoring_engine import score_indicator
 from backend.utils.scoring_utils import normalize_indicator_name, score_source_is_fresh
 from backend.utils.db import get_db_connection
@@ -64,7 +64,9 @@ class TechnicalDataService:
             raise RuntimeError("Geen database verbinding voor scoring engine.")
         try:
             normalized = normalize_indicator_name(name)
-            normalized_value = normalize_technical_value(normalized, value)
+            normalized_value = normalize_technical_value_for_rules(
+                conn, normalized, value, user_id, symbol,
+            )
             scored = score_indicator(
                 conn=conn,
                 category="technical",
@@ -448,7 +450,8 @@ class TechnicalDataService:
             symbol=symbol,
             observed_at=(result.get("observed_at") if isinstance(result, dict) else None),
         )
-        await mark_step_completed(user_id, "technical", self.session)
+        if score is not None:
+            await mark_step_completed(user_id, "technical", self.session)
 
         return {
             "message": f"Indicator '{name}' toegevoegd.",

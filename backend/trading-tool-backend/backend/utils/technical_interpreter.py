@@ -1,10 +1,10 @@
 import logging
 import httpx
+import math
 from datetime import datetime, timezone
 
 from backend.utils.scoring_utils import (
     normalize_indicator_name,
-    get_score_rule_from_db,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,6 +119,9 @@ async def fetch_technical_value(name: str, source: str = None, link: str = None,
 # =========================================================
 def normalize_technical_value(indicator: str, value: float) -> float:
 
+    if value is not None and not math.isfinite(float(value)):
+        raise ValueError("Non-finite technical indicator reading")
+
     try:
         if value is None:
             return 0
@@ -156,9 +159,13 @@ def normalize_technical_value(indicator: str, value: float) -> float:
             return min(100, (deviation / cap) * 100)
 
         if "ma200" in indicator or "ma_200" in indicator:
-            deviation = abs(value - 1)
-            cap = 0.2
-            return min(100, (deviation / cap) * 100)
+            # The provider returns close / MA200. Preserve direction: a price
+            # below the average must never normalize like the same gap above it.
+            if value <= 0.8:
+                return 0
+            if value >= 1.2:
+                return 100
+            return max(0, min(100, 50 + (value - 1.0) * 250))
 
         if "volume" in indicator:
             cap = 1_000_000_000
@@ -180,6 +187,23 @@ def normalize_technical_value(indicator: str, value: float) -> float:
         return 0
 
 
+def normalize_technical_value_for_rules(conn, indicator: str, value: float,
+                                        user_id: int, symbol: str | None = None) -> float:
+    """Keep existing owner MA200 curves on their original distance scale."""
+    if not math.isfinite(float(value)):
+        raise ValueError("Non-finite technical indicator reading")
+    normalized = normalize_indicator_name(indicator)
+    if normalized == "ma_200":
+        from backend.utils.scoring_engine import fetch_rules_for_indicator
+        rules = fetch_rules_for_indicator(
+            conn, category="technical", indicator=normalized,
+            user_id=user_id, symbol=symbol, enforce_fixed_buckets=False,
+        )
+        if rules and all(rule.score_mode == "custom" for rule in rules):
+            return min(100, abs(float(value) - 1.0) / 0.2 * 100)
+    return normalize_technical_value(normalized, value)
+
+
 # =========================================================
 # 🧠 Interpretatie via DB scoreregels (USER-AWARE)
 # =========================================================
@@ -187,18 +211,21 @@ def interpret_technical_indicator_db(indicator: str, value: float, user_id: int)
 
     try:
         normalized_name = normalize_indicator_name(indicator)
-
-        normalized_value = normalize_technical_value(
-            normalized_name,
-            value,
-        )
-
-        result = get_score_rule_from_db(
-            "technical",
-            normalized_name,
-            normalized_value,
-            user_id=user_id,   # ✅ FIX
-        )
+        from backend.utils.db import get_db_connection
+        from backend.utils.scoring_engine import score_indicator
+        conn = get_db_connection()
+        if conn is None:
+            raise RuntimeError("Geen databaseverbinding voor technische scoring")
+        try:
+            normalized_value = normalize_technical_value_for_rules(
+                conn, normalized_name, value, user_id,
+            )
+            result = score_indicator(
+                conn, category="technical", indicator=normalized_name,
+                value=normalized_value, user_id=user_id,
+            )
+        finally:
+            conn.close()
 
         if not result or result.get("score") is None:
             return {

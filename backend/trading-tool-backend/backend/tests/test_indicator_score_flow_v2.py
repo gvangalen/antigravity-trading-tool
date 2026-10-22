@@ -103,10 +103,18 @@ def test_legacy_interpreters_do_not_turn_a_missing_rule_into_ten(monkeypatch):
     for module, function, indicator, value in (
         (market_interpreter, market_interpreter.interpret_market_indicator, "price", 100),
         (macro_interpreter, macro_interpreter.interpret_macro_indicator, "dxy", 102.25),
-        (technical_interpreter, technical_interpreter.interpret_technical_indicator_db, "rsi", 58.33),
     ):
         monkeypatch.setattr(module, "get_score_rule_from_db", lambda *_args, **_kwargs: {"score": None})
         assert function(indicator, value, 7)["score"] is None
+
+    from backend.utils import db, scoring_engine
+    class Connection:
+        def close(self):
+            pass
+    monkeypatch.setattr(db, "get_db_connection", lambda: Connection())
+    monkeypatch.setattr(scoring_engine, "fetch_rules_for_indicator", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(scoring_engine, "score_indicator", lambda *_args, **_kwargs: {"score": None})
+    assert technical_interpreter.interpret_technical_indicator_db("rsi", 58.33, 7)["score"] is None
 
 
 def test_technical_readback_accepts_a_measured_indicator_without_score():
