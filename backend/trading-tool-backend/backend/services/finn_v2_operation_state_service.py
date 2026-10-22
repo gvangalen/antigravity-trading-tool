@@ -1135,7 +1135,10 @@ class FinnV2OperationStateService:
         return bool(re.search(
             r"\b(?:corrigeer|correct|correctie|wijzig|verander|pas\s+aan|update|change|"
             r"ändern|aendere|korrigiere|aktualisiere)\b|"
-            r"\bpas\b[^.!?\n]{0,100}\baan\b|\bmaak\b.+\btoch\b",
+            # A correction can name a long saved setup and strategy before
+            # "aan". A character cap made those owner-scoped corrections
+            # look like fresh requests and could leave an old card actionable.
+            r"\bpas\b[^.!?\n]*\baan\b|\bmaak\b.+\btoch\b",
             str(text or "").casefold(),
         ))
 
@@ -1517,6 +1520,25 @@ class FinnV2OperationStateService:
             for token in (match.group("before"), match.group("after")):
                 if token:
                     currencies.add(FinnV2OperationStateService._currency_token(token))
+        # A card correction may quote a new target and describe unchanged
+        # entry/stop units without repeating their numbers. Both units still
+        # belong to the proposed strategy and must not become a card.
+        target_correction = re.search(
+            r"\b(?:target|doel|koersdoel)\b[^.!?\n]{0,65}?\bnaar\s*"
+            r"\d[\d.,]*\s*(?P<unit>usd|eur|dollars?|euros?|\$|€)(?=\W|$)",
+            text, re.IGNORECASE,
+        )
+        if target_correction:
+            currencies.add(FinnV2OperationStateService._currency_token(
+                target_correction.group("unit"),
+            ))
+        unchanged_levels = re.search(
+            r"\b(?:entry|instap(?:prijs)?)\s+en\s+stop(?:-loss)?\b"
+            r"[^.!?\n]{0,35}?\b(?:in|op)\s+(?P<unit>usd|eur)\b",
+            text, re.IGNORECASE,
+        )
+        if unchanged_levels:
+            currencies.add(unchanged_levels.group("unit").upper())
         return "MIXED" if len(currencies) > 1 else next(iter(currencies)) if currencies else None
 
     @staticmethod

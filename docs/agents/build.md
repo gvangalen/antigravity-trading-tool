@@ -128,6 +128,10 @@ QA status source.
   live runtime acceptance belongs to QA.
 - The sealed holdout is QA-exclusive. Build must not read, copy, score, tune
   against, or submit it through any fixture, runner, provider, or live route.
+  QA may disclose the exact failing question, necessary conversation context
+  and sanitized case-specific diagnostics in its verdict, as defined in
+  `FINN_RELEASE_PROCESS.md`; Build may use that handoff to reproduce and repair
+  the defect locally.
 - `FINN_BUILD_SMOKE_USER_ID` may be used only for voluntary, generic,
   non-sealed production diagnostics. It is not required before independent
   QA, and its token remains in the server-side smoke process.

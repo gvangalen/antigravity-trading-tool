@@ -4,9 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuity and QA fault handoff (22 October 2026)
+
+Phase: `BUILD_LOCAL_VALIDATION`. Branch:
+`codex/finn-strategy-continuity-state-machine`. The previous independent
+[QA workflow 39837873622](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39837873622)
+remains **NOT_ACCEPTED** (14/17 runner cases, plus a safety failure in a
+runner-green mixed-currency case). This candidate is not yet deployed or
+accepted.
+
+Build used QA's authorized, case-specific failing-question handoff to repair
+the bounded two-rule waiver, preserve separate strategy drafts, bind a target
+correction to the intended open card, and reject mixed EUR/USD levels before
+any confirmable proposal. The local owner-scoped six-turn FastAPI/Celery and
+real Responses probe completed the waiver, independent A/B drafts, target
+correction, mixed-currency clarification and complete EUR re-entry without
+confirmation or trade. An unquoted strategy name containing rule-like words
+now requires visible name ratification and a residual rule check. Security
+and Architecture found no concrete remaining P1/P2 in the local diff.
+
+On final local source, the root backend suite passed **3795 tests, 4 existing
+skips**; the restarted worker-driven action matrix passed **16/16** contracts
+and the action-adapter suite passed **19/19**. The matrix recorded zero broker
+orders, Live trading calls, Live bots and production connections (artifact
+SHA-256 `90aff13ddb647842ad84e3823d02a73010bc9821e69f1283cd29f8b694709e4f`). Real Responses selector
+development passed **20/20** and regression **109/109**, both with zero
+provider, schema, timeout, parse or validation failures. Frontend typecheck,
+i18n lint/tests, command/proposal/setup tests, production build, and high-severity
+audit passed on unchanged frontend source; the audit reported zero
+vulnerabilities. All these are Build checks, not independent live acceptance.
+
+The user has given standing authorization for QA to disclose every relevant
+failed-case question, necessary prior turns and sanitized runtime details in
+the existing QA task without repeated permission questions. The canonical
+process and role docs now require that concrete fault handoff while keeping
+credentials and the complete protected dataset with QA.
+
 ## FINN strategy continuity: remaining three follow-ups (22 October 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`. The repair branch was
+Phase: `NOT_ACCEPTED`. The repair branch was
 `codex/finn-strategy-continuity-followup-v4`. The independent protected
 [QA workflow 39825723618](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39825723618)
 ran all 17 cases on public SHA `2b42778b8c530cdbbdb5aa9305d224dbdb136226` and
@@ -57,8 +93,18 @@ HTTP 200 and exactly that product SHA. This documentation-only status update
 will itself create a later public SHA. Build must wait for its final CI and
 Auto Deploy, verify both public SHAs and absence of a newer pending deploy,
 then hand off the unchanged 17-case scope to the same independent QA Agent.
-The previous `NOT_ACCEPTED` verdict remains until that authenticated live
-retest finishes.
+The independent [QA workflow 39837873622](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39837873622)
+ran all 17 cases on final public SHA `738ba4a3c86a7b44cbaff15d8d46a5acf37bacd1`.
+The runner counted 14 passed and three product failures: the explicit rule
+waiver again ended at `strategy_rule_not_captured`; an open strategy target
+correction was routed to `update_setup`; and complete EUR re-entry again made
+an `update_setup` proposal. Independent QA also found a fourth, safety-critical
+failure in a runner-green case: a mixed EUR/USD correction produced a
+confirmable `create_strategy` card instead of a clarification. No proposal
+was confirmed or traded. QA reported zero broker orders, Live trading calls
+and Live bot activations, with matching polling/SSE responses. This candidate
+is not accepted; the next repair batch must cover both the three continuations
+and the mixed-currency proposal boundary.
 
 ## FINN strategy continuity: six failed follow-ups (22 October 2026)
 

@@ -98,7 +98,8 @@ evidence, Build sends the assignment to the existing QA Agent and follows up
 there. Reuse that agent and task across test steps and repair cycles;
 do not create a new QA agent or task for each step. QA decides its own test
 execution and verdict independently. Build cannot invoke the protected QA
-runner or inspect QA-only fixtures, manifests, prompts, or the sealed holdout.
+runner or inspect QA-only storage, fixtures, manifests, or the complete sealed
+holdout. QA gives Build the relevant failed-case evidence directly for repair.
 The standing authorization does not expand the agreed QA scope or permit Live
 orders, changes to ordinary users, or new kinds of protected fixture writes.
 Those still require explicit user authorization. QA still checks the exact
@@ -115,6 +116,19 @@ QA contract.
 
 QA publishes `ACCEPTED` or `NOT_ACCEPTED` once, with artifacts and hashes. The
 verdict does not start Build, deployment, or another QA run automatically.
+
+For `NOT_ACCEPTED`, QA gives Build a concrete repair handoff in the existing
+QA task without asking the user for another disclosure permission. Include
+each failing case's exact user question, necessary preceding turns, expected
+behavior, observed answer or proposal fields, relevant tool selection and
+state, run ID, severity, and sanitized error code, trace or response. Include
+an apparently passing case when independent review finds a safety failure that
+the runner missed. QA may share further case-specific diagnostic evidence
+directly with Build as needed to make the defect reproducible, without a new
+permission question. QA does not transfer credentials, cookies, personal
+fixture identifiers, the protected manifest, or the complete sealed dataset.
+Build uses this handoff for local repairs and does not read QA-only storage.
+QA keeps the verdict and retest independent.
 
 ## Evidence Rules
 
