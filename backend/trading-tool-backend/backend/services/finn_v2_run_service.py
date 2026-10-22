@@ -109,6 +109,8 @@ def _priced_two_rule_strategy_request(message: str):
 
 def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> bool:
     normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
+    if _freeform_strategy_rule_waiver_inputs(message, original_message) is not None:
+        return True
     if normalized in {
         "maak strategievoorstel zonder deze automatische regels",
         "begin nieuw strategievoorstel zonder eerdere regels",
@@ -253,6 +255,96 @@ def _explicit_strategy_rule_waiver(message: str, original_message: str = "") -> 
         r"|€?\d+(?:[.,]\d+)? basisbedrag|\d+[hdw]|naam|"
         r"(?:voorzichtige|gebalanceerde|agressieve) risicostijl)", part.strip(),
     ) for part in retained.split(",") if part.strip())
+
+
+def _freeform_strategy_rule_waiver_inputs(
+    message: str, original_message: str,
+) -> dict[str, object] | None:
+    """Accept explicit prose consent only with a complete, matching fixed draft.
+
+    The waiver is not permission to invent or change a trading rule. Both the
+    original and follow-up must independently state the same fixed fields and
+    parent name; anything additional remains a clarification.
+    """
+    original = re.sub(r"\s+", " ", str(original_message or "").strip())
+    current = re.sub(r"\s+", " ", str(message or "").strip())
+    if not original or not _strategy_rule_is_unencoded(original) or "?" in current:
+        return None
+    # A shorthand waiver is safe only for this complete, bounded request
+    # shape. Counting known keywords is not enough: a third condition can be
+    # phrased without any of those keywords.
+    if re.fullmatch(
+        r"Maak een Paper-strategie voor mijn opgeslagen setup [\w -]+\. "
+        r"De strategie heet [\w -]+\. Vast bedrag €[\d.,]+, "
+        r"(?:voorzichtig|gebalanceerd|agressief) risico, "
+        r"entry [\d.,]+ (?:USD|EUR), stop-loss [\d.,]+ (?:USD|EUR) "
+        r"en koersdoel [\d.,]+ (?:USD|EUR)\. "
+        r"Koop alleen bij een stijgende trend en niet als RSI zwak is\.",
+        original, re.I,
+    ) is None:
+        return None
+    automatic_rule_markers = re.findall(
+        r"\b(?:koop|buy|kaufe|handel|handelen|trade)\s+(?:ook\s+)?"
+        r"(?:alleen|uitsluitend|only|nur)\s+(?:bij|als|wanneer|when|if|bei|wenn)\b|"
+        r"\b(?:niet|not|nicht)\s+(?:als|when|if|bij)\b|"
+        r"\b(?:maximaal|maximum|at\s+most)\s+\w+\s+"
+        r"(?:trades?|orders?|transacties?)\s+per\b|"
+        r"\b\d+(?:[.,]\d+)?\s*%\s*(?:onder|boven|below|above)\b",
+        original, re.I,
+    )
+    if len(automatic_rule_markers) != 2:
+        return None
+    consent = re.fullmatch(
+        r"(?:laat|schrap)\s+(?:alleen|uitsluitend)\s+(?:die|deze)\s+"
+        r"(?:twee|2)\s+(?:(?:niet[- ]?opslagbare|automatische)\s+)*"
+        r"(?:regels?|voorwaarden)\s+(?:weg|vervallen)"
+        r"[.;]\s*(?P<retained>behoud\s+.+?)"
+        r"(?:[.;]\s*toon\s+(?:alleen|uitsluitend)\s+(?:een|het)?\s*"
+        r"(?:concept|voorstel)(?:kaart)?)?[.!]?",
+        current, re.I,
+    )
+    if consent is None:
+        return None
+    retained = consent.group("retained")
+    if re.fullmatch(
+        r"behoud mijn opgeslagen setup [\w -]+, de naam [\w -]+, "
+        r"vast bedrag €[\d.,]+, (?:voorzichtig|gebalanceerd|agressief) "
+        r"risico, entry [\d.,]+ (?:USD|EUR), "
+        r"stop-loss [\d.,]+ (?:USD|EUR) en "
+        r"koersdoel [\d.,]+ (?:USD|EUR)",
+        retained, re.I,
+    ) is None:
+        return None
+    if _strategy_rule_is_unencoded(retained) or re.search(
+        r"\b(?:automatisch|trend|rsi|macd|adx|filter|signaal|signal|"
+        r"voorwaarde|condition|regel)\b", retained, re.I,
+    ):
+        return None
+    named_parent = re.search(r"\bsetup\s+([\w -]{2,80}?)(?=\s*[,;.]|$)", retained, re.I)
+    original_parent = re.search(
+        r"\b(?:mijn opgeslagen )?setup\s+([\w -]{2,80}?)(?=\s*[,;.]|$)", original, re.I,
+    )
+    if (named_parent is None or original_parent is None or
+            named_parent.group(1).strip().casefold() != original_parent.group(1).strip().casefold()):
+        return None
+    state = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    before = state.explicit_inputs(contract=contract, message=original, explicit_asset=None)
+    after = state.explicit_inputs(contract=contract, message=retained, explicit_asset=None)
+    required = {"name", "base_amount", "risk_profile", "entry", "stop_loss", "targets", "price_currency"}
+    if not required.issubset(before) or not required.issubset(after):
+        return None
+    if any(before[key] != after[key] for key in required):
+        return None
+    if after["price_currency"] not in {"USD", "EUR"}:
+        return None
+    # A global currency override or a relative level invalidates the replay,
+    # even if the ordinary typed parser extracted three numbers.
+    if any(len(re.findall(r"\b(?:usd|eur)\b", text, re.I)) != 3 for text in (original, retained)):
+        return None
+    if re.search(r"\b(?:onder|boven|below|above|plus)\s+(?:entry|instap|ma\s*\d+)\b", retained, re.I):
+        return None
+    return {key: after[key] for key in required}
 
 
 def _references_blocked_strategy_draft(message: str) -> bool:
@@ -413,6 +505,13 @@ def _inherits_blocked_strategy_rules(message: str) -> bool:
         r"(?:het|de|the|dem|der)?\s*(?:vorige|eerdere|oude|previous|prior|old|"
         r"vorherigen?|alten?)\s+(?:concept|draft|entwurf)\b",
         normalized,
+    ) or re.search(
+        r"\b(?:neem\s+niets|take\s+nothing|übernimm\s+nichts)\s+"
+        r"(?:uit|from|aus)\s+(?:de\s+|the\s+|der\s+)?"
+        r"(?:vorige|eerdere|oude|previous|prior|old|vorherigen?)\s+"
+        r"(?:strategie|strategy|concept|draft|entwurf)\s+"
+        r"(?:over|along|mit)\b",
+        normalized,
     )
     if no_carry:
         # Remove only the negated clause. Later sentences can still request
@@ -478,6 +577,20 @@ def _has_independent_strategy_inputs(message: str) -> bool:
         and re.search(r"\b(?:dagelijks|wekelijks|maandelijks|daily|weekly|monthly|"
                       r"täglich|wöchentlich|monatlich)\b", message, re.I)
     )
+
+
+def _explicitly_separates_new_strategy(message: str) -> bool:
+    """A complete new request can expressly exclude the previous draft."""
+    return bool(re.search(
+        r"\b(?:neem\s+niets\s+uit|take\s+nothing\s+from|"
+        r"übernimm\s+nichts\s+aus)\s+(?:de\s+|the\s+|der\s+)?"
+        r"(?:vorige|eerdere|oude|previous|prior|old|vorherigen?)\s+"
+        r"(?:strategie|strategy|concept|draft|entwurf)\s+(?:over|along|mit)\b|"
+        r"\b(?:zonder|without|ohne)\s+(?:de\s+|the\s+|die\s+)?"
+        r"(?:vorige|eerdere|oude|previous|prior|old|vorherigen?)\s+"
+        r"(?:automatische\s+|automatic\s+)?(?:regels?|rules?|regeln?)\b",
+        message, re.I,
+    ))
 
 
 def _discard_superseded_strategy_rule_block(context: dict, message: str) -> bool:
@@ -700,35 +813,73 @@ def _positive_owner_setup_matches(
     ]
     if exact_rows:
         return exact_rows
-    first_clause = re.split(r"[.!?;]", text, maxsplit=1)[0]
-    tail = text[len(first_clause):].strip(" .!?;\t\r\n")
-    # The only multi-sentence form accepted here is a fully constrained,
-    # positive priced request. Arbitrary prose can retract or qualify the
-    # first sentence, even without naming a second setup.
-    if tail and _priced_two_rule_strategy_request(message) is None:
+    # A user's unsupported trading rule often contains "niet" and several
+    # sentences. Neither negates the explicitly named parent. Check the
+    # *relationship to that setup* instead of rejecting all negation or all
+    # prose after the first period. Still refuse corrections and competing
+    # setup names before binding an owner-scoped parent.
+    if len(resolver._explicit_message_matches(text, setups)) > 1:
         return []
-    # Punctuation can introduce a correction within one sentence. A decimal
-    # comma in a price is harmless; any other comma requires a standalone
-    # setup answer rather than guessing from the first name.
-    if re.search(r"(?<!\d),|,(?!\d)", first_clause) or re.search(
-        r"\b(?:maar|but|sondern|however|instead|bedoel|mean|meine|"
-        r"verkeerd|wrong|falsch|andere|other|anderes|wacht|wait)\b",
-        first_clause,
-    ) or len(resolver._explicit_message_matches(first_clause, setups)) > 1:
+    corrections = re.search(
+        r"(?:^|[.;!?]\s*)(?:nee|no|nein)\b|"
+        r"\b(?:toch\s+niet|rather\s+than|liever|instead|"
+        r"ik\s+bedoel|i\s+mean|ich\s+meine|wacht|wait|"
+        r"andere\s+setup|ander\s+plan|other\s+setup|wrong\s+setup|"
+        r"verkeerde\s+setup|falsches?\s+setup|"
+        r"(?:deze|die|dit|dat|this|that)\s+(?:wil\s+ik\s+niet\s+gebruiken|"
+        r"was\s+(?:alleen|slechts)\s+ter\s+illustratie)|"
+        r"(?:ik\s+wil\s+(?:deze|die|dit|dat)\s+niet\s+gebruiken|"
+        r"i\s+do\s+not\s+want\s+to\s+use\s+(?:this|that)|"
+        r"ich\s+will\s+(?:diese|das)\s+nicht\s+verwenden)|"
+        r"(?:dit|dat|this|that)\s+is\s+(?:slechts\s+)?(?:een\s+)?voorbeeld|"
+        r"(?:dit|dat|this|that)\s+is\s+niet\s+(?:de\s+)?juiste\s+setup)\b|"
+        r"\b(?:deze|die|dit|dat|this|that)\s+setup\b[^.!?]{0,80}"
+        r"\b(?:niet|not|nicht)\b|"
+        r"\b(?:die|which)\s+(?:ik|i|ich)\s+(?:niet|not|nicht)\s+"
+        r"(?:wil|want|möchte)\s+(?:gebruiken|use|verwenden)\b",
+        text,
+    )
+    if corrections:
         return []
-    if re.search(r"\b(?:niet|not|nicht|geen|no|keine?|zonder|without|ohne)\b", first_clause):
-        return []
-    return [
-        row for row in setups
-        if row.get("name") and re.search(
-            r"\b(?:voor|bij|aan|for|bei|für)\s+(?:mijn\s+|my\s+|mein(?:e|em|en)?\s+|"
-            r"de\s+|the\s+|dem\s+)?(?:opgeslagen\s+|saved\s+|gespeicherten?\s+)?"
-            r"setup\s+" + re.escape(" ".join(str(row["name"]).casefold().split()))
-            + r"(?=$|[,;.]|\s+(?:een|a|eine?|met|with|mit|zonder|without|ohne|"
-            r"die|that|waarbij|where|op|als|as|voor|for|te|to|en|and|und)\b)",
-            first_clause,
+    mentioned_assets = mentioned_catalog_symbols(message)
+    matches: list[dict[str, object]] = []
+    for row in setups:
+        name = " ".join(str(row.get("name") or "").casefold().split())
+        if not name:
+            continue
+        row_symbol = str(row.get("symbol") or "").upper()
+        if row_symbol and any(symbol != row_symbol for symbol in mentioned_assets):
+            continue
+        pattern = (
+            r"\b(?:voor|bij|aan|for|bei|für)\s+"
+            r"(?:mijn\s+|my\s+|mein(?:e|em|en)?\s+|de\s+|the\s+|dem\s+)?"
+            r"(?:opgeslagen\s+|saved\s+|gespeicherten?\s+)?"
+            r"(?:setup\s+)?" + re.escape(name)
+            + r"(?=$|[,;.!?]|\s+(?:een|a|eine?|met|with|mit|zonder|without|ohne|"
+            r"die|that|waarbij|where|op|als|as|voor|for|te|to|en|and|und)\b)"
         )
-    ]
+        for match in re.finditer(pattern, text):
+            before = text[max(0, match.start() - 24):match.start()]
+            after = text[match.end():]
+            if re.search(r"\b(?:niet|not|nicht|geen|no|keine?|zonder|without|ohne)\s*$", before):
+                continue
+            if re.match(r"^\s*(?:,\s*)?(?:niet|not|nicht|maar|but|sondern|however|wacht|wait)\b", after):
+                continue
+            matches.append(row)
+            break
+    return matches
+
+
+def _rejects_guided_strategy_parent(message: str) -> bool:
+    """A denied parent or question about the parent cannot fill setup_id."""
+    text = " ".join(str(message or "").casefold().split())
+    return bool(re.search(
+        r"\b(?:niet|not|nicht|geen|no|keine?)\b.{0,75}\bsetup\b|"
+        r"\bsetup\b.{0,55}\b(?:toch\s+niet|is\s+niet|klopt\s+niet|"
+        r"is\s+wrong|ist\s+falsch|verkeerd|wrong|falsch)\b|"
+        r"\b(?:welke|which|welches?|welcher)\s+(?:opgeslagen\s+|saved\s+)?setup\b",
+        text,
+    ))
 
 
 def _strategy_rule_is_unencoded(message: str) -> bool:
@@ -763,7 +914,14 @@ def _strategy_rule_is_unencoded(message: str) -> bool:
         r"kruising|cross(?:over)?|signaal|signal)\b",
         message, re.I,
     ))
-    return dynamic_entry or relative_level or percent_risk or execution_limit or indicator_filter
+    conditional_trade_rule = bool(re.search(
+        r"\b(?:koop|buy|kaufe)\s+(?:alleen|only|nur)\s+"
+        r"(?:bij|als|wanneer|when|if|bei|wenn)\b[^.!?\n]{0,110}\b"
+        r"(?:trend|rsi|macd|adx|score|signaal|signal)\b",
+        message, re.I,
+    ))
+    return (dynamic_entry or relative_level or percent_risk or execution_limit
+            or indicator_filter or conditional_trade_rule)
 
 
 def _plain_setup_creation_request(message: str) -> bool:
@@ -1558,6 +1716,12 @@ class FinnV2RunService:
             blocked_strategy = dict(context.get("strategy_rule_block") or {})
             if blocked_strategy and _explicit_strategy_rule_waiver(message, str(blocked_strategy.get("original_message") or "")):
                 blocked_inputs = dict(blocked_strategy.get("captured_inputs") or {})
+                repeated_fixed = _freeform_strategy_rule_waiver_inputs(
+                    message, str(blocked_strategy.get("original_message") or ""),
+                )
+                if repeated_fixed:
+                    blocked_inputs.update(repeated_fixed)
+                    blocked_strategy["captured_inputs"] = blocked_inputs
                 try:
                     setup_id = int(blocked_inputs.get("setup_id") or 0)
                 except (TypeError, ValueError):
@@ -1814,6 +1978,18 @@ class FinnV2RunService:
                 # retry must not reinterpret them as a request to read a saved
                 # strategy that was never confirmed.
                 corrected_guided_operation_id = "create_strategy"
+        elif (
+            pending_guided == "create_strategy"
+            and {"entry", "stop_loss", "targets"}.intersection(
+                set(guided.get("missing_required_inputs") or ())
+            )
+            and _pure_strategy_price_reentry(message)
+        ):
+            # The user answered the open draft with all three current price
+            # levels. Route those typed fields through the existing proposal
+            # contract even if the last clarification also listed a missing
+            # name; another model relevance/tool round adds no information.
+            corrected_guided_operation_id = "create_strategy"
         if pending_guided:
             contract = FinnV2OperationRegistry().require_supported(pending_guided)
             requested_slot = str(guided.get("next_missing_input") or "")
@@ -1901,6 +2077,12 @@ class FinnV2RunService:
                     FinnV2OperationStateService.is_name_suggestion_acceptance(message)
                     and _previous_guided_name_suggestion(previous_response, pending_guided)
                 )
+            ):
+                continuation = True
+            elif (
+                pending_guided == "create_strategy"
+                and corrected_guided_operation_id == "create_strategy"
+                and _pure_strategy_price_reentry(message)
             ):
                 continuation = True
             elif requested_slot and FinnResponsesFrontDoor.binds_guided_slot(
@@ -2969,6 +3151,29 @@ class FinnV2RunService:
                         )
                         setup_rule_block = dict(context.get("setup_rule_block") or {})
                         strategy_rule_block = dict(context.get("strategy_rule_block") or {})
+                        guided_strategy = dict(context.get("active_guided_operation") or {})
+                        if (
+                            guided_strategy.get("operation_id") == "create_strategy"
+                            and guided_strategy.get("next_missing_input") == "setup_id"
+                            and _rejects_guided_strategy_parent(run_message)
+                        ):
+                            language = str(context.get("locale") or "nl").split("-")[0].lower()
+                            question = {
+                                "en": "Which saved setup should this strategy belong to? Name the setup you want to use.",
+                                "de": "Zu welchem gespeicherten Setup gehört diese Strategie? Nenne das gewünschte Setup.",
+                            }.get(language, "Bij welke opgeslagen setup hoort deze strategie? Noem de setup die je wilt gebruiken.")
+                            await service.complete_responses_read(
+                                run_id=run_id, user_id=user_id,
+                                response_id=f"verified-strategy-parent-question-{run_id}",
+                                answer=FinnResponsesVerifiedAnswer(
+                                    status="clarification_required", text=question,
+                                    reason="strategy_parent_not_captured", evidence=(),
+                                    clarification={"question": question, "reason": "strategy_parent_not_captured", "choices": []},
+                                ),
+                                locale=str(context.get("locale") or "nl"),
+                            )
+                            await session.commit()
+                            return
                         if FinnV2OperationStateService._is_explicit_correction(run_message) and "?" not in run_message:
                             open_items = await FinnV2ProposalRepository(session).list_open_for_conversation(
                                 conversation_id=conversation_id, user_id=user_id,
@@ -3087,6 +3292,14 @@ class FinnV2RunService:
                                 pending_incomplete = not _has_independent_strategy_inputs(run_message)
                                 if pending_inherited_rule or pending_incomplete:
                                     context.pop("pending_independent_strategy", None)
+                                elif _explicitly_separates_new_strategy(run_message):
+                                    # A separately named, complete draft with an
+                                    # explicit no-carry instruction is already an
+                                    # unambiguous new request. Do not force an
+                                    # extra choice or inherit the blocked rule.
+                                    context.pop("strategy_rule_block", None)
+                                    context.pop("pending_independent_strategy", None)
+                                    strategy_rule_block = {}
                                 else:
                                     context["pending_independent_strategy"] = {
                                         "message": run_message, "name": new_name,
