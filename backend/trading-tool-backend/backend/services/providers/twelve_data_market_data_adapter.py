@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -23,15 +24,22 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
-def _parse_datetime(value: str | None) -> datetime | None:
+def _parse_datetime(value: str | None, source_timezone: str = "UTC") -> datetime | None:
     if not value:
         return None
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(value, fmt).replace(tzinfo=ZoneInfo(source_timezone)).astimezone(timezone.utc)
         except ValueError:
             continue
     return None
+
+
+def _parse_epoch(value: Any) -> datetime | None:
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc) if value is not None else None
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 class TwelveDataMarketDataAdapter:
@@ -79,7 +87,15 @@ class TwelveDataMarketDataAdapter:
         if price is None:
             raise ValueError("twelve_data_snapshot_missing_price")
 
-        observed_at = _parse_datetime(payload.get("datetime"))
+        # /quote returns exchange-local datetime for equities. Its Unix
+        # timestamp identifies the same bar unambiguously across timezones.
+        observed_at = _parse_epoch(payload.get("timestamp")) or _parse_datetime(
+            payload.get("datetime"), asset.timezone
+        )
+        if observed_at is None:
+            raise ValueError("twelve_data_snapshot_missing_time")
+        if observed_at > datetime.now(timezone.utc) + timedelta(seconds=60):
+            raise ValueError("twelve_data_snapshot_future_time")
         return PriceSnapshotDTO(
             symbol=asset.symbol,
             provider=self.provider_name,
@@ -131,7 +147,7 @@ class TwelveDataMarketDataAdapter:
         values = payload.get("values") or []
         candles: list[OHLCVCandleDTO] = []
         for item in values:
-            period_start = _parse_datetime(item.get("datetime"))
+            period_start = _parse_datetime(item.get("datetime"), asset.timezone)
             if period_start is None:
                 continue
             candles.append(
