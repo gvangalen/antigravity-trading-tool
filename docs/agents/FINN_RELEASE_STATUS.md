@@ -4,6 +4,70 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuity: six failed follow-ups (22 October 2026)
+
+Phase: `PR_CI_PENDING`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
+on public SHA `45981b49ceac8ac4ac9d41e3bfede07216e731be` remains
+**NOT_ACCEPTED**: all 17 cases ran, 11 passed and six failed. With the user's
+authorization, the existing QA Agent disclosed only the six failing user
+questions to Build; Build did not access the protected fixture or sealed
+holdout. The failures covered a saved-setup read, a bounded automatic-rule
+waiver, an independent second strategy, a correction of that open draft, an
+EUR re-entry, and current BTC levels without an active draft.
+
+This batch makes the saved-setup read select and record the read contract;
+retains only explicit fixed fields after the offered waiver of two unsupported
+automatic rules; starts a separately named strategy without inheriting rules;
+selects a uniquely named open card for correction and clarifies on an
+excluded card; and requires complete, single-currency levels for re-entry.
+Without an active draft, “dat BTC-concept” can collect stated prices but must
+ask which saved setup is meant. Both the first selection and the downstream
+owner resolver/snapshot now leave `setup_id` open rather than inheriting a
+recent ETH or BTC setup. The local owner-scoped FastAPI/Celery/Responses probes
+completed the A/B target and EUR continuation without confirmation or order;
+the adverse ETH→BTC probe collected BTC prices, left `setup_id` missing and
+asked for a saved setup without a proposal. Security and Architecture found
+no remaining concrete P1/P2 in this focused diff. These checks do not
+constitute independent live acceptance.
+
+The final-code backend suite passed **3778 tests, 4 existing skips**. The
+restarted worker-driven action matrix passed **16/16** contracts and **19/19**
+adapter checks, with zero broker orders, Live trading calls, Live bots or
+production connections (artifact SHA-256
+`2d7e88dc7892c556defe7dbe8cd3d79b4eb8cf7ddbd8369c7bf5f0c32d69660b`). Frontend
+typecheck, i18n lint/tests, command/proposal tests, production build and the
+high-severity audit passed after upgrading Next.js from 15.5.24 to 15.5.28;
+the production-dependency audit reports zero vulnerabilities. The final-source
+real Responses development selector passed **20/20** and regression selector
+**109/109**, each with zero provider, schema, timeout, parse or validation
+failures (artifact SHA-256 `ebca99c06e597b22fbcc64af3561452156d7671080443fa2a1206fa83b5a6d95`
+and `43c52162e9ca802b5408b31887f2b325fa09a0533e5e8ef53a5cdaa17be680ef`).
+The release candidate is [PR #545](https://github.com/gvangalen/antigravity-trading-tool/pull/545);
+its first CI identified the Next.js advisory, so the dependency was upgraded
+and the frontend gates rerun. CI, deployment, public SHA verification and
+independent live QA are still pending. The previous production QA verdict
+remains `NOT_ACCEPTED`.
+
+## FINN strategy continuity: independent QA after setup prerequisite repair (22 October 2026)
+
+Phase: `NOT_ACCEPTED`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
+ran against public SHA `45981b49ceac8ac4ac9d41e3bfede07216e731be` after checkout,
+release identity, backend/frontend and QA authentication preflight passed. The
+unchanged manifest executed all **17/17** cases: **11 passed, 6 product failures**.
+The former `w00` blocker was repaired: setup proposal, confirmation and
+idempotent replay worked. The failures were `w01_read_setup`,
+`w03_explicit_waiver`, `w04_new_strategy_after_waiver`,
+`w05_change_open_target`, `w07_eur_reentry`, and `w10_current_levels`.
+The two waiver turns returned `strategy_rule_not_captured`; the target change
+became an incomplete `update_setup`, and EUR re-entry produced an unexpected
+`update_setup` proposal. The two read cases ended without a recorded operation
+or target. All 17 runs had one dispatch, at most one attempt and matching
+polling/SSE outcomes, with no HTTP, runner or infrastructure failure and no
+Live trading or Live bot activation. The sanitized QA artifact has SHA-256
+`d7978a11704ce1cf37cb63da2c707ab4e739e5d7817d939656928a204206408d`.
+Its lack of prompt text limits root-cause attribution for several cases;
+Build has not opened the protected manifest or sealed QA prompts.
+
 ## FINN setup prerequisite in strategy continuity QA (22 October 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. The previous public SHA

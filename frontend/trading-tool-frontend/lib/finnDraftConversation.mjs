@@ -51,7 +51,7 @@ export function clarificationQuestionChoices(message) {
   if (!isOpenClarification(message)) return [];
   const clarification = message?.state?.clarification;
   const names = clarification?.choices;
-  if (!Array.isArray(names) || names.length < 2 || names.length > 3) return [];
+  if (!Array.isArray(names) || names.length < 1 || names.length > 3) return [];
   const choices = names.map((name) => typeof name === 'string' ? name.trim() : '');
   if (choices.some((name) => !name || name.length > 80)) return [];
   if (new Set(choices.map((name) => name.toLocaleLowerCase())).size !== choices.length) return [];

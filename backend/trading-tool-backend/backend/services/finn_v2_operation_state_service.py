@@ -958,6 +958,12 @@ class FinnV2OperationStateService:
                     r"(?:€|eur)\s*(\d+(?:[.,]\d+)?)\s*per\s+(?:uitvoering|aankoop|trade)",
                     lowered,
                 )
+            if amount_match is None:
+                amount_match = re.search(
+                    r"(?:€|eur)\s*(\d+(?:[.,]\d+)?)\s+"
+                    r"(?:vast|fixed)\s+per\s+(?:uitvoering|aankoop|trade|execution)",
+                    lowered,
+                )
             # A bare currency amount next to entry/stop/target is a price
             # level, not evidence for the strategy's EUR execution amount.
             # Preserve a prior base amount during corrections; ask for it on
@@ -1345,7 +1351,7 @@ class FinnV2OperationStateService:
             if match:
                 values[field] = cls._numeric_value(match.group(1))
         targets = re.search(
-            r"\b(?:targets?|koersdoel(?:en)?|take[- ]?profits?|ziele?n?)\s*"
+            r"\b(?:targets?|koersdoel(?:en)?|doel(?:en)?|take[- ]?profits?|ziele?n?)\s*"
             r"(?:zijn|is|are|sind|ist|:|=|op|at)?\s*"
             r"(\[?\s*(?:€|\$|eur|usd)?\s*\d+(?:[.,]\d+)?(?:\.(?!\s|$)|[^.!?\n])*?)"
             r"(?=,?\s+(?:(?:and|en|und)\s+)?(?:(?:maximaal|max(?:imum)?|maximum|höchstens)\s+"
@@ -1370,6 +1376,15 @@ class FinnV2OperationStateService:
             r"(?:naar|to|auf)\s*(?:€|\$|eur|usd)?\s*(\d+(?:[.,]\d+)?)",
             text, re.IGNORECASE,
         )
+        if replacement is None:
+            replacement = re.search(
+                r"\b(?:vervang|replace|ersetze)\s+(?:het\s+|the\s+|das\s+)?"
+                r"(?:target|koersdoel|take[- ]?profit|ziel)\s+"
+                r"\d+(?:[.,]\d+)?\s*(?:usd|eur|€|\$)?\s+"
+                r"(?:door|with|durch)\s*(?:€|\$|eur|usd)?\s*"
+                r"(\d+(?:[.,]\d+)?)",
+                text, re.IGNORECASE,
+            )
         only_target = re.search(
             r"\b(?:uitsluitend|alleen|only|nur)\s*(\d+(?:[.,]\d+)?)"
             r"\s*(?:usd|eur|€|\$)?\s+(?:als\s+)?(?:enig|enige|sole|only|einziges?)\s+"
@@ -1404,7 +1419,7 @@ class FinnV2OperationStateService:
             values["risk_profile"] = risk_prefix.group(1).strip()
         elif risk:
             values["risk_profile"] = risk.group(1).strip()
-        else:
+        if "risk_profile" not in values or not cls._canonical_risk_profile(str(values["risk_profile"])):
             natural_risk = re.search(
                 r"\b(conservative|cautious|voorzichtig|defensief|defensive|defensiv|vorsichtig|"
                 r"balanced|gebalanceerd|evenwichtig|ausgewogen|aggressive|offensief|agressief|"
@@ -1475,6 +1490,17 @@ class FinnV2OperationStateService:
             re.IGNORECASE,
         )
         for match in replacement.finditer(text):
+            for token in re.findall(r"\b(?:usd|eur|dollars?|euros?)\b|[$€]", match.group(0), re.IGNORECASE):
+                currencies.add(FinnV2OperationStateService._currency_token(token))
+        direct_replacement = re.compile(
+            r"\b(?:vervang|replace|ersetze)\s+(?:het\s+|the\s+|das\s+)?"
+            r"(?:target|koersdoel|take[- ]?profit|ziel)\s+"
+            r"\d[\d.,]*\s*(?:usd|eur|€|\$)?\s+"
+            r"(?:door|with|durch)\s*(?:€|\$|eur|usd)?\s*"
+            r"\d[\d.,]*\s*(?:usd|eur|€|\$)?",
+            re.IGNORECASE,
+        )
+        for match in direct_replacement.finditer(text):
             for token in re.findall(r"\b(?:usd|eur|dollars?|euros?)\b|[$€]", match.group(0), re.IGNORECASE):
                 currencies.add(FinnV2OperationStateService._currency_token(token))
         # "Pas het target aan naar 93.000 EUR" is a direct correction, not
@@ -1556,6 +1582,22 @@ class FinnV2OperationStateService:
         )
         if direct_correction:
             return direct_correction.group(1).strip(" .\"'“”‘’") or None
+        named_proposal = re.search(
+            r"^\s*(?:maak|create|erstelle)\s+(?:het\s+|the\s+|den\s+)?"
+            r"(?:voorstel|proposal|entwurf)\s+(?:voor|for|für)\s+"
+            r"([^,.!?\n]{2,80}?)\s+(?:bij|for|bei)\s+setup\b",
+            text, re.IGNORECASE,
+        )
+        if named_proposal:
+            return named_proposal.group(1).strip(" .\"'“”‘’") or None
+        named_strategy = re.search(
+            r"\b(?:strategie|strategy)\s*:\s*([^,.!?\n]{2,80}?)\s+"
+            r"(?:voor|for|für)\s+(?:mijn|my|mein(?:e|en)?)\s+"
+            r"(?:(?:opgeslagen|saved|gespeicherte[nr]?)\s+)?setup\b",
+            text, re.IGNORECASE,
+        )
+        if named_strategy:
+            return named_strategy.group(1).strip(" .\"'“”‘’") or None
         natural_title = re.search(
             r"\b(?:(?:de\s+)?(?:nieuwe\s+)?(?:strategie|setup|plan|bot)\s+heet|"
             r"(?:de\s+)?naam\s+wordt)\s+[\"'“‘]?([\w .-]{2,80}?)"
