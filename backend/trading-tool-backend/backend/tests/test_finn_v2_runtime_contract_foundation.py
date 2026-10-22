@@ -570,6 +570,39 @@ def test_failed_turn_preserves_last_collecting_dca_draft_for_retry():
     assert context["active_guided_operation"] == draft
 
 
+def test_currency_clarification_preserves_owner_bound_strategy_price_slots():
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    draft = {
+        "operation_id": "create_strategy", "status": "collecting",
+        "collected_inputs": {"setup_id": 42, "name": "BTC Trend Plan", "base_amount": 100},
+        "missing_required_inputs": ["entry", "stop_loss", "targets"],
+        "next_missing_input": "entry", "awaiting_price_currency_reentry": True,
+    }
+
+    class Conversations:
+        async def get_context(self, **_kwargs):
+            return {"active_guided_operation": draft}
+
+    class Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return SimpleNamespace(run_id="parent-run", state_json={
+                "terminal_status": "clarification_required", "guided_state": {},
+                "responses_clarification": {
+                    "conversation_id": "conversation-1", "run_id": "parent-run",
+                    "reason": "strategy_price_currency_conflict",
+                },
+            })
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = Conversations()
+    service.runtime_contracts = Contracts()
+    context = asyncio.run(service._load_continuation_context(
+        conversation_id="conversation-1", user_id=7, run_id="child-run",
+    ))
+    assert context["active_guided_operation"] == draft
+
+
 def test_successful_action_result_closes_stale_guided_indicator_state():
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 

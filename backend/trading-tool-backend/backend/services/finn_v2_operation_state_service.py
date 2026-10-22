@@ -1128,7 +1128,8 @@ class FinnV2OperationStateService:
     def _is_explicit_correction(text: str) -> bool:
         return bool(re.search(
             r"\b(?:corrigeer|correct|correctie|wijzig|verander|pas\s+aan|update|change|"
-            r"ändern|aendere|korrigiere|aktualisiere)\b|\bmaak\b.+\btoch\b",
+            r"ändern|aendere|korrigiere|aktualisiere)\b|"
+            r"\bpas\b[^.!?\n]{0,100}\baan\b|\bmaak\b.+\btoch\b",
             str(text or "").casefold(),
         ))
 
@@ -1378,6 +1379,15 @@ class FinnV2OperationStateService:
         chosen_target = only_target or replacement
         if chosen_target:
             values["targets"] = [cls._numeric_value(chosen_target.group(1))]
+        elif cls._is_explicit_correction(text):
+            direct_target_change = re.search(
+                r"\b(?:target|koersdoel|take[- ]?profit|ziel)\b"
+                r"[^.!?\n]{0,45}\b(?:aan\s+)?(?:naar|to|auf)\s*"
+                r"(?:€|\$|eur|usd)?\s*(\d+(?:[.,]\d+)?)\b",
+                text, re.IGNORECASE,
+            )
+            if direct_target_change:
+                values["targets"] = [cls._numeric_value(direct_target_change.group(1))]
         risk_prefix = re.search(
             r"\b((?:maximaal|max(?:imum)?|maximum|höchstens)\s+\d+(?:[.,]\d+)?\s*"
             r"(?:procent|percent|%|prozent))\s+(?:risk|risico|risiko)\b",
@@ -1419,7 +1429,7 @@ class FinnV2OperationStateService:
         """Read currency attached to a trade level, never the EUR base amount."""
         level = re.compile(
             r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?|stop(?:[- ]?loss)?|"
-            r"invalidatie|invalidation|invalidierung|targets?|koersdoelen?|"
+            r"invalidatie|invalidation|invalidierung|targets?|koersdoel(?:en)?|"
             r"take[- ]?profits?|ziele?n?)\b\s*(?:is|zijn|are|sind|:|=|op|at|bei|rond|around)?\s*"
             r"(?P<before>\$|€|usd|eur|dollars?|euros?)?\s*"
             r"\d[\d.,]*(?:\s*(?:and|en|und|,|\/|&|\+)\s*\d[\d.,]*)*\s*"
@@ -1444,7 +1454,7 @@ class FinnV2OperationStateService:
         # both quotes; otherwise "target van 93.000 USD naar 92.400 EUR"
         # can silently keep USD while accepting the EUR number as USD.
         replacement = re.compile(
-            r"\b(?:targets?|koersdoelen?|take[- ]?profits?|ziele?n?)\b[^.!?\n]{0,180}?"
+            r"\b(?:targets?|koersdoel(?:en)?|take[- ]?profits?|ziele?n?)\b[^.!?\n]{0,180}?"
             r"\b(?:van|from|von)\s*(?:€|\$|usd|eur)?\s*\d[\d.,]*\s*(?:usd|eur|dollars?|euros?|€|\$)?\s+"
             r"(?:naar|to|auf)\s*(?:€|\$|usd|eur)?\s*\d[\d.,]*\s*(?:usd|eur|dollars?|euros?|€|\$)?",
             re.IGNORECASE,
@@ -1452,6 +1462,20 @@ class FinnV2OperationStateService:
         for match in replacement.finditer(text):
             for token in re.findall(r"\b(?:usd|eur|dollars?|euros?)\b|[$€]", match.group(0), re.IGNORECASE):
                 currencies.add(FinnV2OperationStateService._currency_token(token))
+        # "Pas het target aan naar 93.000 EUR" is a direct correction, not
+        # the older "target van X naar Y" form. Keep its quote so a EUR
+        # replacement can never silently inherit an open USD draft.
+        direct_change = re.compile(
+            r"\b(?:targets?|koersdoel(?:en)?|take[- ]?profits?|ziele?n?)\b"
+            r"[^.!?\n]{0,45}\b(?:aan\s+)?(?:naar|to|auf)\s*"
+            r"(?P<before>€|\$|eur|usd)?\s*\d[\d.,]*\s*"
+            r"(?P<after>usd|eur|dollars?|euros?|\$|€)?(?=\W|$)",
+            re.IGNORECASE,
+        )
+        for match in direct_change.finditer(text):
+            for token in (match.group("before"), match.group("after")):
+                if token:
+                    currencies.add(FinnV2OperationStateService._currency_token(token))
         return "MIXED" if len(currencies) > 1 else next(iter(currencies)) if currencies else None
 
     @staticmethod

@@ -4,6 +4,56 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-agent-cutover: protected QA on 260d846 (22 October 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`; the public SHA `260d84607ab149ea01e245d9f7787fe1d6aafc8e`
+remains **NOT_ACCEPTED**. The independent protected QA run on that SHA
+([workflow 39659501506](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39659501506))
+reported five operation mismatches in eight read-only turns. Its sanitized
+artifact names `w01_read_setup`, `w02_unsupported_rules`,
+`w03_explicit_waiver`, `w04_new_strategy_after_waiver` and
+`w05_change_open_target`, but does not publish the answer text or phase
+needed to attribute each mismatch. QA also saw an Analyse 502,
+market-intelligence 404, duplicate coachfeed updates, and partial portfolio
+cash with unknown total. Those observations remain open and are not claimed
+fixed by this local strategy-continuation batch.
+
+Build reproduced the blocked-strategy and open-card correction chain locally.
+The current worktree carries a coherent repair: a new named strategy is no
+longer recast as a setup; unsupported automatic rules require the user's exact
+choice before a fixed-field proposal; an omitted-rule request reaches that
+choice without becoming authorization by itself. A correction from USD to EUR
+withdraws the old owner-bound card and asks for entry, stop-loss and target
+again in one quote currency. Price re-entry retains the proposal's original
+owner-verified setup even if a different setup appears in recent conversation
+context. With multiple open cards, a correction that cannot safely identify
+and process exactly one card fails closed instead of changing the newest card.
+
+The final-code local five-turn public API/Celery/Responses probe produced a
+USD `create_strategy` draft, withdrew it on a EUR target correction, then
+produced an EUR draft with the same setup and non-price fields after all three
+new price levels were supplied. Database verification found the USD card
+`cancelled` and the EUR card in `draft`, with entry 75,000, stop 71,000,
+target 82,000, price currency EUR and base amount 100. No proposal was
+confirmed, strategy saved or order made. The full backend suite passed
+**3715 tests, 4 existing skips**; web typecheck, i18n lint/tests,
+command/proposal tests, production build and high-severity audit passed. The
+audit reported one moderate Next.js advisory. Security and Architecture
+independently re-reviewed this local diff and found no remaining concrete
+P1/P2 blocker in it. Final-code action-matrix and real-provider selector
+validation have now passed for the worker action path: **16/16** contracts and
+**19/19** adapter checks, with zero broker orders, Live calls, Live bots or
+production connections (artifact SHA-256
+`bf101928820861820acbd6da7d7d14ba05c7727f4220dd2bbdf3c453d050652d`).
+The real Responses development selector set passed **20/20** with no provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`10e030f7c45c59561e2be160881a703deca3c75954073501cfbfe76a90f9511e`).
+The real Responses regression passed **109/109** with no provider, schema,
+parse, validation or timeout failures (artifact SHA-256
+`fd3c4537806f077a53a6645f9c7e2bb06ebb8937cf7f9d145ed9b86725dc5454`).
+CI, deployment and independent live QA have not yet occurred. These local
+results do not overturn the protected QA verdict.
+
 ## FINN-agent-cutover: toestemming na geblokkeerde strategie (21 oktober 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. De bestaande onafhankelijke QA-agent gaf

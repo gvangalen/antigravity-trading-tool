@@ -481,6 +481,18 @@ def test_strategy_name_containing_live_does_not_turn_paper_bot_creation_into_act
     assert service._explicit_guided_create_operation(message=message, facts=facts) == "create_bot"
 
 
+def test_named_setup_is_parent_of_new_second_strategy():
+    message = (
+        "Maak voor mijn opgeslagen setup BTC Breakout Full een tweede Paper-strategie "
+        "met naam Strategie B. BTC 4H, vast bedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD en voorzichtig risico. "
+        "Toon het concept, sla niets op zonder bevestiging."
+    )
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == "create_strategy"
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"

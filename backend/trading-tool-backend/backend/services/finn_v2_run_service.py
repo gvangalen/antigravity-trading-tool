@@ -12,6 +12,7 @@ from time import monotonic
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import (
@@ -28,7 +29,7 @@ from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2Run
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.database import async_session_factory
-from backend.infrastructure.models import User
+from backend.infrastructure.models import FinnV2Run, User
 from backend.services.locale_config import normalize_locale, resolve_chat_locale, response_language_name
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
@@ -270,20 +271,194 @@ def _references_blocked_strategy_draft(message: str) -> bool:
     return refers_to_draft and requests_change
 
 
-def _discard_superseded_strategy_rule_block(context: dict, message: str) -> bool:
-    """Only a demonstrably distinct new strategy supersedes a blocked draft."""
-    block = context.get("strategy_rule_block") or {}
-    if not block:
+def _asks_to_drop_blocked_strategy_rules(message: str) -> bool:
+    """Route a free-text omission request back to the explicit choice.
+
+    This only asks for confirmation; it must never release a proposal by
+    itself, since a sentence may also contain a new unencoded rule.
+    """
+    normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold())
+    return bool(re.match(
+        r"^(?:laat|schrap|verwijder|drop|remove|lass|entferne)\b"
+        r"[^.!?\n]{0,140}\b(?:regel(?:s|en)?|voorwaard(?:e|en)?|"
+        r"trendfilter|limiet|rules?|conditions?|trend|regeln?|bedingungen?)\b"
+        r"[^.!?\n]{0,90}\b(?:weg|vervallen|vallen|out|fallen|entfallen)\b",
+        normalized,
+    ))
+
+
+def _strategy_price_currency_conflict(origin_inputs: dict[str, object], message: str) -> bool:
+    original = str(origin_inputs.get("price_currency") or "")
+    proposed = FinnV2OperationStateService._explicit_trade_price_currency(message)
+    return original in {"EUR", "USD"} and proposed in {"EUR", "USD", "MIXED"} and proposed != original
+
+
+def _select_open_strategy_for_correction(
+    open_items: list[tuple[object, object]], message: str,
+) -> tuple[object, object] | None:
+    strategies = [item for item in open_items if item[0].operation_type == "create_strategy"]
+    if len(open_items) == 1:
+        return strategies[0] if strategies else None
+    named = []
+    for item in strategies:
+        fields = dict(dict(dict(item[0].payload_json or {}).get("change") or {}).get("strategy_fields") or {})
+        name = str(fields.get("name") or "").strip()
+        if name and re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", message, re.IGNORECASE):
+            named.append(item)
+    return named[0] if len(named) == 1 else None
+
+
+def _multiple_open_correction_requires_clarification(
+    open_items: list[tuple[object, object]], selected_open: tuple[object, object] | None,
+    message: str,
+) -> bool:
+    """Never let a correction fall through to the newest of several cards."""
+    if len(open_items) <= 1:
         return False
-    if (
-        _explicit_strategy_rule_waiver(message, str(block.get("original_message") or ""))
-        or _explicit_fresh_create_operation_request(message) != "create_strategy"
+    if selected_open is None:
+        return True
+    origin = dict((selected_open[1].state_json or {}).get("guided_state") or {})
+    fields = dict(dict(dict(selected_open[0].payload_json or {}).get("change") or {}).get("strategy_fields") or {})
+    return not _strategy_price_currency_conflict(
+        {**fields, **dict(origin.get("collected_inputs") or {})}, message,
+    )
+
+
+def _reopen_strategy_for_new_price_currency(
+    origin: dict[str, object], proposal_payload: dict[str, object],
+) -> dict[str, object]:
+    """Keep the selected strategy, but make all three price slots pending."""
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    proposal_fields = dict(dict(proposal_payload.get("change") or {}).get("strategy_fields") or {})
+    collected = {
+        key: value for key, value in proposal_fields.items() if key in contract.input_fields
+    }
+    collected.update(dict(origin.get("collected_inputs") or {}))
+    if proposal_fields.get("setup_id"):
+        # The persisted proposal is the authority for the parent relationship;
+        # an older guided snapshot must not replace it on re-entry.
+        collected["setup_id"] = proposal_fields["setup_id"]
+    retained = {
+        key: value for key, value in collected.items()
+        if key not in {"entry", "stop_loss", "targets", "price_currency"}
+    }
+    return {
+        **origin, "operation_id": "create_strategy", "contract_version": contract.version,
+        "collected_inputs": retained,
+        "missing_required_inputs": ["entry", "stop_loss", "targets"],
+        "next_missing_input": "entry", "open_proposal_id": None, "status": "collecting",
+        "awaiting_price_currency_reentry": True,
+    }
+
+
+def _complete_strategy_price_reentry(message: str) -> bool:
+    if "?" in message or not re.match(
+        r"^\s*(?:(?:de|mijn|the|my|der|mein)\s+)?(?:nieuwe|new|neue[nr]?)?\s*"
+        r"(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\b", message, re.IGNORECASE,
+    ) or re.search(
+        r"\b(?:niet|geen|not|nicht|kein|nein|no|beispiel|voorbeeld|example|"
+        r"don't|dont|do\s+not|doesn't|shouldn't|mag\s+niet)\b", message, re.IGNORECASE,
     ):
         return False
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    fields = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
+    return (
+        all(key in fields for key in ("entry", "stop_loss", "targets"))
+        and fields.get("price_currency") in {"USD", "EUR"}
+    )
+
+
+def _inherits_blocked_strategy_rules(message: str) -> bool:
+    """A new name does not make a draft independent when it inherits old rules."""
+    normalized = re.sub(r"\s+", " ", str(message or "").casefold())
+    no_carry = re.search(
+        r"\b(?:zonder|without|ohne)\b[^.!?\n]{0,70}\b"
+        r"(?:oude|eerdere|vorige|dezelfde|previous|prior|old|same|"
+        r"alten?|vorherigen?)\b[^.!?\n]{0,40}\b"
+        r"(?:regel(?:s|en)?|voorwaard(?:e|en)|handelsregel(?:s|en)?|"
+        r"rule(?:s)?|condition(?:s)?|bedingung(?:en)?)\b",
+        normalized,
+    )
+    if no_carry:
+        # Remove only the negated clause. Later sentences can still request
+        # that another old rule be retained, even without a "but" connector.
+        normalized = normalized[:no_carry.start()] + " " + normalized[no_carry.end():]
+        if re.search(
+            r"\b(?:maar|behalve|toch|but|except|however|aber|doch|außer)\b",
+            normalized[no_carry.start():],
+        ) and not _strategy_rule_is_unencoded(message):
+            return True
+    # Keep the guard for any explicit carry-over instruction, regardless of
+    # how the trader names the old constraint (trendfilter, scoregrens, etc.).
+    # The operation contract cannot infer which old rule was meant.
+    if re.search(
+        r"\b(?:houd|behoud|gebruik|hergebruik|overnemen|neem\s+over|"
+        r"blijft?|blijven|laat\s+staan|dezelfde|hetzelfde|vorige|eerdere|"
+        r"oude|bestaande|same|previous|prior|old|existing|"
+        r"keep|retain|reuse|use|übernehme|behalte|verwende)\b",
+        normalized,
+    ):
+        return True
+    return bool(re.search(
+        r"\b(?:dezelfde|hetzelfde|gelijke|vorige|eerdere|oude|bovenstaande|"
+        r"dit|dat|huidige|bestaande|same|previous|prior|earlier|old|"
+        r"this|that|current|existing|identical|gleichen?|selben|vorherigen?)\b"
+        r".{0,90}\b(?:regel(?:s|en)?|voorwaard(?:e|en)|instelling(?:en)?|"
+        r"strategie(?:concept|voorstel)?|handelsregel(?:s|en)?|instapregel(?:s|en)?|"
+        r"rule(?:s)?|condition(?:s)?|setting(?:s)?|draft|strategy|"
+        r"regel(?:n)?|bedingung(?:en)?|entwurf)\b"
+        r"|\b(?:regel(?:s|en)?|voorwaard(?:e|en)|instelling(?:en)?|"
+        r"strategie(?:concept|voorstel)?|handelsregel(?:s|en)?|instapregel(?:s|en)?|"
+        r"rule(?:s)?|condition(?:s)?|setting(?:s)?|draft|strategy|"
+        r"bedingung(?:en)?|entwurf)\b"
+        r".{0,90}\b(?:dezelfde|hetzelfde|vorige|eerdere|oude|"
+        r"dit|dat|huidige|bestaande|same|previous|prior|old|"
+        r"this|that|current|existing|gleichen?|selben|vorherigen?)\b"
+        r"|\b(?:behoud|behouden|neem over|overnemen|gebruik|use|keep|reuse|"
+        r"retain|übernehmen|behalte)\b.{0,90}\b"
+        r"(?:regel(?:s|en)?|voorwaard(?:e|en)|handelsregel(?:s|en)?|instapregel(?:s|en)?|"
+        r"rule(?:s)?|condition(?:s)?|bedingung(?:en)?)\b",
+        normalized,
+    ))
+
+
+def _has_independent_strategy_inputs(message: str) -> bool:
+    """Clear prior draft state only when the new trade rules stand on their own."""
+    if _strategy_rule_is_unencoded(message):
+        return False
+    inputs = FinnV2OperationStateService._strategy_trade_inputs(message)
+    if {"entry", "stop_loss", "targets", "base_amount"}.issubset(inputs):
+        return True
+    return bool(
+        re.search(r"\b(?:dca|periodiek|recurring|regelmäßig)\b", message, re.I)
+        and "base_amount" in inputs
+        and re.search(r"\b(?:dagelijks|wekelijks|maandelijks|daily|weekly|monthly|"
+                      r"täglich|wöchentlich|monatlich)\b", message, re.I)
+    )
+
+
+def _discard_superseded_strategy_rule_block(context: dict, message: str) -> bool:
+    """Release a blocked draft only on its separate, exact opt-out choice."""
+    block = context.get("strategy_rule_block") or {}
+    pending = context.get("pending_independent_strategy") or {}
+    if not block or not pending:
+        return False
+    pending_message = str(pending.get("message") or "")
+    if not pending.get("source_run_id") or not _has_independent_strategy_inputs(pending_message):
+        return False
+    normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
+    if normalized not in {
+        "begin onafhankelijk nieuw strategievoorstel zonder eerdere automatische regels",
+        "start an independent new strategy proposal without previous automatic rules",
+        "neuen unabhängigen strategieentwurf ohne vorherige automatische regeln beginnen",
+    }:
+        return False
+    # The separately stored, owner-scoped request has its own name and
+    # fields. The exact choice cannot contain a contradictory trailing rule.
     old_name = str((block.get("captured_inputs") or {}).get("name") or "").strip().casefold()
-    new_name = str(FinnV2OperationStateService._name_input_from_text(message) or "").strip().casefold()
-    # A request about "that same strategy" may restate only one fixed field.
-    # Keep the unsupported-rule guard until a separate named object is clear.
+    new_name = str(pending.get("name") or "").strip().casefold()
     if not new_name or (old_name and old_name == new_name):
         return False
     for key in (
@@ -410,6 +585,9 @@ def _safe_blocked_strategy_inputs(message: str, inputs: dict[str, object]) -> di
     # with an explicit currency in the user's own blocked request.
     for field in ("entry", "stop_loss", "targets", "risk_profile", "entry_type", "price_currency"):
         safe.pop(field, None)
+    # Only the fully recognized positive request can carry levels across a
+    # waiver. A fragment match in free prose may be a negated example or may
+    # contradict a global currency instruction, so it is not action evidence.
     fixed_levels = _priced_two_rule_strategy_request(message)
     if fixed_levels and len({fixed_levels.group(key) for key in (
         "entry_currency", "stop_currency", "target_currency",
@@ -450,7 +628,14 @@ def _strategy_rule_is_unencoded(message: str) -> bool:
         r"(?:risico|risk|risiko)\b",
         message, re.I,
     ))
-    return dynamic_entry or relative_level or percent_risk
+    execution_limit = bool(re.search(
+        r"\b(?:maximaal|maximum|max|hoogstens|at most|no more than|höchstens)\s*"
+        r"(?:\d+|een|twee|drie|one|two|three|ein|zwei|drei)\s*"
+        r"(?:trades?|transacties?|orders?)\s*(?:per|pro|a|in|op|elke)\s*"
+        r"(?:dag|week|maand|day|week|month|tag|woche|monat)\b",
+        message, re.I,
+    ))
+    return dynamic_entry or relative_level or percent_risk or execution_limit
 
 
 def _simple_coach_experiment_enabled() -> bool:
@@ -911,6 +1096,7 @@ class FinnV2RunService:
     async def prepare_responses_turn(
         cls, *, run_id: str, user_id: int,
         selector_started: asyncio.Event, selection_ready: asyncio.Event,
+        message_override: str | None = None,
         recovery_response_id: str | None = None,
         prior_tool_trace: tuple[dict[str, Any], ...] = (),
         force_read_repair: bool = False,
@@ -924,7 +1110,7 @@ class FinnV2RunService:
             if run is None or run.status != "planned":
                 raise LookupError("responses_run_not_planned_or_unowned")
             conversation_id = run.conversation_id
-            message = run.message
+            message = message_override or run.message
             user = await session.get(User, user_id)
             context = await orchestrator._load_continuation_context(
                 conversation_id=conversation_id, user_id=user_id, run_id=run_id,
@@ -1041,6 +1227,20 @@ class FinnV2RunService:
                         if not key.endswith("_id") and key not in {"asset", "symbol"}
                     })
                     prior_inputs.update(corrected_fields)
+                    # Keep the owner's original quote in the inherited draft.
+                    # If the correction names a different quote, operation
+                    # state must see both and invalidate all price levels.
+                    # Overwriting the old quote here would silently treat
+                    # the old entry/stop as prices in the new currency.
+                    old_quote = origin_inputs.get("price_currency")
+                    new_quote = corrected_fields.get("price_currency")
+                    if (
+                        contract.operation_id == "create_strategy"
+                        and old_quote in {"USD", "EUR"}
+                        and new_quote in {"USD", "EUR"}
+                        and old_quote != new_quote
+                    ):
+                        prior_inputs["price_currency"] = old_quote
                     if target_change_requested:
                         prior_inputs.update({
                             key: value for key, value in correction_typed_inputs.items()
@@ -1360,6 +1560,13 @@ class FinnV2RunService:
                     # A fresh request must not inherit an unrelated choice as its answer.
                     previous_response = None
         corrected_guided_operation_id: str | None = asset_corrected_operation_id
+        if pending_guided == "create_strategy" and guided.get("awaiting_price_currency_reentry"):
+            if _complete_strategy_price_reentry(message):
+                # These owner-bound price slots answer the currency correction.
+                # Route to the existing typed proposal contract; a relevance
+                # retry must not reinterpret them as a request to read a saved
+                # strategy that was never confirmed.
+                corrected_guided_operation_id = "create_strategy"
         if pending_guided:
             contract = FinnV2OperationRegistry().require_supported(pending_guided)
             requested_slot = str(guided.get("next_missing_input") or "")
@@ -2505,35 +2712,226 @@ class FinnV2RunService:
                     conversation_id = run.conversation_id
                     setup_rule_block = {}
                     strategy_rule_block = {}
+                    pending_independent_choice = False
+                    pending_inherited_rule = False
+                    pending_incomplete = False
+                    message_override = None
                     if visible and conversation_id:
                         context = await service.conversations.get_context(
                             conversation_id=conversation_id, user_id=user_id,
                         )
                         setup_rule_block = dict(context.get("setup_rule_block") or {})
                         strategy_rule_block = dict(context.get("strategy_rule_block") or {})
+                        if FinnV2OperationStateService._is_explicit_correction(run_message) and "?" not in run_message:
+                            open_items = await FinnV2ProposalRepository(session).list_open_for_conversation(
+                                conversation_id=conversation_id, user_id=user_id,
+                            )
+                            selected_open = _select_open_strategy_for_correction(open_items, run_message)
+                            if _multiple_open_correction_requires_clarification(
+                                open_items, selected_open, run_message,
+                            ):
+                                language = str(context.get("locale") or "nl").split("-")[0].lower()
+                                question = {
+                                    "en": "Several proposals are open. Which strategy card do you want to correct? Name it exactly; no card has been changed.",
+                                    "de": "Mehrere Vorschläge sind offen. Welche Strategiekarte möchtest du ändern? Nenne den genauen Namen; keine Karte wurde geändert.",
+                                }.get(language, "Er staan meerdere voorstellen open. Welke strategiekaart wil je corrigeren? Noem de exacte naam; er is niets gewijzigd.")
+                                await service.complete_responses_read(
+                                    run_id=run_id, user_id=user_id,
+                                    response_id=f"verified-strategy-card-ambiguity-{run_id}",
+                                    answer=FinnResponsesVerifiedAnswer(
+                                        status="clarification_required", text=question,
+                                        reason="multiple_open_strategy_cards", evidence=(),
+                                        clarification={"question": question, "reason": "multiple_open_strategy_cards", "choices": []},
+                                    ),
+                                    locale=str(context.get("locale") or "nl"),
+                                )
+                                await session.commit()
+                                return
+                            if selected_open is not None:
+                                origin = dict((selected_open[1].state_json or {}).get("guided_state") or {})
+                                proposal_fields = dict(dict(dict(selected_open[0].payload_json or {}).get("change") or {}).get("strategy_fields") or {})
+                                origin_inputs = {**proposal_fields, **dict(origin.get("collected_inputs") or {})}
+                                if _strategy_price_currency_conflict(origin_inputs, run_message):
+                                    language = str(context.get("locale") or "nl").split("-")[0].lower()
+                                    explanation = {
+                                        "en": ("Your correction uses a different price currency. The previous proposal "
+                                               "has been withdrawn. Please provide entry, stop-loss and target again "
+                                               "in one currency before I prepare a new proposal."),
+                                        "de": ("Deine Korrektur verwendet eine andere Kurswährung. Der vorige Vorschlag "
+                                               "wurde zurückgezogen. Nenne Einstieg, Stop-Loss und Kursziel erneut "
+                                               "in einer Währung, damit ich einen neuen Vorschlag erstellen kann."),
+                                    }.get(language, "Je correctie gebruikt een andere koersvaluta. Het vorige voorstel is ingetrokken. "
+                                             "Geef de entry, stop-loss en het target opnieuw in één valuta; "
+                                             "daarna kan ik een nieuw voorstel tonen.")
+                                    await FinnV2ConfirmationService(session).cancel(
+                                        proposal_id=selected_open[0].id, user_id=user_id,
+                                    )
+                                    for key in ("proposal_revision", "active_guided_operation", "operation_state", "proposal_correction_result"):
+                                        context.pop(key, None)
+                                    # Continue only with non-price fields from
+                                    # this owner's cancelled proposal. The
+                                    # disputed quote and every old price must
+                                    # be supplied together again.
+                                    context["active_guided_operation"] = _reopen_strategy_for_new_price_currency(
+                                        origin, dict(selected_open[0].payload_json or {}),
+                                    )
+                                    await service.conversations.update_context(
+                                        conversation_id=conversation_id, user_id=user_id, context=context,
+                                    )
+                                    await service.complete_responses_read(
+                                        run_id=run_id, user_id=user_id,
+                                        response_id=f"verified-strategy-currency-conflict-{run_id}",
+                                        answer=FinnResponsesVerifiedAnswer(
+                                            status="clarification_required",
+                                            text=explanation,
+                                            reason="strategy_price_currency_conflict", evidence=(),
+                                            clarification={
+                                                "question": explanation,
+                                                "reason": "strategy_price_currency_conflict",
+                                                "choices": [],
+                                            },
+                                        ),
+                                        locale=str(context.get("locale") or "nl"),
+                                    )
+                                    await session.commit()
+                                    return
+                        accepted = dict(context.get("accepted_independent_strategy") or {})
+                        if accepted.get("run_id") == run_id:
+                            message_override = str(accepted.get("message") or "") or None
+                            run_message = message_override or run_message
+                        pending = dict(context.get("pending_independent_strategy") or {})
+                        if pending:
+                            previous_run_id = await session.scalar(
+                                select(FinnV2Run.id).where(
+                                    FinnV2Run.conversation_id == conversation_id,
+                                    FinnV2Run.user_id == user_id,
+                                    FinnV2Run.created_at < run.created_at,
+                                ).order_by(FinnV2Run.created_at.desc()).limit(1)
+                            )
+                            if pending.get("source_run_id") != previous_run_id:
+                                context.pop("pending_independent_strategy", None)
+                                await service.conversations.update_context(
+                                    conversation_id=conversation_id, user_id=user_id,
+                                    context=context,
+                                )
+                                await session.commit()
                         if _discard_superseded_strategy_rule_block(context, run_message):
-                            # A new strategy request supersedes the blocked
-                            # draft. Otherwise the old waiver could restore
-                            # strategy A after the trader asked for B.
+                            pending = dict(context.pop("pending_independent_strategy", {}) or {})
+                            message_override = str(pending.get("message") or "") or None
+                            context["accepted_independent_strategy"] = {
+                                "run_id": run_id, "message": message_override,
+                                "source_run_id": pending.get("source_run_id"),
+                            }
                             await service.conversations.update_context(
                                 conversation_id=conversation_id, user_id=user_id,
                                 context=context,
                             )
                             await session.commit()
                             strategy_rule_block = {}
+                            run_message = message_override or run_message
+                        elif strategy_rule_block and _explicit_fresh_create_operation_request(run_message) == "create_strategy":
+                            old_name = str((strategy_rule_block.get("captured_inputs") or {}).get("name") or "").strip().casefold()
+                            new_name = str(FinnV2OperationStateService._name_input_from_text(run_message) or "").strip()
+                            if new_name and new_name.casefold() != old_name:
+                                pending_inherited_rule = (
+                                    _inherits_blocked_strategy_rules(run_message)
+                                    or _strategy_rule_is_unencoded(run_message)
+                                )
+                                pending_incomplete = not _has_independent_strategy_inputs(run_message)
+                                if pending_inherited_rule or pending_incomplete:
+                                    context.pop("pending_independent_strategy", None)
+                                else:
+                                    context["pending_independent_strategy"] = {
+                                        "message": run_message, "name": new_name,
+                                        "source_run_id": run_id,
+                                    }
+                                    pending_independent_choice = True
+                                await service.conversations.update_context(
+                                    conversation_id=conversation_id, user_id=user_id,
+                                    context=context,
+                                )
+                                await session.commit()
+
+                if visible and (pending_independent_choice or pending_inherited_rule or pending_incomplete):
+                    locale = str(context.get("locale") or "nl").split("-")[0].lower()
+                    if locale == "en":
+                        choice = "Start an independent new strategy proposal without previous automatic rules"
+                        question = (
+                            "The previous draft includes automatic rules I cannot enforce. "
+                            "Your new strategy must stand on its own without those rules. "
+                            "Confirm that choice to continue with the details you just gave."
+                        ) if pending_independent_choice else (
+                            "Your new request still refers to a rule from the blocked draft. "
+                            "State the new strategy without that rule before I can show a proposal."
+                        ) if pending_inherited_rule else (
+                            "To start an independent trade strategy, give its amount, entry, stop and target."
+                        )
+                    elif locale == "de":
+                        choice = "Neuen unabhängigen Strategieentwurf ohne vorherige automatische Regeln beginnen"
+                        question = (
+                            "Der vorige Entwurf enthält automatische Regeln, die ich nicht ausführen kann. "
+                            "Bestätige einen unabhängigen Entwurf ohne diese Regeln; "
+                            "deine übrigen Angaben bleiben erhalten."
+                        ) if pending_independent_choice else (
+                            "Deine neue Anfrage übernimmt noch eine Regel aus dem blockierten Entwurf. "
+                            "Beschreibe die neue Strategie ohne diese Regel."
+                        ) if pending_inherited_rule else (
+                            "Nenne für die unabhängige Strategie Betrag, Einstieg, Stop und Ziel."
+                        )
+                    else:
+                        choice = "Begin onafhankelijk nieuw strategievoorstel zonder eerdere automatische regels"
+                        question = (
+                            "Het vorige concept bevat automatische regels die ik niet kan uitvoeren. "
+                            "Bevestig dat dit een zelfstandig nieuw strategievoorstel zonder die regels is; "
+                            "de gegevens die je net gaf blijven behouden."
+                        ) if pending_independent_choice else (
+                            "Je nieuwe verzoek verwijst nog naar een regel uit het geblokkeerde concept. "
+                            "Beschrijf de nieuwe strategie zonder die regel voordat ik een voorstel kan tonen."
+                        ) if pending_inherited_rule else (
+                            "Geef voor de zelfstandige strategie het bedrag, de entry, stop en het koersdoel op."
+                        )
+                    async with async_session_factory() as session:
+                        conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                            conversation_id=conversation_id, user_id=user_id, for_update=True,
+                        )
+                        if conversation is None or conversation.last_run_id != run_id:
+                            raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                        await cls(session).complete_responses_read(
+                            run_id=run_id, user_id=user_id,
+                            response_id=f"verified-independent-strategy-choice-{run_id}",
+                            answer=FinnResponsesVerifiedAnswer(
+                                status="clarification_required", text=question,
+                                reason="strategy_rule_not_captured", evidence=(),
+                                clarification={
+                                    "question": question, "reason": "strategy_rule_not_captured",
+                                    "choices": [choice] if pending_independent_choice else [],
+                                },
+                            ),
+                            locale=locale,
+                        )
+                        await session.commit()
+                    return
 
                 if (
                     visible and strategy_rule_block
                     and not _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
-                    and _references_blocked_strategy_draft(run_message)
+                    and (
+                        _references_blocked_strategy_draft(run_message)
+                        or _asks_to_drop_blocked_strategy_rules(run_message)
+                    )
                 ):
                     # This is a continuation of an unsaved, blocked draft.
                     # Do not send it through the generic update-strategy
                     # selector, which would ask for a saved strategy and could
                     # imply that unsupported execution rules are editable.
                     locale = str(context.get("locale") or "nl").split("-")[0].lower()
+                    omission_requested = _asks_to_drop_blocked_strategy_rules(run_message)
                     if locale == "en":
                         question = (
+                            "I understand that you want to omit the automatic rules from the unsaved draft. "
+                            "Confirm ‘Make strategy proposal without these automatic rules’ to continue "
+                            "with the fixed fields already given."
+                        ) if omission_requested else (
                             "This is still an unsaved strategy draft. I cannot enforce the "
                             "automatic rules from this draft, including the rule you just "
                             "added. Choose ‘Make strategy proposal without these automatic "
@@ -2543,6 +2941,10 @@ class FinnV2RunService:
                         choice = "Make strategy proposal without these automatic rules"
                     elif locale == "de":
                         question = (
+                            "Du möchtest die automatischen Regeln aus dem ungespeicherten Entwurf "
+                            "weglassen. Bestätige „Strategieentwurf ohne diese automatischen Regeln "
+                            "erstellen“, damit die schon genannten festen Angaben erhalten bleiben."
+                        ) if omission_requested else (
                             "Dies ist noch ein ungespeicherter Strategieentwurf. Die "
                             "automatischen Regeln, auch die eben ergänzte, kann ich so "
                             "nicht ausführen. Wähle „Strategieentwurf ohne diese automatischen "
@@ -2552,6 +2954,10 @@ class FinnV2RunService:
                         choice = "Strategieentwurf ohne diese automatischen Regeln erstellen"
                     else:
                         question = (
+                            "Ik begrijp dat je de automatische regels uit dit niet-opgeslagen concept wilt "
+                            "weglaten. Bevestig ‘Maak strategievoorstel zonder deze automatische regels’ "
+                            "om door te gaan met de vaste gegevens die je al gaf."
+                        ) if omission_requested else (
                             "Dit is nog een niet-opgeslagen strategieconcept. Ik kan de "
                             "automatische regels, ook de regel die je net toevoegt, niet "
                             "afdwingen. Kies ‘Maak strategievoorstel zonder deze automatische "
@@ -2591,6 +2997,7 @@ class FinnV2RunService:
                             run_id=run_id, user_id=user_id,
                             selector_started=selector_started,
                             selection_ready=selection_ready,
+                            message_override=message_override,
                         )
                         logger.info(
                             "FINN Responses preparation completed in %.2fs",
@@ -2933,6 +3340,7 @@ class FinnV2RunService:
                                     run_id=run_id, user_id=user_id,
                                     selector_started=selector_started,
                                     selection_ready=selection_ready,
+                                    message_override=message_override,
                                     recovery_response_id=prepared.response.response_id,
                                     prior_tool_trace=prepared.response.tool_trace,
                                     force_read_repair=not prepared.response.tool_trace and not explain_limit,
