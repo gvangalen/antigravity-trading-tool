@@ -43,9 +43,11 @@ from backend.services.finn_v2_run_service import (
     _minimal_read_answer, _minimal_read_answers_enabled, _explicit_setup_rule_waiver,
     _proposal_from_blocked_setup, _explicit_strategy_rule_waiver,
     _proposal_from_blocked_strategy, _safe_blocked_strategy_inputs,
+    _blocked_strategy_from_clarification,
     _discard_superseded_strategy_rule_block, _references_blocked_strategy_draft,
     _asks_to_drop_blocked_strategy_rules, _strategy_price_currency_conflict,
     _reopen_strategy_for_new_price_currency, _complete_strategy_price_reentry,
+    _pure_strategy_price_reentry,
     _select_open_strategy_for_correction,
     _multiple_open_correction_requires_clarification,
     _strategy_rule_is_unencoded,
@@ -5284,6 +5286,64 @@ def test_blocked_strategy_restores_user_stated_fixed_usd_levels_after_waiver():
     assert restored_inputs["targets"] == [92400]
 
 
+def test_model_clarification_keeps_owner_scoped_strategy_draft_for_rule_waiver():
+    message = (
+        "Maak voor mijn opgeslagen setup BTC Breakout een nieuwe Paper-strategie "
+        "met naam Rustige BTC. BTC 4H, vast bedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD en voorzichtig risico. "
+        "Ik wil daarnaast alleen handelen bij stijgende 1D-trend en maximaal "
+        "twee trades per dag. Toon alleen een concept."
+    )
+    blocked = _blocked_strategy_from_clarification(
+        message, verified_setup={"id": 42, "name": "BTC Breakout", "symbol": "BTC"},
+    )
+    assert blocked is not None
+    assert blocked["captured_inputs"]["setup_id"] == 42
+    assert blocked["captured_inputs"]["name"] == "Rustige BTC"
+    assert blocked["captured_inputs"]["base_amount"] == 100
+    assert not {"entry", "stop_loss", "targets", "price_currency"} & blocked["captured_inputs"].keys()
+    assert "trend" not in blocked["captured_inputs"]
+    assert _explicit_strategy_rule_waiver(
+        "Maak strategievoorstel zonder deze automatische regels", message,
+    )
+    restored = _proposal_from_blocked_strategy(
+        blocked, {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"},
+    )
+    assert restored.request_plan.operation_state["collected_inputs"]["setup_id"] == 42
+    assert "entry" not in restored.request_plan.operation_state["collected_inputs"]
+    assert restored.request_plan.operation_state["status"] == "collecting"
+    assert "entry" in restored.request_plan.operation_state["missing_required_inputs"]
+
+
+def test_model_clarification_never_reuses_unverified_setup_or_price_levels():
+    request = (
+        "Maak een nieuwe Paper-strategie met naam Rustige BTC voor mijn setup. "
+        "Dit is een voorbeeld, niet mijn prijsplan: entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD."
+    )
+    blocked = _blocked_strategy_from_clarification(request, verified_setup=None)
+    assert blocked is not None
+    assert "setup_id" not in blocked["captured_inputs"]
+    assert not {"entry", "stop_loss", "targets", "price_currency"} & blocked["captured_inputs"].keys()
+    contradictory = (
+        "Maak voor mijn opgeslagen setup BTC Breakout een nieuwe Paper-strategie "
+        "met naam Rustige BTC. Alle prijzen zijn EUR: entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD."
+    )
+    rejected = _blocked_strategy_from_clarification(
+        contradictory, verified_setup={"id": 42},
+    )
+    assert rejected is not None
+    assert not {"entry", "stop_loss", "targets", "price_currency"} & rejected["captured_inputs"].keys()
+
+
+def test_direct_price_reentry_requires_only_three_explicit_levels():
+    levels = "Entry 85.000 EUR, stop-loss 80.000 EUR, target 95.000 EUR."
+    assert _pure_strategy_price_reentry(levels)
+    assert not _pure_strategy_price_reentry(levels + " Koop alleen na een volumepiek.")
+    assert not _pure_strategy_price_reentry(levels.replace("target 95.000 EUR", "target 95.000 USD"))
+
+
 def test_blocked_strategy_does_not_recover_levels_from_unrecognized_or_negated_prose():
     message = (
         "Maak BTC Trend Plan voor mijn BTC setup. Met €100 vast per uitvoering: "
@@ -5298,6 +5358,17 @@ def test_blocked_strategy_does_not_recover_levels_from_unrecognized_or_negated_p
     for rejected in (
         "Niet deze niveaus: entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD.",
         "Alle koersniveaus zijn EUR: entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD.",
+        (
+            "Maak een nieuwe Paper-strategie voor BTC. De volgende niveaus gelden niet "
+            "meer en horen bij een oud plan dat ik nu wil vervangen door geheel andere "
+            "prijzen. Entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD. "
+            "Koop alleen bij stijgende 1D trend."
+        ),
+        (
+            "Maak een nieuwe Paper-strategie voor BTC. Dit is uitsluitend ter "
+            "illustratie en mag niet worden gebruikt als prijsplan. Entry 84.000 USD, "
+            "stop-loss 79.800 USD, target 92.400 USD."
+        ),
     ):
         rejected_safe = _safe_blocked_strategy_inputs(rejected, {
             "setup_id": 42, "symbol": "BTC", "entry": 1, "stop_loss": 2,
@@ -5425,6 +5496,13 @@ def test_multiple_open_cards_fail_closed_for_quote_less_target_correction():
     assert not _multiple_open_correction_requires_clarification(
         cards, selected, "Pas het target van BTC Strategy A aan naar 93.000 EUR",
     )
+    assert not _multiple_open_correction_requires_clarification(
+        cards, selected,
+        "Wijzig BTC Strategy A: alle koersniveaus moeten EUR zijn, niet USD.",
+    )
+    assert FinnV2OperationStateService._explicit_trade_price_currency(
+        "Alle koersniveaus moeten EUR zijn, niet USD."
+    ) == "EUR"
 
 
 def test_price_reentry_parent_ignores_recent_different_setup(monkeypatch):

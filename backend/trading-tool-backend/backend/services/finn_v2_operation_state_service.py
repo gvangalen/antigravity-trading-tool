@@ -1446,6 +1446,21 @@ class FinnV2OperationStateService:
         )
         if global_quote:
             currencies.add(FinnV2OperationStateService._currency_token(global_quote.group(1)))
+        # An owner may correct an open card by naming the new quote and the
+        # rejected old quote without repeating a price level. The negated
+        # quote describes the previous draft; it is not a second requested
+        # unit. A later labelled level is still checked below for conflict.
+        contrast_quote = re.search(
+            r"\b(?:alle|all|sämtliche)?\s*(?:koersniveaus|prijsniveaus|prijzen|"
+            r"price\s+levels|prices|trade\s+levels|kursniveaus|preise)\b"
+            r"[^.!?\n]{0,35}?\b(?:moeten|must|sollen|should|zijn|are|sind)\s*"
+            r"(?P<desired>USD|EUR)\s*(?:zijn|be|sein)?\s*[,;]?\s*"
+            r"(?:niet|not|nicht|in\s+plaats\s+van|instead\s+of|statt)\s*"
+            r"(?P<old>USD|EUR)\b",
+            text, re.IGNORECASE,
+        )
+        if contrast_quote and contrast_quote.group("desired").upper() != contrast_quote.group("old").upper():
+            currencies.add(contrast_quote.group("desired").upper())
         for match in level.finditer(text):
             token = match.group("before") or match.group("after")
             if token:
