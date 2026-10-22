@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN setup prerequisite in strategy continuity QA (22 October 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. The previous public SHA
+Phase: `LIVE_CANDIDATE_QA_PENDING`. The previous public SHA
 `86c483c64f036b509aa7131bed8af6c93b7dc9a1` is **NOT_ACCEPTED** after the
 independent [QA workflow 39804577583](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39804577583).
 Its first setup-creation prerequisite ended in `CLARIFICATION / setup_rule_not_captured`;
@@ -29,13 +29,27 @@ was confirmed, plan saved or order executed. The final-code backend suite passed
 **16/16** contracts and **19/19** adapter checks, with zero broker orders, Live
 trading calls, Live bots or production connections (artifact SHA-256
 `fca3c3f666357ed72789edd89524c43a22a792f64b6ed0314269e48b2d9f1a78`).
-The real Responses development selector passed **20/20** with zero provider,
-schema, timeout, parse or validation failures. Frontend typecheck, i18n
+The real Responses development selector passed **20/20** and regression
+selector **109/109**, both with zero provider, schema, timeout, parse or
+validation failures (artifact SHA-256
+`7031406e7951db807a137eb1b4aa1f5213ca06a0e1fc553c4f1a47cf9735b9a3`
+and `6b8f072105e62b049152e563862a7abe72482c32754c9db023e216e76c63ec70`).
+The adverse local runtime probe returned `setup_rule_not_captured` with no
+proposal for an unencoded breakout condition. Frontend typecheck, i18n
 lint/tests, command/proposal tests, production build and high-severity audit
 passed on unchanged frontend source; the audit reported one moderate Next.js
 advisory. Security and Architecture found no P1/P2 in the final closed-grammar
-diff. The real Responses regression set, deployment and independent live retest
-remain pending.
+diff. The repair merged through [PR #543](https://github.com/gvangalen/antigravity-trading-tool/pull/543)
+as product SHA `a80b1d700d5d352b90bc99466575219730f385bb`. The final
+[PR CI attempt 39808061760](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39808061760),
+[main CI 39809571420](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39809571420),
+and [Auto Deploy 39809944670](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39809944670)
+all succeeded. Public backend health and frontend build-info each returned
+HTTP 200 with that exact product SHA. This documentation-only status update
+will create a later public SHA without product-code changes; Build must wait
+for its final CI and Auto Deploy and verify both public SHAs before the
+independent QA handoff. The previous `NOT_ACCEPTED` verdict remains until
+that authenticated live retest completes.
 
 ## FINN strategy continuation: owner and fixed-field repair (22 October 2026)
 
