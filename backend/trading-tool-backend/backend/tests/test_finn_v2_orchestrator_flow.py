@@ -243,6 +243,41 @@ def test_latest_collecting_guided_contract_wins_over_older_successful_action_lin
     assert "operation_state" not in context
 
 
+def test_collecting_second_strategy_does_not_revise_first_open_card(monkeypatch):
+    from backend.services import finn_v2_orchestrator_service as module
+
+    class Session:
+        async def execute(self, *_args, **_kwargs):
+            raise AssertionError("only the owner-scoped open-card lookup is expected")
+
+    first = SimpleNamespace(id="card-a", operation_type="create_strategy")
+    origin = SimpleNamespace(state_json={"guided_state": {
+        "operation_id": "create_strategy", "open_proposal_id": "card-a",
+        "collected_inputs": {"name": "Strategy A"}, "status": "proposed",
+    }})
+    lookup = SimpleNamespace(get_latest_open_for_conversation=AsyncMock(return_value=(first, origin)))
+    monkeypatch.setattr(module, "FinnV2ProposalRepository", lambda _session: lookup)
+    service = FinnV2OrchestratorService(session=Session())
+    service.conversations = _FakeConversationRepo()
+    second = {
+        "operation_id": "create_strategy", "status": "collecting",
+        "collected_inputs": {"name": "Strategy B", "base_amount": 100},
+        "missing_required_inputs": ["setup_id"], "next_missing_input": "setup_id",
+    }
+    service.runtime_contracts = SimpleNamespace(
+        get_latest_for_conversation=AsyncMock(return_value=SimpleNamespace(
+            run_id="run-b", state_json={"guided_state": second},
+        )),
+    )
+
+    context = asyncio.run(service._load_continuation_context(
+        conversation_id="conversation-a-b", user_id=7, run_id="answer-b", has_prior_run=True,
+    ))
+
+    assert context["active_guided_operation"] == second
+    assert "proposal_revision" not in context
+
+
 class _QueryableSession:
     async def execute(self, *_args, **_kwargs):
         raise AssertionError("repository access is replaced by the resolver double")

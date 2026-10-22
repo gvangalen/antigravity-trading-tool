@@ -1453,6 +1453,13 @@ class FinnV2OrchestratorService:
             # user slot. An older successful action-result in this same
             # conversation is dependency lineage, not a reason to discard a
             # newer Setup, Strategy or Bot draft.
+            # An older open card may still exist independently. It is not the
+            # draft being filled when this collecting contract has no matching
+            # proposal ID (for example, strategy B awaits its parent while A
+            # remains open). Never project A as B's revision target.
+            revision = dict(context.get("proposal_revision") or {})
+            if revision and revision.get("proposal_id") != guided_state.get("open_proposal_id"):
+                context.pop("proposal_revision", None)
             context["active_guided_operation"] = guided_state
             context.pop("operation_state", None)
         else:
