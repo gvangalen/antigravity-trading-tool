@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN strategy continuation after clarification (22 October 2026)
 
-Phase: `LOCAL_VALIDATION`. The previous production SHA
+Phase: `LIVE_CANDIDATE_QA_PENDING`. The previous production SHA
 `2ebfd28db90f602a76e3f8468d52de44a8ff0266` remains **NOT_ACCEPTED** after
 independent [QA workflow 39746784985](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39746784985).
 Its ten completed turns exposed a lost strategy draft after an early
@@ -42,10 +42,17 @@ The real Responses regression passed **109/109** with zero provider, schema,
 parse, timeout or validation failures (artifact SHA-256
 `e9f18aa2ba6525c654b0c8a654ca76f8334f5f94dfc633081886b882d8ceb139`).
 Architecture found no P1/P2 in the diff; Security's final re-review found no
-remaining P1/P2 after the unsafe free-text recovery was removed. CI,
-deployment, and authenticated QA remain pending. This local
-evidence does not change the
-previous independent `NOT_ACCEPTED` verdict.
+remaining P1/P2 after the unsafe free-text recovery was removed. The repair
+was merged through [PR #536](https://github.com/gvangalen/antigravity-trading-tool/pull/536)
+as product commit `d4bed4073c5c2b1523a8c4ced0b82cdfb486d1f8`.
+[PR CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39773274358),
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39773680381),
+and [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39773964842)
+completed successfully. Public backend health and frontend build-info both
+returned HTTP 200 and that exact product SHA. This documentation-only status
+update will create a later deployment SHA; independent QA must verify the
+actual public SHA before testing. Authenticated QA is pending, so this Build
+evidence does not overturn the previous independent `NOT_ACCEPTED` verdict.
 
 ## FINN-agent-cutover: protected QA on 260d846 (22 October 2026)
 
