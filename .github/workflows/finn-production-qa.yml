@@ -206,10 +206,35 @@ jobs:
             -o StrictHostKeyChecking=yes
             -o ConnectTimeout=15
           )
+          failure_stage="remote_directory"
+          write_preflight_failure() {
+            local exit_status="$?"
+            local error_code="qa_preflight_${failure_stage}"
+            local remote_code=""
+            if [ "$exit_status" -eq 0 ] || [ -f "qa-artifacts/${report_name}" ]; then
+              return
+            fi
+            if [ "$failure_stage" = "remote_bootstrap" ]; then
+              # shellcheck disable=SC2029 # The attempt-scoped remote marker path intentionally expands locally.
+              remote_code="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "cat '$remote_state_dir/preflight_status'" 2>/dev/null || true)"
+              case "$remote_code" in
+                qa_checkout_mismatch|qa_checkout_unavailable|qa_runner_checksum_mismatch|qa_secrets_unavailable|qa_secrets_load_failed)
+                  error_code="$remote_code"
+                  ;;
+              esac
+            fi
+            mkdir -p qa-artifacts
+            printf '{"schema_version":1,"outcome":"failed","error_category":"%s","profile":"%s"}\n' \
+              "$error_code" "$QA_PROFILE" > "qa-artifacts/${report_name}"
+            sha256sum "qa-artifacts/${report_name}" > "qa-artifacts/${report_name}.sha256"
+          }
+          trap write_preflight_failure ERR
           # shellcheck disable=SC2029 # The command intentionally expands the scoped remote path locally.
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "mkdir -p '$remote_state_dir' && chmod 700 '$remote_state_dir'"
+          failure_stage="runner_transfer"
           scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_runner" "ubuntu@${QA_HOST}:${remote_runner}"
           if [ -n "${MANIFEST_BUNDLE:-}" ]; then
+            failure_stage="manifest_transfer"
             printf '%s' "$MANIFEST_BUNDLE" > "$RUNNER_TEMP/finn-production-qa-manifest.bundle"
             chmod 600 "$RUNNER_TEMP/finn-production-qa-manifest.bundle"
             scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$RUNNER_TEMP/finn-production-qa-manifest.bundle" "ubuntu@${QA_HOST}:${remote_bundle}"
@@ -217,6 +242,7 @@ jobs:
             remote_bundle=""
           fi
           remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$workflow_attempt_id" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION" "$remote_state_dir")
+          failure_stage="remote_bootstrap"
           # shellcheck disable=SC2029 # The SSH arguments are intentionally constructed by this protected runner.
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
           set -euo pipefail
@@ -236,13 +262,19 @@ jobs:
           runner_sha256="${13}"
           runner_revision="${14}"
           state_dir="${15}"
-          cd "$remote_dir"
-          test "$(git rev-parse HEAD)" = "$release_sha"
-          test "$(sha256sum "$runner_path" | awk '{print $1}')" = "$runner_sha256"
+          fail_preflight() {
+            printf '%s\n' "$1" > "$state_dir/preflight_status"
+            printf '%s\n' "$1" >&2
+            exit 1
+          }
+          cd "$remote_dir" || fail_preflight qa_checkout_unavailable
+          test "$(git rev-parse HEAD 2>/dev/null)" = "$release_sha" || fail_preflight qa_checkout_mismatch
+          test "$(sha256sum "$runner_path" | awk '{print $1}')" = "$runner_sha256" || fail_preflight qa_runner_checksum_mismatch
           test ! -f "$state_dir/runner.pid" || ! kill -0 "$(cat "$state_dir/runner.pid")" 2>/dev/null || exit 0
           test ! -f "$state_dir/runner.child.pid" || ! kill -0 "$(cat "$state_dir/runner.child.pid")" 2>/dev/null || exit 0
+          test -f "$HOME/.secrets/trading.env" || fail_preflight qa_secrets_unavailable
           set -a
-          source "$HOME/.secrets/trading.env"
+          source "$HOME/.secrets/trading.env" >/dev/null 2>&1 || fail_preflight qa_secrets_load_failed
           set +a
           # These are scoped to this QA subprocess, never the application processes.
           export FINN_QA_ALLOW_FIXTURE_ACTIONS=0
@@ -337,6 +369,7 @@ jobs:
           nohup "$state_dir/run.sh" </dev/null >/dev/null 2>&1 &
           printf '%s\\n' "$!" > "$state_dir/runner.pid"
           REMOTE
+          failure_stage="remote_poll"
           # The runner is detached from the SSH session. A transport failure
           # while this workflow polls cannot cancel its protected server job.
           completed=0
