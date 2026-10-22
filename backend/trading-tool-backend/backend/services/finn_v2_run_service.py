@@ -458,6 +458,18 @@ def _select_open_strategy_for_correction(
     open_items: list[tuple[object, object]], message: str,
 ) -> tuple[object, object] | None:
     strategies = [item for item in open_items if item[0].operation_type == "create_strategy"]
+    named_reentry = re.match(
+        r"^\s*voor\s+setup\s+.+?\s+en\s+strategie\s+(.+?)\s+zijn\s+"
+        r"(?:de\s+)?(?:actuele|huidige|nieuwe)\s+(?:koersniveaus|prijzen|niveaus)\b",
+        message, re.I,
+    )
+    if named_reentry:
+        target_name = named_reentry.group(1).strip().casefold()
+        exact = [item for item in strategies if str(
+            dict(dict(dict(item[0].payload_json or {}).get("change") or {}).get("strategy_fields") or {})
+            .get("name") or ""
+        ).strip().casefold() == target_name]
+        return exact[0] if len(exact) == 1 else None
     if len(open_items) == 1 and not _rejects_named_open_strategy(open_items, message):
         return strategies[0] if strategies else None
     named = []
@@ -1164,6 +1176,45 @@ def _strategy_rule_is_unencoded(message: str) -> bool:
             or indicator_filter or conditional_trade_rule)
 
 
+def _previous_strategy_clarification(previous_contract: Any, conversation_id: str) -> dict:
+    """Accept only the immediately prior sealed clarification in this conversation."""
+    state = dict((previous_contract.state_json or {}) if previous_contract else {})
+    clarification = dict(state.get("responses_clarification") or {})
+    if (
+        state.get("terminal_status") == "clarification_required"
+        and clarification.get("conversation_id") == conversation_id
+        and clarification.get("run_id") == getattr(previous_contract, "run_id", None)
+    ):
+        return clarification
+    return {}
+
+
+def _new_independent_strategy_supersedes_guided(message: str, guided: dict) -> bool:
+    """A complete, separately named request cannot inherit another open draft."""
+    if guided.get("operation_id") != "create_strategy":
+        return False
+    previous_name = str(dict(guided.get("collected_inputs") or {}).get("name") or "").strip()
+    new_name = str(FinnV2OperationStateService._name_input_from_text(message) or "").strip()
+    return bool(
+        previous_name and new_name and previous_name.casefold() != new_name.casefold()
+        and _explicit_fresh_create_operation_request(message) == "create_strategy"
+        and _explicitly_separates_new_strategy(message)
+        and _has_independent_strategy_inputs(message)
+        and not _inherits_blocked_strategy_rules(message)
+    )
+
+
+def _clear_superseded_strategy_draft(context: dict, message: str) -> bool:
+    current = dict(context.get("active_guided_operation") or {})
+    if not current:
+        current = dict(dict(context.get("proposal_revision") or {}).get("guided_state") or {})
+    if not _new_independent_strategy_supersedes_guided(message, current):
+        return False
+    for key in ("active_guided_operation", "operation_state", "proposal_revision"):
+        context.pop(key, None)
+    return True
+
+
 def _plain_setup_creation_request(message: str) -> bool:
     """Recognize a complete, bare setup request; reject all extra prose."""
     text = " ".join(str(message or "").strip().split())
@@ -1730,6 +1781,52 @@ class FinnV2RunService:
                 message=message,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
+            # The sealed prior run can rehydrate a card through
+            # proposal_revision even without an active guided projection.
+            # A separately named complete request starts from its own fields.
+            _clear_superseded_strategy_draft(context, message)
+            verified_reentry_from_open = False
+            if conversation_id and _complete_strategy_price_reentry(message):
+                # Resolve the explicitly named strategy while its open card
+                # still exists. Generic correction routing otherwise sees a
+                # setup mention and may select update_setup after the card is
+                # cancelled. Every retained field comes from this owner's
+                # open create_strategy contract.
+                open_items = await FinnV2ProposalRepository(session).list_open_for_conversation(
+                    conversation_id=conversation_id, user_id=user_id,
+                )
+                named_open = _select_open_strategy_for_correction(open_items, message)
+                if named_open is not None:
+                    origin = dict((named_open[1].state_json or {}).get("guided_state") or {})
+                    payload = dict(named_open[0].payload_json or {})
+                    fields = dict(dict(payload.get("change") or {}).get("strategy_fields") or {})
+                    prior_inputs = {**fields, **dict(origin.get("collected_inputs") or {})}
+                    setup_id = prior_inputs.get("setup_id")
+                    setup = (
+                        await SetupRepository(session).get_setup_by_id(int(setup_id), user_id)
+                        if setup_id else None
+                    )
+                    stated = FinnV2OperationStateService().explicit_inputs(
+                        contract=FinnV2OperationRegistry().require_supported("create_strategy"),
+                        message=message, explicit_asset=None,
+                    )
+                    if setup and _strategy_reentry_matches_saved_draft(
+                        message, setup, prior_inputs, stated,
+                    ):
+                        await FinnV2ConfirmationService(session).cancel(
+                            proposal_id=named_open[0].id, user_id=user_id,
+                        )
+                        for key in ("proposal_revision", "operation_state", "proposal_correction_result",
+                                    "responses_clarification"):
+                            context.pop(key, None)
+                        context["active_guided_operation"] = _reopen_strategy_for_new_price_currency(
+                            origin, payload,
+                        )
+                        await orchestrator.conversations.update_context(
+                            conversation_id=conversation_id, user_id=user_id, context=context,
+                        )
+                        await session.commit()
+                        verified_reentry_from_open = True
             selected_feed = context.get("feed_event") or {}
             if (run.client_context_json or {}).get("feed_item_id") or (
                 isinstance(selected_feed, dict) and selected_feed.get("item_id")
@@ -1747,7 +1844,15 @@ class FinnV2RunService:
             correction_typed_inputs: dict[str, object] = {}
             explicit_proposal_correction = False
             target_change_requested = False
-            if conversation_id:
+            guided_price_reentry = dict(context.get("active_guided_operation") or {})
+            skip_generic_correction = bool(
+                verified_reentry_from_open or (
+                    guided_price_reentry.get("operation_id") == "create_strategy"
+                    and guided_price_reentry.get("awaiting_price_currency_reentry")
+                    and _complete_strategy_price_reentry(message)
+                )
+            )
+            if conversation_id and not skip_generic_correction:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
                 )
@@ -1889,10 +1994,14 @@ class FinnV2RunService:
                     }
                     context["proposal_correction_result"] = correction_result
                     if (unspecified_correction or corrected_name or corrected_fields
-                            or target_change_requested or resolve_catalog_symbol(corrected_instrument)):
+                            or target_change_requested or resolve_catalog_symbol(corrected_instrument)
+                            or (explicit_proposal_correction and contract.operation_id == "create_strategy")):
                         # The owner changed the instrument of this open
-                        # proposal, not the active workspace asset. Reuse its
-                        # operation contract for the replacement candidate.
+                        # proposal or corrected this unconfirmed strategy,
+                        # not its parent setup. Reuse the owner's open-card
+                        # contract even when the typed diff is empty; the
+                        # replacement must then collect missing fields rather
+                        # than becoming an update_setup proposal.
                         asset_corrected_operation_id = latest_open[0].operation_type
                     context.pop("proposal_revision", None)
                     context.pop("active_guided_operation", None)
@@ -1903,10 +2012,11 @@ class FinnV2RunService:
                     stored_context = await orchestrator.conversations.get_context(
                         conversation_id=conversation_id, user_id=user_id,
                     )
-                    active_guided = dict(stored_context.get("active_guided_operation") or {})
-                    if active_guided.get("open_proposal_id") == latest_open[0].id:
-                        stored_context.pop("active_guided_operation", None)
-                        stored_context.pop("operation_state", None)
+                    # The selected card becomes the focus of this correction.
+                    # A prior card's guided state must not donate its name or
+                    # rules to the replacement when several cards are open.
+                    stored_context.pop("active_guided_operation", None)
+                    stored_context.pop("operation_state", None)
                     if target_change_requested:
                         for key in ("canonical_entity_target", "recent_action_results",
                                     "recent_owner_action_results", "previous_action_result"):
@@ -3441,6 +3551,39 @@ class FinnV2RunService:
                         )
                         setup_rule_block = dict(context.get("setup_rule_block") or {})
                         strategy_rule_block = dict(context.get("strategy_rule_block") or {})
+                        # Clarification state belongs to the previous sealed
+                        # run contract. The conversation projection normally
+                        # carries only its Responses cursor, so read that
+                        # owner-scoped contract before classifying a waiver.
+                        previous_contract = await service.runtime_contracts.get_latest_for_conversation(
+                            conversation_id=conversation_id, user_id=user_id,
+                            exclude_run_id=run_id,
+                        )
+                        prior_clarification = _previous_strategy_clarification(
+                            previous_contract, conversation_id,
+                        )
+                        if (
+                            not strategy_rule_block
+                            and prior_clarification.get("reason") == "strategy_rule_not_captured"
+                        ):
+                            # A clarification may be emitted before proposal
+                            # analysis. Recover its original owner-bound draft
+                            # here so an explicit waiver cannot fall through
+                            # to an unrelated READ selection on the next turn.
+                            original = str(prior_clarification.get("original_message") or "")
+                            if original and _strategy_rule_is_unencoded(original):
+                                resolver = FinnV2EntityResolutionService(session)
+                                setups = [dict(row) for row in await resolver.setups.get_user_setups(user_id)]
+                                matches = _positive_owner_setup_matches(resolver, original, setups)
+                                strategy_rule_block = _blocked_strategy_from_clarification(
+                                    original, verified_setup=matches[0] if len(matches) == 1 else None,
+                                ) or {}
+                                if strategy_rule_block:
+                                    context["strategy_rule_block"] = strategy_rule_block
+                                    await service.conversations.update_context(
+                                        conversation_id=conversation_id, user_id=user_id, context=context,
+                                    )
+                                    await session.commit()
                         guided_strategy = dict(context.get("active_guided_operation") or {})
                         if (
                             guided_strategy.get("operation_id") == "create_strategy"
