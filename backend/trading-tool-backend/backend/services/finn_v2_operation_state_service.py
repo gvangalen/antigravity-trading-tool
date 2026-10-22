@@ -1345,7 +1345,7 @@ class FinnV2OperationStateService:
             if match:
                 values[field] = cls._numeric_value(match.group(1))
         targets = re.search(
-            r"\b(?:targets?|koersdoelen?|take[- ]?profits?|ziele?n?)\s*"
+            r"\b(?:targets?|koersdoel(?:en)?|take[- ]?profits?|ziele?n?)\s*"
             r"(?:zijn|is|are|sind|ist|:|=|op|at)?\s*"
             r"(\[?\s*(?:€|\$|eur|usd)?\s*\d+(?:[.,]\d+)?(?:\.(?!\s|$)|[^.!?\n])*?)"
             r"(?=,?\s+(?:(?:and|en|und)\s+)?(?:(?:maximaal|max(?:imum)?|maximum|höchstens)\s+"
@@ -1556,6 +1556,15 @@ class FinnV2OperationStateService:
         )
         if direct_correction:
             return direct_correction.group(1).strip(" .\"'“”‘’") or None
+        natural_title = re.search(
+            r"\b(?:(?:de\s+)?(?:nieuwe\s+)?(?:strategie|setup|plan|bot)\s+heet|"
+            r"(?:de\s+)?naam\s+wordt)\s+[\"'“‘]?([\w .-]{2,80}?)"
+            r"(?=\s+(?:met|voor|en)\s+(?:een\s+)?(?:vast|basis|bedrag|budget|"
+            r"entry|instap|stop|target|koersdoel|risico)\b|[\"'”’]?[,:;.!?\n]|$)",
+            text, re.IGNORECASE,
+        )
+        if natural_title:
+            return natural_title.group(1).strip(" .\"'“”‘’") or None
         quoted = re.search(
             r"\b(?:met\s+(?:de\s+)?naam|naam|name|named|called|"
             r"noem\s+(?:hem|haar|het|(?:deze|dit|de|het|een)\s+(?:nieuwe?\s+)?(?:setup|strategie|plan|bot)))"

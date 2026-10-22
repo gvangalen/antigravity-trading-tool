@@ -44,6 +44,10 @@ from backend.services.finn_v2_run_service import (
     _proposal_from_blocked_setup, _explicit_strategy_rule_waiver,
     _proposal_from_blocked_strategy, _safe_blocked_strategy_inputs,
     _blocked_strategy_from_clarification, _positive_owner_setup_matches,
+    _rejects_guided_strategy_parent,
+    _strategy_rule_is_unencoded, _inherits_blocked_strategy_rules,
+    _explicitly_separates_new_strategy,
+    _freeform_strategy_rule_waiver_inputs,
     _plain_setup_creation_request, _plain_strategy_execution_mode_reply,
     _plain_strategy_start_request,
     _plain_strategy_guided_mode_transition,
@@ -5504,6 +5508,202 @@ def test_pending_strategy_parent_rejects_negated_owner_setup_name():
     assert _positive_owner_setup_matches(
         resolver, "Maak voor mijn opgeslagen setup BTC Breakout een Paper-strategie.", setups,
     ) == [setups[0]]
+
+
+def test_strategy_parent_survives_non_parent_rule_negation_and_followup_sentences():
+    resolver = FinnV2EntityResolutionService(None)
+    setups = [{"id": 42, "name": "BTC Breakout"}, {"id": 43, "name": "ETH Rustig"}]
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een Paper-strategie voor mijn opgeslagen setup BTC Breakout met naam BTC Veilig. "
+        "Koop alleen na een volumepiek en niet bij een zwakke trend. "
+        "Als die regels niet opgeslagen kunnen worden, toon dan geen kaart.",
+        setups,
+    ) == [setups[0]]
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor BTC Breakout een tweede strategie met een ander target. "
+        "Neem niets over uit de vorige strategie.",
+        setups,
+    ) == [setups[0]]
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn opgeslagen setup BTC Breakout een strategie. "
+        "Toch niet: ik bedoel een andere setup.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een strategie voor mijn opgeslagen setup BTC Breakout. "
+        "Nee, gebruik ETH.",
+        [{"id": 42, "name": "BTC Breakout", "symbol": "BTC"}],
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een strategie voor mijn opgeslagen setup BTC Breakout, "
+        "die ik niet wil gebruiken, met entry 84.000 USD.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een strategie voor mijn opgeslagen setup BTC Breakout. "
+        "Deze setup wil ik niet gebruiken.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een strategie voor mijn opgeslagen setup BTC Breakout. "
+        "Deze wil ik niet gebruiken.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een strategie voor mijn opgeslagen setup BTC Breakout. "
+        "Dit was alleen ter illustratie.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een strategie voor mijn opgeslagen setup BTC Breakout. "
+        "Ik wil deze niet gebruiken.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak een strategie voor mijn opgeslagen setup BTC Breakout. "
+        "Ik wil die niet gebruiken.",
+        setups,
+    ) == []
+
+
+def test_strategy_explicit_fields_include_natural_name_and_singular_koersdoel():
+    state = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    values = state.explicit_inputs(
+        contract=contract,
+        message=(
+            "Maak een Paper-strategie voor mijn opgeslagen setup BTC Breakout. "
+            "De strategie heet BTC Veilig. Vast bedrag €100, voorzichtig risico, "
+            "instap 84.000 USD, stop 79.800 USD en koersdoel 92.400 USD."
+        ),
+        explicit_asset=None,
+    )
+    assert values["name"] == "BTC Veilig"
+    assert values["base_amount"] == 100
+    assert values["entry"] == 84000
+    assert values["stop_loss"] == 79800
+    assert values["targets"] == [92400]
+
+
+def test_denied_guided_parent_requires_a_plain_clarification():
+    assert _rejects_guided_strategy_parent(
+        "Nee, niet die BTC-setup. Welke opgeslagen setup bedoel je dan?"
+    )
+    assert _rejects_guided_strategy_parent("That is the wrong setup; which setup should I use?")
+    assert not _rejects_guided_strategy_parent(
+        "Maak voor mijn setup BTC Breakout een strategie; koop niet bij een zwakke trend."
+    )
+
+
+def test_strategy_condition_is_a_draft_rule_not_an_immediate_order():
+    from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+    request = (
+        "Maak een Paper-strategie voor mijn opgeslagen setup BTC Breakout. "
+        "De strategie heet BTC Veilig. Vast bedrag €100, voorzichtig risico, "
+        "entry 84.000 USD, stop-loss 79.800 USD en koersdoel 92.400 USD. "
+        "Koop alleen bij een stijgende 1D-trend en niet als RSI zwak is. "
+        "Als deze automatische regels niet opgeslagen kunnen worden, toon geen kaart."
+    )
+    facts = FinnV2RequestPreprocessorService().preprocess(message=request)
+    assert facts.action_polarity == "create"
+    assert not facts.financial_execution_intent
+    assert _strategy_rule_is_unencoded(request)
+    order = FinnV2RequestPreprocessorService().preprocess(
+        message="Maak een Paper-strategie voor BTC. Koop nu BTC zonder bevestiging."
+    )
+    assert order.financial_execution_intent
+
+
+def test_complete_new_strategy_can_explicitly_exclude_prior_blocked_rules():
+    request = (
+        "Maak nu een zelfstandige tweede Paper-strategie voor mijn opgeslagen setup BTC Breakout. "
+        "De strategie heet BTC Nieuw. Vast bedrag €120, voorzichtig risico, "
+        "entry 85.000 USD, stop-loss 80.000 USD en koersdoel 95.000 USD. "
+        "Neem niets uit de vorige strategie over. Toon alleen een concept."
+    )
+    assert not _inherits_blocked_strategy_rules(request)
+    assert _explicitly_separates_new_strategy(request)
+    assert not _strategy_rule_is_unencoded(request)
+
+
+def test_rule_waiver_retains_only_explicit_same_currency_fixed_levels():
+    request = (
+        "Maak een Paper-strategie voor mijn opgeslagen setup BTC Breakout. "
+        "De strategie heet BTC Veilig. Vast bedrag €100, voorzichtig risico, "
+        "entry 84.000 USD, stop-loss 79.800 USD en koersdoel 92.400 USD. "
+        "Koop alleen bij een stijgende trend en niet als RSI zwak is."
+    )
+    safe = _safe_blocked_strategy_inputs(request, {"setup_id": 42, "base_amount": 100})
+    assert safe["setup_id"] == 42
+    assert safe["name"] == "BTC Veilig"
+    assert not {"entry", "stop_loss", "targets", "price_currency"} & safe.keys()
+    assert "entry" not in _safe_blocked_strategy_inputs(
+        "Dit zijn voorbeeldprijzen: entry 84.000 USD, stop-loss 79.800 USD, "
+        "koersdoel 92.400 USD.", {"setup_id": 42},
+    )
+    assert "entry" not in _safe_blocked_strategy_inputs(
+        request + " Deze koersniveaus zijn verouderd en mogen niet worden gebruikt.",
+        {"setup_id": 42},
+    )
+
+
+def test_freeform_rule_waiver_requires_same_parent_and_every_fixed_field():
+    original = (
+        "Maak een Paper-strategie voor mijn opgeslagen setup BTC Breakout. "
+        "De strategie heet BTC Veilig. Vast bedrag €100, voorzichtig risico, "
+        "entry 84.000 USD, stop-loss 79.800 USD en koersdoel 92.400 USD. "
+        "Koop alleen bij een stijgende trend en niet als RSI zwak is."
+    )
+    consent = (
+        "Laat alleen die twee automatische regels weg. Behoud mijn opgeslagen "
+        "setup BTC Breakout, de naam BTC Veilig, vast bedrag €100, voorzichtig "
+        "risico, entry 84.000 USD, stop-loss 79.800 USD en koersdoel "
+        "92.400 USD. Toon uitsluitend een concept."
+    )
+    safe = _freeform_strategy_rule_waiver_inputs(consent, original)
+    assert safe is not None and safe["targets"] == [92400]
+    assert _explicit_strategy_rule_waiver(consent, original)
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent.replace("BTC Breakout", "ETH Rustig"), original,
+    ) is None
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent.replace("92.400 USD", "95.000 USD"), original,
+    ) is None
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent.replace("Toon uitsluitend een concept.",
+                        "Koop ook automatisch bij RSI 50. Toon uitsluitend een concept."),
+        original,
+    ) is None
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent,
+        original + " Koop ook uitsluitend wanneer de macro-score boven 70 ligt.",
+    ) is None
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent,
+        original.replace("setup BTC Breakout.", "setup BTC Breakout Extra."),
+    ) is None
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent.replace("koersdoel 92.400 USD.",
+                        "koersdoel 92.400 USD en variabele uitvoering."), original,
+    ) is None
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent,
+        original.replace("Koop alleen", "Pas de strategie uitsluitend toe bij macro 70. Koop alleen"),
+    ) is None
+    assert _freeform_strategy_rule_waiver_inputs(
+        consent,
+        original.replace("Koop alleen", "De oude koersniveaus kloppen niet meer. Koop alleen"),
+    ) is None
 
 
 def test_direct_price_reentry_requires_only_three_explicit_levels():

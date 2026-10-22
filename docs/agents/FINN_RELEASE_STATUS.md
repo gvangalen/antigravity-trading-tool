@@ -4,6 +4,16 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuation: owner and fixed-field repair (22 October 2026)
+
+Phase: `LOCAL_GREEN_DEPLOY_PENDING`. The preceding public SHA
+`90ea9dcb917aa8bbb9034e8fe3a9ace233b0a359` remains **NOT_ACCEPTED** after
+independent [QA workflow 39793779915](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39793779915): 17 cases ran and six failed. QA observed loss of the named parent setup after a free-text rule waiver and on a separately named strategy, a tool-round-limit error after current price re-entry, a technical error for a rejected parent, and missing name/targets in the new strategy continuation. The unsupported automatic-rule block remained safe. No protected QA fixture or sealed prompt was used for this Build repair.
+
+The local repair carries an owner-verified parent through multi-sentence strategy requests and guided clarification, asks again when that parent is denied or merely illustrative, and avoids carrying old rules into an expressly separate strategy. A free-text waiver can retain complete, matching fixed fields only for a bounded two-rule request with the same full setup name; extra rules, changed execution mode, invalidated prices or a different parent fail closed. A three-price follow-up resumes the existing guided strategy contract directly, avoiding the read/tool-round limit. Unit regressions cover these paths and adverse wording. Earlier local FastAPI/Celery/Responses probes exercised the rule block, explicit waiver, separate strategy, denied parent, and three-price follow-up without confirming a card or executing a trade; the last hardening changes were independently rechecked by Security and Architecture with no remaining concrete P1/P2 in this diff.
+
+On the final local source, the root backend suite passed **3750 tests, 4 existing skips**. The restarted worker-driven action matrix passed **16/16** contracts and **19/19** adapter checks with zero broker orders, Live trading calls, Live bots or production connections (artifact SHA-256 `6a84db8a63f48896984f96259ec74c81fb15aa10d52948460d583f504023ce78`). The real Responses development selector passed **20/20** and regression selector **109/109**, each with zero provider/schema/timeout/parse/validation failures (artifact SHA-256 `bfee2d3246b62c2e20116ad4228f03a53e56d91a915e70d4b3b88747e3320117` and `cbc9d127c859746c265be3c49e9bc747e0745caf0a1cec50f521f6179500aa5c`). Frontend typecheck, i18n lint/tests, command/proposal tests, production build and high-severity audit passed on unchanged frontend source; the audit reported one moderate Next.js advisory. This is local Build evidence only. CI, deployment identity and independent authenticated live QA remain pending.
+
 ## FINN strategy continuation follow-up (22 October 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. The previous live candidate `00db98a9622d2573bdf827af782be11441faf925`

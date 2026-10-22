@@ -353,6 +353,23 @@ class FinnV2RequestPreprocessorService:
         financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
             direct_market_order
         )
+        # In a strategy-creation request, "koop alleen bij ..." describes a
+        # conditional plan rule. It does not instruct FINN to buy now. Keep
+        # direct orders (including "koop nu") inside the execution boundary.
+        strategy_condition_request = bool(
+            re.match(r"^\s*(?:maak|create|creëer|erstelle)\b[^.!?]{0,180}\b"
+                     r"(?:strategie|strategy|paper[- ]strategie)\b", normalized)
+            and re.search(r"(?:^|[.!?;]\s*)(?:koop|buy|kaufe)\s+alleen\s+bij\b|"
+                          r"(?:^|[.!?;]\s*)(?:buy|kaufe)\s+only\s+(?:when|if)\b",
+                          normalized)
+            and not re.search(r"\b(?:koop|buy|kaufe)\s+nu\b|"
+                              r"\b(?:plaats|place|submit)\s+(?:nu\s+)?(?:een\s+)?order\b",
+                              normalized)
+        )
+        if strategy_condition_request:
+            direct_market_order = False
+            financial_execution_intent = False
+            action = "create"
         # A first question about a plan remains a question when a later
         # clause mentions buying or automation. A market verb is not itself
         # an instruction to FINN. Still retain a direct order anywhere in
