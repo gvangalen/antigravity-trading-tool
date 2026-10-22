@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN strategy continuity: six failed follow-ups (22 October 2026)
 
-Phase: `PR_CI_PENDING`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
 on public SHA `45981b49ceac8ac4ac9d41e3bfede07216e731be` remains
 **NOT_ACCEPTED**: all 17 cases ran, 11 passed and six failed. With the user's
 authorization, the existing QA Agent disclosed only the six failing user
@@ -42,11 +42,18 @@ real Responses development selector passed **20/20** and regression selector
 **109/109**, each with zero provider, schema, timeout, parse or validation
 failures (artifact SHA-256 `ebca99c06e597b22fbcc64af3561452156d7671080443fa2a1206fa83b5a6d95`
 and `43c52162e9ca802b5408b31887f2b325fa09a0533e5e8ef53a5cdaa17be680ef`).
-The release candidate is [PR #545](https://github.com/gvangalen/antigravity-trading-tool/pull/545);
-its first CI identified the Next.js advisory, so the dependency was upgraded
-and the frontend gates rerun. CI, deployment, public SHA verification and
-independent live QA are still pending. The previous production QA verdict
-remains `NOT_ACCEPTED`.
+The release candidate merged via [PR #545](https://github.com/gvangalen/antigravity-trading-tool/pull/545)
+as product SHA `06fff1caaaca569add6e66df1117796a251eadc5`. Its first CI
+identified the Next.js advisory; after the upgrade, [PR CI 39823353281](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39823353281),
+[main CI 39823798015](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39823798015)
+and [Auto Deploy 39824252922](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39824252922)
+all succeeded. Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` each returned HTTP 200 and exactly
+that product SHA; no newer main deployment was pending at the check. This
+documentation-only status commit will create a later public SHA without
+product-code changes. Independent QA must verify that final public identity
+before testing. The previous production QA verdict remains `NOT_ACCEPTED`
+until the authenticated run finishes.
 
 ## FINN strategy continuity: independent QA after setup prerequisite repair (22 October 2026)
 
