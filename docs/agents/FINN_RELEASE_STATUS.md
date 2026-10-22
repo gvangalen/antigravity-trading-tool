@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuation after clarification (22 October 2026)
+
+Phase: `LOCAL_VALIDATION`. The previous production SHA
+`2ebfd28db90f602a76e3f8468d52de44a8ff0266` remains **NOT_ACCEPTED** after
+independent [QA workflow 39746784985](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39746784985).
+Its ten completed turns exposed a lost strategy draft after an early
+clarification, another unnecessary rule block for a new strategy, a target
+correction cascade, and a blocked EUR re-entry. The runner also reported a
+read-operation mismatch whose answer was sanitized; that cause remains
+unproven. Its unsupported-rule clarification itself was safe.
+
+The local repair persists an owner-bound strategy draft when the model asks
+for clarification before proposal selection. It retains fixed price levels
+across a rule waiver only for a complete, positively identified request; for
+other prose it asks for the current levels again. A withdrawn card resumes
+after complete one-currency price re-entry using its verified setup and
+retained non-price fields. It does not authorize confirmation or turn
+unsupported automatic conditions into executable fields. A local
+five-turn FastAPI/Celery/real-Responses probe produced a first strategy draft,
+a separate second strategy draft, then withdrew the second USD card and
+prepared its EUR replacement with the same setup, name and amount. No card was
+confirmed, strategy saved, or order made.
+
+After rebasing on the concurrent onboarding release, the final-code root
+backend suite passed **3733 tests, 4 existing skips**.
+Web typecheck, i18n lint/tests, command/proposal tests, production build and
+high-severity audit passed; the audit still reported one moderate Next.js
+advisory. The final-code local worker-driven action matrix passed **16/16**
+contracts and **19/19** adapter checks, with zero broker orders, Live calls,
+Live bots or production connections (artifact SHA-256
+`9f72669fdefb4403a33eb4773fb646c9a08fa8e83565c173902c9b6983f5489d`).
+The real Responses development selector set passed **20/20** with zero
+provider/schema/parse/timeout/validation failures (artifact SHA-256
+`2be7594acf9159e94d72f8dbd1ddc1ee4b051a5e68b131a80a94f3ebf149baf8`).
+The real Responses regression passed **109/109** with zero provider, schema,
+parse, timeout or validation failures (artifact SHA-256
+`e9f18aa2ba6525c654b0c8a654ca76f8334f5f94dfc633081886b882d8ceb139`).
+Architecture found no P1/P2 in the diff; Security's final re-review found no
+remaining P1/P2 after the unsafe free-text recovery was removed. CI,
+deployment, and authenticated QA remain pending. This local
+evidence does not change the
+previous independent `NOT_ACCEPTED` verdict.
+
 ## FINN-agent-cutover: protected QA on 260d846 (22 October 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`; the previous public SHA `260d84607ab149ea01e245d9f7787fe1d6aafc8e`

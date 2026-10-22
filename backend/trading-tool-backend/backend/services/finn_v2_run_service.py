@@ -370,6 +370,20 @@ def _complete_strategy_price_reentry(message: str) -> bool:
     )
 
 
+def _pure_strategy_price_reentry(message: str) -> bool:
+    """Permit a direct replay only for three prices, with no extra trade rule."""
+    number = r"(?:€|\$)?\s*\d[\d.,]*\s*(?:USD|EUR)"
+    separator = r"\s*(?:[,;]|\ben\b|\band\b)\s*"
+    return _complete_strategy_price_reentry(message) and bool(re.fullmatch(
+        rf"\s*(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|new)?\s*"
+        rf"(?:entry|instap(?:prijs)?)\s*(?:is|:|=|op|at)?\s*{number}"
+        rf"{separator}(?:stop[- ]?loss|stop)\s*(?:is|:|=|op|at)?\s*{number}"
+        rf"{separator}(?:target|koersdoel|take[- ]?profit)\s*"
+        rf"(?:is|:|=|op|at)?\s*{number}\s*[.!]?\s*",
+        message, re.IGNORECASE,
+    ))
+
+
 def _inherits_blocked_strategy_rules(message: str) -> bool:
     """A new name does not make a draft independent when it inherits old rules."""
     normalized = re.sub(r"\s+", " ", str(message or "").casefold())
@@ -608,6 +622,34 @@ def _safe_blocked_strategy_inputs(message: str, inputs: dict[str, object]) -> di
             "agressief": "aggressive",
         }[fixed_levels.group("risk")]
     return safe
+
+
+def _blocked_strategy_from_clarification(
+    message: str, *, verified_setup: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Keep a rejected create request even when the model never selected a proposal.
+
+    A clarification can precede proposal analysis. Without this owner-bound
+    state, the user's next explicit rule waiver is treated as a new read turn.
+    Only fields stated by the user are retained; the unsupported rule itself
+    is never converted into a strategy field.
+    """
+    if not _explicit_strategy_proposal_request(message):
+        return None
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    inputs = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
+    if verified_setup:
+        setup_id = verified_setup.get("id") or verified_setup.get("setup_id")
+        if setup_id is not None:
+            inputs["setup_id"] = int(setup_id)
+    return {
+        "operation_id": "create_strategy",
+        "original_message": message,
+        "captured_inputs": _safe_blocked_strategy_inputs(message, inputs),
+        "draft_message": message,
+    }
 
 
 def _strategy_rule_is_unencoded(message: str) -> bool:
@@ -1308,6 +1350,74 @@ class FinnV2RunService:
                 conversation_locale=client_locale or cursor.get("locale"),
             )
             context["locale"] = locale
+            guided_reentry = dict(context.get("active_guided_operation") or {})
+            if (
+                guided_reentry.get("operation_id") == "create_strategy"
+                and guided_reentry.get("awaiting_price_currency_reentry")
+                and _pure_strategy_price_reentry(message)
+            ):
+                # The withdrawn card supplied the owner-bound strategy and
+                # setup. The owner has now supplied all replacement prices.
+                # Rebuild that same draft from typed state instead of letting
+                # a fresh model selection adopt another open card or old rule.
+                prior_inputs = dict(guided_reentry.get("collected_inputs") or {})
+                setup_id = prior_inputs.get("setup_id")
+                setup = (
+                    await FinnV2EntityResolutionService(session).setups.get_setup_by_id(
+                        int(setup_id), user_id,
+                    ) if setup_id else None
+                )
+                if setup:
+                    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+                    stated_prices = FinnV2OperationStateService().explicit_inputs(
+                        contract=contract, message=message, explicit_asset=None,
+                    )
+                    inputs = {
+                        key: value for key, value in prior_inputs.items()
+                        if key in contract.input_fields
+                        and key not in {"setup_id", "setup_type"}
+                    }
+                    inputs.update({
+                        key: stated_prices[key]
+                        for key in ("entry", "stop_loss", "targets", "price_currency")
+                    })
+                    verified_parent = {
+                        "setup_id": int(setup_id),
+                        "setup_type": str(setup.get("setup_type") or "").lower(),
+                        "symbol": setup.get("symbol"),
+                        "timeframe": setup.get("timeframe"),
+                    }
+                    restored_call = FinnResponsesToolCatalog().validate(
+                        "create_or_update_trade_plan_proposal",
+                        {"operation_id": "create_strategy", "inputs": inputs},
+                    )
+                    safe_message = (
+                        f"Naam: {inputs.get('name') or ''}. "
+                        f"Alle koersniveaus in {inputs['price_currency']}"
+                    )
+                    restored = FinnResponsesProposalSelection().from_call(
+                        call=restored_call, message=safe_message,
+                        conversation_context={},
+                        verified_asset=str(setup.get("symbol") or "") or None,
+                        verified_parent_setup=verified_parent,
+                    )
+                    return FinnResponsesFrontDoorResult(
+                        response=FinnResponsesResult(
+                            text={
+                                "en": "I am preparing the revised strategy draft with the new price currency.",
+                                "de": "Ich bereite den überarbeiteten Strategieentwurf mit der neuen Kurswährung vor.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Ik bereid het aangepaste strategievoorstel met de nieuwe koersvaluta voor."),
+                            response_id=f"verified-strategy-price-reentry-{run_id}",
+                            tool_trace=({
+                                "name": "verified_strategy_price_reentry", "status": "completed",
+                                "result": {"operation_id": "create_strategy"},
+                            },),
+                            response_id_reusable=False,
+                        ),
+                        proposal_analysis=restored,
+                        locale=locale,
+                    ), message
             blocked_strategy = dict(context.get("strategy_rule_block") or {})
             if blocked_strategy and _explicit_strategy_rule_waiver(message, str(blocked_strategy.get("original_message") or "")):
                 blocked_inputs = dict(blocked_strategy.get("captured_inputs") or {})
@@ -3401,6 +3511,34 @@ class FinnV2RunService:
                                 answer=answer, locale=prepared.locale,
                             )
                         async with async_session_factory() as session:
+                            if (
+                                answer.status == "clarification_required"
+                                and answer.reason == "strategy_rule_not_captured"
+                                and not strategy_rule_block
+                                and conversation_id
+                            ):
+                                # The provider may ask for clarification
+                                # before selecting create_strategy. Preserve
+                                # the rejected draft at that boundary too.
+                                resolver = FinnV2EntityResolutionService(session)
+                                setups = [dict(row) for row in await resolver.setups.get_user_setups(user_id)]
+                                matches = resolver._explicit_message_matches(run_message, setups)
+                                blocked = _blocked_strategy_from_clarification(
+                                    run_message,
+                                    verified_setup=matches[0] if len(matches) == 1 else None,
+                                )
+                                if blocked is not None:
+                                    conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                                        conversation_id=conversation_id, user_id=user_id, for_update=True,
+                                    )
+                                    if conversation is None or conversation.last_run_id != run_id:
+                                        raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                                    saved_context = dict(conversation.context_json or {})
+                                    saved_context["strategy_rule_block"] = blocked
+                                    await FinnV2ConversationRepository(session).update_context(
+                                        conversation_id=conversation_id, user_id=user_id,
+                                        context=saved_context,
+                                    )
                             await cls(session).complete_responses_read(
                                 run_id=run_id, user_id=user_id,
                                 response_id=final_response_id or prepared.response.response_id,
