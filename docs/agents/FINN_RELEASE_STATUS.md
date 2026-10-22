@@ -6,13 +6,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN strategy continuity and QA fault handoff (22 October 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`. The product repair merged through
+Phase: `ACCEPTED` for the agreed 17-case strategy-continuity scope. The product repair merged through
 [PR #550](https://github.com/gvangalen/antigravity-trading-tool/pull/550)
 as SHA `9579a5166c6ceb49aa4f207820f4dca5df5feaf2`. The previous independent
 [QA workflow 39837873622](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39837873622)
 remains **NOT_ACCEPTED** (14/17 runner cases, plus a safety failure in a
-runner-green mixed-currency case). This new candidate is deployed but has not
-yet received independent QA acceptance.
+runner-green mixed-currency case). The final independently tested public SHA is
+`dfec6faa14bb278d81a326ed584aa287df64fa75`, which includes this repair
+and a later AAPL Paper change from PR #552.
 
 Build used QA's authorized, case-specific failing-question handoff to repair
 the bounded two-rule waiver, preserve separate strategy drafts, bind a target
@@ -40,9 +41,32 @@ vulnerabilities. All these are Build checks, not independent live acceptance.
 and [Auto Deploy 39844850978](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39844850978)
 all succeeded. Backend health and frontend build-info returned HTTP 200 and
 the same product SHA `9579a5166c6ceb49aa4f207820f4dca5df5feaf2`.
-This status-only update creates a later main SHA; Build must wait for its
-final CI and Auto Deploy, verify both public SHAs and no newer pending deploy,
-then hand the unchanged 17-case scope to the same independent QA Agent.
+The status-only update merged as `1f9b4ef67de2506094de5d56c38e1cf213ee90cc`.
+Its [main CI 39845600297](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39845600297)
+succeeded. After PR #552 merged, the intervening deploy failed because its
+candidate was no longer the current main commit; the subsequent
+[Auto Deploy 39846287687](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39846287687)
+succeeded. Public backend health and frontend build-info each returned HTTP
+200 and the final QA SHA `dfec6faa14bb278d81a326ed584aa287df64fa75`.
+
+The same independent QA Agent ran the protected
+[workflow 39846697208](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39846697208)
+on that SHA and returned **ACCEPTED: 17/17**, with checkout, release marker,
+backend, frontend and protected authentication matching. QA manually checked
+the prior failures: the bounded waiver made the intended strategy draft,
+the open target correction preserved the budget, mixed EUR/USD levels caused
+clarification with no confirmable card, and complete EUR re-entry made a
+draft with the new levels. All 17 runs returned HTTP 200, one dispatch,
+at most one attempt and matching polling/SSE responses. The sole protected
+fixture action persisted once; replay returned `already_executed`. QA saw no
+broker orders, Live trading calls or Live bot activations. Sanitized QA report
+SHA-256: `787e9bb2f8a1905509ba72776808d83c80b62af1d52db507e3345fed2b290574`.
+This verdict covers strategy continuity; it does not independently prove
+server-side invalidation of a previously issued confirmation token after
+mixed-currency correction, or replace browser onboarding and scoreflow tests.
+This verdict-recording documentation commit will create a newer public SHA
+without product-code changes. The accepted product behavior is tied to the
+tested SHA above; Build must verify the documentation deploy separately.
 
 The user has given standing authorization for QA to disclose every relevant
 failed-case question, necessary prior turns and sanitized runtime details in
