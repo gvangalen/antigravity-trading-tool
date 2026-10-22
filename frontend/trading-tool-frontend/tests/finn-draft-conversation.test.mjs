@@ -68,6 +68,12 @@ test('general clarification offers only verified choices and preserves free text
     { label: 'setup', reply: 'setup' },
     { label: 'strategie', reply: 'strategie' },
   ]);
+  assert.deepEqual(clarificationQuestionChoices({ state: {
+    run_status: 'clarification_required',
+    clarification: { question: 'Laat ik de regels weg?', choices: ['Maak strategievoorstel zonder deze automatische regels'] },
+  } }), [
+    { label: 'Maak strategievoorstel zonder deze automatische regels', reply: 'Maak strategievoorstel zonder deze automatische regels' },
+  ]);
   assert.deepEqual(clarificationQuestionChoices({ state: { run_status: 'clarification_required' } }), []);
   assert.equal(isOpenClarification({ ...message, state: { ...message.state, run_status: 'completed' } }), false);
 });

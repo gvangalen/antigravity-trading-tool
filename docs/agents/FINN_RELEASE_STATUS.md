@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuity: independent QA after setup prerequisite repair (22 October 2026)
+
+Phase: `NOT_ACCEPTED`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
+ran against public SHA `45981b49ceac8ac4ac9d41e3bfede07216e731be` after checkout,
+release identity, backend/frontend and QA authentication preflight passed. The
+unchanged manifest executed all **17/17** cases: **11 passed, 6 product failures**.
+The former `w00` blocker was repaired: setup proposal, confirmation and
+idempotent replay worked. The failures were `w01_read_setup`,
+`w03_explicit_waiver`, `w04_new_strategy_after_waiver`,
+`w05_change_open_target`, `w07_eur_reentry`, and `w10_current_levels`.
+The two waiver turns returned `strategy_rule_not_captured`; the target change
+became an incomplete `update_setup`, and EUR re-entry produced an unexpected
+`update_setup` proposal. The two read cases ended without a recorded operation
+or target. All 17 runs had one dispatch, at most one attempt and matching
+polling/SSE outcomes, with no HTTP, runner or infrastructure failure and no
+Live trading or Live bot activation. The sanitized QA artifact has SHA-256
+`d7978a11704ce1cf37cb63da2c707ab4e739e5d7817d939656928a204206408d`.
+Its lack of prompt text limits root-cause attribution for several cases;
+Build has not opened the protected manifest or sealed QA prompts.
+
 ## FINN setup prerequisite in strategy continuity QA (22 October 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. The previous public SHA
