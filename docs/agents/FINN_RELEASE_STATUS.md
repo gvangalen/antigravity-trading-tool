@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuity: remaining three follow-ups (22 October 2026)
+
+Phase: `RELEASE_CANDIDATE_LOCAL_VALIDATED`. Branch:
+`codex/finn-strategy-continuity-followup-v4`. The independent protected
+[QA workflow 39825723618](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39825723618)
+ran all 17 cases on public SHA `2b42778b8c530cdbbdb5aa9305d224dbdb136226` and
+returned **NOT_ACCEPTED: 14 passed, 3 failed**. The user authorized QA to
+disclose only the failing questions for `w03_explicit_waiver`,
+`w05_change_open_target`, and `w07_eur_reentry`; Build did not inspect the
+protected fixture or sealed holdout. The user separately authorized a single
+yes/no disclosure: the original blocked `w02` request contained only the two
+automatic rules withdrawn in `w03`.
+
+This repair reads the immediately preceding owner-scoped sealed clarification
+when the conversation projection lost the blocked strategy rule, keeps a
+separately named strategy B from inheriting strategy A's open draft or rules,
+and binds target corrections and complete EUR price re-entry to B's own open
+card. The older A card may remain open, but it cannot become B's revision
+target while B is collecting a missing setup. The blocked-rule check remains
+mandatory, including after EUR re-entry. Without a verified saved setup,
+FINN collects the missing parent rather than offering a strategy card.
+
+The final-source local FastAPI/Celery/Responses conversation completed the
+waiver, independent A/B concepts, B target correction and EUR re-entry without
+confirmation or order; a separate current-levels turn requested its missing
+setup. The root backend suite passed **3782 tests, 4 existing skips**. The
+worker-driven action matrix passed **16/16** contracts, and the adapter suite
+passed **19/19**, with zero broker orders, Live trading calls, Live bots or
+production connections (matrix artifact SHA-256
+`2e5927184bf85375f28780b42c28cc28b7349954e7c260277cf2c9425f798b46`).
+The real Responses development selector passed **20/20**, with no provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`2a680e7677964f997a47d0e0d793b8f4482a2c497a65b19393c29bb0db954324`).
+The real Responses regression selector passed **109/109**, also without
+provider, schema, timeout, parse or validation failures (artifact SHA-256
+`d0281704aa15267a86abc7fdfa53fef136db2526661992b04f4350c02217bfd5`).
+Frontend typecheck,
+i18n lint/tests, command/proposal/setup tests, production build and the
+high-severity audit passed on unchanged frontend source; the audit reported
+zero vulnerabilities. Security and Architecture found no concrete remaining
+P1/P2 in this repair. These Build checks do not constitute independent live
+acceptance.
+
 ## FINN strategy continuity: six failed follow-ups (22 October 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. Independent protected [QA workflow 39811868914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39811868914)
