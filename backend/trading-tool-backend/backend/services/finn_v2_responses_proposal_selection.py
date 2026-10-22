@@ -387,6 +387,24 @@ class FinnResponsesProposalSelection:
         inputs = dict(state.collected_inputs)
         asset = str(inputs.get("asset") or inputs.get("symbol") or verified_asset or "").upper() or None
         operation_state = state.dict()
+        if contract.operation_id == "create_strategy":
+            # This is the owner-bound guided context used by the Responses
+            # proposal gate *before* orchestration. Preserve every user turn
+            # so an earlier unencoded trading rule cannot disappear when the
+            # last answer only supplies a name, amount, or execution mode.
+            prior = dict(context.get("active_guided_operation") or {})
+            messages = list(prior.get("guided_user_messages") or [])
+            prior_origin = str(prior.get("original_request") or "").strip()
+            if prior_origin and not messages:
+                messages.append(prior_origin)
+            messages.append(str(message or "").strip())
+            operation_state.update({
+                "original_request": prior_origin or str(message or "").strip(),
+                "guided_user_messages": messages[:20],
+                "guided_history_truncated": bool(
+                    prior.get("guided_history_truncated") or len(messages) > 20
+                ),
+            })
         if contract.operation_id == "create_bot" and (
             pending_target_choice
             or semantic_target_candidate

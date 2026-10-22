@@ -33,6 +33,7 @@ from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+from backend.services.finn_v2_responses_front_door import _explicit_fresh_create_operation_request
 
 
 logger = logging.getLogger(__name__)
@@ -154,6 +155,12 @@ class FinnV2OrchestratorService:
                     "previous_safe_terminal_operation_id": terminal.get("operation_id"),
                     "previous_safe_terminal_reason": terminal.get("terminal_reason"),
                 })
+        if operation_state.get("operation_id") == "create_strategy":
+            operation_state.update({
+                "original_request": guided_state.get("original_request"),
+                "guided_user_messages": list(guided_state.get("guided_user_messages") or []),
+                "guided_history_truncated": bool(guided_state.get("guided_history_truncated")),
+            })
         return operation_state
 
     @staticmethod
@@ -461,6 +468,15 @@ class FinnV2OrchestratorService:
             ),
         )
         resolved_operation_state = state.dict()
+        if operation_id == "create_strategy":
+            previous_guided = dict(conversation_context.get("active_guided_operation") or {})
+            if _explicit_fresh_create_operation_request(message) == "create_strategy":
+                previous_guided = {}
+            resolved_operation_state["original_request"] = (
+                str(previous_guided.get("original_request") or "").strip()
+                if previous_guided.get("operation_id") == operation_id
+                else str(message or "").strip()
+            )
         if unresolved_guided_target:
             target_slot = f"{entity_type}_id"
             collected = dict(resolved_operation_state.get("collected_inputs") or {})
@@ -544,6 +560,13 @@ class FinnV2OrchestratorService:
                 "_conversation_has_prior_run"
             ),
         )
+        if _explicit_fresh_create_operation_request(run.message) == "create_strategy":
+            # The selector already starts a new draft on this wording. The
+            # orchestrator must drop the same old guided inputs and origin
+            # before resolving the owner-scoped parent of the new strategy.
+            conversation_context.pop("active_guided_operation", None)
+            conversation_context.pop("operation_state", None)
+            conversation_context.pop("responses_clarification", None)
         feed_item_id = str((getattr(run, "client_context_json", {}) or {}).get("feed_item_id") or "")
         if feed_item_id:
             from backend.services.finn_coach_feed_service import FinnCoachFeedService
@@ -666,6 +689,26 @@ class FinnV2OrchestratorService:
             ),
         )
         guided_state = dict(getattr(request_plan, "operation_state", {}) or {})
+        if (
+            getattr(request_plan, "operation_id", None) == "create_strategy"
+            and guided_state.get("operation_id") == "create_strategy"
+        ):
+            previous_guided = dict(conversation_context.get("active_guided_operation") or {})
+            if _explicit_fresh_create_operation_request(run.message) == "create_strategy":
+                previous_guided = {}
+            guided_state["original_request"] = (
+                str(previous_guided.get("original_request") or "").strip()
+                if previous_guided.get("operation_id") == "create_strategy"
+                else str(run.message or "").strip()
+            )
+            prior_messages = list(previous_guided.get("guided_user_messages") or [])
+            selected_messages = list(guided_state.get("guided_user_messages") or [])
+            messages = selected_messages or [*prior_messages, str(run.message or "").strip()]
+            guided_state["guided_user_messages"] = messages[:20]
+            guided_state["guided_history_truncated"] = bool(
+                guided_state.get("guided_history_truncated")
+                or previous_guided.get("guided_history_truncated") or len(messages) > 20
+            )
         record_guided_draft = getattr(self.runtime_contracts, "record_guided_draft", None)
         record_conversation_state = getattr(self.runtime_contracts, "record_conversation_state", None)
         lineage_state = {
@@ -1922,6 +1965,16 @@ class FinnV2OrchestratorService:
                 "reason_codes": ["guided_operation_cancelled"],
             }
         elif operation_state:
+            previous_guided = dict(context.get("active_guided_operation") or {})
+            if operation_state.get("operation_id") == "create_strategy" and operation_state.get("status") == "collecting":
+                if previous_guided.get("operation_id") == "create_strategy" and previous_guided.get("original_request"):
+                    operation_state["original_request"] = str(previous_guided["original_request"])
+                else:
+                    current_run = await self.runs.get_by_id_for_user(
+                        run_id=result.run_id, user_id=user_id,
+                    )
+                    if current_run is not None:
+                        operation_state["original_request"] = str(current_run.message or "")
             proposal_id = getattr(verified_response, "proposal_id", None)
             if proposal_id:
                 operation_state.update(

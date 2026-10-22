@@ -4,6 +4,16 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN strategy continuation follow-up (22 October 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. The previous live candidate `00db98a9622d2573bdf827af782be11441faf925`
+is **NOT_ACCEPTED** after independent [QA workflow 39775430356](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39775430356).
+Transport and safety checks passed 12/12, with no confirmation, execution or Live order, but the owner-scoped strategy continuation still missed the explicit waiver, a separate new strategy, and current EUR price re-entry in several turns. Its result is not described as a successful release.
+
+The new local repair makes a typed `strategy_rule_not_captured` clarification persistent even when the owner phrases creation as “Ik wil…”. A known unsupported automatic rule is blocked before model selection, while only complete positively stated fixed fields survive a rule waiver. A separately named strategy with complete inputs continues through an explicit independent choice; it cannot inherit the old rules. A withdrawn currency card resumes from three newly stated prices. When the parent setup is missing, FINN asks for its name before offering the waiver, rejects negated or corrected setup names and allows cancellation. A multi-sentence request can bind its named parent only when the entire request matches the constrained priced-strategy form; other prose requires a separate exact setup answer. These rules are independent of the asset name.
+
+The latest local five-turn FastAPI/Celery/Responses probe blocked unsupported automatic rules, produced a draft only after the explicit waiver, created a separate second strategy draft, withdrew its USD card, and created an EUR replacement from three newly stated prices. A separate two-turn probe started an unfinished BTC strategy A and then explicitly created ETH strategy B: B's owner-bound proposal held only its own parent setup, name, €200 amount and EUR entry/stop/target. No card was confirmed and no strategy or order was executed. The final-code backend suite passed **3743 tests, 4 existing skips**. The worker-driven action matrix passed **16/16** contracts and **19/19** adapter checks, with zero broker orders, Live trading calls, Live bots or production connections (artifact SHA-256 `40e795269251728f1d410039251b05309840a9f78d60216313737e4d325cf13d`). The real Responses development selector passed **20/20** and regression selector **109/109**, each with zero provider, schema, timeout, parse or validation failures (artifact SHA-256 `6de6209b99da5f3ee8f9a3b2d405987a692ea1b6575947a6dfe73ecfd93abc6b` and `1cccdcba4d02acdff193019247e65f3b455d22e5971f55a1378f2298fce7ba98`). Frontend typecheck, i18n lint/tests, command/proposal tests, production build and high-severity audit passed; the audit reported one moderate Next.js advisory. Security and Architecture found no remaining concrete P1/P2 in the local diff. This candidate is not yet deployed or independently accepted.
+
 ## FINN strategy continuation after clarification (22 October 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. The previous production SHA

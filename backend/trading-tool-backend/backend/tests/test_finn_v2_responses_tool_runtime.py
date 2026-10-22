@@ -43,8 +43,12 @@ from backend.services.finn_v2_run_service import (
     _minimal_read_answer, _minimal_read_answers_enabled, _explicit_setup_rule_waiver,
     _proposal_from_blocked_setup, _explicit_strategy_rule_waiver,
     _proposal_from_blocked_strategy, _safe_blocked_strategy_inputs,
-    _blocked_strategy_from_clarification,
-    _discard_superseded_strategy_rule_block, _references_blocked_strategy_draft,
+    _blocked_strategy_from_clarification, _positive_owner_setup_matches,
+    _plain_setup_creation_request, _plain_strategy_execution_mode_reply,
+    _plain_strategy_start_request,
+    _plain_strategy_guided_mode_transition,
+    _discard_superseded_strategy_rule_block, _inherits_blocked_strategy_rules,
+    _references_blocked_strategy_draft,
     _asks_to_drop_blocked_strategy_rules, _strategy_price_currency_conflict,
     _reopen_strategy_for_new_price_currency, _complete_strategy_price_reentry,
     _pure_strategy_price_reentry,
@@ -56,7 +60,7 @@ from backend.infrastructure.repositories.finn_v2_conversation_repository import 
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
-from backend.services.finn_v2_entity_resolution_service import CanonicalEntityTarget
+from backend.services.finn_v2_entity_resolution_service import CanonicalEntityTarget, FinnV2EntityResolutionService
 from backend.services.finn_v2_tool_adapters.setup_inventory_tool_adapter import SetupInventoryToolAdapter
 from backend.schemas.finn_v2_schema import VerifiedResponse
 
@@ -4573,6 +4577,8 @@ def test_target_only_correction_keeps_prior_base_amount_despite_model_price_conf
     "Maak een strategie voor mijn setup QA vaste ETH vrijdag 2026-10-11.",
     "Create a fixed strategy for my ETH setup.",
     "Erstelle eine DCA-Strategie für mein ETH-Setup.",
+    "Ik wil voor mijn BTC-setup een Paper-strategie met naam Rustige BTC.",
+    "Maak een onafhankelijk nieuw strategievoorstel voor mijn BTC-setup.",
 ])
 def test_explicit_strategy_draft_request_accepts_domain_modifiers(message):
     assert _explicit_strategy_proposal_request(message)
@@ -4585,6 +4591,9 @@ def test_explicit_strategy_draft_request_accepts_domain_modifiers(message):
     "Maak geen strategie voor mijn ETH-setup.",
     "Maak geen Paper-strategie voor mijn BTC-setup.",
     "Vergelijk mijn DCA-strategie met mijn tradeplan.",
+    "Ik wil weten hoe mijn strategie werkt.",
+    "Ik wil geen strategie maken.",
+    "Ik wil een strategie als hypothetische denkoefening.",
 ])
 def test_strategy_draft_request_does_not_capture_coaching(message):
     assert not _explicit_strategy_proposal_request(message)
@@ -5315,6 +5324,39 @@ def test_model_clarification_keeps_owner_scoped_strategy_draft_for_rule_waiver()
     assert "entry" in restored.request_plan.operation_state["missing_required_inputs"]
 
 
+def test_model_clarification_retains_strategy_requested_in_natural_language():
+    blocked = _blocked_strategy_from_clarification(
+        "Ik wil voor mijn opgeslagen setup BTC Breakout een Paper-strategie met "
+        "naam Rustige BTC, vast bedrag €100 en een extra automatische trendregel.",
+        verified_setup={"id": 42, "name": "BTC Breakout", "symbol": "BTC"},
+    )
+    assert blocked is not None
+    assert blocked["captured_inputs"]["setup_id"] == 42
+    assert blocked["captured_inputs"]["name"] == "Rustige BTC"
+    assert blocked["captured_inputs"]["base_amount"] == 100
+
+
+def test_natural_strategy_request_keeps_only_explicit_positive_prices_after_waiver():
+    request = (
+        "Ik wil voor mijn opgeslagen setup BTC Breakout een Paper-strategie "
+        "met naam Rustige BTC. BTC 4H, vast bedrag €100, entry 84.000 USD, "
+        "stop-loss 79.800 USD, target 92.400 USD en voorzichtig risico. "
+        "Ik wil daarnaast alleen handelen bij stijgende 1D-trend en maximaal "
+        "twee trades per dag. Toon het concept, sla niets op zonder bevestiging."
+    )
+    blocked = _blocked_strategy_from_clarification(
+        request, verified_setup={"id": 42, "name": "BTC Breakout", "symbol": "BTC"},
+    )
+    assert blocked["captured_inputs"]["entry"] == 84000
+    assert blocked["captured_inputs"]["stop_loss"] == 79800
+    assert blocked["captured_inputs"]["targets"] == [92400]
+    assert blocked["captured_inputs"]["price_currency"] == "USD"
+    assert blocked["captured_inputs"]["risk_profile"] == "conservative"
+    assert _explicit_strategy_rule_waiver(
+        "Maak strategievoorstel zonder deze automatische regels", request,
+    )
+
+
 def test_model_clarification_never_reuses_unverified_setup_or_price_levels():
     request = (
         "Maak een nieuwe Paper-strategie met naam Rustige BTC voor mijn setup. "
@@ -5337,10 +5379,145 @@ def test_model_clarification_never_reuses_unverified_setup_or_price_levels():
     assert not {"entry", "stop_loss", "targets", "price_currency"} & rejected["captured_inputs"].keys()
 
 
+def test_plain_action_fields_do_not_need_rule_review():
+    assert _plain_setup_creation_request(
+        "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup."
+    )
+    assert not _plain_setup_creation_request(
+        "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup, alleen als RSI stijgt."
+    )
+    assert not _plain_setup_creation_request(
+        "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup. Koop bij RSI 30."
+    )
+    assert _plain_strategy_execution_mode_reply("Vaste uitvoering.")
+    assert not _plain_strategy_execution_mode_reply("Vaste uitvoering, maar alleen bij RSI 30.")
+    assert _plain_strategy_start_request(
+        "Maak een strategie voor Matrix Strategy Parent.",
+        owner_setup_name="Matrix Strategy Parent",
+    )
+    assert not _plain_strategy_start_request(
+        "Maak een strategie voor Matrix Strategy Parent, maar alleen bij RSI 30.",
+        owner_setup_name="Matrix Strategy Parent",
+    )
+    assert not _plain_strategy_start_request(
+        "Maak een strategie voor BTC met MA200.", owner_setup_name="BTC",
+    )
+    assert _plain_strategy_guided_mode_transition(
+        ["Maak een strategie voor Matrix Strategy Parent.", "Matrix Nieuwe Strategie", "Vaste uitvoering."],
+        owner_setup_name="Matrix Strategy Parent", strategy_name="Matrix Nieuwe Strategie",
+    )
+    assert not _plain_strategy_guided_mode_transition(
+        ["Maak een strategie voor BTC.", "Gebruik MA200 als instapfilter.", "Vaste uitvoering."],
+        owner_setup_name="BTC", strategy_name="Matrix Nieuwe Strategie",
+    )
+    assert _strategy_rule_is_unencoded("Gebruik MA200 als instapfilter.")
+    assert _explicit_fresh_create_operation_request(
+        "Ik wil een nieuwe strategie voor mijn opgeslagen BTC-setup."
+    ) == "create_strategy"
+
+
+def test_strategy_proposal_gate_sees_owner_guided_rule_history_before_orchestration():
+    call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_strategy", "draft_intent": "new", "inputs": {}},
+    )
+    prior = {
+        "operation_id": "create_strategy", "contract_version": FinnV2OperationRegistry().require_supported("create_strategy").version,
+        "state_revision": 1, "status": "collecting", "collected_inputs": {"setup_id": 42, "symbol": "BTC"},
+        "missing_required_inputs": ["name", "execution_mode"], "next_missing_input": "name",
+        "original_request": "Maak een strategie voor BTC en koop alleen bij een volumepiek.",
+    }
+    selected = FinnResponsesProposalSelection().from_call(
+        call=call, message="BTC Trend", conversation_context={"active_guided_operation": prior},
+        verified_asset="BTC",
+    )
+    state = selected.request_plan.operation_state
+    assert state["original_request"] == prior["original_request"]
+    assert state["guided_user_messages"] == [prior["original_request"], "BTC Trend"]
+
+
+def test_pending_strategy_parent_rejects_negated_owner_setup_name():
+    resolver = FinnV2EntityResolutionService(None)
+    setups = [{"id": 42, "name": "BTC Breakout"}, {"id": 43, "name": "ETH Rustig"}]
+    assert _positive_owner_setup_matches(resolver, "BTC Breakout", setups) == [setups[0]]
+    assert _positive_owner_setup_matches(resolver, "Niet BTC Breakout.", setups) == []
+    assert _positive_owner_setup_matches(resolver, "Gebruik BTC Breakout niet.", setups) == []
+    assert _positive_owner_setup_matches(resolver, "BTC Breakout is niet mijn setup.", setups) == []
+    assert _positive_owner_setup_matches(resolver, "BTC Breakout toch niet.", setups) == []
+    assert _positive_owner_setup_matches(resolver, "Niet voor BTC Breakout.", setups) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn opgeslagen setup BTC Breakout een Paper-strategie. Toch niet BTC Breakout; ik bedoel ETH Rustig.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn opgeslagen setup BTC Breakout een Paper-strategie. Ik bedoel ETH Rustig, niet BTC Breakout.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn opgeslagen setup BTC Breakout een Paper-strategie. Dat is niet de juiste setup.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn opgeslagen setup BTC Breakout een Paper-strategie; gebruik een ander plan.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn setup BTC Breakout Extra een Paper-strategie.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn setup BTC Breakout, maar ik bedoel ETH Rustig.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn setup BTC Breakout, wacht, ik bedoel ETH Rustig.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Maak voor mijn opgeslagen setup BTC Breakout een Paper-strategie met instapvoorwaarde bij stijgende trend. Liever ETH.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Ik wil voor mijn opgeslagen setup BTC Breakout een Paper-strategie. Dit is slechts een voorbeeld. Maximaal twee trades per dag.",
+        setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver,
+        "Ik wil voor mijn opgeslagen setup BTC Breakout een Paper-strategie met naam BTC Veilig. "
+        "BTC 4H, vast bedrag €100, entry 84.000 USD, stop-loss 79.800 USD, target 92.400 USD "
+        "en voorzichtig risico. Ik wil daarnaast alleen handelen bij stijgende 1D-trend en "
+        "maximaal twee trades per dag. Toon het concept, sla niets op zonder bevestiging.",
+        setups,
+    ) == [setups[0]]
+    assert _positive_owner_setup_matches(
+        resolver, "Niet BTC Breakout, maar ETH Rustig.", setups,
+    ) == []
+    assert _positive_owner_setup_matches(
+        resolver, "Maak voor mijn opgeslagen setup BTC Breakout een Paper-strategie.", setups,
+    ) == [setups[0]]
+
+
 def test_direct_price_reentry_requires_only_three_explicit_levels():
     levels = "Entry 85.000 EUR, stop-loss 80.000 EUR, target 95.000 EUR."
     assert _pure_strategy_price_reentry(levels)
+    assert _pure_strategy_price_reentry(
+        "Mijn actuele koersniveaus zijn entry 85.000 EUR, "
+        "stop-loss 80.000 EUR en target 95.000 EUR."
+    )
     assert not _pure_strategy_price_reentry(levels + " Koop alleen na een volumepiek.")
+    assert not _pure_strategy_price_reentry(
+        "Mijn actuele koersniveaus zijn entry 85.000 EUR, stop-loss 80.000 EUR "
+        "en target 95.000 EUR. Koop alleen na een volumepiek."
+    )
     assert not _pure_strategy_price_reentry(levels.replace("target 95.000 EUR", "target 95.000 USD"))
 
 
@@ -5690,6 +5867,11 @@ def test_blocked_strategy_followup_names_unsaved_draft_not_saved_strategy():
 
 
 def test_new_strategy_request_supersedes_blocked_draft_but_waiver_does_not():
+    assert not _inherits_blocked_strategy_rules(
+        "Maak een nieuwe strategie voor mijn opgeslagen setup BTC Breakout. "
+        "Gebruik die setup als gekoppeld plan, met vaste entry en stop."
+    )
+    assert _inherits_blocked_strategy_rules("Gebruik de regels van het vorige concept.")
     prior = {"strategy_rule_block": {"captured_inputs": {"name": "Strategie A"}},
              "active_guided_operation": {"operation_id": "create_strategy"},
              "responses_clarification": {"reason": "strategy_rule_not_captured"}}

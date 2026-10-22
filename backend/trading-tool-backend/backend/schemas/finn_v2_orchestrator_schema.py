@@ -123,6 +123,11 @@ class FinnV2OperationState(BaseModel):
 
     operation_id: str
     contract_version: str
+    # Owner-scoped initial request for a guided draft. Subsequent short slot
+    # answers must never erase trading rules stated in this request.
+    original_request: Optional[str] = None
+    guided_user_messages: List[str] = Field(default_factory=list)
+    guided_history_truncated: bool = False
     # Monotonic per flow. Consumers can reject a stale clarification instead
     # of merging it into a newer guided operation.
     state_revision: int = Field(default=1, ge=1)
