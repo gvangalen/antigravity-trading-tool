@@ -925,20 +925,32 @@ def _strategy_rule_is_unencoded(message: str) -> bool:
 
 
 def _plain_setup_creation_request(message: str) -> bool:
-    """A fully typed setup name, asset and chart interval adds no trade rule."""
+    """Recognize a complete, bare setup request; reject all extra prose."""
     text = " ".join(str(message or "").strip().split())
-    if re.search(
-        r"\b(?:als|alleen|wanneer|zodra|tenzij|onder|boven|bij|if|only|when|"
-        r"unless|below|above|trend|rsi|score|voorwaarde|condition|regel|rule)\b",
-        text, re.I,
-    ):
+    text = re.sub(r"\.\s*toon\s+alleen\s+een\s+concept\.?$", "", text, flags=re.I)
+    # Unquoted trailing names cannot be distinguished from an instruction
+    # appended in the same sentence. Only quotes or a following typed field
+    # provide a clear boundary for the short path.
+    quoted_name = r"[\"“][a-z0-9][a-z0-9 _-]{0,79}[\"”]"
+    delimited_name = r"[a-z0-9][a-z0-9_-]{0,79}"
+    asset = r"[a-z0-9]{2,10}"
+    interval = r"\d+\s*(?:uur|hour|h|dag|day|d|week|w)"
+    draft = r"\.?"
+    patterns = (
+        rf"maak\s+een\s+(?:swing|trade|dca)[ -]setup\s+voor\s+{asset}\s+op\s+{interval}\s+met\s+de\s+naam\s+{quoted_name}{draft}",
+        rf"maak\s+een\s+{asset}\s+(?:swing|trade|dca)[ -]setup\s+op\s+{interval}\s+met\s+de\s+naam\s+{quoted_name}{draft}",
+        rf"maak\s+een\s+(?:swing|trade|dca)?\s*setup\s+met\s+de\s+naam\s+{delimited_name}{draft}",
+        rf"maak\s+een\s+(?:swing|trade|dca)\s*setup\s+met\s+de\s+naam\s+{delimited_name},\s*symbool\s+{asset}\s+en\s+timeframe\s+{interval}{draft}",
+    )
+    if not any(re.fullmatch(pattern, text, re.I) for pattern in patterns):
         return False
-    return bool(re.fullmatch(
-        r"maak\s+een\s+(?:swing|trade|dca)\s+setup\s+voor\s+"
-        r"[a-z0-9]{2,10}\s+op\s+\d+\s*(?:uur|hour|h|dag|day|d|week|w)\s+"
-        r"met\s+de\s+naam\s+[\w -]{1,80}\.?",
+    # Even a delimited name must not itself contain a required trade rule.
+    return not re.search(
+        r"\b(?:als|alleen|wanneer|zodra|tenzij|onder|boven|bij|if|only|when|"
+        r"unless|below|above|trend|rsi|score|voorwaarde|condition|regel|rule|"
+        r"koop|kopen|aankoop|buy|entry|instap|filter|trigger)\b",
         text, re.I,
-    ))
+    )
 
 
 def _plain_strategy_execution_mode_reply(message: str) -> bool:

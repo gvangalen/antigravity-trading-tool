@@ -48,7 +48,8 @@ from backend.services.finn_v2_run_service import (
     _strategy_rule_is_unencoded, _inherits_blocked_strategy_rules,
     _explicitly_separates_new_strategy,
     _freeform_strategy_rule_waiver_inputs,
-    _plain_setup_creation_request, _plain_strategy_execution_mode_reply,
+    _plain_setup_creation_request,
+    _plain_strategy_execution_mode_reply,
     _plain_strategy_start_request,
     _plain_strategy_guided_mode_transition,
     _discard_superseded_strategy_rule_block, _inherits_blocked_strategy_rules,
@@ -5108,6 +5109,35 @@ def test_setup_rule_coverage_does_not_truncate_late_required_condition():
     assert fake.requests[0]["input"].find("1D-trend stijgt") >= 3000
 
 
+@pytest.mark.parametrize("message", [
+    'Maak een BTC swing-setup op 4 uur met de naam "Rustige Breakout". Toon alleen een concept.',
+    'Maak een swing setup voor SOL op 4 uur met de naam "Matrix Nieuwe Setup".',
+    "Maak een swingsetup met de naam Atlas, symbool XLM en timeframe 4H.",
+    "Maak een setup met de naam momentum.",
+])
+def test_plain_setup_requests_do_not_invent_automatic_rule_evidence(message):
+    assert _plain_setup_creation_request(message)
+
+
+@pytest.mark.parametrize("message", [
+    "Maak een BTC-setup. Ik stap alleen in als de 1D-trend stijgt.",
+    "Maak een setup; koop pas wanneer de markt niet onder druk staat.",
+    "Maak een setup met instapvoorwaarde RSI onder 35.",
+    "Create a setup. Only buy if the market score is above 70.",
+    "Maak een BTC-setup op 1D. Koop bij RSI onder 30.",
+    "Gebruik RSI 30 als koopgrens.",
+    "Handel bij stijgende trend.",
+    "Wacht met kopen tot RSI onder 35 staat.",
+    "Aankopen bij een koers boven 80.000 USD.",
+    "Maak een setup voor BTC met markt 20-60, macro 30-70 en technisch 40-80.",
+    "Maak een BTC swing-setup op 4 uur met de naam Rustige Breakout activeer hem na een uitbraak.",
+    "Maak een BTC swing-setup op 4 uur met de naam Rustige Breakout en ga long na uitbraak.",
+    "Maak een swingsetup met de naam Atlas activeer, symbool XLM en timeframe 4H.",
+])
+def test_setup_automatic_rule_evidence_still_requires_coverage(message):
+    assert not _plain_setup_creation_request(message)
+
+
 @pytest.mark.parametrize("answer, expected", [
     ("Maak voorstel zonder deze voorwaarden", True),
     ("Begin nieuw voorstel zonder eerdere voorwaarden", True),
@@ -5385,7 +5415,7 @@ def test_model_clarification_never_reuses_unverified_setup_or_price_levels():
 
 def test_plain_action_fields_do_not_need_rule_review():
     assert _plain_setup_creation_request(
-        "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup."
+        'Maak een swing setup voor SOL op 4 uur met de naam "Matrix Nieuwe Setup".'
     )
     assert not _plain_setup_creation_request(
         "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup, alleen als RSI stijgt."

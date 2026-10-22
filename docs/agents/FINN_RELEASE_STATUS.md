@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN setup prerequisite in strategy continuity QA (22 October 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. The previous public SHA
+`86c483c64f036b509aa7131bed8af6c93b7dc9a1` is **NOT_ACCEPTED** after the
+independent [QA workflow 39804577583](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39804577583).
+Its first setup-creation prerequisite ended in `CLARIFICATION / setup_rule_not_captured`;
+no setup proposal or persisted setup resulted, so the remaining sixteen strategy
+cases were not evaluated. The sanitized report recorded no selected operation
+for that turn. It did not expose the protected prompt or fixture.
+
+The local repair narrows the setup-rule coverage exception to closed, fully
+recognized bare setup requests. A quoted name, or a single-token name with
+explicit `symbool` and `timeframe` fields, gives an unambiguous boundary;
+unbounded free text still uses the semantic rule check. A standalone bare
+single-token name remains a partial request and may ask for missing setup
+details. Security and Architecture rejected an earlier open-vocabulary shortcut
+because it could silently absorb a trading condition into the setup name; that
+shortcut is not part of this candidate. The owner-scoped local FastAPI/Celery/
+Responses probe completed a typed XLM setup request as `create_setup` in 7.6s;
+a second run produced an actual setup proposal without an error code. No card
+was confirmed, plan saved or order executed. The final-code backend suite passed
+**3767 tests, 4 existing skips**. The local worker-driven action matrix passed
+**16/16** contracts and **19/19** adapter checks, with zero broker orders, Live
+trading calls, Live bots or production connections (artifact SHA-256
+`fca3c3f666357ed72789edd89524c43a22a792f64b6ed0314269e48b2d9f1a78`).
+The real Responses development selector passed **20/20** with zero provider,
+schema, timeout, parse or validation failures. Frontend typecheck, i18n
+lint/tests, command/proposal tests, production build and high-severity audit
+passed on unchanged frontend source; the audit reported one moderate Next.js
+advisory. Security and Architecture found no P1/P2 in the final closed-grammar
+diff. The real Responses regression set, deployment and independent live retest
+remain pending.
+
 ## FINN strategy continuation: owner and fixed-field repair (22 October 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. The preceding public SHA
