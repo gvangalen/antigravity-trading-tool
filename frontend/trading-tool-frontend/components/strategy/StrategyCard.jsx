@@ -71,7 +71,8 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
     : [];
 
   const currentPrice = btcLive; // In a multi-asset system, we'd filter by symbol
-  const distToEntry = currentPrice && entry ? ((currentPrice - entry) / entry) * 100 : null;
+  const distToEntry = currentPrice && entry && strategy.price_currency_confirmed && strategy.price_currency === "USD"
+    ? ((currentPrice - entry) / entry) * 100 : null;
 
   /* ==========================================================
      RISK / REWARD CALCULATIONS
@@ -153,6 +154,15 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
     if (v === null || v === undefined || isNaN(v)) return "---";
     return new Intl.NumberFormat(getIntlLocale(locale), { style: "currency", currency: "USD" }).format(v);
   };
+  const formatStrategyPrice = (v) => {
+    if (v === null || v === undefined || isNaN(v)) return "---";
+    if (!strategy.price_currency_confirmed) {
+      return `${new Intl.NumberFormat(getIntlLocale(locale)).format(v)} · ${copy.priceCurrencyUnconfirmed}`;
+    }
+    return new Intl.NumberFormat(getIntlLocale(locale), {
+      style: "currency", currency: strategy.price_currency,
+    }).format(v);
+  };
   const formatAmountEur = (value) => {
     if (value === null || value === undefined || isNaN(value)) return "---";
     return new Intl.NumberFormat(getIntlLocale(locale), { style: "currency", currency: "EUR" }).format(value);
@@ -219,19 +229,19 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                 <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                   <ArrowRight size={12} className="text-blue-500" /> {copy.entryLabel}
                 </div>
-                <div className="text-lg font-black text-foreground tracking-tight">{formatCurrency(entry)}</div>
+                <div className="text-lg font-black text-foreground tracking-tight">{formatStrategyPrice(entry)}</div>
               </div>
               <div className="bg-[var(--color-border-subtle)] p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
                 <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                   <Target size={12} className="text-green-500" /> {copy.targetsLabel}
                 </div>
-                <div className="text-lg font-black text-foreground tracking-tight">{targets.length > 0 ? formatCurrency(targets[0]) : "-"}</div>
+                <div className="text-lg font-black text-foreground tracking-tight">{targets.length > 0 ? formatStrategyPrice(targets[0]) : "-"}</div>
               </div>
               <div className="bg-red-50/50 p-4 rounded-2xl border border-red-100 flex flex-col justify-center">
                 <div className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                   <ShieldAlert size={12} className="text-red-500" /> {copy.stopLossLabel}
                 </div>
-                <div className="text-lg font-black text-red-600 tracking-tight">{formatCurrency(stop_loss)}</div>
+                <div className="text-lg font-black text-red-600 tracking-tight">{formatStrategyPrice(stop_loss)}</div>
               </div>
             </div>
           )}
@@ -271,7 +281,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Setup</dt><dd className="mt-1 font-semibold text-foreground">{strategy.setup_name || "-"}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Mode</dt><dd className="mt-1 font-semibold text-foreground">{formatExecutionMode(strategy.execution_mode, locale) || "-"}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">{copy.amountPerExecution}</dt><dd className="mt-1 font-semibold text-foreground">{formatAmountEur(base_amount)}</dd></div>
-            <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Invalidatie</dt><dd className="mt-1 font-semibold text-foreground">{formatCurrency(stop_loss)}</dd></div>
+            <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Invalidatie</dt><dd className="mt-1 font-semibold text-foreground">{formatStrategyPrice(stop_loss)}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Targets</dt><dd className="mt-1 font-semibold text-foreground">{targets.length ? targets.join(", ") : "-"}</dd></div>
             <div><dt className="text-[9px] font-black uppercase tracking-widest text-secondary">Risico</dt><dd className="mt-1 font-semibold text-foreground">{strategy.risk_profile || strategy.risk_reward || "-"}</dd></div>
           </dl>
@@ -341,7 +351,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
                 {targets.slice(0, 2).reverse().map((t, i) => (
                   <div key={i} className="flex items-center justify-between px-3 py-2 bg-green-50 border border-green-100 rounded-lg opacity-60">
                     <span className="text-[9px] font-black text-green-500">TP{targets.length - i}</span>
-                    <span className="text-xs font-black text-green-700">{formatCurrency(t)}</span>
+                    <span className="text-xs font-black text-green-700">{formatStrategyPrice(t)}</span>
                   </div>
                 ))}
 
@@ -358,12 +368,12 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
 
                 <div className="flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
                    <span className="text-[9px] font-black text-blue-500 uppercase">{copy.entryShort}</span>
-                   <span className="text-xs font-black text-blue-700">{formatCurrency(entry)}</span>
+                   <span className="text-xs font-black text-blue-700">{formatStrategyPrice(entry)}</span>
                 </div>
 
                 <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
                    <span className="text-[9px] font-black text-red-500 uppercase">{copy.stopShort}</span>
-                   <span className="text-xs font-black text-red-700">{formatCurrency(stop_loss)}</span>
+                   <span className="text-xs font-black text-red-700">{formatStrategyPrice(stop_loss)}</span>
                 </div>
              </div>
           </div>

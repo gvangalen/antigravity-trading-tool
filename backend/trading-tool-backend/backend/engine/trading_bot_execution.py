@@ -129,6 +129,54 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
     )
     return eur_price
 
+
+def _get_trade_quote_fx_context(conn, symbol: str) -> dict:
+    """Read a dated quote conversion for saved trade levels."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT quote_currency FROM asset_catalog WHERE symbol=%s LIMIT 1", (symbol,))
+        row = cur.fetchone()
+    quote = str(row[0] or "").upper() if row else ""
+    if quote == "EUR":
+        return {"quote_currency": quote, "eur_per_unit": 1.0, "fx_as_of": None,
+                "live_price_eur": None}
+    if quote != "USD":
+        return {"quote_currency": quote, "eur_per_unit": None, "fx_as_of": None,
+                "live_price_eur": None}
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT eur_per_unit, observed_at FROM portfolio_fx_rates
+            WHERE quote_currency='USD' LIMIT 1
+        """)
+        fx_row = cur.fetchone()
+        cur.execute("""
+            SELECT price, source_observed_at FROM market_data
+            WHERE symbol=%s AND price IS NOT NULL
+            ORDER BY timestamp DESC LIMIT 1
+        """, (symbol,))
+        market_row = cur.fetchone()
+    if not fx_row or not market_row:
+        return {"quote_currency": quote, "eur_per_unit": None, "fx_as_of": None,
+                "live_price_eur": None}
+    from backend.services.portfolio_fx_service import price_in_eur
+    converted, _observed, factor, fx_as_of = price_in_eur(
+        price=market_row[0], price_at=market_row[1], quote_currency="USD",
+        fx={"eur_per_unit": fx_row[0], "observed_at": fx_row[1]},
+    )
+    return {"quote_currency": quote, "eur_per_unit": factor if converted is not None else None,
+            "fx_as_of": fx_as_of, "live_price_eur": converted}
+
+
+def _convert_trade_snapshot_to_eur(snapshot: dict, factor: float) -> dict:
+    """Convert every saved USD level with the same verified FX factor."""
+    if not math.isfinite(factor) or factor <= 0:
+        raise ValueError("Invalid trade FX factor")
+    return {
+        **snapshot,
+        "entry": snapshot["entry"] * factor if snapshot.get("entry") is not None else None,
+        "stop_loss": snapshot["stop_loss"] * factor if snapshot.get("stop_loss") is not None else None,
+        "targets": [value * factor for value in snapshot.get("targets") or []],
+    }
+
 def _clear_existing_pending_orders_for_day(
     conn,
     *,
@@ -517,18 +565,34 @@ def _default_trade_plan(
 # ✅ Strategy setup payload (from DB) — single truth for bot_brain
 # =====================================================
 def _hold_for_unconverted_trade_levels(brain: Dict[str, Any], setup_payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Never compare saved non-EUR trade levels with an EUR live price."""
-    if setup_payload.get("setup_type") != "trade" or str(setup_payload.get("price_currency", "EUR")).upper() == "EUR":
+    """Never execute against ambiguous or unconverted trade price levels."""
+    if setup_payload.get("setup_type") != "trade":
+        return brain
+    if setup_payload.get("price_currency_confirmed") and (
+        setup_payload.get("price_currency") == "EUR" or setup_payload.get("trade_levels_converted")
+    ):
         return brain
     held = dict(brain)
     held["action"] = "hold"
     held["amount_eur"] = 0.0
-    held["guardrail_reason"] = "strategy_price_currency_mismatch"
+    reason_code = (
+        "strategy_price_currency_unconfirmed"
+        if not setup_payload.get("price_currency_confirmed")
+        else "strategy_price_conversion_unavailable"
+    )
+    held["reason"] = (
+        "Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie."
+        if reason_code == "strategy_price_currency_unconfirmed"
+        else "Actuele USD/EUR-omrekening ontbreekt; automatische uitvoering wacht."
+    )
+    held["guardrail_reason"] = reason_code
     held["guardrails_result"] = {
         "allowed": False, "adjusted_amount_eur": 0.0,
-        "blocked_by": "strategy_price_currency_mismatch",
-        "reason": "De opgeslagen koersniveaus zijn niet in EUR; automatische uitvoering wacht op een betrouwbare omrekening.",
-        "warnings": ["strategy_price_currency_mismatch"], "guardrails": {},
+        "original_amount_eur": float(brain.get("amount_eur") or 0),
+        "blocked_by": reason_code, "reason": held["reason"],
+        "warnings": [reason_code], "debug_code": reason_code,
+        "explanations": [{"code": reason_code, "message": held["reason"]}],
+        "guardrails": {},
     }
     return held
 
@@ -609,6 +673,7 @@ def _get_strategy_setup_payload(
         "execution_mode": execution_mode,
         "setup_type": normalized_type,
         "price_currency": str(stored_data.get("price_currency", "EUR")).upper(),
+        "price_currency_confirmed": stored_data.get("price_currency_confirmed") is True,
     }
 
     if execution_mode == "custom":
@@ -1611,6 +1676,7 @@ def _persist_decision_and_order(
         **verified_components,
         "setup": (scores.get("_setup_match") or {}).get("score"),
         "setup_match": decision.get("setup_match"),
+        "decision_basis": decision.get("decision_basis"),
 
         "combined": benchmark_score(
             {f"{category}_score": verified_components[category]
@@ -1882,6 +1948,15 @@ def run_trading_bot_execution(
             else:
                 current_match = match_setup_from_daily_scores({}, scores, scores.get("_benchmark_weights"))
             scores["_setup_match"] = current_match
+            if setup_payload.get("setup_type") == "trade":
+                setup_payload["saved_trade_match_status"] = (
+                    current_match.get("status") if not bot.get("is_live") else None
+                )
+                # The saved score band is the Paper trade signal. Live orders
+                # retain their existing independent confidence policy.
+                setup_payload["confirmed_trade_match"] = (
+                    not bot.get("is_live") and current_match.get("status") == "matches"
+                )
             snapshot = _get_saved_strategy_plan(
                 conn, user_id, bot["strategy_id"], current_match.get("score"),
             )
@@ -1923,6 +1998,25 @@ def run_trading_bot_execution(
                     "stop_loss": snapshot.get("stop_loss"),
                     "targets": snapshot.get("targets"),
                 })
+
+            trade_fx_context = None
+            source_trade_levels = None
+            if setup_payload.get("setup_type") == "trade":
+                trade_fx_context = _get_trade_quote_fx_context(conn, symbol)
+                if not bot.get("is_live") and trade_fx_context["quote_currency"] == "USD":
+                    live_price = trade_fx_context.get("live_price_eur")
+                if trade_fx_context["quote_currency"] == "EUR" and setup_payload.get("price_currency") == "EUR":
+                    setup_payload["price_currency_confirmed"] = True
+                if setup_payload.get("price_currency") == "USD" and snapshot:
+                    factor = trade_fx_context.get("eur_per_unit")
+                    if (not bot.get("is_live") and setup_payload.get("price_currency_confirmed") and
+                            trade_fx_context.get("quote_currency") == "USD" and factor and live_price is not None):
+                        source_trade_levels = dict(snapshot)
+                        snapshot = _convert_trade_snapshot_to_eur(snapshot, factor)
+                        setup_payload.update({
+                            "entry": snapshot["entry"], "stop_loss": snapshot["stop_loss"],
+                            "targets": snapshot["targets"], "trade_levels_converted": True,
+                        })
 
             # =========================
             # PORTFOLIO CONTEXT (ACCURATE)
@@ -1987,8 +2081,8 @@ def run_trading_bot_execution(
             )
             brain = _enforce_setup_match_on_buy(brain, current_match, setup_payload)
 
-            # Live prices and sizing are EUR-denominated. A strategy whose
-            # levels were saved in USD must not compare them with EUR prices.
+            # All comparisons and sizing now use EUR. Ambiguous old levels or
+            # a missing dated FX rate still fail closed before an order.
             brain = _hold_for_unconverted_trade_levels(brain, setup_payload)
 
             if live_cash_error or (bot.get("is_live") and live_price is None):
@@ -2027,6 +2121,17 @@ def run_trading_bot_execution(
                     reason="fallback_trade_plan",
                     snapshot=snapshot,
                 )
+            if setup_payload.get("setup_type") == "trade" and isinstance(trade_plan, dict):
+                trade_plan["price_currency"] = (
+                    "EUR" if setup_payload.get("trade_levels_converted") else setup_payload.get("price_currency")
+                )
+                if source_trade_levels:
+                    trade_plan["source_price_currency"] = "USD"
+                    trade_plan["source_levels"] = {
+                        key: source_trade_levels.get(key) for key in ("entry", "stop_loss", "targets")
+                    }
+                    trade_plan["fx_eur_per_unit"] = trade_fx_context["eur_per_unit"]
+                    trade_plan["fx_as_of"] = trade_fx_context["fx_as_of"].isoformat()
 
             # =========================
             # POSITION SIZE
@@ -2060,6 +2165,10 @@ def run_trading_bot_execution(
                 ),
                 "dca_amount_semantics": setup_payload.get("dca_amount_semantics"),
                 "score_source": (setup_payload.get("decision_curve") or {}).get("input"),
+                "decision_basis": (
+                    "saved_setup_score_band" if setup_payload.get("confirmed_trade_match")
+                    else None
+                ),
 
                 "base_amount": brain.get("base_amount") or setup_payload.get("base_amount"),
                 "execution_mode": setup_payload.get("execution_mode"),

@@ -213,7 +213,7 @@ class BotService:
         if isinstance(result, dict):
             if blocked_by in {"guardrails_error", "cash_unavailable", "market_price_stale", "unsupported_live_currency"}:
                 state = "error"
-            elif proposed > 0 and (blocked_by or result.get("allowed") is False):
+            elif blocked_by or (proposed > 0 and result.get("allowed") is False):
                 state = "blocked"
             elif proposed > 0 and result.get("allowed") is True:
                 state = "reduced" if allowed < proposed - 0.01 else "allowed"
@@ -657,6 +657,39 @@ class BotService:
         await self.session.commit()
         bot = await self.repository.get_bot_config(user_id, bot_id)
         return {"ok": True, "id": bot_id, **self._bot_contract(bot)}
+
+    async def transfer_paper_cash(
+        self, *, user_id: int, source_bot_id: int, target_bot_id: int,
+        amount_eur: Decimal, idempotency_key: str,
+    ) -> dict:
+        if source_bot_id == target_bot_id:
+            raise HTTPException(422, "Kies twee verschillende Paper-bots.")
+        amount = Decimal(str(amount_eur))
+        if not amount.is_finite() or amount <= 0 or amount.as_tuple().exponent < -2:
+            raise HTTPException(422, "Het bedrag moet positief zijn en hele eurocenten bevatten.")
+        try:
+            result = await self.repository.transfer_paper_cash(
+                user_id=user_id, source_bot_id=source_bot_id,
+                target_bot_id=target_bot_id, amount_eur=str(amount.quantize(Decimal("0.01"))),
+                idempotency_key=idempotency_key,
+            )
+            await self.session.commit()
+        except ValueError as exc:
+            await self.session.rollback()
+            messages = {
+                "paper_transfer_key_reused": "Deze overboekingscode hoort bij een andere overboeking.",
+                "paper_transfer_bot_invalid": "Een van deze Paper-bots is niet beschikbaar voor dit account.",
+                "paper_transfer_unverified_ledger": "Een bot heeft nog niet geverifieerde Paper-transacties.",
+                "paper_transfer_insufficient_cash": "De bronbot heeft onvoldoende beschikbare Paper-kas.",
+            }
+            raise HTTPException(409, messages.get(str(exc), "Paper-overboeking geweigerd.")) from exc
+        if not result["replayed"]:
+            try:
+                await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
+            except Exception:
+                logger.exception("Paper portfolio snapshot after transfer failed for user=%s", user_id)
+        return {"ok": True, **result, "amount_eur": float(amount),
+                "source_bot_id": source_bot_id, "target_bot_id": target_bot_id}
 
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
         # Match the order-submission lock order. History and validation must
@@ -1705,6 +1738,7 @@ class BotService:
                 "setup_name": bot.get("setup_name"),
                 "action": r["action"],
                 "confidence": r["confidence"],
+                "decision_basis": scores_payload.get("decision_basis"),
                 "scores_json": scores_payload or daily_scores,
                 "requested_amount_eur": scores_payload.get("requested_amount_eur"),
                 "amount_eur": scores_payload.get("amount_eur"),
@@ -1774,6 +1808,7 @@ class BotService:
                 "decision_ts": r["decision_ts"].isoformat() if r.get("decision_ts") else None,
                 "action": r["action"],
                 "confidence": r["confidence"],
+                "decision_basis": scores.get("decision_basis"),
                 "amount_eur": r["amount_eur"],
                 "setup_match": setup_match,
                 "reasons": reasons,

@@ -492,9 +492,9 @@ export default function BotAgentCard({
         action.toUpperCase() ||
         copy.insufficientData,
       confidenceLabel:
-        confidenceLabels[confidence] ||
-        confidence.toUpperCase() ||
-        copy.insufficientData,
+        normalizedDecision?.decision_basis === "saved_setup_score_band"
+          ? copy.scoreBandBasis
+          : confidenceLabels[confidence] || confidence.toUpperCase() || copy.insufficientData,
       amountLabel:
         amount > 0
           ? formatCurrency(amount, locale, "EUR", { maximumFractionDigits: 0 })

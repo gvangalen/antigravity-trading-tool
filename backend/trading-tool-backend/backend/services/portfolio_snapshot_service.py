@@ -28,24 +28,31 @@ def floor_timestamp(dt: datetime, bucket: BucketType) -> datetime:
 def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime) -> bool:
     """Write a complete Paper-only valuation; partial or Live ledgers never enter this series."""
     cur.execute("""
-        SELECT c.id, COALESCE(NULLIF(UPPER(c.symbol), ''), 'BTC') AS symbol,
+        SELECT c.id, COALESCE(NULLIF(UPPER(c.symbol), ''), NULLIF(UPPER(s.symbol), ''),
+                              NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), ''), 'BTC') AS symbol,
                p.bot_id IS NOT NULL AS initialized, p.cash_eur, p.position_qty,
                (u.bot_id IS NOT NULL OR EXISTS (
                    SELECT 1 FROM bot_ledger legacy WHERE legacy.user_id=c.user_id
                      AND legacy.bot_id=c.id AND legacy.entry_type='execute'
                      AND legacy.valuation_version < 2
                )) AS unverified_ledger,
-               p.updated_at
+               p.updated_at,
+               EXISTS (SELECT 1 FROM bot_ledger ledger
+                       WHERE ledger.user_id=c.user_id AND ledger.bot_id=c.id) AS has_ledger
         FROM bot_configs c
+        LEFT JOIN strategies s ON s.id=c.strategy_id AND s.user_id=c.user_id
+        LEFT JOIN setups st ON st.id=s.setup_id AND st.user_id=s.user_id
         LEFT JOIN bot_portfolios p ON p.user_id=c.user_id AND p.bot_id=c.id
-             AND p.symbol=COALESCE(NULLIF(UPPER(c.symbol), ''), 'BTC')
+             AND p.symbol=COALESCE(NULLIF(UPPER(c.symbol), ''), NULLIF(UPPER(s.symbol), ''),
+                                   NULLIF(UPPER(s.data->>'symbol'), ''), NULLIF(UPPER(st.symbol), ''), 'BTC')
         LEFT JOIN portfolio_unverified_paper_bots u
              ON u.user_id=c.user_id AND u.bot_id=c.id
         WHERE c.user_id=%s AND c.is_live=FALSE
         ORDER BY c.id
     """, (user_id,))
     bots = cur.fetchall()
-    if not bots or any(not row[2] or row[5] for row in bots):
+    if (not bots or not any(row[2] for row in bots)
+            or any(row[5] or (not row[2] and row[7]) for row in bots)):
         return False
     cur.execute("""
         SELECT quote_currency, eur_per_unit, observed_at, provider, provider_pair FROM portfolio_fx_rates
@@ -69,7 +76,7 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
     source_times = []
     evidence = []
     now = datetime.now(timezone.utc)
-    for bot_id, symbol, _initialized, bot_cash, qty, _unverified, portfolio_updated_at in bots:
+    for bot_id, symbol, _initialized, bot_cash, qty, _unverified, portfolio_updated_at, _has_ledger in bots:
         cash += float(bot_cash or 0)
         bot_evidence = {
             "bot_id": bot_id, "symbol": symbol,

@@ -141,6 +141,13 @@ export const fetchBotPortfolios = async () => {
   return ensureArray(data);
 };
 
+export const transferPaperCash = async (payload) => handleApi(
+  fetchAuth("/api/bot/paper/cash-transfer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+);
+
 /* =====================================================
    🔁 5. GENERATE BOT DECISION
 ===================================================== */

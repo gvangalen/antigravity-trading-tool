@@ -249,9 +249,68 @@ def test_non_eur_trade_levels_cannot_trigger_eur_paper_execution():
     )
     assert held["action"] == "hold"
     assert held["amount_eur"] == 0
-    assert held["guardrails_result"]["blocked_by"] == "strategy_price_currency_mismatch"
+    assert held["guardrails_result"]["blocked_by"] == "strategy_price_currency_unconfirmed"
     assert proposed["action"] == "buy"
-    assert _hold_for_unconverted_trade_levels(proposed, {"setup_type": "trade"}) == proposed
+    assert _hold_for_unconverted_trade_levels(proposed, {
+        "setup_type": "trade", "price_currency": "USD",
+        "price_currency_confirmed": True, "trade_levels_converted": True,
+    }) == proposed
+
+
+def test_confirmed_trade_match_uses_saved_score_band_without_invented_confidence():
+    from backend.engine.bot_brain import run_bot_brain
+
+    result = run_bot_brain(
+        user_id=7,
+        setup={"setup_type": "trade", "symbol": "AAPL", "base_amount": 400,
+               "execution_mode": "fixed", "confirmed_trade_match": True,
+               "saved_trade_match_status": "matches"},
+        scores={"market_score": 60, "macro_score": 70, "technical_score": 70,
+                "_source_available": {"market_score": True, "macro_score": True,
+                                      "technical_score": True},
+                "_benchmark_weights": {"market_score": 1 / 3,
+                                       "macro_score": 1 / 3,
+                                       "technical_score": 1 / 3}},
+        portfolio_context={"active_strategy": {
+            "entry": 300, "stop_loss": 295, "targets": [310], "confidence": None,
+        }, "live_price": 300, "cash_balance_eur": 400,
+            "portfolio_value_eur": 400, "max_asset_exposure_pct": 100,
+            "daily_allocation_eur": 400, "total_budget_eur": 400,
+            "max_trade_risk_eur": 400, "min_order_eur": 1},
+    )
+    assert result["confidence"] == 0.0
+    assert result["action"] == "buy"
+    assert "Confidence too low" not in result["reason"]
+
+    live_policy = run_bot_brain(
+        user_id=7,
+        setup={"setup_type": "trade", "symbol": "AAPL", "base_amount": 400,
+               "execution_mode": "fixed"},
+        scores={"market_score": 60, "macro_score": 70, "technical_score": 70,
+                "_source_available": {"market_score": True, "macro_score": True,
+                                      "technical_score": True}},
+        portfolio_context={"active_strategy": {
+            "entry": 300, "stop_loss": 295, "targets": [310], "confidence": None,
+        }, "live_price": 300, "cash_balance_eur": 400,
+            "portfolio_value_eur": 400, "max_asset_exposure_pct": 100,
+            "daily_allocation_eur": 400, "total_budget_eur": 400,
+            "max_trade_risk_eur": 400, "min_order_eur": 1},
+    )
+    assert live_policy["action"] == "hold"
+    assert "Confidence too low" in live_policy["reason"]
+
+
+def test_aapl_usd_trade_levels_use_one_fx_factor_before_eur_execution():
+    from backend.engine.trading_bot_execution import _convert_trade_snapshot_to_eur
+
+    source = {"entry": 347.14, "stop_loss": 342.00, "targets": [357.42]}
+    converted = _convert_trade_snapshot_to_eur(source, 0.85)
+    assert converted["entry"] == pytest.approx(295.069)
+    assert converted["stop_loss"] == pytest.approx(290.7)
+    assert converted["targets"] == pytest.approx([303.807])
+    assert source == {"entry": 347.14, "stop_loss": 342.00, "targets": [357.42]}
+    with pytest.raises(ValueError):
+        _convert_trade_snapshot_to_eur(source, 0)
 
 
 @pytest.mark.parametrize("weights,expected", [
@@ -573,8 +632,12 @@ def test_worker_records_score_2_decision_for_missing_and_complete_sources(monkey
                               ("market_score", "macro_score", "technical_score", "setup_score")},
     })
     monkeypatch.setattr(worker, "_get_live_price", lambda *args: 100)
+    monkeypatch.setattr(worker, "_get_trade_quote_fx_context", lambda *args: {
+        "quote_currency": "EUR", "eur_per_unit": 1.0, "fx_as_of": None,
+    })
     monkeypatch.setattr(worker, "_get_strategy_setup_payload", lambda *args, **kwargs: {
         "setup_type": "trade", "symbol": "BTC", "execution_mode": "fixed", "base_amount": 100,
+        "price_currency": "EUR", "price_currency_confirmed": True,
     })
     monkeypatch.setattr(worker, "_get_current_benchmark_weights", lambda *args: (
         {key: 1 / 3 for key in ("market_score", "macro_score", "technical_score")},

@@ -2225,6 +2225,20 @@
     "budgetHint": "Een limiet is geen cash of portefeuillewaarde.",
     "unreconciledLive": "Het live rekeningoverzicht is nog niet betrouwbaar met botposities te verrekenen. Het totaal en beschikbare cash blijven daarom onbekend.",
     "unfunded": "Een of meer botportfolio’s hebben nog geen toegewezen cash.",
+    "partiallyUnfunded": "Een Paper-bot heeft nog geen toegewezen cash. Het totaal toont de bekende waarde van de gefinancierde bots.",
+    "unfundedBot": "Nog geen Paper-kas",
+    "paperTransferTitle": "Bestaande Paper-kas overboeken",
+    "paperTransferHelp": "Verplaats virtuele euro’s tussen je Paper-bots. De totale Paper-kas wordt niet verhoogd en botbudgetten blijven gelijk.",
+    "paperTransferFrom": "Van bot",
+    "paperTransferTo": "Naar bot",
+    "paperTransferChoose": "Kies een bot",
+    "paperTransferAmount": "Bedrag (€)",
+    "paperTransferRemaining": "Kas bij bronbot na overboeking",
+    "paperTransferConfirm": "Ik bevestig dat dit bedrag uit de bestaande Paper-kas van de bronbot komt.",
+    "paperTransferInvalid": "Kies twee eigen Paper-bots, bevestig de overboeking en gebruik een bedrag dat beschikbaar is in de bronkas.",
+    "paperTransferFailed": "De Paper-overboeking is niet gelukt.",
+    "paperTransferSaving": "Overboeken…",
+    "paperTransferSubmit": "Paper-kas overboeken",
     "unverifiedLedger": "Oudere Paper-transacties hebben nog geen gecontroleerde euro-omrekening. Hun portefeuillewaarde blijft onbekend tot reconciliatie.",
     "unverifiedBot": "Waardering nog niet geverifieerd",
     "missingPrice": "Een positie heeft geen gecontroleerde koers in euro. De totale waarde blijft daarom onbekend.",
@@ -2444,6 +2458,8 @@
         "no_allocatable_size": "Er blijft geen geldig koopbedrag over",
         "unsupported_live_currency": "Live botorders gebruiken alleen EUR; wijzig de botvaluta voordat je handelt.",
         "market_price_stale": "Geen recente EUR-marktprijs beschikbaar voor live uitvoering.",
+        "strategy_price_currency_unconfirmed": "De valuta van instap, stop-loss en doelen is nog niet bevestigd.",
+        "strategy_price_conversion_unavailable": "Een recente USD/EUR-omrekening voor de opgeslagen koersniveaus ontbreekt.",
         "insufficient_funds": "Onvoldoende beschikbaar kassaldo",
         "cash_unavailable": "Beschikbaar exchange-kassaldo kon niet worden gecontroleerd.",
         "total_budget": "Botbudgetlimiet bereikt",
@@ -2457,6 +2473,8 @@
         "unsupported_live_currency": "Stel de botvaluta in op EUR en controleer opnieuw.",
         "execution_pending": "Wacht op de uitvoeringsstatus; verstuur geen tweede order.",
         "market_price_stale": "Ververs de EUR-marktprijs en controleer opnieuw.",
+        "strategy_price_currency_unconfirmed": "Open de strategie, kies de juiste koersvaluta en sla opnieuw op.",
+        "strategy_price_conversion_unavailable": "Wacht op een gecontroleerde USD/EUR-koers en laat de bot opnieuw beoordelen.",
         "executed": "Bekijk de tradegeschiedenis en wacht op de volgende botcyclus.",
         "skipped": "Wacht op de volgende botcyclus.",
         "awaiting_exchange": "Wacht op bevestiging van de exchange.",
@@ -2713,6 +2731,7 @@
       "lockedLabel": "Vastgezet"
     },
     "history": {
+      "scoreBandBasis": "Setupscore bevestigd; geen aparte confidence berekend",
       "title": "Botgeschiedenis",
       "reason": "Reden",
       "loading": "Geschiedenis laden…",
@@ -2763,6 +2782,7 @@
       "delete": "Bot verwijderen"
     },
     "decisionCard": {
+      "scoreBandBasis": "Setupscore bevestigd; geen aparte confidence berekend",
       "loading": "Bot analyseert de markt…",
       "insufficientData": "Onvoldoende data",
       "pipelineLabel": "Bot intelligence pipeline",
@@ -2863,6 +2883,7 @@
       "version": "Versie"
     },
     "agentCard": {
+      "scoreBandBasis": "Setupscore bevestigd; geen aparte confidence berekend",
       "chartTimeframe": "Grafiek",
       "strategyTimeframe": "Strategie",
       "riskConservative": "Risico: Conservatief",
@@ -3084,6 +3105,8 @@
     "tradePlanCard": {
       "loading": "Trade plan laden…",
       "executionPlan": "Uitvoeringsplan",
+      "priceCurrency": "Koersvaluta",
+      "convertedFrom": "omgerekend uit",
       "activeTargetStructure": "Actieve doelstructuur",
       "livePrice": "Live koers",
       "targetZone": "DOELZONE",
@@ -3485,6 +3508,11 @@
       "entryPlaceholder": "Instap",
       "targetsPlaceholder": "Doelen (komma gescheiden)",
       "stopLossPlaceholder": "Stop-loss",
+      "priceCurrencyLabel": "Valuta van instap, stop-loss en doelen",
+      "priceCurrencyChoose": "Kies de koersvaluta",
+      "priceCurrencyUsd": "USD ($)",
+      "priceCurrencyEur": "EUR (€)",
+      "priceCurrencyHelp": "Bevestig de valuta van deze koersniveaus. Het bedrag per uitvoering blijft in euro.",
       "amountPlaceholder": "Bedrag (€)",
       "amountPerExecutionLabel": "Basisbedrag per uitvoering (€)",
       "amountPerExecutionHelp": "Bij vast bedrag betaal je dit per uitvoering. Bij een curve is dit de 100%-basis.",
@@ -3497,6 +3525,7 @@
       "saveButton": "Opslaan"
     },
     "card": {
+      "priceCurrencyUnconfirmed": "valuta onbevestigd",
       "fallbackName": "Strategie",
       "amountPerExecution": "Bedrag per uitvoering",
       "analysisSuccess": "AI-uitleg bijgewerkt.",
