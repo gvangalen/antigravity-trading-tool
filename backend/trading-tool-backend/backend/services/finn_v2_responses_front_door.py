@@ -100,7 +100,7 @@ def _verified_previous_closed_review_id(previous_response: Mapping[str, Any] | N
 def _proposal_explicitly_excluded(message: str) -> bool:
     return bool(re.search(
         r"\b(?:geen|no|kein(?:e|en|er|es)?)\s+(?:voorstel|proposal|draft|concept(?:kaart)?)\b"
-        r"|\b(?:hypothetisch|hypothetical|hypothetisch(?:es|er)?|denkbeeldig)\b",
+        r"|\b(?:hypothetisch(?:e|es|er)?|hypothetical|denkbeeldig)\b",
         message, re.I,
     ))
 
@@ -130,10 +130,19 @@ def _explicit_create_operation_request(message: str) -> str | None:
 
 def _explicit_fresh_create_operation_request(message: str) -> str | None:
     """An indefinite/new object starts a new draft, even in the same domain."""
-    operation = _explicit_create_operation_request(message)
+    operation = _explicit_create_operation_request(message) or (
+        "create_strategy" if _explicit_strategy_proposal_request(message) else None
+    )
     if operation and re.match(
         r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\s+"
         r"(?:een|an?|ein(?:e|en|er|es)?|neu(?:e|en|er|es)?|new)\b",
+        message, re.I,
+    ):
+        return operation
+    if operation == "create_strategy" and re.match(
+        r"^\s*(?:ik\s+wil|i\s+want|ich\s+möchte)\s+"
+        r"(?:een|a|an|eine?)\s+(?:nieuwe|andere|tweede|new|another|second|"
+        r"neue|andere|zweite)\s+(?:paper[-\s]+)?(?:strategie|strategy)\b",
         message, re.I,
     ):
         return operation
@@ -143,8 +152,8 @@ def _explicit_fresh_create_operation_request(message: str) -> str | None:
     if operation == "create_strategy" and re.match(
         r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
         r"[^.!?]{0,160}\b(?:een|a|an|ein(?:e|en|er|es)?)\s+"
-        r"(?:(?:tweede|nieuwe|andere|second|new|another|zweite|neue)\s+)?"
-        r"(?:paper[-\s]+)?(?:strategie|strategy)\b",
+        r"(?:(?:tweede|nieuwe|andere|onafhankelijk|nieuw|second|new|another|independent|zweite|neue)\s+)*"
+        r"(?:paper[-\s]+)?(?:strategie|strategy)(?:voorstel|concept|proposal|draft)?\b",
         message, re.I,
     ):
         return operation
@@ -167,9 +176,21 @@ def _explicit_strategy_proposal_request(message: str) -> bool:
         text, re.I,
     ):
         return False
+    if _proposal_explicitly_excluded(text) or re.match(
+        r"^\s*(?:ik\s+wil|i\s+want|ich\s+(?:will|möchte))\s+"
+        r"(?:geen|niet|no|not|keine?|nicht)\b",
+        text, re.I,
+    ):
+        return False
+    if re.match(r"^\s*(?:ik\s+wil|i\s+want|ich\s+(?:will|möchte))\b", text, re.I):
+        return bool(re.search(
+            r"\b(?:een|a|an|eine[nrms]?)\s+(?:(?:nieuwe|new|neue[nrms]?|paper)\s*[- ]?)*"
+            r"(?:strategie|strategy)\b",
+            text[:240], re.I,
+        ))
     return bool(re.match(
         r"^(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
-        r"[^.!?\n]{0,200}\bstrateg(?:ie|y)\b",
+        r"[^.!?\n]{0,200}\bstrateg(?:ie|y)(?:voorstel|concept|proposal|draft)?\b",
         text, re.I,
     ))
 
@@ -614,6 +635,14 @@ class FinnResponsesFrontDoor:
         rejection_feedback: dict[str, Any] | None = None,
         feed_evidence: list[dict[str, Any]] | None = None,
     ) -> FinnResponsesFrontDoorResult:
+        if _explicit_fresh_create_operation_request(message) == "create_strategy":
+            # Apply the same fresh-draft boundary before proposal selection as
+            # in orchestration. A previous completed or collecting strategy
+            # must not donate inputs or rules to this independent request.
+            conversation_context = dict(conversation_context)
+            conversation_context.pop("active_guided_operation", None)
+            conversation_context.pop("operation_state", None)
+            conversation_context.pop("responses_clarification", None)
         selected: RequestAnalysisResult | None = None
         individual_proposals = (
             os.getenv("APP_ENV") == "local_finn"

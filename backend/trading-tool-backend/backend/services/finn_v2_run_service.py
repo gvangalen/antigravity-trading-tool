@@ -64,6 +64,7 @@ from backend.services.finn_v2_verified_setup_reference import (
 )
 from backend.services.asset_catalog_service import corrected_catalog_instrument, mentioned_catalog_symbols, requests_unspecified_asset_correction, resolve_catalog_symbol
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.utils import openai_client
@@ -93,7 +94,7 @@ def _priced_two_rule_strategy_request(message: str):
     """Recognize one positive plan request with two named unsupported rules."""
     numeric = r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)"
     return re.fullmatch(
-        r"maak voor mijn opgeslagen setup [\w -]+ een (?:tweede )?paper-strategie "
+        r"(?:maak|ik wil) voor mijn opgeslagen setup [\w -]+ een (?:tweede )?paper-strategie "
         r"met naam [\w -]+\. (?P<asset>[a-z]{2,8}) (?P<timeframe>\d+[hdw]), vast bedrag €[\d.,]+, "
         rf"entry (?P<entry>{numeric}) (?P<entry_currency>usd|eur), "
         rf"stop-loss (?P<stop>{numeric}) (?P<stop_currency>usd|eur), "
@@ -352,8 +353,14 @@ def _reopen_strategy_for_new_price_currency(
 
 
 def _complete_strategy_price_reentry(message: str) -> bool:
+    introduction = (
+        r"(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|actuele|huidige|new|current)?\s*"
+        r"(?:koersniveaus|prijsniveaus|prijzen|price\s+levels|prices)\s*"
+        r"(?:zijn|are|:|=)\s*"
+    )
     if "?" in message or not re.match(
-        r"^\s*(?:(?:de|mijn|the|my|der|mein)\s+)?(?:nieuwe|new|neue[nr]?)?\s*"
+        rf"^\s*(?:{introduction})?"
+        r"(?:(?:de|mijn|the|my|der|mein)\s+)?(?:nieuwe|new|neue[nr]?)?\s*"
         r"(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\b", message, re.IGNORECASE,
     ) or re.search(
         r"\b(?:niet|geen|not|nicht|kein|nein|no|beispiel|voorbeeld|example|"
@@ -374,8 +381,13 @@ def _pure_strategy_price_reentry(message: str) -> bool:
     """Permit a direct replay only for three prices, with no extra trade rule."""
     number = r"(?:€|\$)?\s*\d[\d.,]*\s*(?:USD|EUR)"
     separator = r"\s*(?:[,;]|\ben\b|\band\b)\s*"
+    introduction = (
+        r"(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|actuele|huidige|new|current)?\s*"
+        r"(?:koersniveaus|prijsniveaus|prijzen|price\s+levels|prices)\s*"
+        r"(?:zijn|are|:|=)\s*"
+    )
     return _complete_strategy_price_reentry(message) and bool(re.fullmatch(
-        rf"\s*(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|new)?\s*"
+        rf"\s*(?:{introduction})?(?:(?:de|mijn|the|my)\s+)?(?:nieuwe|new)?\s*"
         rf"(?:entry|instap(?:prijs)?)\s*(?:is|:|=|op|at)?\s*{number}"
         rf"{separator}(?:stop[- ]?loss|stop)\s*(?:is|:|=|op|at)?\s*{number}"
         rf"{separator}(?:target|koersdoel|take[- ]?profit)\s*"
@@ -394,6 +406,13 @@ def _inherits_blocked_strategy_rules(message: str) -> bool:
         r"(?:regel(?:s|en)?|voorwaard(?:e|en)|handelsregel(?:s|en)?|"
         r"rule(?:s)?|condition(?:s)?|bedingung(?:en)?)\b",
         normalized,
+    ) or re.search(
+        r"\b(?:zonder|without|ohne)\b\s+(?:de\s+|the\s+|die\s+)?"
+        r"(?:automatische\s+|automatic\s+|automatischen?\s+)?"
+        r"(?:regels?|rules?|regeln?)\s+(?:uit|from|aus)\s+"
+        r"(?:het|de|the|dem|der)?\s*(?:vorige|eerdere|oude|previous|prior|old|"
+        r"vorherigen?|alten?)\s+(?:concept|draft|entwurf)\b",
+        normalized,
     )
     if no_carry:
         # Remove only the negated clause. Later sentences can still request
@@ -408,10 +427,18 @@ def _inherits_blocked_strategy_rules(message: str) -> bool:
     # how the trader names the old constraint (trendfilter, scoregrens, etc.).
     # The operation contract cannot infer which old rule was meant.
     if re.search(
-        r"\b(?:houd|behoud|gebruik|hergebruik|overnemen|neem\s+over|"
-        r"blijft?|blijven|laat\s+staan|dezelfde|hetzelfde|vorige|eerdere|"
-        r"oude|bestaande|same|previous|prior|old|existing|"
-        r"keep|retain|reuse|use|übernehme|behalte|verwende)\b",
+        r"\b(?:houd|behoud|gebruik|hergebruik|neem\s+over|"
+        r"keep|retain|reuse|use|behalte|verwende)\s+"
+        r"(?:de|het|alle|alleen|the|all|die)?\s*"
+        r"(?:rest|overige|vorige|eerdere|oude|bestaande|same|previous|prior|old)\b",
+        normalized,
+    ):
+        return True
+    if re.search(
+        r"\b(?:houd|behoud|gebruik|hergebruik|neem\s+over|"
+        r"keep|retain|reuse|use|behalte|verwende)\b[^.!?\n]{0,55}\b"
+        r"(?:trendfilter|scoregrens|instapfilter|handelsfilter|"
+        r"trend\s+filter|score\s+threshold|entry\s+filter)\b",
         normalized,
     ):
         return True
@@ -634,8 +661,11 @@ def _blocked_strategy_from_clarification(
     Only fields stated by the user are retained; the unsupported rule itself
     is never converted into a strategy field.
     """
-    if not _explicit_strategy_proposal_request(message):
-        return None
+    # The caller has already received the typed `strategy_rule_not_captured`
+    # result from a strategy creation attempt. Requiring a particular opening
+    # verb here loses the draft when the owner says "Ik wil een strategie ...".
+    # This only stores a non-confirmable clarification state; it never saves
+    # a strategy or reuses price examples.
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
     inputs = FinnV2OperationStateService().explicit_inputs(
         contract=contract, message=message, explicit_asset=None,
@@ -650,6 +680,55 @@ def _blocked_strategy_from_clarification(
         "captured_inputs": _safe_blocked_strategy_inputs(message, inputs),
         "draft_message": message,
     }
+
+
+def _positive_owner_setup_matches(
+    resolver: FinnV2EntityResolutionService,
+    message: str,
+    setups: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Accept an exact setup answer or a positive parent phrase in a request.
+
+    Free prose containing a setup name is not enough to bind a confirmable
+    strategy: the name may be explicitly rejected elsewhere in that clause.
+    """
+    text = " ".join(str(message or "").casefold().split())
+    exact = text.strip(" \t\r\n.!,;:\"'“”‘’")
+    exact_rows = [
+        row for row in setups
+        if exact == " ".join(str(row.get("name") or "").casefold().split())
+    ]
+    if exact_rows:
+        return exact_rows
+    first_clause = re.split(r"[.!?;]", text, maxsplit=1)[0]
+    tail = text[len(first_clause):].strip(" .!?;\t\r\n")
+    # The only multi-sentence form accepted here is a fully constrained,
+    # positive priced request. Arbitrary prose can retract or qualify the
+    # first sentence, even without naming a second setup.
+    if tail and _priced_two_rule_strategy_request(message) is None:
+        return []
+    # Punctuation can introduce a correction within one sentence. A decimal
+    # comma in a price is harmless; any other comma requires a standalone
+    # setup answer rather than guessing from the first name.
+    if re.search(r"(?<!\d),|,(?!\d)", first_clause) or re.search(
+        r"\b(?:maar|but|sondern|however|instead|bedoel|mean|meine|"
+        r"verkeerd|wrong|falsch|andere|other|anderes|wacht|wait)\b",
+        first_clause,
+    ) or len(resolver._explicit_message_matches(first_clause, setups)) > 1:
+        return []
+    if re.search(r"\b(?:niet|not|nicht|geen|no|keine?|zonder|without|ohne)\b", first_clause):
+        return []
+    return [
+        row for row in setups
+        if row.get("name") and re.search(
+            r"\b(?:voor|bij|aan|for|bei|für)\s+(?:mijn\s+|my\s+|mein(?:e|em|en)?\s+|"
+            r"de\s+|the\s+|dem\s+)?(?:opgeslagen\s+|saved\s+|gespeicherten?\s+)?"
+            r"setup\s+" + re.escape(" ".join(str(row["name"]).casefold().split()))
+            + r"(?=$|[,;.]|\s+(?:een|a|eine?|met|with|mit|zonder|without|ohne|"
+            r"die|that|waarbij|where|op|als|as|voor|for|te|to|en|and|und)\b)",
+            first_clause,
+        )
+    ]
 
 
 def _strategy_rule_is_unencoded(message: str) -> bool:
@@ -677,7 +756,65 @@ def _strategy_rule_is_unencoded(message: str) -> bool:
         r"(?:dag|week|maand|day|week|month|tag|woche|monat)\b",
         message, re.I,
     ))
-    return dynamic_entry or relative_level or percent_risk or execution_limit
+    indicator_filter = bool(re.search(
+        r"\b(?:gebruik|use|nutze)\s+(?:de\s+|the\s+)?"
+        r"(?:ma\s*\d+|rsi|macd|adx)\b[^.!?\n]{0,90}"
+        r"\b(?:instapfilter|entry\s*filter|voorwaarde|condition|"
+        r"kruising|cross(?:over)?|signaal|signal)\b",
+        message, re.I,
+    ))
+    return dynamic_entry or relative_level or percent_risk or execution_limit or indicator_filter
+
+
+def _plain_setup_creation_request(message: str) -> bool:
+    """A fully typed setup name, asset and chart interval adds no trade rule."""
+    text = " ".join(str(message or "").strip().split())
+    if re.search(
+        r"\b(?:als|alleen|wanneer|zodra|tenzij|onder|boven|bij|if|only|when|"
+        r"unless|below|above|trend|rsi|score|voorwaarde|condition|regel|rule)\b",
+        text, re.I,
+    ):
+        return False
+    return bool(re.fullmatch(
+        r"maak\s+een\s+(?:swing|trade|dca)\s+setup\s+voor\s+"
+        r"[a-z0-9]{2,10}\s+op\s+\d+\s*(?:uur|hour|h|dag|day|d|week|w)\s+"
+        r"met\s+de\s+naam\s+[\w -]{1,80}\.?",
+        text, re.I,
+    ))
+
+
+def _plain_strategy_execution_mode_reply(message: str) -> bool:
+    """A mode label alone cannot introduce an automatic trading condition."""
+    return bool(re.fullmatch(
+        r"\s*(?:vaste|fixed|variabele|variable|custom)\s+"
+        r"(?:uitvoering|execution|modus|mode)\s*[.!]?\s*",
+        str(message or ""), re.I,
+    ))
+
+
+def _plain_strategy_start_request(message: str, *, owner_setup_name: str) -> bool:
+    """Accept only the exact verified parent name; no trailing rule text."""
+    name = " ".join(str(owner_setup_name or "").strip().split())
+    text = " ".join(str(message or "").strip().split()).rstrip(".")
+    return bool(name) and text.casefold() == f"maak een strategie voor {name}".casefold()
+
+
+def _plain_strategy_guided_mode_transition(
+    messages: list[str], *, owner_setup_name: str, strategy_name: str,
+) -> bool:
+    """Only a fully typed bare start, optional exact name, and mode may skip review."""
+    if len(messages) not in {2, 3}:
+        return False
+    if not _plain_strategy_start_request(messages[0], owner_setup_name=owner_setup_name):
+        return False
+    if not _plain_strategy_execution_mode_reply(messages[-1]):
+        return False
+    if len(messages) == 3:
+        name = " ".join(str(strategy_name or "").strip().split())
+        middle = " ".join(str(messages[1] or "").strip().split()).rstrip(".")
+        if not name or middle.casefold() != name.casefold():
+            return False
+    return True
 
 
 def _simple_coach_experiment_enabled() -> bool:
@@ -3023,6 +3160,113 @@ class FinnV2RunService:
                     return
 
                 if (
+                    visible and strategy_rule_block and conversation_id
+                    and not dict(strategy_rule_block.get("captured_inputs") or {}).get("setup_id")
+                    and FinnV2OperationStateService.is_cancel_intent(run_message)
+                ):
+                    locale = str(context.get("locale") or "nl")
+                    async with async_session_factory() as session:
+                        conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                            conversation_id=conversation_id, user_id=user_id, for_update=True,
+                        )
+                        if conversation is None or conversation.last_run_id != run_id:
+                            raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                        saved_context = dict(conversation.context_json or {})
+                        for key in (
+                            "strategy_rule_block", "pending_independent_strategy",
+                            "active_guided_operation", "responses_clarification",
+                        ):
+                            saved_context.pop(key, None)
+                        await FinnV2ConversationRepository(session).update_context(
+                            conversation_id=conversation_id, user_id=user_id,
+                            context=saved_context,
+                        )
+                        answer = {
+                            "en": "I have cancelled this unsaved strategy draft.",
+                            "de": "Ich habe diesen ungespeicherten Strategieentwurf verworfen.",
+                        }.get(locale.split("-")[0].lower(),
+                              "Ik heb dit niet-opgeslagen strategieconcept geannuleerd.")
+                        await cls(session).complete_responses_read(
+                            run_id=run_id, user_id=user_id,
+                            response_id=f"verified-strategy-draft-cancel-{run_id}",
+                            answer=FinnResponsesVerifiedAnswer(
+                                status="completed", text=answer, reason="strategy_draft_cancelled",
+                                evidence=(),
+                            ),
+                            locale=locale,
+                        )
+                        await session.commit()
+                    return
+
+                if (
+                    visible and strategy_rule_block and conversation_id
+                    and not dict(strategy_rule_block.get("captured_inputs") or {}).get("setup_id")
+                    and _explicit_fresh_create_operation_request(run_message) != "create_strategy"
+                    and "?" not in run_message
+                ):
+                    # A rule waiver cannot restore a strategy without its
+                    # owner-bound parent. Resolve that slot before offering
+                    # the waiver or letting the short reply become a READ.
+                    locale = str(context.get("locale") or "nl")
+                    async with async_session_factory() as session:
+                        resolver = FinnV2EntityResolutionService(session)
+                        setups = [dict(row) for row in await resolver.setups.get_user_setups(user_id)]
+                        matches = _positive_owner_setup_matches(resolver, run_message, setups)
+                        if len(matches) == 1:
+                            setup_id = matches[0].get("id") or matches[0].get("setup_id")
+                            if setup_id is not None:
+                                updated = dict(strategy_rule_block)
+                                captured = dict(updated.get("captured_inputs") or {})
+                                captured["setup_id"] = int(setup_id)
+                                updated["captured_inputs"] = captured
+                                strategy_rule_block = updated
+                        if strategy_rule_block is not None:
+                            conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                                conversation_id=conversation_id, user_id=user_id, for_update=True,
+                            )
+                            if conversation is None or conversation.last_run_id != run_id:
+                                raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                            saved_context = dict(conversation.context_json or {})
+                            saved_context["strategy_rule_block"] = strategy_rule_block
+                            await FinnV2ConversationRepository(session).update_context(
+                                conversation_id=conversation_id, user_id=user_id,
+                                context=saved_context,
+                            )
+                        if dict(strategy_rule_block.get("captured_inputs") or {}).get("setup_id"):
+                            choice = {
+                                "en": "Make strategy proposal without these automatic rules",
+                                "de": "Strategieentwurf ohne diese automatischen Regeln erstellen",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Maak strategievoorstel zonder deze automatische regels")
+                            question = {
+                                "en": "I found the saved setup. The automatic rule cannot be stored. Choose the offered option only if I may omit it.",
+                                "de": "Ich habe das gespeicherte Setup gefunden. Die automatische Regel kann nicht gespeichert werden. Wähle die angebotene Option nur, wenn ich sie weglassen darf.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Ik heb de opgeslagen setup gevonden. De automatische regel kan niet worden opgeslagen. Kies de aangeboden optie alleen als die regel mag vervallen.")
+                            choices = [choice]
+                        else:
+                            question = {
+                                "en": "Which saved setup should this strategy belong to? Name the setup first.",
+                                "de": "Zu welchem gespeicherten Setup gehört diese Strategie? Nenne zuerst das Setup.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Bij welke opgeslagen setup hoort deze strategie? Noem eerst de setup.")
+                            choices = []
+                        await cls(session).complete_responses_read(
+                            run_id=run_id, user_id=user_id,
+                            response_id=f"verified-strategy-parent-choice-{run_id}",
+                            answer=FinnResponsesVerifiedAnswer(
+                                status="clarification_required", text=question,
+                                reason="strategy_parent_not_captured", evidence=(),
+                                clarification={"question": question,
+                                               "reason": "strategy_parent_not_captured",
+                                               "choices": choices},
+                            ),
+                            locale=locale,
+                        )
+                        await session.commit()
+                    return
+
+                if (
                     visible and strategy_rule_block
                     and not _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
                     and (
@@ -3097,6 +3341,70 @@ class FinnV2RunService:
                         await session.commit()
                     return
 
+                if (
+                    visible and conversation_id and not strategy_rule_block
+                    and _explicit_strategy_proposal_request(run_message)
+                    and _strategy_rule_is_unencoded(run_message)
+                ):
+                    # Unsupported automatic execution rules are a contract
+                    # fact, not a model-choice problem. Record the owner's
+                    # incomplete draft before asking whether those rules may
+                    # be omitted; navigation or a model read classification
+                    # must not lose the follow-up state.
+                    locale = str(context.get("locale") or "nl")
+                    async with async_session_factory() as session:
+                        resolver = FinnV2EntityResolutionService(session)
+                        setups = [dict(row) for row in await resolver.setups.get_user_setups(user_id)]
+                        matches = _positive_owner_setup_matches(resolver, run_message, setups)
+                        blocked = _blocked_strategy_from_clarification(
+                            run_message,
+                            verified_setup=matches[0] if len(matches) == 1 else None,
+                        )
+                        conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                            conversation_id=conversation_id, user_id=user_id, for_update=True,
+                        )
+                        if conversation is None or conversation.last_run_id != run_id:
+                            raise RuntimeContractConflictError("strategy_rule_block_conversation_stale")
+                        saved_context = dict(conversation.context_json or {})
+                        saved_context["strategy_rule_block"] = blocked
+                        await FinnV2ConversationRepository(session).update_context(
+                            conversation_id=conversation_id, user_id=user_id,
+                            context=saved_context,
+                        )
+                        choice = {
+                            "en": "Make strategy proposal without these automatic rules",
+                            "de": "Strategieentwurf ohne diese automatischen Regeln erstellen",
+                        }.get(locale.split("-")[0].lower(),
+                              "Maak strategievoorstel zonder deze automatische regels")
+                        if not dict(blocked.get("captured_inputs") or {}).get("setup_id"):
+                            question = {
+                                "en": "Which saved setup should this strategy belong to? Name the setup first; the automatic rule still needs a separate decision.",
+                                "de": "Zu welchem gespeicherten Setup gehört diese Strategie? Nenne zuerst das Setup; über die automatische Regel entscheiden wir danach getrennt.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Bij welke opgeslagen setup hoort deze strategie? Noem eerst de setup; over de automatische regel beslissen we daarna apart.")
+                            choices = []
+                        else:
+                            question = {
+                                "en": "This draft contains an automatic rule I cannot store. Choose the offered option only if I may omit that rule; the fixed details you gave stay in the draft.",
+                                "de": "Dieser Entwurf enthält eine automatische Regel, die ich nicht speichern kann. Wähle die angebotene Option nur, wenn ich diese Regel weglassen darf; deine festen Angaben bleiben erhalten.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Dit concept bevat een automatische regel die ik niet kan opslaan. Kies de aangeboden optie alleen als die regel mag vervallen; je vaste gegevens blijven in het concept.")
+                            choices = [choice]
+                        await cls(session).complete_responses_read(
+                            run_id=run_id, user_id=user_id,
+                            response_id=f"verified-strategy-rule-boundary-{run_id}",
+                            answer=FinnResponsesVerifiedAnswer(
+                                status="clarification_required", text=question,
+                                reason="strategy_rule_not_captured", evidence=(),
+                                clarification={"question": question,
+                                               "reason": "strategy_rule_not_captured",
+                                               "choices": choices},
+                            ),
+                            locale=locale,
+                        )
+                        await session.commit()
+                    return
+
                 prepared: FinnResponsesFrontDoorResult | None = None
                 if visible:
                     from backend.services.ai_usage_observability_service import ai_usage_context
@@ -3147,7 +3455,9 @@ class FinnV2RunService:
                                     + "\nCurrent user request: " + message
                                 )
                             coverage = (
-                                "none" if waiver else
+                                "none" if waiver or (
+                                    not active_block and _plain_setup_creation_request(run_message)
+                                ) else
                                 await FinnResponsesToolRelevanceGuard(
                                     openai_client.async_client
                                 ).setup_rule_coverage(
@@ -3275,18 +3585,49 @@ class FinnV2RunService:
                             strategy_inputs = dict(
                                 prepared.proposal_analysis.request_plan.operation_state.get("collected_inputs") or {}
                             )
+                            guided_origin = str(
+                                prepared.proposal_analysis.request_plan.operation_state.get("original_request") or ""
+                            )
+                            guided_messages = list(
+                                prepared.proposal_analysis.request_plan.operation_state.get("guided_user_messages") or []
+                            )
+                            guided_history_truncated = bool(
+                                prepared.proposal_analysis.request_plan.operation_state.get("guided_history_truncated")
+                            )
+                            owner_setup_name = ""
+                            setup_id = strategy_inputs.get("setup_id")
+                            if isinstance(setup_id, int) and setup_id > 0:
+                                async with async_session_factory() as setup_session:
+                                    owner_setup = await SetupRepository(setup_session).get_setup_by_id(
+                                        setup_id, user_id,
+                                    )
+                                    owner_setup_name = str((owner_setup or {}).get("name") or "")
                             strategy_waiver = _explicit_strategy_rule_waiver(run_message, str(strategy_rule_block.get("original_message") or ""))
                             if strategy_rule_block and not strategy_waiver:
                                 coverage = "unsupported_required_rule"
                             elif strategy_waiver:
                                 coverage = "none"
-                            elif _strategy_rule_is_unencoded(run_message):
+                            elif guided_history_truncated:
+                                coverage = "unclear"
+                            elif any(_strategy_rule_is_unencoded(item) for item in guided_messages or [run_message]):
                                 coverage = "unsupported_required_rule"
+                            elif _plain_strategy_guided_mode_transition(
+                                guided_messages, owner_setup_name=owner_setup_name,
+                                strategy_name=str(strategy_inputs.get("name") or ""),
+                            ):
+                                coverage = "none"
+                            elif guided_origin and _strategy_rule_is_unencoded(guided_origin):
+                                coverage = "unsupported_required_rule"
+                            elif _plain_strategy_execution_mode_reply(run_message) and not guided_messages:
+                                coverage = "unclear"
                             else:
                                 coverage = await FinnResponsesToolRelevanceGuard(
                                     openai_client.async_client
                                 ).strategy_rule_coverage(
-                                    message=message, collected_inputs=strategy_inputs,
+                                    message=(
+                                        "User requests for this draft: " + "\n".join(guided_messages)
+                                        if guided_messages else message
+                                    ), collected_inputs=strategy_inputs,
                                 )
                             if coverage != "none":
                                 locale = prepared.locale or "nl"
@@ -3522,7 +3863,7 @@ class FinnV2RunService:
                                 # the rejected draft at that boundary too.
                                 resolver = FinnV2EntityResolutionService(session)
                                 setups = [dict(row) for row in await resolver.setups.get_user_setups(user_id)]
-                                matches = resolver._explicit_message_matches(run_message, setups)
+                                matches = _positive_owner_setup_matches(resolver, run_message, setups)
                                 blocked = _blocked_strategy_from_clarification(
                                     run_message,
                                     verified_setup=matches[0] if len(matches) == 1 else None,
