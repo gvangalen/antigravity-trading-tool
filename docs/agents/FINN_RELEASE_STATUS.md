@@ -6,12 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN strategy continuity and QA fault handoff (22 October 2026)
 
-Phase: `BUILD_LOCAL_VALIDATION`. Branch:
-`codex/finn-strategy-continuity-state-machine`. The previous independent
+Phase: `LIVE_CANDIDATE_QA_PENDING`. The product repair merged through
+[PR #550](https://github.com/gvangalen/antigravity-trading-tool/pull/550)
+as SHA `9579a5166c6ceb49aa4f207820f4dca5df5feaf2`. The previous independent
 [QA workflow 39837873622](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39837873622)
 remains **NOT_ACCEPTED** (14/17 runner cases, plus a safety failure in a
-runner-green mixed-currency case). This candidate is not yet deployed or
-accepted.
+runner-green mixed-currency case). This new candidate is deployed but has not
+yet received independent QA acceptance.
 
 Build used QA's authorized, case-specific failing-question handoff to repair
 the bounded two-rule waiver, preserve separate strategy drafts, bind a target
@@ -33,6 +34,15 @@ provider, schema, timeout, parse or validation failures. Frontend typecheck,
 i18n lint/tests, command/proposal/setup tests, production build, and high-severity
 audit passed on unchanged frontend source; the audit reported zero
 vulnerabilities. All these are Build checks, not independent live acceptance.
+
+[PR CI 39843936876](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39843936876),
+[main CI 39844466444](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39844466444)
+and [Auto Deploy 39844850978](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39844850978)
+all succeeded. Backend health and frontend build-info returned HTTP 200 and
+the same product SHA `9579a5166c6ceb49aa4f207820f4dca5df5feaf2`.
+This status-only update creates a later main SHA; Build must wait for its
+final CI and Auto Deploy, verify both public SHAs and no newer pending deploy,
+then hand the unchanged 17-case scope to the same independent QA Agent.
 
 The user has given standing authorization for QA to disclose every relevant
 failed-case question, necessary prior turns and sanitized runtime details in
