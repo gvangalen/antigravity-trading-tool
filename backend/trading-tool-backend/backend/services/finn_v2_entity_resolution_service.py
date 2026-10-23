@@ -805,6 +805,21 @@ class FinnV2EntityResolutionService:
                 and self._coerce_int(row.get("dca_day")) == weekday
                 and (not enriched.get("asset") or self._matches_symbol(row.get("symbol"), enriched["asset"]))
             ]
+            selected_bot = None
+            selected_strategy = None
+            bot_id = self._coerce_int(enriched.get("bot_id"))
+            if bot_id:
+                selected_bot = await self.bots.get_bot_config(user_id, bot_id)
+                strategy_id = self._coerce_int((selected_bot or {}).get("strategy_id"))
+                if strategy_id:
+                    selected_strategy = await self.strategies.get_raw_strategy_with_setup(strategy_id, user_id)
+            linked_setup_id = self._coerce_int((selected_strategy or {}).get("setup_id"))
+            if linked_setup_id and any(
+                self._coerce_int(row.get("id") or row.get("setup_id")) == linked_setup_id
+                for row in candidates
+            ):
+                candidates = [row for row in candidates
+                              if self._coerce_int(row.get("id") or row.get("setup_id")) == linked_setup_id]
             if len(candidates) == 1:
                 for entity in ("setup", "strategy", "bot"):
                     selected_name = enriched.get(f"{entity}_name")
@@ -813,9 +828,16 @@ class FinnV2EntityResolutionService:
                             raise LookupError("setup_ambiguous")
                 enriched["setup_id"] = self._coerce_int(candidates[0].get("id") or candidates[0].get("setup_id"))
                 enriched.pop("setup_name", None)
-                enriched.pop("strategy_id", None)
+                if linked_setup_id == enriched["setup_id"]:
+                    enriched["strategy_id"] = self._coerce_int(
+                        selected_strategy.get("id") or selected_strategy.get("strategy_id")
+                        or selected_bot.get("strategy_id")
+                    )
+                else:
+                    enriched.pop("strategy_id", None)
                 enriched.pop("strategy_name", None)
-                enriched.pop("bot_id", None)
+                if linked_setup_id != enriched["setup_id"]:
+                    enriched.pop("bot_id", None)
                 enriched.pop("bot_name", None)
             elif len(candidates) > 1:
                 raise LookupError("setup_ambiguous")
@@ -1042,6 +1064,8 @@ class FinnV2EntityResolutionService:
             if parent_strategy_id:
                 row = await self.strategies.get_raw_strategy_with_setup(parent_strategy_id, user_id)
                 if row:
+                    if setup and self._coerce_int(row.get("setup_id")) != self._coerce_int(setup.get("id") or setup.get("setup_id")):
+                        raise LookupError("strategy_not_resolved")
                     return {"strategy": dict(row), "resolution_source": "explicit_bot_link"}
             raise LookupError("strategy_not_resolved")
 

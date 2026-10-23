@@ -1,3 +1,7 @@
+export function resolvePlanWorkspaceSymbol({ routeSymbol, selectedAsset, fallbackSymbol } = {}) {
+  return String(routeSymbol || selectedAsset || fallbackSymbol || "BTC").trim().toUpperCase();
+}
+
 export function selectFeaturedPlan(plans, symbol, activeSetupId) {
   const asset = String(symbol || "").toUpperCase();
   const candidates = (plans || []).filter((plan) =>

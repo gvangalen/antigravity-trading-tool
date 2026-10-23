@@ -22,6 +22,19 @@ const planSource = await readFile(
 const analysisSource = await readFile(
   new URL("../components/workspaces/asset/AssetWorkspaceV3.jsx", import.meta.url), "utf8",
 );
+const botPageSource = await readFile(
+  new URL("../app/(protected)/bot/page.jsx", import.meta.url), "utf8",
+);
+const providersSource = await readFile(
+  new URL("../app/providers/AppProviders.tsx", import.meta.url), "utf8",
+);
+
+test("bot page and FINN chat share the selected bot provider", () => {
+  assert.match(providersSource, /<ActiveBotProvider>/);
+  assert.doesNotMatch(botPageSource, /<ActiveBotProvider>/);
+  assert.match(botPageSource, /url\.searchParams\.set\("bot_id", String\(botId\)\)/);
+  assert.match(botPageSource, /url\.searchParams\.set\("symbol", symbol\)/);
+});
 
 test("shared workspace shows the persisted coach feed and opens chat on demand", () => {
   assert.match(shellSource, /<FinnCoachFeed\s+key=/);

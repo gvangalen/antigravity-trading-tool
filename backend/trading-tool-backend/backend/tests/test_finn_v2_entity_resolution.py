@@ -134,6 +134,43 @@ def test_saved_weekday_reference_asks_when_more_than_one_plan_matches():
         ))
 
 
+def test_saved_weekday_reference_keeps_the_selected_bots_owner_graph():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 11, "name": "BTC Monday", "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "1"},
+        {"id": 12, "name": "BTC Friday", "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "5"},
+        {"id": 13, "name": "BTC Friday B", "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "5"},
+    ])
+    service.bots = _FakeBotRepo()
+    service.bots.get_bot_config = lambda _user_id, bot_id: asyncio.sleep(
+        0, result={"id": 171, "strategy_id": 311, "symbol": "BTC"} if bot_id == 171 else None,
+    )
+    service.strategies = _FakeStrategyRepo()
+    service.strategies.get_raw_strategy_with_setup = lambda strategy_id, _user_id: asyncio.sleep(
+        0, result={"id": 311, "setup_id": 12, "setup_symbol": "BTC"} if strategy_id == 311 else None,
+    )
+
+    selected = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=388,
+        selector={"asset": "BTC", "setup_id": 11, "bot_id": 171},
+        message="Wat zegt mijn vrijdagplan bij de Paper-bot?",
+    ))
+    assert selected["setup_id"] == 12
+    assert selected["strategy_id"] == 311
+    assert selected["bot_id"] == 171
+
+
+def test_bot_link_cannot_supply_a_strategy_for_another_selected_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+    with pytest.raises(LookupError, match="strategy_not_resolved"):
+        asyncio.run(service.resolve_strategy(
+            user_id=388, selector={"bot_id": 170}, setup={"id": 12, "symbol": "BTC"},
+        ))
+
+
 def test_entity_resolution_prefers_explicit_graph_links_for_asset():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

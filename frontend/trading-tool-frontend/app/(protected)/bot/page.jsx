@@ -15,10 +15,7 @@ import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
 import BotBudgetForm from "@/components/bot/BotBudgetForm";
 import GlobalTradePanel from "@/components/bot/GlobalTradePanel";
 
-import {
-  ActiveBotProvider,
-  useActiveBot,
-} from "@/app/providers/ActiveBotProvider";
+import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
@@ -63,10 +60,13 @@ function ProgressStep({ index, title, subtitle, active, complete, locked }) {
   );
 }
 
-function persistBotSelection(botId) {
+function persistBotSelection(bot) {
+  const botId = Number(bot?.id || bot?.bot_id || 0);
   if (typeof window === "undefined" || !botId) return;
   const url = new URL(window.location.href);
   url.searchParams.set("bot_id", String(botId));
+  const symbol = String(bot?.strategy?.setup?.symbol || bot?.strategy?.symbol || bot?.symbol || "").trim().toUpperCase();
+  if (symbol) url.searchParams.set("symbol", symbol);
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -324,7 +324,7 @@ function BotPageInner() {
 
     setActiveBot(nextBot);
     setExpandedBotId(nextBot.id);
-    persistBotSelection(nextBot.id);
+    persistBotSelection(nextBot);
     setPendingFocusedBotId(null);
   }, [pendingFocusedBotId, resolvedBots, setActiveBot]);
 
@@ -341,7 +341,7 @@ function BotPageInner() {
         setActiveBot(targetBot);
         setExpandedBotId(targetBot.id);
         setTradePanelBotId(targetBot.id);
-        persistBotSelection(targetBot.id);
+        persistBotSelection(targetBot);
       }
 
       requestAnimationFrame(() => {
@@ -436,7 +436,7 @@ function BotPageInner() {
       setExpandedBotId(nextBot.id);
       // Preserve a deep link while its bot is still loading or temporarily
       // hidden by a filter; the URL selection effect can resolve it later.
-      if (!requestedBotId || requestedBot) persistBotSelection(nextBot.id);
+      if (!requestedBotId || requestedBot) persistBotSelection(nextBot);
     }
   }, [activeBot, filteredBots, setActiveBot]);
 
@@ -541,7 +541,7 @@ function BotPageInner() {
     if (botId > 0) {
       setPendingFocusedBotId(botId);
       setExpandedBotId(botId);
-      persistBotSelection(botId);
+      persistBotSelection(resolveBotChain(candidate, strategies, setups));
     }
 
     if (candidate) {
@@ -989,7 +989,7 @@ function BotPageInner() {
                 setActiveBot(bot);
                 setExpandedBotId(bot.id);
                 setTradePanelBotId(null);
-                persistBotSelection(bot.id);
+                persistBotSelection(bot);
               }}
               decision={decisionsByBot?.[activeBot?.id]}
               pendingOrder={today?.orders?.find((order) => order.bot_id === activeBot?.id)}
@@ -1147,9 +1147,7 @@ export default function BotPage() {
         </div>
       </div>
     }>
-      <ActiveBotProvider>
-        <BotPageInner />
-      </ActiveBotProvider>
+      <BotPageInner />
     </Suspense>
   );
 }

@@ -33,7 +33,8 @@ import { deleteSetup, fetchActiveSetup, fetchSetupMarketMatches } from "@/lib/ap
 import { getSetupId } from "@/lib/setup/activeSetup";
 import { formatSetupScoreConditions } from "@/lib/setup/scoreConditionSummary.mjs";
 import { formatBenchmarkScore } from "@/lib/workspace/canonicalScorePresentation.mjs";
-import { selectFeaturedPlan } from "@/lib/setup/selectFeaturedPlan.mjs";
+import { resolvePlanWorkspaceSymbol, selectFeaturedPlan } from "@/lib/setup/selectFeaturedPlan.mjs";
+import { useAsset } from "@/app/providers/AssetProvider";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
 const COPY = {
@@ -430,9 +431,14 @@ function BenchmarkStatus({ match, copy }) {
 
 export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const searchParams = useSearchParams();
+  const { selectedAsset } = useAsset();
   const { locale, t } = useTranslation();
   const copy = getCopy(locale);
-  const activeSymbol = String(searchParams.get("symbol") || symbol || "BTC").toUpperCase();
+  const activeSymbol = resolvePlanWorkspaceSymbol({
+    routeSymbol: searchParams.get("symbol"),
+    selectedAsset,
+    fallbackSymbol: symbol,
+  });
   const requestedSetupId = String(searchParams.get("setup_id") || "").trim();
   const feedSetupId = /^\d+$/.test(requestedSetupId) ? requestedSetupId : null;
   const lastFocusedFeedSetup = useRef(null);
@@ -596,6 +602,9 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     }));
     const activeSetupId = normalizeId(getSetupId(marketBestSetup) || getSetupId(activeSetup));
     return result.sort((a, b) => {
+      const aSelectedAsset = String(a.setup?.symbol || "").toUpperCase() === activeSymbol;
+      const bSelectedAsset = String(b.setup?.symbol || "").toUpperCase() === activeSymbol;
+      if (aSelectedAsset !== bSelectedAsset) return Number(bSelectedAsset) - Number(aSelectedAsset);
       if (Boolean(a.match?.is_active) !== Boolean(b.match?.is_active)) {
         return Number(Boolean(b.match?.is_active)) - Number(Boolean(a.match?.is_active));
       }
@@ -608,7 +617,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       if (a.complete !== b.complete) return Number(b.complete) - Number(a.complete);
       return getPlanName(a, copy).localeCompare(getPlanName(b, copy));
     });
-  }, [activeSetup, bots, copy, marketBestSetup, setupMatches, setups, strategies]);
+  }, [activeSetup, activeSymbol, bots, copy, marketBestSetup, setupMatches, setups, strategies]);
 
   useEffect(() => {
     if (!feedSetupId || loading || !plans.some((plan) => String(getSetupId(plan.setup)) === feedSetupId)) return undefined;

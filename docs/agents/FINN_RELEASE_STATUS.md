@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN coach context repair after independent QA (23 oktober 2026)
+
+Phase: `BUILD_VALIDATED_AWAITING_CI` on branch `codex/finn-coach-context-repair`.
+Independent desktop QA on public SHA `712b0862e0d4de938e75786964598c55cd806f79`
+returned `NOT_ACCEPTED`: AAPL Analyse had no complete benchmark while Mijn
+Plan featured a BTC setup, and FINN mixed a selected Friday Paper bot with a
+different Monday setup on a two-turn coach question. QA also found untranslated
+German decision-history headings. The historical Paper decision, tighter
+budget edit, portfolio totals and localized decision reason passed in that run.
+
+The repair makes My Plan follow the actual selected asset when its URL has no
+asset parameter; the bot page and persistent chat now share one selected-bot
+provider and write the selected bot's asset to the URL. Read tools discard a
+cached plan graph when the owner-scoped relation selector changes. A saved
+weekday reference retains a selected bot's strategy only when its stored setup
+matches that weekday, and a bot-derived strategy cannot be attached to a
+different setup. German history headings use German product copy.
+
+The final backend suite passed **3806 tests, 4 existing skips**. Web typecheck,
+i18n checks, command/proposal/setup tests, production build and high-severity
+audit passed; the audit reported zero vulnerabilities. Real Responses selector
+development passed **20/20** and regression **109/109**, each with zero provider,
+schema, parse or validation failures (development artifact SHA-256
+`aa2535082214e8364b312176292cd6de43dc998f6b68f6a8ec871850c27bc0b5`,
+regression artifact SHA-256
+`2848934c277048ba3cda7aaf9d3591ca9429cb49d46c4a32218a00d6a317b72f`).
+A local two-turn API/Celery/Responses
+probe with competing Monday and Friday BTC plans completed both turns with
+one dispatch and one attempt each. The selected setup and strategy tool calls
+used the Friday setup; FINN explained the Paper budget as a limit and made no
+proposal or order. An older local Celery worker from the previous day had
+intermittently consumed earlier probe tasks using stale code; it was stopped
+before the final two-turn probe. The final worker-driven action matrix passed
+**16/16** contracts and **19/19** adapter checks, with zero broker orders,
+Live trading calls, Live bots or production connections (artifact SHA-256
+`41cea073bc81cdbd091687c0ed4f1c5a128cd1874dfd7ad1f5e43967514c3a9d`).
+CI, deployment and independent live QA are pending. The previous
+`NOT_ACCEPTED` verdict remains in force.
+
 ## FINN coach, setupmatch en Paper-beslisstatus (23 oktober 2026)
 
 Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product change: [PR #555](https://github.com/gvangalen/antigravity-trading-tool/pull/555), merged as `e2ff180c83e0494b9973be596aaccee7ed8eca6e`.
