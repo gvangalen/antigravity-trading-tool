@@ -2,7 +2,7 @@
 
 import pytest
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 
 from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 from backend.engine import bot_brain
@@ -602,8 +602,12 @@ def test_persisted_paper_scores_use_verified_benchmark_and_preserve_unknown(monk
     assert cursor.saved["combined"] == 60
 
 
-@pytest.mark.parametrize("available", [False, True])
-def test_worker_records_score_2_decision_for_missing_and_complete_sources(monkeypatch, paper_engines, available):
+@pytest.mark.parametrize(("available", "quote_ready"), [
+    (False, True), (True, True), (True, False),
+])
+def test_worker_records_score_2_decision_for_missing_and_complete_sources(
+    monkeypatch, paper_engines, available, quote_ready,
+):
     from backend.engine import trading_bot_execution as worker
 
     class Connection:
@@ -632,9 +636,19 @@ def test_worker_records_score_2_decision_for_missing_and_complete_sources(monkey
                               ("market_score", "macro_score", "technical_score", "setup_score")},
     })
     monkeypatch.setattr(worker, "_get_live_price", lambda *args: 100)
-    monkeypatch.setattr(worker, "_get_trade_quote_fx_context", lambda *args: {
-        "quote_currency": "EUR", "eur_per_unit": 1.0, "fx_as_of": None,
-    })
+    verified_context = {
+        "quote_currency": "EUR", "eur_per_unit": None, "fx_as_of": None,
+        "live_price_eur": 100, "market_price": 100,
+        "market_price_at": datetime.now(timezone.utc),
+        "market_fx_eur_per_unit": 1.0, "market_fx_as_of": None,
+    }
+    unavailable_context = {
+        "quote_currency": "EUR", "reason": "market_quote_unverified",
+        "live_price_eur": None, "eur_per_unit": None, "fx_as_of": None,
+    }
+    monkeypatch.setattr(worker, "_get_trade_quote_fx_context", lambda *args, **kwargs: (
+        verified_context if quote_ready else unavailable_context
+    ))
     monkeypatch.setattr(worker, "_get_strategy_setup_payload", lambda *args, **kwargs: {
         "setup_type": "trade", "symbol": "BTC", "execution_mode": "fixed", "base_amount": 100,
         "price_currency": "EUR", "price_currency_confirmed": True,
@@ -670,9 +684,12 @@ def test_worker_records_score_2_decision_for_missing_and_complete_sources(monkey
 
     assert result["ok"] is True
     assert conn.committed is True
-    assert result["decisions"][0]["action"] == ("buy" if available else "hold")
+    assert result["decisions"][0]["action"] == ("buy" if available and quote_ready else "hold")
     assert result["decisions"][0]["execution_status"] == "no_order"
     assert (seen["scores"]["setup"] is not None) is available
     assert seen["scores"]["_setup_match"]["status"] == (
         "matches" if available else "insufficient_data"
     )
+    if not quote_ready:
+        assert seen["decision"]["guardrail_reason"] == "market_quote_unverified"
+        assert seen["decision"]["trade_plan"]["quote_check_reason"] == "market_quote_unverified"

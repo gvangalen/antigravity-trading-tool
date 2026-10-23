@@ -29,6 +29,19 @@ class MarketDataRepository:
     async def get_latest_snapshot(self, symbol: str = 'BTC') -> Optional[MarketData]:
         return await self.get_latest_market_data(symbol.upper())
 
+    async def get_latest_quoted_snapshot(self, symbol: str) -> Optional[MarketData]:
+        """Use a provider-dated row with its own unit for factual price reads."""
+        stmt = (
+            select(MarketData)
+            .where(MarketData.symbol == symbol.upper())
+            .where(MarketData.source_observed_at.is_not(None))
+            .where(MarketData.quote_currency.is_not(None))
+            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def get_latest_snapshots(self, symbols: Sequence[str]) -> Sequence[MarketData]:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))
         if not normalized:

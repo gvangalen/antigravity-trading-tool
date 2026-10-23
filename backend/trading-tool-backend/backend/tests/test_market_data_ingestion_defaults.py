@@ -35,11 +35,14 @@ def test_equity_quote_routing_migration_is_explicit_and_idempotent():
 def test_market_ingestion_preserves_provider_time_separately_from_receipt_time():
     service = MarketDataIngestionService(session=object())
     observed = datetime(2026, 10, 4, 12, tzinfo=timezone.utc)
-    base = {"symbol": "BTC", "provider": "binance", "provider_symbol": "BTCUSDT", "price": 100}
+    base = {"symbol": "BTC", "provider": "binance", "provider_symbol": "BTCUSDT",
+            "price": 100, "currency": "USDT"}
     verified = service._build_market_data_row(PriceSnapshotDTO(**base, observed_at=observed))
     unknown = service._build_market_data_row(PriceSnapshotDTO(**base, observed_at=None))
 
     assert verified.source_observed_at == observed.replace(tzinfo=None)
+    assert verified.quote_currency == "USDT"
+    assert verified.price_provider == "binance"
     assert unknown.source_observed_at is None
     assert unknown.timestamp is not None
 

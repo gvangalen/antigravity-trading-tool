@@ -95,6 +95,8 @@ class SetupMarketMatchesData(BaseModel):
 class MarketSnapshotData(BaseModel):
     symbol: str
     price: Optional[float] = None
+    quote_currency: Optional[str] = None
+    price_provider: Optional[str] = None
     change_24h: Optional[float] = None
     volume: Optional[float] = None
     source: str
@@ -178,6 +180,7 @@ class LinkedStrategyData(BaseModel):
     risk_profile: Optional[str] = None
     entry: Optional[str] = None
     price_currency: Optional[str] = None
+    price_currency_status: str = "unconfirmed"
     entry_type: Optional[str] = None
     stop_loss: Optional[str] = None
     targets: List[str] = Field(default_factory=list)

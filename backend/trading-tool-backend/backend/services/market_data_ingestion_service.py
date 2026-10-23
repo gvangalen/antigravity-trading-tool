@@ -125,4 +125,6 @@ class MarketDataIngestionService:
             volume=snapshot.volume,
             timestamp=observed_at or datetime.utcnow(),
             source_observed_at=observed_at,
+            quote_currency=str(snapshot.currency).upper() if snapshot.currency else None,
+            price_provider=snapshot.provider,
         )

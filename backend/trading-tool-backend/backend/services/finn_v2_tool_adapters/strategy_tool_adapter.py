@@ -22,6 +22,15 @@ class StrategyToolAdapter:
         elif not isinstance(targets, list):
             targets = []
         dca_rule = self._dca_amount_rule(strategy, raw_data)
+        # Old strategies received an implicit EUR default. Only an explicitly
+        # confirmed saved quote can be presented as the unit of trade levels.
+        confirmed = raw_data.get("price_currency_confirmed") is True
+        saved_currency = raw_data.get("price_currency") if confirmed else None
+        if confirmed and saved_currency is None:
+            saved_currency = strategy.get("price_currency")
+        if str(saved_currency or "").upper() not in {"EUR", "USD", "USDT"}:
+            confirmed = False
+            saved_currency = None
         payload = LinkedStrategyData(
             strategy_id=strategy.get("id"),
             setup_id=strategy.get("setup_id"),
@@ -31,7 +40,8 @@ class StrategyToolAdapter:
             execution_mode=strategy.get("execution_mode"),
             risk_profile=strategy.get("risk_profile"),
             entry=strategy.get("entry"),
-            price_currency=raw_data.get("price_currency", strategy.get("price_currency", "EUR")),
+            price_currency=str(saved_currency).upper() if confirmed else None,
+            price_currency_status="confirmed" if confirmed else "unconfirmed",
             entry_type=self._entry_type(strategy, raw_data),
             stop_loss=strategy.get("stop_loss"),
             targets=targets,

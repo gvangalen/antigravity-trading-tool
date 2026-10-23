@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.plan_price_comparison import compare_plan_entry_with_market
 from backend.domain.finn_v2_tools import TOOL_FRESHNESS_MAX_AGE_SECONDS
 from backend.domain.strategy_level_geometry import strategy_level_geometry
 from backend.schemas.finn_v2_evidence_schema import ActiveSetupData
@@ -152,6 +153,7 @@ class FinnResponsesReadExecutor:
             results.append(evidence)
             if read_tool == "read_indicator_configuration":
                 results.append(self._macro_catalog_evidence())
+        self._add_plan_price_comparisons(results)
         output = {
             "status": "completed" if all(item["status"] == "completed" for item in results) else "partial",
             "tool": call.name,
@@ -277,6 +279,10 @@ class FinnResponsesReadExecutor:
                 "Stored entry, stop-loss, target and amount values "
                 "must be described as existing settings, never as an instruction to trade at "
                 "those levels or as proof that this plan suits the user's goals or risk style. "
+                "price_currency_status=unconfirmed means the saved level currency is "
+                "unknown; the base amount currency is separate. Compare a current price "
+                "with entry only when market_price_comparison.status=available, using its "
+                "typed relation_to_entry. Otherwise say the comparison is unavailable. "
                 "For a factual readback, answer only the fields the user asked about; do not add "
                 "an unsolicited suitability warning or suggest a trade. For a question about "
                 "an extra amount outside a scheduled DCA purchase, compare it with the saved "
@@ -343,6 +349,35 @@ class FinnResponsesReadExecutor:
                 output["evidence_kind"] = "saved_plan_configuration"
                 output["assessment_status"] = "not_assessed"
         return output
+
+    @staticmethod
+    def _add_plan_price_comparisons(results: list[dict[str, Any]]) -> None:
+        markets = [
+            item for item in results
+            if item["scope"] == "read_market_snapshot" and item["status"] == "completed"
+            and isinstance(item.get("data"), dict)
+        ]
+        for item in results:
+            if item["scope"] != "read_linked_strategy" or item["status"] != "completed":
+                continue
+            strategy = item.get("data")
+            if not isinstance(strategy, dict) or strategy.get("entry") is None:
+                continue
+            matching = [
+                market for market in markets
+                if str(market["data"].get("symbol") or "").upper()
+                == str(strategy.get("symbol") or "").upper()
+            ]
+            market = max(
+                matching,
+                key=lambda candidate: str(candidate["data"].get("as_of") or ""),
+            ) if matching else None
+            item["data"] = {
+                **strategy,
+                "market_price_comparison": compare_plan_entry_with_market(
+                    strategy, market["data"] if market else None,
+                ),
+            }
 
     @staticmethod
     def _as_of(data: Any) -> str | None:

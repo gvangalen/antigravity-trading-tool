@@ -33,6 +33,7 @@ class _Cursor:
             self.rows = [(
                 self.prices[params[0]][0], 0, self.prices[params[0]][2],
                 self.prices[params[0]][1],
+                self.prices[params[0]][3] if len(self.prices[params[0]]) > 3 else self.prices[params[0]][2],
             )] if params[0] in self.prices else []
         elif "into portfolio_value_snapshots_v2" in statement:
             self.snapshots.append(params)
@@ -139,6 +140,16 @@ def test_paper_order_price_is_eur_and_live_non_eur_does_not_use_catalog_quote():
     conn = _Connection(cursor)
     assert _get_live_price(conn, "ETH") == 2000.0
     assert _get_live_price(conn, "ETH", max_age_seconds=60) is None
+
+
+def test_paper_price_rejects_legacy_or_mismatched_row_quote():
+    now = datetime.now(timezone.utc)
+    for row_quote in (None, "USD"):
+        cursor = _Cursor(
+            bots=[], prices={"BTC": (100, now, "USDT", row_quote)},
+            fx=[("USDT", 0.8, now)],
+        )
+        assert _get_live_price(_Connection(cursor), "BTC", paper_execution=True) is None
 
 
 def test_fx_refresh_rejects_undated_quote_and_keeps_other_source(monkeypatch):

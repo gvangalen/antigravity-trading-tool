@@ -475,6 +475,8 @@ class MarketDataService:
             volume=snapshot.volume,
             timestamp=snapshot.observed_at.replace(tzinfo=None) if snapshot.observed_at else datetime.utcnow(),
             source_observed_at=snapshot.observed_at.replace(tzinfo=None) if snapshot.observed_at else None,
+            quote_currency=str(snapshot.currency).upper() if snapshot.currency else None,
+            price_provider=snapshot.provider,
         )
         self.session.add(new_data)
         await self.session.commit()

@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 
 from backend.engine.trading_bot_execution import _auto_execute_decision, _get_live_exchange_balance, _get_live_price, _validate_live_auto_order_risk
 
@@ -22,7 +23,11 @@ class _Cursor:
         elif "from bot_orders" in normalized:
             self.rows = self.connection.pending
         elif "from market_data" in normalized:
-            self.rows = (self.connection.market_by_asset or {}).get(params[0], self.connection.market)
+            legacy_rows = (self.connection.market_by_asset or {}).get(params[0], self.connection.market)
+            self.rows = [
+                (*row, datetime.now(timezone.utc), row[2]) if len(row) == 3 else row
+                for row in legacy_rows
+            ]
         else:
             raise AssertionError(normalized)
 

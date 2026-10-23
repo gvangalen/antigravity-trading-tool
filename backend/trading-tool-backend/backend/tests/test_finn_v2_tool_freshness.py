@@ -6,6 +6,7 @@ from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_adapters.macro_tool_adapter import MacroToolAdapter, _display_value
 from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
+from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.utils.scoring_utils import score_source_is_fresh
 
 
@@ -26,22 +27,41 @@ def test_market_snapshot_uses_provider_source_moment_not_receipt_time():
     async def latest(_asset):
         return SimpleNamespace(symbol="ETH", price=2500, change_24h=1,
                                volume=100, timestamp=now,
-                               source_observed_at=observed)
+                               source_observed_at=observed,
+                               quote_currency="USDT", price_provider="binance")
 
-    adapter.repository.get_latest_snapshot = latest
+    adapter.repository.get_latest_quoted_snapshot = latest
     result = asyncio.run(adapter.execute(asset="ETH", user_id=1))
     assert result["as_of"] == observed
     assert result["data"].source_observed_at == observed
+    assert result["data"].quote_currency == "USDT"
     assert FinnV2FreshnessService().freshness_for("read_market_snapshot", result["as_of"]) == "fresh"
 
     async def missing_source(_asset):
         return SimpleNamespace(symbol="ETH", price=2500, change_24h=1,
                                volume=100, timestamp=now, source_observed_at=None)
 
-    adapter.repository.get_latest_snapshot = missing_source
+    adapter.repository.get_latest_quoted_snapshot = missing_source
     missing = asyncio.run(adapter.execute(asset="ETH", user_id=1))
     assert missing["as_of"] is None
     assert FinnV2FreshnessService().freshness_for("read_market_snapshot", missing["as_of"]) == "unknown"
+
+
+def test_responses_read_exposes_typed_aapl_direction_and_withholds_mismatched_quote():
+    now = datetime.now(timezone.utc)
+    results = [
+        {"scope": "read_market_snapshot", "status": "completed",
+         "data": {"symbol": "AAPL", "price": 346.61,
+                  "quote_currency": "USD", "as_of": now.isoformat()}},
+        {"scope": "read_linked_strategy", "status": "completed",
+         "data": {"strategy_id": 130, "symbol": "AAPL", "entry": 347.14,
+                  "price_currency": "USD", "price_currency_status": "confirmed"}},
+    ]
+    FinnResponsesReadExecutor._add_plan_price_comparisons(results)
+    assert results[1]["data"]["market_price_comparison"]["relation_to_entry"] == "below"
+    results[0]["data"]["quote_currency"] = "USDT"
+    FinnResponsesReadExecutor._add_plan_price_comparisons(results)
+    assert results[1]["data"]["market_price_comparison"]["status"] == "unavailable"
 
 
 def test_freshness_service_returns_not_applicable_for_profile():

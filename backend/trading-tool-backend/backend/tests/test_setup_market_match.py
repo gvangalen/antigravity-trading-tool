@@ -136,15 +136,17 @@ def test_finn_current_score_read_matches_analyse_and_market_snapshot_has_no_scor
         assert result["matches"][0]["conditions"]["benchmark"]["minimum"] == 20
 
         adapter = MarketToolAdapter(SimpleNamespace())
-        adapter.repository.get_latest_snapshot = AsyncMock(return_value=SimpleNamespace(
+        adapter.repository.get_latest_quoted_snapshot = AsyncMock(return_value=SimpleNamespace(
             symbol="BTC", price=100000, change_24h=1, volume=100,
             timestamp=datetime.now(timezone.utc),
+            source_observed_at=datetime.now(timezone.utc),
+            quote_currency="USDT", price_provider="binance",
         ))
         market = await adapter.execute(asset="BTC", user_id=7)
         assert "saved_market_score" not in market["data"].dict()
         assert market["source"] == "market_data"
 
-        adapter.repository.get_latest_snapshot = AsyncMock(return_value=None)
+        adapter.repository.get_latest_quoted_snapshot = AsyncMock(return_value=None)
         with pytest.raises(LookupError, match="source_unavailable"):
             await adapter.execute(asset="BTC", user_id=7)
 
