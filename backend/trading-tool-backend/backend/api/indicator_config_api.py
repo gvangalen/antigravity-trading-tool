@@ -11,6 +11,7 @@ from backend.schemas.indicator_config_schema import (
     IndicatorCustomRulesSave,
     IndicatorResetPayload,
     IndicatorConfigReconciliationAssign,
+    IndicatorImpactPreviewRequest,
 )
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.infrastructure.repositories.indicator_config_reconciliation_repository import (
@@ -18,6 +19,7 @@ from backend.infrastructure.repositories.indicator_config_reconciliation_reposit
     IndicatorConfigReconciliationRepository,
 )
 from backend.services.indicator_config_service import IndicatorConfigService
+from backend.services.indicator_impact_preview_service import IndicatorImpactPreviewService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -25,6 +27,22 @@ logger = logging.getLogger(__name__)
 async def get_indicator_config_service(db: AsyncSession = Depends(get_db)):
     repo = IndicatorConfigRepository(db)
     return IndicatorConfigService(repo)
+
+
+@router.post("/indicator_config/preview")
+async def preview_indicator_impact(
+    payload: IndicatorImpactPreviewRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Show verified current state and the immediate post-save safety boundary."""
+    try:
+        return await IndicatorImpactPreviewService(db).preview(
+            user_id=current_user["id"], symbol=payload.symbol,
+            category=payload.category, indicator=payload.indicator,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Ongeldige indicatorvoorvertoning.") from exc
 
 
 @router.get("/indicator_config/reconciliations")

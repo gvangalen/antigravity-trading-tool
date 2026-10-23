@@ -33,6 +33,7 @@ from backend.services.finn_v2_turn_contract import turn_contract_gap
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_responses_model import finn_responses_model_options
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,241 @@ class FinnResponsesAnswerVerifier:
     def __init__(self, semantic: FinnV2SemanticVerifierService | None = None, client: Any = None) -> None:
         self.semantic = semantic or FinnV2SemanticVerifierService()
         self.client = client
+
+    @staticmethod
+    def _verified_saved_plan_answer(
+        message: str, evidence: tuple[dict[str, Any], ...], locale: str | None,
+        turn_contract: dict[str, Any] | None,
+    ) -> str | None:
+        """Render requested saved levels or a cautious plan overview without model prose."""
+        field_patterns = {
+            "entry": r"\b(?:entry|instap\w*|einstieg\w*)\b",
+            "stop": r"\b(?:stop(?:[ -]?loss)?|stopprijs|stopkurs)\b",
+            "targets": r"\b(?:targets?|doel(?:koers|prijs|en)?|kursziel\w*|ziele?)\b",
+        }
+        requested = [key for key, pattern in field_patterns.items() if re.search(pattern, message, re.I)]
+        readback = bool(requested) and bool(re.search(
+            r"\b(?:wat|welke|toon|geef|noem|what|which|show|tell|was|welche|zeig|nenn)\b",
+            message, re.I,
+        )) and not re.search(r"\b(?:waarom|hoe|risico|why|how|risk|warum|wie|risiko)\b", message, re.I)
+        review = bool(re.search(
+            r"\b(?:wat\s+vind|beoordeel|review|evaluate|assess|what\s+do\s+you\s+think|"
+            r"was\s+hältst|beurteil\w*)\b", message, re.I,
+        )) and bool(re.search(r"\b(?:plan|strateg\w*)\b", message, re.I))
+        if not (readback or review):
+            return None
+        rows = [item["data"] for item in evidence
+                if item.get("scope") == "read_linked_strategy"
+                and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
+        contract = turn_contract or {}
+        focused = contract.get("focused_strategy_id")
+        if focused is not None:
+            rows = [row for row in rows if row.get("strategy_id") == focused]
+        requested_symbols = mentioned_catalog_symbols(message)
+        if requested_symbols:
+            rows = [row for row in rows if str(row.get("symbol") or "").upper() in requested_symbols]
+        target_ids = {
+            target.get("setup_id") for target in contract.get("targets") or []
+            if isinstance(target, dict) and target.get("setup_id") is not None
+        }
+        if target_ids:
+            rows = [row for row in rows if row.get("setup_id") in target_ids]
+        identities = {(row.get("setup_id"), row.get("strategy_id")) for row in rows}
+        language = locale if locale in {"nl", "en", "de"} else "nl"
+        if not rows:
+            return {
+                "nl": "Ik kan de bedoelde opgeslagen strategie niet bevestigen. Kies de juiste setup of strategie.",
+                "en": "I cannot verify the intended saved strategy. Choose the correct setup or strategy.",
+                "de": "Ich kann die gemeinte gespeicherte Strategie nicht bestätigen. Wähle das richtige Setup oder die richtige Strategie.",
+            }[language]
+        snapshots = {
+            repr((row.get("entry"), row.get("stop_loss"), row.get("targets"),
+                  row.get("price_currency"), row.get("price_currency_status")))
+            for row in rows
+        }
+        if len(snapshots) != 1:
+            return {
+                "nl": "De gelezen opgeslagen prijsniveaus spreken elkaar tegen. Lees de strategie opnieuw voordat ik een niveau bevestig.",
+                "en": "The saved price levels read from the source conflict. Read the strategy again before I confirm a level.",
+                "de": "Die gelesenen gespeicherten Kursniveaus widersprechen einander. Lies die Strategie erneut, bevor ich ein Niveau bestätige.",
+            }[language]
+        if len(identities) != 1:
+            return {
+                "nl": "Welke opgeslagen strategie bedoel je?",
+                "en": "Which saved strategy do you mean?",
+                "de": "Welche gespeicherte Strategie meinst du?",
+            }[language]
+        row = rows[0]
+        confirmed_quote = (
+            str(row.get("price_currency") or "").upper()
+            if row.get("price_currency_status") == "confirmed" else ""
+        )
+        def level(value: Any) -> str | None:
+            try:
+                number = Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+            if not number.is_finite() or number <= 0:
+                return None
+            rendered = format(number, "f")
+            if language != "en":
+                rendered = rendered.replace(".", ",")
+            return f"{confirmed_quote} {rendered}" if confirmed_quote else rendered
+
+        targets = row.get("targets")
+        target_values = []
+        if isinstance(targets, (list, tuple)):
+            for target in targets:
+                raw = target.get("target", target.get("price")) if isinstance(target, dict) else target
+                if formatted := level(raw):
+                    target_values.append(formatted)
+        labels = {
+            "nl": {"entry": "instap", "stop": "stop-loss", "targets": "doel(en)"},
+            "en": {"entry": "entry", "stop": "stop-loss", "targets": "target(s)"},
+            "de": {"entry": "Einstieg", "stop": "Stop-Loss", "targets": "Ziel(e)"},
+        }[language]
+        values = {
+            "entry": level(row.get("entry")),
+            "stop": level(row.get("stop_loss")),
+            "targets": ", ".join(target_values) if target_values else None,
+        }
+        selected = [key for key in ("entry", "stop", "targets") if (review or key in requested) and values[key]]
+        if not selected:
+            return {
+                "nl": "Voor deze strategie is het gevraagde prijsniveau niet opgeslagen.",
+                "en": "The requested price level is not saved for this strategy.",
+                "de": "Für diese Strategie ist das angefragte Kursniveau nicht gespeichert.",
+            }[language]
+        details = ", ".join(f"{labels[key]} {values[key]}" for key in selected)
+        intro = {
+            "nl": f"In je opgeslagen strategie staan: {details}.",
+            "en": f"Your saved strategy has: {details}.",
+            "de": f"In deiner gespeicherten Strategie stehen: {details}.",
+        }[language]
+        if not confirmed_quote:
+            intro += {
+                "nl": " De valuta van deze prijsniveaus is nog niet bevestigd.",
+                "en": " The currency of these price levels is not yet confirmed.",
+                "de": " Die Währung dieser Kursniveaus ist noch nicht bestätigt.",
+            }[language]
+        if readback:
+            return intro
+        complete_levels = all(values[key] for key in ("entry", "stop", "targets"))
+        review_copy = {
+            "nl": (
+                "Sterk: de opgeslagen instap, stop-loss en doelen maken de afstand tussen risico en doel controleerbaar. "
+                if complete_levels else "Ik zie nog niet alle instap-, stop- en doelniveaus in de gelezen strategie. "
+            ) + (
+                "Waar ik je afrem: deze niveaus bewijzen niet dat je instapvoorwaarde nu is gehaald of dat het verlies bij jouw risicobudget past. "
+                "Eerstvolgende check: controleer je concrete instaptrigger, maximaal toegestaan verlies en het actuele botbesluit. "
+                "Dit is een controle van opgeslagen niveaus, geen volledige beoordeling van je plan of positiegrootte."
+            ),
+            "en": (
+                "Strength: the saved entry, stop-loss and targets make the distance between risk and target checkable. "
+                if complete_levels else "I cannot see every entry, stop and target level in the strategy read. "
+            ) + (
+                "Where I would slow down: these levels do not prove that your entry condition is met now or that the loss fits your risk budget. "
+                "Next check: verify your specific entry trigger, maximum acceptable loss and current bot decision. "
+                "This checks saved levels, not your full plan or position size."
+            ),
+            "de": (
+                "Stärke: Gespeicherter Einstieg, Stop-Loss und Ziele machen den Abstand zwischen Risiko und Ziel prüfbar. "
+                if complete_levels else "Ich sehe nicht alle Einstiegs-, Stop- und Zielniveaus in der gelesenen Strategie. "
+            ) + (
+                "Wo ich bremsen würde: Diese Niveaus beweisen weder eine jetzt erfüllte Einstiegsbedingung noch ein zu deinem Risikobudget passendes Verlustrisiko. "
+                "Nächster Schritt: Prüfe deinen konkreten Einstiegsauslöser, maximal akzeptierten Verlust und die aktuelle Botentscheidung. "
+                "Das ist eine Prüfung gespeicherter Niveaus, keine vollständige Plan- oder Positionsgrößenbewertung."
+            ),
+        }[language]
+        return intro + " " + review_copy
+
+    @staticmethod
+    def _verified_plan_price_answer(
+        evidence: tuple[dict[str, Any], ...], locale: str | None,
+        turn_contract: dict[str, Any],
+    ) -> str | None:
+        """Render the direction in code; generated prose never owns this fact."""
+        comparisons = FinnResponsesReadExecutor._current_plan_price_comparisons(evidence)
+        focused_id = turn_contract.get("focused_strategy_id")
+        targets = turn_contract.get("targets") or []
+        setup_id = targets[0].get("setup_id") if len(targets) == 1 else None
+        requested_symbols = mentioned_catalog_symbols(str(turn_contract.get("question") or ""))
+        if requested_symbols:
+            comparisons = [row for row in comparisons
+                           if str(row.get("symbol") or "").upper() in requested_symbols]
+        if focused_id is not None:
+            comparisons = [row for row in comparisons if row.get("strategy_id") == focused_id]
+        elif setup_id is not None:
+            comparisons = [row for row in comparisons if row.get("setup_id") == setup_id]
+        language = locale if locale in {"nl", "en", "de"} else "nl"
+        if len(comparisons) > 1:
+            return {
+                "nl": "Welke opgeslagen strategie wil je met de actuele koers vergelijken?",
+                "en": "Which saved strategy do you want to compare with the current price?",
+                "de": "Welche gespeicherte Strategie möchtest du mit dem aktuellen Kurs vergleichen?",
+            }[language]
+        if not comparisons:
+            return {
+                "nl": "Ik kan nog geen opgeslagen instapprijs bij deze vergelijking vaststellen. Kies de bedoelde strategie; daarna kan ik die met een recente koers in dezelfde valuta vergelijken.",
+                "en": "I cannot identify a saved entry for this comparison yet. Choose the intended strategy so I can compare it with a fresh price in the same currency.",
+                "de": "Ich kann für diesen Vergleich noch keinen gespeicherten Einstieg feststellen. Wähle die gemeinte Strategie, damit ich sie mit einem aktuellen Kurs in derselben Währung vergleichen kann.",
+            }[language]
+        comparison = comparisons[0]
+        if comparison["status"] != "available":
+            if comparison.get("reason") in {"matching_market_price_unavailable", "market_price_stale"}:
+                return {
+                    "nl": "Ik heb voor deze strategie een nieuwe, bevestigde marktkoers in dezelfde valuta nodig. Zonder die meting kan ik de huidige koers niet met je instap vergelijken.",
+                    "en": "I need a new verified market price in the same currency for this strategy. Without it, I cannot compare the current price with your entry.",
+                    "de": "Für diese Strategie brauche ich einen neuen bestätigten Marktkurs in derselben Währung. Ohne ihn kann ich den aktuellen Kurs nicht mit deinem Einstieg vergleichen.",
+                }[language]
+            return {
+                "nl": "Ik kan de actuele koers niet betrouwbaar met de opgeslagen instapprijs vergelijken. Controleer eerst de koersvaluta en het bronmoment van een nieuwe marktmeting.",
+                "en": "I cannot reliably compare the current price with the saved entry. Check the quote currency and source time of a fresh market reading first.",
+                "de": "Ich kann den aktuellen Kurs nicht zuverlässig mit dem gespeicherten Einstieg vergleichen. Prüfe zuerst Kurswährung und Quellenzeit einer neuen Marktmessung.",
+            }[language]
+        relation = comparison["relation_to_entry"]
+        words = {
+            "nl": {"above": "boven", "below": "onder", "equal": "gelijk aan"},
+            "en": {"above": "above", "below": "below", "equal": "equal to"},
+            "de": {"above": "über", "below": "unter", "equal": "gleich"},
+        }
+        # Display enough precision to make the direction visible, including
+        # prices whose difference is smaller than one cent.
+        precision = 2
+        while (
+            precision < 8
+            and round(comparison["market_price"], precision) == round(comparison["entry"], precision)
+            and comparison["market_price"] != comparison["entry"]
+        ):
+            precision += 1
+        value = lambda number: (
+            f"{number:.{precision}f}" if language == "en"
+            else f"{number:.{precision}f}".replace(".", ",")
+        )
+        quote = comparison["quote_currency"]
+        price = value(comparison["market_price"])
+        entry = value(comparison["entry"])
+        as_of = comparison["market_price_as_of"]
+        answer = {
+            "nl": f"De bevestigde marktkoers was {quote} {price} op {as_of}. Dat is {words['nl'][relation]} de opgeslagen instapprijs van {quote} {entry}. Dit is geen instapbevestiging.",
+            "en": f"The verified market price was {quote} {price} at {as_of}. That is {words['en'][relation]} the saved entry of {quote} {entry}. This is not entry confirmation.",
+            "de": f"Der bestätigte Marktkurs lag am {as_of} bei {quote} {price}. Das ist {words['de'][relation]} dem gespeicherten Einstieg von {quote} {entry}. Das ist keine Einstiegsbestätigung.",
+        }[language]
+        question = str(turn_contract.get("question") or "")
+        if re.search(r"\b(?:hoe\s+ver|how\s+far|wie\s+weit|verschil|difference|unterschied)\b", question, re.I):
+            distance = value(abs(comparison["market_price"] - comparison["entry"]))
+            answer += {
+                "nl": f" Het absolute verschil is {quote} {distance}.",
+                "en": f" The absolute difference is {quote} {distance}.",
+                "de": f" Der absolute Abstand beträgt {quote} {distance}.",
+            }[language]
+        if re.search(r"\b(?:al\s+bereikt|already\s+reached|schon\s+erreicht)\b", question, re.I):
+            answer += {
+                "nl": " Of de instap eerder is geraakt, kan ik uit één actuele koersmeting niet vaststellen.",
+                "en": " One current quote cannot establish whether the entry was reached earlier.",
+                "de": " Ein einzelner aktueller Kurs zeigt nicht, ob der Einstieg früher erreicht wurde.",
+            }[language]
+        return answer
 
     @staticmethod
     def _verified_strategy_followup(
@@ -2683,6 +2919,12 @@ class FinnResponsesAnswerVerifier:
                 recent_action_result=recent_action_result,
                 locale=locale,
             )
+            if checked.reason in {
+                "verified_plan_price_comparison",
+                "verified_saved_plan_answer",
+                "plan_price_requires_fresh_read",
+            }:
+                return checked
             if checked.status == "completed" and checked.text.strip() != result.text.strip():
                 # Existing source and safety checks may synthesize a safe
                 # replacement. In the single-owner path that is feedback to
@@ -2715,6 +2957,95 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        comparisons = FinnResponsesReadExecutor._current_plan_price_comparisons(evidence)
+        if comparisons:
+            by_strategy = {
+                (row.get("setup_id"), row.get("strategy_id")): row
+                for row in comparisons
+            }
+            evidence = tuple(
+                {**item, "data": {**item["data"], "market_price_comparison": comparison}}
+                if item.get("scope") == "read_linked_strategy"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and (comparison := by_strategy.get((
+                    item["data"].get("setup_id"), item["data"].get("strategy_id"),
+                ))) is not None
+                else item
+                for item in evidence
+            )
+        if result.answer_kind == "free_text" and (result.turn_contract or {}).get("price_relation_requested") is True:
+            answer = self._verified_plan_price_answer(evidence, locale, result.turn_contract)
+            if answer is not None:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", answer, "verified_plan_price_comparison", evidence,
+                )
+        prior_market_read = bool(
+            previous_response and result.uses_previous_response
+            and any(
+                item.get("scope") == "read_market_snapshot" and item.get("status") == "completed"
+                for call in (previous_response.get("tool_trace") or [])
+                for item in ((call.get("result") or {}).get("results") or [])
+                if isinstance(item, dict)
+            )
+        )
+        has_market_read = any(
+            item.get("scope") == "read_market_snapshot" and item.get("status") == "completed"
+            for item in evidence
+        )
+        if result.answer_kind == "free_text" and not result.model_owned_repair and (has_market_read or prior_market_read):
+            saved_answer = self._verified_saved_plan_answer(
+                message, evidence, locale, result.turn_contract,
+            )
+            if saved_answer is not None:
+                is_review = bool(re.search(
+                    r"\b(?:wat\s+vind|beoordeel|review|evaluate|assess|"
+                    r"what\s+do\s+you\s+think|was\s+hältst|beurteil\w*)\b",
+                    message, re.I,
+                ))
+                if is_review and has_market_read:
+                    saved_answer += " " + self._verified_plan_price_answer(
+                        evidence, locale, result.turn_contract or {},
+                    )
+                return FinnResponsesVerifiedAnswer(
+                    "completed", saved_answer, "verified_saved_plan_answer", evidence,
+                )
+        # Free model prose can volunteer unverified price or currency claims.
+        # The current plan+market evidence is rendered entirely by the typed
+        # comparison until general coaching has a fully structured claim contract.
+        guard_evidence = evidence
+        current_market_read = any(
+            item.get("scope") == "read_market_snapshot" and item.get("status") == "completed"
+            for item in evidence
+        )
+        if previous_response and result.uses_previous_response and not current_market_read:
+            prior_evidence = tuple(
+                item for call in (previous_response.get("tool_trace") or [])
+                for item in ((call.get("result") or {}).get("results") or [])
+                if isinstance(item, dict)
+            )
+            if any(item.get("scope") == "read_market_snapshot" and item.get("status") == "completed"
+                   for item in prior_evidence):
+                guard_evidence = prior_evidence + evidence
+        guard_comparisons = FinnResponsesReadExecutor._current_plan_price_comparisons(guard_evidence)
+        if (
+            result.answer_kind == "free_text" and guard_comparisons
+            and any(item.get("scope") == "read_market_snapshot" and item.get("status") == "completed"
+                    for item in guard_evidence)
+        ):
+            if guard_evidence is not evidence:
+                answer = {
+                    "nl": "Voor een actuele vergelijking moet ik de marktkoers opnieuw ophalen. Stel de koersvraag opnieuw; ik gebruik geen eerdere meting als nieuwe bevestiging.",
+                    "en": "I need a new market reading for a current comparison. Ask the price question again; I will not treat an earlier quote as a new confirmation.",
+                    "de": "Für einen aktuellen Vergleich muss ich den Marktkurs neu abrufen. Frage erneut nach dem Kurs; eine frühere Messung ist keine neue Bestätigung.",
+                }[locale if locale in {"nl", "en", "de"} else "nl"]
+                return FinnResponsesVerifiedAnswer(
+                    "completed", answer, "plan_price_requires_fresh_read", guard_evidence,
+                )
+            answer = self._verified_plan_price_answer(guard_evidence, locale, result.turn_contract or {})
+            return FinnResponsesVerifiedAnswer(
+                "completed", answer, "verified_plan_price_comparison", guard_evidence,
+            )
         if result.answer_kind == "missing_setup_update":
             for item in evidence:
                 data = item.get("data") or {}
@@ -2742,6 +3073,7 @@ class FinnResponsesAnswerVerifier:
             )
         if (
             result.model_led_coach and result.answer_kind == "free_text"
+            and not any(item.get("scope") == "read_market_snapshot" for item in evidence)
             and (sourced_strategy := self._source_bound_strategy_fields(
                 message, result.text, evidence,
             ))

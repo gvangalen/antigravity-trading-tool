@@ -20,6 +20,30 @@ def requests_comparison(message: str) -> bool:
     ))
 
 
+def requests_current_price_vs_entry(message: str) -> bool:
+    """Classify an explicit price relation request, not general plan advice."""
+    if not re.search(r"\b(?:entry|instap\w*|einstieg\w*)\b", message, re.I):
+        return False
+    relation = re.search(
+        r"\b(?:boven|onder|hoger|lager|above|below|higher|lower|über|unter|"
+        r"vergelijk\w*|compare\w*|vergleich\w*|verschil\w*|difference\w*|"
+        r"unterschied\w*|\bhoe\s+ver\b|how\s+far|wie\s+weit|"
+        r"bereik\w*|reach\w*|erreich\w*)\b",
+        message, re.I,
+    )
+    market = re.search(
+        r"\b(?:koers\w*|prijs\w*|markt\w*|price\w*|market\w*|"
+        r"kurs\w*|preis\w*)\b", message, re.I,
+    )
+    # "Is de AAPL prijs boven mijn instap?" and "is mijn instapprijs al
+    # bereikt?" name the price by relation instead of saying "actueel".
+    reached_saved_price = re.search(
+        r"\b(?:instapprijs|entry\s+price|einstiegspreis)\b", message, re.I,
+    ) and re.search(r"\b(?:al|already|schon)\b", message, re.I)
+    distance_to_entry = re.search(r"\b(?:hoe\s+ver|how\s+far|wie\s+weit)\b", message, re.I)
+    return bool(relation and (market or reached_saved_price or distance_to_entry))
+
+
 def referenced_setup_rows(
     *, message: str, rows: list[dict[str, Any]],
     previous_contract: Mapping[str, Any] | None = None,
@@ -192,6 +216,7 @@ def build_turn_contract(
         "question": message,
         "answer_type": selected_answer_type,
         "requested_fields": requested_fields,
+        "price_relation_requested": requests_current_price_vs_entry(message),
         "targets": targets,
         "focused_setup_id": focused_setup_id,
         "focused_strategy_id": focused_strategy_id,

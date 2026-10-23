@@ -64,6 +64,33 @@ def test_responses_read_exposes_typed_aapl_direction_and_withholds_mismatched_qu
     assert results[1]["data"]["market_price_comparison"]["status"] == "unavailable"
 
 
+def test_responses_comparison_joins_separate_plan_and_market_reads():
+    now = datetime.now(timezone.utc)
+    plan_read = {"scope": "read_linked_strategy", "status": "completed", "data": {
+        "setup_id": 8, "strategy_id": 130, "symbol": "AAPL", "entry": 347.14,
+        "price_currency": "USD", "price_currency_status": "confirmed",
+    }}
+    market_read = {"scope": "read_market_snapshot", "status": "completed", "data": {
+        "symbol": "AAPL", "price": 346.61, "quote_currency": "USD",
+        "as_of": now.isoformat(),
+    }}
+    # These rows arrive from two separate Responses tool calls.
+    assert FinnResponsesReadExecutor._current_plan_price_comparisons([plan_read])[0]["status"] == "unavailable"
+    together = FinnResponsesReadExecutor._current_plan_price_comparisons([plan_read, market_read])
+    assert together[0]["relation_to_entry"] == "below"
+    market_read["data"]["quote_currency"] = "USDT"
+    assert FinnResponsesReadExecutor._current_plan_price_comparisons([plan_read, market_read])[0]["status"] == "unavailable"
+    market_read["data"]["quote_currency"] = "USD"
+    invalid_later = {"scope": "read_market_snapshot", "status": "completed", "data": {
+        "symbol": "AAPL", "price": 999.0, "quote_currency": "EUR",
+        "as_of": (now + timedelta(seconds=1)).isoformat(),
+    }}
+    selected = FinnResponsesReadExecutor._current_plan_price_comparisons(
+        [plan_read, market_read, invalid_later]
+    )
+    assert selected[0]["relation_to_entry"] == "below"
+
+
 def test_freshness_service_returns_not_applicable_for_profile():
     service = FinnV2FreshnessService()
 

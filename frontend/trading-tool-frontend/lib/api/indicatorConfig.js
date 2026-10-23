@@ -2,6 +2,13 @@
 
 import { fetchAuth } from '@/lib/api/auth';
 
+export async function previewIndicatorImpact({ category, indicator, symbol }) {
+  return fetchAuth('/api/indicator_config/preview', {
+    method: 'POST',
+    body: JSON.stringify({ category, indicator, symbol }),
+  });
+}
+
 //
 // ======================================================
 // 🔹 1. Indicator config ophalen

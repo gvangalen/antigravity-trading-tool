@@ -5124,7 +5124,17 @@
       "onTimeframes": "op",
       "and": "en",
       "noExtraMoments": "zonder extra marktmomenten",
-      "summaryTemplate": "FINN gebruikt {indicator}: {interpretation}, {when}, met {weight} invloed.",
+      "summaryTemplate": "FINN gebruikt {indicator}: {interpretation}, met {weight} invloed.",
+      "impactTitle": "Veiligheidsgevolg tijdens herberekening",
+      "impactLoading": "Score- en botgevolgen ophalen...",
+      "impactUnavailable": "Het effect kon niet worden gecontroleerd. Opslaan is tijdelijk niet mogelijk.",
+      "impactUnknown": "niet beschikbaar",
+      "impactScore": "Huidige bevestigde benchmark: {score}.",
+      "impactAlreadyMissing": "De benchmarkscore ontbreekt nu al. Een bot die daarvan afhangt kan daardoor ook nu al wachten.",
+      "impactAfter": "Na opslaan is een nieuwe benchmark pas betrouwbaar wanneer alle indicatorbronnen en scoreregels opnieuw zijn gecontroleerd. Een nieuwe score kan nu niet exact worden voorspeld.",
+      "impactSetups": "{count} setup(s) gebruiken scorevoorwaarden en kunnen tijdens herberekening tijdelijk wachten.",
+      "impactBots": "{count} actieve bot(s) gebruiken de score voor een voorwaarde of bedrag en kunnen tijdens herberekening tijdelijk wachten.",
+      "impactFixedDca": "Het ingestelde ritme van een vaste DCA zonder scorevoorwaarde verandert niet. Uitvoering blijft afhankelijk van veiligheidscontroles.",
       "weightOptions": {
         "low": "Laag",
         "normal": "Normaal",
@@ -5144,7 +5154,7 @@
       },
       "roles": {
         "generic": {
-          "description": "Bepaal wanneer FINN naar {indicator} luistert, hoe het signaal wordt gelezen en hoe zwaar het meetelt.",
+          "description": "Bepaal hoe {indicator} wordt gescoord en hoe zwaar die meetelt.",
           "whenQuestion": "Wanneer moet FINN extra naar deze indicator luisteren?",
           "always": {
             "label": "Altijd gebruiken",

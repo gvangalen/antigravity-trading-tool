@@ -39,3 +39,9 @@ class IndicatorResetPayload(BaseModel):
 class IndicatorConfigReconciliationAssign(BaseModel):
     reconciliation_id: int
     symbol: str
+
+
+class IndicatorImpactPreviewRequest(BaseModel):
+    symbol: str
+    category: str
+    indicator: str

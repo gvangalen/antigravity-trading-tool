@@ -23,7 +23,10 @@ def compare_plan_entry_with_market(
     *, now: datetime | None = None,
 ) -> dict[str, Any]:
     """Never infer parity between USD and USDT or trust an undated quote."""
-    unavailable = {"status": "unavailable"}
+    unavailable = {
+        "status": "unavailable", "setup_id": strategy.get("setup_id"),
+        "strategy_id": strategy.get("strategy_id"), "symbol": strategy.get("symbol"),
+    }
     if strategy.get("price_currency_status") != "confirmed":
         return {**unavailable, "reason": "plan_currency_unconfirmed"}
     if not market or str(market.get("symbol") or "").upper() != str(strategy.get("symbol") or "").upper():
@@ -46,7 +49,8 @@ def compare_plan_entry_with_market(
     if not math.isfinite(entry) or not math.isfinite(price) or entry <= 0 or price <= 0:
         return {**unavailable, "reason": "price_values_unavailable"}
     return {
-        "status": "available", "strategy_id": strategy.get("strategy_id"),
+        "status": "available", "setup_id": strategy.get("setup_id"),
+        "strategy_id": strategy.get("strategy_id"), "symbol": strategy.get("symbol"),
         "entry": entry, "market_price": price, "quote_currency": plan_quote,
         "market_price_as_of": observed_at.isoformat(),
         "relation_to_entry": "above" if price > entry else "below" if price < entry else "equal",

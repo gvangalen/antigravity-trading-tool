@@ -68,6 +68,10 @@ class FinnResponsesReadExecutor:
         self.session_factory = session_factory
         self.reads = FinnV2ToolExecutionService(session) if session is not None else None
         self.verified_review_id: int | None = None
+        # One executor belongs to one owner and one Responses run. Keep only
+        # facts read in this run so separate plan and market calls can be
+        # compared without borrowing a prior conversation's market price.
+        self._plan_price_sources: list[dict[str, Any]] = []
 
     async def __call__(self, call: FinnResponsesToolCall) -> dict[str, Any]:
         if call.name == "answer_directly":
@@ -154,11 +158,25 @@ class FinnResponsesReadExecutor:
             if read_tool == "read_indicator_configuration":
                 results.append(self._macro_catalog_evidence())
         self._add_plan_price_comparisons(results)
+        if not hasattr(self, "_plan_price_sources"):
+            self._plan_price_sources = []
+        self._plan_price_sources.extend(
+            item for item in results
+            if item.get("scope") in {"read_linked_strategy", "read_market_snapshot"}
+            and item.get("status") == "completed" and isinstance(item.get("data"), dict)
+        )
         output = {
             "status": "completed" if all(item["status"] == "completed" for item in results) else "partial",
             "tool": call.name,
             "results": results,
         }
+        comparisons = self._current_plan_price_comparisons(self._plan_price_sources)
+        if comparisons:
+            output["plan_price_comparisons"] = comparisons
+            output["plan_price_boundary"] = (
+                "Use only a comparison with status=available and its typed relation_to_entry. "
+                "An unavailable comparison does not establish which price is higher."
+            )
         if call.name == "get_my_profile_and_risk_style":
             output["evidence_boundary"] = (
                 "These are saved owner preferences, not a suitability assessment or a trading "
@@ -368,16 +386,82 @@ class FinnResponsesReadExecutor:
                 if str(market["data"].get("symbol") or "").upper()
                 == str(strategy.get("symbol") or "").upper()
             ]
-            market = max(
-                matching,
-                key=lambda candidate: str(candidate["data"].get("as_of") or ""),
-            ) if matching else None
+            candidates = [
+                compare_plan_entry_with_market(strategy, market["data"])
+                for market in matching
+            ]
+            available = [candidate for candidate in candidates if candidate["status"] == "available"]
             item["data"] = {
                 **strategy,
-                "market_price_comparison": compare_plan_entry_with_market(
-                    strategy, market["data"] if market else None,
+                "market_price_comparison": (
+                    max(available, key=lambda candidate: candidate["market_price_as_of"])
+                    if available else candidates[-1] if candidates
+                    else compare_plan_entry_with_market(strategy, None)
                 ),
             }
+
+    @staticmethod
+    def _current_plan_price_comparisons(
+        evidence: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    ) -> list[dict[str, Any]]:
+        strategy_groups: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
+        for item in evidence:
+            if (item.get("scope") == "read_linked_strategy"
+                    and item.get("status") == "completed"
+                    and isinstance(item.get("data"), dict)):
+                row = item["data"]
+                strategy_groups.setdefault((row.get("setup_id"), row.get("strategy_id")), []).append(row)
+        markets = [item["data"] for item in evidence
+                   if item.get("scope") == "read_market_snapshot" and item.get("status") == "completed"
+                   and isinstance(item.get("data"), dict)]
+        comparisons = []
+        for group in strategy_groups.values():
+            strategy = group[-1]
+            if strategy.get("entry") is None:
+                continue
+            identity = {"setup_id": strategy.get("setup_id"),
+                        "strategy_id": strategy.get("strategy_id"), "symbol": strategy.get("symbol")}
+            strategy_signatures = {
+                repr((row.get("symbol"), row.get("entry"), row.get("stop_loss"),
+                      row.get("targets"), row.get("price_currency"), row.get("price_currency_status")))
+                for row in group
+            }
+            if len(strategy_signatures) != 1:
+                comparisons.append({"status": "unavailable", "reason": "conflicting_evidence", **identity})
+                continue
+            matches = [market for market in markets
+                       if str(market.get("symbol") or "").upper()
+                       == str(strategy.get("symbol") or "").upper()]
+            source_rows: dict[str, set[str]] = {}
+            for market in matches:
+                observed = market.get("as_of") or market.get("source_observed_at")
+                if observed is not None:
+                    try:
+                        moment = observed if isinstance(observed, datetime) else datetime.fromisoformat(
+                            str(observed).replace("Z", "+00:00")
+                        )
+                        if moment.tzinfo is None:
+                            moment = moment.replace(tzinfo=timezone.utc)
+                        source_key = moment.astimezone(timezone.utc).isoformat()
+                    except ValueError:
+                        source_key = str(observed)
+                    source_rows.setdefault(source_key, set()).add(
+                        repr((market.get("price"), market.get("quote_currency")))
+                    )
+            if any(len(values) > 1 for values in source_rows.values()):
+                comparisons.append({"status": "unavailable", "reason": "conflicting_evidence", **identity})
+                continue
+            candidates = [compare_plan_entry_with_market(strategy, market) for market in matches]
+            available = [item for item in candidates if item["status"] == "available"]
+            # The pure comparator has already parsed the provider time and
+            # checked quote, age and value. A later invalid row must not hide
+            # an earlier still-current verified quote.
+            comparisons.append(
+                max(available, key=lambda item: item["market_price_as_of"])
+                if available else candidates[-1] if candidates
+                else compare_plan_entry_with_market(strategy, None)
+            )
+        return comparisons
 
     @staticmethod
     def _as_of(data: Any) -> str | None:

@@ -5145,7 +5145,17 @@
       "onTimeframes": "auf",
       "and": "und",
       "noExtraMoments": "ohne zusätzliche Marktbedingungen",
-      "summaryTemplate": "FINN nutzt {indicator}: {interpretation}, {when}, mit {weight} Einfluss.",
+      "summaryTemplate": "FINN nutzt {indicator}: {interpretation}, mit {weight} Einfluss.",
+      "impactTitle": "Sicherheitswirkung während der Neuberechnung",
+      "impactLoading": "Auswirkungen auf Bewertung und Bots werden geladen...",
+      "impactUnavailable": "Die Auswirkung konnte nicht geprüft werden. Speichern ist vorübergehend nicht möglich.",
+      "impactUnknown": "nicht verfügbar",
+      "impactScore": "Aktuelle bestätigte Gesamtbewertung: {score}.",
+      "impactAlreadyMissing": "Die Gesamtbewertung fehlt bereits jetzt. Ein davon abhängiger Bot wartet möglicherweise schon.",
+      "impactAfter": "Nach dem Speichern ist eine neue Bewertung erst zuverlässig, wenn alle Indikatorquellen und Bewertungsregeln erneut geprüft wurden. Eine genaue neue Punktzahl lässt sich jetzt nicht vorhersagen.",
+      "impactSetups": "{count} Setup(s) verwenden Punktebedingungen und können während der Neuberechnung vorübergehend warten.",
+      "impactBots": "{count} aktive Bot(s) verwenden die Bewertung für eine Bedingung oder einen Betrag und können während der Neuberechnung vorübergehend warten.",
+      "impactFixedDca": "Der eingestellte Rhythmus eines festen DCA ohne Punktebedingung ändert sich nicht. Die Ausführung hängt weiterhin von Sicherheitsprüfungen ab.",
       "weightOptions": {
         "low": "Niedrig",
         "normal": "Normal",
@@ -5165,7 +5175,7 @@
       },
       "roles": {
         "generic": {
-          "description": "Lege fest, wann FINN auf {indicator} achtet, wie das Signal gelesen wird und wie stark es zählt.",
+          "description": "Lege fest, wie {indicator} bewertet wird und wie stark er zählt.",
           "whenQuestion": "Wann soll FINN diesen Indikator besonders berücksichtigen?",
           "always": {
             "label": "Immer verwenden",
