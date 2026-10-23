@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN open-bot plan lineage (23 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Branch: `codex/finn-bot-context-plan-read`.
+Phase: `QA_PENDING`. Product repair:
+[PR #566](https://github.com/gvangalen/antigravity-trading-tool/pull/566),
+merged as `c631c7eb9bcd3754eb79addfcecf5b63550e8f8f`.
 Independent browser QA on deployed `b60e5fa7ec9d3b2d3ce411d0b4f2c4ac37b26762`
 returned `NOT_ACCEPTED`. The exact broad BTC Friday coach question
 terminalized normally in three of three fresh conversations, but no first
@@ -23,7 +25,29 @@ checks the bot and its linked strategy/setup through owner-scoped repositories,
 and reads that exact lineage for an unnamed plan question. A named different
 object, another asset or another weekday prevents the page hint from taking
 over. The final read executor checks the owner again. No action contract or
-confirmation boundary changes. Local and live validation are pending.
+confirmation boundary changes. The final backend suite passed **3814 tests,
+4 existing skips**. Web typecheck, i18n, command, proposal and setup tests,
+build and high-severity audit passed. Real-provider development and regression
+selector evaluations passed **20/20** and **109/109**, with complete operation
+accuracy and zero provider/schema failures (artifact SHA-256
+`5cd282c19bddd8e6b6736961c0ee947792b2901aeb98acad0196f7eb77c4264a`
+and `83080abd9433cc4fafcfb7b51b2631527d5e17da73c271aa29c24fbf0d59858a`).
+The final worker-driven action matrix passed **16/16**, plus **19/19** adapter
+checks, with zero broker orders, Live calls or production connections
+(artifact SHA-256
+`a58c467025d92866a2ff59a7bb13ea182511b798b1b06655353e54ee80449359`).
+Three final local API/Celery/real-Responses runs with twenty BTC setups and
+two strategies on the Friday setup completed in one dispatch and attempt
+each. Every trace read the exact strategy linked to the open bot, and no
+proposal or order was made. PR CI passed, as did main CI
+[40020889622](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40020889622)
+and Auto Deploy
+[40021258688](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40021258688).
+Backend health and frontend build-info both returned HTTP 200 with product SHA
+`c631c7eb9bcd3754eb79addfcecf5b63550e8f8f`. This release-record commit
+will get its own SHA; Build verifies its last main CI, Auto Deploy and both
+public SHA surfaces before independent QA starts. Live coach acceptance is
+pending.
 
 ## FINN evaluation-to-read boundary (23 oktober 2026)
 
