@@ -11,6 +11,33 @@ from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionS
 from backend.services import finn_v2_tool_execution_service as execution_module
 
 
+def test_relation_cache_never_reuses_a_monday_plan_for_selected_friday_bot():
+    state = {}
+    service = FinnV2ToolExecutionService
+    service._reset_relation_cache_for_selector({"asset": "BTC", "setup_id": 11}, state)
+    state.update({"asset": "BTC", "setup": {"id": 11}, "strategy": {"id": 301}, "bot": {"id": 170}})
+    service._reset_relation_cache_for_selector({"asset": "BTC", "setup_id": 12, "strategy_id": 311, "bot_id": 171}, state)
+    assert not any(key in state for key in ("asset", "setup", "strategy", "bot"))
+    state.update({"asset": "BTC", "setup": {"id": 12}, "strategy": {"id": 311}, "bot": {"id": 171}})
+    service._reset_relation_cache_for_selector({"asset": "BTC", "setup_id": 12, "strategy_id": 311, "bot_id": 171}, state)
+    assert state["setup"]["id"] == 12
+
+
+def test_selected_bot_context_outranks_a_stale_workspace_setup():
+    run = SimpleNamespace(
+        workspace_hints_json={"setup_id": 11, "bot_id": 171},
+        client_context_json={},
+    )
+    selected = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={}, tool_name="read_active_setup", run=run,
+    )
+    assert selected == {"bot_id": 171}
+    explicit = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={"setup_name": "Another saved plan"}, tool_name="read_active_setup", run=run,
+    )
+    assert explicit == {"setup_name": "Another saved plan"}
+
+
 class _FakeRunRepo:
     async def get_by_id_for_user(self, *, run_id, user_id):
         return SimpleNamespace(

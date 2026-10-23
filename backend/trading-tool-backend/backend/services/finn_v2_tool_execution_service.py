@@ -200,6 +200,8 @@ class FinnV2ToolExecutionService:
             tool_name=tool_name,
             run=run_context,
         )
+        if shared_state is not None:
+            self._reset_relation_cache_for_selector(selector, shared_state)
         # Resolver enrichment may query owner-scoped entities and therefore
         # opens a new transaction after the run preflight. Release that final
         # read transaction immediately before the short-lived durable tool-call
@@ -745,11 +747,27 @@ class FinnV2ToolExecutionService:
             return selector
         if any(
             selector.get(field) is not None
-            for field in ("strategy_id", "strategy_name", "bot_id", "bot_name")
+            for field in ("strategy_id", "strategy_name", "bot_id", "bot_name", "setup_name")
         ):
             # The explicit child identifies its owner-scoped parent setup.
             # A stale workspace setup must never outrank that relation.
             return selector
+
+        # The bot selected in Automation is the most specific page context.
+        # Its stored links identify both strategy and setup without guessing
+        # among other plans for the same asset.
+        for context in (
+            getattr(run, "workspace_hints_json", {}) or {},
+            getattr(run, "client_context_json", {}) or {},
+        ):
+            try:
+                bot_id = int(context.get("bot_id"))
+            except (TypeError, ValueError):
+                continue
+            if bot_id > 0:
+                enriched = dict(selector)
+                enriched["bot_id"] = bot_id
+                return enriched
 
         for context in (
             getattr(run, "workspace_hints_json", {}) or {},
@@ -765,6 +783,20 @@ class FinnV2ToolExecutionService:
                 enriched["setup_id"] = setup_id
                 return enriched
         return selector
+
+    @staticmethod
+    def _reset_relation_cache_for_selector(selector: Dict[str, Any], shared_state: Dict[str, Any]) -> None:
+        """Never reuse an earlier plan graph for a different owner-scoped selector."""
+        identity = tuple(str(selector.get(key) or "").strip().casefold() for key in (
+            "asset", "setup_id", "setup_name", "strategy_id", "strategy_name", "bot_id", "bot_name",
+        ))
+        if not any(identity) and "_relation_selector_identity" not in shared_state:
+            return
+        if shared_state.get("_relation_selector_identity") == identity:
+            return
+        for key in ("asset", "setup", "strategy", "bot", "setups", "resolution_source"):
+            shared_state.pop(key, None)
+        shared_state["_relation_selector_identity"] = identity
 
     async def _ensure_asset(self, *, user_id: int, selector: Dict[str, Any], run, shared_state: Dict[str, Any]) -> Dict[str, Any]:
         if "asset" in shared_state:
