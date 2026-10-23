@@ -17,3 +17,20 @@ export function selectFeaturedPlan(plans, symbol, activeSetupId) {
     || null;
   return { best, featured };
 }
+
+export function getPlanName(plan, copy) {
+  return (plan?.hasStrategy ? plan.strategy?.name : null) || plan?.setup?.name || copy.planTerm;
+}
+
+export function getFeaturedPlanMessage(copy, plan) {
+  // The user may have plans for other assets but none for the selected asset.
+  // Navigation between assets can reach this state before data refreshes too.
+  if (!plan) return copy.noPlansBody;
+  if (!plan.hasStrategy) {
+    return `${getPlanName(plan, copy)}: ${copy.setupReady.toLowerCase()}, ${copy.missingStrategy.toLowerCase()}.`;
+  }
+  if (!plan.complete) {
+    return `${getPlanName(plan, copy)}: ${copy.strategyTerm.toLowerCase()} ${copy.notReady.toLowerCase()}.`;
+  }
+  return `${getPlanName(plan, copy)} ${copy.readyForAutomation.toLowerCase()}.`;
+}

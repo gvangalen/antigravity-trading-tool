@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolvePlanWorkspaceSymbol, selectFeaturedPlan } from "../lib/setup/selectFeaturedPlan.mjs";
+import { getFeaturedPlanMessage, resolvePlanWorkspaceSymbol, selectFeaturedPlan } from "../lib/setup/selectFeaturedPlan.mjs";
 
 test("featured plan and best-match badge stay on the selected asset", () => {
   const plans = [
@@ -16,4 +16,11 @@ test("featured plan and best-match badge stay on the selected asset", () => {
 test("plan page follows the selected asset when navigation has no symbol", () => {
   assert.equal(resolvePlanWorkspaceSymbol({ selectedAsset: "AAPL", fallbackSymbol: "BTC" }), "AAPL");
   assert.equal(resolvePlanWorkspaceSymbol({ routeSymbol: "ETH", selectedAsset: "AAPL" }), "ETH");
+});
+
+test("switching to an asset without a plan leaves a safe empty coach state", () => {
+  const plans = [{ setup: { id: 1, symbol: "BTC" }, hasStrategy: true }];
+  const { featured } = selectFeaturedPlan(plans, "AAPL", 1);
+  assert.equal(featured, null);
+  assert.equal(getFeaturedPlanMessage({ noPlansBody: "Geen plan voor deze asset." }, featured), "Geen plan voor deze asset.");
 });

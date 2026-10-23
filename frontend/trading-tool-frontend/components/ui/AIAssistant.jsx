@@ -1051,11 +1051,11 @@ function AIAssistantContent({
       if (["failed", "unavailable"].includes(String(run?.status || "").toLowerCase())) {
         // Keep diagnostics out of FINN's answer. A failed run can otherwise
         // look identical to client polling exhaustion in the visible chat.
-        console.warn("FINN V2 terminal failure", {
-          run_id: runId,
-          status: run.status,
-          error_code: run.error_code || null,
-        });
+        // Keep the typed failure visible in text-only browser log collectors.
+        // This contains no user message or account data.
+        console.warn(
+          `FINN V2 terminal failure run_id=${runId} status=${run.status} error_code=${run.error_code || "none"}`
+        );
       }
       const verified = run?.response;
       const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};

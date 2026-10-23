@@ -937,7 +937,16 @@ def ask_gpt_structured_response(
             }
         if "timeout" in str(e).lower():
             return {"error": "timeout"}
-    return {"error": "provider_error"}
+        # Preserve only typed transport metadata. Callers can retry a genuine
+        # transient 5xx without treating schema or authentication failures as
+        # retryable, and no provider body or user content escapes this layer.
+        return {
+            "error": "provider_error",
+            "provider_metadata": {
+                "http_status": _read_status_code(e),
+                "request_id": _read_request_id(e),
+            },
+        }
 
 
 _DEFAULT_SYNC_STRUCTURED_PROVIDER = ask_gpt_structured_response

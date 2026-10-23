@@ -208,9 +208,15 @@ def _canonical_eval_conversation_context(case: SelectorEvalCase) -> dict[str, An
 
 
 def retry_delay(row: Mapping[str, Any], *, attempt: int, base_seconds: float) -> float | None:
-    if row.get("failure_category") != "provider" or row.get("error") != "ai_rate_limited":
+    if row.get("failure_category") != "provider":
         return None
     metadata = row.get("provider_metadata") or {}
+    error = row.get("error")
+    status = metadata.get("http_status") if isinstance(metadata, Mapping) else None
+    if error == "provider_error" and status in {500, 502, 503, 504, 520, 521, 522, 524}:
+        return base_seconds * (2 ** (attempt - 1))
+    if error != "ai_rate_limited":
+        return None
     retry_after = metadata.get("retry_after_seconds") if isinstance(metadata, Mapping) else None
     try:
         return max(0.0, float(retry_after)) if retry_after is not None else base_seconds * (2 ** (attempt - 1))

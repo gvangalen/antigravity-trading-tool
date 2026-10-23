@@ -33,7 +33,7 @@ import { deleteSetup, fetchActiveSetup, fetchSetupMarketMatches } from "@/lib/ap
 import { getSetupId } from "@/lib/setup/activeSetup";
 import { formatSetupScoreConditions } from "@/lib/setup/scoreConditionSummary.mjs";
 import { formatBenchmarkScore } from "@/lib/workspace/canonicalScorePresentation.mjs";
-import { resolvePlanWorkspaceSymbol, selectFeaturedPlan } from "@/lib/setup/selectFeaturedPlan.mjs";
+import { getFeaturedPlanMessage, getPlanName, resolvePlanWorkspaceSymbol, selectFeaturedPlan } from "@/lib/setup/selectFeaturedPlan.mjs";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
@@ -347,21 +347,6 @@ function buildPlans(setups, strategies, bots = []) {
     hasStrategy: hasUsableStrategy(plan.strategy),
     complete: strategyIsComplete(plan.setup, plan.strategy),
   }));
-}
-
-function getPlanName(plan, copy) {
-  return (plan.hasStrategy ? plan.strategy?.name : null) || plan.setup?.name || copy.planTerm;
-}
-
-function getFinnMessage(copy, plan, totalPlans) {
-  if (!totalPlans) return copy.noPlansBody;
-  if (!plan?.hasStrategy) {
-    return `${getPlanName(plan, copy)}: ${copy.setupReady.toLowerCase()}, ${copy.missingStrategy.toLowerCase()}.`;
-  }
-  if (!plan.complete) {
-    return `${getPlanName(plan, copy)}: ${copy.strategyTerm.toLowerCase()} ${copy.notReady.toLowerCase()}.`;
-  }
-  return `${getPlanName(plan, copy)} ${copy.readyForAutomation.toLowerCase()}.`;
 }
 
 function formatNumber(value) {
@@ -774,7 +759,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">{copy.finnLabel}</div>
             <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800 dark:text-slate-200">
-              {getFinnMessage(copy, activePlan, plans.length)}
+              {getFeaturedPlanMessage(copy, activePlan)}
             </p>
           </div>
         </div>
