@@ -1,7 +1,7 @@
 "use client";
 
 import ReportCard from "../ReportCard";
-import { CheckCircle2, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 /* -------------------------------------------------------
@@ -12,14 +12,10 @@ function ScoreBar({ score }) {
   if (score === null || score === undefined || score === "" || !Number.isFinite(Number(score))) return null;
   const pct = Math.max(0, Math.min(100, Number(score)));
 
-  let color = "bg-slate-400";
-  if (pct >= 80) color = "bg-green-500";
-  else if (pct <= 40) color = "bg-red-500";
-
   return (
     <div className="w-full h-1 bg-[var(--color-border-subtle)] rounded-full overflow-hidden">
       <div
-        className={`h-full ${color} transition-all duration-1000 ease-out shadow-sm`}
+        className="h-full bg-blue-500 transition-all duration-1000 ease-out shadow-sm"
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -37,7 +33,7 @@ export default function SetupMatchReportCard({ report }) {
   const displayScore = (score) =>
     score === null || score === undefined || score === "" || !Number.isFinite(Number(score))
       ? copy.unknownScore
-      : `${score}%`;
+      : `${score}/100`;
 
   if (!best) {
     return (
@@ -65,7 +61,7 @@ export default function SetupMatchReportCard({ report }) {
       {/* BESTE OPTIE */}
       <div className="mb-8 p-5 rounded-2xl bg-card border border-slate-50 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
-          <CheckCircle2 className="w-4 h-4 text-green-600" />
+          <Layers className="w-4 h-4 text-blue-600" />
           <span className="text-[11px] font-bold text-secondary tracking-tight">
             {copy.bestMatch}
           </span>

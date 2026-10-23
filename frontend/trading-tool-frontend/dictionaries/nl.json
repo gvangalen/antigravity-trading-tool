@@ -1682,11 +1682,11 @@
       "hudUpdated": "Bijgewerkt",
       "hudSnapshotTitle": "Rapportmomentopname",
       "hudGeneratedTitle": "Rapport opgesteld",
-      "hudSnapshotExplanation": "Deze scores en setupmatch zijn vastgelegd voor dit rapport. Analyse en FINN kunnen later nieuwere metingen tonen.",
+      "hudSnapshotExplanation": "Deze scores en de setupnabijheid zijn vastgelegd voor dit rapport. Analyse en FINN kunnen later nieuwere metingen tonen.",
       "hudLegacyExplanation": "Dit rapport is een historische momentopname. Analyse en FINN kunnen inmiddels nieuwere gegevens tonen.",
       "hudSourceDetails": "Bekijk de gebruikte scorebronnen",
       "hudScoreDate": "Scoredatum",
-      "hudSetupSource": "De setupmatch in dit rapport gebruikt deze opgeslagen scores en de toen geldende setupvoorwaarden; het is geen actueel instapsignaal.",
+      "hudSetupSource": "De setupnabijheid gebruikt de opgeslagen scores en de toen geldende setupvoorwaarden. Alleen de aparte voorwaardenstatus zegt of de scoregrens paste; geen van beide is een actueel instapsignaal.",
       "hudLegacySources": "Dit oudere rapport bewaart geen afzonderlijke bronmomenten per score.",
       "hudNoAssets": "Voor dit rapport zijn geen scorebronnen van gevolgde assets vastgelegd.",
       "hudSourceUnknown": "Bronmoment niet beschikbaar",
@@ -2101,7 +2101,7 @@
       "hudMacro": "Macro",
       "hudTechnical": "Technisch",
       "hudMarket": "Markt",
-      "hudSetup": "Actieve setupmatch"
+      "hudSetup": "Setupnabijheid"
     }
   },
   "setupPage": {
@@ -3607,16 +3607,16 @@
         "macroLabel": "Macro",
         "technicalLabel": "Technisch",
         "marketLabel": "Markt",
-        "setupLabel": "Actieve setupmatch"
+        "setupLabel": "Setupnabijheid"
       },
       "setupMatch": {
         "cardTitle": "Setupvergelijking",
         "empty": "Geen bevestigde actuele setupmatch in dit rapport.",
-        "bestMatch": "Beste match",
-        "matchScore": "Matchscore",
+        "bestMatch": "Dichtstbijzijnde setup",
+        "matchScore": "Nabijheidsscore",
         "comparison": "Vergelijking",
         "unknownScore": "Onbekend",
-        "explanation": "Toelichting: De beste setup is geselecteerd op basis van de huidige macro- en marktomstandigheden."
+        "explanation": "Deze nabijheidsscore toont hoe dicht de benchmarkscore bij de opgeslagen setupvoorwaarden lag op het rapportmoment. Het is geen kans op winst of instapsignaal."
       },
       "activeStrategy": {
         "cardTitle": "Opgeslagen strategie",

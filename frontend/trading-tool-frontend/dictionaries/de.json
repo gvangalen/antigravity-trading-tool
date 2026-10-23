@@ -1686,11 +1686,11 @@
       "hudUpdated": "Aktualisiert",
       "hudSnapshotTitle": "Berichtsmomentaufnahme",
       "hudGeneratedTitle": "Bericht erstellt",
-      "hudSnapshotExplanation": "Diese Werte und der Setup-Treffer wurden für diesen Bericht gespeichert. Analyse und FINN können später neuere Messungen zeigen.",
+      "hudSnapshotExplanation": "Diese Werte und die Setup-Nähe wurden für diesen Bericht gespeichert. Analyse und FINN können später neuere Messungen zeigen.",
       "hudLegacyExplanation": "Dieser Bericht ist eine historische Momentaufnahme. Analyse und FINN können inzwischen neuere Daten zeigen.",
       "hudSourceDetails": "Verwendete Bewertungsquellen anzeigen",
       "hudScoreDate": "Bewertungsdatum",
-      "hudSetupSource": "Der Setup-Treffer in diesem Bericht verwendet diese gespeicherten Werte und die damaligen Setup-Bedingungen; er ist kein aktuelles Einstiegssignal.",
+      "hudSetupSource": "Die Setup-Nähe verwendet die gespeicherten Werte und die damaligen Bedingungen. Nur der separate Bedingungsstatus zeigt, ob der Wertebereich passte; beides ist kein aktuelles Einstiegssignal.",
       "hudLegacySources": "Dieser ältere Bericht enthält keine einzelnen Quellenzeitpunkte pro Wert.",
       "hudNoAssets": "Für diesen Bericht wurden keine Bewertungsquellen beobachteter Assets erfasst.",
       "hudSourceUnknown": "Quellenzeitpunkt nicht verfügbar",
@@ -2117,7 +2117,7 @@
       "hudMacro": "Makro",
       "hudTechnical": "Technisch",
       "hudMarket": "Markt",
-      "hudSetup": "Aktiver Setup-Abgleich"
+      "hudSetup": "Setup-Nähe"
     }
   },
   "setupPage": {
@@ -3623,16 +3623,16 @@
         "macroLabel": "Makro",
         "technicalLabel": "Technisch",
         "marketLabel": "Markt",
-        "setupLabel": "Aktive Setup-Übereinstimmung"
+        "setupLabel": "Setup-Nähe"
       },
       "setupMatch": {
         "cardTitle": "Setup-Vergleich",
         "empty": "In diesem Bericht wurde keine bestätigte aktuelle Setup-Übereinstimmung gefunden.",
-        "bestMatch": "Beste Übereinstimmung",
-        "matchScore": "Übereinstimmungswert",
+        "bestMatch": "Nächstes Setup",
+        "matchScore": "Nähewert",
         "comparison": "Vergleich",
         "unknownScore": "Unbekannt",
-        "explanation": "Erklärung: Das beste Setup wird anhand der aktuellen Makro- und Marktbedingungen ausgewählt."
+        "explanation": "Dieser Nähewert zeigt, wie nah der Benchmarkwert beim Erstellen des Berichts an den gespeicherten Setup-Bedingungen lag. Er ist weder eine Gewinnwahrscheinlichkeit noch ein Einstiegssignal."
       },
       "activeStrategy": {
         "cardTitle": "Gespeicherte Strategie",
