@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN coach, setupmatch en Paper-beslisstatus (23 oktober 2026)
 
-Phase: `BUILD_VALIDATED_AWAITING_CI`. Branch: `codex/finn-coach-full-flow-fix`.
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product change: [PR #555](https://github.com/gvangalen/antigravity-trading-tool/pull/555), merged as `e2ff180c83e0494b9973be596aaccee7ed8eca6e`.
 Independent desktop QA on public SHA `ffc5baa311138fd869cb05ec94069b035327a986`
 found an AAPL card claiming matching setup conditions without a complete score,
 a BTC plan highlighted on the AAPL plan page, a natural reference to the
@@ -43,8 +43,12 @@ connections. Frontend typecheck, i18n, command, proposal, setup and targeted
 regression tests passed; the production web build and high-severity audit
 passed. The real Responses development selector passed **20/20** and
 regression **109/109**, both with zero provider, schema, timeout, parse or
-validation failures. CI, deployment and independent live QA are still
-pending. No new live behavior is claimed in this section.
+validation failures. [PR CI 39983626854](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39983626854),
+[main CI 39984014411](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39984014411), and
+[Auto Deploy 39984389837](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39984389837)
+all succeeded. Backend health and frontend build-info returned HTTP 200 and
+the same product SHA `e2ff180c83e0494b9973be596aaccee7ed8eca6e`.
+Independent live QA remains pending. No live acceptance is claimed here.
 
 ## FINN strategy continuity and QA fault handoff (22 October 2026)
 
