@@ -235,6 +235,12 @@ class FinnResponsesAnswerVerifier:
             }[language]
         comparison = comparisons[0]
         if comparison["status"] != "available":
+            if comparison.get("reason") == "conflicting_evidence":
+                return {
+                    "nl": "Ik kan de actuele koers niet met je instap vergelijken omdat de gelezen koers- of strategiegegevens elkaar tegenspreken. Controleer de opgeslagen strategie en vraag daarna een nieuwe marktmeting op.",
+                    "en": "I cannot compare the current price with your entry because the market or strategy readings conflict. Check the saved strategy, then request a fresh market reading.",
+                    "de": "Ich kann den aktuellen Kurs nicht mit deinem Einstieg vergleichen, weil sich die gelesenen Markt- oder Strategiedaten widersprechen. Prüfe die gespeicherte Strategie und fordere dann eine neue Marktmessung an.",
+                }[language]
             if comparison.get("reason") in {"matching_market_price_unavailable", "market_price_stale"}:
                 return {
                     "nl": "Ik heb voor deze strategie een nieuwe, bevestigde marktkoers in dezelfde valuta nodig. Zonder die meting kan ik de huidige koers niet met je instap vergelijken.",

@@ -195,7 +195,7 @@ def test_saved_readback_does_not_use_another_asset_or_conflicting_snapshot():
         )), locale="nl",
     ))
     assert direct.reason == "verified_plan_price_comparison"
-    assert "niet betrouwbaar" in direct.text
+    assert "spreken" in direct.text and "tegen" in direct.text
 
     market_conflict = {**market, "data": {**market["data"], "price": 400}}
     conflicting_market = replace(base, tool_trace=(
@@ -207,7 +207,7 @@ def test_saved_readback_does_not_use_another_asset_or_conflicting_snapshot():
             message=price_question, tool_trace=conflicting_market.tool_trace,
         )), locale="nl",
     ))
-    assert "niet betrouwbaar" in direct.text
+    assert "spreken" in direct.text and "tegen" in direct.text
 
     equivalent_time = {**market_conflict, "data": {
         **market_conflict["data"],
@@ -222,7 +222,7 @@ def test_saved_readback_does_not_use_another_asset_or_conflicting_snapshot():
             message=price_question, tool_trace=conflicting_market.tool_trace,
         )), locale="nl",
     ))
-    assert "niet betrouwbaar" in direct.text
+    assert "spreken" in direct.text and "tegen" in direct.text
 
 
 def test_direct_price_question_never_uses_stale_or_mismatched_quote():
