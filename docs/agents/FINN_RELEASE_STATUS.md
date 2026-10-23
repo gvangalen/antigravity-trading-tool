@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN plan-navigation crash and read-only coach deadline (23 oktober 2026)
 
-Phase: `BUILD_VALIDATION_IN_PROGRESS` on branch `codex/finn-coach-terminal-and-plan-crash`.
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product repair: [PR #559](https://github.com/gvangalen/antigravity-trading-tool/pull/559), merged as `92d1ca504faa9f9f5f2570fb9bb7da5d7add3010`.
 Independent desktop QA on public SHA `33419d80095869b56f5a44c562a466699c6bcf0f`
 returned `NOT_ACCEPTED`: AAPL Analyse → Mijn Plan crashed twice on client
 navigation with a null `hasStrategy` access, and the first natural BTC Friday
@@ -50,7 +50,13 @@ failures (development artifact SHA-256
 `48790c803b183d3b2451cb08fd04916aafd2ae302f2d2b915181fc43976f20f7`,
 regression artifact SHA-256
 `96a34f9151de911ec370bf60e2228d2d96e404e1e8af3ec007bf080b0d9c5146`).
-CI, deployment and independent live QA are pending.
+[PR CI 40004538796](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40004538796),
+[main CI 40004969312](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40004969312), and
+[Auto Deploy 40005335990](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40005335990)
+all succeeded. Backend health and frontend build-info returned HTTP 200 and
+the same product SHA `92d1ca504faa9f9f5f2570fb9bb7da5d7add3010`.
+Independent live QA is pending; the previous `NOT_ACCEPTED` verdict remains
+in force until QA completes its fresh test.
 
 ## FINN coach context repair after independent QA (23 oktober 2026)
 
