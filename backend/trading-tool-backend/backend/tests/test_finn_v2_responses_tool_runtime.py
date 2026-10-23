@@ -12271,6 +12271,82 @@ def test_read_only_coach_can_answer_after_five_successful_reads():
     assert fake.requests[-1]["tools"] == []
 
 
+def test_read_only_coach_can_explain_a_failed_read_at_the_round_limit():
+    fake = FakeResponses(
+        response("scores", calls=(tool_call("c1", "get_current_asset_scores", {}),)),
+        response("portfolio", calls=(tool_call("c2", "get_portfolio_and_exposure", {}),)),
+        response("answer", text="De scores kan ik lezen; je vrije cash kan ik niet vaststellen."),
+    )
+
+    async def execute(call):
+        if call.name == "get_portfolio_and_exposure":
+            return {"status": "error", "reason": "tool_execution_failed"}
+        return {"status": "completed", "results": []}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute, max_rounds=2,
+    ).run(
+        message="Past €75 extra bij mijn vrijdagplan, scores en portfolio? Geen aankoop.",
+        instructions="Gebruik alleen gelezen feiten.", model_led_coach=True, read_only_turn=True,
+    ))
+
+    assert result.text.startswith("De scores")
+    assert [item["status"] for item in result.tool_trace] == ["completed", "error"]
+    assert fake.requests[0]["parallel_tool_calls"] is True
+    assert fake.requests[-1]["tool_choice"] == "none"
+    assert fake.requests[-1]["tools"] == []
+
+
+def test_read_only_coach_batches_independent_evidence_reads_in_one_provider_round():
+    fake = FakeResponses(
+        response("reads", calls=(
+            tool_call("scores", "get_current_asset_scores", {}),
+            tool_call("plan", "get_active_plan_and_strategy", {}),
+            tool_call("portfolio", "get_portfolio_and_exposure", {}),
+        )),
+        response("answer", text="Je vrijdagplan en score zijn bekend; vrije cash blijft onbekend."),
+    )
+
+    async def execute(call):
+        return {"status": "completed", "results": [], "tool": call.name}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute, max_rounds=2,
+    ).run(
+        message="Hoe passen plan, scores en portfolio bij €75 extra? Alleen sparren.",
+        instructions="Lees de feiten.", model_led_coach=True, read_only_turn=True,
+    ))
+
+    assert len(result.tool_trace) == 3
+    assert len(fake.requests) == 2
+    assert fake.requests[0]["parallel_tool_calls"] is True
+    assert not any(
+        FinnResponsesToolCatalog().is_proposal_tool(item["name"])
+        for item in fake.requests[0]["tools"]
+    )
+    assert fake.requests[1]["parallel_tool_calls"] is True
+
+
+def test_action_capable_coach_keeps_parallel_tool_calls_disabled():
+    fake = FakeResponses(response("answer", text="Ik kan het concept voorbereiden na je keuze."))
+
+    async def execute(_call):
+        raise AssertionError("No tool should run for this response")
+
+    asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message="Maak een BTC-setup voor mij", instructions="Vraag naar ontbrekende gegevens.",
+        model_led_coach=True, read_only_turn=False,
+    ))
+
+    assert fake.requests[0]["parallel_tool_calls"] is False
+    assert any(
+        FinnResponsesToolCatalog().is_proposal_tool(item["name"])
+        for item in fake.requests[0]["tools"]
+    )
+
+
 def test_read_only_coach_can_answer_after_a_duplicate_read_at_the_round_limit():
     fake = FakeResponses(
         response("first", calls=(tool_call("c1", "get_saved_setup_inventory", {}),)),

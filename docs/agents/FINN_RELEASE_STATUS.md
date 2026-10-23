@@ -4,9 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN read-only coach multi-source tool rounds (23 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Branch: `codex/finn-multisource-read-rounds`.
+Independent browser QA on deployed `87051ddc9cea938f1d690053a754ee6d292c1792`
+returned `NOT_ACCEPTED`: AAPL Analyse → Mijn Plan succeeded twice without a
+client crash, but the first exact BTC Friday FOMO/score/portfolio question
+still terminalized. The console reported run
+`finn-v2-run-666974f068de421fbc21d258350073ff`,
+`status=unavailable`, `error_code=responses_tool_round_limit` at
+2026-10-23 18:52:30 UTC. The direct follow-up correctly found the Friday
+setup, strategy and €75 cadence; historical Paper status and German decision
+labels also passed. The browser exposed no per-round tool trace, so the exact
+five-tool sequence of that production run is unknown.
+
+The read-only Responses loop previously disabled parallel tool calls even
+when every exposed tool was non-mutating. At its five-round ceiling it also
+refused a final explanation when a read returned an error or incomplete state.
+This batch allows independent reads in one provider round and reserves a
+final answer for read-only coaching with typed read evidence, including a
+failed read. Action proposal turns keep their existing serial and confirmation
+boundaries. Sanitized tool names and statuses are logged if a round limit still
+occurs. Regression tests cover multi-read batching and a failed read at the
+round limit; they retain the action-boundary test.
+
+The exact two-turn BTC question completed locally through API, Celery and
+real Luna/Responses with one dispatch and attempt per turn. The final backend
+suite passed **3811 tests, 4 existing skips**. Web typecheck, i18n, command,
+proposal and setup tests, build, and high-severity audit passed; audit found
+zero vulnerabilities. The real-provider development selector evaluation
+passed **20/20** and regression **109/109**, both with zero provider failures
+and complete operation accuracy (artifact SHA-256 `c8825faf9da27802271db8a74d0e8e96400107d52b9a6aba688488a5919a7857`
+and `f7d0b885cb710136663247770d8432788e5c3d80e2f5ac1f587e64c35d56a8d9`).
+The final worker-driven action matrix passed **16/16** and adapter checks
+**19/19** (artifact SHA-256
+`70d074809917ef4f53648c7b1896a2fc1f0ab9a6050f5fe647b5a966044d351a`),
+with zero broker orders, Live calls, Live bots or production connections.
+After restarting API and Celery on the final source, the exact two-turn BTC
+question again completed one dispatch and attempt per turn, selected only the
+Friday setup and linked strategy, and made no proposal or order. This is not
+a live acceptance claim; the prior QA verdict remains `NOT_ACCEPTED`.
+
 ## FINN plan-navigation crash and read-only coach deadline (23 oktober 2026)
 
-Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product repair: [PR #559](https://github.com/gvangalen/antigravity-trading-tool/pull/559), merged as `92d1ca504faa9f9f5f2570fb9bb7da5d7add3010`.
+Phase: `NOT_ACCEPTED`. Product repair: [PR #559](https://github.com/gvangalen/antigravity-trading-tool/pull/559), merged as `92d1ca504faa9f9f5f2570fb9bb7da5d7add3010`.
 Independent desktop QA on public SHA `33419d80095869b56f5a44c562a466699c6bcf0f`
 returned `NOT_ACCEPTED`: AAPL Analyse → Mijn Plan crashed twice on client
 navigation with a null `hasStrategy` access, and the first natural BTC Friday
@@ -55,8 +96,10 @@ regression artifact SHA-256
 [Auto Deploy 40005335990](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40005335990)
 all succeeded. Backend health and frontend build-info returned HTTP 200 and
 the same product SHA `92d1ca504faa9f9f5f2570fb9bb7da5d7add3010`.
-Independent live QA is pending; the previous `NOT_ACCEPTED` verdict remains
-in force until QA completes its fresh test.
+The final public deployment SHA was `87051ddc9cea938f1d690053a754ee6d292c1792`
+after its status update. Independent QA found the AAPL crash resolved but the
+first BTC coach question still failed with `responses_tool_round_limit`.
+The next section records the repair candidate and retest boundary.
 
 ## FINN coach context repair after independent QA (23 oktober 2026)
 

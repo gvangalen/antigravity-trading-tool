@@ -481,30 +481,36 @@ class FinnResponsesLoop:
         incomplete_output_retry_used = False
         transient_provider_retry_used = False
         output_token_override: int | None = None
-        # A turn composed entirely of read tools may use the last allowed
-        # round to fetch its final piece of evidence. Reserve one answer-only
-        # round regardless of whether the front door classified it as coach
-        # mode; a stale-source probe is also a read and needs that answer.
+        # Reserve a final answer-only round after read tools. A read-only coach
+        # turn must also be able to explain a failed or incomplete read instead
+        # of terminalizing when the last evidence request reaches the limit.
         for _ in range(self.max_rounds + 1):
             answer_only_round = tool_rounds >= self.max_rounds
             if answer_only_round and not (
-                trace and not proposal_selected
-                and not repair_tool_name
-                and all(
-                    (
-                        item["name"].startswith(("get_", "evaluate_"))
-                        and item["status"] in {"completed", "partial", "unavailable", "retry"}
-                    ) or (
-                        item["status"] == "retry"
-                        and (item.get("result") or {}).get("reason") in {
-                            "tool_not_relevant_to_request",
-                            "primary_operation_mismatch",
-                            "read_already_completed_this_turn",
-                        }
+                (read_only_coaching and trace and not proposal_selected
+                 and all(item["name"].startswith(("get_", "evaluate_")) for item in trace))
+                or (
+                    trace and not proposal_selected and not repair_tool_name
+                    and all(
+                        (
+                            item["name"].startswith(("get_", "evaluate_"))
+                            and item["status"] in {"completed", "partial", "unavailable", "retry"}
+                        ) or (
+                            item["status"] == "retry"
+                            and (item.get("result") or {}).get("reason") in {
+                                "tool_not_relevant_to_request",
+                                "primary_operation_mismatch",
+                                "read_already_completed_this_turn",
+                            }
+                        )
+                        for item in trace
                     )
-                    for item in trace
                 )
             ):
+                logger.warning(
+                    "FINN Responses tool-round limit before final answer trace=%s",
+                    [(item["name"], item["status"]) for item in trace],
+                )
                 raise FinnResponsesError("responses_tool_round_limit")
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
@@ -694,6 +700,9 @@ class FinnResponsesLoop:
                     "establishes only the fields it returned. For ambiguous, missing, stale, "
                     "or unavailable data, explain the supported limit and ask one useful "
                     "clarifying question when needed; never invent a cause or a match. "
+                    "When a read-only question needs several independent facts, request "
+                    "the relevant read tools together where possible, then answer from "
+                    "the returned evidence or state its limits. "
                     "Explain the answer the trader actually saw when asked about a previous "
                     "turn. A newly supplied choice is not a saved fact until a tool confirms it. "
                     "Before personal advice that relies on a confirmation rule, read the "
@@ -733,7 +742,17 @@ class FinnResponsesLoop:
                 "instructions": turn_instructions,
                 "input": current_input,
                 "tools": definitions,
-                "parallel_tool_calls": False,
+                # Multi-source coach questions often need plan, score and portfolio
+                # evidence together. Allow the model to request independent reads
+                # in one provider round; the executor still validates and runs
+                # every call separately. Never enable this for action proposals.
+                "parallel_tool_calls": bool(
+                    read_only_coaching and not guided_operation_id
+                    and definitions and all(
+                        not self.catalog.is_proposal_tool(item["name"])
+                        for item in definitions
+                    )
+                ),
                 "store": True,
                 "max_output_tokens": output_token_override or (
                     1800 if many_plan_comparison else
@@ -1080,6 +1099,10 @@ class FinnResponsesLoop:
             calls = [item for item in (getattr(response, "output", None) or []) if getattr(item, "type", None) == "function_call"]
             logger.info("FINN Responses provider output classified call_count=%d round=%d", len(calls), tool_rounds + 1)
             if answer_only_round and calls:
+                logger.warning(
+                    "FINN Responses unexpected tool call in answer-only round trace=%s",
+                    [(item["name"], item["status"]) for item in trace],
+                )
                 raise FinnResponsesError("responses_tool_round_limit")
             if not calls:
                 logger.info("FINN Responses answer extraction starting")
