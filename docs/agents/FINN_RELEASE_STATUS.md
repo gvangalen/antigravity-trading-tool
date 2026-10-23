@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN read-only coach multi-source tool rounds (23 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Branch: `codex/finn-multisource-read-rounds`.
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product repair:
+[PR #561](https://github.com/gvangalen/antigravity-trading-tool/pull/561),
+merged as `ad0ae137588c6c04e64a4b7ce434470836b64c51`.
 Independent browser QA on deployed `87051ddc9cea938f1d690053a754ee6d292c1792`
 returned `NOT_ACCEPTED`: AAPL Analyse → Mijn Plan succeeded twice without a
 client crash, but the first exact BTC Friday FOMO/score/portfolio question
@@ -44,6 +46,12 @@ After restarting API and Celery on the final source, the exact two-turn BTC
 question again completed one dispatch and attempt per turn, selected only the
 Friday setup and linked strategy, and made no proposal or order. This is not
 a live acceptance claim; the prior QA verdict remains `NOT_ACCEPTED`.
+[PR CI 40009778123](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40009778123),
+[main CI 40010234543](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40010234543),
+and [Auto Deploy 40010597218](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40010597218)
+all succeeded. Backend health and frontend build-info both returned HTTP 200
+with product SHA `ad0ae137588c6c04e64a4b7ce434470836b64c51`.
+Independent live QA is pending on the final public SHA after this status update.
 
 ## FINN plan-navigation crash and read-only coach deadline (23 oktober 2026)
 
