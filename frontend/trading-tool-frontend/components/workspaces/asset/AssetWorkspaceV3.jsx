@@ -45,7 +45,7 @@ import {
   toTradingViewSymbol,
 } from "../../../../../shared/tradingViewConfig";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
-import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { formatBenchmarkScore, hasCompleteDailyBenchmark, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
@@ -687,61 +687,12 @@ const DEFAULT_INTELLIGENCE_WEIGHTS = {
 };
 
 const ANALYSIS_TIMEFRAMES = ["day", "week", "month", "quarter"];
-const ACTIVE_SETUP_CACHE_TTL_MS = 60_000;
 const ASSISTANT_PREFERENCES_CACHE_TTL_MS = 300_000;
-const activeSetupCache = new Map();
 let assistantPreferencesCache = {
   data: null,
   updatedAt: 0,
   inflight: null,
 };
-
-function getFreshActiveSetup(symbol) {
-  const key = String(symbol || "BTC").toUpperCase();
-  const entry = activeSetupCache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() - entry.updatedAt > ACTIVE_SETUP_CACHE_TTL_MS) return undefined;
-  return entry.data;
-}
-
-async function loadActiveSetupShared(symbol, forceFresh = false) {
-  const key = String(symbol || "BTC").toUpperCase();
-  const cached = getFreshActiveSetup(key);
-  if (!forceFresh && cached !== undefined) {
-    return cached;
-  }
-
-  const current = activeSetupCache.get(key);
-  if (!forceFresh && current?.inflight) {
-    return current.inflight;
-  }
-
-  const inflight = fetchActiveSetup(key)
-    .then((result) => {
-      activeSetupCache.set(key, {
-        data: result ?? null,
-        updatedAt: Date.now(),
-        inflight: null,
-      });
-      return result ?? null;
-    })
-    .catch((error) => {
-      activeSetupCache.set(key, {
-        data: current?.data ?? null,
-        updatedAt: current?.updatedAt ?? 0,
-        inflight: null,
-      });
-      throw error;
-    });
-
-  activeSetupCache.set(key, {
-    data: current?.data ?? null,
-    updatedAt: current?.updatedAt ?? 0,
-    inflight,
-  });
-
-  return inflight;
-}
 
 function getFreshAssistantPreferences() {
   if (!assistantPreferencesCache.updatedAt) return undefined;
@@ -1741,6 +1692,7 @@ function AnalysisChartSection({ interval, onIntervalChange, symbol, tradingViewS
 }
 
 function PlanBridge({ candidate, onOpenPlan, ui }) {
+  if (!candidate) return null;
   const setupScore = normalizeScore(candidate?.score);
   const scoreLabel = setupScore === null ? "—" : `${Math.round(setupScore)}/100`;
   const candidateName = String(candidate?.displayName || "").trim();
@@ -2480,7 +2432,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     bias: workspace?.master?.master_bias || "–",
   };
   const assetLive = workspace?.quote || null;
-  const hasScoreData = [market.score, macro.score, technical.score].some((score) => score !== null);
   const hasResolvedWorkspace = Boolean(workspace);
   const marketLoading = workspaceLoading && !hasResolvedWorkspace;
   const macroLoading = workspaceLoading && !hasResolvedWorkspace;
@@ -2518,19 +2469,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   useEffect(() => {
     let cancelled = false;
+    setMarketBestSetup(null);
 
     async function loadMarketBestSetup() {
-      const cached = getFreshActiveSetup(activeSymbol);
-      if (!cancelled && cached !== undefined) {
-        setMarketBestSetup(
-          cached && String(cached.symbol || activeSymbol).toUpperCase() === activeSymbol
-            ? cached
-            : null
-        );
-      }
-
       try {
-        const result = await loadActiveSetupShared(activeSymbol, cached === undefined);
+        const result = await fetchActiveSetup(activeSymbol);
         if (cancelled) return;
         if (!cancelled) {
           setMarketBestSetup(
@@ -2549,7 +2492,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return () => {
       cancelled = true;
     };
-  }, [activeSymbol]);
+  }, [activeSymbol, workspace?.daily?.calculated_at]);
 
   const planBridgeCandidate = useMemo(() => {
     if (!marketBestSetup?.is_active || String(marketBestSetup.symbol || "").toUpperCase() !== activeSymbol) return null;
@@ -3075,7 +3018,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       </section>
 
       <PlanBridge
-        candidate={hasScoreData ? planBridgeCandidate : null}
+        candidate={hasCompleteDailyBenchmark(workspace, activeSymbol) ? planBridgeCandidate : null}
         onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
         ui={ui}
       />

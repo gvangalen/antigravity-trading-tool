@@ -794,6 +794,33 @@ class FinnV2EntityResolutionService:
         enriched = dict(selector)
         if self.is_setup_collection_request(message):
             enriched["setup_collection_requested"] = True
+        # An explicitly described cadence is an object reference, just like
+        # an exact saved name. Do not let a previously focused Monday setup
+        # win over the trader's "my Friday plan" on the same asset page.
+        weekday = self._referenced_saved_plan_weekday(message)
+        if weekday is not None and "setup" not in skip_entities:
+            candidates = [
+                dict(row) for row in await self.setups.get_user_setups(user_id)
+                if str(row.get("dca_frequency") or "").lower() == "weekly"
+                and self._coerce_int(row.get("dca_day")) == weekday
+                and (not enriched.get("asset") or self._matches_symbol(row.get("symbol"), enriched["asset"]))
+            ]
+            if len(candidates) == 1:
+                for entity in ("setup", "strategy", "bot"):
+                    selected_name = enriched.get(f"{entity}_name")
+                    if selected_name and self._message_mentions_name(message, selected_name):
+                        if entity != "setup" or self._normalized_name(selected_name) != self._normalized_name(candidates[0].get("name")):
+                            raise LookupError("setup_ambiguous")
+                enriched["setup_id"] = self._coerce_int(candidates[0].get("id") or candidates[0].get("setup_id"))
+                enriched.pop("setup_name", None)
+                enriched.pop("strategy_id", None)
+                enriched.pop("strategy_name", None)
+                enriched.pop("bot_id", None)
+                enriched.pop("bot_name", None)
+            elif len(candidates) > 1:
+                raise LookupError("setup_ambiguous")
+            else:
+                raise LookupError("setup_not_resolved")
         repositories = {
             "setup": self.setups.get_user_setups,
             "strategy": lambda owner_id: self.strategies.query_strategies(owner_id, {}),
@@ -822,6 +849,28 @@ class FinnV2EntityResolutionService:
             elif len(matches) > 1:
                 raise LookupError(f"{entity}_ambiguous")
         return enriched
+
+    @staticmethod
+    def _referenced_saved_plan_weekday(message: str) -> Optional[int]:
+        words = {
+            1: ("maandag", "monday", "montag"),
+            2: ("dinsdag", "tuesday", "dienstag"),
+            3: ("woensdag", "wednesday", "mittwoch"),
+            4: ("donderdag", "thursday", "donnerstag"),
+            5: ("vrijdag", "friday", "freitag"),
+            6: ("zaterdag", "saturday", "samstag"),
+            7: ("zondag", "sunday", "sonntag"),
+        }
+        normalized = " ".join(str(message or "").casefold().split())
+        for day, labels in words.items():
+            for label in labels:
+                if re.search(
+                    rf"\b(?:mijn|my|mein\w*)\s+(?:\w+\s+){{0,2}}{label}"
+                    rf"(?:se|s)?(?:[- ]?(?:dca[- ]?)?(?:plan|setup))\b",
+                    normalized,
+                ):
+                    return day
+        return None
 
     @staticmethod
     def is_setup_collection_request(message: str) -> bool:

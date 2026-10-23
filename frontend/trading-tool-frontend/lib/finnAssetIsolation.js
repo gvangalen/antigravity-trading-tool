@@ -32,6 +32,15 @@ export function resolveFinnContextSymbol({
   );
 }
 
+export function resolveFinnBotContextSymbol({ bot = null, routeSymbol = null, selectedAsset = null } = {}) {
+  const botSymbol = bot?.strategy?.setup?.symbol || bot?.symbol || bot?.strategy?.symbol;
+  return resolveFinnContextSymbol({
+    urlSymbol: botSymbol || routeSymbol,
+    activeSetupSymbol: bot?.strategy?.setup?.symbol,
+    selectedAsset,
+  });
+}
+
 export function shouldBlockFinnSubmission({
   isAuthenticated = false,
   assetStatus = "unconfigured",

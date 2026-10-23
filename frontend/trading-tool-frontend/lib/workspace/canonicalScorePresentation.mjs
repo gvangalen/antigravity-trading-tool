@@ -24,6 +24,15 @@ export function indicatorSourceFreshness(freshness) {
   return freshness.stale ? "stale" : "current";
 }
 
+export function hasCompleteDailyBenchmark(workspace, symbol) {
+  const validScore = (value) => value !== null && value !== undefined && value !== ""
+    && Number.isFinite(Number(value));
+  const daily = workspace?.daily;
+  return String(workspace?.symbol || "").toUpperCase() === String(symbol || "").toUpperCase()
+    && validScore(daily?.benchmark_score)
+    && ["market", "macro", "technical"].every((category) => validScore(daily?.[category]?.score));
+}
+
 export function formatBenchmarkScore(value, locale = "nl") {
   if (value === null || value === undefined || value === "") return "—";
   const score = Number(value);

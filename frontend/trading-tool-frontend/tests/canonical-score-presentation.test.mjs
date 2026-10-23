@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "../lib/workspace/canonicalScorePresentation.mjs";
+import { formatBenchmarkScore, hasCompleteDailyBenchmark, indicatorSourceFreshness, validatedDayEvidence } from "../lib/workspace/canonicalScorePresentation.mjs";
+
+test("a setup-match card requires the current asset's complete daily benchmark", () => {
+  const complete = {
+    symbol: "BTC",
+    daily: { benchmark_score: 0, market: { score: 0 }, macro: { score: 20 }, technical: { score: 40 } },
+  };
+  assert.equal(hasCompleteDailyBenchmark(complete, "BTC"), true);
+  assert.equal(hasCompleteDailyBenchmark(complete, "AAPL"), false);
+  assert.equal(hasCompleteDailyBenchmark({ ...complete, daily: { ...complete.daily, macro: { score: null } } }, "BTC"), false);
+  assert.equal(hasCompleteDailyBenchmark({ ...complete, daily: { ...complete.daily, benchmark_score: null } }, "BTC"), false);
+});
 
 test("an old row score cannot become a visible current indicator score", () => {
   const evidence = { dxy: { score: 100, source_observed_at: "2026-09-22T00:00:00Z" } };

@@ -804,6 +804,10 @@ class BotService:
             disabled_limit = field in {"budget_total_eur", "budget_daily_limit_eur", "budget_max_order_eur"} and before is not None and before > 0 and after == 0
             if disabled_limit:
                 reasons.append(f"{field} uitgeschakeld (van {before:g} naar 0)")
+            elif field in {"budget_total_eur", "budget_daily_limit_eur", "budget_max_order_eur"} and before == 0 and after is not None and after > 0:
+                # Zero is an unlimited optional cap. Setting a positive cap
+                # narrows the bot's permissions and is not a risk increase.
+                continue
             elif before is not None and after is not None and after > before:
                 reasons.append(f"{field} verhoogd van {before:g} naar {after:g}")
 

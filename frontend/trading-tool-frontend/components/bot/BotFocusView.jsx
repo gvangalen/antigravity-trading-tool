@@ -9,6 +9,7 @@ import StrategyTestPanel from "@/components/bot/StrategyTestPanel";
 import BotHistoryTable from "@/components/bot/BotHistoryTable";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
+import { selectLastBotDecision } from "@/lib/bot/lastDecision.mjs";
 
 export default function BotFocusView({
   bots, activeBot, onSelectBot, decision, pendingOrder, portfolio, trades, allTrades,
@@ -95,8 +96,19 @@ export default function BotFocusView({
     return [...executions, ...decisions].sort((a, b) =>
       new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0));
   }, [activeBot?.id, history, trades]);
-  const strategyReason = decision?.strategy_reason === "Scheduled DCA amount selected from the confirmed plan"
-    ? copy.scheduledDcaReason : decision?.strategy_reason;
+  // The current-status endpoint may omit a paused bot. Its persisted decision
+  // history still describes the last assessment, without making it executable.
+  const lastRecordedDecision = selectLastBotDecision(decision, history, activeBot?.id);
+  const historyOnlyDecision = !decision?.action && Boolean(lastRecordedDecision);
+  const historicalDecisionAt = historyOnlyDecision
+    ? lastRecordedDecision?.decision_ts || lastRecordedDecision?.created_at || lastRecordedDecision?.date
+    : null;
+  const recordedSafety = lastRecordedDecision?.safety_check || {};
+  const recordedReason = lastRecordedDecision?.strategy_reason
+    || lastRecordedDecision?.reasons?.find((item) => typeof item === "string" && item.trim())
+    || recordedSafety.reason;
+  const strategyReason = recordedReason === "Scheduled DCA amount selected from the confirmed plan"
+    ? copy.scheduledDcaReason : recordedReason;
   const dcaSchedule = activeBot?.dca_schedule_status;
   const nextDcaDate = dcaSchedule?.next_due_date
     ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" })
@@ -311,11 +323,13 @@ export default function BotFocusView({
                 <p className="mt-3 text-sm">{money(portfolio?.stats?.invested_eur)} {copy.usedOf} {money(activeBot.budget?.total_eur)} {copy.limit}</p>
                 <p className="mt-2 text-xs text-slate-500">{copy.budgetNotCash}</p>
               </section>
-              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 lg:col-span-2"><h3 className="font-black text-slate-950 dark:text-white">{copy.lastDecision}</h3>
-                <p className="mt-2 text-sm font-bold">{decision?.action ? (copy.actions?.[decision.action] || decision.action) : copy.noDecision}</p>
-                <p className="mt-1 text-sm text-slate-500">{["blocked", "reduced", "error"].includes(risk.state) || explanations.length > 0
-                  ? riskReason
-                  : strategyReason || risk.reason || copy.noDecision}</p>
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 lg:col-span-2"><h3 className="font-black text-slate-950 dark:text-white">{historyOnlyDecision ? copy.previousRecordedDecision : copy.lastDecision}</h3>
+                <p className="mt-2 text-sm font-bold">{lastRecordedDecision?.action ? (copy.actions?.[String(lastRecordedDecision.action).toLowerCase()] || lastRecordedDecision.action) : copy.noDecision}</p>
+                {historyOnlyDecision && <p className="mt-1 text-xs text-slate-500">{historicalDecisionAt ? `${formatDateTime(historicalDecisionAt, locale)} · ` : ""}{copy.historicalDecisionHint}</p>}
+                <p className="mt-1 text-sm text-slate-500">{lastRecordedDecision
+                  ? (decision && (["blocked", "reduced", "error"].includes(risk.state) || explanations.length > 0)
+                    ? riskReason : strategyReason || copy.riskCodes?.[recordedSafety.reason_code] || copy.reasonUnavailable)
+                  : copy.noDecision}</p>
               </section>
             </div>
 

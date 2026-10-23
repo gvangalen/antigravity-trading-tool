@@ -28,8 +28,14 @@ export function increasesBotBudgetRisk(next, previous) {
   return BUDGET_RISK_FIELDS.some((field) => {
     const before = Number(previous?.[field] ?? 0);
     const after = Number(next?.[field] ?? 0);
-    const disablesLimit = field !== "max_asset_exposure_pct" && before > 0 && after === 0;
-    return Number.isFinite(before) && Number.isFinite(after) && (after > before || disablesLimit);
+    if (!Number.isFinite(before) || !Number.isFinite(after)) return false;
+    // Zero monetary limits mean "unlimited". Moving from zero to a positive
+    // cap narrows risk; moving back to zero removes a protection.
+    if (field !== "max_asset_exposure_pct") {
+      if (before === 0) return false;
+      if (after === 0) return true;
+    }
+    return after > before;
   });
 }
 

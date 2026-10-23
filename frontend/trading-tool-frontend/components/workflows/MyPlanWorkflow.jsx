@@ -33,6 +33,7 @@ import { deleteSetup, fetchActiveSetup, fetchSetupMarketMatches } from "@/lib/ap
 import { getSetupId } from "@/lib/setup/activeSetup";
 import { formatSetupScoreConditions } from "@/lib/setup/scoreConditionSummary.mjs";
 import { formatBenchmarkScore } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { selectFeaturedPlan } from "@/lib/setup/selectFeaturedPlan.mjs";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
 const COPY = {
@@ -623,19 +624,9 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     return () => window.cancelAnimationFrame(frame);
   }, [activeSymbol, feedSetupId, loading, plans]);
 
-  const marketBestPlan = useMemo(() => {
-    return plans.find((plan) => plan.match?.is_active) || null;
-  }, [plans]);
-
-  const activePlan = useMemo(() => {
-    const setupId = normalizeId(getSetupId(activeSetup));
-    return marketBestPlan
-      || plans.find((plan) => plan.bot?.is_active && normalizeId(getSetupId(plan.setup)) === setupId)
-      || plans.find((plan) => plan.bot?.is_active)
-      || plans.find((plan) => normalizeId(getSetupId(plan.setup)) === setupId)
-      || plans[0]
-      || null;
-  }, [activeSetup, marketBestPlan, plans]);
+  const { best: marketBestPlan, featured: activePlan } = useMemo(() =>
+    selectFeaturedPlan(plans, activeSymbol, getSetupId(activeSetup)),
+  [activeSetup, activeSymbol, plans]);
 
   // The highlighted plan is the workspace selection FINN receives with an
   // explicit question on this page. Keep its owner-validated setup identity
@@ -643,13 +634,17 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   useEffect(() => {
     const featured = activePlan?.setup;
     const featuredId = getSetupId(featured);
+    if (!loading && !featuredId && activeSetup && String(activeSetup.symbol || "").toUpperCase() !== activeSymbol) {
+      setActiveSetup(null);
+      return;
+    }
     if (!featuredId || loading || normalizeId(featuredId) === normalizeId(getSetupId(activeSetup))) return;
     setActiveSetup({
       ...featured,
       setup_id: featuredId,
       strategy_id: activePlan?.strategy?.id || null,
     });
-  }, [activePlan, activeSetup, loading, setActiveSetup]);
+  }, [activeSymbol, activePlan, activeSetup, loading, setActiveSetup]);
 
   const closeDrawer = () => setDrawer(null);
 

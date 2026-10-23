@@ -31,7 +31,13 @@ spawn_detached() {
 }
 case "${1:-}" in
   start)
-    require_env; load_env; stop_local_processes; docker compose -f "$ROOT/docker-compose.finn-local.yml" up -d --wait
+    require_env; load_env
+    # Mirror the shipped read-only coach boundary unless a local experiment
+    # explicitly sets a different value. Otherwise the runtime probe exercises
+    # the legacy verifier and can fail for a reason production never sees.
+    : "${FINN_MINIMAL_READ_ANSWERS:=1}"
+    export FINN_MINIMAL_READ_ANSWERS
+    stop_local_processes; docker compose -f "$ROOT/docker-compose.finn-local.yml" up -d --wait
     migrate; mkdir -p "$PID_DIR"
     spawn_detached "$PID_DIR/backend.log" "$PID_DIR/backend.pid" env TRADAMIND_BUILD_SERVICE=backend python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18000
     # macOS Python 3.13 extension modules are not fork-safe. Keep the production
