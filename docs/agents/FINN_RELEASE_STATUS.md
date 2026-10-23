@@ -6,7 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN open-bot plan lineage (23 oktober 2026)
 
-Phase: `QA_PENDING`. Product repair:
+Phase: `ACCEPTED` for the targeted open-bot coach and regression scope on
+production SHA `38f0ae952b3a01464b91943ef27ece3f25b16280`. Independent
+authenticated browser QA asked the exact broad BTC/FOMO question as the first
+turn in three fresh conversations. All three completed without a terminal
+error, used the linked fixed €75 Friday strategy, the saved setup score band
+26–45 versus benchmark 40, and kept €300 virtual Paper cash separate from the
+bot budget. No action proposal or order appeared. A direct follow-up named
+the exact setup and strategy. AAPL Analyse-to-plan navigation passed twice;
+the historical Paper decision survived refresh, and German decision labels
+worked. One answer had a non-blocking raw self-correction in a price sentence.
+This verdict covers these tested paths, not every coach conversation or a
+Live order. Product repair:
 [PR #566](https://github.com/gvangalen/antigravity-trading-tool/pull/566),
 merged as `c631c7eb9bcd3754eb79addfcecf5b63550e8f8f`.
 Independent browser QA on deployed `b60e5fa7ec9d3b2d3ce411d0b4f2c4ac37b26762`
@@ -45,9 +56,9 @@ and Auto Deploy
 [40021258688](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40021258688).
 Backend health and frontend build-info both returned HTTP 200 with product SHA
 `c631c7eb9bcd3754eb79addfcecf5b63550e8f8f`. This release-record commit
-will get its own SHA; Build verifies its last main CI, Auto Deploy and both
-public SHA surfaces before independent QA starts. Live coach acceptance is
-pending.
+received its own SHA, `38f0ae952b3a01464b91943ef27ece3f25b16280`,
+without product-code changes. Independent QA tested that public SHA as
+recorded above.
 
 ## FINN evaluation-to-read boundary (23 oktober 2026)
 
