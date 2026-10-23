@@ -68,6 +68,33 @@ def test_transport_timeout_is_not_sent_as_a_responses_payload_field():
     assert "timeout" not in request
 
 
+def test_transient_structured_provider_failure_keeps_typed_status_without_body(monkeypatch):
+    class ServiceUnavailable(Exception):
+        status_code = 503
+        request_id = "req-test-503"
+
+    def fail_request(**_kwargs):
+        raise ServiceUnavailable("provider temporarily unavailable")
+
+    monkeypatch.setattr(openai_client, "client", SimpleNamespace(responses=SimpleNamespace(create=fail_request)))
+    monkeypatch.setattr(openai_client, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(openai_client, "_rate_limit_allows_call", lambda: True)
+    monkeypatch.setattr(openai_client, "_quota_breaker_active", lambda: False)
+    monkeypatch.setattr(openai_client, "_mark_runtime_error", lambda _message: None)
+
+    result = openai_client.ask_gpt_structured_response(
+        prompt="x", system_role="x",
+        output_spec=StructuredOutputSpec("test", {
+            "type": "object", "properties": {}, "required": [], "additionalProperties": False,
+        }),
+    )
+
+    assert result == {
+        "error": "provider_error",
+        "provider_metadata": {"http_status": 503, "request_id": "req-test-503"},
+    }
+
+
 def test_explicit_reasoning_effort_is_sent_only_for_opted_in_structured_calls():
     spec = StructuredOutputSpec("test", {
         "type": "object", "properties": {}, "required": [], "additionalProperties": False,

@@ -143,8 +143,13 @@ class FinnV2FlagService:
         return max(5, min(15, self._env_int("FINN_V2_LIFECYCLE_DEADLINE_SECONDS", 14)))
 
     def responses_lifecycle_deadline_seconds(self) -> int:
-        """Allow selection, tool evidence, and answer composition one bounded budget."""
-        return max(15, min(40, self._env_int("FINN_V2_RESPONSES_LIFECYCLE_DEADLINE_SECONDS", 40)))
+        """Bound a complete model-led turn, including sequential read evidence.
+
+        A plan, score, and portfolio question can require several provider
+        rounds after the first tool results. Keep the durable terminal reserve,
+        but do not end a valid read-only answer at the old 40-second ceiling.
+        """
+        return max(15, min(60, self._env_int("FINN_V2_RESPONSES_LIFECYCLE_DEADLINE_SECONDS", 60)))
 
     def selector_phase_deadline_seconds(self) -> int:
         # A phase cannot consume more than the complete visible lifecycle.

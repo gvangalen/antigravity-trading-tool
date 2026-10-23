@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN plan-navigation crash and read-only coach deadline (23 oktober 2026)
+
+Phase: `BUILD_VALIDATION_IN_PROGRESS` on branch `codex/finn-coach-terminal-and-plan-crash`.
+Independent desktop QA on public SHA `33419d80095869b56f5a44c562a466699c6bcf0f`
+returned `NOT_ACCEPTED`: AAPL Analyse → Mijn Plan crashed twice on client
+navigation with a null `hasStrategy` access, and the first natural BTC Friday
+FOMO/score/portfolio question terminalized. A direct plan reload showed the
+correct AAPL plan without an invented match; the follow-up found the Friday
+bot, setup and strategy. German decision-history labels, historical Paper
+decision and budget distinction passed. QA could not recover the terminal
+run's typed status or error code from the closed browser tab or protected
+runner. The old verdict remains in force.
+
+The plan crash came from rendering coach copy while the selected asset had no
+featured plan, even though other-asset plans were loaded. The featured-plan
+message now handles that normal state and has a focused regression. The
+Responses lifecycle budget is raised from 40 to a bounded 60 seconds in code,
+production PM2 defaults and local parity; a multi-source read-only coach turn
+may require several sequential provider rounds, each individually bounded at
+20 seconds. This is a plausible cause of the intermittent first-turn failure,
+not a proven diagnosis of QA's specific run. The browser console now emits the
+typed run status and error code as text if a future terminal failure occurs.
+
+An actual HTTP 503 during the first regression evaluation exposed a separate
+measurement weakness: the structured provider helper discarded the typed HTTP
+status and the evaluator retried only 429. It now records safe transport
+metadata and retries only transient 5xx/429; schema and authentication failures
+stay hard failures. The interrupted partial run is not counted as passing.
+
+Measured local evidence so far: final backend suite **3808 passed, 4 existing skips**;
+frontend typecheck, i18n, command/proposal/setup tests, production build and
+high-severity audit passed with zero vulnerabilities. The earlier local matrix
+passed **16/16** and adapter checks **19/19**. The final post-change worker
+matrix also passed **16/16** and **19/19**, with zero broker orders, Live
+trading calls, Live bots or production connections (artifact SHA-256
+`10d85985fb12a742f6e4f9622330f04091d5dbe416e12b4992b1f28093046246`).
+The exact two-turn BTC Friday question completed locally through API, Celery
+and real Luna/Responses with one dispatch and one attempt per turn, without a
+proposal or order. Real-provider development selector evaluation passed
+**20/20** with zero provider, schema, timeout, parse or validation failures.
+The final real-provider development selector passed **20/20** and regression
+passed **109/109**, both with zero provider, schema, timeout, parse or validation
+failures (development artifact SHA-256
+`48790c803b183d3b2451cb08fd04916aafd2ae302f2d2b915181fc43976f20f7`,
+regression artifact SHA-256
+`96a34f9151de911ec370bf60e2228d2d96e404e1e8af3ec007bf080b0d9c5146`).
+CI, deployment and independent live QA are pending.
+
 ## FINN coach context repair after independent QA (23 oktober 2026)
 
 Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product repair: [PR #557](https://github.com/gvangalen/antigravity-trading-tool/pull/557), merged as `5a626eb809d313d45e8b406e0f5092fd7ef77816`.
