@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN coach context repair after independent QA (23 oktober 2026)
 
-Phase: `BUILD_VALIDATED_AWAITING_CI` on branch `codex/finn-coach-context-repair`.
+Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product repair: [PR #557](https://github.com/gvangalen/antigravity-trading-tool/pull/557), merged as `5a626eb809d313d45e8b406e0f5092fd7ef77816`.
 Independent desktop QA on public SHA `712b0862e0d4de938e75786964598c55cd806f79`
 returned `NOT_ACCEPTED`: AAPL Analyse had no complete benchmark while Mijn
 Plan featured a BTC setup, and FINN mixed a selected Friday Paper bot with a
@@ -40,8 +40,13 @@ before the final two-turn probe. The final worker-driven action matrix passed
 **16/16** contracts and **19/19** adapter checks, with zero broker orders,
 Live trading calls, Live bots or production connections (artifact SHA-256
 `41cea073bc81cdbd091687c0ed4f1c5a128cd1874dfd7ad1f5e43967514c3a9d`).
-CI, deployment and independent live QA are pending. The previous
-`NOT_ACCEPTED` verdict remains in force.
+[PR CI 39993708802](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39993708802),
+[main CI 39994112591](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39994112591), and
+[Auto Deploy 39994470298](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/39994470298)
+all succeeded. Backend health and frontend build-info returned HTTP 200 and
+the same product SHA `5a626eb809d313d45e8b406e0f5092fd7ef77816`.
+Independent live QA is pending; the previous `NOT_ACCEPTED` verdict remains
+in force until QA completes its fresh test.
 
 ## FINN coach, setupmatch en Paper-beslisstatus (23 oktober 2026)
 
