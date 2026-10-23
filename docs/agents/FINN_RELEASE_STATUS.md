@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN evaluation-to-read boundary (23 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Branch: `codex/finn-evaluation-read-boundary`.
+Phase: `DEPLOYMENT_PENDING`. Product repair:
+[PR #563](https://github.com/gvangalen/antigravity-trading-tool/pull/563),
+merged as `8337414508d7a90fe92a042b75b0ae6a93eb8a2d`.
 Independent browser QA on deployed `65225c314b08f8e4afa3bb4453ec4d0dc6f31dcb`
 returned `NOT_ACCEPTED`: the exact first BTC Friday plan/score/portfolio
 coach question terminalized in two of three fresh conversations with
@@ -34,8 +36,18 @@ read the Friday setup and its linked strategy; their traces also read scores,
 market context and portfolio without a proposal or order. This is local
 evidence only. On the final source, a second three-run real-provider probe
 completed each question in one dispatch and one attempt without a proposal or
-order. The full backend suite passed **3813 tests, 4 existing skips**. The
-action matrix, provider regression suite and independent live QA are pending.
+order. The full backend suite passed **3813 tests, 4 existing skips**.
+The real-provider development and regression selector evaluations passed
+**20/20** and **109/109**, both with complete operation accuracy and zero
+provider failures (artifact SHA-256
+`514dee98d7c36866fcf0612c9ff18f2ed4a79feea28c60b8f079bc20ec71d9c6`
+and `e5f02d4acab1cc8340a54c06f24ff959ad5f05e356e554952c302aee5c031950`).
+The worker-driven action matrix passed **16/16**, plus **19/19** adapter
+checks, with zero broker orders, Live calls or production connections
+(artifact SHA-256
+`9a2e34813f14828a0c8cd5dfe67ea76ad6a0d39a466ad0cf4a1e2f00e85bf501`).
+PR CI passed. The last main CI, Auto Deploy, public SHA verification and
+independent live QA are pending; this is not a live acceptance claim.
 
 ## FINN read-only coach multi-source tool rounds (23 oktober 2026)
 
