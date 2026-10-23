@@ -2754,6 +2754,7 @@ class FinnV2RunService:
             user_id=user_id, run_id=run_id, model_led_coach=True,
         ).run(
             message=message,
+            workspace_hints=dict(getattr(run, "workspace_hints_json", None) or {}),
             corrected_guided_operation_id=corrected_guided_operation_id,
             model_message=(
                 "Previous unresolved user request: " + str(pending_clarification["original_message"])
