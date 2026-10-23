@@ -12346,6 +12346,59 @@ def test_front_door_requires_plan_read_for_multisource_evaluation(monkeypatch):
     assert captured["required_read_tool_name"] == "get_active_plan_and_strategy"
 
 
+def test_open_bot_context_binds_its_strategy_only_for_unnamed_owner_plan(monkeypatch):
+    setup = {"id": 11, "name": "QA BTC Friday Setup", "symbol": "BTC",
+             "dca_frequency": "weekly", "dca_day": 5}
+    strategy = {"id": 22, "name": "QA Friday Strategy", "setup_id": 11}
+    bot = {"id": 33, "name": "QA Friday Paper Bot", "strategy_id": 22}
+    other_setup = {"id": 12, "name": "QA Other BTC Setup", "symbol": "BTC"}
+
+    class FakeResolver:
+        def __init__(self, _session):
+            self.bots = SimpleNamespace(
+                get_bot_config=AsyncMock(side_effect=lambda owner, bot_id: bot if owner == 7 and bot_id == 33 else None),
+                get_bot_configs=AsyncMock(return_value=[bot]),
+            )
+            self.strategies = SimpleNamespace(
+                get_raw_strategy_with_setup=AsyncMock(return_value=strategy),
+                query_strategies=AsyncMock(return_value=[strategy]),
+            )
+            self.setups = SimpleNamespace(
+                get_setup_by_id=AsyncMock(return_value=setup),
+                get_user_setups=AsyncMock(return_value=[setup, other_setup]),
+            )
+
+        @staticmethod
+        def _message_mentions_name(message, name):
+            return bool(name and name.casefold() in message.casefold())
+
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService",
+        FakeResolver,
+    )
+    front = FinnResponsesFrontDoor(
+        client=object(), session_factory=session_factory, user_id=7, run_id="bot-plan-context",
+    )
+    hints = {"page": "/bot", "bot_id": 33}
+    read = lambda message, assets={"BTC"}, context=hints: asyncio.run(
+        front._workspace_bot_plan_selector(
+            workspace_hints=context, message=message, mentioned_assets=assets,
+        )
+    )
+
+    assert read("Hoe past mijn vrijdagplan bij de scores en mijn portfolio?") == {"bot_id": 33}
+    assert read("Hoe past mijn maandagplan bij de scores en mijn portfolio?") is None
+    assert read("Hoe past mijn andere BTC-plan bij mijn portfolio?") is None
+    assert read("Hoe past QA Other BTC Setup bij mijn portfolio?") is None
+    assert read("Hoe past dit ETH-plan bij mijn portfolio?", assets={"ETH"}) is None
+    assert read("Hoe past mijn vrijdagplan?", context={"page": "/asset", "bot_id": 33}) is None
+    assert read("Hoe past mijn vrijdagplan?", context={"page": "/bot", "bot_id": 99}) is None
+
+
 def test_read_only_coach_batches_independent_evidence_reads_in_one_provider_round():
     fake = FakeResponses(
         response("reads", calls=(

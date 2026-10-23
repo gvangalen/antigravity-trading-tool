@@ -46,6 +46,16 @@ from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToo
 
 logger = logging.getLogger(__name__)
 
+_WEEKDAY_REFERENCES = {
+    1: ("monday", "maandag", "montag"),
+    2: ("tuesday", "dinsdag", "dienstag"),
+    3: ("wednesday", "woensdag", "mittwoch"),
+    4: ("thursday", "donderdag", "donnerstag"),
+    5: ("friday", "vrijdag", "freitag"),
+    6: ("saturday", "zaterdag", "samstag"),
+    7: ("sunday", "zondag", "sonntag"),
+}
+
 
 def _listed_setup_ordinal(message: str) -> int | None:
     """Resolve an ordinal only against a previously verified ordered inventory."""
@@ -555,6 +565,68 @@ class FinnResponsesFrontDoor:
         self.proposals = FinnResponsesProposalSelection()
         self.relevance_guard = FinnResponsesToolRelevanceGuard(client)
 
+    async def _workspace_bot_plan_selector(
+        self, *, workspace_hints: Mapping[str, object], message: str,
+        mentioned_assets: set[str],
+    ) -> dict[str, int] | None:
+        """Follow the open bot's owner-scoped lineage for an unnamed plan read.
+
+        A page ID is only a hint. Saved names in the user's message and an
+        explicitly different asset always take precedence over that hint.
+        """
+        if (workspace_hints.get("page") != "/bot" or len(mentioned_assets) > 1
+                or re.search(r"\b(?:ander(?:e|en)?|other|another|anderes?)\b", message, re.I)):
+            return None
+        raw_bot_id = workspace_hints.get("bot_id")
+        try:
+            bot_id = int(raw_bot_id) if not isinstance(raw_bot_id, bool) else 0
+        except (TypeError, ValueError):
+            return None
+        session_factory = getattr(self.reads, "session_factory", None)
+        if bot_id <= 0 or session_factory is None:
+            return None
+        async with session_factory() as session:
+            resolver = FinnV2EntityResolutionService(session)
+            bot = await resolver.bots.get_bot_config(self.user_id, bot_id)
+            if not bot or not bot.get("strategy_id"):
+                return None
+            strategy = await resolver.strategies.get_raw_strategy_with_setup(
+                int(bot["strategy_id"]), self.user_id,
+            )
+            if not strategy or not strategy.get("setup_id"):
+                return None
+            setup = await resolver.setups.get_setup_by_id(
+                int(strategy["setup_id"]), self.user_id,
+            )
+            if not setup or (mentioned_assets and str(setup.get("symbol") or "").upper() not in mentioned_assets):
+                return None
+            mentioned_days = {
+                day for day, words in _WEEKDAY_REFERENCES.items()
+                if any(re.search(rf"\b{word}(?:s?plan|s|se)?\b", message, re.I) for word in words)
+            }
+            if mentioned_days and (
+                str(setup.get("dca_frequency") or "").lower() != "weekly"
+                or int(setup.get("dca_day") or 0) not in mentioned_days
+            ):
+                return None
+            named_objects = (
+                [("setup", dict(row)) for row in await resolver.setups.get_user_setups(self.user_id)]
+                + [("strategy", dict(row)) for row in await resolver.strategies.query_strategies(self.user_id, {})]
+                + [("bot", dict(row)) for row in await resolver.bots.get_bot_configs(self.user_id)]
+            )
+            permitted_ids = {
+                ("setup", int(setup.get("setup_id") or setup["id"])),
+                ("strategy", int(strategy.get("strategy_id") or strategy["id"])),
+                ("bot", bot_id),
+            }
+            if any(
+                resolver._message_mentions_name(message, row.get("name"))
+                and (kind, int(row.get(f"{kind}_id") or row.get("id") or 0)) not in permitted_ids
+                for kind, row in named_objects
+            ):
+                return None
+        return {"bot_id": bot_id}
+
     @staticmethod
     def binds_guided_slot(*, message: str, contract: Any, registry: Any, requested_slot: str) -> bool:
         """A short typed answer belongs to the persisted slot, not a new model intent."""
@@ -680,7 +752,9 @@ class FinnResponsesFrontDoor:
         force_read_repair: bool = False,
         rejection_feedback: dict[str, Any] | None = None,
         feed_evidence: list[dict[str, Any]] | None = None,
+        workspace_hints: Mapping[str, object] | None = None,
     ) -> FinnResponsesFrontDoorResult:
+        workspace_hints = dict(workspace_hints or {})
         active_strategy_draft = dict(conversation_context.get("active_guided_operation") or {}).get(
             "operation_id"
         ) == "create_strategy"
@@ -2315,6 +2389,16 @@ class FinnResponsesFrontDoor:
                             "asset": selected_score_setup[1],
                             "setup_id": selected_score_setup[0],
                         })
+                if call.name == "get_active_plan_and_strategy" and not pending_operation:
+                    workspace_selector = await self._workspace_bot_plan_selector(
+                        workspace_hints=workspace_hints, message=message,
+                        mentioned_assets=mentioned_assets,
+                    )
+                    if workspace_selector is not None:
+                        # The read executor follows bot -> strategy -> setup in
+                        # one owner-scoped chain, including when the setup has
+                        # several strategies. Never reuse model-selected IDs.
+                        call = replace(call, inputs=workspace_selector)
                 read_result = await self.reads(call)
                 if call.name == "get_saved_setup_inventory":
                     # Match explicit names against the owner-scoped result. The

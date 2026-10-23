@@ -4,9 +4,30 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN open-bot plan lineage (23 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Branch: `codex/finn-bot-context-plan-read`.
+Independent browser QA on deployed `b60e5fa7ec9d3b2d3ce411d0b4f2c4ac37b26762`
+returned `NOT_ACCEPTED`. The exact broad BTC Friday coach question
+terminalized normally in three of three fresh conversations, but no first
+answer consistently read the linked saved strategy. One claimed the Friday
+plan could not be fetched; a direct follow-up found the setup, linked €75
+strategy and Paper bot. AAPL navigation, historic Paper status and German
+labels remained green. There was no proposal or order.
+
+The web chat already sends the open bot ID in its workspace context, but the
+Responses front door did not pass it into the owner-scoped plan read. When a
+setup has multiple strategies, resolving from the setup alone is ambiguous.
+This repair carries the current page hint only for an explicit chat turn,
+checks the bot and its linked strategy/setup through owner-scoped repositories,
+and reads that exact lineage for an unnamed plan question. A named different
+object, another asset or another weekday prevents the page hint from taking
+over. The final read executor checks the owner again. No action contract or
+confirmation boundary changes. Local and live validation are pending.
+
 ## FINN evaluation-to-read boundary (23 oktober 2026)
 
-Phase: `QA_PENDING`. Product repair:
+Phase: `NOT_ACCEPTED`. Product repair:
 [PR #563](https://github.com/gvangalen/antigravity-trading-tool/pull/563),
 merged as `8337414508d7a90fe92a042b75b0ae6a93eb8a2d`.
 Independent browser QA on deployed `65225c314b08f8e4afa3bb4453ec4d0dc6f31dcb`
@@ -57,9 +78,14 @@ and Auto Deploy
 [40016346683](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40016346683).
 Backend health and frontend build-info both returned HTTP 200 with SHA
 `57e8ebae0e89654dcfaf39b8472557a4ea1118be` on 23 October 2026.
-The documentation handoff commit containing this paragraph gets its own SHA;
-Build verifies that last main CI, Auto Deploy and both public SHA surfaces
-before independent QA starts. Live coach acceptance remains pending.
+The final documentation handoff passed main CI
+[40017158637](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40017158637)
+and Auto Deploy
+[40017515089](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40017515089).
+Both public surfaces returned HTTP 200 with final SHA
+`b60e5fa7ec9d3b2d3ce411d0b4f2c4ac37b26762`. Independent QA confirmed
+normal terminalization in three of three first coach turns, but rejected the
+missing linked-strategy readback. The current section records the next repair.
 
 ## FINN read-only coach multi-source tool rounds (23 oktober 2026)
 
