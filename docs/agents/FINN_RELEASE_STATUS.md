@@ -4,9 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN evaluation-to-read boundary (23 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Branch: `codex/finn-evaluation-read-boundary`.
+Independent browser QA on deployed `65225c314b08f8e4afa3bb4453ec4d0dc6f31dcb`
+returned `NOT_ACCEPTED`: the exact first BTC Friday plan/score/portfolio
+coach question terminalized in two of three fresh conversations with
+`responses_tool_round_limit` (runs
+`finn-v2-run-c67faf685fd54644a54beed05c0f1cfb` and
+`finn-v2-run-5634fbdb5857406dbc62670479d01ed7`). The one substantive
+answer separated Paper cash from bot budget but claimed the linked Friday
+strategy was unavailable; the immediate explicit follow-up found it. AAPL
+plan navigation, historic Paper status and German labels remained green.
+
+The exact question is classified as `evaluate` with plan, scores and portfolio
+entities. The front door had passed read-only mode only for `read` intent, so
+the previous read-only tool-round repair did not apply. This batch makes
+non-mutating evaluations use the same read-only boundary and requires the
+owner-scoped setup/strategy read first when a plan assessment explicitly asks
+about one saved plan. Collection comparisons retain the complete inventory
+route. Explicit mutation requests retain the action proposal and confirmation
+path. Focused tests cover the exact question's classification, the front-door
+tool contract, collection comparison and action exclusion.
+
+In a local account with twenty BTC setups, including competing Monday and
+Friday DCA plans, three independent exact questions completed via API,
+Celery and real Luna/Responses with one dispatch and attempt each. All three
+read the Friday setup and its linked strategy; their traces also read scores,
+market context and portfolio without a proposal or order. This is local
+evidence only. On the final source, a second three-run real-provider probe
+completed each question in one dispatch and one attempt without a proposal or
+order. The full backend suite passed **3813 tests, 4 existing skips**. The
+action matrix, provider regression suite and independent live QA are pending.
+
 ## FINN read-only coach multi-source tool rounds (23 oktober 2026)
 
-Phase: `DEPLOYED_AWAITING_INDEPENDENT_QA`. Product repair:
+Phase: `NOT_ACCEPTED`. Product repair:
 [PR #561](https://github.com/gvangalen/antigravity-trading-tool/pull/561),
 merged as `ad0ae137588c6c04e64a4b7ce434470836b64c51`.
 Independent browser QA on deployed `87051ddc9cea938f1d690053a754ee6d292c1792`
@@ -51,7 +84,9 @@ a live acceptance claim; the prior QA verdict remains `NOT_ACCEPTED`.
 and [Auto Deploy 40010597218](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40010597218)
 all succeeded. Backend health and frontend build-info both returned HTTP 200
 with product SHA `ad0ae137588c6c04e64a4b7ce434470836b64c51`.
-Independent live QA is pending on the final public SHA after this status update.
+The final public SHA was `65225c314b08f8e4afa3bb4453ec4d0dc6f31dcb`.
+Independent QA found the original coach failure in two of three fresh
+conversations. The next section records the corrected evaluation boundary.
 
 ## FINN plan-navigation crash and read-only coach deadline (23 oktober 2026)
 

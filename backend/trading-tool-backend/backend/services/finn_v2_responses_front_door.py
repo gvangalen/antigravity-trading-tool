@@ -105,6 +105,17 @@ def _proposal_explicitly_excluded(message: str) -> bool:
     ))
 
 
+def _is_read_only_coach_turn(
+    *, polarity: str | None, imperative_operation: str | None,
+    explicit_closed_review_read: bool = False,
+) -> bool:
+    """A plan assessment reads evidence even when its intent is evaluation."""
+    return bool(
+        explicit_closed_review_read
+        or (polarity in {"read", "evaluate"} and not imperative_operation)
+    )
+
+
 def _explicit_create_operation_request(message: str) -> str | None:
     """Recognize a fresh registry creation request across draft domains.
 
@@ -1002,7 +1013,15 @@ class FinnResponsesFrontDoor:
             self.reads.verified_review_id = previous_closed_review_id
         # "bevestigde les" describes a stored lesson; it is not an instruction
         # to confirm an action. Keep this explicit dossier request read-only.
-        is_read_request = (request_facts.action_polarity == "read" and not imperative_operation) or explicit_closed_review_read
+        is_read_request = (
+            (request_facts.action_polarity == "read" and not imperative_operation)
+            or explicit_closed_review_read
+        )
+        is_read_only_turn = _is_read_only_coach_turn(
+            polarity=request_facts.action_polarity,
+            imperative_operation=imperative_operation,
+            explicit_closed_review_read=explicit_closed_review_read,
+        )
         if request_facts.action_polarity == "execute" and not imperative_operation:
             # An execution request without a supported action contract must
             # never be converted into an unrelated proposal by tool selection.
@@ -3012,11 +3031,17 @@ class FinnResponsesFrontDoor:
                 and pending_operation is None and not resuming_clarification
                 else "get_saved_setup_inventory"
                 if normalized_inventory_read and pending_operation is None
-                and not resuming_clarification else None
+                and not resuming_clarification
+                else "get_active_plan_and_strategy"
+                if is_read_only_turn and request_facts.action_polarity == "evaluate"
+                and not (collection_cue or requests_comparison(message))
+                and {"plan", "setup", "strategy"}.intersection(request_facts.explicit_entities)
+                and pending_operation is None and not resuming_clarification
+                else None
             ),
             rejection_feedback=rejection_feedback,
             model_led_coach=getattr(self, "model_led_coach", False),
-            read_only_turn=is_read_request or bool(unsupported_pair),
+            read_only_turn=is_read_only_turn or bool(unsupported_pair),
             open_draft_available=bool(conversation_context.get("proposal_revision")),
             catalog_boundary_only=bool(unsupported_pair),
         )

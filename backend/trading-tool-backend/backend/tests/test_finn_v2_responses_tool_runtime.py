@@ -24,7 +24,7 @@ from backend.services.finn_v2_responses_proposal_selection import FinnResponsesP
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
     _explicit_strategy_proposal_request, _explicit_create_operation_request,
-    _explicit_fresh_create_operation_request,
+    _explicit_fresh_create_operation_request, _is_read_only_coach_turn,
 )
 from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
@@ -12295,6 +12295,55 @@ def test_read_only_coach_can_explain_a_failed_read_at_the_round_limit():
     assert fake.requests[0]["parallel_tool_calls"] is True
     assert fake.requests[-1]["tool_choice"] == "none"
     assert fake.requests[-1]["tools"] == []
+
+
+def test_evaluative_plan_question_uses_read_only_coach_boundary():
+    from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+
+    message = (
+        "Ik twijfel of ik vandaag €75 extra in BTC moet stoppen omdat de koers stijgt. "
+        "Hoe past dat bij mijn vrijdagplan, de huidige scores en mijn portefeuille? "
+        "Geef geen koopopdracht; benoem wat je wel en niet zeker weet."
+    )
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+
+    assert facts.action_polarity == "evaluate"
+    assert {"plan", "scores", "portfolio"}.issubset(set(facts.explicit_entities))
+    assert _is_read_only_coach_turn(
+        polarity=facts.action_polarity, imperative_operation=None,
+    ) is True
+    assert _is_read_only_coach_turn(
+        polarity="create", imperative_operation="create_setup",
+    ) is False
+    assert _is_read_only_coach_turn(
+        polarity="evaluate", imperative_operation="update_strategy",
+    ) is False
+
+
+def test_front_door_requires_plan_read_for_multisource_evaluation(monkeypatch):
+    message = (
+        "Ik twijfel of ik vandaag €75 extra in BTC moet stoppen omdat de koers stijgt. "
+        "Hoe past dat bij mijn vrijdagplan, de huidige scores en mijn portefeuille? "
+        "Geef geen koopopdracht; benoem wat je wel en niet zeker weet."
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="eval-plan-read")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees je plan en de beschikbare gegevens.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=message, instructions="Lees feiten", conversation_context={}, verified_asset="BTC",
+    ))
+
+    assert captured["model_led_coach"] is True
+    assert captured["read_only_turn"] is True
+    assert captured["required_read_tool_name"] == "get_active_plan_and_strategy"
 
 
 def test_read_only_coach_batches_independent_evidence_reads_in_one_provider_round():
