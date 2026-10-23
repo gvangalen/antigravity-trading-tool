@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN evaluation-to-read boundary (23 oktober 2026)
 
-Phase: `DEPLOYMENT_PENDING`. Product repair:
+Phase: `QA_PENDING`. Product repair:
 [PR #563](https://github.com/gvangalen/antigravity-trading-tool/pull/563),
 merged as `8337414508d7a90fe92a042b75b0ae6a93eb8a2d`.
 Independent browser QA on deployed `65225c314b08f8e4afa3bb4453ec4d0dc6f31dcb`
@@ -46,8 +46,20 @@ The worker-driven action matrix passed **16/16**, plus **19/19** adapter
 checks, with zero broker orders, Live calls or production connections
 (artifact SHA-256
 `9a2e34813f14828a0c8cd5dfe67ea76ad6a0d39a466ad0cf4a1e2f00e85bf501`).
-PR CI passed. The last main CI, Auto Deploy, public SHA verification and
-independent live QA are pending; this is not a live acceptance claim.
+PR CI passed, as did main CI
+[40015412961](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40015412961)
+and Auto Deploy
+[40015763168](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40015763168)
+for product SHA `8337414508d7a90fe92a042b75b0ae6a93eb8a2d`.
+The release-record commit then passed main CI
+[40015970052](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40015970052)
+and Auto Deploy
+[40016346683](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40016346683).
+Backend health and frontend build-info both returned HTTP 200 with SHA
+`57e8ebae0e89654dcfaf39b8472557a4ea1118be` on 23 October 2026.
+The documentation handoff commit containing this paragraph gets its own SHA;
+Build verifies that last main CI, Auto Deploy and both public SHA surfaces
+before independent QA starts. Live coach acceptance remains pending.
 
 ## FINN read-only coach multi-source tool rounds (23 oktober 2026)
 
