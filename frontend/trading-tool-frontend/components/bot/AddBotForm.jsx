@@ -248,8 +248,10 @@ const AddBotForm = forwardRef(function AddBotForm({
   const cadenceSpendLabel = copy.dailyLimitLabel || "Daily spending limit";
   const cadenceSpendHelp = copy.dailyLimitHelp || "The most this bot may spend in one calendar day.";
 
-  const getStrategyType = (s) =>
-    (s?.strategy_type || s?.type || "manual").toUpperCase();
+  const getStrategyType = (s) => {
+    const type = String(s?.strategy_type || s?.type || "manual").toLowerCase();
+    return copy.strategyTypes?.[type] || (type === "manual" ? copy.modeManual : type);
+  };
 
   const validateForm = useCallback(() => {
     if (formRef.current && !formRef.current.reportValidity()) {

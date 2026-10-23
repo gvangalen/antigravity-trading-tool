@@ -16,6 +16,8 @@ test("budget increases ask for confirmation before contacting the server", () =>
   assert.equal(increasesBotBudgetRisk({ ...saved, max_order_eur: 0 }, saved), true);
   assert.equal(increasesBotBudgetRisk({ ...saved, max_asset_exposure_pct: 0 }, saved), false);
   assert.equal(increasesBotBudgetRisk(saved, saved), false);
+  const unlimited = { ...saved, total_eur: 0, daily_limit_eur: 0, max_order_eur: 0 };
+  assert.equal(increasesBotBudgetRisk({ ...unlimited, total_eur: 50, daily_limit_eur: 25, max_order_eur: 25 }, unlimited), false);
 });
 
 test("preserves the typed bot risk acknowledgement instead of flattening it to a generic error", () => {

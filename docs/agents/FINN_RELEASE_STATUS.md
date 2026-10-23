@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN coach, setupmatch en Paper-beslisstatus (23 oktober 2026)
+
+Phase: `BUILD_VALIDATED_AWAITING_CI`. Branch: `codex/finn-coach-full-flow-fix`.
+Independent desktop QA on public SHA `ffc5baa311138fd869cb05ec94069b035327a986`
+found an AAPL card claiming matching setup conditions without a complete score,
+a BTC plan highlighted on the AAPL plan page, a natural reference to the
+Friday plan resolving to a Monday setup, and a paused Paper bot whose last
+decision card contradicted its persisted decision history. QA also found
+technical labels and an incorrect budget-widening warning. The prior verdict
+remains `NOT_ACCEPTED` for a complete external coach test.
+
+This candidate makes the Analysis match card depend on a complete daily Score
+2.0 benchmark and refreshes its active-setup read when the score revision
+changes. My Plan selects its highlighted plan within the current asset. The
+bot page gives FINN the selected bot's owner-linked asset, setup and strategy;
+an explicit saved weekday reference outranks stale page context and asks for
+clarification when it identifies multiple setups. A paused bot shows a dated,
+clearly historical Paper decision rather than claiming no decision exists.
+The English DCA reason and raw form labels are localized. Setting a positive
+money cap after an unlimited zero cap is treated as a restriction, while
+removing a positive cap still requires risk acknowledgement.
+
+The local runtime previously left `FINN_MINIMAL_READ_ANSWERS` unset although
+production defaults it to `1`. Its legacy verifier timed out on a synthetic
+read-only FOMO question after correctly reading the Friday setup, producing a
+false parity failure. The local starter now defaults to the production read
+boundary. With that parity restored, the same worker/Responses question
+completed with one dispatch and one attempt, read the saved Friday setup and
+linked strategy rather than the stale Monday setup, treated the Paper budget
+as a limit rather than cash, and made no proposal or order.
+
+Measured local evidence so far: root backend suite **3802 passed, 4 existing
+skips**; worker-driven action matrix **16/16** and adapter suite **19/19**;
+final production-equivalent matrix artifact SHA-256 `1e232c90078480efb2e878438fc64b836dd8d8fe575c943a477b86b5d0fd8475`,
+with zero broker orders, Live trading calls, Live bots or production
+connections. Frontend typecheck, i18n, command, proposal, setup and targeted
+regression tests passed; the production web build and high-severity audit
+passed. The real Responses development selector passed **20/20** and
+regression **109/109**, both with zero provider, schema, timeout, parse or
+validation failures. CI, deployment and independent live QA are still
+pending. No new live behavior is claimed in this section.
+
 ## FINN strategy continuity and QA fault handoff (22 October 2026)
 
 Phase: `ACCEPTED` for the agreed 17-case strategy-continuity scope. The product repair merged through

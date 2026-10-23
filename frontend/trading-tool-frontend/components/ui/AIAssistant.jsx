@@ -15,7 +15,7 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
-import { normalizeScopedAssetSymbol, resolveFinnContextSymbol, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
+import { normalizeScopedAssetSymbol, resolveFinnBotContextSymbol, resolveFinnContextSymbol, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
@@ -715,9 +715,16 @@ function AIAssistantContent({
 
   const getContext = () => {
     const routeSymbol = normalizeScopedAssetSymbol(searchParams.get("symbol") || searchParams.get("asset"));
-    const resolvedWorkspaceSymbol = resolveFinnContextSymbol({
+    const botPage = pathname === "/bot";
+    const contextualSetup = botPage ? activeBot?.strategy?.setup || null : activeSetup;
+    const contextualStrategy = botPage ? activeBot?.strategy || null : null;
+    const resolvedWorkspaceSymbol = botPage ? resolveFinnBotContextSymbol({
+      bot: activeBot,
+      routeSymbol,
+      selectedAsset: globalSymbol,
+    }) : resolveFinnContextSymbol({
       urlSymbol: routeSymbol,
-      activeSetupSymbol: activeSetup?.symbol,
+      activeSetupSymbol: contextualSetup?.symbol,
       selectedAsset: globalSymbol,
     });
 
@@ -747,13 +754,13 @@ function AIAssistantContent({
         (pathname.includes("dashboard") || pathname === "/"
           ? t?.common?.week || "Week"
           : t?.common?.day || "Day"),
-      setup_id: getActiveSetupId(activeSetup),
-      setup_type: activeSetup?.setup_type || activeSetup?.type || null,
-      setup_symbol: activeSetup?.symbol || null,
-      setup_timeframe: activeSetup?.timeframe || null,
-      bot_id: activeBot?.id || activeBot?.bot_id || focusedBotId || null,
-      strategy_id: activeSetup?.strategy_id || null,
-      setup_name: searchParams.get("name") || activeSetup?.name || null,
+      setup_id: getActiveSetupId(contextualSetup),
+      setup_type: contextualSetup?.setup_type || contextualSetup?.type || null,
+      setup_symbol: contextualSetup?.symbol || null,
+      setup_timeframe: contextualSetup?.timeframe || null,
+      bot_id: (botPage ? activeBot?.id || activeBot?.bot_id : focusedBotId) || null,
+      strategy_id: contextualStrategy?.id || contextualSetup?.strategy_id || null,
+      setup_name: botPage ? contextualSetup?.name || null : searchParams.get("name") || contextualSetup?.name || null,
       finn_draft: finnDraft,
     };
   };

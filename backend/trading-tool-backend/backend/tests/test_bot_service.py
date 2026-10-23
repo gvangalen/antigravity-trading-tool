@@ -1759,6 +1759,20 @@ def test_bot_update_pressure_event_detects_budget_live_and_mode_risk():
     assert any("mode verhoogd" in reason for reason in event["reasons"])
 
 
+def test_setting_positive_caps_from_unlimited_does_not_require_risk_acknowledgement():
+    service = BotService(_FakeSession())
+    existing = {
+        "id": 9, "symbol": "BTC", "is_live": False,
+        "budget_total_eur": 0, "budget_daily_limit_eur": 0,
+        "budget_max_order_eur": 0,
+    }
+    updates = {
+        "budget_total_eur": 50, "budget_daily_limit_eur": 25,
+        "budget_max_order_eur": 25,
+    }
+    assert service._bot_update_pressure_event(existing, {**existing, **updates}, updates) is None
+
+
 def test_live_manual_order_requires_idempotency_and_risk_acknowledgement():
     service = BotService(_FakeSession())
     service.repository = _ManualOrderRepo()

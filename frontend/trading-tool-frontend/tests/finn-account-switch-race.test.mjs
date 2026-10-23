@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   normalizeScopedAssetSymbol,
+  resolveFinnBotContextSymbol,
   resolveFinnContextSymbol,
   resolveScopedAssetStatus,
   shouldBlockFinnSubmission,
@@ -73,6 +74,12 @@ test("BTC-user logout to AAPL-user direct /bot keeps FINN blocked during hydrati
     resolveFinnContextSymbol({ urlSymbol: null, activeSetupSymbol: null, selectedAsset: "AAPL" }),
     "AAPL",
   );
+});
+
+test("selected bot determines FINN asset even when the route still names a previous bot", () => {
+  const ethBot = { symbol: "ETH", strategy: { setup: { symbol: "ETH" } } };
+  assert.equal(resolveFinnBotContextSymbol({ bot: ethBot, routeSymbol: "BTC", selectedAsset: "BTC" }), "ETH");
+  assert.equal(resolveFinnBotContextSymbol({ bot: null, routeSymbol: "BTC", selectedAsset: "ETH" }), "BTC");
 });
 
 test("direct /bot route never falls back to BTC when no user-scoped symbol is resolved", () => {

@@ -13,6 +13,8 @@ export default function BotHistoryTable({
   const copy = t?.botPage?.history || {};
   const focusCopy = t?.botPage?.focus || {};
   const riskCodes = focusCopy.riskCodes || {};
+  const localizeReason = (value) => value === "Scheduled DCA amount selected from the confirmed plan"
+    ? focusCopy.scheduledDcaReason : value;
   const confidenceLabels = t?.botPage?.agentCard?.confidenceLabels || {};
 
   return (
@@ -98,7 +100,7 @@ export default function BotHistoryTable({
                     return hasAmounts ? `${label}: ${formatCurrency(Number(item.from_amount_eur), locale)} → ${formatCurrency(Number(item.to_amount_eur), locale)}` : label;
                   }).join(" · ")
                 : riskCodes[safety.reason_code] || riskCodes[guardrailResult.blocked_by] || (h.is_trade ? copy.tradeExecutedReason : null)
-                  || h.reasons?.find((item) => typeof item === "string" && item.trim() && !["{}", "[]", "null"].includes(item.trim()))
+                  || localizeReason(h.reasons?.find((item) => typeof item === "string" && item.trim() && !["{}", "[]", "null"].includes(item.trim())))
                   || guardrailResult.reason
                   || (status === "executed" ? copy.executedDecisionReason : copy.reasonNotRecorded));
               const dateValue = h.is_trade ? h.created_at : safety.checked_at || h.decision_ts || h.created_at || h.date;

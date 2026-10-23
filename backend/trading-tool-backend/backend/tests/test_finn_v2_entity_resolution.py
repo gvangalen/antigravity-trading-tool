@@ -99,6 +99,41 @@ class _FakeBotRepo:
         return []
 
 
+def test_saved_weekday_reference_outranks_stale_page_setup_and_bot():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 11, "name": "BTC Monday", "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "1"},
+        {"id": 12, "name": "BTC Friday", "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "5"},
+    ])
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+
+    selected = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=388,
+        selector={"asset": "BTC", "setup_id": 11, "bot_id": 170, "bot_name": "Matrix Bot"},
+        message="Wat zegt mijn vrijdagplan en Paper-botbudget?",
+    ))
+
+    assert selected["setup_id"] == 12
+    assert "bot_id" not in selected
+    assert "bot_name" not in selected
+
+
+def test_saved_weekday_reference_asks_when_more_than_one_plan_matches():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 11, "name": "BTC Friday A", "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "5"},
+        {"id": 12, "name": "BTC Friday B", "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "5"},
+    ])
+    with pytest.raises(LookupError, match="setup_ambiguous"):
+        asyncio.run(service.enrich_tool_selector_from_message(
+            user_id=388, selector={"asset": "BTC"}, message="Lees mijn vrijdagplan.",
+            skip_entities=frozenset({"strategy", "bot"}),
+        ))
+
+
 def test_entity_resolution_prefers_explicit_graph_links_for_asset():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()
