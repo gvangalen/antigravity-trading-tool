@@ -51,10 +51,11 @@ def _seed_fixture() -> tuple[int, int, str]:
             cur.execute(
                 """INSERT INTO setups (
                     user_id,name,symbol,timeframe,setup_type,dca_frequency,
+                    min_benchmark_score,
                     min_macro_score,min_technical_score,min_market_score,
                     created_at,last_validated)
                    VALUES (%s,'Local stale Smart DCA','ETH','1D','dca','daily',
-                           0,0,0,%s,%s) RETURNING id""",
+                           0,0,0,0,%s,%s) RETURNING id""",
                 (user_id, now, now),
             )
             setup_id = int(cur.fetchone()[0])

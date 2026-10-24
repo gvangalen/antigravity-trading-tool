@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timedelta, timezone
+import asyncio
 
 import pytest
 
@@ -8,6 +10,7 @@ from backend.services.providers.twelve_data_technical_indicator_adapter import (
     TwelveDataTechnicalIndicatorAdapter,
 )
 from backend.services.providers.twelve_data_response_cache import TwelveDataResponseCache
+from backend.utils.scoring_utils import score_source_is_fresh
 
 
 @pytest.fixture(autouse=True)
@@ -35,8 +38,6 @@ def test_provider_symbol_normalizes_crypto_pairs_for_twelve_data():
 
 
 def test_technical_reading_carries_underlying_candle_date():
-    import asyncio
-
     adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
 
     async def value(_asset, _indicator):
@@ -55,8 +56,6 @@ def test_technical_reading_carries_underlying_candle_date():
 
 
 def test_crypto_technical_reading_uses_exchange_candle_time():
-    import asyncio
-
     adapter = TwelveDataTechnicalIndicatorAdapter(api_key="")
     adapter.api_key = ""
 
@@ -74,8 +73,6 @@ def test_crypto_technical_reading_uses_exchange_candle_time():
 
 
 def test_technical_failover_uses_same_provider_for_value_and_source_time():
-    import asyncio
-
     adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
 
     async def unavailable_exchange(_asset, _indicator):
@@ -96,7 +93,72 @@ def test_technical_failover_uses_same_provider_for_value_and_source_time():
     adapter._get_binance_candles = wrong_exchange_candles
     reading = asyncio.run(adapter.fetch_indicator_reading(_asset(), "rsi"))
     assert reading["value"] == 44.0
-    assert reading["observed_at"].date().isoformat() == "2026-10-02"
+    assert reading["observed_at"] == datetime(2026, 10, 2, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+
+def test_completed_crypto_day_is_fresh_during_following_afternoon():
+    saturday = datetime(2026, 10, 24, 15, 0, tzinfo=timezone.utc)
+    friday_open = datetime(2026, 10, 23, 0, 0, tzinfo=timezone.utc)
+    friday_close = datetime(2026, 10, 23, 23, 59, 59, 999000, tzinfo=timezone.utc)
+
+    assert not score_source_is_fresh("technical", "ma_200", friday_open, symbol="BTC", now=saturday)
+    assert score_source_is_fresh("technical", "ma_200", friday_close, symbol="BTC", now=saturday)
+
+
+def test_twelve_data_crypto_uses_completed_daily_candle_only():
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+    today = datetime.now(timezone.utc).date()
+    yesterday = today - timedelta(days=1)
+    candles = [
+        {"close": 100.0, "source_time": yesterday.isoformat()},
+        {"close": 200.0, "source_time": today.isoformat()},
+    ]
+
+    completed = adapter._completed_crypto_daily_candles(candles)
+
+    assert [row["close"] for row in completed] == [100.0]
+    assert datetime.fromisoformat(completed[0]["source_time"]) == datetime.combine(
+        today, datetime.min.time(), timezone.utc,
+    ) - timedelta(microseconds=1)
+
+
+def test_binance_crypto_excludes_open_day_and_uses_close_timestamp(monkeypatch):
+    import httpx
+
+    today_start = datetime.combine(datetime.now(timezone.utc).date(), datetime.min.time(), timezone.utc)
+    prior_start = today_start - timedelta(days=1)
+    prior_close_ms = int(today_start.timestamp() * 1000) - 1
+    open_close_ms = int((today_start + timedelta(days=1)).timestamp() * 1000) - 1
+
+    def row(open_at, close_at, price):
+        return [int(open_at.timestamp() * 1000), str(price), str(price), str(price), str(price), "100", close_at]
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, params):
+            return httpx.Response(200, request=httpx.Request("GET", url, params=params), json=[
+                row(prior_start, prior_close_ms, 100),
+                row(today_start, open_close_ms, 200),
+            ])
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_technical_indicator_adapter.httpx.AsyncClient", Client,
+    )
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="")
+    adapter.api_key = ""
+
+    candles = asyncio.run(adapter._get_binance_candles("BTCUSDT"))
+
+    assert [candle["close"] for candle in candles] == [100.0]
+    assert candles[0]["source_time"] == prior_close_ms
 
 
 def test_twelve_data_transport_does_not_log_query_parameter_credentials():

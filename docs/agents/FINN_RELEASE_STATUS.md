@@ -4,9 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Closed crypto daycandles for Score 2.0 technical indicators (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATED`, awaiting PR CI and Auto Deploy. Product branch:
+`codex/ma200-refresh`. On the
+existing BTC Analyse view, the MA200 measurement was marked stale because its
+source moment was 23 October 02:00 CEST: the **opening** of the Friday UTC
+daycandle. On Saturday afternoon that timestamp exceeded the 36-hour crypto
+technical-source limit, although the completed Friday candle closed about
+15 hours earlier. The technical category and combined benchmark therefore
+remained unavailable. The worker still requires actual source evidence; no
+freshness limit or missing-score rule was relaxed.
+
+The provider adapter now excludes unfinished crypto daycandles and attaches the
+completed candle's close moment to both its value and its source evidence.
+The local real Binance read returned Friday 23:59:59 UTC and passed the
+unchanged 36-hour freshness check. An isolated local owner-bound MA200 write
+produced an indicator score of **65/100**; the subsequent Score 2.0 rebuild
+stored **Technical 65/100**, with Market and Macro correctly unknown because
+they were not configured in that fixture. A separate stale-source Paper probe
+held the bot active with amount €0, no order, no ledger entry and unchanged
+virtual cash. That probe was corrected to include an actual benchmark
+condition; its previous fixture had none and could only return `unconfigured`.
+
+Focused backend tests passed **35/35** and the final root backend suite passed
+**3,873 tests with 4 existing skips**. Frontend typecheck, i18n lint/tests,
+command/proposal/setup tests, production build and high-severity audit passed
+with zero vulnerabilities. The isolated local worker/Responses action matrix
+passed **16/16** contracts and **19/19** adapters, with no broker order, Live
+call, Live bot or production connection (artifact SHA-256
+`142d59b0292cea602d2a65fa77ab4b186faaee00c199fcfee1fee38a98812b85`).
+Real Luna/Responses selector evaluations passed **20/20** development and
+**109/109** regression cases, with 100% operation accuracy and zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`4863bcd602c3fc3bf4ef71d071a0ddb704efcde1ff45618b9b716dcf784daea3`
+and `686b1b9e4ac8ec60e0ccedccde7a7fff8f316ed1255c1960cada6781c2ffce85`).
+This is local evidence, not proof of production worker completion or an
+authenticated live BTC score. Independent QA must check the final deployed
+SHA and the saved BTC MA200 score/source moment.
+
 ## FINN watchlist refresh and closed-session stock quote (24 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`, pending independent authenticated QA. Product branch:
+Phase: `ACCEPTED` for the targeted independent authenticated browser scope. Product branch:
 `codex/finn-watchlist-refresh-and-stock-quote`; merged through
 [PR #588](https://github.com/gvangalen/antigravity-trading-tool/pull/588)
 as `df176b70d3e2c789c216d094eeb19f8621baf6f7`. FINN's successful
@@ -37,8 +76,12 @@ main CI [40104088448](https://github.com/gvangalen/antigravity-trading-tool/acti
 and Auto Deploy [40104273783](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40104273783)
 passed. Public backend health and frontend build-info both returned HTTP 200
 with the exact product merge SHA. The final status-only revision and its last
-CI/deployment identity still need verification before QA handoff; independent
-live browser acceptance remains open.
+CI/deployment identity completed on live SHA
+`6bfdaf9c1ec9c4784a21427b4b5ed2643365e0df`. Independent QA confirmed
+MSFT watchlist add/remove via FINN appeared immediately without refresh, AAPL's
+last Friday quote on Saturday used the closed-exchange label in NL/EN/DE,
+and no score or trade was invented. A much older quote and an in-session
+lagging quote were not represented in that fixture and remain unproved.
 
 ## Separate optional bot cap from assigned Paper cash (24 oktober 2026)
 
