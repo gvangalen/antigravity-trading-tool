@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN owner-scoped plan evidence and model-owned coaching (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/finn-plan-evidence-fixes`.
-Production has not received this candidate; independent live QA is pending.
+Phase: `DEPLOYED_QA_PENDING`. Product repair:
+[PR #569](https://github.com/gvangalen/antigravity-trading-tool/pull/569),
+merged as `4698f360dca4a5fd813506f9cb113e68fdd892a6`.
+Independent authenticated live QA is pending.
 
 This batch carries the typed plan/market comparison, quote and FX provenance for
 Paper orders, and the indicator score-impact preview. The proposed fixed
@@ -34,7 +36,15 @@ A three-turn synthetic local AAPL conversation read the saved stop-loss,
 reviewed the plan and handled a follow-up. All three turns completed with
 owner-scoped evidence, no proposal, and terminal text equal to Luna's draft
 (artifact SHA-256 `147d8246390dcb3b04b30753f2057dab62d5ef714952ea227dfb0176590d300d`).
-PR CI, deployment identity and independent browser QA remain open.
+PR CI passed all five checks. Main CI
+[40073501934](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40073501934)
+and Auto Deploy
+[40073695051](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40073695051)
+succeeded for product SHA `4698f360dca4a5fd813506f9cb113e68fdd892a6`.
+The public backend health and frontend build-info both returned HTTP 200 and
+that exact SHA on 24 October 2026. The next status-document commit will
+create a new deployment SHA; independent QA must use that final public
+revision after its own CI and Auto Deploy complete.
 
 ## FINN open-bot plan lineage (23 oktober 2026)
 
