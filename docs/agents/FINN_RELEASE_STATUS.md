@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Separate optional bot cap from assigned Paper cash (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product branch:
+Phase: `NOT_ACCEPTED` for complete external acceptance; the targeted bot
+explanation and three trader checks passed independent live QA. Product branch:
 `codex/finn-paper-funding-facts`; merged through
 [PR #585](https://github.com/gvangalen/antigravity-trading-tool/pull/585)
 as `711143cfd7293fec61406f2cecfa8269bc6e804e`.
@@ -40,8 +41,21 @@ main CI [40096842381](https://github.com/gvangalen/antigravity-trading-tool/acti
 and Auto Deploy [40097037003](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40097037003)
 passed. Public backend health and frontend build-info returned HTTP 200 and
 the exact product merge SHA. This status update creates a new final SHA;
-Build must verify its last main CI, Auto Deploy and both public markers before
-handing that revision to independent QA. Independent live QA is pending.
+Build verified the last main CI, Auto Deploy and both public markers before
+handing final live SHA `87570158128a0168fd1c6bedb2d470044ed37c51` to the
+existing independent QA agent. In separate fresh chats, both open-bot questions
+named `QA Review Paper 2410` and its linked strategy, identified pause and
+unassigned Paper cash, and did not call the disabled €0 cap a blocker. An
+explicit AAPL-bot reference prevailed over the open BTC page, and a direct
+Paper-buy request produced no proposal or order. Analyse/FINN scored only
+configured indicators, the report labeled setup proximity as no entry signal,
+and the Volume preview disclosed possible setup/bot impact before saving.
+The positive AAPL USD-entry comparison remains unproved on the live QA
+fixture, which has no saved entry, stop or targets and had a stale quote. QA
+also observed three HTTP 502 responses during an initial page transition at
+13:21:21 UTC; the pages recovered, and two further complete navigation rounds
+in a clean authenticated tab produced no 502 or new console errors. Those
+observations do not establish the underlying cause or structural reliability.
 
 ## Owner-bound open-bot evidence bundle (24 oktober 2026)
 
