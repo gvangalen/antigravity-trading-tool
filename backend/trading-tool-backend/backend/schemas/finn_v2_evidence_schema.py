@@ -223,6 +223,7 @@ class LinkedBotData(BaseModel):
     is_live: bool = False
     mode: Optional[str] = None
     budget_total_eur: Optional[float] = None
+    budget_limit_enabled: Optional[bool] = None
     paper_initial_cash_eur: Optional[float] = None
 
 

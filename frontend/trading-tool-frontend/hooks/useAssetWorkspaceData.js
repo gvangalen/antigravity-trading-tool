@@ -16,6 +16,7 @@ import {
   materializeWorkspaceEvidence,
   pendingWorkspaceEvidenceCategories,
 } from "@/lib/workspace/pendingEvidence.mjs";
+import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 300_000;
@@ -218,10 +219,12 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const lastForegroundRefreshAtRef = useRef(0);
   const lastSuccessfulRefreshAtRef = useRef(cachedWorkspace ? Date.now() : 0);
   const requestSequenceRef = useRef(0);
+  const currentWorkspaceKeyRef = useRef(workspaceKey);
   const currentScopeRef = useRef(snapshotScope);
   const stateScopeRef = useRef(snapshotScope);
   currentScopeRef.current = snapshotScope;
   const assetSymbol = String(symbol || "BTC").toUpperCase();
+  currentWorkspaceKeyRef.current = workspaceKey;
 
   useEffect(() => {
     if (stateScopeRef.current === snapshotScope) return;
@@ -240,11 +243,15 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   }, [snapshotScope, cachedWorkspace, cachedWatchlist]);
 
   useEffect(() => {
-    const fallbackWorkspace = stateScopeRef.current === snapshotScope ? latestWorkspaceRef.current : null;
+    requestSequenceRef.current += 1;
+    activeReloadPromiseRef.current = null;
+    const fallbackWorkspace = stateScopeRef.current === snapshotScope && matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods)
+      ? latestWorkspaceRef.current : null;
     const fallbackWatchlist = Array.isArray(fallbackWorkspace?.watchlist?.rows)
       ? fallbackWorkspace.watchlist.rows
       : stateScopeRef.current === snapshotScope ? latestWatchlistRef.current : [];
-    const nextWorkspace = cachedWorkspace || fallbackWorkspace || null;
+    const nextWorkspace = matchesWorkspaceAsset(cachedWorkspace, assetSymbol, periods)
+      ? cachedWorkspace : fallbackWorkspace;
     const nextWatchlist = cachedWorkspace
       ? cachedWatchlist
       : Array.isArray(fallbackWatchlist)
@@ -261,15 +268,15 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     latestWorkspaceRef.current = nextWorkspace;
     latestWatchlistRef.current = nextWatchlist;
     lastSuccessfulRefreshAtRef.current = cachedWorkspace ? Date.now() : 0;
-  }, [cachedWatchlist, cachedWorkspace, workspaceKey, snapshotScope]);
+  }, [assetSymbol, cachedWatchlist, cachedWorkspace, periods, workspaceKey, snapshotScope]);
 
   useEffect(() => {
     if (workspaceScope !== snapshotScope) return;
     latestWorkspaceRef.current = workspace || null;
-    if (workspace) {
+    if (matchesWorkspaceAsset(workspace, assetSymbol, periods)) {
       setWorkspaceSnapshot(assetSymbol, workspace, snapshotScope);
     }
-  }, [assetSymbol, snapshotScope, workspace, workspaceScope]);
+  }, [assetSymbol, periods, snapshotScope, workspace, workspaceScope]);
 
   useEffect(() => {
     if (workspaceScope !== snapshotScope) return;
@@ -303,8 +310,8 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       return cached;
     }
 
-    if (activeReloadPromiseRef.current) {
-      return activeReloadPromiseRef.current;
+    if (activeReloadPromiseRef.current?.key === workspaceKey) {
+      return activeReloadPromiseRef.current.promise;
     }
 
     if (
@@ -352,7 +359,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     const reloadPromise = (async () => {
       try {
       const payload = await request.promise;
-      if (requestId !== requestSequenceRef.current || currentScopeRef.current !== snapshotScope) return null;
+      if (requestId !== requestSequenceRef.current || currentScopeRef.current !== snapshotScope || currentWorkspaceKeyRef.current !== workspaceKey) return null;
       setFreshCache(workspaceCache, workspaceKey, payload);
       lastSuccessfulRefreshAtRef.current = Date.now();
       if (fallbackStartedAtRef.current) {
@@ -368,8 +375,9 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       setIsFallbackWorkspace(false);
       return payload;
     } catch (nextError) {
-      if (requestId !== requestSequenceRef.current || currentScopeRef.current !== snapshotScope) return null;
-      const liveWorkspace = latestWorkspaceRef.current;
+      if (requestId !== requestSequenceRef.current || currentScopeRef.current !== snapshotScope || currentWorkspaceKeyRef.current !== workspaceKey) return null;
+      const liveWorkspace = matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods)
+        ? latestWorkspaceRef.current : null;
       if (liveWorkspace) {
         if (!fallbackStartedAtRef.current) {
           fallbackStartedAtRef.current = Date.now();
@@ -414,7 +422,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       setIsFallbackWorkspace(true);
       return fallback;
     } finally {
-      if (requestId === requestSequenceRef.current && currentScopeRef.current === snapshotScope) {
+      if (requestId === requestSequenceRef.current && currentScopeRef.current === snapshotScope && currentWorkspaceKeyRef.current === workspaceKey) {
         if (!getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS)) {
           setLoading(false);
           setWatchlistLoading(false);
@@ -423,18 +431,19 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
           setWatchlistLoading(false);
         }
       }
-      if (activeReloadPromiseRef.current === reloadPromise) {
+      if (activeReloadPromiseRef.current?.promise === reloadPromise) {
         activeReloadPromiseRef.current = null;
       }
     }
     })();
 
-    activeReloadPromiseRef.current = reloadPromise;
+    activeReloadPromiseRef.current = { key: workspaceKey, promise: reloadPromise };
     return reloadPromise;
-  }, [cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey, snapshotScope]);
+  }, [assetSymbol, cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey, snapshotScope]);
 
   useEffect(() => {
-    const baseWorkspace = latestWorkspaceRef.current;
+    const baseWorkspace = matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods)
+      ? latestWorkspaceRef.current : null;
     const baseWatchlist = Array.isArray(latestWatchlistRef.current) ? latestWatchlistRef.current : [];
     const symbolsNeedingQuotes = new Set();
 
@@ -471,7 +480,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         })
       );
 
-      if (cancelled || currentScopeRef.current !== snapshotScope) return;
+      if (cancelled || currentScopeRef.current !== snapshotScope || currentWorkspaceKeyRef.current !== workspaceKey) return;
 
       const quoteMap = new Map(
         settled
@@ -482,6 +491,9 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       if (!quoteMap.size) return;
 
       setWorkspace((currentWorkspace) => {
+        if (!matchesWorkspaceAsset(currentWorkspace || latestWorkspaceRef.current, assetSymbol, periods)) {
+          return currentWorkspace;
+        }
         const mergedWorkspace = mergeQuoteBackfill(
           currentWorkspace || latestWorkspaceRef.current,
           quoteMap,
@@ -503,7 +515,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     return () => {
       cancelled = true;
     };
-  }, [assetSymbol, workspaceKey, watchlist, snapshotScope]);
+  }, [assetSymbol, periods, workspaceKey, watchlist, snapshotScope]);
 
   const refreshWorkspaceIfStale = useCallback(() => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
@@ -530,6 +542,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   }, [workspaceKey]);
 
   useEffect(() => {
+    if (!matchesWorkspaceAsset(workspace, assetSymbol, periods)) return;
     const pendingCategories = pendingWorkspaceEvidenceCategories(workspace);
     if (pendingCategories.length === 0) {
       evidenceMaterializationKeyRef.current = "";
@@ -571,7 +584,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       cancelled = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
-  }, [assetSymbol, reloadWorkspace, workspace, workspaceKey]);
+  }, [assetSymbol, periods, reloadWorkspace, workspace, workspaceKey]);
 
   useEffect(() => {
     return subscribeWorkspaceRefresh((payload) => {
@@ -608,10 +621,12 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     deps: [symbol, periods.market, periods.macro, periods.technical, watchlistKey],
   });
 
+  const visibleWorkspace = workspaceScope === snapshotScope && matchesWorkspaceAsset(workspace, assetSymbol, periods)
+    ? workspace : null;
   return {
-    workspace: workspaceScope === snapshotScope ? workspace : null,
+    workspace: visibleWorkspace,
     watchlist: workspaceScope === snapshotScope ? watchlist : [],
-    loading,
+    loading: loading || !visibleWorkspace,
     watchlistLoading,
     error,
     isFallbackWorkspace,

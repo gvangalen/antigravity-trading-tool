@@ -67,6 +67,23 @@ def test_linked_bot_read_keeps_verified_parent_names_and_mode_for_coaching():
     assert facts["is_live"] is False
 
 
+def test_manual_paper_zero_budget_is_disabled_cap_not_blocked_cash():
+    result = asyncio.run(BotToolAdapter().execute_linked_bot(
+        bot={
+            "id": 33, "name": "QA Paper Bot", "symbol": "BTC",
+            "is_active": False, "is_live": False, "mode": "manual",
+            "budget_total_eur": 0, "paper_initial_cash_eur": 0,
+        },
+        resolution_source="workspace_bot_id",
+    ))
+    facts = FinnV2ReasoningContextService(session=object())._sanitize_facts(
+        result["data"].dict(), "read_linked_bot",
+    )
+    assert facts["budget_total_eur"] == 0
+    assert facts["budget_limit_enabled"] is False
+    assert facts["paper_initial_cash_eur"] == 0
+
+
 def test_bot_parent_reads_scope_both_joins_to_owner():
     class Session:
         def __init__(self):

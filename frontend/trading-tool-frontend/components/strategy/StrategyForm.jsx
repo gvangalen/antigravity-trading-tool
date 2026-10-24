@@ -364,24 +364,24 @@ const StrategyForm = forwardRef(function StrategyForm({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold">{copy.assetLabel || "Asset"}</span>
+        <label className="flex min-w-0 flex-col gap-2">
+          <span className="block text-sm font-semibold">{copy.assetLabel || "Asset"}</span>
           <input
             name="symbol"
             value={form.symbol}
             onChange={handleChange}
             placeholder={copy.assetPlaceholder || "BTC"}
-            className="input"
+            className="input w-full"
           />
         </label>
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold">{copy.timeframeLabel || "Timeframe"}</span>
+        <label className="flex min-w-0 flex-col gap-2">
+          <span className="block text-sm font-semibold">{copy.timeframeLabel || "Timeframe"}</span>
           <input
             name="timeframe"
             value={form.timeframe}
             onChange={handleChange}
             placeholder={copy.timeframePlaceholder || "4H"}
-            className="input"
+            className="input w-full"
           />
         </label>
       </div>

@@ -41,6 +41,24 @@ export function resolveFinnBotContextSymbol({ bot = null, routeSymbol = null, se
   });
 }
 
+export function resolveFinnBotPageContext({ search = "", activeBot = null, selectedAsset = null } = {}) {
+  const params = new URLSearchParams(search);
+  const requestedBotId = Number(params.get("bot_id"));
+  const routeBotId = Number.isSafeInteger(requestedBotId) && requestedBotId > 0 ? requestedBotId : null;
+  const selectedBot = routeBotId && Number(activeBot?.id || activeBot?.bot_id) !== routeBotId
+    ? null : activeBot;
+  const botId = routeBotId || Number(selectedBot?.id || selectedBot?.bot_id) || null;
+  return {
+    botId,
+    bot: selectedBot,
+    symbol: resolveFinnBotContextSymbol({
+      bot: selectedBot,
+      routeSymbol: normalizeScopedAssetSymbol(params.get("symbol") || params.get("asset")),
+      selectedAsset,
+    }),
+  };
+}
+
 export function shouldBlockFinnSubmission({
   isAuthenticated = false,
   assetStatus = "unconfigured",

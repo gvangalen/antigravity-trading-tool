@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Trader evidence follow-up: asset switching, bot context, zero cap (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch: `codex/trader-evidence-followup`.
+Independent authenticated QA on live SHA
+`c43f64f014203b987d38675fecb45d18bc96aaab` found three remaining
+inconsistencies after the original four-point trader repair: an old AAPL quote
+briefly appeared below a newly selected BTC heading, FINN did not identify the
+open BTC bot when asked about "deze bot", and FINN treated a manual Paper
+bot's €0 optional budget cap as an order block even though the UI correctly
+said that zero disables the cap. QA also found cramped asset/timeframe labels
+in the strategy drawer. Its earlier AAPL quote value now appeared as US$347,73
+in Analyse and FINN; a fresh saved AAPL USD entry comparison remains unproved
+in that QA fixture.
+
+The workspace hook now scopes visible and fallback data, async completions,
+quote backfill and evidence materialization to the selected asset and periods.
+The chat resolves the open bot from the current URL, checks its identity
+against provider state, and sends its owner-validated ID and symbol instead of
+a stale asset override. FINN receives the typed fact that a zero total budget
+cap is disabled and separate from Paper cash and pause status. The strategy
+drawer separates asset and timeframe labels from their inputs.
+
+On this local source, root pytest passed **3846 tests, 4 existing skips**.
+Frontend typecheck, i18n lint/tests, command/proposal tests, asset-switch
+regressions, production build and high-severity audit passed (zero high
+vulnerabilities). The local FastAPI/Celery/PostgreSQL/Redis/Responses action
+matrix passed **16/16** contracts and **19/19** adapter checks with zero
+broker orders, Live calls, Live bots or production connections (artifact
+SHA-256 `44a49eb04bda74c792c95d7e49e60bd553b5434278cec26ee2c3d056fe595554`).
+Real Responses selector evaluations passed **20/20** development and **109/109**
+regression cases, with 100% operation accuracy and zero provider, schema,
+parse, validation or timeout failures (artifact SHA-256
+`eee269cc1fc91b86296cb8e9525aa2f6e8e9f62b90efddb90b3a02c4d3f763a1`
+and `388050a8f3a8d2b16735929ef575a067c5cae014769310222548afcff0253d0f`).
+CI, deployment and independent live QA are still pending.
+
 ## AAPL quote parity between Analyse and FINN (24 oktober 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/aapl-price-source-parity`;
