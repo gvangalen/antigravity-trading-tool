@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { useAsset } from "@/app/providers/AssetProvider";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
@@ -46,7 +47,7 @@ import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
-import { benchmarkScaleBands, benchmarkSetupView, withSelectedBenchmarkSetup } from "@/lib/setup/benchmarkScale.mjs";
+import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup } from "@/lib/setup/benchmarkScale.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -1462,10 +1463,7 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
   const eligibleMatches = isDailyBenchmark && Array.isArray(setupMatches) ? setupMatches.filter((match) =>
     String(match?.symbol || "").toUpperCase() === assetSymbol
   ) : [];
-  const selectedMatch = eligibleMatches.find((match) => String(match.setup_id) === String(selectedSetupId))
-    || eligibleMatches.find((match) => match.is_best)
-    || eligibleMatches[0]
-    || null;
+  const selectedMatch = selectedBenchmarkSetupMatch(eligibleMatches, selectedSetupId);
   const view = benchmarkSetupView(currentScore, selectedMatch);
   const scaleBands = benchmarkScaleBands();
   const setupZoneLabel = view.preset
@@ -2328,6 +2326,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user, sessionChecked } = useAuth();
   const { selectedAsset, setSelectedAsset } = useAsset();
   const { symbols: persistedWatchlistSymbols = [], refresh: refreshPersistedWatchlist } = useWatchlist();
   const { locale, t } = useTranslation();
@@ -2335,6 +2334,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const ui = useMemo(() => getUiCopy(locale), [locale]);
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
+  const setupSelectionKey = sessionChecked ? benchmarkSetupSessionKey(user?.id, activeSymbol) : null;
+  const urlSetupId = searchParams.get("benchmarkSetup");
+  const [rememberedSetup, setRememberedSetup] = useState({ key: null, id: null });
+  useEffect(() => {
+    if (!setupSelectionKey) {
+      setRememberedSetup({ key: null, id: null });
+      return;
+    }
+    const id = urlSetupId || window.sessionStorage.getItem(setupSelectionKey);
+    if (urlSetupId) window.sessionStorage.setItem(setupSelectionKey, urlSetupId);
+    setRememberedSetup({ key: setupSelectionKey, id });
+  }, [setupSelectionKey, urlSetupId]);
   const [marketTimeframe, setMarketTimeframe] = useState("day");
   const [macroTimeframe, setMacroTimeframe] = useState("day");
   const [technicalTimeframe, setTechnicalTimeframe] = useState("day");
@@ -2896,10 +2907,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         onSaveWeights={saveWeights}
         onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
         onSelectSetup={(setupId) => {
+          if (setupSelectionKey) {
+            window.sessionStorage.setItem(setupSelectionKey, String(setupId));
+            setRememberedSetup({ key: setupSelectionKey, id: String(setupId) });
+          }
           const query = withSelectedBenchmarkSetup(searchParams.toString(), setupId);
           router.replace(`${pathname || "/asset"}?${query}`, { scroll: false });
         }}
-        selectedSetupId={searchParams.get("benchmarkSetup")}
+        selectedSetupId={urlSetupId || (rememberedSetup.key === setupSelectionKey ? rememberedSetup.id : null)}
         setupMatches={setupMatches}
         setupMatchError={setupMatchError}
         ui={ui}

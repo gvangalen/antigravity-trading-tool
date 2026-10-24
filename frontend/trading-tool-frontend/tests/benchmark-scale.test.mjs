@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { benchmarkScaleBands, benchmarkSetupView, withSelectedBenchmarkSetup } from "../lib/setup/benchmarkScale.mjs";
+import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup } from "../lib/setup/benchmarkScale.mjs";
 
 test("benchmark scale follows the saved setup presets without gaps", () => {
   const bands = benchmarkScaleBands();
@@ -61,4 +61,19 @@ test("the chosen setup survives refresh in the URL without replacing asset conte
   assert.equal(params.get("benchmarkSetup"), "42");
   assert.equal(new URLSearchParams(withSelectedBenchmarkSetup(query, null)).has("benchmarkSetup"), false);
   assert.equal(new URLSearchParams(withSelectedBenchmarkSetup(query, "not-an-id")).has("benchmarkSetup"), false);
+});
+
+test("a remembered setup selection is isolated by authenticated owner and asset", () => {
+  assert.equal(benchmarkSetupSessionKey(17, "btc"), "benchmarkSetup:17:BTC");
+  assert.equal(benchmarkSetupSessionKey(17, "ETH"), "benchmarkSetup:17:ETH");
+  assert.equal(benchmarkSetupSessionKey(18, "BTC"), "benchmarkSetup:18:BTC");
+  assert.equal(benchmarkSetupSessionKey(null, "BTC"), null);
+  assert.equal(benchmarkSetupSessionKey(17, "BTC?symbol=ETH"), null);
+});
+
+test("returning from another page restores only a setup in the owner's loaded list", () => {
+  const ownerMatches = [{ setup_id: 10, is_best: true }, { setup_id: 20, is_best: false }];
+  assert.equal(selectedBenchmarkSetupMatch(ownerMatches, 20).setup_id, 20);
+  assert.equal(selectedBenchmarkSetupMatch(ownerMatches, 999).setup_id, 10);
+  assert.equal(selectedBenchmarkSetupMatch([], 20), null);
 });

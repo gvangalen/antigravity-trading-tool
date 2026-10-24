@@ -4,9 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Analyse benchmark navigation follow-up (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Candidate branch:
+`codex/benchmark-zone-navigation-fix`. Independent authenticated browser QA
+marked live SHA `d4e48baa023da15115353d2554aa1d51be896569`
+`NOT_ACCEPTED`: the selected second BTC setup survived refresh, but ordinary
+navigation through Mijn Plan back to Analyse omitted `benchmarkSetup` from the
+URL and selected the first setup again. The 390 px five-zone scale, incomplete
+AAPL state, no-condition setup, NL/EN/DE copy and console checks passed.
+
+The selected setup is now remembered by authenticated user and asset for the
+browser session. The URL remains a shareable/refreshable selection; on return
+without that parameter the remembered selection is used, and only an ID in the
+current owner's loaded setup matches can be displayed. No score, setup-match,
+bot or FINN model logic changed. Focused setup tests, i18n/command/proposal
+tests, typecheck, i18n lint, production build and high-severity audit passed.
+CI, deployment identity and independent authenticated browser QA remain pending.
+
 ## Analyse benchmark QA follow-up (24 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`, awaiting targeted independent authenticated browser QA.
+Phase: `NOT_ACCEPTED` after targeted independent authenticated browser QA.
 Product branch: `codex/benchmark-zone-qa-fixes`; merged through
 [PR #594](https://github.com/gvangalen/antigravity-trading-tool/pull/594)
 as product SHA `a462fb9c86ecdb22a089cbc991e89a29f53e0478`.
