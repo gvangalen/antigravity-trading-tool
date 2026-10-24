@@ -4,13 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL quote parity between Analyse and FINN (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch: `codex/aapl-price-source-parity`;
+product commit: `45e288925`. CI, deployment and independent live QA are pending.
+The preceding independent QA found that Analyse's header and watchlist showed
+US$347,69, while FINN read a Twelve Data price of US$347,73 for the same AAPL
+source moment. Analyse selected the newest receipt-time row, whereas FINN
+required a provider-dated row with its own quote currency. The workspace now
+uses the same provider-dated selection and source moment as FINN. Its header
+and watchlist render the selected row's quote currency rather than assuming
+USD. Unverified historical rows are not silently presented as verified prices.
+
+Local PostgreSQL proof inserted a newer unverified AAPL receipt alongside a
+provider-dated USD row: FINN's singular repository read, the workspace bulk
+read and the workspace projection all selected US$347,72501. Root pytest
+passed **3845 tests, 4 existing skips**. Frontend typecheck, i18n lint/tests,
+command/proposal tests, production build and high-severity audit passed.
+The local action matrix passed **16/16** plus **19/19** adapter checks, with
+zero broker orders, Live calls or production connections (artifact SHA-256
+`860cba0cfb277d36828c6a640135859074c3d90cad69782322ef5424179079e3`).
+Real Responses selector evaluations passed **20/20** development and **109/109**
+regression cases, with 100% operation accuracy and zero provider or schema
+failures (artifact SHA-256
+`84f443c603cb6dfc1a62c7279bb5b6ea403e4ee93afe3e54fdff0e2bdf4acae5` and
+`2594e6f46235e21b26e394d5a1ade5085443fe9713f4dce08bbf7149b293e76a`).
+CI, deployment and independent live QA remain pending.
+
 ## Trader evidence across coach, Analyse, report and indicator preview (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/trader-evidence-four-points`;
+Phase: `NOT_ACCEPTED` for the complete independent four-point scope, with
+three observed passes and one new price-parity defect. Product branch:
+`codex/trader-evidence-four-points`;
 product commit: `9526573cf`, merged through
 [PR #571](https://github.com/gvangalen/antigravity-trading-tool/pull/571) as
 `246db47f5a6504fdf4fba5dc96afd54860ab9d18`. Independent authenticated
-QA is pending. This is one repair batch for four findings from the daily Paper
+desktop QA tested final live SHA `3b9985f152e6f231dc7c3b513f7eb1c85767f80e`.
+This is one repair batch for four findings from the daily Paper
 trader: AAPL price/currency claims, Analyse source wording, report proximity
 semantics, and Volume impact before adding an indicator.
 
@@ -42,9 +72,18 @@ and Auto Deploy
 [40077898023](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40077898023)
 succeeded on `246db47f5a6504fdf4fba5dc96afd54860ab9d18`. Public backend
 health and frontend build-info both returned HTTP 200 and that exact SHA on
-24 October 2026. This status update will create its own SHA; Build must wait
-for its final main CI and Auto Deploy before assigning independent QA.
-Independent acceptance is not recorded for this batch yet.
+24 October 2026. The subsequent status-only commit produced final live SHA
+`3b9985f152e6f231dc7c3b513f7eb1c85767f80e`; main CI
+[40078200735](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40078200735)
+and Auto Deploy
+[40078394189](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40078394189)
+succeeded, and public backend/frontend both reported that SHA. Independent
+QA saw correct AAPL read-only restraint, evidence-bound Analyse wording,
+report proximity wording at 83/100, and a non-mutating Volume preview. It
+could not test a fresh AAPL USD-entry comparison because its strategy lacks
+an entry and the stock quote was stale. It also found the Analyse/FINN AAPL
+quote discrepancy described above. The configuration-load failure was not
+induced live; disabled saving on that path has code evidence only.
 
 ## FINN owner-scoped plan evidence and model-owned coaching (24 oktober 2026)
 

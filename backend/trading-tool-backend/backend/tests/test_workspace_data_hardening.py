@@ -392,6 +392,28 @@ def test_workspace_quote_reads_do_not_fall_back_to_live_provider_calls():
     assert result == {}
 
 
+def test_workspace_and_finn_select_the_same_provider_dated_quote():
+    observed = datetime(2026, 10, 23, 19, 59, tzinfo=timezone.utc)
+    quoted = SimpleNamespace(
+        symbol="AAPL", price=Decimal("347.72501"), change_24h=Decimal("1.01"),
+        volume=None, timestamp=observed + timedelta(minutes=2), source_observed_at=observed,
+        quote_currency="USD", price_provider="Twelve Data",
+    )
+    service = object.__new__(WorkspaceDataService)
+    service.market = SimpleNamespace(
+        get_latest_quoted_snapshots=AsyncMock(return_value=[quoted]),
+        get_latest_snapshots=AsyncMock(side_effect=AssertionError("unverified receipt-time row")),
+    )
+
+    result = asyncio.run(service._resolve_quote_map(["AAPL"]))
+
+    service.market.get_latest_quoted_snapshots.assert_awaited_once_with(["AAPL"])
+    service.market.get_latest_snapshots.assert_not_awaited()
+    assert result["AAPL"]["price"] == 347.72501
+    assert result["AAPL"]["timestamp"] == observed
+    assert result["AAPL"]["quote_currency"] == "USD"
+
+
 def test_workspace_macro_rows_follow_active_asset_symbol():
     service = object.__new__(WorkspaceDataService)
     service.macro = SimpleNamespace(
@@ -614,6 +636,10 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
                 raise RuntimeError("quote timestamp expired after lookup")
             return self._timestamp
 
+        source_observed_at = None
+        quote_currency = "USD"
+        price_provider = "QA provider"
+
     quote = ExpiringQuote()
     service = object.__new__(WorkspaceDataService)
     service.session = SimpleNamespace(execute=AsyncMock())
@@ -650,6 +676,7 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
     assert result["quote"]["price"] == 64000.0
     assert result["quote"]["change_24h"] == 1.5
     assert result["quote"]["volume"] == 1200.0
+    assert result["quote"]["quote_currency"] == "USD"
     assert "regime" not in result
     assert "finn" not in result
     service.intelligence.get_market_intelligence.assert_not_awaited()

@@ -42,6 +42,33 @@ class MarketDataRepository:
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
+    async def get_latest_quoted_snapshots(self, symbols: Sequence[str]) -> Sequence[MarketData]:
+        """Return the same provider-dated quote used by FINN for each asset."""
+        normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))
+        if not normalized:
+            return []
+        requested = values(column("symbol", String), name="requested").data(
+            [(symbol,) for symbol in normalized]
+        ).alias("requested")
+        latest = (
+            select(MarketData.id)
+            .where(MarketData.symbol == requested.c.symbol)
+            .where(MarketData.source_observed_at.is_not(None))
+            .where(MarketData.quote_currency.is_not(None))
+            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
+            .limit(1)
+            .correlate(requested)
+            .lateral()
+        )
+        stmt = (
+            select(MarketData)
+            .select_from(requested)
+            .join(latest, true())
+            .join(MarketData, MarketData.id == latest.c.id)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def get_latest_snapshots(self, symbols: Sequence[str]) -> Sequence[MarketData]:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))
         if not normalized:
