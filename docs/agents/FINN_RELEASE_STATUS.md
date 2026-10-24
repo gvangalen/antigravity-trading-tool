@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse dated market context (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/analysis-market-context`.
+Phase: `LIVE_CANDIDATE`. Product branch: `codex/analysis-market-context`,
+merged through [PR #600](https://github.com/gvangalen/antigravity-trading-tool/pull/600)
+as product SHA `4c81ec5581748722bd1763f903cb49cdd88f8bed`.
 Analyse now places a compact market-context card between the Score 2.0
 benchmark and indicator groups. It describes only owner-scoped readings already
 in the asset workspace: a dated, usable 24-hour quote change and, when the
@@ -21,8 +23,16 @@ Navigation triggers no new provider or OpenAI call for this card.
 Local frontend i18n, command, proposal and setup tests, typecheck, i18n lint,
 production build and high-severity audit passed. Focused tests cover fresh
 MA200 plus quote, a closed exchange session, stale/missing/future sources,
-an MA200-only reading, and suppression of weekly aggregates. CI, deployment
-identity and independent authenticated browser QA remain pending.
+an MA200-only reading, and suppression of weekly aggregates. PR CI
+[40123988035](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40123988035),
+main CI [40124252812](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40124252812)
+and Auto Deploy [40124470375](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40124470375)
+passed. Public backend health and frontend build-info each returned HTTP 200
+with the product SHA. This status-only update creates a later final SHA; Build
+must verify the last main CI, Auto Deploy and both public markers on that exact
+revision before handing it to independent QA. QA should inspect fresh and
+missing/stale cases, closed US equity sessions, responsive layout and NL/EN/DE
+copy. Independent browser QA is pending.
 
 ## Analyse benchmark navigation follow-up (24 oktober 2026)
 
