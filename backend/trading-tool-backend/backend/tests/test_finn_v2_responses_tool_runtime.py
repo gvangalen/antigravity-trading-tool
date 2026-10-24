@@ -10140,6 +10140,8 @@ def test_portfolio_readback_identifies_each_bot_budget_separately():
     assert result["results"][0]["data"]["bots"][0]["budget_total_eur"] == 600.0
     assert "bots[].budget_total_eur" in result["evidence_boundary"]
     assert "sum across the selected bots" in result["evidence_boundary"]
+    assert "budget_total_eur=0 disables only that optional cap" in result["evidence_boundary"]
+    assert "missing Paper cash is a separate reason" in result["evidence_boundary"]
 
 
 def test_plan_evidence_coverage_distinguishes_saved_facts_from_full_assessment():

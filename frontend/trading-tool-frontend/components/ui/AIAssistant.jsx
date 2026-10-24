@@ -15,7 +15,7 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
-import { normalizeScopedAssetSymbol, resolveFinnBotContextSymbol, resolveFinnContextSymbol, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
+import { normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
@@ -714,15 +714,19 @@ function AIAssistantContent({
   }
 
   const getContext = () => {
-    const routeSymbol = normalizeScopedAssetSymbol(searchParams.get("symbol") || searchParams.get("asset"));
     const botPage = pathname === "/bot";
-    const contextualSetup = botPage ? activeBot?.strategy?.setup || null : activeSetup;
-    const contextualStrategy = botPage ? activeBot?.strategy || null : null;
-    const resolvedWorkspaceSymbol = botPage ? resolveFinnBotContextSymbol({
-      bot: activeBot,
-      routeSymbol,
-      selectedAsset: globalSymbol,
-    }) : resolveFinnContextSymbol({
+    // Bot selection uses replaceState, so Next's searchParams can lag the
+    // bot that is already open on screen. Read the visible URL at submission.
+    const routeParams = botPage && typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search) : searchParams;
+    const routeSymbol = normalizeScopedAssetSymbol(routeParams.get("symbol") || routeParams.get("asset"));
+    const botContext = botPage ? resolveFinnBotPageContext({
+      search: routeParams.toString(), activeBot, selectedAsset: globalSymbol,
+    }) : null;
+    const contextualBot = botPage ? botContext.bot : activeBot;
+    const contextualSetup = botPage ? contextualBot?.strategy?.setup || null : activeSetup;
+    const contextualStrategy = botPage ? contextualBot?.strategy || null : null;
+    const resolvedWorkspaceSymbol = botPage ? botContext.symbol : resolveFinnContextSymbol({
       urlSymbol: routeSymbol,
       activeSetupSymbol: contextualSetup?.symbol,
       selectedAsset: globalSymbol,
@@ -758,7 +762,7 @@ function AIAssistantContent({
       setup_type: contextualSetup?.setup_type || contextualSetup?.type || null,
       setup_symbol: contextualSetup?.symbol || null,
       setup_timeframe: contextualSetup?.timeframe || null,
-      bot_id: (botPage ? activeBot?.id || activeBot?.bot_id : focusedBotId) || null,
+      bot_id: botPage ? botContext.botId : focusedBotId || null,
       strategy_id: contextualStrategy?.id || contextualSetup?.strategy_id || null,
       setup_name: botPage ? contextualSetup?.name || null : searchParams.get("name") || contextualSetup?.name || null,
       finn_draft: finnDraft,
@@ -766,6 +770,9 @@ function AIAssistantContent({
   };
 
   const context = getContext();
+  useEffect(() => {
+    setChatAssetOverride(null);
+  }, [pathname, context.bot_id, context.symbol]);
   const currentConversationStorageKey = React.useMemo(() => {
     const userScope = String(user?.id || "anonymous");
     const section = String(context.page_type || pathname || "overview").toLowerCase();
@@ -1396,7 +1403,15 @@ function AIAssistantContent({
         locale, typeof document === "undefined" ? null : document.documentElement.lang,
       );
       const requestContext = { ...baseRequestContext, ...commandContext, locale: submissionLocale,
-        symbol: chatAssetOverride || commandContext.symbol || baseRequestContext.symbol };
+        symbol: pathname === "/bot" && baseRequestContext.bot_id
+          ? baseRequestContext.symbol
+          : chatAssetOverride || commandContext.symbol || baseRequestContext.symbol };
+      if (pathname === "/bot" && context.bot_id) {
+        requestContext.bot_id = context.bot_id;
+        requestContext.symbol = context.symbol;
+        requestContext.setup_id = context.setup_id;
+        requestContext.strategy_id = context.strategy_id;
+      }
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"
@@ -2240,7 +2255,7 @@ function AIAssistantContent({
   const compactFinnHeader = [
     "FINN",
     workspaceContextLabel,
-    String(chatAssetOverride || context.symbol || globalSymbol || "BTC").toUpperCase(),
+    String((pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || "BTC").toUpperCase(),
   ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"
@@ -2377,12 +2392,13 @@ function AIAssistantContent({
                   <span aria-hidden="true">·</span>
                   <select
                     aria-label={at("uiText.assetContext")}
-                    value={chatAssetOverride || context.symbol || globalSymbol || ""}
+                    value={(pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || ""}
+                    disabled={pathname === "/bot" && Boolean(context.bot_id)}
                     onChange={(event) => setChatAssetOverride(event.target.value || null)}
-                    className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none dark:text-slate-300"
+                    className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none disabled:cursor-default dark:text-slate-300"
                   >
-                    {!FINN_ASSETS.some((asset) => asset.symbol === (chatAssetOverride || context.symbol || globalSymbol)) ? (
-                      <option value={chatAssetOverride || context.symbol || globalSymbol || ""}>{chatAssetOverride || context.symbol || globalSymbol || "—"}</option>
+                    {!FINN_ASSETS.some((asset) => asset.symbol === (pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol || globalSymbol)) ? (
+                      <option value={(pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || ""}>{(pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || "—"}</option>
                     ) : null}
                     {FINN_ASSETS.map((asset) => <option key={asset.symbol} value={asset.symbol}>{asset.symbol}</option>)}
                   </select>

@@ -594,6 +594,8 @@ class FinnV2ReasoningContextService:
                     "is_live",
                     "mode",
                     "budget_total_eur",
+                    "budget_limit_enabled",
+                    "paper_initial_cash_eur",
                 ]
                 if payload.get(key) is not None
             }

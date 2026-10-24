@@ -19,6 +19,7 @@ class BotToolAdapter:
             is_live=bool(bot.get("is_live")),
             mode=bot.get("mode"),
             budget_total_eur=bot.get("budget_total_eur"),
+            budget_limit_enabled=(float(bot["budget_total_eur"]) > 0) if bot.get("budget_total_eur") is not None else None,
             paper_initial_cash_eur=bot.get("paper_initial_cash_eur"),
         )
         return {

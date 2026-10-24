@@ -317,6 +317,9 @@ class FinnResponsesReadExecutor:
         if call.name in {"get_portfolio_and_exposure", "get_saved_bots"}:
             output["evidence_boundary"] = (
                 "Each bots[].budget_total_eur is that saved bot's own budget limit. "
+                "For a manual Paper bot, budget_total_eur=0 disables only that optional cap; "
+                "it does not itself prevent orders and does not supply cash. A paused bot or "
+                "missing Paper cash is a separate reason why an order cannot run. "
                 "global.total_budget_limit is the sum across the selected bots, not a "
                 "separate budget for one bot. When asked about a particular bot's budget, "
                 "use its matching bot row and never say its budget is missing when that "
@@ -345,6 +348,14 @@ class FinnResponsesReadExecutor:
                 "false, do not infer cash or equity from budgets. Translate technical field "
                 "names such as as_of into natural language."
             )
+        if any(item["scope"] == "read_linked_bot" and item["status"] == "completed" for item in results):
+            output["evidence_boundary"] = (
+                output.get("evidence_boundary", "") +
+                " budget_limit_enabled=false means that this bot's optional total budget cap "
+                "is disabled; it does not itself block a manual Paper order. "
+                "paper_initial_cash_eur is starting virtual cash, not proof of current cash. "
+                "A budget cap is distinct from current Paper cash and from whether the bot is paused."
+            ).strip()
         if any(
             item["scope"] == "read_asset_scores" and item["status"] == "completed"
             for item in results

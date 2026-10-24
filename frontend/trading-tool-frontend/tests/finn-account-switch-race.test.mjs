@@ -3,11 +3,23 @@ import assert from "node:assert/strict";
 
 import {
   normalizeScopedAssetSymbol,
+  resolveFinnBotPageContext,
   resolveFinnBotContextSymbol,
   resolveFinnContextSymbol,
   resolveScopedAssetStatus,
   shouldBlockFinnSubmission,
 } from "../lib/finnAssetIsolation.js";
+import { matchesWorkspaceAsset } from "../lib/workspace/workspaceAssetScope.mjs";
+
+test("asset switch cannot show an AAPL workspace beneath a BTC heading", () => {
+  const periods = { market: "day", macro: "day", technical: "day" };
+  const previousWorkspace = { symbol: "AAPL", periods, quote: { price: 347.73 } };
+  const currentWorkspace = { symbol: "BTC", periods, quote: { price: 80606 } };
+  assert.equal(matchesWorkspaceAsset(previousWorkspace, "BTC", periods), false);
+  assert.equal(matchesWorkspaceAsset(currentWorkspace, "BTC", periods), true);
+  assert.equal(matchesWorkspaceAsset(currentWorkspace, "BTC", { ...periods, technical: "week" }), false);
+  assert.equal(matchesWorkspaceAsset(null, "BTC"), false);
+});
 
 test("BTC-user logout to AAPL-user direct /bot keeps FINN blocked during hydration race", () => {
   const btcUserState = {
@@ -80,6 +92,18 @@ test("selected bot determines FINN asset even when the route still names a previ
   const ethBot = { symbol: "ETH", strategy: { setup: { symbol: "ETH" } } };
   assert.equal(resolveFinnBotContextSymbol({ bot: ethBot, routeSymbol: "BTC", selectedAsset: "BTC" }), "ETH");
   assert.equal(resolveFinnBotContextSymbol({ bot: null, routeSymbol: "BTC", selectedAsset: "ETH" }), "BTC");
+});
+
+test("visible bot URL outranks a stale bot provider and old asset selection", () => {
+  const staleAaplBot = { id: 71, symbol: "AAPL" };
+  const context = resolveFinnBotPageContext({
+    search: "?symbol=BTC&bot_id=132",
+    activeBot: staleAaplBot,
+    selectedAsset: "AAPL",
+  });
+  assert.equal(context.botId, 132);
+  assert.equal(context.bot, null);
+  assert.equal(context.symbol, "BTC");
 });
 
 test("direct /bot route never falls back to BTC when no user-scoped symbol is resolved", () => {
