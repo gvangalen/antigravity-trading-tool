@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN watchlist refresh and closed-session stock quote (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Product branch:
-`codex/finn-watchlist-refresh-and-stock-quote`. FINN's successful
+Phase: `LIVE_CANDIDATE`, pending independent authenticated QA. Product branch:
+`codex/finn-watchlist-refresh-and-stock-quote`; merged through
+[PR #588](https://github.com/gvangalen/antigravity-trading-tool/pull/588)
+as `df176b70d3e2c789c216d094eeb19f8621baf6f7`. FINN's successful
 `watchlist_add` or `watchlist_remove` confirmation now invalidates the shared
 watchlist and causes Analyse to fetch the authoritative list without a page
 refresh. The watchlist GET bypasses browser caching. The Analyse quote card
@@ -30,7 +32,13 @@ Real Luna/Responses selector evaluations passed **20/20** development and
 schema, parse, validation or timeout failures (artifact SHA-256
 `7ad1f23a30413d6cd9c209ddd2dd7704d378278a0c0ecc50faff45e62074e5ea`
 and `d7adad6d5d3142cfb3180917b58e195943ca1e292685d4a7845e450f51b5309a`).
-CI, deployment identity and independent live browser acceptance remain open.
+PR CI [40103883815](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40103883815),
+main CI [40104088448](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40104088448)
+and Auto Deploy [40104273783](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40104273783)
+passed. Public backend health and frontend build-info both returned HTTP 200
+with the exact product merge SHA. The final status-only revision and its last
+CI/deployment identity still need verification before QA handoff; independent
+live browser acceptance remains open.
 
 ## Separate optional bot cap from assigned Paper cash (24 oktober 2026)
 
