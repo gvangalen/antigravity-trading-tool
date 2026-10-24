@@ -12482,7 +12482,8 @@ def test_open_bot_reference_scopes_portfolio_evidence_without_changing_global_to
             "global": {"paper_cash_eur": 300},
             "bots": [
                 {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": 0,
-                 "budget_total_eur": 0, "budget_limit_enabled": False},
+                 "budget_total_eur": 0, "budget_limit_enabled": False,
+                 "is_live": False, "valuation_status": "unfunded"},
                 {"bot_id": 88, "name": "Other Paper", "paper_cash_eur": 300},
             ],
         },
@@ -12491,6 +12492,9 @@ def test_open_bot_reference_scopes_portfolio_evidence_without_changing_global_to
     data = focused["results"][0]["data"]
     assert [row["bot_id"] for row in data["bots"]] == [132]
     assert data["bots"][0]["budget_limit_enabled"] is False
+    assert data["bots"][0]["optional_budget_cap_status"] == "disabled"
+    assert "budget_total_eur" not in data["bots"][0]
+    assert data["bots"][0]["paper_cash_status"] == "not_assigned"
     assert data["global"]["paper_cash_eur"] == 300
     assert data["global_summary_scope"] == "all_bots"
     assert data["focus_status"] == "resolved"
@@ -12510,6 +12514,20 @@ def test_open_bot_reference_does_not_show_another_bot_if_focused_row_is_missing(
     unverified = FinnResponsesFrontDoor._focus_portfolio_on_open_bot(original, None)
     assert unverified["results"][0]["data"]["bots"] == []
     assert unverified["results"][0]["data"]["focus_status"] == "unverified_workspace_bot"
+
+
+def test_open_bot_finance_projection_keeps_an_enabled_cap_and_funded_cash():
+    original = {"status": "completed", "results": [{
+        "scope": "read_portfolio", "status": "completed", "data": {
+            "bots": [{"bot_id": 132, "budget_total_eur": 100,
+                      "budget_limit_enabled": True, "paper_cash_eur": 60,
+                      "is_live": False, "valuation_status": "available"}],
+        },
+    }]}
+    row = FinnResponsesFrontDoor._focus_portfolio_on_open_bot(original, 132)["results"][0]["data"]["bots"][0]
+    assert row["budget_total_eur"] == 100
+    assert row["paper_cash_status"] == "assigned"
+    assert "optional_budget_cap_status" not in row
 
 
 @pytest.mark.parametrize("question,selected_tool", [
@@ -12571,7 +12589,8 @@ def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkey
                     "global": {"paper_cash_eur": 300},
                     "bots": [
                         {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": None,
-                         "budget_total_eur": 0, "budget_limit_enabled": False},
+                         "budget_total_eur": 0, "budget_limit_enabled": False,
+                         "is_live": False, "valuation_status": "unfunded"},
                         {"bot_id": 88, "name": "QA Friday Paper", "paper_cash_eur": 300},
                     ],
                 },
@@ -12610,10 +12629,15 @@ def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkey
                       if item["scope"] == "read_linked_bot")
         assert linked["data"]["name"] == "QA Review Paper"
         assert linked["data"]["budget_limit_enabled"] is False
+        assert linked["data"]["optional_budget_cap_status"] == "disabled"
+        assert "budget_total_eur" not in linked["data"]
     portfolio = next(item["data"] for item in result.response.tool_trace[0]["result"]["results"]
                      if item["scope"] == "read_portfolio")
     assert [row["name"] for row in portfolio["bots"]] == ["QA Review Paper"]
     assert portfolio["bots"][0]["budget_limit_enabled"] is False
+    assert portfolio["bots"][0]["optional_budget_cap_status"] == "disabled"
+    assert "budget_total_eur" not in portfolio["bots"][0]
+    assert portfolio["bots"][0]["paper_cash_status"] == "not_assigned"
     assert portfolio["global_summary_scope"] == "all_bots"
 
 

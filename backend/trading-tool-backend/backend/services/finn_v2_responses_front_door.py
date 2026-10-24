@@ -652,6 +652,15 @@ class FinnResponsesFrontDoor:
         """Keep a singular, owner-verified bot read about the visible bot."""
         projected = []
         for item in read_result.get("results", []):
+            if (bot_id is not None and item.get("scope") == "read_linked_bot"
+                    and isinstance(item.get("data"), dict)
+                    and str(item["data"].get("bot_id")) == str(bot_id)):
+                linked = dict(item["data"])
+                if linked.get("budget_limit_enabled") is False:
+                    linked.pop("budget_total_eur", None)
+                    linked["optional_budget_cap_status"] = "disabled"
+                projected.append({**item, "data": linked})
+                continue
             if item.get("scope") != "read_portfolio" or not isinstance(item.get("data"), dict):
                 projected.append(item)
                 continue
@@ -660,10 +669,23 @@ class FinnResponsesFrontDoor:
             if not isinstance(bots, list):
                 projected.append(item)
                 continue
-            focused = [
-                row for row in bots if isinstance(row, dict)
-                and str(row.get("bot_id")) == str(bot_id)
-            ]
+            focused = []
+            for row in bots:
+                if (bot_id is None or not isinstance(row, dict)
+                        or str(row.get("bot_id")) != str(bot_id)):
+                    continue
+                selected = dict(row)
+                if selected.get("budget_limit_enabled") is False:
+                    selected.pop("budget_total_eur", None)
+                    selected["optional_budget_cap_status"] = "disabled"
+                if selected.get("is_live") is False:
+                    selected["paper_cash_status"] = (
+                        "not_assigned" if selected.get("valuation_status") == "unfunded"
+                        else "zero_cash" if selected.get("paper_cash_eur") == 0
+                        else "assigned" if isinstance(selected.get("paper_cash_eur"), (int, float))
+                        else "unknown"
+                    )
+                focused.append(selected)
             projected.append({**item, "data": {
                 **data, "bots": focused,
                 "focused_bot_id": bot_id,
