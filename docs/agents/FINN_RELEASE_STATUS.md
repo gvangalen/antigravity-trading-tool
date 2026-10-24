@@ -4,9 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Owner-bound open-bot evidence bundle (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch: `codex/finn-open-bot-evidence-bundle`.
+Independent authenticated QA on live SHA
+`c81d18a90f1ed69addf3b75c64fdae37e948a734` returned `NOT_ACCEPTED`
+for the natural paraphrase about the bot on screen. FINN named the correct
+linked strategy but omitted the open bot's name and said there was no virtual
+botbudget before saying the €0 optional cap did not block. The original
+"bot die ik hier bekijk" question, explicit other-bot priority and direct
+Paper-order boundary passed. No order was placed.
+
+The root cause in the read contract is that `get_active_plan_and_strategy`
+could be selected for a visible-bot question yet return setup and strategy
+without the bot row or current Paper cash. When the owner-verified open bot is
+the singular target, that same read now includes `read_linked_bot` and
+`read_portfolio`, then scopes the bot rows to the verified ID. The linked-bot
+fact includes the name and `budget_limit_enabled`; the portfolio fact keeps
+Paper cash separate. FINN remains free to write the answer. The extra reads
+are omitted for other named bots, unresolved page bots and pending actions.
+A read-only Security review found no concrete P1/P2 owner-scope or
+action-boundary issue.
+
+Root pytest passed **3869 tests, 4 existing skips**. Frontend typecheck,
+i18n lint/tests, command/proposal tests, production build and high-severity
+audit passed with zero high vulnerabilities. The local worker action matrix
+passed **16/16** contracts and **19/19** adapter checks, with zero broker
+orders, Live calls, Live bots or production connections (artifact SHA-256
+`9243ebd1591b0046731278b03b5938062431e8e029ba9f59f4798447cbddb519`).
+Real Luna/Responses selector evaluations passed **20/20** development and
+**109/109** regression cases, with 100% operation accuracy and zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`0bf7e7907a6cb7220f4397fc4bdb73ebef29b1445e7883fd9e44cc41f0e84002` and
+`4c6f420c7e74bf94e9d992b88b3cdc8958963b8b4661bb026cc77348d3b19b2f`).
+CI, deployment and independent live QA are pending.
+
 ## Visible Paper-bot reference and zero-cap facts (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/finn-visible-bot-reference`;
+Phase: `NOT_ACCEPTED` for the complete independent scope. Product branch: `codex/finn-visible-bot-reference`;
 merged through [PR #581](https://github.com/gvangalen/antigravity-trading-tool/pull/581)
 as `7a7f5c5144eb881714eb67b9db3f585ecd5e1ea9`.
 Independent authenticated QA on live SHA
@@ -42,8 +77,9 @@ main CI [40091869860](https://github.com/gvangalen/antigravity-trading-tool/acti
 and Auto Deploy [40092037848](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40092037848)
 passed. Public backend health and frontend build-info returned HTTP 200 and
 the exact product merge SHA. This status update creates a new final SHA;
-Build will verify its last main CI, Auto Deploy and both public markers before
-handing the exact revision to independent QA. Independent live QA is pending.
+Build verified its last main CI, Auto Deploy and both public markers before
+handing the exact revision to independent QA. QA's failing paraphrase is
+recorded in the current section above.
 
 ## Causal Paper-bot explanation after independent QA (24 oktober 2026)
 
