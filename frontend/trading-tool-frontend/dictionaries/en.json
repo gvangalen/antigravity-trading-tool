@@ -2279,6 +2279,10 @@
   },
   "botPage": {
     "focus": {
+      "paperAaplMarketClosed": "Market closed: no current AAPL quote is available. The Paper bot will not place a new order now.",
+      "paperAaplMarketClosedNextStep": "Wait for the market to open and a current quote to become available.",
+      "paperPriceUnavailable": "No current market price is available for this Paper bot. No new order will be placed.",
+      "paperPriceUnavailableNextStep": "Check the quote source again when current market data is available.",
       "eyebrow": "AUTOMATION",
       "title": "My bots",
       "subtitle": "See what your bot does and where attention is needed.",

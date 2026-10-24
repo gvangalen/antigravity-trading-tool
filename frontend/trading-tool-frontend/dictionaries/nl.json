@@ -2280,6 +2280,10 @@
   },
   "botPage": {
     "focus": {
+      "paperAaplMarketClosed": "Beurs gesloten: er is geen actuele AAPL-koers beschikbaar. De Paper-bot plaatst nu geen nieuwe order.",
+      "paperAaplMarketClosedNextStep": "Wacht tot de beurs opent en er weer een actuele koers beschikbaar is.",
+      "paperPriceUnavailable": "Geen actuele marktprijs beschikbaar voor deze Paper-bot. Er wordt geen nieuwe order geplaatst.",
+      "paperPriceUnavailableNextStep": "Controleer de koersbron opnieuw zodra actuele marktdata beschikbaar is.",
       "eyebrow": "AUTOMATION",
       "title": "Mijn bots",
       "subtitle": "Bekijk wat je bot doet en waar je aandacht nodig is.",

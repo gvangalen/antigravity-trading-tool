@@ -11,6 +11,17 @@ import { openFinnContext } from "@/lib/finnCommandSearch";
 import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
 import { selectLastBotDecision } from "@/lib/bot/lastDecision.mjs";
 
+function isAaplMarketClosed(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", weekday: "short", hour: "2-digit",
+    minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const value = (type) => parts.find((part) => part.type === type)?.value;
+  const weekday = value("weekday");
+  const minutes = Number(value("hour")) * 60 + Number(value("minute"));
+  return weekday === "Sat" || weekday === "Sun" || minutes < 9 * 60 + 30 || minutes >= 16 * 60;
+}
+
 export default function BotFocusView({
   bots, activeBot, onSelectBot, decision, pendingOrder, portfolio, trades, allTrades,
   loading, onLoadBotTrades, onLoadAllTrades, onCreateBot, onOpenSettings,
@@ -55,12 +66,18 @@ export default function BotFocusView({
   const state = orderState || (activeBot?.is_active === false ? "paused" : risk.state || "missing");
   const riskTitle = copy.states?.[state] || state;
   const explanations = Array.isArray(risk.explanations) ? risk.explanations : [];
-  const riskReason = orderState ? copy.reasons?.[orderState]
+  const paperPriceUnavailable = !activeBot?.is_live && risk.reason_code === "market_price_stale" && !orderState;
+  const aaplMarketClosed = paperPriceUnavailable && String(activeBot?.symbol || "").toUpperCase() === "AAPL" && isAaplMarketClosed();
+  const riskReason = aaplMarketClosed ? copy.paperAaplMarketClosed
+    : paperPriceUnavailable ? copy.paperPriceUnavailable
+    : orderState ? copy.reasons?.[orderState]
     : risk.execution_failure || (state === "no_proposal" ? copy.reasons?.no_proposal : null)
       || copy.riskCodes?.[risk.reason_code] || copy.riskCodes?.[explanations[0]?.code]
       || ((state === "allowed" || state === "executed") && explanations.length === 0 ? copy.states?.allowed : null)
       || risk.reason || copy.reasons?.[state] || copy.reasonUnavailable;
-  const nextStepText = orderState ? copy.nextSteps?.[orderState] : copy.nextSteps?.[risk.reason_code] || copy.nextSteps?.[state] || risk.next_step || copy.nextStepFallback;
+  const nextStepText = aaplMarketClosed ? copy.paperAaplMarketClosedNextStep
+    : paperPriceUnavailable ? copy.paperPriceUnavailableNextStep
+    : orderState ? copy.nextSteps?.[orderState] : copy.nextSteps?.[risk.reason_code] || copy.nextSteps?.[state] || risk.next_step || copy.nextStepFallback;
   const pausedPaperWithoutCash = state === "paused" && !activeBot?.is_live
     && (!portfolio?.stats?.paper_cash_configured || Number(portfolio.stats.paper_cash_eur || 0) <= 0);
   const riskTone = state === "blocked" || state === "error" || state === "unknown_exchange_state"
@@ -302,7 +319,8 @@ export default function BotFocusView({
                 <ul className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200" aria-label={copy.adjustmentReasons || "Redenen voor aanpassing of blokkade"}>
                   {explanations.map((item, index) => (
                     <li key={`${item.code || "reason"}-${index}`}>
-                      • {copy.riskCodes?.[item.code] || item.message || copy.reasonUnavailable}
+                      • {paperPriceUnavailable && item.code === "market_price_stale"
+                        ? riskReason : copy.riskCodes?.[item.code] || item.message || copy.reasonUnavailable}
                       {Number.isFinite(Number(item.from_amount_eur)) && Number.isFinite(Number(item.to_amount_eur))
                         ? `: ${money(item.from_amount_eur)} → ${money(item.to_amount_eur)}` : ""}
                     </li>
@@ -347,7 +365,7 @@ export default function BotFocusView({
                 <button type="button" role="tab" aria-selected={activityView === "decisions"} onClick={() => setActivityView("decisions")} className={`pb-2 text-sm font-bold ${activityView === "decisions" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500"}`}>{copy.activityDecisions}</button>
               </div>
               <div className="mt-3 max-h-80 overflow-auto">
-                <BotHistoryTable history={recentActivity.filter((item) => activityView === "trades" ? item.is_trade : !item.is_trade)} emptyMessage={activityView === "trades" ? copy.noTrades : copy.noDecisions} />
+                <BotHistoryTable history={recentActivity.filter((item) => activityView === "trades" ? item.is_trade : !item.is_trade)} emptyMessage={activityView === "trades" ? copy.noTrades : copy.noDecisions} paperPriceReason={!activeBot.is_live ? (aaplMarketClosed ? copy.paperAaplMarketClosed : copy.paperPriceUnavailable) : null} />
               </div>
             </section>
           </article>}

@@ -8,6 +8,7 @@ export default function BotHistoryTable({
   history = [],
   loading = false,
   emptyMessage,
+  paperPriceReason,
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.history || {};
@@ -93,7 +94,8 @@ export default function BotHistoryTable({
                     : formatCurrency(Number(safety.allowed_amount_eur ?? h.amount_eur ?? 0), locale);
               const guardrailExplanations = Array.isArray(safety.explanations) ? safety.explanations
                 : Array.isArray(guardrailResult.explanations) ? guardrailResult.explanations : [];
-              const reason = h.execution_failure || (guardrailExplanations.length > 0
+              const reason = !h.is_trade && paperPriceReason && (safety.reason_code === "market_price_stale" || guardrailResult.blocked_by === "market_price_stale")
+                ? paperPriceReason : h.execution_failure || (guardrailExplanations.length > 0
                 ? guardrailExplanations.map((item) => {
                     const label = riskCodes[item.code] || item.message;
                     const hasAmounts = Number.isFinite(Number(item.from_amount_eur)) && Number.isFinite(Number(item.to_amount_eur));
