@@ -2296,10 +2296,12 @@
   },
   "botPage": {
     "focus": {
-      "paperAaplMarketClosed": "Börse geschlossen: Für AAPL ist kein aktueller Kurs verfügbar. Der Paper-Bot platziert jetzt keine neue Order.",
+      "paperAaplMarketClosed": "Die reguläre AAPL-Börsensitzung ist jetzt geschlossen. Bei der letzten Bot-Bewertung fehlte ein aktueller Kurs; es wurde keine Paper-Order platziert.",
       "paperAaplMarketClosedNextStep": "Warte, bis die Börse öffnet und ein aktueller Kurs verfügbar ist.",
-      "paperPriceUnavailable": "Für diesen Paper-Bot ist kein aktueller Marktpreis verfügbar. Es wird keine neue Order platziert.",
+      "paperAaplMarketClosedHistory": "Zum Zeitpunkt dieser Bewertung war die reguläre AAPL-Börsensitzung geschlossen und kein aktueller Kurs verfügbar. Es wurde keine Paper-Order platziert.",
+      "paperPriceUnavailable": "Bei der letzten Bot-Bewertung fehlte ein aktueller Marktpreis. Es wurde keine Paper-Order platziert.",
       "paperPriceUnavailableNextStep": "Prüfe die Kursquelle erneut, sobald aktuelle Marktdaten verfügbar sind.",
+      "paperPriceUnavailableHistory": "Zum Zeitpunkt dieser Bewertung war kein aktueller Marktpreis verfügbar. Es wurde keine Paper-Order platziert.",
       "eyebrow": "AUTOMATION",
       "title": "Meine Bots",
       "subtitle": "Sieh, was dein Bot tut und wo Aufmerksamkeit nötig ist.",
