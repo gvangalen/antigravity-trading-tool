@@ -146,6 +146,7 @@ function getUiCopy(locale = "nl") {
       benchmarkAssetTitle: (symbol) => `Your ${symbol} benchmark`,
       benchmarkBasis: "Your indicators. Your measure.",
       benchmarkNow: "Now",
+      benchmarkRoundedRule: "Setup zones compare the score rounded to a whole point.",
       benchmarkSetupLabel: "Compare with setup",
       benchmarkSetupZone: "Saved setup condition",
       benchmarkNoSetup: "No saved setup for this asset.",
@@ -323,6 +324,7 @@ function getUiCopy(locale = "nl") {
       benchmarkAssetTitle: (symbol) => `Dein ${symbol}-Benchmark`,
       benchmarkBasis: "Deine Indikatoren. Dein Maßstab.",
       benchmarkNow: "Jetzt",
+      benchmarkRoundedRule: "Setup-Zonen vergleichen den auf ganze Punkte gerundeten Score.",
       benchmarkSetupLabel: "Mit Setup vergleichen",
       benchmarkSetupZone: "Gespeicherte Setup-Bedingung",
       benchmarkNoSetup: "Für dieses Asset ist kein Setup gespeichert.",
@@ -499,6 +501,7 @@ function getUiCopy(locale = "nl") {
     benchmarkAssetTitle: (symbol) => `Jouw ${symbol}-benchmark`,
     benchmarkBasis: "Jouw indicatoren. Jouw meetlat.",
     benchmarkNow: "Nu",
+    benchmarkRoundedRule: "Setupzones vergelijken de op hele punten afgeronde score.",
     benchmarkSetupLabel: "Vergelijk met setup",
     benchmarkSetupZone: "Opgeslagen setupvoorwaarde",
     benchmarkNoSetup: "Voor deze asset is geen setup opgeslagen.",
@@ -1546,7 +1549,7 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
       <div className="px-4 py-4">
         <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
           <strong className="text-[42px] font-black leading-none tracking-tight text-slate-950">
-            {loading && currentScore === null ? "…" : formatScore(currentScore)}
+            {loading && currentScore === null ? "…" : formatBenchmarkScore(currentScore, locale)}
           </strong>
           <div className="pb-0.5">
             <div className="text-[16px] font-bold text-slate-950">
@@ -1560,10 +1563,10 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
 
         <div className="mt-5 overflow-x-auto pb-1">
           <div className="min-w-[560px]">
-            <div className="relative h-12" role="img" aria-label={`${ui.benchmarkScore}: ${currentScore === null ? ui.unavailable : `${formatScore(currentScore)} · ${conditionOptions?.[view.currentBand?.id]?.title || ui.benchmarkCustom(view.currentBand.min, view.currentBand.max)}`}`}>
+            <div className="relative h-12" role="img" aria-label={`${ui.benchmarkScore}: ${currentScore === null ? ui.unavailable : `${formatBenchmarkScore(currentScore, locale)} · ${conditionOptions?.[view.currentBand?.id]?.title || ui.benchmarkCustom(view.currentBand.min, view.currentBand.max)}`}`}>
               {currentScore !== null ? (
                 <div className="absolute top-0 z-20 -translate-x-1/2 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white" style={{ left: `${Math.max(3, Math.min(97, currentScore))}%` }}>
-                  {ui.benchmarkNow} · {formatScore(currentScore)}
+                  {ui.benchmarkNow} · {formatBenchmarkScore(currentScore, locale)}
                 </div>
               ) : null}
               <div className="absolute inset-x-0 bottom-0 flex h-7 gap-0.5 overflow-hidden rounded-lg">
@@ -1590,6 +1593,7 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
             </div>
           </div>
         </div>
+        {isDailyBenchmark && currentScore !== null ? <p className="mt-1 text-[10px] text-slate-500">{ui.benchmarkRoundedRule}</p> : null}
 
         {isDailyBenchmark ? (
           <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-3.5 py-3">
