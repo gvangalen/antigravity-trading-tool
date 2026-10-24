@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse benchmark as the single market-phase view (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/analysis-market-phase`.
+Phase: `LIVE_CANDIDATE`. Product branch: `codex/analysis-market-phase`,
+merged through [PR #603](https://github.com/gvangalen/antigravity-trading-tool/pull/603)
+as product SHA `509d1e6d9aa7ff180a45d66127d448e2f051f3d8`.
 The owner-weighted Score 2.0 benchmark already shows the current five-zone
 market assessment, source age, Market/Macro/Technical components and the saved
 setup condition. The additional market-context card gave a configured MA200
@@ -16,8 +18,16 @@ in the Technical indicator section; no scores, setup conditions, bot rules or
 FINN model behavior change. This supersedes the separate card described below.
 
 Local frontend i18n, command, proposal and setup tests, typecheck, i18n lint,
-production build and high-severity audit passed. CI, deployment identity and
-independent browser QA remain pending.
+production build and high-severity audit passed. PR CI passed, main CI
+[40131496425](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40131496425)
+and Auto Deploy [40131716004](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40131716004)
+passed. Public backend health and frontend build-info each returned HTTP 200
+with the product SHA. This status-only update creates a later final SHA; Build
+must verify last main CI, Auto Deploy and both public markers on that revision
+before handing it to independent browser QA. QA should check that the five-zone
+benchmark, source age, three component scores, and selected setup comparison
+remain visible while the extra MA200 context card is absent on desktop and
+390 px mobile web. Independent browser QA remains pending.
 
 ## Analyse dated market context (24 oktober 2026)
 
