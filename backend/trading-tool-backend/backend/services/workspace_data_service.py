@@ -538,6 +538,8 @@ class WorkspaceDataService:
                 "symbol": symbol,
                 "display_name": asset_meta.get("display_name") or symbol,
                 "asset_class": asset_meta.get("asset_class") or "unknown",
+                "market_region": asset_meta.get("market_region") or "global",
+                "timezone": asset_meta.get("timezone") or "UTC",
                 "logo_url": asset_meta.get("logo_url"),
                 "tradingview_symbol": asset_meta.get("tradingview_symbol"),
             },

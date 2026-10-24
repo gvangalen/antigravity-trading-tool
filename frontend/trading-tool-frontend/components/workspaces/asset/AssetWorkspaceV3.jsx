@@ -46,6 +46,7 @@ import {
 } from "../../../../../shared/tradingViewConfig";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, hasCompleteDailyBenchmark, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
@@ -241,6 +242,7 @@ function getUiCopy(locale = "nl") {
       currentData: "Current",
       fallbackData: "Fallback",
       staleData: "Stale",
+      closedMarketQuote: "Market closed · last available quote",
       fallbackReady: "Fallback data is available. Detailed context will return automatically once the full workspace feed responds again.",
       scoreContribution: "Score contribution",
       sampleSize: "Readings in period",
@@ -417,6 +419,7 @@ function getUiCopy(locale = "nl") {
       currentData: "Aktuell",
       fallbackData: "Fallback",
       staleData: "Veraltet",
+      closedMarketQuote: "Börse geschlossen · letzter verfügbarer Kurs",
       fallbackReady: "Fallback-Daten sind verfügbar. Die Detailkontexte erscheinen automatisch wieder, sobald der vollständige Workspace-Feed erneut antwortet.",
       scoreContribution: "Score-Beitrag",
       sampleSize: "Messungen im Zeitraum",
@@ -592,6 +595,7 @@ function getUiCopy(locale = "nl") {
     currentData: "Actueel",
     fallbackData: "Fallback",
     staleData: "Verouderd",
+    closedMarketQuote: "Beurs gesloten · laatst beschikbare koers",
     fallbackReady: "Fallback-data is beschikbaar. De detailcontext komt automatisch terug zodra de volledige workspace-feed weer antwoord geeft.",
     scoreContribution: "Scorebijdrage",
     sampleSize: "Metingen in periode",
@@ -2419,6 +2423,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     bias: workspace?.master?.master_bias || "–",
   };
   const assetLive = workspace?.quote || null;
+  const quoteStatus = quotePresentationStatus({
+    stale: assetLive?.stale,
+    assetClass: workspaceAsset?.asset_class,
+    marketRegion: workspaceAsset?.market_region,
+    timeZone: workspaceAsset?.timezone,
+    sourceAt: assetLive?.as_of,
+  });
   const hasResolvedWorkspace = Boolean(workspace);
   const marketLoading = workspaceLoading && !hasResolvedWorkspace;
   const macroLoading = workspaceLoading && !hasResolvedWorkspace;
@@ -2869,7 +2880,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         price={formatQuotePrice(assetLive?.price, locale, assetLive?.quote_currency)}
         change24h={assetLive?.change_24h}
         updatedAt={formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)}
-        statusLabel={isFallbackWorkspace ? ui.fallbackData : assetLive?.stale ? ui.staleData : null}
+        statusLabel={isFallbackWorkspace ? ui.fallbackData : quoteStatus === "closed_session" ? ui.closedMarketQuote : quoteStatus === "stale" ? ui.staleData : null}
         combinedSummary={combinedSummary}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}

@@ -1,7 +1,7 @@
 import { fetchAuth } from "@/lib/api/auth";
 
 export async function fetchWatchlist() {
-  return await fetchAuth("/api/watchlist");
+  return await fetchAuth("/api/watchlist", { forceFresh: true });
 }
 
 export async function addToWatchlist(asset) {

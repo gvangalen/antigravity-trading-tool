@@ -13,6 +13,13 @@ import {
 const WATCHLIST_CACHE_TTL_MS = 30_000;
 const WATCHLIST_CACHE_KEY = "watchlist:default";
 
+export function invalidateWatchlist() {
+  markCachedResourceStale(WATCHLIST_CACHE_KEY);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("watchlist-updated"));
+  }
+}
+
 function normalizeWatchlistItem(item) {
   if (typeof item === "string") {
     const symbol = item.toUpperCase();
@@ -92,17 +99,12 @@ export function useWatchlist(options = {}) {
     }
   }
 
-  const notify = () => {
-    markCachedResourceStale(WATCHLIST_CACHE_KEY);
-    window.dispatchEvent(new CustomEvent("watchlist-updated"));
-  };
-
   async function add(asset) {
     try {
       await addToWatchlist(asset);
       const data = await loadWatchlist(true);
       setCachedResourceData(WATCHLIST_CACHE_KEY, data || []);
-      notify();
+      invalidateWatchlist();
     } catch (err) {
       console.error("❌ Watchlist add error:", err);
     }
@@ -113,7 +115,7 @@ export function useWatchlist(options = {}) {
       await removeFromWatchlist(symbol);
       const data = await loadWatchlist(true);
       setCachedResourceData(WATCHLIST_CACHE_KEY, data || []);
-      notify();
+      invalidateWatchlist();
     } catch (err) {
       console.error("❌ Watchlist remove error:", err);
     }
