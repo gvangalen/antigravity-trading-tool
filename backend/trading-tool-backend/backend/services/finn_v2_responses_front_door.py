@@ -628,6 +628,54 @@ class FinnResponsesFrontDoor:
         return {"bot_id": bot_id}
 
     @staticmethod
+    def _refers_to_open_bot(message: str) -> bool:
+        if re.search(r"\b(?:vergelijk\w*|compare\w*|vergleich\w*|ander(?:e|en)?|other|another)\b", message, re.I):
+            return False
+        return bool(
+            re.search(r"\b(?:deze|dit|this|current|geopende)\s+bot\b", message, re.I)
+            or re.search(
+                r"\bbot\b.{0,80}\b(?:op deze pagina|on this page|hier open|open heb|open staat)\b",
+                message, re.I,
+            )
+        )
+
+    @staticmethod
+    def _focus_portfolio_on_open_bot(read_result: dict[str, Any], bot_id: int | None) -> dict[str, Any]:
+        """Keep a singular, owner-verified bot read about the visible bot."""
+        projected = []
+        for item in read_result.get("results", []):
+            if item.get("scope") != "read_portfolio" or not isinstance(item.get("data"), dict):
+                projected.append(item)
+                continue
+            data = item["data"]
+            bots = data.get("bots")
+            if not isinstance(bots, list):
+                projected.append(item)
+                continue
+            focused = [
+                row for row in bots if isinstance(row, dict)
+                and str(row.get("bot_id")) == str(bot_id)
+            ]
+            projected.append({**item, "data": {
+                **data, "bots": focused,
+                "focused_bot_id": bot_id,
+                "focus_status": (
+                    "unverified_workspace_bot" if bot_id is None
+                    else "resolved" if focused else "not_in_portfolio_read"
+                ),
+                "global_summary_scope": "all_bots",
+            }})
+        return {
+            **read_result,
+            "results": projected,
+            "evidence_boundary": (
+                str(read_result.get("evidence_boundary") or "")
+                + " In this read, bots[] is scoped to the owner-verified open bot. "
+                  "The global summary still covers all selected bots, not only this bot."
+            ).strip(),
+        }
+
+    @staticmethod
     def binds_guided_slot(*, message: str, contract: Any, registry: Any, requested_slot: str) -> bool:
         """A short typed answer belongs to the persisted slot, not a new model intent."""
         states = FinnV2OperationStateService()
@@ -2431,6 +2479,19 @@ class FinnResponsesFrontDoor:
                         # several strategies. Never reuse model-selected IDs.
                         call = replace(call, inputs=workspace_selector)
                 read_result = await self.reads(call)
+                if (
+                    call.name in {"get_saved_bots", "get_portfolio_and_exposure"}
+                    and self._refers_to_open_bot(message)
+                ):
+                    workspace_selector = await self._workspace_bot_plan_selector(
+                        workspace_hints=workspace_hints, message=message,
+                        mentioned_assets=mentioned_assets,
+                    )
+                    if workspace_hints.get("page") == "/bot":
+                        read_result = self._focus_portfolio_on_open_bot(
+                            read_result,
+                            workspace_selector["bot_id"] if workspace_selector is not None else None,
+                        )
                 if call.name == "get_saved_setup_inventory":
                     # Match explicit names against the owner-scoped result. The
                     # model receives the requested records, not unrelated setups
