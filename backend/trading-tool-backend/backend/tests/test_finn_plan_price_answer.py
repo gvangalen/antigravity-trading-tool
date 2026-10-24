@@ -112,6 +112,26 @@ def test_fact_check_rejects_wrong_direction_without_writing_coach_copy():
     assert right.text == correct
 
 
+def test_live_read_rejects_the_paper_traders_exact_wrong_aapl_price_claims():
+    trace = _trace()
+    def checked(draft):
+        prepared = SimpleNamespace(response=SimpleNamespace(
+            text=draft, tool_trace=trace, uses_previous_response=False,
+        ), previous_response=None)
+        return _minimal_read_answer(message="Vergelijk mijn AAPL-plan met de koers", prepared=prepared)
+
+    wrong_direction = checked("US$346,61 ligt boven de entry van US$347,14.")
+    wrong_quote = checked("De opgeslagen prijsvaluta is EUR.")
+    wrong_level_quote = checked("De entry is €347,14.")
+    wrong_trailing_quote = checked("De entry is 347,14 EUR.")
+    correct = "US$346,61 ligt onder de entry van US$347,14. Het basisbedrag is €25."
+    assert wrong_direction.reason == "price_relation_conflicts_with_source"
+    assert wrong_quote.reason == "price_relation_conflicts_with_source"
+    assert wrong_level_quote.reason == "price_relation_conflicts_with_source"
+    assert wrong_trailing_quote.reason == "price_relation_conflicts_with_source"
+    assert checked(correct).text == correct
+
+
 def test_negated_comparison_is_not_treated_as_opposite_claim():
     trace = _trace()
     evidence = tuple(item for call in trace for item in call["result"]["results"])

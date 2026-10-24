@@ -168,6 +168,24 @@ function getRoleModel(category, indicator, profileContext, copy) {
   const summarySuffix = profileContext?.summaryText || copy.thisWorkflow;
   const generic = copy.roles.generic;
 
+  if (category === "market" && ["volume", "market_volume"].includes(normalizedIndicator)) {
+    return {
+      description: copy.roles.volume.description,
+      whenQuestion: generic.whenQuestion,
+      whenOptions: [{ id: "default", ...generic.always }],
+      recommendedWhen: ["default"],
+      interpretationQuestion: generic.interpretationQuestion,
+      interpretationOptions: [
+        { id: "standard", ...copy.roles.volume.standard },
+        { id: "contrarian", ...copy.roles.volume.contrarian },
+      ],
+      recommendedInterpretation: "standard",
+      summaryLabel: getIndicatorLabel(indicator),
+      recommendationReason: copy.roles.volume.recommendation,
+      recommendationLabel: copy.roles.volume.contextTitle,
+    };
+  }
+
   if (category !== "technical") {
     return {
       description: generic.description.replace("{indicator}", getIndicatorLabel(indicator)),
@@ -269,6 +287,7 @@ export default function IndicatorConfigModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [profileContext, setProfileContext] = useState(() => buildProfileContext({}, copy));
   const [impactPreview, setImpactPreview] = useState(null);
@@ -352,8 +371,10 @@ export default function IndicatorConfigModal({
 
     let active = true;
     setLoading(true);
+    setDraft(null);
     setAdvancedOpen(false);
     setSaveError("");
+    setLoadError("");
     setImpactPreview(null);
     setPreviewError(false);
     setPreviewLoading(true);
@@ -382,7 +403,10 @@ export default function IndicatorConfigModal({
       .catch((error) => {
         if (!active) return;
         console.error("Failed to load indicator config modal:", error);
-        setDraft(normalizeDraft(category, normalizedIndicator));
+        // A generic fallback rule is not the saved indicator rule. Keep the
+        // action disabled when the real configuration cannot be read.
+        setDraft(null);
+        setLoadError(copy.loadFailed.replace("{indicator}", indicatorLabel));
         showSnackbar(copy.loadFailed.replace("{indicator}", indicatorLabel), "danger");
       })
       .finally(() => {
@@ -489,7 +513,7 @@ export default function IndicatorConfigModal({
           <div className="space-y-6">
             {loading || !draft ? (
               <div className="rounded-[28px] border border-slate-200 bg-slate-50 px-6 py-12 text-sm font-semibold text-slate-500">
-                {copy.loading}
+                {loading ? copy.loading : loadError || copy.loading}
               </div>
             ) : (
               <div className="space-y-6">
@@ -500,7 +524,7 @@ export default function IndicatorConfigModal({
                     </div>
                     <div className="space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                        {copy.recommendedForProfile}
+                        {roleModel.recommendationLabel || copy.recommendedForProfile}
                       </div>
                       <div className="text-lg font-black text-slate-950">
                         {recommendationText}
@@ -601,6 +625,7 @@ export default function IndicatorConfigModal({
                         <p>{copy.impactAfter}</p>
                         <p>{copy.impactSetups.replace("{count}", String(impactPreview.setups?.filter((item) => item.after_status === "pending_score").length || 0))}</p>
                         <p>{copy.impactBots.replace("{count}", String(impactPreview.bots?.filter((item) => item.after_status === "wait_for_fresh_score").length || 0))}</p>
+                        {["volume", "market_volume"].includes(normalizedIndicator) ? <p>{copy.impactVolume}</p> : null}
                         <p className="text-xs text-slate-500">{copy.impactFixedDca}</p>
                       </div>}
                 </section>

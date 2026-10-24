@@ -43,12 +43,14 @@ export default function SetupMatchReportCard({ report }) {
         </p>
         {topSetups.length > 0 && (
           <div className="mt-5 space-y-3">
+            <p className="text-xs font-semibold text-secondary">{copy.matchScore}</p>
             {topSetups.map((setup) => (
               <div key={setup.id ?? setup.setup_id} className="flex justify-between gap-3 text-sm">
                 <span>{setup.name}</span>
                 <span>{displayScore(setup.score)}</span>
               </div>
             ))}
+            <p className="pt-2 text-xs text-muted">{copy.explanation}</p>
           </div>
         )}
       </ReportCard>

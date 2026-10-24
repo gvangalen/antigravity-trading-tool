@@ -5013,6 +5013,7 @@
       "impactAfter": "After saving, a new benchmark is reliable only once all indicator sources and scoring rules have been checked again. A new score cannot be predicted exactly now.",
       "impactSetups": "{count} setup(s) use score conditions and may temporarily wait during recalculation.",
       "impactBots": "{count} active bot(s) use the score for a condition or amount and may temporarily wait during recalculation.",
+      "impactVolume": "Volume measures trading activity, not price direction. A market score changed by Volume does not confirm a rise or an entry.",
       "impactFixedDca": "The configured timing of a fixed DCA without score conditions does not change. Execution still depends on safety checks.",
       "weightOptions": {
         "low": "Low",
@@ -5049,6 +5050,13 @@
             "help": "High and low values are reversed when that is more appropriate."
           },
           "recommendation": "Recommended as a safe starting point for {profile}."
+        },
+        "volume": {
+          "contextTitle": "What Volume measures",
+          "description": "Volume compares trading activity with its own recent history. It does not show whether price is rising or falling.",
+          "standard": {"label": "Activity under the standard rule", "help": "This rule scores trading activity. Check the scoring bands; high volume without price direction is not a positive entry signal."},
+          "contrarian": {"label": "Reversed activity score", "help": "Reverses the activity score but does not turn Volume into a price direction indicator."},
+          "recommendation": "Check the scoring bands and the effect on your plans and bots before counting Volume."
         },
         "rsi": {
           "description": "RSI helps FINN assess when momentum is stretched or continues to show strength.",
