@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import httpx
 
@@ -75,6 +75,8 @@ class TwelveDataTechnicalIndicatorAdapter:
             candles = await self._get_binance_candles(self._binance_symbol(asset))
         else:
             candles = await self._get_twelve_data_candles(self._provider_symbol(asset))
+            if asset.asset_class == "crypto":
+                candles = self._completed_crypto_daily_candles(candles)
         source_time = candles[-1].get("source_time") if candles else None
         observed_at = None
         try:
@@ -91,6 +93,10 @@ class TwelveDataTechnicalIndicatorAdapter:
     async def _fetch_twelve_data_indicator(self, asset: AssetRecord, normalized: str) -> float:
         symbol = self._provider_symbol(asset)
         candles = await self._get_twelve_data_candles(symbol)
+        if asset.asset_class == "crypto":
+            candles = self._completed_crypto_daily_candles(candles)
+        if not candles:
+            raise ValueError(f"Geen afgesloten dagcandles beschikbaar voor {asset.symbol}.")
         closes = [candle["close"] for candle in candles]
         highs = [candle["high"] for candle in candles]
         lows = [candle["low"] for candle in candles]
@@ -130,6 +136,23 @@ class TwelveDataTechnicalIndicatorAdapter:
             return self._adx(highs, lows, closes, period=14)
 
         raise ValueError(f"Unsupported Twelve Data technical indicator: {indicator_name}")
+
+    @staticmethod
+    def _completed_crypto_daily_candles(candles: list[dict]) -> list[dict]:
+        """Daily provider dates name the session, not its completed source time."""
+        today = datetime.now(timezone.utc).date()
+        completed = []
+        for candle in candles:
+            raw_time = candle.get("source_time")
+            try:
+                source_day = datetime.fromisoformat(str(raw_time).replace("Z", "+00:00")).date()
+            except (TypeError, ValueError):
+                continue
+            if source_day >= today:
+                continue
+            close_time = datetime.combine(source_day + timedelta(days=1), time.min, timezone.utc) - timedelta(microseconds=1)
+            completed.append({**candle, "source_time": close_time.isoformat()})
+        return completed
 
     async def _get_twelve_data_candles(self, symbol: str) -> list[dict[str, float]]:
         """Fetch one cached daily history series for every technical card.
@@ -282,6 +305,7 @@ class TwelveDataTechnicalIndicatorAdapter:
                     raise TechnicalSourceRateLimited("technical_source_rate_limited")
                 response.raise_for_status()
                 rows = response.json()
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
             self._binance_candle_cache[symbol] = [
                 {
                     "open": float(row[1]),
@@ -289,9 +313,13 @@ class TwelveDataTechnicalIndicatorAdapter:
                     "low": float(row[3]),
                     "close": float(row[4]),
                     "volume": float(row[5]),
-                    "source_time": row[0],
+                    # The opening timestamp makes a completed daily reading
+                    # look stale on the following afternoon. An unfinished
+                    # daily candle must not be used as settled score evidence.
+                    "source_time": row[6],
                 }
                 for row in rows
+                if int(row[6]) <= now_ms
             ]
         return self._binance_candle_cache[symbol]
 
