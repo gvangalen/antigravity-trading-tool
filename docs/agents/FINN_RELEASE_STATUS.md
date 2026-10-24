@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse benchmark navigation follow-up (24 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`, awaiting targeted independent authenticated browser QA.
+Phase: `ACCEPTED` for the targeted independent authenticated browser scope.
 Product branch: `codex/benchmark-zone-navigation-fix`; merged through
 [PR #596](https://github.com/gvangalen/antigravity-trading-tool/pull/596)
 as product SHA `b8e26786d3a0ec5072185f372ff4e96b6366ba5e`.
@@ -29,8 +29,16 @@ and Auto Deploy [40119924322](https://github.com/gvangalen/antigravity-trading-t
 passed. Public backend health and frontend build-info each returned HTTP 200
 with the product SHA. This status-only update creates a later final SHA; Build
 must verify the last main CI, Auto Deploy and both public markers on that exact
-revision before independent QA retests Analyse → Mijn Plan → Analyse, refresh,
-multiple setups, and the absence of cross-owner or cross-asset selection.
+revision. Independent QA then tested live SHA
+`f6cd74b87e552f06386902fd0739a4c20fda7730` and returned `ACCEPTED`:
+the second BTC setup remained selected after refresh, two visits through
+Mijn Plan, and BTC → AAPL → BTC. Its “Onder druk” condition matched the
+verified score 40 in zone 26–45. AAPL showed no BTC setup or invented match;
+the setup without a benchmark condition was labeled accordingly. No console
+errors or product writes were observed. The prior QA run on the preceding
+candidate also verified the complete five-zone scale at 390 px without page
+overflow and checked NL/EN/DE copy. This is a targeted benchmark presentation
+and navigation acceptance, not a full Analyse or trading-flow verdict.
 
 ## Analyse benchmark QA follow-up (24 oktober 2026)
 
