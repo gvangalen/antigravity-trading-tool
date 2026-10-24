@@ -6,9 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Trader evidence across coach, Analyse, report and indicator preview (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Product branch: `codex/trader-evidence-four-points`;
-product commit: `9526573cf`. CI, deployment and independent authenticated QA
-are pending. This is one repair batch for four findings from the daily Paper
+Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/trader-evidence-four-points`;
+product commit: `9526573cf`, merged through
+[PR #571](https://github.com/gvangalen/antigravity-trading-tool/pull/571) as
+`246db47f5a6504fdf4fba5dc96afd54860ab9d18`. Independent authenticated
+QA is pending. This is one repair batch for four findings from the daily Paper
 trader: AAPL price/currency claims, Analyse source wording, report proximity
 semantics, and Volume impact before adding an indicator.
 
@@ -34,7 +36,15 @@ regression cases with 100% operation accuracy and zero provider or schema
 failures (artifact SHA-256
 `f1434a04e2979a8164ecfeff603bcc547847b83d6169017068c7935528332027` and
 `5dd769c1f3a9cf5bf2f1b207bfd21443831fc49abf5cfc48dabb16587dd9c0c0`).
-No production claim or independent acceptance is recorded for this batch yet.
+PR CI passed all five checks. Main CI
+[40077710728](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40077710728)
+and Auto Deploy
+[40077898023](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40077898023)
+succeeded on `246db47f5a6504fdf4fba5dc96afd54860ab9d18`. Public backend
+health and frontend build-info both returned HTTP 200 and that exact SHA on
+24 October 2026. This status update will create its own SHA; Build must wait
+for its final main CI and Auto Deploy before assigning independent QA.
+Independent acceptance is not recorded for this batch yet.
 
 ## FINN owner-scoped plan evidence and model-owned coaching (24 oktober 2026)
 
