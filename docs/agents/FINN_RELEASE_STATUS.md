@@ -4,9 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Visible Paper-bot reference and zero-cap facts (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch: `codex/finn-visible-bot-reference`.
+Independent authenticated QA on live SHA
+`7cfd55f967fde8b62cddf45303f14a6183ea01f8` returned `NOT_ACCEPTED`:
+the exact causal question now identified the open bot, but initially treated
+its €0 optional budget cap as another order block. A paraphrase, "Leg uit
+waarom de bot op dit scherm nu niet klaar is om op papier BTC te kopen. Welke
+strategie hoort erbij?", instead described other BTC bots. The direct Paper
+purchase instruction did not produce a proposal or order. The page's next
+step correctly mentioned both missing virtual cash and resume status.
+
+The open-bot reference now recognizes the visible-screen wording and uses
+the existing owner-verified bot selector before exposing portfolio rows to
+Luna. Portfolio evidence states `budget_limit_enabled=false` when the saved
+optional cap is €0, separately from the Paper-cash amount. FINN still writes
+the coaching response; this change supplies facts and target identity, not a
+fixed answer. A read-only Security review found no concrete P1/P2 cross-owner
+or action-boundary issue.
+
+Root pytest passed **3869 tests, 4 existing skips**. Frontend typecheck,
+i18n lint/tests, command/proposal tests, production build and high-severity
+audit passed, with zero high vulnerabilities. The local worker action matrix
+passed **16/16** action contracts and **19/19** adapter checks, with zero
+broker orders, Live calls, Live bots or production connections (artifact
+SHA-256 `f291eaa0970eecf0bc00553504915c219305e0ee298bd8318c033222ba4d80fa`).
+Real Luna/Responses selector evaluations passed **20/20** development and
+**109/109** regression cases, with 100% operation accuracy and zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`f363f58fb9f3b648e2d4891fbfb5eff7401e5fbdffeb7720061893321d71d713` and
+`d526cc9f18f6f4597ceca59751045ae0abd28e23353b356f67b8e9e038185b86`).
+CI, deployment and independent live QA are pending.
+
 ## Causal Paper-bot explanation after independent QA (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/finn-bot-explanation-intent`;
+Phase: `NOT_ACCEPTED` for the complete independent scope. Product branch: `codex/finn-bot-explanation-intent`;
 merged through [PR #579](https://github.com/gvangalen/antigravity-trading-tool/pull/579)
 as `bb8b66f774ebbbe0e0ff4811316e60a91dffb729`.
 Independent authenticated QA on live SHA
@@ -47,8 +80,9 @@ main CI [40089456963](https://github.com/gvangalen/antigravity-trading-tool/acti
 and Auto Deploy [40089653538](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40089653538)
 passed. Public backend health and frontend build-info both returned HTTP 200
 and that exact product merge SHA. This status update creates a new final SHA;
-Build will verify its last main CI, Auto Deploy and both public markers before
-handing the exact revision to independent QA. Independent live QA is pending.
+Build verified its last main CI, Auto Deploy and both public markers before
+handing the exact revision to independent QA. The QA verdict and failed
+visible-screen paraphrase are recorded in the current section above.
 
 ## Focused bot read after trader evidence QA (24 oktober 2026)
 

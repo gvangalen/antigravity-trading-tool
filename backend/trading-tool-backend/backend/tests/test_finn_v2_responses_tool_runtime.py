@@ -12469,13 +12469,20 @@ def test_open_bot_reference_scopes_portfolio_evidence_without_changing_global_to
     assert FinnResponsesFrontDoor._refers_to_open_bot(
         "Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren?"
     )
+    assert FinnResponsesFrontDoor._refers_to_open_bot(
+        "Leg uit waarom de bot op dit scherm nu niet klaar is om op papier BTC te kopen."
+    )
+    assert FinnResponsesFrontDoor._refers_to_open_bot(
+        "Why is the bot on this screen paused?"
+    )
     assert not FinnResponsesFrontDoor._refers_to_open_bot("Vergelijk al mijn BTC-bots")
     assert not FinnResponsesFrontDoor._refers_to_open_bot("Vergelijk deze bot met een andere bot")
     original = {"status": "completed", "results": [{
         "scope": "read_portfolio", "status": "completed", "data": {
             "global": {"paper_cash_eur": 300},
             "bots": [
-                {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": 0},
+                {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": 0,
+                 "budget_total_eur": 0, "budget_limit_enabled": False},
                 {"bot_id": 88, "name": "Other Paper", "paper_cash_eur": 300},
             ],
         },
@@ -12483,6 +12490,7 @@ def test_open_bot_reference_scopes_portfolio_evidence_without_changing_global_to
     focused = FinnResponsesFrontDoor._focus_portfolio_on_open_bot(original, 132)
     data = focused["results"][0]["data"]
     assert [row["bot_id"] for row in data["bots"]] == [132]
+    assert data["bots"][0]["budget_limit_enabled"] is False
     assert data["global"]["paper_cash_eur"] == 300
     assert data["global_summary_scope"] == "all_bots"
     assert data["focus_status"] == "resolved"
@@ -12507,6 +12515,7 @@ def test_open_bot_reference_does_not_show_another_bot_if_focused_row_is_missing(
 @pytest.mark.parametrize("question", [
     "Welke bot heb ik op deze pagina open, aan welke strategie is hij gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg.",
     "Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren? Noem zijn naam en gekoppelde strategie.",
+    "Leg uit waarom de bot op dit scherm nu niet klaar is om op papier BTC te kopen. Welke strategie hoort erbij?",
 ])
 def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkeypatch, question):
     setup = {"id": 11, "name": "QA BTC Friday Setup", "symbol": "BTC"}

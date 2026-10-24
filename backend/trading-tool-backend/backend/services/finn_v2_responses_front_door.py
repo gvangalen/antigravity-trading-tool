@@ -635,11 +635,14 @@ class FinnResponsesFrontDoor:
             re.search(r"\b(?:deze|dit|this|current|geopende)\s+bot\b", message, re.I)
             or re.search(
                 r"\b(?:de|the|der|die)\s+bot\b.{0,80}"
-                r"\b(?:hier|here|op deze pagina|on this page|auf dieser seite)\b",
+                r"\b(?:hier|here|op (?:deze pagina|dit scherm|mijn scherm)|"
+                r"on (?:this page|this screen)|auf (?:dieser seite|diesem bildschirm))\b",
                 message, re.I,
             )
             or re.search(
-                r"\bbot\b.{0,80}\b(?:op deze pagina|on this page|hier open|open heb|open staat)\b",
+                r"\bbot\b.{0,80}\b(?:op (?:deze pagina|dit scherm|mijn scherm)|"
+                r"on (?:this page|this screen)|auf (?:dieser seite|diesem bildschirm)|"
+                r"hier open|open heb|open staat)\b",
                 message, re.I,
             )
         )
