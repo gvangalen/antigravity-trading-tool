@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Separate optional bot cap from assigned Paper cash (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Product branch: `codex/finn-paper-funding-facts`.
+Phase: `DEPLOYED_QA_PENDING`. Product branch:
+`codex/finn-paper-funding-facts`; merged through
+[PR #585](https://github.com/gvangalen/antigravity-trading-tool/pull/585)
+as `711143cfd7293fec61406f2cecfa8269bc6e804e`.
 Independent authenticated QA on live SHA
 `c75c2a2080d0e0acc33b3468cf01caed2c899164` returned `NOT_ACCEPTED`:
 the open-bot paraphrase named the correct bot and strategy but described
@@ -32,7 +35,13 @@ Real Luna/Responses selector evaluations passed **20/20** development and
 schema or parse failures (artifact SHA-256
 `d820be4c382ee7c05b307760335f1707b440fa8b619a408d14e37da37c75f03b` and
 `242816e17d79f79b2a8305951d27047fa2f9f5fe7f6aec5beb81e929d45e8194`).
-CI, deployment and independent live QA are pending.
+PR CI [40096605343](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40096605343),
+main CI [40096842381](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40096842381)
+and Auto Deploy [40097037003](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40097037003)
+passed. Public backend health and frontend build-info returned HTTP 200 and
+the exact product merge SHA. This status update creates a new final SHA;
+Build must verify its last main CI, Auto Deploy and both public markers before
+handing that revision to independent QA. Independent live QA is pending.
 
 ## Owner-bound open-bot evidence bundle (24 oktober 2026)
 
