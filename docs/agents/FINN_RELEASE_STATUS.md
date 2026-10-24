@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN owner-scoped plan evidence and model-owned coaching (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/finn-plan-evidence-fixes`.
+Production has not received this candidate; independent live QA is pending.
+
+This batch carries the typed plan/market comparison, quote and FX provenance for
+Paper orders, and the indicator score-impact preview. The proposed fixed
+plan/price coach paragraphs were removed. The active FINN 2.0 read-only path
+now always publishes Luna's own prose, with narrow owner-bound entity and
+typed price-direction checks; a rejected price claim goes back through the
+model repair path. An owner-scoped read also binds a complete strategy name
+from the user's message when the model selects only a shortened suffix.
+Provider failure no longer creates a synthetic stop-loss or reflection answer.
+The old `FINN_MINIMAL_READ_ANSWERS` rollout setting was removed so an
+environment value cannot reactivate the legacy read-only verifier.
+
+On the final local product source, root pytest passed **3842 tests, 4 existing
+skips**. Frontend typecheck, i18n lint/tests, command/proposal tests, build and
+high-severity audit passed. The real Responses selector evaluations passed
+**20/20** development and **109/109** regression cases with 100% operation
+accuracy and zero provider failures (artifact SHA-256
+`954d9705b60f2220ccc71326f2eff0657e66deebe6b2c3c8b2a79963a7cee528` and
+`a1a0483a55f1bc6a4ac52e4732c1b52039a749cc8bde3c21d1402adbcd945de6`).
+The local worker-driven action matrix passed **16/16**, plus **19/19** adapter
+checks, with zero broker orders, Live calls or production connections (artifact
+SHA-256 `b597bb48bcdf69f3a9380f48cfdfcbffbfc24059bcdf52e05b91bbfc4ddde96e`).
+A three-turn synthetic local AAPL conversation read the saved stop-loss,
+reviewed the plan and handled a follow-up. All three turns completed with
+owner-scoped evidence, no proposal, and terminal text equal to Luna's draft
+(artifact SHA-256 `147d8246390dcb3b04b30753f2057dab62d5ef714952ea227dfb0176590d300d`).
+PR CI, deployment identity and independent browser QA remain open.
+
 ## FINN open-bot plan lineage (23 oktober 2026)
 
 Phase: `ACCEPTED` for the targeted open-bot coach and regression scope on

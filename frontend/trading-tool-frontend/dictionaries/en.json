@@ -1681,11 +1681,11 @@
       "hudUpdated": "Updated",
       "hudSnapshotTitle": "Report snapshot",
       "hudGeneratedTitle": "Report created",
-      "hudSnapshotExplanation": "These scores and setup match were saved for this report. Analysis and FINN may show newer readings later.",
+      "hudSnapshotExplanation": "These scores and setup proximity were saved for this report. Analysis and FINN may show newer readings later.",
       "hudLegacyExplanation": "This report is a historical snapshot. Analysis and FINN may now show newer data.",
       "hudSourceDetails": "View the score sources used",
       "hudScoreDate": "Score date",
-      "hudSetupSource": "The setup match in this report uses these saved scores and the setup conditions at that time; it is not a current entry signal.",
+      "hudSetupSource": "Setup proximity uses the saved scores and setup conditions at that time. Only the separate conditions status says whether the score range matched; neither is a current entry signal.",
       "hudLegacySources": "This older report does not retain separate source times for each score.",
       "hudNoAssets": "No score sources for followed assets were recorded for this report.",
       "hudSourceUnknown": "Source time unavailable",
@@ -2100,7 +2100,7 @@
       "hudMacro": "Macro",
       "hudTechnical": "Technical",
       "hudMarket": "Market",
-      "hudSetup": "Active setup match"
+      "hudSetup": "Setup proximity"
     }
   },
   "setupPage": {
@@ -3606,16 +3606,16 @@
         "macroLabel": "Macro",
         "technicalLabel": "Technical",
         "marketLabel": "Market",
-        "setupLabel": "Active setup match"
+        "setupLabel": "Setup proximity"
       },
       "setupMatch": {
         "cardTitle": "Setup comparison",
         "empty": "No confirmed current setup match in this report.",
-        "bestMatch": "Best match",
-        "matchScore": "Match score",
+        "bestMatch": "Closest setup",
+        "matchScore": "Proximity score",
         "comparison": "Comparison",
         "unknownScore": "Unknown",
-        "explanation": "Explanation: The best setup is selected based on the current macro and market conditions."
+        "explanation": "This proximity score shows how close the benchmark score was to the saved setup conditions when the report was created. It is neither a profit probability nor an entry signal."
       },
       "activeStrategy": {
         "cardTitle": "Saved strategy",
@@ -5003,7 +5003,17 @@
       "onTimeframes": "on",
       "and": "and",
       "noExtraMoments": "without additional market conditions",
-      "summaryTemplate": "FINN uses {indicator}: {interpretation}, {when}, with {weight} influence.",
+      "summaryTemplate": "FINN uses {indicator}: {interpretation}, with {weight} influence.",
+      "impactTitle": "Safety effect during recalculation",
+      "impactLoading": "Loading score and bot effects...",
+      "impactUnavailable": "The effect could not be checked. Saving is temporarily unavailable.",
+      "impactUnknown": "unavailable",
+      "impactScore": "Current verified benchmark: {score}.",
+      "impactAlreadyMissing": "The benchmark score is already unavailable. A bot that depends on it may already be waiting.",
+      "impactAfter": "After saving, a new benchmark is reliable only once all indicator sources and scoring rules have been checked again. A new score cannot be predicted exactly now.",
+      "impactSetups": "{count} setup(s) use score conditions and may temporarily wait during recalculation.",
+      "impactBots": "{count} active bot(s) use the score for a condition or amount and may temporarily wait during recalculation.",
+      "impactFixedDca": "The configured timing of a fixed DCA without score conditions does not change. Execution still depends on safety checks.",
       "weightOptions": {
         "low": "Low",
         "normal": "Normal",
@@ -5023,7 +5033,7 @@
       },
       "roles": {
         "generic": {
-          "description": "Choose when FINN listens to {indicator}, how the signal is read and how much it counts.",
+          "description": "Choose how {indicator} is scored and how much it counts.",
           "whenQuestion": "When should FINN pay extra attention to this indicator?",
           "always": {
             "label": "Always use",

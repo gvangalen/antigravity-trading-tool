@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Check,
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import Drawer from "@/components/ui/Drawer";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   getIndicatorConfig,
+  previewIndicatorImpact,
   saveCustomRules,
   updateIndicatorSettings,
 } from "@/lib/api/indicatorConfig";
@@ -251,17 +251,6 @@ function getRoleModel(category, indicator, profileContext, copy) {
   };
 }
 
-function buildWhenSummary(ids, options, copy) {
-  const labels = options
-    .filter((option) => ids.includes(option.id))
-    .map((option) => option.label.toLowerCase());
-
-  if (labels.length === 0) return copy.noExtraMoments;
-  if (labels.length === 1) return labels[0];
-  if (labels.length === 2) return `${labels[0]} ${copy.and} ${labels[1]}`;
-  return `${labels.slice(0, -1).join(", ")} ${copy.and} ${labels[labels.length - 1]}`;
-}
-
 export default function IndicatorConfigModal({
   isOpen,
   category,
@@ -282,7 +271,9 @@ export default function IndicatorConfigModal({
   const [saveError, setSaveError] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [profileContext, setProfileContext] = useState(() => buildProfileContext({}, copy));
-  const [selectedConditions, setSelectedConditions] = useState([]);
+  const [impactPreview, setImpactPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
 
   const categoryLabel = useMemo(() => getCategoryLabel(category, copy), [category, copy]);
   const normalizedIndicator = useMemo(() => normalizeIndicatorName(indicator), [indicator]);
@@ -293,7 +284,6 @@ export default function IndicatorConfigModal({
     [category, copy, normalizedIndicator, profileContext]
   );
   const interpretationOptions = roleModel.interpretationOptions || [];
-  const whenOptions = roleModel.whenOptions || [];
   const selectedWeight = useMemo(() => getWeightOptionFromValue(draft?.weight), [draft?.weight]);
   const selectedInterpretation = useMemo(() => draft?.score_mode || roleModel.recommendedInterpretation || "standard", [
     draft?.score_mode,
@@ -303,14 +293,12 @@ export default function IndicatorConfigModal({
   const summaryText = useMemo(() => {
     if (!draft) return "";
     const interpretationLabel = copy.interpretationLabels[selectedInterpretation] || copy.interpretationLabels.standard;
-    const whenLabel = buildWhenSummary(selectedConditions, whenOptions, copy);
     const weightLabel = copy.weightOptions[selectedWeight.id].toLowerCase();
     return copy.summaryTemplate
       .replace("{indicator}", roleModel.summaryLabel || indicatorLabel)
       .replace("{interpretation}", interpretationLabel)
-      .replace("{when}", whenLabel)
       .replace("{weight}", weightLabel);
-  }, [copy, draft, indicatorLabel, roleModel.summaryLabel, selectedConditions, selectedInterpretation, selectedWeight.id, whenOptions]);
+  }, [copy, draft, indicatorLabel, roleModel.summaryLabel, selectedInterpretation, selectedWeight.id]);
 
   const recommendationText = useMemo(() => {
     if (roleModel.recommendationReason) return roleModel.recommendationReason;
@@ -359,16 +347,6 @@ export default function IndicatorConfigModal({
     });
   }, []);
 
-  const handleToggleCondition = useCallback((conditionId) => {
-    setSelectedConditions((current) => {
-      if (current.includes(conditionId)) {
-        const next = current.filter((item) => item !== conditionId);
-        return next.length > 0 ? next : current;
-      }
-      return [...current, conditionId];
-    });
-  }, []);
-
   useEffect(() => {
     if (!isOpen || !category || !normalizedIndicator || !assetSymbol) return;
 
@@ -376,6 +354,13 @@ export default function IndicatorConfigModal({
     setLoading(true);
     setAdvancedOpen(false);
     setSaveError("");
+    setImpactPreview(null);
+    setPreviewError(false);
+    setPreviewLoading(true);
+    previewIndicatorImpact({ category, indicator: normalizedIndicator, symbol: assetSymbol })
+      .then((preview) => { if (active) setImpactPreview(preview); })
+      .catch(() => { if (active) setPreviewError(true); })
+      .finally(() => { if (active) setPreviewLoading(false); });
 
     Promise.all([
       getIndicatorConfig(category, normalizedIndicator, assetSymbol),
@@ -393,7 +378,6 @@ export default function IndicatorConfigModal({
           ...normalizedDraft,
           score_mode: configResponse?.score_mode || nextRoleModel.recommendedInterpretation || normalizedDraft.score_mode,
         });
-        setSelectedConditions(nextRoleModel.recommendedWhen || []);
       })
       .catch((error) => {
         if (!active) return;
@@ -527,45 +511,6 @@ export default function IndicatorConfigModal({
 
                 <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                    {roleModel.whenQuestion}
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    {whenOptions.map((option) => {
-                      const active = selectedConditions.includes(option.id);
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => handleToggleCondition(option.id)}
-                          className={`rounded-[24px] border px-5 py-4 text-left transition ${
-                            active
-                              ? "border-blue-200 bg-blue-50 shadow-sm"
-                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-base font-black text-slate-950">{option.label}</div>
-                              <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
-                                {option.help}
-                              </div>
-                            </div>
-                            <div
-                              className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full border ${
-                                active ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-transparent"
-                              }`}
-                            >
-                              <Check size={12} />
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
                     {roleModel.interpretationQuestion}
                   </div>
                   <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -646,6 +591,20 @@ export default function IndicatorConfigModal({
                   </p>
                 </section>
 
+                <section className="rounded-[30px] border border-blue-200 bg-blue-50/70 p-6" aria-live="polite">
+                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-700">{copy.impactTitle}</div>
+                  {previewLoading ? <p className="mt-3 text-sm text-slate-600">{copy.impactLoading}</p>
+                    : previewError || !impactPreview ? <p className="mt-3 text-sm text-red-700">{copy.impactUnavailable}</p>
+                    : <div className="mt-3 space-y-2 text-sm font-medium text-slate-700">
+                        <p>{copy.impactScore.replace("{score}", impactPreview.before?.benchmark_score == null ? copy.impactUnknown : String(impactPreview.before.benchmark_score))}</p>
+                        {impactPreview.before?.benchmark_score == null ? <p>{copy.impactAlreadyMissing}</p> : null}
+                        <p>{copy.impactAfter}</p>
+                        <p>{copy.impactSetups.replace("{count}", String(impactPreview.setups?.filter((item) => item.after_status === "pending_score").length || 0))}</p>
+                        <p>{copy.impactBots.replace("{count}", String(impactPreview.bots?.filter((item) => item.after_status === "wait_for_fresh_score").length || 0))}</p>
+                        <p className="text-xs text-slate-500">{copy.impactFixedDca}</p>
+                      </div>}
+                </section>
+
                 <section className="rounded-[30px] border border-slate-200 bg-white shadow-sm">
                   <button
                     type="button"
@@ -703,7 +662,7 @@ export default function IndicatorConfigModal({
               <button
                 type="button"
                 onClick={handleConfirm}
-                disabled={saving || !isValidDraft || loading}
+                disabled={saving || !isValidDraft || loading || previewLoading || previewError || !impactPreview}
                 className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? copy.saving : actionLabel}

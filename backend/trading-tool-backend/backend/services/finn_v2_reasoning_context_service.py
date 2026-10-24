@@ -6,6 +6,7 @@ from hashlib import sha256
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from backend.domain.plan_price_comparison import compare_plan_entry_with_market
 
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
@@ -216,6 +217,7 @@ class FinnV2ReasoningContextService:
             evidence = [*feed_evidence, *evidence]
             selected_domains.add("plan_context")
             evidence = evidence[:self.max_evidence_items]
+        self._attach_plan_price_comparisons(evidence)
         evidence = self._trim_to_size(evidence)
         domain_statuses = []
         for item in validation_model.domains:
@@ -409,6 +411,28 @@ class FinnV2ReasoningContextService:
                 return None
         return None
 
+    @classmethod
+    def _attach_plan_price_comparisons(cls, evidence: list[ReasoningEvidenceItem]) -> None:
+        """Derive direction only from same-unit, dated, owner-scoped tool facts."""
+        markets = [item for item in evidence if item.tool_name == "read_market_snapshot"]
+        for strategy in (item for item in evidence if item.tool_name == "read_linked_strategy"):
+            facts = strategy.facts
+            if facts.get("entry") is None:
+                continue
+            matching = [
+                item for item in markets
+                if str(item.facts.get("symbol") or "").upper() == str(facts.get("symbol") or "").upper()
+            ]
+            market = max(
+                matching,
+                key=lambda item: cls._parse_feed_moment(item.facts.get("as_of"))
+                or datetime.min.replace(tzinfo=timezone.utc),
+            ) if matching else None
+            result = compare_plan_entry_with_market(facts, market.facts if market else None)
+            if market and result["status"] == "available":
+                result["market_artifact_id"] = market.artifact_id
+            facts["market_price_comparison"] = result
+
     @staticmethod
     def _expected_asset(referenced: Dict[str, Any]) -> Optional[str]:
         target = referenced.get("canonical_entity_target")
@@ -507,7 +531,10 @@ class FinnV2ReasoningContextService:
                 "benchmark_score", "benchmark_weights",
             )}
         if tool_name == "read_market_snapshot":
-            return {key: payload.get(key) for key in ["symbol", "price", "change_24h", "volume", "source", "as_of"] if payload.get(key) is not None}
+            return {key: payload.get(key) for key in [
+                "symbol", "price", "quote_currency", "price_provider",
+                "change_24h", "volume", "source", "as_of",
+            ] if payload.get(key) is not None}
         if tool_name == "read_macro_snapshot":
             return {"symbol": payload.get("symbol"), "items": payload.get("items", [])[:8]}
         if tool_name == "read_technical_snapshot":
@@ -542,6 +569,7 @@ class FinnV2ReasoningContextService:
                     "risk_profile",
                     "entry",
                     "price_currency",
+                    "price_currency_status",
                     "entry_type",
                     "stop_loss",
                     "targets",

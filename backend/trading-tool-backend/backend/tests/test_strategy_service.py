@@ -231,7 +231,7 @@ def test_strategy_read_preserves_trade_level_currency_separately_from_euro_amoun
         "id": 3, "setup_id": 77, "name": "BTC USD levels", "setup_type": "trade",
         "execution_mode": "fixed", "base_amount": 100,
         "data": {"entry": 84000, "stop_loss": 79800, "targets": [92400],
-                 "price_currency": "USD"},
+                 "price_currency": "USD", "price_currency_confirmed": True},
     })
     assert formatted["price_currency"] == "USD"
     assert formatted["entry"] == 84000
@@ -239,10 +239,25 @@ def test_strategy_read_preserves_trade_level_currency_separately_from_euro_amoun
 
     from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
     evidence = asyncio.run(StrategyToolAdapter().execute(
-        strategy={**formatted, "data": {"price_currency": "USD"}},
+        strategy={**formatted, "data": {"price_currency": "USD", "price_currency_confirmed": True}},
         resolution_source="explicit_name",
     ))["data"]
     assert evidence.price_currency == "USD"
+    assert evidence.price_currency_status == "confirmed"
+    assert evidence.currency == "EUR"
+
+
+def test_legacy_strategy_read_does_not_present_default_eur_as_confirmed_quote():
+    from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
+
+    evidence = asyncio.run(StrategyToolAdapter().execute(
+        strategy={"id": 4, "setup_id": 77, "entry": "347.14",
+                  "stop_loss": "342", "base_amount": 400,
+                  "price_currency": "EUR", "data": {"price_currency": "EUR"}},
+        resolution_source="setup_id",
+    ))["data"]
+    assert evidence.price_currency is None
+    assert evidence.price_currency_status == "unconfirmed"
     assert evidence.currency == "EUR"
 
 

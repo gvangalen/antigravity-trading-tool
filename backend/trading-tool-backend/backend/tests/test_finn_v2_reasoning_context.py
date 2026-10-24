@@ -27,6 +27,33 @@ def test_reasoning_context_marks_empty_canonical_indicator_evidence_as_absence_n
     ]
 
 
+def test_plan_price_comparison_is_typed_and_uses_confirmed_same_unit():
+    now = datetime.now(timezone.utc)
+    market = ReasoningEvidenceItem(
+        evidence_id="E1", artifact_id="market-aapl", tool_name="read_market_snapshot",
+        domain="market_context", entity_type="market_snapshot", asset="AAPL",
+        source="market_data", freshness="fresh", confidence="high",
+        facts={"symbol": "AAPL", "price": 346.61, "quote_currency": "USD",
+               "as_of": now.isoformat()},
+    )
+    strategy = ReasoningEvidenceItem(
+        evidence_id="E2", artifact_id="strategy-aapl", tool_name="read_linked_strategy",
+        domain="plan_context", entity_type="strategy", asset="AAPL",
+        source="strategies", freshness="fresh", confidence="high",
+        facts={"strategy_id": 130, "symbol": "AAPL", "entry": 347.14,
+               "price_currency": "USD", "price_currency_status": "confirmed"},
+    )
+    FinnV2ReasoningContextService._attach_plan_price_comparisons([market, strategy])
+    assert strategy.facts["market_price_comparison"]["relation_to_entry"] == "below"
+    assert strategy.facts["market_price_comparison"]["quote_currency"] == "USD"
+    market.facts["quote_currency"] = "USDT"
+    FinnV2ReasoningContextService._attach_plan_price_comparisons([market, strategy])
+    assert strategy.facts["market_price_comparison"]["status"] == "unavailable"
+    strategy.facts["price_currency_status"] = "unconfirmed"
+    FinnV2ReasoningContextService._attach_plan_price_comparisons([market, strategy])
+    assert strategy.facts["market_price_comparison"]["status"] == "unavailable"
+
+
 def test_reasoning_context_keeps_required_domains_and_sanitizes_facts():
     service = FinnV2ReasoningContextService(session=object(), max_evidence_items=30, max_context_bytes=131072)
     service.evidence_repo.list_for_run = lambda **_kwargs: asyncio.sleep(

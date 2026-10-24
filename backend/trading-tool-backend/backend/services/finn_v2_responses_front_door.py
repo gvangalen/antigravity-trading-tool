@@ -2256,8 +2256,10 @@ class FinnResponsesFrontDoor:
                         })
                     session_factory = getattr(self.reads, "session_factory", None)
                     if session_factory is not None:
+                        owner_named_strategy = None
                         async with session_factory() as session:
-                            target = await FinnV2EntityResolutionService(session).resolve_canonical_target(
+                            resolver = FinnV2EntityResolutionService(session)
+                            target = await resolver.resolve_canonical_target(
                                 user_id=self.user_id, entity_type="setup", message=message,
                                 conversation_context=(
                                     {"canonical_entity_target": previous_setup_target}
@@ -2276,6 +2278,35 @@ class FinnResponsesFrontDoor:
                                     ),
                                 },
                             )
+                            if (
+                                target.resolution_status == "resolved"
+                                and call.name == "get_active_plan_and_strategy"
+                                and not multiple_targets
+                                and getattr(resolver, "strategies", None) is not None
+                                and (call.inputs.get("strategy_name") or re.search(
+                                    r"\b(?:strategie|strategy)\b", message, re.I,
+                                ))
+                            ):
+                                # A model may shorten a visible saved name (for example
+                                # "AAPL Coach Strategy" to "Coach Strategy"). Bind the
+                                # exact owner-scoped name written by the user before the
+                                # read tool resolves the strategy; never guess a name.
+                                owner_rows = await resolver.strategies.query_strategies(
+                                    self.user_id, {"setup_id": target.entity_id},
+                                )
+                                visible_names = sorted({
+                                    str(row.get("name") or "").strip()
+                                    for row in owner_rows
+                                    if row.get("name") and re.search(
+                                        rf"(?<!\w){re.escape(str(row['name']).strip())}(?!\w)",
+                                        message, re.I,
+                                    )
+                                }, key=len, reverse=True)
+                                if visible_names and all(
+                                    name.casefold() in visible_names[0].casefold()
+                                    for name in visible_names[1:]
+                                ):
+                                    owner_named_strategy = visible_names[0]
                         if target.resolution_status == "resolved" and (
                             call.name in {"get_active_plan_and_strategy", "get_linked_strategies", "get_saved_setup"}
                             or target.source == "explicit_name"
@@ -2283,8 +2314,8 @@ class FinnResponsesFrontDoor:
                         ):
                             call = replace(call, inputs=(
                                 {"setup_id": target.entity_id,
-                                 **({"strategy_name": call.inputs["strategy_name"]}
-                                    if call.inputs.get("strategy_name") else {}),
+                                 **({"strategy_name": owner_named_strategy or call.inputs["strategy_name"]}
+                                    if owner_named_strategy or call.inputs.get("strategy_name") else {}),
                                  **({"strategy_id": confirmed_strategy["entity_id"]}
                                     if call.name == "get_active_plan_and_strategy"
                                     and confirmed_strategy

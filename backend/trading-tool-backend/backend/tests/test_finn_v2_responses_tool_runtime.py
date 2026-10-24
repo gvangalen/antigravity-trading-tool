@@ -240,13 +240,13 @@ def test_raw_coach_baseline_cannot_be_enabled_outside_local_fixture(monkeypatch)
     assert _raw_coach_experiment_enabled() is True
 
 
-def test_minimal_read_answers_uses_explicit_runtime_switch(monkeypatch):
+def test_model_led_read_answers_cannot_be_switched_back_to_legacy_verifier(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("FINN_RAW_COACH_EXPERIMENT", "0")
     monkeypatch.setenv("FINN_MINIMAL_READ_ANSWERS", "1")
     assert _minimal_read_answers_enabled() is True
     monkeypatch.setenv("FINN_MINIMAL_READ_ANSWERS", "0")
-    assert _minimal_read_answers_enabled() is False
+    assert _minimal_read_answers_enabled() is True
 
 
 def test_raw_coach_keeps_general_answer_but_rejects_unread_saved_strategy_claim():
@@ -2806,6 +2806,65 @@ def test_selected_strategy_name_is_a_valid_owner_scoped_read_selector():
         "strategy_name": "Apple Full Strategy", "reference": "current_request",
     })
     assert call.inputs["strategy_name"] == "Apple Full Strategy"
+
+
+def test_named_strategy_read_uses_full_owner_name_when_model_shortens_it(monkeypatch):
+    import backend.services.finn_v2_responses_front_door as front_module
+
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "get_active_plan_and_strategy", {
+            "asset": "AAPL", "strategy_name": "Coach Strategy",
+            "reference": "current_request",
+        }),)),
+        response("r2", text="De opgeslagen stop-loss is 342."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "full-owner-strategy-name"
+    front.proposals = FinnResponsesProposalSelection()
+    received = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def commit(self):
+            pass
+
+    class Reads:
+        session_factory = Session
+
+        async def __call__(self, call):
+            received.append(call.inputs)
+            return {"status": "completed", "results": []}
+
+    class Resolver:
+        is_setup_collection_request = staticmethod(lambda _message: False)
+        references_recent_action = staticmethod(lambda _message, _entity_type: False)
+
+        def __init__(self, _session):
+            self.strategies = SimpleNamespace(query_strategies=AsyncMock(return_value=[
+                {"name": "AAPL Coach Strategy", "setup_id": 42},
+                {"name": "AAPL Other Strategy", "setup_id": 42},
+            ]))
+
+        async def resolve_canonical_target(self, **_kwargs):
+            return SimpleNamespace(resolution_status="resolved", entity_id=42,
+                                   source="explicit_name")
+
+    monkeypatch.setattr(front_module, "FinnV2EntityResolutionService", Resolver)
+    monkeypatch.setattr(front_module.FinnV2RuntimeContractRepository,
+                        "record_responses_progress", AsyncMock())
+    front.reads = Reads()
+    asyncio.run(front.run(
+        message="Wat is mijn opgeslagen stop-loss voor AAPL Coach Strategy?",
+        instructions="Read saved fields", verified_asset="AAPL", conversation_context={},
+    ))
+    assert received == [{"setup_id": 42, "strategy_name": "AAPL Coach Strategy"}]
 
 
 def test_saved_setup_bounds_read_never_requires_a_strategy():

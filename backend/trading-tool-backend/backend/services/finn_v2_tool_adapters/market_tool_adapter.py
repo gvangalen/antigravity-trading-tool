@@ -9,7 +9,7 @@ class MarketToolAdapter:
         self.repository = MarketDataRepository(session)
 
     async def execute(self, *, asset: str, user_id: int, **_kwargs):
-        snapshot = await self.repository.get_latest_snapshot(asset)
+        snapshot = await self.repository.get_latest_quoted_snapshot(asset)
         if snapshot is None:
             raise LookupError("source_unavailable")
         # Receipt/update time does not establish the age of the provider's
@@ -18,6 +18,11 @@ class MarketToolAdapter:
         payload = {
             "symbol": snapshot.symbol,
             "price": float(snapshot.price) if snapshot.price is not None else None,
+            "quote_currency": (
+                str(snapshot.quote_currency).upper()
+                if getattr(snapshot, "quote_currency", None) and observed_at else None
+            ),
+            "price_provider": getattr(snapshot, "price_provider", None) if observed_at else None,
             "change_24h": float(snapshot.change_24h) if snapshot.change_24h is not None else None,
             "volume": float(snapshot.volume) if snapshot.volume is not None else None,
             "source": "market_data",

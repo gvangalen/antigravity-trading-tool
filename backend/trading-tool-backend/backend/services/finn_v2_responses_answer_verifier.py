@@ -33,6 +33,7 @@ from backend.services.finn_v2_turn_contract import turn_contract_gap
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_responses_model import finn_responses_model_options
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,47 @@ class FinnResponsesAnswerVerifier:
     def __init__(self, semantic: FinnV2SemanticVerifierService | None = None, client: Any = None) -> None:
         self.semantic = semantic or FinnV2SemanticVerifierService()
         self.client = client
+
+    @staticmethod
+    def _price_relation_claim_supported(
+        answer: str, evidence: tuple[dict[str, Any], ...],
+    ) -> bool:
+        """Reject only an explicit direction that contradicts a current typed comparison."""
+        comparisons = FinnResponsesReadExecutor._current_plan_price_comparisons(evidence)
+        available = [row for row in comparisons if row.get("status") == "available"]
+        if len(comparisons) != 1 or len(available) != 1:
+            return True
+        expected = available[0]["relation_to_entry"]
+        market = r"(?:koers|marktprijs|market\s+price|price|kurs|marktpreis)"
+        entry = r"(?:instap(?:prijs)?|entry(?:\s+price)?|einstieg(?:spreis)?)"
+        directions = {
+            "above": r"(?:boven|hoger\s+dan|above|higher\s+than|über)",
+            "below": r"(?:onder|lager\s+dan|below|lower\s+than|unter)",
+        }
+        for sentence in re.split(r"[.!?;\n]", answer):
+            for direction, word in directions.items():
+                # The subject changes the meaning: 'market above entry' and
+                # 'entry below market' assert the same relation.
+                forward = re.search(rf"\b{market}\b[^.!?;\n]{{0,100}}?\b{word}\b[^.!?;\n]{{0,75}}?\b{entry}\b", sentence, re.I)
+                reverse = re.search(rf"\b{entry}\b[^.!?;\n]{{0,100}}?\b{word}\b[^.!?;\n]{{0,75}}?\b{market}\b", sentence, re.I)
+                def negated(match: re.Match[str] | None) -> bool:
+                    if match is None:
+                        return False
+                    relation = re.search(rf"\b{word}\b", match.group(0), re.I)
+                    if relation is None:
+                        return False
+                    at = match.start() + relation.start()
+                    return bool(re.search(
+                        r"\b(?:niet|not|nicht|geen|no|kein\w*)\s*$",
+                        sentence[max(0, at - 18):at], re.I,
+                    ))
+                if negated(forward) or negated(reverse):
+                    continue
+                if forward and direction != expected:
+                    return False
+                if reverse and ("below" if direction == "above" else "above") != expected:
+                    return False
+        return True
 
     @staticmethod
     def _verified_strategy_followup(
@@ -1252,8 +1294,8 @@ class FinnResponsesAnswerVerifier:
         amounts = set()
         for match in re.finditer(
             r"(?:[+−-]?\s*[€$]\s*[+−-]?\s*([\d][\d.,]*)|"
-            r"[+−-]?\s*\b(?:eur|usd)\b\s*[+−-]?\s*([\d][\d.,]*)|"
-            r"[+−-]?\s*([\d][\d.,]*)\s*(?:[€$]|\beuros?\b|\beur\b|\busd\b|\bdollars?\b))",
+            r"[+−-]?\s*\b(?:eur|usd|usdt)\b\s*[+−-]?\s*([\d][\d.,]*)|"
+            r"[+−-]?\s*([\d][\d.,]*)\s*(?:[€$]|\beuros?\b|\beur\b|\busd\b|\busdt\b|\bdollars?\b))",
             text.casefold(),
         ):
             value = (match.group(1) or match.group(2) or match.group(3)).rstrip(".,")
@@ -1579,11 +1621,18 @@ class FinnResponsesAnswerVerifier:
         for item in evidence:
             if item.get("status") == "completed":
                 monetary_fields(item.get("data"))
+                if item.get("scope") == "read_market_snapshot" and item.get("freshness") == "fresh":
+                    market = item.get("data") or {}
+                    if isinstance(market, dict) and (item.get("as_of") or market.get("as_of")):
+                        quote = str(market.get("quote_currency") or "").upper()
+                        price = market.get("price")
+                        if quote in {"EUR", "USD", "USDT"} and price is not None:
+                            grounded.update(cls._currency_amounts(f"{price} {quote}"))
                 if item.get("scope") == "read_linked_strategy":
                     strategy = item.get("data") or {}
                     if isinstance(strategy, dict):
                         quote = strategy.get("price_currency") or strategy.get("currency")
-                        if quote in {"EUR", "USD"}:
+                        if quote in {"EUR", "USD", "USDT"}:
                             levels = (
                                 strategy.get("entry"), strategy.get("stop_loss"),
                                 *(strategy.get("targets") or []),
@@ -2105,6 +2154,8 @@ class FinnResponsesAnswerVerifier:
             if re.search(r"(?:\$\s*[+−-]?\s*\d|\d\s*\$|\d\s*(?:usd|dollars?)\b|"
                          r"\busd\s*[+−-]?\s*\d)", normalized):
                 found.add("USD")
+            if re.search(r"(?:\d\s*usdt\b|\busdt\s*[+−-]?\s*\d)", normalized):
+                found.add("USDT")
             return found
 
         claimed = units(answer)
@@ -2114,7 +2165,7 @@ class FinnResponsesAnswerVerifier:
             if isinstance(value, dict):
                 for key, item in value.items():
                     if key in {"currency", "price_currency", "base_currency", "quote_currency"}:
-                        if str(item).upper() in {"EUR", "USD"}:
+                        if str(item).upper() in {"EUR", "USD", "USDT"}:
                             allowed.add(str(item).upper())
                     else:
                         collect_currency(item)
@@ -2715,6 +2766,16 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if (
+            result.answer_kind == "free_text"
+            and not self._price_relation_claim_supported(result.text, evidence)
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                "price_relation_conflicts_with_source", evidence,
+                rejection_details={"fact_mismatch": "typed_plan_price_relation"},
+            )
         if result.answer_kind == "missing_setup_update":
             for item in evidence:
                 data = item.get("data") or {}
@@ -2742,6 +2803,7 @@ class FinnResponsesAnswerVerifier:
             )
         if (
             result.model_led_coach and result.answer_kind == "free_text"
+            and not any(item.get("scope") == "read_market_snapshot" for item in evidence)
             and (sourced_strategy := self._source_bound_strategy_fields(
                 message, result.text, evidence,
             ))
@@ -3069,16 +3131,6 @@ class FinnResponsesAnswerVerifier:
                 clarification={"question": question, "reason": "previous_response_unavailable"},
             )
         if result.answer_kind == "provider_unavailable":
-            if result.model_led_coach and _read_only_stop_loss_coaching(message):
-                return FinnResponsesVerifiedAnswer(
-                    "completed", self._stop_loss_coach_fallback(locale),
-                    "safe_stop_loss_coaching", evidence,
-                )
-            if result.model_led_coach and _hypothetical_trade_reflection(message):
-                return FinnResponsesVerifiedAnswer(
-                    "completed", self._hypothetical_reflection_fallback(locale),
-                    "safe_hypothetical_reflection", evidence,
-                )
             return FinnResponsesVerifiedAnswer(
                 "unavailable", self._fallback_copy(
                     "responses_provider_timeout", message=message, locale=locale,

@@ -155,6 +155,8 @@ class MarketData(Base):
     is_updated = Column(Boolean, default=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     source_observed_at = Column(DateTime, nullable=True)
+    quote_currency = Column(String(8), nullable=True)
+    price_provider = Column(String(80), nullable=True)
 
 class MarketDataIndicator(Base):
     __tablename__ = 'market_data_indicators'

@@ -81,19 +81,24 @@ def _safe_json(v, fallback):
     except Exception:
         return fallback
 
-def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) -> Optional[float]:
+def _get_live_price(
+    conn, symbol: str, max_age_seconds: Optional[int] = None,
+    *, paper_execution: bool = False,
+) -> Optional[float]:
     symbol = (symbol or DEFAULT_SYMBOL).upper()
 
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
-                   a.quote_currency, m.source_observed_at
+                   a.quote_currency, m.source_observed_at, m.quote_currency
             FROM market_data m
             LEFT JOIN asset_catalog a ON a.symbol = m.symbol
             WHERE m.symbol = %s
               AND m.price IS NOT NULL
-            ORDER BY m.timestamp DESC
+              AND m.source_observed_at IS NOT NULL
+              AND m.quote_currency IS NOT NULL
+            ORDER BY m.source_observed_at DESC, m.timestamp DESC
             LIMIT 1
             """,
             (symbol,),
@@ -101,6 +106,8 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
         row = cur.fetchone()
 
     if not row or row[0] is None:
+        return None
+    if str(row[2] or "").upper() != str(row[4] or "").upper():
         return None
 
     if max_age_seconds is not None and (row[1] is None or float(row[1]) > max_age_seconds or float(row[1]) < -60):
@@ -112,8 +119,8 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
         price = float(row[0])
         return price if math.isfinite(price) and price > 0 else None
 
-    from backend.services.portfolio_fx_service import price_in_eur
-    quote = str(row[2] or "").upper()
+    from backend.services.portfolio_fx_service import price_in_eur, trade_quote_context
+    quote = str(row[4] or "").upper()
     fx = None
     if quote in {"USD", "USDT"}:
         with conn.cursor() as cur:
@@ -124,46 +131,57 @@ def _get_live_price(conn, symbol: str, max_age_seconds: Optional[int] = None) ->
             fx_row = cur.fetchone()
         if fx_row:
             fx = {"eur_per_unit": fx_row[0], "observed_at": fx_row[1]}
+    if paper_execution:
+        checked = trade_quote_context(
+            price=row[0], price_at=row[3], row_quote=row[4],
+            catalog_quote=row[2], usd_fx=None, quote_fx=fx, require_usd=False,
+        )
+        return checked.get("market_price_eur")
     eur_price, _source_at, _factor, _fx_at = price_in_eur(
         price=row[0], price_at=row[3], quote_currency=quote, fx=fx,
     )
     return eur_price
 
 
-def _get_trade_quote_fx_context(conn, symbol: str) -> dict:
-    """Read a dated quote conversion for saved trade levels."""
+def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True) -> dict:
+    """Read the verified row quote and independent dated FX sources."""
     with conn.cursor() as cur:
         cur.execute("SELECT quote_currency FROM asset_catalog WHERE symbol=%s LIMIT 1", (symbol,))
         row = cur.fetchone()
-    quote = str(row[0] or "").upper() if row else ""
-    if quote == "EUR":
-        return {"quote_currency": quote, "eur_per_unit": 1.0, "fx_as_of": None,
-                "live_price_eur": None}
-    if quote != "USD":
-        return {"quote_currency": quote, "eur_per_unit": None, "fx_as_of": None,
-                "live_price_eur": None}
+    catalog_quote = str(row[0] or "").upper() if row else ""
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT eur_per_unit, observed_at FROM portfolio_fx_rates
-            WHERE quote_currency='USD' LIMIT 1
+            SELECT quote_currency, eur_per_unit, observed_at FROM portfolio_fx_rates
+            WHERE quote_currency IN ('USD', 'USDT')
         """)
-        fx_row = cur.fetchone()
+        fx_rows = {
+            str(currency).upper(): {"eur_per_unit": factor, "observed_at": at}
+            for currency, factor, at in cur.fetchall()
+        }
         cur.execute("""
-            SELECT price, source_observed_at FROM market_data
+            SELECT price, source_observed_at, quote_currency FROM market_data
             WHERE symbol=%s AND price IS NOT NULL
-            ORDER BY timestamp DESC LIMIT 1
+              AND source_observed_at IS NOT NULL
+              AND quote_currency IS NOT NULL
+            ORDER BY source_observed_at DESC, timestamp DESC LIMIT 1
         """, (symbol,))
         market_row = cur.fetchone()
-    if not fx_row or not market_row:
-        return {"quote_currency": quote, "eur_per_unit": None, "fx_as_of": None,
-                "live_price_eur": None}
-    from backend.services.portfolio_fx_service import price_in_eur
-    converted, _observed, factor, fx_as_of = price_in_eur(
-        price=market_row[0], price_at=market_row[1], quote_currency="USD",
-        fx={"eur_per_unit": fx_row[0], "observed_at": fx_row[1]},
+    from backend.services.portfolio_fx_service import trade_quote_context
+    verified = trade_quote_context(
+        price=market_row[0] if market_row else None,
+        price_at=market_row[1] if market_row else None,
+        row_quote=market_row[2] if market_row else None,
+        catalog_quote=catalog_quote,
+        usd_fx=fx_rows.get("USD"),
+        quote_fx=fx_rows.get(catalog_quote),
+        require_usd=require_usd,
     )
-    return {"quote_currency": quote, "eur_per_unit": factor if converted is not None else None,
-            "fx_as_of": fx_as_of, "live_price_eur": converted}
+    return {
+        **verified, "quote_currency": catalog_quote,
+        "eur_per_unit": verified.get("usd_fx_eur_per_unit"),
+        "fx_as_of": verified.get("usd_fx_as_of"),
+        "live_price_eur": verified.get("market_price_eur"),
+    }
 
 
 def _convert_trade_snapshot_to_eur(snapshot: dict, factor: float) -> dict:
@@ -568,6 +586,27 @@ def _hold_for_unconverted_trade_levels(brain: Dict[str, Any], setup_payload: Dic
     """Never execute against ambiguous or unconverted trade price levels."""
     if setup_payload.get("setup_type") != "trade":
         return brain
+    if setup_payload.get("market_price_verified") is False:
+        held = dict(brain)
+        reason_code = str(setup_payload.get("market_price_reason") or "market_quote_unverified")
+        reason = {
+            "market_quote_unverified": "De herkomstvaluta van de recente marktprijs is niet bevestigd; de Paper-order wacht op een nieuwe prijs.",
+            "market_price_stale": "De marktprijs is te oud voor een Paper-order.",
+            "usd_eur_fx_unavailable": "Een recente USD/EUR-koers ontbreekt voor de opgeslagen prijsniveaus.",
+            "market_quote_eur_fx_unavailable": "Een recente omrekening van de marktvaluta naar EUR ontbreekt.",
+            "trade_quote_sources_out_of_sync": "De prijs en valutakoersen komen niet uit hetzelfde recente tijdvak.",
+        }.get(reason_code, "De actuele koersomrekening is niet verifieerbaar; de Paper-order wacht.")
+        held.update({"action": "hold", "amount_eur": 0.0, "reason": reason,
+                     "guardrail_reason": reason_code,
+                     "guardrails_result": {
+                         "allowed": False, "adjusted_amount_eur": 0.0,
+                         "original_amount_eur": float(brain.get("amount_eur") or 0),
+                         "blocked_by": reason_code, "reason": reason,
+                         "warnings": [reason_code], "debug_code": reason_code,
+                         "explanations": [{"code": reason_code, "message": reason}],
+                         "guardrails": {},
+                     }})
+        return held
     if setup_payload.get("price_currency_confirmed") and (
         setup_payload.get("price_currency") == "EUR" or setup_payload.get("trade_levels_converted")
     ):
@@ -583,7 +622,7 @@ def _hold_for_unconverted_trade_levels(brain: Dict[str, Any], setup_payload: Dic
     held["reason"] = (
         "Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie."
         if reason_code == "strategy_price_currency_unconfirmed"
-        else "Actuele USD/EUR-omrekening ontbreekt; automatische uitvoering wacht."
+        else "Actuele omrekening van opgeslagen koersniveaus ontbreekt; automatische uitvoering wacht."
     )
     held["guardrail_reason"] = reason_code
     held["guardrails_result"] = {
@@ -2002,15 +2041,19 @@ def run_trading_bot_execution(
             trade_fx_context = None
             source_trade_levels = None
             if setup_payload.get("setup_type") == "trade":
-                trade_fx_context = _get_trade_quote_fx_context(conn, symbol)
-                if not bot.get("is_live") and trade_fx_context["quote_currency"] == "USD":
+                trade_fx_context = _get_trade_quote_fx_context(
+                    conn, symbol, require_usd=setup_payload.get("price_currency") == "USD",
+                )
+                setup_payload["market_quote_currency"] = trade_fx_context["quote_currency"]
+                if not bot.get("is_live"):
                     live_price = trade_fx_context.get("live_price_eur")
-                if trade_fx_context["quote_currency"] == "EUR" and setup_payload.get("price_currency") == "EUR":
-                    setup_payload["price_currency_confirmed"] = True
+                    setup_payload["market_price_verified"] = live_price is not None
+                    setup_payload["market_price_reason"] = trade_fx_context.get("reason")
                 if setup_payload.get("price_currency") == "USD" and snapshot:
                     factor = trade_fx_context.get("eur_per_unit")
                     if (not bot.get("is_live") and setup_payload.get("price_currency_confirmed") and
-                            trade_fx_context.get("quote_currency") == "USD" and factor and live_price is not None):
+                            trade_fx_context.get("quote_currency") in {"USD", "USDT", "EUR"}
+                            and factor and live_price is not None):
                         source_trade_levels = dict(snapshot)
                         snapshot = _convert_trade_snapshot_to_eur(snapshot, factor)
                         setup_payload.update({
@@ -2125,13 +2168,23 @@ def run_trading_bot_execution(
                 trade_plan["price_currency"] = (
                     "EUR" if setup_payload.get("trade_levels_converted") else setup_payload.get("price_currency")
                 )
-                if source_trade_levels:
-                    trade_plan["source_price_currency"] = "USD"
+                if snapshot:
+                    original_levels = source_trade_levels or snapshot
+                    trade_plan["source_price_currency"] = setup_payload.get("price_currency")
                     trade_plan["source_levels"] = {
-                        key: source_trade_levels.get(key) for key in ("entry", "stop_loss", "targets")
+                        key: original_levels.get(key) for key in ("entry", "stop_loss", "targets")
                     }
-                    trade_plan["fx_eur_per_unit"] = trade_fx_context["eur_per_unit"]
-                    trade_plan["fx_as_of"] = trade_fx_context["fx_as_of"].isoformat()
+                    trade_plan["market_quote_currency"] = trade_fx_context["quote_currency"]
+                    trade_plan["quote_check_reason"] = trade_fx_context.get("reason")
+                    if trade_fx_context.get("live_price_eur") is not None:
+                        trade_plan["market_price"] = trade_fx_context["market_price"]
+                        trade_plan["market_price_as_of"] = trade_fx_context["market_price_at"].isoformat()
+                        trade_plan["market_fx_eur_per_unit"] = trade_fx_context["market_fx_eur_per_unit"]
+                        market_fx_at = trade_fx_context.get("market_fx_as_of")
+                        trade_plan["market_fx_as_of"] = market_fx_at.isoformat() if market_fx_at else None
+                        trade_plan["fx_eur_per_unit"] = trade_fx_context["eur_per_unit"]
+                        fx_at = trade_fx_context.get("fx_as_of")
+                        trade_plan["fx_as_of"] = fx_at.isoformat() if fx_at else None
 
             # =========================
             # POSITION SIZE
@@ -2429,6 +2482,54 @@ def _recheck_auto_buy_limits(
         )
 
 
+def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: str) -> Optional[float]:
+    """Return a fresh EUR execution price for a trade or None for DCA."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT s.setup_type, s.data, d.scores_json->'trade_plan'
+               FROM bot_decisions d
+               JOIN strategies s ON s.id=d.strategy_id AND s.user_id=d.user_id
+               WHERE d.id=%s AND d.user_id=%s AND d.symbol=%s
+               FOR SHARE OF s""",
+            (decision_id, user_id, symbol),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise BotSafetyBlock("De opgeslagen strategie bij deze Paper-beslissing is niet beschikbaar.")
+    if str(row[0] or "").lower() not in {"trade", "trading", "manual", "breakout", "position"}:
+        return None
+    saved = _safe_json(row[1], {})
+    plan = _safe_json(row[2], {})
+    source = str(plan.get("source_price_currency") or "").upper()
+    levels = plan.get("source_levels") or {}
+    if not saved.get("price_currency_confirmed") or source not in {"EUR", "USD"}:
+        raise BotSafetyBlock("De koersvaluta van deze Paper-beslissing is niet bevestigd. Maak een nieuwe beslissing.")
+    if str(saved.get("price_currency") or "").upper() != source:
+        raise BotSafetyBlock("De koersvaluta van de strategie is gewijzigd. Maak een nieuwe beslissing.")
+    try:
+        entry = float(levels["entry"])
+        current_entry = float(saved["entry"])
+        current_stop = float(saved["stop_loss"])
+        planned_stop = float(levels["stop_loss"])
+        current_targets = [float(value) for value in saved["targets"]]
+        planned_targets = [float(value) for value in levels["targets"]]
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise BotSafetyBlock("De opgeslagen prijsniveaus zijn onvolledig. Maak een nieuwe beslissing.") from exc
+    all_levels = [entry, current_entry, current_stop, planned_stop, *current_targets, *planned_targets]
+    if (not all(math.isfinite(value) and value > 0 for value in all_levels)
+            or not current_targets or current_entry != entry
+            or current_stop != planned_stop or current_targets != planned_targets):
+        raise BotSafetyBlock("De strategieprijzen zijn gewijzigd. Maak een nieuwe Paper-beslissing.")
+    context = _get_trade_quote_fx_context(conn, symbol, require_usd=source == "USD")
+    price = context.get("market_price_eur")
+    if price is None:
+        raise BotSafetyBlock("De marktprijs of valutakoers is niet recent genoeg voor Paper-uitvoering.")
+    entry_eur = entry * float(context["usd_fx_eur_per_unit"]) if source == "USD" else entry
+    if not entry_eur <= price <= entry_eur * 1.01:
+        raise BotSafetyBlock("De actuele prijs ligt buiten de opgeslagen instapzone. Maak een nieuwe Paper-beslissing.")
+    return price
+
+
 def _auto_execute_decision(
     *,
     conn,
@@ -2485,7 +2586,12 @@ def _auto_execute_decision(
         raise RuntimeError("Invalid execution parameters")
 
     if not is_live:
-        price = _get_live_price(conn, symbol)
+        checked_trade_price = _recheck_paper_trade_entry(
+            conn, user_id=user_id, decision_id=decision_id, symbol=symbol,
+        ) if side == "buy" else None
+        price = checked_trade_price if checked_trade_price is not None else _get_live_price(
+            conn, symbol, paper_execution=True,
+        )
         if price is None:
             raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
         if side == "buy":
@@ -2767,7 +2873,12 @@ def execute_manual_decision(
             raise RuntimeError("Invalid order execution values")
 
         if not bot_live:
-            price = _get_live_price(conn, symbol)
+            checked_trade_price = _recheck_paper_trade_entry(
+                conn, user_id=user_id, decision_id=decision_id, symbol=symbol,
+            ) if side == "buy" else None
+            price = checked_trade_price if checked_trade_price is not None else _get_live_price(
+                conn, symbol, paper_execution=True,
+            )
             if price is None:
                 raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
             if side == "buy":
