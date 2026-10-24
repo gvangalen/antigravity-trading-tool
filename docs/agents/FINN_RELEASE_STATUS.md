@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Focused bot read after trader evidence QA (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Product branch: `codex/finn-focused-bot-read`.
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Product branch: `codex/finn-focused-bot-read`;
+merged through [PR #577](https://github.com/gvangalen/antigravity-trading-tool/pull/577)
+as `3762c1814a94008b8ca10012fc556f51a7fccbe2`.
 Independent authenticated QA on final live SHA
 `ea6b1128b252fb3a582d84e3c50aed14c7c5b650` returned `NOT_ACCEPTED`
 for one reproduced wrong-target read: on `/bot?bot_id=132&symbol=BTC`, FINN
@@ -39,7 +41,17 @@ schema, parse, validation or timeout failures (artifact SHA-256
 `e570974ab19538624a0145bde60c7d0a4a5440eda4cc82bb5f` and
 `ff998aaf1770db05a3e81baae264797d3dbe2ce2e8b88461a5fb466e0c123598`).
 A read-only Security review found no remaining concrete wrong-target or
-cross-owner issue. CI, deployment and independent live QA are pending.
+cross-owner issue. PR CI
+[40085498005](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40085498005),
+main CI
+[40085702743](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40085702743)
+and Auto Deploy
+[40085864429](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40085864429)
+passed. Public backend health and frontend build-info returned HTTP 200 and
+the product merge SHA above. This status update creates a new final SHA;
+Build will verify its last main CI, Auto Deploy, and both public markers
+before handing the exact revision to independent QA. Independent live QA is
+pending.
 
 ## Trader evidence follow-up: asset switching, bot context, zero cap (24 oktober 2026)
 
