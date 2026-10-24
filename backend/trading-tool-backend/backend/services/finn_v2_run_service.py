@@ -1439,8 +1439,8 @@ def _raw_coach_experiment_enabled() -> bool:
 
 
 def _minimal_read_answers_enabled() -> bool:
-    """Use only typed source checks around model-led, read-only answers."""
-    return os.getenv("FINN_MINIMAL_READ_ANSWERS") == "1" or _raw_coach_experiment_enabled()
+    """Keep model-led read-only prose with its model in every environment."""
+    return True
 
 
 def _minimal_read_answer(
@@ -1479,6 +1479,12 @@ def _minimal_read_answer(
             "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
             "saved_entity_type_unverified", evidence,
             rejection_details={"unsupported_claims": {"saved_entity_type": text}},
+        )
+    if not FinnResponsesAnswerVerifier._price_relation_claim_supported(text, evidence):
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
+            "price_relation_conflicts_with_source", evidence,
+            rejection_details={"fact_mismatch": "typed_plan_price_relation"},
         )
     return FinnResponsesVerifiedAnswer(
         "completed", text, None, evidence,
@@ -4779,7 +4785,7 @@ class FinnV2RunService:
                                     "personal_fit_not_established", "current_market_claim_unverified",
                                     "saved_action_claim_unverified", "trading_outcome_claim_unverified",
                                     "user_condition_bypass_blocked", "saved_entity_type_unverified",
-                                    "turn_contract_mismatch",
+                                    "turn_contract_mismatch", "price_relation_conflicts_with_source",
                                 }
                                 and cls._read_only_repair_eligible(prepared.response.tool_trace)
                                 and cls._read_repair_has_budget(remaining, explain_limit=explain_limit)
@@ -4843,11 +4849,6 @@ class FinnV2RunService:
                         else:
                             answer = None
                     if answer is not None:
-                        if not prepared.response.model_owned_repair and not minimal_read_used:
-                            answer = FinnResponsesAnswerVerifier.recover_read_only_coaching(
-                                message=message, result=prepared.response,
-                                answer=answer, locale=prepared.locale,
-                            )
                         async with async_session_factory() as session:
                             if (
                                 answer.status == "clarification_required"
