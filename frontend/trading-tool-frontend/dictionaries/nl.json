@@ -5134,6 +5134,7 @@
       "impactAfter": "Na opslaan is een nieuwe benchmark pas betrouwbaar wanneer alle indicatorbronnen en scoreregels opnieuw zijn gecontroleerd. Een nieuwe score kan nu niet exact worden voorspeld.",
       "impactSetups": "{count} setup(s) gebruiken scorevoorwaarden en kunnen tijdens herberekening tijdelijk wachten.",
       "impactBots": "{count} actieve bot(s) gebruiken de score voor een voorwaarde of bedrag en kunnen tijdens herberekening tijdelijk wachten.",
+      "impactVolume": "Volume meet handelsactiviteit, geen koersrichting. Een gewijzigde marktscore door Volume bevestigt dus geen stijging of instap.",
       "impactFixedDca": "Het ingestelde ritme van een vaste DCA zonder scorevoorwaarde verandert niet. Uitvoering blijft afhankelijk van veiligheidscontroles.",
       "weightOptions": {
         "low": "Laag",
@@ -5170,6 +5171,13 @@
             "help": "Hoge en lage waarden worden omgekeerd wanneer dat logischer is."
           },
           "recommendation": "Aanbevolen als veilige start voor {profile}."
+        },
+        "volume": {
+          "contextTitle": "Wat Volume meet",
+          "description": "Volume vergelijkt handelsactiviteit met de eigen recente historie. Het laat niet zien of de koers stijgt of daalt.",
+          "standard": {"label": "Activiteit volgens standaardregel", "help": "Deze regel beoordeelt handelsactiviteit. Bekijk de scorebanden; hoog volume is zonder koersrichting geen positief instapsignaal."},
+          "contrarian": {"label": "Omgekeerde activiteitsscore", "help": "Draait de activiteitsscore om, maar maakt van Volume nog geen koersrichtingsindicator."},
+          "recommendation": "Controleer de scorebanden en de invloed op je plannen en bots voordat je Volume laat meetellen."
         },
         "rsi": {
           "description": "RSI helpt FINN inschatten wanneer momentum te ver is doorgeschoten of juist kracht houdt.",

@@ -5155,6 +5155,7 @@
       "impactAfter": "Nach dem Speichern ist eine neue Bewertung erst zuverlässig, wenn alle Indikatorquellen und Bewertungsregeln erneut geprüft wurden. Eine genaue neue Punktzahl lässt sich jetzt nicht vorhersagen.",
       "impactSetups": "{count} Setup(s) verwenden Punktebedingungen und können während der Neuberechnung vorübergehend warten.",
       "impactBots": "{count} aktive Bot(s) verwenden die Bewertung für eine Bedingung oder einen Betrag und können während der Neuberechnung vorübergehend warten.",
+      "impactVolume": "Volumen misst Handelsaktivität, nicht die Kursrichtung. Eine durch Volumen geänderte Marktbewertung bestätigt daher weder einen Anstieg noch einen Einstieg.",
       "impactFixedDca": "Der eingestellte Rhythmus eines festen DCA ohne Punktebedingung ändert sich nicht. Die Ausführung hängt weiterhin von Sicherheitsprüfungen ab.",
       "weightOptions": {
         "low": "Niedrig",
@@ -5191,6 +5192,13 @@
             "help": "Hohe und niedrige Werte werden umgekehrt, wenn das sinnvoller ist."
           },
           "recommendation": "Als sicherer Ausgangspunkt für {profile} empfohlen."
+        },
+        "volume": {
+          "contextTitle": "Was Volumen misst",
+          "description": "Volumen vergleicht die Handelsaktivität mit ihrer eigenen jüngeren Historie. Es zeigt nicht, ob der Kurs steigt oder fällt.",
+          "standard": {"label": "Aktivität nach Standardregel", "help": "Diese Regel bewertet Handelsaktivität. Prüfe die Bewertungsbereiche; hohes Volumen ohne Kursrichtung ist kein positives Einstiegssignal."},
+          "contrarian": {"label": "Umgekehrte Aktivitätsbewertung", "help": "Kehrt die Aktivitätsbewertung um, macht Volumen aber nicht zu einem Indikator für die Kursrichtung."},
+          "recommendation": "Prüfe die Bewertungsbereiche und die Auswirkung auf Pläne und Bots, bevor Volumen mitzählt."
         },
         "rsi": {
           "description": "Der RSI hilft FINN zu erkennen, wann das Momentum überdehnt ist oder Stärke behält.",

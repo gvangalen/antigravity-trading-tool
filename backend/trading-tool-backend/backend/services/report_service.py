@@ -27,7 +27,7 @@ _daily_report_preview_cache: Dict[int, Dict[str, Any]] = {}
 
 from backend.services.intelligence_semantics import get_macro_semantics, get_technical_semantics, get_market_semantics
 
-def _get_structure_label(score: Optional[float], category: str) -> str:
+def _get_structure_label(score: Optional[float], category: str, locale: str = "nl") -> str:
     if category == "macro":
         res = get_macro_semantics(score)
         return f"{res['regime']} · Conviction {res['conviction']}%"
@@ -40,10 +40,8 @@ def _get_structure_label(score: Optional[float], category: str) -> str:
     else: # setup
         if score is None:
             return "Setupmatch niet beschikbaar"
-        val = float(score)
-        if val >= 70: return f"Premium Alignment · Conviction {int(val)}%"
-        if val >= 50: return f"Standard Setup · Conviction {int(val)}%"
-        return f"Sub-optimal Alignment · Conviction {int(val)}%"
+        noun = {"nl": "Nabijheidsscore", "de": "Nähewert", "en": "Proximity score"}.get(locale, "Proximity score")
+        return f"{noun} {float(score):g}/100"
 
 class ReportService:
     def __init__(self, repository: ReportRepository, request_locale: Optional[str] = None):
@@ -174,7 +172,7 @@ class ReportService:
                 "market_score": mkt_sc,
                 "market_label": _get_structure_label(mkt_sc, "market"),
                 "setup_score": stp_sc,
-                "setup_label": _get_structure_label(stp_sc, "setup"),
+                "setup_label": _get_structure_label(stp_sc, "setup", resolve_request_locale(self.request_locale)),
                 "price": meta.get("price") or report.get("price"),
                 "change_24h": meta.get("change_24h") or report.get("change_24h"),
                 "volume": meta.get("volume") or report.get("volume"),
@@ -207,7 +205,7 @@ class ReportService:
                 "market_score": mkt_sc,
                 "market_label": _get_structure_label(mkt_sc, "market"),
                 "setup_score": stp_sc,
-                "setup_label": _get_structure_label(stp_sc, "setup"),
+                "setup_label": _get_structure_label(stp_sc, "setup", resolve_request_locale(self.request_locale)),
                 "price": report.get("price"),
                 "change_24h": report.get("change_24h"),
                 "volume": report.get("volume"),

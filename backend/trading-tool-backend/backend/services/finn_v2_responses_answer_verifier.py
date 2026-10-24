@@ -59,12 +59,90 @@ class FinnResponsesAnswerVerifier:
     def _price_relation_claim_supported(
         answer: str, evidence: tuple[dict[str, Any], ...],
     ) -> bool:
-        """Reject only an explicit direction that contradicts a current typed comparison."""
+        """Check explicit saved quote and price direction against owner-read facts."""
+        def stated_quote(token: str) -> str:
+            token = token.upper()
+            return "USD" if token in {"$", "US$"} else "EUR" if token == "€" else token
+
+        strategies = {
+            (row.get("setup_id"), row.get("strategy_id")): row
+            for item in evidence
+            if item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            for row in (item["data"],)
+        }
+        if len(strategies) == 1:
+            strategy = next(iter(strategies.values()))
+            quote = str(strategy.get("price_currency") or "").upper()
+            if strategy.get("price_currency_status") == "confirmed" and quote in {"EUR", "USD", "USDT"}:
+                quote_claims = (
+                    # A currency for saved price levels is separate from a
+                    # strategy's EUR base amount or a Paper cash balance.
+                    r"\b(?:prijs(?:niveau)?valuta|koersvaluta|price\s+currency|"
+                    r"quote\s+currency|(?:opgeslagen|saved)\s+prijsniveaus?)\b"
+                    r"\s*(?:(?:is|zijn)(?:\s+in)?|staat\s+op|in|:|=)?\s*(US\$|USDT|USD|EUR|€|\$)",
+                    r"\b(?:entry|instap(?:prijs)?|stop(?:[- ]?loss)?|targets?|"
+                    r"koersdoelen?|price\s+levels?)\b\s*(?:is|staat\s+op|van|op|in|:)?\s*"
+                    r"(US\$|USDT|USD|EUR|€|\$)\s*\d",
+                    r"\b(?:entry|instap(?:prijs)?|stop(?:[- ]?loss)?|targets?|"
+                    r"koersdoelen?|price\s+levels?)\b\s*(?:is|staat\s+op|van|op|in|:)?\s*"
+                    r"\d[\d.,]*\s*(US\$|USDT|USD|EUR|€|\$)\b",
+                )
+                for pattern in quote_claims:
+                    for match in re.finditer(pattern, answer, re.I):
+                        if stated_quote(match.group(1)) != quote:
+                            return False
         comparisons = FinnResponsesReadExecutor._current_plan_price_comparisons(evidence)
         available = [row for row in comparisons if row.get("status") == "available"]
         if len(comparisons) != 1 or len(available) != 1:
             return True
         expected = available[0]["relation_to_entry"]
+        def parse_display_price(value: str) -> Decimal | None:
+            value = value.strip().rstrip(".,")
+            if "," in value and "." in value:
+                decimal_mark = "," if value.rfind(",") > value.rfind(".") else "."
+                value = value.replace("." if decimal_mark == "," else ",", "")
+                value = value.replace(decimal_mark, ".")
+            elif "," in value or "." in value:
+                mark = "," if "," in value else "."
+                pieces = value.split(mark)
+                value = "".join(pieces) if len(pieces) > 2 or len(pieces[-1]) == 3 else value.replace(mark, ".")
+            try:
+                return Decimal(value)
+            except InvalidOperation:
+                return None
+
+        # A model often omits the word 'koers' when quoting two prices. Bind
+        # that compact assertion only when both numbers match the typed pair.
+        numeric_relation = re.compile(
+            r"(?P<market_quote>US\$|USDT|USD|EUR|[$€])?\s*"
+            r"(?P<market>\d[\d.,]*)\s*(?:ligt|staat|is)?\s*"
+            r"(?P<direction>boven|onder|hoger\s+dan|lager\s+dan|above|below|"
+            r"higher\s+than|lower\s+than|über|unter)\s+"
+            r"(?:de|het|je|jouw|the|den)?\s*(?:entry|instap(?:prijs)?|"
+            r"einstieg(?:spreis)?)\s*(?:van|op|at|of|:)?\s*"
+            r"(?P<entry_quote>US\$|USDT|USD|EUR|[$€])?\s*(?P<entry>\d[\d.,]*)",
+            re.I,
+        )
+        for claim in numeric_relation.finditer(answer):
+            market_value = parse_display_price(claim.group("market"))
+            entry_value = parse_display_price(claim.group("entry"))
+            if market_value is None or entry_value is None:
+                continue
+            if abs(market_value - Decimal(str(available[0]["market_price"]))) > Decimal("0.05"):
+                continue
+            if abs(entry_value - Decimal(str(available[0]["entry"]))) > Decimal("0.05"):
+                continue
+            if any(
+                stated_quote(token) != available[0]["quote_currency"]
+                for token in (claim.group("market_quote"), claim.group("entry_quote")) if token
+            ):
+                return False
+            word = claim.group("direction").lower()
+            stated = "above" if word in {"boven", "above", "über"} or word.startswith(("hoger", "higher")) else "below"
+            if stated != expected:
+                return False
         market = r"(?:koers|marktprijs|market\s+price|price|kurs|marktpreis)"
         entry = r"(?:instap(?:prijs)?|entry(?:\s+price)?|einstieg(?:spreis)?)"
         directions = {

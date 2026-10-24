@@ -302,15 +302,8 @@ function getUiCopy(locale = "nl") {
       },
       sectionInsights: {
         missing: "Not enough score data for a reliable group conclusion.",
-        marketNegative: "The configured market indicators currently score low.",
-        marketPositive: "The configured market indicators currently score high.",
-        marketNeutral: "The configured market indicators currently give a mixed score.",
-        macroNegative: "The configured macro indicators currently score low.",
-        macroPositive: "The configured macro indicators currently score high.",
-        macroNeutral: "The configured macro indicators currently give a mixed score.",
-        technicalNegative: "The configured technical indicators currently score low.",
-        technicalPositive: "The configured technical indicators currently score high.",
-        technicalNeutral: "The configured technical indicators currently give a mixed score.",
+        scoreWithoutRows: (category, score) => `${category}: ${score}/100. The indicator details are not available in this view.`,
+        measured: (category, score, names, extra) => `${category}: ${score}/100 from ${names}${extra ? ` and ${extra} other indicator(s)` : ""}.`,
       },
     };
   }
@@ -485,15 +478,8 @@ function getUiCopy(locale = "nl") {
       },
       sectionInsights: {
         missing: "Für eine zuverlässige Gruppenbewertung fehlen Score-Daten.",
-        marketNegative: "Die eingerichteten Marktindikatoren ergeben derzeit einen niedrigen Wert.",
-        marketPositive: "Die eingerichteten Marktindikatoren ergeben derzeit einen hohen Wert.",
-        marketNeutral: "Die eingerichteten Marktindikatoren ergeben derzeit einen gemischten Wert.",
-        macroNegative: "Die eingerichteten Makroindikatoren ergeben derzeit einen niedrigen Wert.",
-        macroPositive: "Die eingerichteten Makroindikatoren ergeben derzeit einen hohen Wert.",
-        macroNeutral: "Die eingerichteten Makroindikatoren ergeben derzeit einen gemischten Wert.",
-        technicalNegative: "Die eingerichteten technischen Indikatoren ergeben derzeit einen niedrigen Wert.",
-        technicalPositive: "Die eingerichteten technischen Indikatoren ergeben derzeit einen hohen Wert.",
-        technicalNeutral: "Die eingerichteten technischen Indikatoren ergeben derzeit einen gemischten Wert.",
+        scoreWithoutRows: (category, score) => `${category}: ${score}/100. Die Indikatordetails sind in dieser Ansicht nicht verfügbar.`,
+        measured: (category, score, names, extra) => `${category}: ${score}/100 aus ${names}${extra ? ` und ${extra} weiteren Indikator(en)` : ""}.`,
       },
     };
   }
@@ -667,15 +653,8 @@ function getUiCopy(locale = "nl") {
     },
     sectionInsights: {
       missing: "Onvoldoende scoredata voor een betrouwbare groepsconclusie.",
-      marketNegative: "De ingestelde marktindicatoren leveren momenteel een lage score op.",
-      marketPositive: "De ingestelde marktindicatoren leveren momenteel een hoge score op.",
-      marketNeutral: "De ingestelde marktindicatoren leveren momenteel een gemengde score op.",
-      macroNegative: "De ingestelde macro-indicatoren leveren momenteel een lage score op.",
-      macroPositive: "De ingestelde macro-indicatoren leveren momenteel een hoge score op.",
-      macroNeutral: "De ingestelde macro-indicatoren leveren momenteel een gemengde score op.",
-      technicalNegative: "De ingestelde technische indicatoren leveren momenteel een lage score op.",
-      technicalPositive: "De ingestelde technische indicatoren leveren momenteel een hoge score op.",
-      technicalNeutral: "De ingestelde technische indicatoren leveren momenteel een gemengde score op.",
+      scoreWithoutRows: (category, score) => `${category}: ${score}/100. De indicatordetails zijn in dit overzicht niet beschikbaar.`,
+      measured: (category, score, names, extra) => `${category}: ${score}/100 uit ${names}${extra ? ` en ${extra} andere indicator(en)` : ""}.`,
     },
   };
 }
@@ -1441,21 +1420,13 @@ function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, r
     return copy.missing;
   }
 
-  if (sectionId === "market") {
-    if (score <= 35) return copy.marketNegative;
-    if (score >= 70) return copy.marketPositive;
-    return copy.marketNeutral;
-  }
-
-  if (sectionId === "macro") {
-    if (score <= 35) return copy.macroNegative;
-    if (score >= 70) return copy.macroPositive;
-    return copy.macroNeutral;
-  }
-
-  if (score <= 35) return copy.technicalNegative;
-  if (score >= 70) return copy.technicalPositive;
-  return copy.technicalNeutral;
+  const scored = rows.filter((row) => normalizeScore(row?.score) !== null && row?.label);
+  if (!scored.length) return copy.scoreWithoutRows(ui[sectionId], Math.round(score));
+  return copy.measured(
+    ui[sectionId], Math.round(score),
+    scored.slice(0, 3).map((row) => row.label).join(", "),
+    Math.max(0, scored.length - 3),
+  );
 }
 
 function ScoreOverview({ market, macro, technical, combined, sections, weights, loading, onSaveWeights, ui, locale, conditionOptions, isDailyBenchmark }) {
