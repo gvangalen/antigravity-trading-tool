@@ -3,11 +3,14 @@
 import CardLoader from "@/components/ui/CardLoader";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
+import { paperPriceMessageKey } from "@/lib/bot/paperPriceMessage.mjs";
 
 export default function BotHistoryTable({
   history = [],
   loading = false,
   emptyMessage,
+  botIsLive,
+  botSymbol,
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.history || {};
@@ -93,7 +96,12 @@ export default function BotHistoryTable({
                     : formatCurrency(Number(safety.allowed_amount_eur ?? h.amount_eur ?? 0), locale);
               const guardrailExplanations = Array.isArray(safety.explanations) ? safety.explanations
                 : Array.isArray(guardrailResult.explanations) ? guardrailResult.explanations : [];
-              const reason = h.execution_failure || (guardrailExplanations.length > 0
+              const paperPriceKey = !h.is_trade && paperPriceMessageKey({
+                isLive: botIsLive, symbol: h.symbol || botSymbol,
+                reasonCode: safety.reason_code || guardrailResult.blocked_by,
+                at: safety.checked_at || h.decision_ts || h.created_at || h.date,
+              });
+              const reason = paperPriceKey ? focusCopy[`${paperPriceKey}History`] : h.execution_failure || (guardrailExplanations.length > 0
                 ? guardrailExplanations.map((item) => {
                     const label = riskCodes[item.code] || item.message;
                     const hasAmounts = Number.isFinite(Number(item.from_amount_eur)) && Number.isFinite(Number(item.to_amount_eur));

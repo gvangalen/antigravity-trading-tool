@@ -2279,6 +2279,12 @@
   },
   "botPage": {
     "focus": {
+      "paperAaplMarketClosed": "The regular AAPL market session is closed now. The last bot assessment lacked a current quote; no Paper order was placed.",
+      "paperAaplMarketClosedNextStep": "Wait for the market to open and a current quote to become available.",
+      "paperAaplMarketClosedHistory": "The regular AAPL market session was closed at this assessment and no current quote was available. No Paper order was placed.",
+      "paperPriceUnavailable": "The last bot assessment lacked a current market price. No Paper order was placed.",
+      "paperPriceUnavailableNextStep": "Check the quote source again when current market data is available.",
+      "paperPriceUnavailableHistory": "No current market price was available at this assessment. No Paper order was placed.",
       "eyebrow": "AUTOMATION",
       "title": "My bots",
       "subtitle": "See what your bot does and where attention is needed.",
