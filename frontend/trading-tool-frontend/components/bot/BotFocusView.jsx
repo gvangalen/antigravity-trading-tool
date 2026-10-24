@@ -61,6 +61,8 @@ export default function BotFocusView({
       || ((state === "allowed" || state === "executed") && explanations.length === 0 ? copy.states?.allowed : null)
       || risk.reason || copy.reasons?.[state] || copy.reasonUnavailable;
   const nextStepText = orderState ? copy.nextSteps?.[orderState] : copy.nextSteps?.[risk.reason_code] || copy.nextSteps?.[state] || risk.next_step || copy.nextStepFallback;
+  const pausedPaperWithoutCash = state === "paused" && !activeBot?.is_live
+    && (!portfolio?.stats?.paper_cash_configured || Number(portfolio.stats.paper_cash_eur || 0) <= 0);
   const riskTone = state === "blocked" || state === "error" || state === "unknown_exchange_state"
     ? "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
     : state === "reduced" || state === "stale" || state === "missing" || state === "awaiting_exchange" || state === "execution_pending"
@@ -251,7 +253,7 @@ export default function BotFocusView({
               <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider"><AlertTriangle size={16} />{copy.now}</div>
               <h3 className="mt-2 text-lg font-black">{riskTitle}</h3>
               <p className="mt-1 text-sm">{state === "paused" ? copy.pausedReason : riskReason}</p>
-              <p className="mt-3 text-sm"><strong>{copy.nextStep}:</strong> {state === "paused" ? copy.resumeStep : nextStepText}</p>
+              <p className="mt-3 text-sm"><strong>{copy.nextStep}:</strong> {state === "paused" ? (pausedPaperWithoutCash ? copy.fundAndResumeStep : copy.resumeStep) : nextStepText}</p>
             </section>
 
             <div className="flex flex-wrap gap-2">

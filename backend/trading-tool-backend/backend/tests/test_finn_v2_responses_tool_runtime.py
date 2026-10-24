@@ -12466,6 +12466,9 @@ def test_open_bot_reference_scopes_portfolio_evidence_without_changing_global_to
         "en kan hij nu een Paper-order plaatsen? Alleen uitleg."
     )
     assert FinnResponsesFrontDoor._refers_to_open_bot(message)
+    assert FinnResponsesFrontDoor._refers_to_open_bot(
+        "Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren?"
+    )
     assert not FinnResponsesFrontDoor._refers_to_open_bot("Vergelijk al mijn BTC-bots")
     assert not FinnResponsesFrontDoor._refers_to_open_bot("Vergelijk deze bot met een andere bot")
     original = {"status": "completed", "results": [{
@@ -12501,7 +12504,11 @@ def test_open_bot_reference_does_not_show_another_bot_if_focused_row_is_missing(
     assert unverified["results"][0]["data"]["focus_status"] == "unverified_workspace_bot"
 
 
-def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkeypatch):
+@pytest.mark.parametrize("question", [
+    "Welke bot heb ik op deze pagina open, aan welke strategie is hij gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg.",
+    "Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren? Noem zijn naam en gekoppelde strategie.",
+])
+def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkeypatch, question):
     setup = {"id": 11, "name": "QA BTC Friday Setup", "symbol": "BTC"}
     strategy = {"id": 22, "name": "QA Friday Strategy", "setup_id": 11}
     bot = {"id": 132, "name": "QA Review Paper", "strategy_id": 22}
@@ -12561,8 +12568,7 @@ def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkey
     )
     front.reads = FakeRead()
     result = asyncio.run(front.run(
-        message=("Welke bot heb ik op deze pagina open, aan welke strategie is hij "
-                 "gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg."),
+        message=question,
         instructions=front._model_led_instructions("nl"),
         conversation_context={}, verified_asset="BTC",
         workspace_hints={"page": "/bot", "bot_id": 132, "symbol": "BTC"},

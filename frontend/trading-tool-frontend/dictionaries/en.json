@@ -2318,6 +2318,7 @@
       "deferredLiveBody": "This bot remains paused. Connect your exchange, set the limits, and resume it only when you are ready to trade live.",
       "deferredLiveLimits": "Set limits",
       "resumeStep": "Resume the bot to make decisions again.",
+      "fundAndResumeStep": "Assign virtual Paper cash first. Then you can resume and reassess the bot; resuming alone is not enough for a purchase.",
       "reasonUnavailable": "No reason from a recent check is available.",
       "nextStepFallback": "Review the safety check and bot settings.",
       "setPaperCash": "Set paper cash",

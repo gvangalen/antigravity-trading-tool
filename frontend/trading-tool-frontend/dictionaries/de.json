@@ -2335,6 +2335,7 @@
       "deferredLiveBody": "Dieser Bot bleibt pausiert. Verbinde deine Börse, lege Limits fest und aktiviere ihn erst, wenn du live handeln möchtest.",
       "deferredLiveLimits": "Limits festlegen",
       "resumeStep": "Aktiviere den Bot, damit er wieder Entscheidungen trifft.",
+      "fundAndResumeStep": "Weise zuerst virtuelles Paper-Guthaben zu. Danach kannst du den Bot fortsetzen und erneut prüfen; das Fortsetzen allein reicht für einen Kauf nicht aus.",
       "reasonUnavailable": "Noch kein Grund aus einer aktuellen Prüfung verfügbar.",
       "nextStepFallback": "Prüfe Sicherheitskontrolle und Bot-Einstellungen.",
       "setPaperCash": "Paper-Guthaben festlegen",
