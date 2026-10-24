@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## AAPL quote parity between Analyse and FINN (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Product branch: `codex/aapl-price-source-parity`;
-product commit: `45e288925`. CI, deployment and independent live QA are pending.
+Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/aapl-price-source-parity`;
+product commit: `45e288925`, merged through
+[PR #573](https://github.com/gvangalen/antigravity-trading-tool/pull/573) as
+`a5961862c24b3640fea3b5676ee9b4cffd8104bc`. Independent live QA is pending.
 The preceding independent QA found that Analyse's header and watchlist showed
 US$347,69, while FINN read a Twelve Data price of US$347,73 for the same AAPL
 source moment. Analyse selected the newest receipt-time row, whereas FINN
@@ -29,7 +31,14 @@ regression cases, with 100% operation accuracy and zero provider or schema
 failures (artifact SHA-256
 `84f443c603cb6dfc1a62c7279bb5b6ea403e4ee93afe3e54fdff0e2bdf4acae5` and
 `2594e6f46235e21b26e394d5a1ade5085443fe9713f4dce08bbf7149b293e76a`).
-CI, deployment and independent live QA remain pending.
+PR CI passed all five checks. Main CI
+[40080080254](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40080080254)
+and Auto Deploy
+[40080278241](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40080278241)
+succeeded on `a5961862c24b3640fea3b5676ee9b4cffd8104bc`. Public backend
+health and frontend build-info both returned HTTP 200 and that exact SHA on
+24 October 2026. This status update will create a new final SHA; Build waits
+for its own main CI and Auto Deploy before assigning independent QA.
 
 ## Trader evidence across coach, Analyse, report and indicator preview (24 oktober 2026)
 
