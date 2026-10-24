@@ -11,7 +11,6 @@ import {
   Plus,
   Save,
   Sliders,
-  Target,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -21,7 +20,6 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useWatchlist } from "@/hooks/useWatchlist";
-import { useStrategyData } from "@/hooks/useStrategyData";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
 import {
@@ -32,7 +30,7 @@ import {
   marketIndicatorAdd,
 } from "@/lib/api/market";
 import { macroDataAdd } from "@/lib/api/macro";
-import { fetchActiveSetup } from "@/lib/api/setups";
+import { fetchSetupMarketMatches } from "@/lib/api/setups";
 import { technicalDataAdd } from "@/lib/api/technical";
 import { removeFromWatchlist } from "@/lib/api/watchlist";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
@@ -45,9 +43,10 @@ import {
   toTradingViewSymbol,
 } from "../../../../../shared/tradingViewConfig";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
-import { formatBenchmarkScore, hasCompleteDailyBenchmark, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
+import { benchmarkScaleBands, benchmarkSetupView } from "@/lib/setup/benchmarkScale.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -143,9 +142,20 @@ function getUiCopy(locale = "nl") {
       benchmarkExplanation: "A weighted average of your Market, Macro and Technical indicators. Your setup is compared with it; the strategy decides whether a trade follows.",
       benchmarkDetails: "See indicators and weights",
       marketSituation: "Market situation",
-      benchmarkCompositionTitle: "How your benchmark is built",
       periodCompositionTitle: "Scores for the selected periods",
-      benchmarkComposition: "Market, Macro and Technical are the three parts. Their weighted average is shown on the right.",
+      benchmarkAssetTitle: (symbol) => `Your ${symbol} benchmark`,
+      benchmarkBasis: "Your indicators. Your measure.",
+      benchmarkNow: "Now",
+      benchmarkSetupLabel: "Compare with setup",
+      benchmarkSetupZone: "Saved setup condition",
+      benchmarkNoSetup: "No saved setup for this asset.",
+      benchmarkNoCondition: "This setup has no benchmark condition. Review its other rules in My Plan.",
+      benchmarkMissing: "No complete current benchmark. The missing component scores are shown below.",
+      benchmarkUpdating: "The setup comparison is updating. No current match can be confirmed yet.",
+      benchmarkReadError: "The saved setups could not be loaded. No current match can be confirmed.",
+      benchmarkMatches: "Benchmark condition reached. Check the remaining plan rules separately.",
+      benchmarkOutside: "Benchmark condition not reached. The current score is outside the saved range.",
+      benchmarkCustom: (min, max) => min !== null && max !== null ? `${min}–${max}` : min !== null ? `From ${min}` : `Up to ${max}`,
       confidence: "Confidence",
       bias: "Bias",
       watchlist: "Watchlist",
@@ -163,11 +173,6 @@ function getUiCopy(locale = "nl") {
       positive: "Positive",
       negative: "Negative",
       neutral: "Neutral",
-      componentStates: {
-        market: { low: "Market signals weak", mixed: "Market signals mixed", high: "Market signals strong" },
-        macro: { low: "Macro headwinds", mixed: "Macro mixed", high: "Macro supportive" },
-        technical: { low: "Technical signals weak", mixed: "Technical signals mixed", high: "Technical signals strong" },
-      },
       indicatorStates: { low: "Little support", mixed: "Mixed", high: "Strong support" },
       unavailable: "Insufficient data",
       notConfigured: "No indicators added",
@@ -199,14 +204,8 @@ function getUiCopy(locale = "nl") {
       macro: "Macro",
       technical: "Technical",
       combined: "Combined",
-      nextStep: "Next step",
-      planBridgeTitle: "Best matching plan for current market conditions",
-      planBridgeDescription: "Open My Plan to review the linked plan, setup and strategy before bot execution.",
-      openMyPlan: "Open My Plan",
-      setupScore: "Setup closeness",
-      planBridgeScoreHelp: "The setup conditions match. Closeness is not a buy signal; the strategy decides whether a trade follows.",
       setup: "Setup",
-      tuneEngine: "Tune engine",
+      tuneEngine: "Adjust weights",
       closeTuning: "Close tuning",
       weight: "Weight",
       weightInfluence: "Influence on your benchmark score",
@@ -320,9 +319,20 @@ function getUiCopy(locale = "nl") {
       benchmarkExplanation: "Gewichteter Durchschnitt deiner Markt-, Makro- und technischen Indikatoren. Dein Setup wird damit verglichen; die Strategie entscheidet über einen Trade.",
       benchmarkDetails: "Indikatoren und Gewichtung ansehen",
       marketSituation: "Marktlage",
-      benchmarkCompositionTitle: "So entsteht dein Benchmark",
       periodCompositionTitle: "Scores der gewählten Zeiträume",
-      benchmarkComposition: "Markt, Makro und Technik sind die drei Bestandteile. Ihr gewichteter Durchschnitt steht rechts.",
+      benchmarkAssetTitle: (symbol) => `Dein ${symbol}-Benchmark`,
+      benchmarkBasis: "Deine Indikatoren. Dein Maßstab.",
+      benchmarkNow: "Jetzt",
+      benchmarkSetupLabel: "Mit Setup vergleichen",
+      benchmarkSetupZone: "Gespeicherte Setup-Bedingung",
+      benchmarkNoSetup: "Für dieses Asset ist kein Setup gespeichert.",
+      benchmarkNoCondition: "Dieses Setup hat keine Benchmark-Bedingung. Die übrigen Regeln stehen in Mein Plan.",
+      benchmarkMissing: "Kein vollständiger aktueller Benchmark. Die fehlenden Teilwerte stehen unten.",
+      benchmarkUpdating: "Der Setup-Vergleich wird aktualisiert. Eine aktuelle Übereinstimmung ist noch nicht bestätigt.",
+      benchmarkReadError: "Die gespeicherten Setups konnten nicht geladen werden. Eine aktuelle Übereinstimmung ist nicht bestätigt.",
+      benchmarkMatches: "Benchmark-Bedingung erreicht. Prüfe die übrigen Planregeln separat.",
+      benchmarkOutside: "Benchmark-Bedingung nicht erreicht. Der aktuelle Wert liegt außerhalb des gespeicherten Bereichs.",
+      benchmarkCustom: (min, max) => min !== null && max !== null ? `${min}–${max}` : min !== null ? `Ab ${min}` : `Bis ${max}`,
       confidence: "Vertrauen",
       bias: "Bias",
       watchlist: "Watchlist",
@@ -340,11 +350,6 @@ function getUiCopy(locale = "nl") {
       positive: "Positiv",
       negative: "Negativ",
       neutral: "Neutral",
-      componentStates: {
-        market: { low: "Marktsignale schwach", mixed: "Marktsignale gemischt", high: "Marktsignale stark" },
-        macro: { low: "Makro-Gegenwind", mixed: "Makro gemischt", high: "Makro unterstützt" },
-        technical: { low: "Technische Signale schwach", mixed: "Technische Signale gemischt", high: "Technische Signale stark" },
-      },
       indicatorStates: { low: "Wenig Unterstützung", mixed: "Gemischt", high: "Starke Unterstützung" },
       unavailable: "Unzureichende Daten",
       notConfigured: "Keine Indikatoren hinzugefügt",
@@ -376,14 +381,8 @@ function getUiCopy(locale = "nl") {
       macro: "Makro",
       technical: "Technisch",
       combined: "Kombiniert",
-      nextStep: "Nächster Schritt",
-      planBridgeTitle: "Bester Plan für die aktuellen Marktbedingungen",
-      planBridgeDescription: "Öffne Mein Plan, um den verknüpften Plan, das Setup und die Strategie vor der Bot-Ausführung zu prüfen.",
-      openMyPlan: "Mein Plan öffnen",
-      setupScore: "Setup-Nähe",
-      planBridgeScoreHelp: "Die Setup-Bedingungen passen. Nähe ist kein Kaufsignal; die Strategie entscheidet über einen Trade.",
       setup: "Setup",
-      tuneEngine: "Engine abstimmen",
+      tuneEngine: "Gewichtung anpassen",
       closeTuning: "Abstimmung schließen",
       weight: "Gewichtung",
       weightInfluence: "Einfluss auf deinen Benchmark-Score",
@@ -496,9 +495,20 @@ function getUiCopy(locale = "nl") {
     benchmarkExplanation: "Gewogen gemiddelde van jouw Markt-, Macro- en Technisch-indicatoren. Je setup wordt hiermee vergeleken; de strategie bepaalt of er een trade volgt.",
     benchmarkDetails: "Bekijk indicatoren en weging",
     marketSituation: "Marktsituatie",
-    benchmarkCompositionTitle: "Zo is jouw benchmark opgebouwd",
     periodCompositionTitle: "Scores voor de gekozen perioden",
-    benchmarkComposition: "Markt, Macro en Technisch zijn de drie onderdelen. Rechts staat hun gewogen gemiddelde.",
+    benchmarkAssetTitle: (symbol) => `Jouw ${symbol}-benchmark`,
+    benchmarkBasis: "Jouw indicatoren. Jouw meetlat.",
+    benchmarkNow: "Nu",
+    benchmarkSetupLabel: "Vergelijk met setup",
+    benchmarkSetupZone: "Opgeslagen setupvoorwaarde",
+    benchmarkNoSetup: "Voor deze asset is geen setup opgeslagen.",
+    benchmarkNoCondition: "Deze setup heeft geen benchmarkvoorwaarde. Bekijk de overige regels in Mijn Plan.",
+    benchmarkMissing: "Geen complete actuele benchmark. De ontbrekende deelscores staan hieronder.",
+    benchmarkUpdating: "De setupvergelijking wordt bijgewerkt. Een actuele match is nog niet bevestigd.",
+    benchmarkReadError: "De opgeslagen setups konden niet worden geladen. Een actuele match is niet bevestigd.",
+    benchmarkMatches: "Benchmarkvoorwaarde bereikt. Controleer de andere planregels afzonderlijk.",
+    benchmarkOutside: "Benchmarkvoorwaarde niet bereikt. De huidige score valt buiten het opgeslagen bereik.",
+    benchmarkCustom: (min, max) => min !== null && max !== null ? `${min}–${max}` : min !== null ? `Vanaf ${min}` : `Tot ${max}`,
     confidence: "Vertrouwen",
     bias: "Bias",
     watchlist: "Watchlist",
@@ -516,11 +526,6 @@ function getUiCopy(locale = "nl") {
     positive: "Positief",
     negative: "Negatief",
     neutral: "Neutraal",
-    componentStates: {
-      market: { low: "Marktsignalen zwak", mixed: "Marktsignalen gemengd", high: "Marktsignalen sterk" },
-      macro: { low: "Macro werkt tegen", mixed: "Macro is gemengd", high: "Macro ondersteunt" },
-      technical: { low: "Technische signalen zwak", mixed: "Technische signalen gemengd", high: "Technische signalen sterk" },
-    },
     indicatorStates: { low: "Weinig steun", mixed: "Gemengd", high: "Veel steun" },
     unavailable: "Onvoldoende data",
     notConfigured: "Geen indicatoren toegevoegd",
@@ -552,14 +557,8 @@ function getUiCopy(locale = "nl") {
     macro: "Macro",
     technical: "Technisch",
     combined: "Gecombineerd",
-    nextStep: "Volgende stap",
-    planBridgeTitle: "Best passende plan voor de huidige marktomstandigheden",
-    planBridgeDescription: "Open Mijn Plan om het gekoppelde plan, de setup en strategie te beoordelen voordat de bot uitvoert.",
-    openMyPlan: "Open Mijn Plan",
-    setupScore: "Nabijheid setup",
-    planBridgeScoreHelp: "De setupvoorwaarden passen. Nabijheid is geen koopsignaal; de strategie bepaalt of er een trade volgt.",
     setup: "Setup",
-    tuneEngine: "Engine afstemmen",
+    tuneEngine: "Wegingen aanpassen",
     closeTuning: "Afstemmen sluiten",
     weight: "Weging",
     weightInfluence: "Invloed op jouw benchmarkscore",
@@ -1163,13 +1162,6 @@ function scoreTone(value, ui = getUiCopy("nl")) {
   };
 }
 
-function componentScoreLabel(category, value, ui) {
-  const score = normalizeScore(value);
-  if (score === null) return ui.unavailable;
-  const band = score <= 35 ? "low" : score >= 70 ? "high" : "mixed";
-  return ui.componentStates?.[category]?.[band] || ui.unavailable;
-}
-
 function explainIndicatorAssessment({
   name,
   label,
@@ -1449,9 +1441,10 @@ function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, r
   );
 }
 
-function ScoreOverview({ market, macro, technical, combined, sections, weights, loading, onSaveWeights, ui, locale, conditionOptions, isDailyBenchmark }) {
+function ScoreOverview({ assetSymbol, market, macro, technical, combined, sections, weights, loading, onSaveWeights, onOpenPlan, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedSetupId, setSelectedSetupId] = useState(null);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
 
   useEffect(() => {
@@ -1463,28 +1456,27 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
     }
   }, [isEditing, weights]);
 
-  const items = [
-    {
-      id: "market",
-      label: ui.market,
-      score: normalizeScore(market?.score),
-    },
-    {
-      id: "macro",
-      label: ui.macro,
-      score: normalizeScore(macro?.score),
-    },
-    {
-      id: "technical",
-      label: ui.technical,
-      score: normalizeScore(technical?.score),
-    },
-    {
-      id: "combined",
-      label: isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore,
-      score: normalizeScore(combined?.score),
-    },
-  ];
+  const currentScore = normalizeScore(combined?.score);
+  const eligibleMatches = isDailyBenchmark && Array.isArray(setupMatches) ? setupMatches.filter((match) =>
+    String(match?.symbol || "").toUpperCase() === assetSymbol
+  ) : [];
+  const selectedMatch = eligibleMatches.find((match) => String(match.setup_id) === String(selectedSetupId))
+    || eligibleMatches.find((match) => match.is_best)
+    || eligibleMatches[0]
+    || null;
+  const view = benchmarkSetupView(currentScore, selectedMatch);
+  const scaleBands = benchmarkScaleBands();
+  const setupZoneLabel = view.preset
+    ? conditionOptions?.[view.preset.id]?.title || ui.benchmarkCustom(view.minimum, view.maximum)
+    : view.zone ? ui.benchmarkCustom(view.minimum, view.maximum) : null;
+  const statusText = setupMatchError ? ui.benchmarkReadError : setupMatches === null ? ui.benchmarkUpdating : ({
+    no_setup: ui.benchmarkNoSetup,
+    no_condition: ui.benchmarkNoCondition,
+    insufficient_data: ui.benchmarkMissing,
+    updating: ui.benchmarkUpdating,
+    matches: ui.benchmarkMatches,
+    outside_conditions: ui.benchmarkOutside,
+  }[view.status]);
   const scoreSections = sections.filter((section) => section.score !== null);
   const sectionSource = (id) => oldestScoredSource(sections.find((section) => section.id === id)?.rows);
   const combinedSource = scoreSections.length && scoreSections.every((section) => sectionSource(section.id))
@@ -1527,12 +1519,16 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
 
   const totalWeight = Object.values(localWeights).reduce((sum, value) => sum + value, 0);
   const isBalanced = Math.abs(totalWeight - 1) < 0.01;
+  const currentWeights = normalizeWeights(weights);
 
   return (
     <section id="benchmark-uitleg" className="scroll-mt-6 rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-        <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-          {isDailyBenchmark ? ui.benchmarkCompositionTitle : ui.periodCompositionTitle}
+        <div>
+          <h2 className="text-[19px] font-black tracking-tight text-slate-950">
+            {isDailyBenchmark ? ui.benchmarkAssetTitle(assetSymbol) : ui.periodCompositionTitle}
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-500">{ui.benchmarkBasis}</p>
         </div>
         <button
           type="button"
@@ -1547,39 +1543,82 @@ function ScoreOverview({ market, macro, technical, combined, sections, weights, 
           {isEditing ? ui.closeTuning : ui.tuneEngine}
         </button>
       </div>
-      <p className="px-4 pt-2.5 text-[11px] leading-relaxed text-slate-500">{ui.benchmarkComposition}</p>
+      <div className="px-4 py-4">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
+          <strong className="text-[42px] font-black leading-none tracking-tight text-slate-950">
+            {loading && currentScore === null ? "…" : formatScore(currentScore)}
+          </strong>
+          <div className="pb-0.5">
+            <div className="text-[16px] font-bold text-slate-950">
+              {view.currentBand ? conditionOptions?.[view.currentBand.id]?.title || ui.benchmarkCustom(view.currentBand.min, view.currentBand.max) : ui.unavailable}
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {currentScore !== null ? (combinedSource ? `${ui.scoreSourceDate}: ${formatTimestamp(combinedSource, locale)}` : ui.scoreSourceUnknown) : ui.benchmarkMissing}
+            </div>
+          </div>
+        </div>
 
-      <div className="grid gap-2.5 px-4 py-2.5 lg:grid-cols-4">
-        {items.map((item) => {
-          const tone = scoreTone(item.score, ui);
-          const benchmarkCondition = item.id === "combined" ? marketConditionForScore(item.score) : null;
-          const summary = loading && item.score === null ? ui.loadingScores : item.id === "combined"
-            ? (benchmarkCondition ? conditionOptions?.[benchmarkCondition.id]?.title : ui.unavailable)
-            : sections.find((section) => section.id === item.id)?.notConfigured
-              ? ui.notConfigured
-              : componentScoreLabel(item.id, item.score, ui);
-          const sourceAt = item.id === "combined" ? combinedSource : sectionSource(item.id);
-          return (
-            <div key={item.id} className={`rounded-[16px] border px-3.5 py-2.5 ${tone.pill}`}>
-              <div className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">
-                {item.label}
+        <div className="mt-5 overflow-x-auto pb-1">
+          <div className="min-w-[560px]">
+            <div className="relative h-12" role="img" aria-label={`${ui.benchmarkScore}: ${currentScore === null ? ui.unavailable : `${formatScore(currentScore)} · ${conditionOptions?.[view.currentBand?.id]?.title || ui.benchmarkCustom(view.currentBand.min, view.currentBand.max)}`}`}>
+              {currentScore !== null ? (
+                <div className="absolute top-0 z-20 -translate-x-1/2 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white" style={{ left: `${Math.max(3, Math.min(97, currentScore))}%` }}>
+                  {ui.benchmarkNow} · {formatScore(currentScore)}
+                </div>
+              ) : null}
+              <div className="absolute inset-x-0 bottom-0 flex h-7 gap-0.5 overflow-hidden rounded-lg">
+                {scaleBands.map((band, index) => (
+                  <div key={band.id} style={{ width: `${band.width}%` }} className={[
+                    "bg-rose-200", "bg-orange-200", "bg-amber-100", "bg-teal-100", "bg-emerald-200",
+                  ][index]} />
+                ))}
               </div>
-              <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="text-[24px] font-black leading-none tracking-tight">{formatScore(item.score)}</span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-80">
-                  {summary}
-                </span>
-              </div>
-              {item.score !== null ? (
-                <p className="mt-1.5 text-[10px] font-medium opacity-80">
-                  {sourceAt ? `${ui.scoreSourceDate}: ${formatTimestamp(sourceAt, locale)}` : ui.scoreSourceUnknown}
-                </p>
+              {view.zone ? (
+                <div className="absolute bottom-0 z-10 h-7 rounded-lg border-[3px] border-blue-600" style={{ left: `${view.zone.start}%`, width: `${Math.max(1, view.zone.end - view.zone.start)}%` }} />
+              ) : null}
+              {currentScore !== null ? (
+                <div className="absolute bottom-0 z-30 h-7 w-0.5 -translate-x-1/2 bg-slate-950" style={{ left: `${currentScore}%` }} />
               ) : null}
             </div>
-          );
-        })}
+            <div className="mt-2 flex gap-0.5 text-center text-[10px] font-semibold leading-tight text-slate-600">
+              {scaleBands.map((band) => (
+                <div key={band.id} style={{ width: `${band.width}%` }}>
+                  <span className="block font-bold text-slate-400">{band.min}–{band.max}</span>
+                  {conditionOptions?.[band.id]?.title || ui.benchmarkCustom(band.min, band.max)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {isDailyBenchmark ? (
+          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-3.5 py-3">
+            {eligibleMatches.length > 1 ? (
+              <label className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
+                {ui.benchmarkSetupLabel}
+                <select value={String(selectedMatch?.setup_id || "")} onChange={(event) => setSelectedSetupId(event.target.value)} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900">
+                  {eligibleMatches.map((match) => <option key={match.setup_id} value={match.setup_id}>{match.name}</option>)}
+                </select>
+              </label>
+            ) : selectedMatch ? (
+              <button type="button" onClick={onOpenPlan} className="text-left text-xs font-bold text-blue-700 hover:underline">{selectedMatch.name}</button>
+            ) : null}
+            {setupZoneLabel ? <p className="text-xs font-semibold text-slate-900">{ui.benchmarkSetupZone}: {setupZoneLabel}</p> : null}
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">{statusText}</p>
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
+          {weightItems.map((item) => (
+            <div key={item.id} className="text-xs text-slate-600">
+              <span className="font-semibold">{item.label}</span>{" "}
+              <strong className="text-slate-950">{formatScore(item.score)}</strong>{" · "}
+              {Math.round((currentWeights[item.id] || 0) * 100)}%
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">{ui.scoreSourceLimit}</p>
       </div>
-      <p className="px-4 pb-3 text-[11px] text-slate-500">{ui.scoreSourceLimit}</p>
 
       {isEditing ? (
         <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3.5">
@@ -1678,64 +1717,6 @@ function AnalysisChartSection({ interval, onIntervalChange, symbol, tradingViewS
           />
         </div>
       ) : null}
-    </section>
-  );
-}
-
-function PlanBridge({ candidate, onOpenPlan, ui }) {
-  if (!candidate) return null;
-  const setupScore = normalizeScore(candidate?.score);
-  const scoreLabel = setupScore === null ? "—" : `${Math.round(setupScore)}/100`;
-  const candidateName = String(candidate?.displayName || "").trim();
-  const bridgeTitle = candidateName || ui.planBridgeTitle;
-
-  return (
-    <section className="relative overflow-hidden rounded-[24px] border border-blue-100 bg-gradient-to-r from-blue-50/80 via-white to-white px-4 py-3.5 shadow-[0_18px_40px_-38px_rgba(37,99,235,0.45)]">
-      <div className="absolute inset-y-0 left-0 w-1 bg-blue-600" />
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-white text-blue-600 shadow-sm">
-            <Target size={17} />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[9px] font-black uppercase tracking-[0.22em] text-blue-600">
-              {ui.nextStep}
-            </div>
-            <h3 className="mt-0.5 text-[15px] font-black tracking-tight text-slate-950">
-              {bridgeTitle}
-            </h3>
-            <p className="mt-0.5 text-[12px] font-medium leading-5 text-slate-500">
-              {ui.planBridgeDescription}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 sm:justify-end">
-          <div className="min-w-[92px]">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
-                {ui.setupScore}
-              </span>
-              <span className="text-[13px] font-black text-slate-900">{scoreLabel}</span>
-            </div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200/80">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-[width] duration-500"
-                style={{ width: `${setupScore ?? 0}%` }}
-              />
-            </div>
-            <p className="mt-1.5 max-w-52 text-[10px] leading-relaxed text-slate-500">{ui.planBridgeScoreHelp}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenPlan}
-            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-blue-700"
-          >
-            {ui.openMyPlan}
-            <ArrowRight size={13} />
-          </button>
-        </div>
-      </div>
     </section>
   );
 }
@@ -2405,8 +2386,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     reloadWorkspace,
     reloadWatchlist,
   } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
-  const { strategies = [] } = useStrategyData({ includeSetups: false });
-  const [marketBestSetup, setMarketBestSetup] = useState(null);
+  const [setupMatches, setSetupMatches] = useState(null);
+  const [setupMatchError, setSetupMatchError] = useState(false);
   const lastWorkspaceReloadAtRef = useRef(0);
   const scoreRefreshTimersRef = useRef([]);
 
@@ -2467,46 +2448,30 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   useEffect(() => {
     let cancelled = false;
-    setMarketBestSetup(null);
+    setSetupMatches(null);
+    setSetupMatchError(false);
 
-    async function loadMarketBestSetup() {
+    async function loadSetupMatches() {
       try {
-        const result = await fetchActiveSetup(activeSymbol);
-        if (cancelled) return;
+        const result = await fetchSetupMarketMatches(activeSymbol);
         if (!cancelled) {
-          setMarketBestSetup(
-            result && String(result.symbol || activeSymbol).toUpperCase() === activeSymbol
-              ? result
-              : null
-          );
+          setSetupMatches(result.filter((match) => String(match?.symbol || "").toUpperCase() === activeSymbol));
+          setSetupMatchError(false);
         }
       } catch (error) {
-        console.error("Failed to load active setup for asset workspace", error);
-        if (!cancelled) setMarketBestSetup(null);
+        console.error("Failed to load setup matches for asset workspace", error);
+        if (!cancelled) {
+          setSetupMatches(null);
+          setSetupMatchError(true);
+        }
       }
     }
 
-    loadMarketBestSetup();
+    loadSetupMatches();
     return () => {
       cancelled = true;
     };
   }, [activeSymbol, workspace?.daily?.calculated_at]);
-
-  const planBridgeCandidate = useMemo(() => {
-    if (!marketBestSetup?.is_active || String(marketBestSetup.symbol || "").toUpperCase() !== activeSymbol) return null;
-    const runtimeSetupId = marketBestSetup.setup_id ?? marketBestSetup.id ?? null;
-    const linkedStrategies = strategies.filter((strategy) =>
-      String(strategy?.setup_id ?? strategy?.setup?.id ?? "") === String(runtimeSetupId)
-    );
-    const linkedStrategy = linkedStrategies.find((strategy) => strategy?.is_active) || linkedStrategies[0];
-    return {
-      ...marketBestSetup,
-      resolvedSetupId: runtimeSetupId,
-      score: normalizeScore(marketBestSetup.score),
-      strategyId: linkedStrategy?.id ?? null,
-      displayName: linkedStrategy?.name || marketBestSetup.name || ui.planBridgeTitle,
-    };
-  }, [activeSymbol, marketBestSetup, strategies, ui.planBridgeTitle]);
 
   const addMarket = async (name) => {
     await marketIndicatorAdd(name, activeSymbol);
@@ -2912,6 +2877,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       />
 
       <ScoreOverview
+        assetSymbol={activeSymbol}
         market={{ score: sections.find((section) => section.id === "market")?.score ?? null }}
         macro={{ score: sections.find((section) => section.id === "macro")?.score ?? null }}
         technical={{ score: sections.find((section) => section.id === "technical")?.score ?? null }}
@@ -2925,6 +2891,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         locale={locale}
         loading={scoresLoading}
         onSaveWeights={saveWeights}
+        onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
+        setupMatches={setupMatches}
+        setupMatchError={setupMatchError}
         ui={ui}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
@@ -3014,12 +2983,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           />
         ))}
       </section>
-
-      <PlanBridge
-        candidate={hasCompleteDailyBenchmark(workspace, activeSymbol) ? planBridgeCandidate : null}
-        onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
-        ui={ui}
-      />
 
       <ForwardReturnsSection symbol={activeSymbol} ui={ui} />
 
