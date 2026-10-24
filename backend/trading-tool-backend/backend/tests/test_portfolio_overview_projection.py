@@ -48,6 +48,17 @@ def test_budget_and_missing_quote_never_become_value_or_cash():
     assert funded.bots[0].result_eur is None
 
 
+def test_zero_optional_bot_budget_is_explicitly_disabled_in_portfolio_facts():
+    data = project_portfolio({"bots": [
+        _bot(1, initialized=False, budget=0),
+        _bot(2, cash=80, budget=500),
+    ]}, environment="paper")
+    assert data.bots[0].budget_total_eur == 0
+    assert data.bots[0].budget_limit_enabled is False
+    assert data.bots[0].paper_cash_eur is None
+    assert data.bots[1].budget_limit_enabled is True
+
+
 def test_empty_unfunded_paper_bot_does_not_hide_known_funded_total():
     data = project_portfolio({"read_at": READ_AT, "bots": [
         _bot(129, cash=10000),

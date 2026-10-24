@@ -280,6 +280,7 @@ class PortfolioBotData(BaseModel):
     valuation_available: bool = False
     valuation_status: str = "unavailable"
     budget_total_eur: Optional[float] = None
+    budget_limit_enabled: Optional[bool] = None
     paper_cash_eur: Optional[float] = None
     is_active: Optional[bool] = None
     is_live: Optional[bool] = None

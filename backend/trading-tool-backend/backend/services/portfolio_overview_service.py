@@ -119,6 +119,7 @@ def project_portfolio(
                 "missing_price" if not row_priced else "available"
             ),
             budget_total_eur=float(row.get("budget_total") or 0),
+            budget_limit_enabled=float(row.get("budget_total") or 0) > 0,
             paper_cash_eur=None if row_live else row_cash, is_active=row.get("is_active"), is_live=row_live,
             price_as_of=account.get("as_of") if row_live and account and row_qty else row.get("price_as_of"),
             price_quote_currency="EUR" if row_live and row_priced else row.get("price_quote_currency"),
