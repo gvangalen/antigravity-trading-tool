@@ -4,12 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Trader evidence across coach, Analyse, report and indicator preview (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch: `codex/trader-evidence-four-points`;
+product commit: `9526573cf`. CI, deployment and independent authenticated QA
+are pending. This is one repair batch for four findings from the daily Paper
+trader: AAPL price/currency claims, Analyse source wording, report proximity
+semantics, and Volume impact before adding an indicator.
+
+The read-only FINN guard now rejects the exact previously observed false
+claims that US$346,61 is above a saved US$347,14 entry or that USD price
+levels are EUR, using the owner-scoped saved strategy and typed market
+comparison. It still leaves the prose to Luna and accepts a separate EUR
+base amount. Analyse summarizes only verified scored indicators. The report
+card and mobile report label identify setup proximity as a score out of 100,
+not a conviction percentage. The indicator modal explains that Volume
+measures activity, not price direction, and disables saving if its actual
+configuration or read-only score-impact preview cannot be loaded. It does
+not predict a new score before the score refresh.
+
+Final local source checks: root pytest **3844 passed, 4 existing skips**;
+frontend typecheck, i18n lint/tests, command/proposal tests, production build
+and high-severity audit passed (0 high vulnerabilities). Local FastAPI/Celery/
+PostgreSQL/Redis/Responses action matrix passed **16/16** and adapter checks
+**19/19**, with zero broker orders, Live calls or production connections
+(artifact SHA-256 `df355e7ba8bc69c89437ef737c949b9d2d74a76823c6ae2bb283eca35181f534`).
+Real Responses selector evaluations passed **20/20** development and **109/109**
+regression cases with 100% operation accuracy and zero provider or schema
+failures (artifact SHA-256
+`f1434a04e2979a8164ecfeff603bcc547847b83d6169017068c7935528332027` and
+`5dd769c1f3a9cf5bf2f1b207bfd21443831fc49abf5cfc48dabb16587dd9c0c0`).
+No production claim or independent acceptance is recorded for this batch yet.
+
 ## FINN owner-scoped plan evidence and model-owned coaching (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product repair:
+Phase: `TARGETED_QA_COMPLETE_WITH_LIMITS`. Product repair:
 [PR #569](https://github.com/gvangalen/antigravity-trading-tool/pull/569),
 merged as `4698f360dca4a5fd813506f9cb113e68fdd892a6`.
-Independent authenticated live QA is pending.
+Independent authenticated live desktop QA completed on final public SHA
+`90a98183e4f0bbd5a67fd706aca0f25f2e1f763e`. It found consistent BTC
+score/setup reads and five continuing FINN turns, but did not prove a fresh
+onboarding, mobile runtime, saved AAPL price comparison, or new Paper order.
 
 This batch carries the typed plan/market comparison, quote and FX provenance for
 Paper orders, and the indicator score-impact preview. The proposed fixed
