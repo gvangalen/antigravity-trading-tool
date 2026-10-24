@@ -6,7 +6,7 @@ import { cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal,
 import { Send, Shield, Loader2, X, Bot, ListChecks, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useWatchlist } from "@/hooks/useWatchlist";
+import { invalidateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
 import { useModal } from "@/components/modal/ModalProvider";
 import { fetchSetups } from "@/lib/api/setups";
 import { fetchStrategies } from "@/lib/api/strategy";
@@ -1751,6 +1751,9 @@ function AIAssistantContent({
             state: { ...(message.state || {}), setup_draft: null, action_draft: null },
           };
         }));
+        if (operationId === "watchlist_add" || operationId === "watchlist_remove") {
+          invalidateWatchlist();
+        }
         emitFinnRefreshSignals();
         return;
       }

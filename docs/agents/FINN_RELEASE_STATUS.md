@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN watchlist refresh and closed-session stock quote (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch:
+`codex/finn-watchlist-refresh-and-stock-quote`. FINN's successful
+`watchlist_add` or `watchlist_remove` confirmation now invalidates the shared
+watchlist and causes Analyse to fetch the authoritative list without a page
+refresh. The watchlist GET bypasses browser caching. The Analyse quote card
+uses asset market region and exchange time zone to label a recent Friday US
+equity quote viewed on Saturday or Sunday as the last available quote while
+the exchange is closed. The underlying quote remains stale for score and
+trade safety; an older quote or a quote lagging during the trading week still
+shows `Verouderd`. No model answer or order rule changed.
+
+Local evidence: root pytest **3870 passed, 4 existing skips**; focused
+workspace tests **34 passed**; targeted frontend regressions **7 passed**;
+web typecheck, i18n lint, command/proposal tests, i18n tests, production
+build and high-severity audit passed (zero high vulnerabilities). The local
+worker-driven FINN matrix passed **16/16** action contracts and **19/19**
+adapter checks, with zero broker orders, Live calls, Live bots or production
+connections (artifact SHA-256
+`d9ab540bd5c6edc056de52c8d80eb2268670e0c9c560f8a3ed93a19067240f47`).
+Real Luna/Responses selector evaluations passed **20/20** development and
+**109/109** regression cases with 100% operation accuracy and zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`7ad1f23a30413d6cd9c209ddd2dd7704d378278a0c0ecc50faff45e62074e5ea`
+and `d7adad6d5d3142cfb3180917b58e195943ca1e292685d4a7845e450f51b5309a`).
+CI, deployment identity and independent live browser acceptance remain open.
+
 ## Separate optional bot cap from assigned Paper cash (24 oktober 2026)
 
 Phase: `NOT_ACCEPTED` for complete external acceptance; the targeted bot
