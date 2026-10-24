@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse benchmark QA follow-up (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/benchmark-zone-qa-fixes`.
+Phase: `LIVE_CANDIDATE`, awaiting targeted independent authenticated browser QA.
+Product branch: `codex/benchmark-zone-qa-fixes`; merged through
+[PR #594](https://github.com/gvangalen/antigravity-trading-tool/pull/594)
+as product SHA `a462fb9c86ecdb22a089cbc991e89a29f53e0478`.
 Independent authenticated browser QA marked live SHA
 `2432d486e26769111b663748c7a3c6b780eb1f88` `NOT_ACCEPTED` for two
 presentation defects: the selected BTC setup reverted after an ordinary
@@ -20,8 +23,16 @@ current owner's returned matches. The zone bar now fits the available width;
 small-screen labels wrap, and the current-score marker stays inside the bar at
 both extremes. No score, setup-match, bot or FINN model logic changed. Frontend
 setup, i18n, command and proposal tests, typecheck, i18n lint, production
-build and high-severity audit passed. CI, deployment identity and independent
-authenticated browser QA remain pending.
+build and high-severity audit passed. PR CI
+[40117970204](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40117970204),
+main CI [40118199564](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40118199564)
+and Auto Deploy [40118391839](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40118391839)
+passed. Public backend health and frontend build-info each returned HTTP 200
+with that product SHA. This status-only update creates a later final SHA; Build
+must verify the last main CI, Auto Deploy and both public markers on that exact
+revision before handing it to independent QA. QA must retest ordinary refresh
+after selecting the second BTC setup and check a 390 px viewport for horizontal
+overflow and clipped zone labels, alongside no-score and unconfigured cases.
 
 ## Analyse benchmark scale and setup comparison (24 oktober 2026)
 
