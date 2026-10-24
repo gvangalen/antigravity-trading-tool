@@ -4,9 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Analyse benchmark QA follow-up (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/benchmark-zone-qa-fixes`.
+Independent authenticated browser QA marked live SHA
+`2432d486e26769111b663748c7a3c6b780eb1f88` `NOT_ACCEPTED` for two
+presentation defects: the selected BTC setup reverted after an ordinary
+refresh, and the five-zone scale caused horizontal page overflow at a 390 px
+viewport. The actual BTC score, saved 34–55 setup band, incomplete AAPL state,
+unconfigured setup state and NL/EN/DE text were otherwise observed correctly.
+
+The selected setup now lives in an owner-checked URL parameter that preserves
+the asset context across refresh and is ignored if the setup is absent from the
+current owner's returned matches. The zone bar now fits the available width;
+small-screen labels wrap, and the current-score marker stays inside the bar at
+both extremes. No score, setup-match, bot or FINN model logic changed. Frontend
+setup, i18n, command and proposal tests, typecheck, i18n lint, production
+build and high-severity audit passed. CI, deployment identity and independent
+authenticated browser QA remain pending.
+
 ## Analyse benchmark scale and setup comparison (24 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`, pending independent authenticated browser QA. Candidate
+Phase: `NOT_ACCEPTED` after independent authenticated browser QA. Candidate
 branch: `codex/benchmark-zone-visualization`; merged via
 [PR #592](https://github.com/gvangalen/antigravity-trading-tool/pull/592) as
 `272457f2a70fa85daa0bb204b50c48fd840f1634`. This is a frontend
