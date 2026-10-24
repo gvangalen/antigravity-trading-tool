@@ -4,9 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Separate optional bot cap from assigned Paper cash (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch: `codex/finn-paper-funding-facts`.
+Independent authenticated QA on live SHA
+`c75c2a2080d0e0acc33b3468cf01caed2c899164` returned `NOT_ACCEPTED`:
+the open-bot paraphrase named the correct bot and strategy but described
+"geen toegewezen Paper-budget of Paper-kas" as a blocker, then correctly said
+that its €0 optional budget cap does not block. The exact original bot question,
+explicitly named other-bot priority, direct-order boundary, Analyse source
+claims, report proximity language and Volume preview passed. A positive AAPL
+USD-entry comparison remains unproved because the QA strategy has no saved
+entry/stop/targets and the observed quote was stale.
+
+The owner-verified open-bot read now presents a disabled optional cap as a
+typed disabled state rather than a raw €0 amount. It supplies a separate typed
+Paper-cash status from the portfolio ledger; enabled caps keep their amount.
+This changes evidence supplied to Luna, not FINN's answer text or action
+permissions. Root pytest passed **3870 tests, 4 existing skips**. Frontend
+typecheck, i18n lint/tests, command/proposal tests, production build and
+high-severity audit passed with zero high vulnerabilities. The local worker
+action matrix passed **16/16** contracts and **19/19** adapter checks, with
+zero broker orders, Live calls, Live bots or production connections (artifact
+SHA-256 `2aa236afdc94a27e12e530f50fbfb286d2faa20307f47420789251ead71d5917`).
+Real Luna/Responses selector evaluations passed **20/20** development and
+**109/109** regression cases with 100% operation accuracy and zero provider,
+schema or parse failures (artifact SHA-256
+`d820be4c382ee7c05b307760335f1707b440fa8b619a408d14e37da37c75f03b` and
+`242816e17d79f79b2a8305951d27047fa2f9f5fe7f6aec5beb81e929d45e8194`).
+CI, deployment and independent live QA are pending.
+
 ## Owner-bound open-bot evidence bundle (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product branch:
+Phase: `NOT_ACCEPTED` for the complete independent scope. Product branch:
 `codex/finn-open-bot-evidence-bundle`; merged through
 [PR #583](https://github.com/gvangalen/antigravity-trading-tool/pull/583)
 as `34da29d2751f7beeed7a907ab4b220d40ed0361a`.
@@ -45,8 +75,9 @@ main CI [40094324235](https://github.com/gvangalen/antigravity-trading-tool/acti
 and Auto Deploy [40094510799](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40094510799)
 passed. Public backend health and frontend build-info returned HTTP 200 and
 the exact product merge SHA. This status update creates a new final SHA;
-Build must verify its last main CI, Auto Deploy and both public markers before
-handing that revision to independent QA. Independent live QA is pending.
+Build verified the last main CI, Auto Deploy and both public markers before
+handing that revision to independent QA. The verdict and remaining issue are
+recorded in the current section above.
 
 ## Visible Paper-bot reference and zero-cap facts (24 oktober 2026)
 
