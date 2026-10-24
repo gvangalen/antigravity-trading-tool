@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { benchmarkScaleBands, benchmarkSetupView } from "../lib/setup/benchmarkScale.mjs";
+import { benchmarkScaleBands, benchmarkSetupView, withSelectedBenchmarkSetup } from "../lib/setup/benchmarkScale.mjs";
 
 test("benchmark scale follows the saved setup presets without gaps", () => {
   const bands = benchmarkScaleBands();
@@ -51,4 +51,14 @@ test("custom and one-sided setup bounds use their saved range", () => {
     components: { benchmark: { score: 80 } },
     status: "matches",
   }).zone, { start: 69.5, end: 100 });
+});
+
+test("the chosen setup survives refresh in the URL without replacing asset context", () => {
+  const query = withSelectedBenchmarkSetup("symbol=BTC&tab=market&variant=v3", 42);
+  const params = new URLSearchParams(query);
+  assert.equal(params.get("symbol"), "BTC");
+  assert.equal(params.get("tab"), "market");
+  assert.equal(params.get("benchmarkSetup"), "42");
+  assert.equal(new URLSearchParams(withSelectedBenchmarkSetup(query, null)).has("benchmarkSetup"), false);
+  assert.equal(new URLSearchParams(withSelectedBenchmarkSetup(query, "not-an-id")).has("benchmarkSetup"), false);
 });

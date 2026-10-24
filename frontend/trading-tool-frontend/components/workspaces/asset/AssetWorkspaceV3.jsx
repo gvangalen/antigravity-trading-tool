@@ -46,7 +46,7 @@ import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
-import { benchmarkScaleBands, benchmarkSetupView } from "@/lib/setup/benchmarkScale.mjs";
+import { benchmarkScaleBands, benchmarkSetupView, withSelectedBenchmarkSetup } from "@/lib/setup/benchmarkScale.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -1444,10 +1444,9 @@ function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, r
   );
 }
 
-function ScoreOverview({ assetSymbol, market, macro, technical, combined, sections, weights, loading, onSaveWeights, onOpenPlan, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark }) {
+function ScoreOverview({ assetSymbol, market, macro, technical, combined, sections, weights, loading, onSaveWeights, onOpenPlan, onSelectSetup, selectedSetupId, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedSetupId, setSelectedSetupId] = useState(null);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
 
   useEffect(() => {
@@ -1561,11 +1560,11 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto pb-1">
-          <div className="min-w-[560px]">
+        <div className="mt-5 min-w-0 pb-1">
+          <div className="w-full min-w-0">
             <div className="relative h-12" role="img" aria-label={`${ui.benchmarkScore}: ${currentScore === null ? ui.unavailable : `${formatBenchmarkScore(currentScore, locale)} · ${conditionOptions?.[view.currentBand?.id]?.title || ui.benchmarkCustom(view.currentBand.min, view.currentBand.max)}`}`}>
               {currentScore !== null ? (
-                <div className="absolute top-0 z-20 -translate-x-1/2 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white" style={{ left: `${Math.max(3, Math.min(97, currentScore))}%` }}>
+                <div className={`absolute top-0 z-20 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white ${currentScore <= 10 ? "" : currentScore >= 90 ? "-translate-x-full" : "-translate-x-1/2"}`} style={{ left: `${currentScore}%` }}>
                   {ui.benchmarkNow} · {formatBenchmarkScore(currentScore, locale)}
                 </div>
               ) : null}
@@ -1583,9 +1582,9 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
                 <div className="absolute bottom-0 z-30 h-7 w-0.5 -translate-x-1/2 bg-slate-950" style={{ left: `${currentScore}%` }} />
               ) : null}
             </div>
-            <div className="mt-2 flex gap-0.5 text-center text-[10px] font-semibold leading-tight text-slate-600">
+            <div className="mt-2 flex gap-0.5 text-center text-[8px] font-semibold leading-tight text-slate-600 sm:text-[10px]">
               {scaleBands.map((band) => (
-                <div key={band.id} style={{ width: `${band.width}%` }}>
+                <div key={band.id} style={{ width: `${band.width}%` }} className="min-w-0 break-words px-0.5">
                   <span className="block font-bold text-slate-400">{band.min}–{band.max}</span>
                   {conditionOptions?.[band.id]?.title || ui.benchmarkCustom(band.min, band.max)}
                 </div>
@@ -1600,7 +1599,7 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
             {eligibleMatches.length > 1 ? (
               <label className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
                 {ui.benchmarkSetupLabel}
-                <select value={String(selectedMatch?.setup_id || "")} onChange={(event) => setSelectedSetupId(event.target.value)} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900">
+                <select value={String(selectedMatch?.setup_id || "")} onChange={(event) => onSelectSetup(event.target.value)} className="max-w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900">
                   {eligibleMatches.map((match) => <option key={match.setup_id} value={match.setup_id}>{match.name}</option>)}
                 </select>
               </label>
@@ -2896,6 +2895,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         loading={scoresLoading}
         onSaveWeights={saveWeights}
         onOpenPlan={() => router.push(`/setup?symbol=${encodeURIComponent(activeSymbol)}`)}
+        onSelectSetup={(setupId) => {
+          const query = withSelectedBenchmarkSetup(searchParams.toString(), setupId);
+          router.replace(`${pathname || "/asset"}?${query}`, { scroll: false });
+        }}
+        selectedSetupId={searchParams.get("benchmarkSetup")}
         setupMatches={setupMatches}
         setupMatchError={setupMatchError}
         ui={ui}

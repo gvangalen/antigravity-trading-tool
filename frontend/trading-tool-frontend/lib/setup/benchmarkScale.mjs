@@ -14,6 +14,14 @@ export function benchmarkScaleBands() {
   });
 }
 
+export function withSelectedBenchmarkSetup(search, setupId) {
+  const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+  const id = Number(setupId);
+  if (Number.isSafeInteger(id) && id > 0) params.set("benchmarkSetup", String(id));
+  else params.delete("benchmarkSetup");
+  return params.toString();
+}
+
 export function benchmarkSetupView(score, match) {
   const current = validScore(score);
   const condition = match?.conditions?.benchmark;
