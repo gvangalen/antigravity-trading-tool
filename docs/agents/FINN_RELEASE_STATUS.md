@@ -4,6 +4,21 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Analyse benchmark as the single market-phase view (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/analysis-market-phase`.
+The owner-weighted Score 2.0 benchmark already shows the current five-zone
+market assessment, source age, Market/Macro/Technical components and the saved
+setup condition. The additional market-context card gave a configured MA200
+indicator undue prominence and duplicated the benchmark. It is removed from
+Analyse, along with its unused helper, copy and tests. MA200 remains available
+in the Technical indicator section; no scores, setup conditions, bot rules or
+FINN model behavior change. This supersedes the separate card described below.
+
+Local frontend i18n, command, proposal and setup tests, typecheck, i18n lint,
+production build and high-severity audit passed. CI, deployment identity and
+independent browser QA remain pending.
+
 ## Analyse dated market context (24 oktober 2026)
 
 Phase: `NOT_ACCEPTED` for the full targeted browser scope because the positive
