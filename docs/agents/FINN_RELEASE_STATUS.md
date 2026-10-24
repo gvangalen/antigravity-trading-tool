@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse benchmark as the single market-phase view (24 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`. Product branch: `codex/analysis-market-phase`,
+Phase: `ACCEPTED` for the targeted independent Analyse browser scope. Product
+branch: `codex/analysis-market-phase`,
 merged through [PR #603](https://github.com/gvangalen/antigravity-trading-tool/pull/603)
 as product SHA `509d1e6d9aa7ff180a45d66127d448e2f051f3d8`.
 The owner-weighted Score 2.0 benchmark already shows the current five-zone
@@ -24,10 +25,20 @@ and Auto Deploy [40131716004](https://github.com/gvangalen/antigravity-trading-t
 passed. Public backend health and frontend build-info each returned HTTP 200
 with the product SHA. This status-only update creates a later final SHA; Build
 must verify last main CI, Auto Deploy and both public markers on that revision
-before handing it to independent browser QA. QA should check that the five-zone
-benchmark, source age, three component scores, and selected setup comparison
-remain visible while the extra MA200 context card is absent on desktop and
-390 px mobile web. Independent browser QA remains pending.
+before handing it to independent browser QA. Status-update main CI
+[40132121104](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40132121104)
+and Auto Deploy [40132314635](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40132314635)
+passed. Both public markers returned HTTP 200 with final tested SHA
+`81c3e7ed08edccd3ddf4aff77c523c45f8d6d0be`.
+
+Independent authenticated browser QA accepted the targeted view: BTC showed
+a single five-zone benchmark at 40/100, Market 30, Macro 40, Technical 50,
+oldest indicator source and selected setup comparison. The separate context
+card was absent on BTC and AAPL; AAPL with incomplete component scores showed
+no total or match. NL/EN/DE, 390 px width and console checks passed. No
+indicator, plan, bot or order was changed. The account had no configured
+MA200, so its continued placement within Technical is code-verified but not
+live-observed in this QA run. This verdict does not extend to trading logic.
 
 ## Analyse dated market context (24 oktober 2026)
 
