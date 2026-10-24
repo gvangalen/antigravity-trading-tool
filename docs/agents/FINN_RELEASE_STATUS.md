@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Trader evidence follow-up: asset switching, bot context, zero cap (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Product branch: `codex/trader-evidence-followup`.
+Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/trader-evidence-followup`;
+merged through [PR #575](https://github.com/gvangalen/antigravity-trading-tool/pull/575)
+as `7b414d86e8e0f00af8854526d97251fffc9ccb06`.
 Independent authenticated QA on live SHA
 `c43f64f014203b987d38675fecb45d18bc96aaab` found three remaining
 inconsistencies after the original four-point trader repair: an old AAPL quote
@@ -38,14 +40,24 @@ regression cases, with 100% operation accuracy and zero provider, schema,
 parse, validation or timeout failures (artifact SHA-256
 `eee269cc1fc91b86296cb8e9525aa2f6e8e9f62b90efddb90b3a02c4d3f763a1`
 and `388050a8f3a8d2b16735929ef575a067c5cae014769310222548afcff0253d0f`).
-CI, deployment and independent live QA are still pending.
+PR CI [40082827240](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40082827240),
+main CI [40083005626](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40083005626)
+and Auto Deploy [40083143172](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40083143172)
+passed. Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 and that exact
+SHA on 24 October 2026. This status update creates a new final SHA, which
+Build will verify after its own main CI and Auto Deploy. Independent live QA
+is pending on that final public revision.
 
 ## AAPL quote parity between Analyse and FINN (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/aapl-price-source-parity`;
+Phase: `NOT_ACCEPTED` for the follow-up browser scope. Product branch: `codex/aapl-price-source-parity`;
 product commit: `45e288925`, merged through
 [PR #573](https://github.com/gvangalen/antigravity-trading-tool/pull/573) as
-`a5961862c24b3640fea3b5676ee9b4cffd8104bc`. Independent live QA is pending.
+`a5961862c24b3640fea3b5676ee9b4cffd8104bc`. Independent live QA on
+final SHA `c43f64f014203b987d38675fecb45d18bc96aaab` verified the AAPL
+quote parity, then found the asset-switch, bot-context, zero-cap and strategy
+drawer issues described in the follow-up batch above.
 The preceding independent QA found that Analyse's header and watchlist showed
 US$347,69, while FINN read a Twelve Data price of US$347,73 for the same AAPL
 source moment. Analyse selected the newest receipt-time row, whereas FINN
