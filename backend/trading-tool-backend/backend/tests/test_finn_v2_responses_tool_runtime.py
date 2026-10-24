@@ -12512,12 +12512,12 @@ def test_open_bot_reference_does_not_show_another_bot_if_focused_row_is_missing(
     assert unverified["results"][0]["data"]["focus_status"] == "unverified_workspace_bot"
 
 
-@pytest.mark.parametrize("question", [
-    "Welke bot heb ik op deze pagina open, aan welke strategie is hij gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg.",
-    "Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren? Noem zijn naam en gekoppelde strategie.",
-    "Leg uit waarom de bot op dit scherm nu niet klaar is om op papier BTC te kopen. Welke strategie hoort erbij?",
+@pytest.mark.parametrize("question,selected_tool", [
+    ("Welke bot heb ik op deze pagina open, aan welke strategie is hij gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg.", "get_saved_bots"),
+    ("Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren? Noem zijn naam en gekoppelde strategie.", "get_saved_bots"),
+    ("Leg uit waarom de bot op dit scherm nu niet klaar is om op papier BTC te kopen. Welke strategie hoort erbij?", "get_active_plan_and_strategy"),
 ])
-def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkeypatch, question):
+def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkeypatch, question, selected_tool):
     setup = {"id": 11, "name": "QA BTC Friday Setup", "symbol": "BTC"}
     strategy = {"id": 22, "name": "QA Friday Strategy", "setup_id": 11}
     bot = {"id": 132, "name": "QA Review Paper", "strategy_id": 22}
@@ -12541,17 +12541,37 @@ def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkey
         def _message_mentions_name(message, name):
             return bool(name and name.casefold() in message.casefold())
 
+        @staticmethod
+        def is_setup_collection_request(_message):
+            return False
+
+        @staticmethod
+        def references_recent_action(_message, _entity):
+            return False
+
+        async def resolve_canonical_target(self, **_kwargs):
+            return SimpleNamespace(resolution_status="not_found", source="none")
+
     @asynccontextmanager
     async def session_factory():
         yield SimpleNamespace(commit=AsyncMock())
 
+    selected_calls = []
+
     class FakeRead:
-        async def __call__(self, _call):
-            return {"status": "completed", "results": [{
+        async def __call__(self, call):
+            selected_calls.append(call)
+            linked_bot = [{"scope": "read_linked_bot", "status": "completed", "data": {
+                "bot_id": 132, "name": "QA Review Paper",
+                "strategy_name": "QA Friday Strategy", "budget_total_eur": 0,
+                "budget_limit_enabled": False, "is_active": False,
+            }}] if "read_linked_bot" in call.read_tools else []
+            return {"status": "completed", "results": [*linked_bot, {
                 "scope": "read_portfolio", "status": "completed", "data": {
                     "global": {"paper_cash_eur": 300},
                     "bots": [
-                        {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": 0},
+                        {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": None,
+                         "budget_total_eur": 0, "budget_limit_enabled": False},
                         {"bot_id": 88, "name": "QA Friday Paper", "paper_cash_eur": 300},
                     ],
                 },
@@ -12568,7 +12588,7 @@ def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkey
         AsyncMock(),
     )
     fake = FakeResponses(
-        response("bot-read", calls=[tool_call("call-bot", "get_saved_bots", {"asset": "BTC"})]),
+        response("bot-read", calls=[tool_call("call-bot", selected_tool, {"asset": "BTC"})]),
         response("bot-answer", text="QA Review Paper is gepauzeerd."),
     )
     front = FinnResponsesFrontDoor(
@@ -12582,8 +12602,18 @@ def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkey
         conversation_context={}, verified_asset="BTC",
         workspace_hints={"page": "/bot", "bot_id": 132, "symbol": "BTC"},
     ))
-    portfolio = result.response.tool_trace[0]["result"]["results"][0]["data"]
+    assert selected_calls[0].inputs.get("bot_id") == 132 or selected_tool == "get_saved_bots"
+    if selected_tool == "get_active_plan_and_strategy":
+        assert "read_linked_bot" in selected_calls[0].read_tools
+        assert "read_portfolio" in selected_calls[0].read_tools
+        linked = next(item for item in result.response.tool_trace[0]["result"]["results"]
+                      if item["scope"] == "read_linked_bot")
+        assert linked["data"]["name"] == "QA Review Paper"
+        assert linked["data"]["budget_limit_enabled"] is False
+    portfolio = next(item["data"] for item in result.response.tool_trace[0]["result"]["results"]
+                     if item["scope"] == "read_portfolio")
     assert [row["name"] for row in portfolio["bots"]] == ["QA Review Paper"]
+    assert portfolio["bots"][0]["budget_limit_enabled"] is False
     assert portfolio["global_summary_scope"] == "all_bots"
 
 

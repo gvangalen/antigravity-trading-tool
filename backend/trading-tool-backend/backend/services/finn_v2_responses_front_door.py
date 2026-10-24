@@ -2476,6 +2476,11 @@ class FinnResponsesFrontDoor:
                             "asset": selected_score_setup[1],
                             "setup_id": selected_score_setup[0],
                         })
+                workspace_selector = None
+                visible_bot_reference = (
+                    workspace_hints.get("page") == "/bot"
+                    and self._refers_to_open_bot(message)
+                )
                 if call.name == "get_active_plan_and_strategy" and not pending_operation:
                     workspace_selector = await self._workspace_bot_plan_selector(
                         workspace_hints=workspace_hints, message=message,
@@ -2485,21 +2490,31 @@ class FinnResponsesFrontDoor:
                         # The read executor follows bot -> strategy -> setup in
                         # one owner-scoped chain, including when the setup has
                         # several strategies. Never reuse model-selected IDs.
-                        call = replace(call, inputs=workspace_selector)
-                read_result = await self.reads(call)
-                if (
-                    call.name in {"get_saved_bots", "get_portfolio_and_exposure"}
-                    and self._refers_to_open_bot(message)
-                ):
+                        call = replace(
+                            call,
+                            inputs=workspace_selector,
+                            read_tools=(
+                                tuple(dict.fromkeys((*call.read_tools, "read_linked_bot", "read_portfolio")))
+                                if visible_bot_reference else call.read_tools
+                            ),
+                        )
+                        # A question about the open bot needs its own name,
+                        # optional-cap state and actual Paper cash even if
+                        # Luna initially selected only a plan read. Supply
+                        # those owner-bound facts in the same read, leaving
+                        # the wording of the answer to Luna.
+                if (visible_bot_reference and workspace_selector is None
+                        and call.name in {"get_saved_bots", "get_portfolio_and_exposure"}):
                     workspace_selector = await self._workspace_bot_plan_selector(
                         workspace_hints=workspace_hints, message=message,
                         mentioned_assets=mentioned_assets,
                     )
-                    if workspace_hints.get("page") == "/bot":
-                        read_result = self._focus_portfolio_on_open_bot(
-                            read_result,
-                            workspace_selector["bot_id"] if workspace_selector is not None else None,
-                        )
+                read_result = await self.reads(call)
+                if visible_bot_reference and "read_portfolio" in call.read_tools:
+                    read_result = self._focus_portfolio_on_open_bot(
+                        read_result,
+                        workspace_selector["bot_id"] if workspace_selector is not None else None,
+                    )
                 if call.name == "get_saved_setup_inventory":
                     # Match explicit names against the owner-scoped result. The
                     # model receives the requested records, not unrelated setups
