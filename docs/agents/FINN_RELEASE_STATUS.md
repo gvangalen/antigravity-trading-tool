@@ -6,8 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse benchmark scale and setup comparison (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Candidate branch:
-`codex/benchmark-zone-visualization`. This is a frontend presentation change:
+Phase: `LIVE_CANDIDATE`, pending independent authenticated browser QA. Candidate
+branch: `codex/benchmark-zone-visualization`; merged via
+[PR #592](https://github.com/gvangalen/antigravity-trading-tool/pull/592) as
+`272457f2a70fa85daa0bb204b50c48fd840f1634`. This is a frontend
+presentation change:
 the Analyse benchmark block now gives the verified combined score priority,
 uses the same five inclusive bands as the saved setup-condition picker, and
 outlines a selected setup's actual stored benchmark bounds. It reads all
@@ -21,8 +24,14 @@ FINN model route, setup rule, bot decision or order path changed.
 Frontend setup tests, i18n tests, command tests, proposal tests, typecheck,
 i18n lint, production build and high-severity audit passed. The new boundary
 tests cover preset gaps, rounded score boundaries, incomplete evidence,
-unconfigured setups, custom ranges and one-sided ranges. Deployment identity
-and independent authenticated browser QA remain open.
+unconfigured setups, custom ranges and one-sided ranges. PR CI
+[40116496857](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40116496857),
+main CI [40116742188](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40116742188)
+and Auto Deploy [40116926024](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40116926024)
+passed. Public backend health and frontend build-info both returned HTTP 200
+with the merge SHA above. This status-only update creates a later final SHA;
+Build must verify its last main CI, Auto Deploy and both public markers before
+independent QA checks the owner-scoped web flow on that final revision.
 
 ## Closed crypto daycandles for Score 2.0 technical indicators (24 oktober 2026)
 
