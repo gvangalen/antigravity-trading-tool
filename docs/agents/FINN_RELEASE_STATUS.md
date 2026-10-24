@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Closed crypto daycandles for Score 2.0 technical indicators (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATED`, awaiting PR CI and Auto Deploy. Product branch:
-`codex/ma200-refresh`. On the
+Phase: `LIVE_CANDIDATE`, pending independent authenticated QA. Product branch:
+`codex/ma200-refresh`; merged through
+[PR #590](https://github.com/gvangalen/antigravity-trading-tool/pull/590)
+as product SHA `ad9e26b7acadbf62bfc6c00e78fa2d5da4ec4203`. On the
 existing BTC Analyse view, the MA200 measurement was marked stale because its
 source moment was 23 October 02:00 CEST: the **opening** of the Friday UTC
 daycandle. On Saturday afternoon that timestamp exceeded the 36-hour crypto
@@ -40,8 +42,15 @@ schema, timeout, parse or validation failures (artifact SHA-256
 `4863bcd602c3fc3bf4ef71d071a0ddb704efcde1ff45618b9b716dcf784daea3`
 and `686b1b9e4ac8ec60e0ccedccde7a7fff8f316ed1255c1960cada6781c2ffce85`).
 This is local evidence, not proof of production worker completion or an
-authenticated live BTC score. Independent QA must check the final deployed
-SHA and the saved BTC MA200 score/source moment.
+authenticated live BTC score. PR CI
+[40107003229](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40107003229),
+main CI [40107212679](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40107212679)
+and Auto Deploy [40107448671](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40107448671)
+passed. Public backend health and frontend build-info each returned HTTP 200
+with the product SHA above. This status-only update creates a later final SHA;
+Build must verify its last main CI, Auto Deploy and both public markers before
+handing that revision to independent QA. QA must check the saved BTC MA200
+score and source moment on that final SHA.
 
 ## FINN watchlist refresh and closed-session stock quote (24 oktober 2026)
 
