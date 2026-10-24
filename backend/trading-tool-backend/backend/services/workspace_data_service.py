@@ -114,7 +114,9 @@ def _materialize_quote_snapshot(row: Any) -> dict[str, Any]:
         "price": _number(getattr(row, "price", None)),
         "change_24h": _number(getattr(row, "change_24h", None)),
         "volume": _number(getattr(row, "volume", None)),
-        "timestamp": getattr(row, "timestamp", None),
+        "timestamp": getattr(row, "source_observed_at", None) or getattr(row, "timestamp", None),
+        "quote_currency": getattr(row, "quote_currency", None),
+        "price_provider": getattr(row, "price_provider", None),
     }
 
 
@@ -471,6 +473,8 @@ class WorkspaceDataService:
             "price": quote_snapshot.get("price"),
             "change_24h": quote_snapshot.get("change_24h"),
             "volume": quote_snapshot.get("volume"),
+            "quote_currency": quote_snapshot.get("quote_currency"),
+            "price_provider": quote_snapshot.get("price_provider"),
             **_freshness(quote_snapshot.get("timestamp"), STALE_AFTER_SECONDS["quote"], "market_data"),
         }
         canonical_day = all(period == "day" for period in periods.values())
@@ -634,6 +638,7 @@ class WorkspaceDataService:
                 "logo_url": asset_meta.get("logo_url"),
                 "tradingview_symbol": asset_meta.get("tradingview_symbol"),
                 "price": quote.get("price") if quote else None,
+                "quote_currency": quote.get("quote_currency") if quote else None,
                 "change_24h": quote.get("change_24h") if quote else None,
                 "score": combined,
                 "score_period": "day",
@@ -662,7 +667,9 @@ class WorkspaceDataService:
         if not normalized:
             return {}
 
-        if hasattr(self.market, "get_latest_snapshots"):
+        if hasattr(self.market, "get_latest_quoted_snapshots"):
+            quotes = await self.market.get_latest_quoted_snapshots(normalized)
+        elif hasattr(self.market, "get_latest_snapshots"):
             quotes = await self.market.get_latest_snapshots(normalized)
         else:
             quotes = []

@@ -829,6 +829,22 @@ function formatPrice(value, locale) {
   }).format(numericValue);
 }
 
+function formatQuotePrice(value, locale, quoteCurrency) {
+  if (value === null || value === undefined || value === "") return "—";
+  const numericValue = Number(value);
+  const currency = String(quoteCurrency || "").toUpperCase();
+  if (!Number.isFinite(numericValue) || !currency) return "—";
+  if (["USD", "EUR", "GBP"].includes(currency)) {
+    return new Intl.NumberFormat(locale || "en-US", {
+      style: "currency", currency,
+      maximumFractionDigits: numericValue >= 1000 ? 0 : 2,
+    }).format(numericValue);
+  }
+  return `${new Intl.NumberFormat(locale || "en-US", {
+    maximumFractionDigits: numericValue >= 1000 ? 0 : 2,
+  }).format(numericValue)} ${currency}`;
+}
+
 function formatPercent(value, digits = 2) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return "—";
@@ -2613,7 +2629,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             tradingviewSymbol: row?.tradingview_symbol || row?.tradingviewSymbol || null,
             assetClass,
             assetGroup: normalizeAssetGroup(assetClass),
-            lastPrice: formatPrice(row?.price, locale),
+            lastPrice: formatQuotePrice(row?.price, locale, row?.quote_currency),
             change24h: formatPercent(changeValue, 2),
             changeTone: Number.isFinite(changeValue)
             ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
@@ -2850,7 +2866,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         activeSymbol={activeSymbol}
         assetName={activeAssetName}
         assetLogoUrl={activeAssetLogo}
-        price={formatPrice(assetLive?.price, locale)}
+        price={formatQuotePrice(assetLive?.price, locale, assetLive?.quote_currency)}
         change24h={assetLive?.change_24h}
         updatedAt={formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)}
         statusLabel={isFallbackWorkspace ? ui.fallbackData : assetLive?.stale ? ui.staleData : null}
