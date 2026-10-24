@@ -22,6 +22,21 @@ export function withSelectedBenchmarkSetup(search, setupId) {
   return params.toString();
 }
 
+export function benchmarkSetupSessionKey(userId, symbol) {
+  const owner = Number(userId);
+  const asset = String(symbol || "").trim().toUpperCase();
+  if (!Number.isSafeInteger(owner) || owner <= 0 || !/^[A-Z0-9]{1,15}$/.test(asset)) return null;
+  return `benchmarkSetup:${owner}:${asset}`;
+}
+
+export function selectedBenchmarkSetupMatch(matches, selectedId) {
+  const ownerMatches = Array.isArray(matches) ? matches : [];
+  return ownerMatches.find((match) => String(match.setup_id) === String(selectedId))
+    || ownerMatches.find((match) => match.is_best)
+    || ownerMatches[0]
+    || null;
+}
+
 export function benchmarkSetupView(score, match) {
   const current = validScore(score);
   const condition = match?.conditions?.benchmark;
