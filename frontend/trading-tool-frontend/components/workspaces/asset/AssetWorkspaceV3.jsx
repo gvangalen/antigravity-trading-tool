@@ -46,6 +46,7 @@ import {
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
+import { marketContextFromEvidence } from "@/lib/workspace/marketContext.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup } from "@/lib/setup/benchmarkScale.mjs";
 
@@ -166,6 +167,22 @@ function getUiCopy(locale = "nl") {
       chartTitle: "TradingView chart",
       chartClose: "Close chart",
       chartOpen: "Open chart",
+      marketContextTitle: "Market context",
+      marketContextPeriod: "Daily readings · 1D",
+      marketContextMissing: "Recent price movement and a usable MA200 reading are not available yet.",
+      marketContextMaHeadline: { above: "Price above MA200", below: "Price below MA200" },
+      marketContextChangeHeadline: { up: "Recent price rise", down: "Recent price fall", flat: "Price broadly unchanged" },
+      marketContextChangePart: { up: "a recent price rise", down: "a recent price fall", flat: "little recent price movement" },
+      marketContextCombined: (ma, change) => `${ma}, with ${change}`,
+      marketContextMaFact: { above: "The MA200 reading places the price above its 200-day average.", below: "The MA200 reading places the price below its 200-day average." },
+      marketContextChangeFact: (value, closed) => closed
+        ? `The last available session reports a 24-hour price change of ${value}.`
+        : `The reported 24-hour price change is ${value}.`,
+      marketContextEvidence: "How was this described?",
+      marketContextMaRatio: "Price / MA200",
+      marketContextMaSource: "MA200 source time",
+      marketContextQuoteSource: "Price source time",
+      marketContextScope: "Describes price movement from dated sources; it does not change the benchmark or your plan conditions.",
       contextScores: "Context scores",
       scoreSourceDate: "Oldest indicator source",
       scoreSourceUnknown: "Source date incomplete",
@@ -344,6 +361,22 @@ function getUiCopy(locale = "nl") {
       chartTitle: "TradingView-chart",
       chartClose: "Chart schließen",
       chartOpen: "Chart öffnen",
+      marketContextTitle: "Marktkontext",
+      marketContextPeriod: "Tagesdaten · 1D",
+      marketContextMissing: "Eine aktuelle Kursbewegung und ein brauchbarer MA200-Wert liegen noch nicht vor.",
+      marketContextMaHeadline: { above: "Kurs über MA200", below: "Kurs unter MA200" },
+      marketContextChangeHeadline: { up: "Jüngster Kursanstieg", down: "Jüngster Kursrückgang", flat: "Kurs nahezu unverändert" },
+      marketContextChangePart: { up: "einem jüngsten Kursanstieg", down: "einem jüngsten Kursrückgang", flat: "wenig jüngster Kursbewegung" },
+      marketContextCombined: (ma, change) => `${ma}, mit ${change}`,
+      marketContextMaFact: { above: "Die MA200-Messung zeigt den Kurs über dem 200-Tage-Durchschnitt.", below: "Die MA200-Messung zeigt den Kurs unter dem 200-Tage-Durchschnitt." },
+      marketContextChangeFact: (value, closed) => closed
+        ? `Die letzte verfügbare Sitzung meldet eine 24-Stunden-Kursänderung von ${value}.`
+        : `Die gemeldete 24-Stunden-Kursänderung beträgt ${value}.`,
+      marketContextEvidence: "Grundlage ansehen",
+      marketContextMaRatio: "Kurs / MA200",
+      marketContextMaSource: "MA200-Quellzeit",
+      marketContextQuoteSource: "Kurs-Quellzeit",
+      marketContextScope: "Beschreibt die Kursbewegung aus datierten Quellen; Benchmark und Planbedingungen bleiben unverändert.",
       contextScores: "Kontext-scores",
       scoreSourceDate: "Älteste Indikatorquelle",
       scoreSourceUnknown: "Quelldatum unvollständig",
@@ -521,6 +554,22 @@ function getUiCopy(locale = "nl") {
     chartTitle: "TradingView-chart",
     chartClose: "Chart sluiten",
     chartOpen: "Chart openen",
+    marketContextTitle: "Marktcontext",
+    marketContextPeriod: "Dagdata · 1D",
+    marketContextMissing: "Er is nog geen recente koersverandering of bruikbare MA200-meting beschikbaar.",
+    marketContextMaHeadline: { above: "Koers boven MA200", below: "Koers onder MA200" },
+    marketContextChangeHeadline: { up: "Recente koersstijging", down: "Recente koersdaling", flat: "Koers vrijwel onveranderd" },
+    marketContextChangePart: { up: "een recente koersstijging", down: "een recente koersdaling", flat: "weinig recente koersbeweging" },
+    marketContextCombined: (ma, change) => `${ma}, met ${change}`,
+    marketContextMaFact: { above: "De MA200-meting plaatst de koers boven het 200-daags gemiddelde.", below: "De MA200-meting plaatst de koers onder het 200-daags gemiddelde." },
+    marketContextChangeFact: (value, closed) => closed
+      ? `De laatst beschikbare beurssessie meldt een koersverandering van ${value} over 24 uur.`
+      : `De gemeten koersverandering over 24 uur bedraagt ${value}.`,
+    marketContextEvidence: "Onderbouwing bekijken",
+    marketContextMaRatio: "Koers / MA200",
+    marketContextMaSource: "Bronmoment MA200",
+    marketContextQuoteSource: "Bronmoment koers",
+    marketContextScope: "Beschrijft koersbeweging uit gedateerde bronnen; je benchmark en planvoorwaarden veranderen niet.",
     contextScores: "Contextscores",
     scoreSourceDate: "Oudste indicatorbron",
     scoreSourceUnknown: "Brondatum onvolledig",
@@ -1717,6 +1766,50 @@ function AnalysisChartSection({ interval, onIntervalChange, symbol, tradingViewS
             onIntervalChange={onIntervalChange}
           />
         </div>
+      ) : null}
+    </section>
+  );
+}
+
+function MarketContextCard({ context, locale, loading, ui }) {
+  const { ma, change } = context;
+  const headline = ma && change
+    ? ui.marketContextCombined(ui.marketContextMaHeadline[ma.position], ui.marketContextChangePart[change.direction])
+    : ma ? ui.marketContextMaHeadline[ma.position]
+      : change ? ui.marketContextChangeHeadline[change.direction]
+        : ui.marketContextMissing;
+  const changeText = change
+    ? `${new Intl.NumberFormat(locale || "nl", { maximumFractionDigits: 2, signDisplay: "exceptZero" }).format(change.percent)}%`
+    : null;
+
+  return (
+    <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)] sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-bold text-slate-950">{ui.marketContextTitle}</h2>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
+            {ui.marketContextPeriod}
+          </span>
+        </div>
+      </div>
+      <p className={`mt-3 text-lg font-semibold leading-snug ${context.available ? "text-slate-950" : "text-slate-500"}`}>
+        {loading && !context.available ? ui.loadingMarket : headline}
+      </p>
+      {context.available ? (
+        <>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+            {ma ? <li className="flex gap-2"><span aria-hidden="true" className="mt-2 h-2 w-2 shrink-0 rounded-full bg-blue-500" />{ui.marketContextMaFact[ma.position]}</li> : null}
+            {change ? <li className="flex gap-2"><span aria-hidden="true" className="mt-2 h-2 w-2 shrink-0 rounded-full bg-blue-500" />{ui.marketContextChangeFact(changeText, change.closedSession)}</li> : null}
+          </ul>
+          <details className="mt-4 border-t border-slate-100 pt-3 text-sm text-slate-600">
+            <summary className="cursor-pointer font-semibold text-blue-600 hover:text-blue-700">{ui.marketContextEvidence}</summary>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {ma ? <div><span className="font-medium">{ui.marketContextMaRatio}:</span> {new Intl.NumberFormat(locale || "nl", { maximumFractionDigits: 3 }).format(ma.ratio)}<br /><span className="font-medium">{ui.marketContextMaSource}:</span> {formatTimestamp(ma.sourceAt, locale)}</div> : null}
+              {change ? <div><span className="font-medium">{ui.marketContextQuoteSource}:</span> {formatTimestamp(change.sourceAt, locale)}</div> : null}
+            </div>
+            <p className="mt-3 text-xs text-slate-500">{ui.marketContextScope}</p>
+          </details>
+        </>
       ) : null}
     </section>
   );
@@ -2920,6 +3013,19 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         ui={ui}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
+      />
+
+      <MarketContextCard
+        context={marketContextFromEvidence({
+          quote: String(workspace?.symbol || "").toUpperCase() === activeSymbol ? assetLive : null,
+          quoteStatus,
+          technicalRows: String(workspace?.symbol || "").toUpperCase() === activeSymbol
+            ? sections.find((section) => section.id === "technical")?.rows : [],
+          technicalPeriod: technicalTimeframe,
+        })}
+        locale={locale}
+        loading={workspaceLoading && !workspace}
+        ui={ui}
       />
 
       <section className="space-y-3">
