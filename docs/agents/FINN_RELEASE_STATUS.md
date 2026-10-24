@@ -4,9 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Focused bot read after trader evidence QA (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Product branch: `codex/finn-focused-bot-read`.
+Independent authenticated QA on final live SHA
+`ea6b1128b252fb3a582d84e3c50aed14c7c5b650` returned `NOT_ACCEPTED`
+for one reproduced wrong-target read: on `/bot?bot_id=132&symbol=BTC`, FINN
+answered a question about the open bot using a different saved Paper bot and
+its €300 cash. The other seven scoped checks were green or partly green;
+the positive saved AAPL USD-entry comparison and exact 94/100 report fixture
+were unavailable to that QA run. No order was placed.
+
+The chat now resolves the visible bot URL at submission rather than relying
+on a prior render or flow state. A directly submitted, unchanged bot-review
+button keeps its explicitly named bot target; edited or ordinary chat follows
+the visible bot. For singular references to the open bot, the server validates
+the page bot ID against the authenticated owner and scopes `bots[]` in the
+portfolio evidence to that bot. The global portfolio summary remains labelled
+as an aggregate. If the page bot is not owner-verified or absent from the
+portfolio read, no unrelated bot row is substituted. FINN still writes its
+own answer from typed facts; no fixed coach response was added.
+
+The final local backend suite passed **3849 tests, 4 existing skips**.
+Frontend typecheck, i18n lint/tests, command/proposal tests, production build
+and high-severity audit passed (zero high vulnerabilities). Focused tests
+cover stale conversation state, explicit button targets, edited requests,
+owner-verified portfolio focus and invalid focus. The local worker-driven
+action matrix passed **16/16** contracts and **19/19** adapter checks, with
+zero broker orders, Live calls or production connections (artifact SHA-256
+`113fdae27bf1c0f1a47af69364a48061280a82b9769ee348a53c01c95e3f8ce9`).
+Real Luna/Responses selector evaluations passed **20/20** development and
+**109/109** regression cases, with 100% operation accuracy and zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`e570974ab19538624a0145bde60c7d0a4a5440eda4cc82bb5f` and
+`ff998aaf1770db05a3e81baae264797d3dbe2ce2e8b88461a5fb466e0c123598`).
+A read-only Security review found no remaining concrete wrong-target or
+cross-owner issue. CI, deployment and independent live QA are pending.
+
 ## Trader evidence follow-up: asset switching, bot context, zero cap (24 oktober 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Product branch: `codex/trader-evidence-followup`;
+Phase: `NOT_ACCEPTED` for the complete independent scope. Product branch: `codex/trader-evidence-followup`;
 merged through [PR #575](https://github.com/gvangalen/antigravity-trading-tool/pull/575)
 as `7b414d86e8e0f00af8854526d97251fffc9ccb06`.
 Independent authenticated QA on live SHA
@@ -45,9 +82,13 @@ main CI [40083005626](https://github.com/gvangalen/antigravity-trading-tool/acti
 and Auto Deploy [40083143172](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40083143172)
 passed. Public `https://tradamind.com/api/health` and
 `https://tradamind.com/build-info.json` both returned HTTP 200 and that exact
-SHA on 24 October 2026. This status update creates a new final SHA, which
-Build will verify after its own main CI and Auto Deploy. Independent live QA
-is pending on that final public revision.
+SHA on 24 October 2026. The status update created a new final SHA.
+Build verified final public SHA `ea6b1128b252fb3a582d84e3c50aed14c7c5b650`
+after successful main CI
+[40083481444](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40083481444)
+and Auto Deploy
+[40083676983](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40083676983).
+Independent QA found the remaining open-bot target issue described above.
 
 ## AAPL quote parity between Analyse and FINN (24 oktober 2026)
 

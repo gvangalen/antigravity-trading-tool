@@ -15,7 +15,7 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
-import { normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
+import { normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, resolveFinnSubmissionContext, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
@@ -1386,9 +1386,9 @@ function AIAssistantContent({
       ];
 
       const latestAssistantState = overrideContext || activeState || getLatestAssistantState();
-      const baseRequestContext = latestAssistantState?.current_flow
-        ? { ...context, ...latestAssistantState }
-        : context;
+      // The bot page changes its URL with replaceState. Resolve the visible
+      // selection when sending, since the last chat render may predate it.
+      const livePageContext = getContext();
       const commandContext = { ...(commandRequest?.context || {}) };
       if (commandContext.feed_item_id) {
         const attachFeed = shouldAttachFeedContext(
@@ -1402,16 +1402,12 @@ function AIAssistantContent({
       const submissionLocale = finnSubmissionLocale(
         locale, typeof document === "undefined" ? null : document.documentElement.lang,
       );
-      const requestContext = { ...baseRequestContext, ...commandContext, locale: submissionLocale,
-        symbol: pathname === "/bot" && baseRequestContext.bot_id
-          ? baseRequestContext.symbol
-          : chatAssetOverride || commandContext.symbol || baseRequestContext.symbol };
-      if (pathname === "/bot" && context.bot_id) {
-        requestContext.bot_id = context.bot_id;
-        requestContext.symbol = context.symbol;
-        requestContext.setup_id = context.setup_id;
-        requestContext.strategy_id = context.strategy_id;
-      }
+      const requestContext = resolveFinnSubmissionContext({
+        pathname, livePageContext, latestAssistantState, commandContext,
+        chatAssetOverride, locale: submissionLocale, query: nextQuery,
+        autoSubmitCommand: Boolean(commandRequest?.autoSubmit),
+        originalCommandQuery: commandRequest?.query || "",
+      });
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"

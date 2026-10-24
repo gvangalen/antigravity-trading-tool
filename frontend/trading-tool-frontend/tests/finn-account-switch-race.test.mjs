@@ -6,6 +6,7 @@ import {
   resolveFinnBotPageContext,
   resolveFinnBotContextSymbol,
   resolveFinnContextSymbol,
+  resolveFinnSubmissionContext,
   resolveScopedAssetStatus,
   shouldBlockFinnSubmission,
 } from "../lib/finnAssetIsolation.js";
@@ -104,6 +105,72 @@ test("visible bot URL outranks a stale bot provider and old asset selection", ()
   assert.equal(context.botId, 132);
   assert.equal(context.bot, null);
   assert.equal(context.symbol, "BTC");
+});
+
+test("sending from the visible bot ignores a stale chat asset and prior bot flow", () => {
+  const livePageContext = {
+    page: "/bot", bot_id: 132, symbol: "BTC", setup_id: 11, strategy_id: 22,
+  };
+  const submitted = resolveFinnSubmissionContext({
+    pathname: "/bot", livePageContext,
+    latestAssistantState: { current_flow: "read_bot", bot_id: 71, symbol: "AAPL" },
+    commandContext: { bot_id: 71, symbol: "AAPL" },
+    chatAssetOverride: "AAPL", locale: "nl",
+  });
+  assert.equal(submitted.bot_id, 132);
+  assert.equal(submitted.symbol, "BTC");
+  assert.equal(submitted.setup_id, 11);
+  assert.equal(submitted.strategy_id, 22);
+  assert.equal(submitted.locale, "nl");
+
+  const noBot = resolveFinnSubmissionContext({
+    pathname: "/bot", livePageContext: { page: "/bot", bot_id: null, symbol: "BTC" },
+    latestAssistantState: { current_flow: "read_bot", bot_id: 71, symbol: "AAPL" },
+  });
+  assert.equal(noBot.bot_id, null);
+  assert.equal(noBot.symbol, "BTC");
+});
+
+test("explicit bot review button keeps its named target instead of the open bot", () => {
+  const submitted = resolveFinnSubmissionContext({
+    pathname: "/bot",
+    livePageContext: { page: "/bot", bot_id: 132, symbol: "BTC", strategy_id: 22 },
+    commandContext: {
+      bot_id: 71, bot_name: "AAPL Paper", symbol: "AAPL", strategy_id: 23,
+      finn_subject_type: "bot",
+    },
+    query: "Beoordeel bot AAPL Paper en leg de risico's uit.",
+    originalCommandQuery: "Beoordeel bot AAPL Paper en leg de risico's uit.",
+    autoSubmitCommand: true,
+    locale: "nl",
+  });
+  assert.equal(submitted.bot_id, 71);
+  assert.equal(submitted.symbol, "AAPL");
+  assert.equal(submitted.strategy_id, 23);
+
+  const unrelated = resolveFinnSubmissionContext({
+    pathname: "/bot",
+    livePageContext: { page: "/bot", bot_id: 132, symbol: "BTC" },
+    commandContext: {
+      bot_id: 71, bot_name: "AAPL Paper", symbol: "AAPL", finn_subject_type: "bot",
+    },
+    query: "Welke bot heb ik hier open?",
+  });
+  assert.equal(unrelated.bot_id, 132);
+  assert.equal(unrelated.symbol, "BTC");
+
+  const edited = resolveFinnSubmissionContext({
+    pathname: "/bot",
+    livePageContext: { page: "/bot", bot_id: 132, symbol: "BTC" },
+    commandContext: {
+      bot_id: 71, bot_name: "AAPL Paper", symbol: "AAPL", finn_subject_type: "bot",
+    },
+    originalCommandQuery: "Beoordeel bot AAPL Paper en leg de risico's uit.",
+    query: "Niet bot AAPL Paper; beoordeel deze bot op de pagina.",
+    autoSubmitCommand: true,
+  });
+  assert.equal(edited.bot_id, 132);
+  assert.equal(edited.symbol, "BTC");
 });
 
 test("direct /bot route never falls back to BTC when no user-scoped symbol is resolved", () => {

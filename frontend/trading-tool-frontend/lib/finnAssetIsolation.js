@@ -59,6 +59,45 @@ export function resolveFinnBotPageContext({ search = "", activeBot = null, selec
   };
 }
 
+export function resolveFinnSubmissionContext({
+  pathname,
+  livePageContext,
+  latestAssistantState = null,
+  commandContext = {},
+  chatAssetOverride = null,
+  locale,
+  query = "",
+  autoSubmitCommand = false,
+  originalCommandQuery = "",
+} = {}) {
+  const base = latestAssistantState?.current_flow
+    ? { ...livePageContext, ...latestAssistantState }
+    : { ...livePageContext };
+  const request = {
+    ...base,
+    ...commandContext,
+    locale,
+    symbol: chatAssetOverride || commandContext.symbol || base.symbol,
+  };
+  if (pathname === "/bot") {
+    const explicitBotId = Number(commandContext.bot_id);
+    const explicitBotName = String(commandContext.bot_name || "").trim();
+    const explicitBotAction = autoSubmitCommand
+      && originalCommandQuery === query
+      && commandContext.finn_subject_type === "bot"
+      && Number.isSafeInteger(explicitBotId) && explicitBotId > 0
+      && explicitBotName && String(query).toLocaleLowerCase().includes(explicitBotName.toLocaleLowerCase());
+    // A named bot action from a clicked card keeps its explicit target. For
+    // ordinary chat, the visible URL outranks old flow and asset selection.
+    const focused = explicitBotAction ? commandContext : livePageContext;
+    request.bot_id = focused.bot_id || null;
+    request.symbol = focused.symbol || null;
+    request.setup_id = focused.setup_id || null;
+    request.strategy_id = focused.strategy_id || null;
+  }
+  return request;
+}
+
 export function shouldBlockFinnSubmission({
   isAuthenticated = false,
   assetStatus = "unconfigured",

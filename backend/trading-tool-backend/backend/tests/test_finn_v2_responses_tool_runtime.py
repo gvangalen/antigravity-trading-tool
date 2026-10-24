@@ -12460,6 +12460,118 @@ def test_open_bot_context_binds_its_strategy_only_for_unnamed_owner_plan(monkeyp
     assert read("Hoe past mijn vrijdagplan?", context={"page": "/bot", "bot_id": 99}) is None
 
 
+def test_open_bot_reference_scopes_portfolio_evidence_without_changing_global_totals():
+    message = (
+        "Welke bot heb ik op deze pagina open, aan welke strategie is hij gekoppeld, "
+        "en kan hij nu een Paper-order plaatsen? Alleen uitleg."
+    )
+    assert FinnResponsesFrontDoor._refers_to_open_bot(message)
+    assert not FinnResponsesFrontDoor._refers_to_open_bot("Vergelijk al mijn BTC-bots")
+    assert not FinnResponsesFrontDoor._refers_to_open_bot("Vergelijk deze bot met een andere bot")
+    original = {"status": "completed", "results": [{
+        "scope": "read_portfolio", "status": "completed", "data": {
+            "global": {"paper_cash_eur": 300},
+            "bots": [
+                {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": 0},
+                {"bot_id": 88, "name": "Other Paper", "paper_cash_eur": 300},
+            ],
+        },
+    }]}
+    focused = FinnResponsesFrontDoor._focus_portfolio_on_open_bot(original, 132)
+    data = focused["results"][0]["data"]
+    assert [row["bot_id"] for row in data["bots"]] == [132]
+    assert data["global"]["paper_cash_eur"] == 300
+    assert data["global_summary_scope"] == "all_bots"
+    assert data["focus_status"] == "resolved"
+    assert len(original["results"][0]["data"]["bots"]) == 2
+
+
+def test_open_bot_reference_does_not_show_another_bot_if_focused_row_is_missing():
+    original = {"status": "completed", "results": [{
+        "scope": "read_portfolio", "status": "completed", "data": {
+            "bots": [{"bot_id": 88, "name": "Other Paper"}],
+        },
+    }]}
+    focused = FinnResponsesFrontDoor._focus_portfolio_on_open_bot(original, 132)
+    data = focused["results"][0]["data"]
+    assert data["bots"] == []
+    assert data["focus_status"] == "not_in_portfolio_read"
+    unverified = FinnResponsesFrontDoor._focus_portfolio_on_open_bot(original, None)
+    assert unverified["results"][0]["data"]["bots"] == []
+    assert unverified["results"][0]["data"]["focus_status"] == "unverified_workspace_bot"
+
+
+def test_open_bot_question_passes_only_the_owner_verified_bot_row_to_luna(monkeypatch):
+    setup = {"id": 11, "name": "QA BTC Friday Setup", "symbol": "BTC"}
+    strategy = {"id": 22, "name": "QA Friday Strategy", "setup_id": 11}
+    bot = {"id": 132, "name": "QA Review Paper", "strategy_id": 22}
+
+    class FakeResolver:
+        def __init__(self, _session):
+            self.bots = SimpleNamespace(
+                get_bot_config=AsyncMock(side_effect=lambda owner, bot_id: bot if owner == 7 and bot_id == 132 else None),
+                get_bot_configs=AsyncMock(return_value=[bot]),
+            )
+            self.strategies = SimpleNamespace(
+                get_raw_strategy_with_setup=AsyncMock(return_value=strategy),
+                query_strategies=AsyncMock(return_value=[strategy]),
+            )
+            self.setups = SimpleNamespace(
+                get_setup_by_id=AsyncMock(return_value=setup),
+                get_user_setups=AsyncMock(return_value=[setup]),
+            )
+
+        @staticmethod
+        def _message_mentions_name(message, name):
+            return bool(name and name.casefold() in message.casefold())
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    class FakeRead:
+        async def __call__(self, _call):
+            return {"status": "completed", "results": [{
+                "scope": "read_portfolio", "status": "completed", "data": {
+                    "global": {"paper_cash_eur": 300},
+                    "bots": [
+                        {"bot_id": 132, "name": "QA Review Paper", "paper_cash_eur": 0},
+                        {"bot_id": 88, "name": "QA Friday Paper", "paper_cash_eur": 300},
+                    ],
+                },
+            }]}
+
+    FakeRead.session_factory = staticmethod(session_factory)
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService",
+        FakeResolver,
+    )
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    fake = FakeResponses(
+        response("bot-read", calls=[tool_call("call-bot", "get_saved_bots", {"asset": "BTC"})]),
+        response("bot-answer", text="QA Review Paper is gepauzeerd."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session_factory=session_factory,
+        user_id=7, run_id="focused-bot-read", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=("Welke bot heb ik op deze pagina open, aan welke strategie is hij "
+                 "gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg."),
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/bot", "bot_id": 132, "symbol": "BTC"},
+    ))
+    portfolio = result.response.tool_trace[0]["result"]["results"][0]["data"]
+    assert [row["name"] for row in portfolio["bots"]] == ["QA Review Paper"]
+    assert portfolio["global_summary_scope"] == "all_bots"
+
+
 def test_read_only_coach_batches_independent_evidence_reads_in_one_provider_round():
     fake = FakeResponses(
         response("reads", calls=(
