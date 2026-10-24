@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse dated market context (24 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`. Product branch: `codex/analysis-market-context`,
+Phase: `NOT_ACCEPTED` for the full targeted browser scope because the positive
+MA200 case remains unobserved, without an identified product defect. Product
+branch: `codex/analysis-market-context`,
 merged through [PR #600](https://github.com/gvangalen/antigravity-trading-tool/pull/600)
 as product SHA `4c81ec5581748722bd1763f903cb49cdd88f8bed`.
 Analyse now places a compact market-context card between the Score 2.0
@@ -30,9 +32,21 @@ and Auto Deploy [40124470375](https://github.com/gvangalen/antigravity-trading-t
 passed. Public backend health and frontend build-info each returned HTTP 200
 with the product SHA. This status-only update creates a later final SHA; Build
 must verify the last main CI, Auto Deploy and both public markers on that exact
-revision before handing it to independent QA. QA should inspect fresh and
-missing/stale cases, closed US equity sessions, responsive layout and NL/EN/DE
-copy. Independent browser QA is pending.
+revision before handing it to independent QA. Status-update main CI
+[40124923298](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40124923298)
+and Auto Deploy [40125103659](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40125103659)
+passed; both public markers returned HTTP 200 with final tested SHA
+`1dd8226567d436ac6a4ec40a83c3205376f11b20`.
+
+Independent authenticated browser QA observed BTC without an MA200 showing
+only its dated 1D price change, and AAPL during a closed exchange session
+showing its last session quote while the benchmark remained unavailable.
+NL/EN/DE, a 390 px viewport and console checks passed. QA found no invented
+cycle phase, MA200 slope or score. The available QA account has no configured
+MA200, so the positive MA200 presentation and the stale/missing MA200-source
+case were not observed live. No product state or orders were changed. This is
+a targeted evidence gap rather than an observed regression; focused local
+tests cover those branches but do not replace live verification.
 
 ## Analyse benchmark navigation follow-up (24 oktober 2026)
 
