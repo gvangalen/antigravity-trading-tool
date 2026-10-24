@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Analyse dated market context (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Candidate branch: `codex/analysis-market-context`.
+Analyse now places a compact market-context card between the Score 2.0
+benchmark and indicator groups. It describes only owner-scoped readings already
+in the asset workspace: a dated, usable 24-hour quote change and, when the
+user configured it, a fresh daily MA200 price ratio. A closed US equity
+session is identified as the last available session. Stale, missing,
+future-dated or aggregated-period readings cannot create a current MA200 or
+price-change claim. The card shows source moments on demand and has NL/EN/DE
+copy. It does not infer accumulation/recovery phases or an MA200 slope from a
+single reading, and it changes no score, setup, FINN model or bot decision.
+Navigation triggers no new provider or OpenAI call for this card.
+
+Local frontend i18n, command, proposal and setup tests, typecheck, i18n lint,
+production build and high-severity audit passed. Focused tests cover fresh
+MA200 plus quote, a closed exchange session, stale/missing/future sources,
+an MA200-only reading, and suppression of weekly aggregates. CI, deployment
+identity and independent authenticated browser QA remain pending.
+
 ## Analyse benchmark navigation follow-up (24 oktober 2026)
 
 Phase: `ACCEPTED` for the targeted independent authenticated browser scope.
