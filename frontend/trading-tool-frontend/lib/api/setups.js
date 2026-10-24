@@ -131,9 +131,10 @@ export const fetchActiveSetup = async (symbol = "BTC") => {
 // =========================================================
 // 10. DAGELIJKSE SETUP SCORES
 // =========================================================
-export const fetchSetupMarketMatches = async () => {
+export const fetchSetupMarketMatches = async (symbol = null) => {
   try {
-    const res = await fetchAuth('/api/setups/market-matches', {
+    const query = symbol ? `?symbol=${encodeURIComponent(String(symbol).toUpperCase())}` : '';
+    const res = await fetchAuth(`/api/setups/market-matches${query}`, {
       method: 'GET',
     });
 
@@ -141,6 +142,6 @@ export const fetchSetupMarketMatches = async () => {
   } catch (err) {
     console.error('❌ [fetchSetupMarketMatches] Fout:', err);
     toast.error('Setupmatches laden mislukt.');
-    return [];
+    throw err;
   }
 };

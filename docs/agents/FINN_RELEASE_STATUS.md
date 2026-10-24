@@ -4,9 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Analyse benchmark scale and setup comparison (24 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Candidate branch:
+`codex/benchmark-zone-visualization`. This is a frontend presentation change:
+the Analyse benchmark block now gives the verified combined score priority,
+uses the same five inclusive bands as the saved setup-condition picker, and
+outlines a selected setup's actual stored benchmark bounds. It reads all
+owner-scoped matches for the current asset, including multiple setups and
+setups without a benchmark condition. A missing current score has no marker or
+match claim; a score that differs from the match response is presented as an
+updating comparison. The separate best-plan bridge was removed so the same
+condition is not presented twice. No scoring formula, freshness threshold,
+FINN model route, setup rule, bot decision or order path changed.
+
+Frontend setup tests, i18n tests, command tests, proposal tests, typecheck,
+i18n lint, production build and high-severity audit passed. The new boundary
+tests cover preset gaps, rounded score boundaries, incomplete evidence,
+unconfigured setups, custom ranges and one-sided ranges. Deployment identity
+and independent authenticated browser QA remain open.
+
 ## Closed crypto daycandles for Score 2.0 technical indicators (24 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`, pending independent authenticated QA. Product branch:
+Phase: `NOT_ACCEPTED` for the targeted independent hard-refresh evidence scope;
+no new product defect was demonstrated. On live final SHA
+`f434b707f5a93994ccbf24d39c79b9d18a827fe2`, independent QA read the
+existing BTC MA200 as current with score 65/100, Technical 65 and a combined
+benchmark 65 before hard refresh. The controllable Safari session then switched
+to another window, so QA could not verify the same row after hard refresh. The
+missing refresh observation is a proof gap, not evidence that the score fix
+failed. Product branch:
 `codex/ma200-refresh`; merged through
 [PR #590](https://github.com/gvangalen/antigravity-trading-tool/pull/590)
 as product SHA `ad9e26b7acadbf62bfc6c00e78fa2d5da4ec4203`. On the
