@@ -2319,6 +2319,7 @@
       "deferredLiveBody": "Deze bot blijft gepauzeerd. Gebruik Exchange-koppeling, stel je limieten in en hervat hem pas wanneer je echt live wilt handelen.",
       "deferredLiveLimits": "Limieten instellen",
       "resumeStep": "Hervat de bot wanneer je weer beslissingen wilt laten maken.",
+      "fundAndResumeStep": "Wijs eerst virtueel Paper-kassaldo toe. Daarna kun je de bot hervatten en opnieuw beoordelen; hervatten alleen is niet genoeg voor een aankoop.",
       "reasonUnavailable": "Er is nog geen reden van een recente check beschikbaar.",
       "nextStepFallback": "Bekijk de veiligheidscheck en botinstellingen.",
       "setPaperCash": "Paper-kassaldo instellen",

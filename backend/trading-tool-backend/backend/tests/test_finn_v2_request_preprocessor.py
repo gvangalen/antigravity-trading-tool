@@ -143,6 +143,45 @@ def test_direct_order_after_a_plan_question_remains_execution_request():
     assert facts.financial_execution_intent is True
 
 
+@pytest.mark.parametrize("message", [
+    "Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren? Noem zijn naam en gekoppelde strategie.",
+    "Why can the bot on this page not execute a paper purchase today? Name its strategy.",
+    "Warum kann der Bot hier heute keinen Paper-Kauf ausführen? Nenne seine Strategie.",
+    "Waarom kan je voor mij geen BTC kopen? Leg uit wat de bot blokkeert.",
+    "Why can the bot not buy and sell BTC today?",
+    "Why can the bot not buy, sell, or rebalance BTC today?",
+    "Why can the bot not place a buy order, sell order, or stop order?",
+])
+def test_causal_bot_execution_question_is_an_explanation_not_an_order(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == "read"
+    assert facts.financial_execution_intent is False
+
+
+def test_order_after_causal_question_is_still_an_execution_request():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Waarom kan die bot geen Paper-order uitvoeren? Koop nu BTC voor mij."
+    )
+    assert facts.action_polarity == "execute"
+    assert facts.financial_execution_intent is True
+
+
+@pytest.mark.parametrize("message,expected", [
+    ("Waarom wacht de bot, koop nu BTC voor mij?", "execute"),
+    ("Waarom kan de bot geen Paper-order uitvoeren, activeer hem live?", "activate"),
+    ("Why is the bot paused, buy BTC for me now?", "execute"),
+    ("Waarom kan de bot niet kopen — koop nu BTC voor mij?", "execute"),
+    ("Waarom wacht de bot en koop nu BTC voor mij?", "execute"),
+    ("Waarom mag de bot niet kopen? En koop nu BTC voor mij.", "execute"),
+    ("Waarom staat de bot stil, koop BTC?", "execute"),
+    ("Why is the bot paused, buy BTC?", "execute"),
+    ("Waarom staat de bot stil, plaats een kooporder?", "execute"),
+])
+def test_command_inside_causal_question_retains_action_boundary(message, expected):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == expected
+
+
 def test_autonomous_financial_decision_authority_is_an_execution_fact_without_trade_verb():
     service = FinnV2RequestPreprocessorService()
 

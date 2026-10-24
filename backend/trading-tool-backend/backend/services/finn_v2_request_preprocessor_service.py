@@ -342,14 +342,10 @@ class FinnV2RequestPreprocessorService:
             and not {"setup", "strategy", "bot", "indicator_configuration", "watchlist"}.intersection(entities)
         ):
             action = "read"
-        market_mention = bool(
-            asset and re.search(
-                r"\b(?:koop\w*|kopen|verkoop\w*|verkopen|buy\w*|sell\w*|"
-                r"kaufe\w*|kaufen|verkaufe\w*|verkaufen|"
-                r"place\w*|plaats\w*|submit\w*)\b", normalized,
-            )
-        )
-        direct_market_order = market_mention and self._is_direct_market_order_request(normalized)
+        # A directed order remains an execution request when the user omits
+        # the asset ("plaats een kooporder"). Missing inputs are resolved by
+        # the action boundary, never by treating the request as a read.
+        direct_market_order = self._is_direct_market_order_request(normalized)
         financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
             direct_market_order
         )
@@ -558,6 +554,18 @@ class FinnV2RequestPreprocessorService:
         return {"strategie": "strategy"}.get(matches[-1], matches[-1])
 
     def _action_polarity(self, text: str) -> str:
+        # A causal question describes a state or asks for its reason. Verbs
+        # inside that question ("waarom kan de bot geen order uitvoeren?")
+        # are not instructions to FINN. A separate affirmative command after
+        # the question still retains its own action polarity.
+        if re.match(r"^\s*(?:waarom|why|warum|wieso|weshalb)\b", text) and "?" in text:
+            for following in self._causal_question_clauses(text):
+                if self._is_direct_market_order_request(following):
+                    return "execute"
+                following_action = self._action_polarity(following)
+                if following_action not in {"read", "evaluate"}:
+                    return following_action
+            return "evaluate" if self._is_plan_assessment(text) else "read"
         # A standalone no-change instruction limits the preceding request.
         # It is not itself a request to update a saved object. Keep a real
         # mutation in the preceding clause ("maak een bot. Wijzig niets")
@@ -804,6 +812,35 @@ class FinnV2RequestPreprocessorService:
         )
 
     @staticmethod
+    def _causal_question_clauses(text: str) -> tuple[str, ...]:
+        first, following = text.split("?", 1)
+        # Scan for a *directed* imperative rather than splitting every list
+        # separator. "Can the bot buy, sell, or rebalance?" is one question;
+        # "why is it paused, buy now for me?" contains a separate command.
+        segments: list[str] = []
+        action_after_boundary = re.compile(
+            r"(?:[,;—–]|\b(?:en|and|und)\b)\s*"
+            r"(?P<verb>koop|verkoop|buy|sell|kaufe|verkaufe|plaats|place|submit|"
+            r"activeer|activate|aktiviere|wijzig|change|update|verwijder|remove|delete)\b",
+            re.I,
+        )
+        market_verbs = {"koop", "verkoop", "buy", "sell", "kaufe", "verkaufe", "plaats", "place", "submit"}
+        for match in action_after_boundary.finditer(first):
+            clause = first[match.start("verb"):].strip()
+            if match.group("verb").casefold() in market_verbs:
+                directed_now = bool(re.search(r"\b(?:nu|now|sofort)\b", clause[:60], re.I))
+                preceding_is_list_verb = bool(re.search(
+                    r"\b(?:koop|kopen|verkoop|verkopen|buy|sell|kaufe|kaufen|verkaufe|verkaufen)"
+                    r"(?:\s+(?:orders?|kooporder|verkooporder|purchase|sale))?\s*$",
+                    first[:match.start()].rstrip(), re.I,
+                ))
+                if preceding_is_list_verb and not directed_now:
+                    continue
+            segments.append(clause)
+        tail = re.sub(r"^(?:en|and|und)\s+", "", following.strip(), flags=re.I)
+        return tuple(part for part in [*segments, tail] if part)
+
+    @staticmethod
     def _is_direct_market_order_request(text: str) -> bool:
         """Distinguish an order directed at FINN from a hypothetical trade.
 
@@ -811,6 +848,13 @@ class FinnV2RequestPreprocessorService:
         does not delegate execution. Direct imperatives and requests that
         explicitly address FINN remain inside the execution boundary.
         """
+        if re.match(r"^\s*(?:waarom|why|warum|wieso|weshalb)\b", text) and "?" in text:
+            # The first clause asks why a trade can or cannot happen. A later
+            # clause can still issue a separate direct order.
+            return any(
+                FinnV2RequestPreprocessorService._is_direct_market_order_request(clause)
+                for clause in FinnV2RequestPreprocessorService._causal_question_clauses(text)
+            )
         market_verb = r"(?:koop\w*|kopen|verkoop\w*|verkopen|buy\w*|sell\w*|kaufe\w*|kaufen|verkaufe\w*|verkaufen|plaats\w*|place\w*|submit\w*)"
         imperative_verb = r"(?:koop|verkoop|buy|sell|kaufe|verkaufe|plaats|place|submit)"
         execute_order = re.search(
