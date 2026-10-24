@@ -6,8 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Analyse benchmark navigation follow-up (24 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Candidate branch:
-`codex/benchmark-zone-navigation-fix`. Independent authenticated browser QA
+Phase: `LIVE_CANDIDATE`, awaiting targeted independent authenticated browser QA.
+Product branch: `codex/benchmark-zone-navigation-fix`; merged through
+[PR #596](https://github.com/gvangalen/antigravity-trading-tool/pull/596)
+as product SHA `b8e26786d3a0ec5072185f372ff4e96b6366ba5e`.
+Independent authenticated browser QA
 marked live SHA `d4e48baa023da15115353d2554aa1d51be896569`
 `NOT_ACCEPTED`: the selected second BTC setup survived refresh, but ordinary
 navigation through Mijn Plan back to Analyse omitted `benchmarkSetup` from the
@@ -20,7 +23,14 @@ without that parameter the remembered selection is used, and only an ID in the
 current owner's loaded setup matches can be displayed. No score, setup-match,
 bot or FINN model logic changed. Focused setup tests, i18n/command/proposal
 tests, typecheck, i18n lint, production build and high-severity audit passed.
-CI, deployment identity and independent authenticated browser QA remain pending.
+PR CI [40119468981](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40119468981),
+main CI [40119716766](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40119716766)
+and Auto Deploy [40119924322](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40119924322)
+passed. Public backend health and frontend build-info each returned HTTP 200
+with the product SHA. This status-only update creates a later final SHA; Build
+must verify the last main CI, Auto Deploy and both public markers on that exact
+revision before independent QA retests Analyse → Mijn Plan → Analyse, refresh,
+multiple setups, and the absence of cross-owner or cross-asset selection.
 
 ## Analyse benchmark QA follow-up (24 oktober 2026)
 
