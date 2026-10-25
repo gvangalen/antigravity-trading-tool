@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN new asset during an unfinished DCA draft (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_PR`. Independent QA returned `NOT_ACCEPTED` on live SHA
+Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Independent QA returned `NOT_ACCEPTED` on live SHA
 `05b80ae0a6f8e566746a6069f60aeb7d242b6155`. The earlier tickerless
 asset switch and correction of an open score-filtered card passed. The
 remaining P2 case was a complete request for a new AAPL DCA setup during an
@@ -37,9 +37,18 @@ schema, timeout, parse or validation failures (artifact SHA-256
 The same real Responses regression selection passed 109/109 with zero
 provider, schema, timeout, parse or validation failures (artifact SHA-256
 `483202e829b68088866a9a6a4a65ea60546110da51eeb57d4b0a61785e2937c4`).
-This candidate is not deployed or
-independently accepted yet. Build has not accessed the protected QA fixture
-or sealed holdout.
+The product repair merged via [PR #633](https://github.com/gvangalen/antigravity-trading-tool/pull/633)
+as SHA `971c0932a1fe1d0f726ce3a7e8547dcfab01b94d`. PR CI
+[40238391110](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40238391110)
+and main CI [40238643981](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40238643981)
+passed all five jobs. [Auto Deploy 40238867579](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40238867579)
+succeeded. Public backend health and frontend build-info each returned HTTP
+200 and exact product SHA `971c0932a1fe1d0f726ce3a7e8547dcfab01b94d`.
+This release-status update itself creates a later main SHA; Build must wait
+for its CI and Auto Deploy, verify both public markers on that final SHA,
+then assign the same independent QA Agent the authenticated live hertest.
+The repair is not independently accepted yet. Build has not accessed the
+protected QA fixture or sealed holdout.
 
 ## FINN asset switch during an open DCA setup (25 oktober 2026)
 
