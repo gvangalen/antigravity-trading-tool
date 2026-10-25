@@ -165,6 +165,98 @@ def test_open_setup_only_proposal_can_ask_for_strategy_amount_later_in_same_draf
     assert revised.next_missing_input == "dca_amount_mode"
 
 
+def test_cancelled_setup_only_proposal_can_become_full_dca_without_old_state():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    message = (
+        "Ik verander dit open concept: maak er een volledig BTC DCA-plan van "
+        "met een vast bedrag van €100 per week op vrijdag. Behoud de naam "
+        "QA BTC Staffel Later 2510 en geen setupscorefilter. Toon de nieuwe "
+        "conceptkaart; bevestig niets."
+    )
+    prior = {
+        "name": "QA BTC Staffel Later 2510", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+        "plan_scope": "setup_only", "min_benchmark_score": 26,
+        "max_benchmark_score": 45,
+    }
+    state = FinnV2OperationStateService().resolve(
+        contract=contract, message=message, explicit_asset="BTC",
+        conversation_context={}, supplied_inputs={"name": "QA BTC Staffel Later 2510"},
+        derived_inputs=prior, model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["plan_scope"] == "setup_and_strategy"
+    assert state.collected_inputs["dca_amount_mode"] == "fixed"
+    assert state.collected_inputs["base_amount"] == 100
+    assert state.collected_inputs["timeframe"] == "1D"
+    assert state.collected_inputs["name"] == "QA BTC Staffel Later 2510"
+    assert "score_source" not in state.collected_inputs
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+
+
+def test_open_dca_revision_ignores_timeframe_code_inside_preserved_name():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    prior = {
+        "name": "QA BTC 4H", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+        "plan_scope": "setup_only",
+    }
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak er een volledig BTC DCA-plan van met vast €100 per week. "
+                 "Behoud de naam QA BTC 4H en geen setupscorefilter."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "QA BTC 4H"}, derived_inputs=prior,
+        model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["timeframe"] == "1D"
+    assert state.collected_inputs["name"] == "QA BTC 4H"
+
+
+def test_open_dca_revision_allows_explicit_timeframe_same_as_name():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    prior = {
+        "name": "4H", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+        "plan_scope": "setup_only",
+    }
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak er een volledig BTC DCA-plan van met vast €100 per week. "
+                 "Behoud de naam 4H, wijzig primair timeframe naar 4H."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "4H"}, derived_inputs=prior,
+        model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["timeframe"] == "4H"
+
+
+def test_no_extra_scorefilter_keeps_existing_setup_bounds():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    prior = {
+        "name": "QA BTC", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+        "plan_scope": "setup_only", "min_benchmark_score": 26,
+        "max_benchmark_score": 45,
+    }
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak er een volledig BTC DCA-plan van met vast €100 per week. "
+                 "Behoud de naam QA BTC en de bestaande scorevoorwaarde 26 tot 45 "
+                 "en geen extra scorefilter."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "QA BTC"}, derived_inputs=prior,
+        model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["min_benchmark_score"] == 26
+    assert state.collected_inputs["max_benchmark_score"] == 45
+    assert state.collected_inputs["name"] == "QA BTC"
+
+
 @pytest.mark.parametrize("message", [
     "Toch geen strategie erbij.", "Ik wil toch geen strategie.",
     "Toch geen vaste strategie erbij.", "Toch niet die strategie erbij.",

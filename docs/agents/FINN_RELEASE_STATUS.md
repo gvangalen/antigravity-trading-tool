@@ -4,9 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN open DCA concept scope revision (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`; repair branch: `codex/finn-plan-scope-revision`.
+Independent authenticated browser QA returned `NOT_ACCEPTED` on final SHA
+`178833743e9b032800c01bb1492f04c43969bbf9`. The direct setup-only
+26–45 card, amount deferral, guided swing and negative capability cases
+passed. A future Smart-DCA staffel initially caused one unnecessary amount
+question, then correctly yielded a setup-only card without score filter.
+Changing that open card to a full fixed €100 DCA plan failed with
+`orchestrator_failed` (run `finn-v2-run-c0c773ea78a84793be105d9da1516207`):
+the old card was withdrawn, but no replacement appeared. QA confirmed no
+proposal, plan or order.
+
+The local reproduction found that a cancelled setup-only proposal donated its
+old `plan_scope` as a default after the corrected amount was parsed. The typed
+proposal validator then rejected the conflicting scope and amount. This repair
+derives scope from the current correction before merging prior inputs, keeps
+the name literal from becoming a Smart-DCA instruction, and keeps weekly DCA
+cadence from rewriting the chart timeframe. A read-only Security and
+Architecture review also found that an old 26–45 setup filter could survive an
+explicit removal and that `4H` in a setup name could alter the chart timeframe.
+Those are now cleared only on an explicit filter removal, while a request for
+"geen extra scorefilter" preserves existing bounds; chart detection ignores
+the name occurrence but still recognizes a separate explicit timeframe change.
+Their final read-only reviews found no remaining P1/P2.
+
+The local real Luna/Responses probe starts with an owner-bound setup-only card
+having benchmark bounds 26–45, then replaces it with a full fixed €100 BTC
+DCA card on Friday and 1D with no setup filter. The original card is not
+confirmed. It also proves setup-only confirmation writes only the setup, no
+strategy, and rejects cross-owner access. The final full backend suite passed
+**3919 tests, 4 existing skips**. The worker-driven action matrix passed
+**16/16** and adapter checks **21/21**, with zero broker orders, Live calls or
+production connections (artifact SHA-256
+`439dd7810ec068c9bcddb52594170779c5aebeeb832234bc0287b67c5e114005`).
+Frontend build, typecheck, i18n lint/tests, command/proposal tests and the
+high-severity production audit passed. Real Responses development selector
+passed **20/20** with zero provider/schema/timeout/parse/validation failures.
+Its regression run, final restarted-runtime probe, CI, deployment and
+independent live QA remain pending.
+
 ## FINN setup-only DCA contract and continuing draft repair (25 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`; repair branch:
+Phase: `NOT_ACCEPTED` by independent live QA on final SHA
+`178833743e9b032800c01bb1492f04c43969bbf9`; repair branch:
 `codex/finn-plan-setup-only`, [PR #614](https://github.com/gvangalen/antigravity-trading-tool/pull/614).
 Independent live QA returned `NOT_ACCEPTED` on final SHA
 `cd5f309464900f4c07a58282c21eb2e53ecc5681` for the preceding
@@ -44,10 +86,11 @@ The product merged as `fe9ea1f2beae416038dd7ad0b79e09b9feb59932`.
 [Main CI 40190985708](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40190985708)
 and [Auto Deploy 40191172701](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40191172701)
 passed. Public backend health and frontend build info each returned HTTP 200
-and that exact product SHA. This status-only edit creates a later final SHA;
-Build must verify its last main CI, Auto Deploy and both public markers before
-assigning independent authenticated browser QA. The live QA verdict remains
-pending.
+and that exact product SHA. The later status-only final SHA passed
+[main CI 40191676003](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40191676003)
+and [Auto Deploy 40191867130](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40191867130);
+public backend and frontend markers both returned HTTP 200 and that final
+SHA. The independent verdict and repair are recorded above.
 
 ## FINN trading-plan contract and continuing draft (25 oktober 2026)
 

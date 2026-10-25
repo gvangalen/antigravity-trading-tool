@@ -10,6 +10,7 @@ from backend.services.asset_catalog_service import (
 )
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall, FinnResponsesToolError
@@ -182,16 +183,14 @@ class FinnResponsesProposalSelection:
             # Contribution cadence is not a chart timeframe. The model's
             # candidate may fill this required slot only when the user's
             # current text actually states a canonical setup timeframe.
-            chart_timeframe_named = bool(re.search(
-                r"\b(?:\d+\s*(?:m|min|h|d|w|mo|uur|hour|dag|day|week)|"
-                r"timeframe|tijdframe|time\s*frame|chart|grafiek|zeitrahmen)\b",
-                message.casefold(),
-            ))
-            explicit_timeframe = self.states.explicit_inputs(
-                contract=contract, message=message, explicit_asset=None,
-            ).get("timeframe") if chart_timeframe_named else None
             revision = dict(conversation_context.get("proposal_revision") or {})
             prior_inputs = dict(dict(revision.get("guided_state") or {}).get("collected_inputs") or {})
+            explicit_timeframe = FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(
+                message, ignored_names=(
+                    str(prior_inputs.get("name") or ""),
+                    str(explicitly_named or ""),
+                ),
+            )
             revising_draft = (
                 call.draft_intent == "revise"
                 and revision.get("operation_id") == contract.operation_id

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Optional
+from typing import Optional, Sequence
 
 
 class FinnV2SetupInputCatalog:
@@ -69,9 +69,23 @@ class FinnV2SetupInputCatalog:
         return next(iter(matches)) if len(matches) == 1 else None
 
     @classmethod
-    def explicit_chart_timeframe_from_text(cls, text: str) -> Optional[str]:
+    def explicit_chart_timeframe_from_text(
+        cls, text: str, *, ignored_names: Sequence[str] = (),
+    ) -> Optional[str]:
         """A concrete chart duration cannot be confused with a DCA cadence."""
-        match = cls._CODE_TIMEFRAME.search(str(text or ""))
+        text = str(text or "")
+        for name in ignored_names:
+            if name:
+                # Mask only the name attached to a naming cue. The same token
+                # may appear again as a genuine chart correction, e.g. a
+                # setup named "4H" and "wijzig timeframe naar 4H".
+                text = re.sub(
+                    r"(\b(?:naam|name|bezeichnung)\b\s*(?:(?:is|:|=)\s*)?[\"'“‘]?)"
+                    + re.escape(str(name)) + r"\b",
+                    lambda match: match.group(1) + " ", text,
+                    count=1, flags=re.IGNORECASE,
+                )
+        match = cls._CODE_TIMEFRAME.search(text)
         if match:
             return match.group(1).upper()
         normalized = cls._comparison_text(text)
