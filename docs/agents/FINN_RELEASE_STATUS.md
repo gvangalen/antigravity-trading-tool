@@ -6,7 +6,37 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN ETH DCA guided setup repair (25 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. The product
+Phase: `LOCAL_VALIDATION` for the continuation repair. Independent QA returned
+`NOT_ACCEPTED` on live SHA `b13ad54f51a415bd30395a7db7db196456e860f7`:
+an existing ETH setup diverted the open new ETH-DCA draft into a saved-plan
+read, and correcting an open ETH card to AAPL withdrew the old card but did
+not produce a replacement. The local reproduction showed that the runtime
+continuation check omitted the draft's collected inputs. The card correction
+also discarded its weekly schedule and fixed amount when the asset changed;
+the rule-coverage check then interpreted those missing fields as an unsupported
+condition. A correction before the first card failed with
+`proposal_asset_ambiguous` because both old and new asset remained in the
+request. The new candidate carries the owner-bound DCA fields through both
+correction stages, removes the old asset from proposal selection, and
+recognizes the initial conversational ETH setup request as a create intent.
+The exact locally reproduced existing-setup and asset-switch flows now reach
+unconfirmed ETH/AAPL concept cards. A correction without a ticker first asks
+which asset is meant; after `AAPL`, the owner-bound DCA choices remain in the
+new draft. No setup or order was confirmed. The final local backend suite
+passed **3973 tests, 4 existing skips**. The worker-driven action matrix
+passed **16/16** contracts and **21/21** adapter checks, with zero broker
+orders, Live calls, Live bots, or production connections (artifact SHA-256
+`b18dfe5ba95f2f0e0d426eca57cf5a226df590fa30a08d619b355ba2d3ed4b71`).
+The final real Responses development evaluation passed **20/20** and the
+regression evaluation passed **109/109**, each with zero provider, schema,
+timeout, parse or validation failures (artifact SHA-256
+`31a48e4d56cbf6523a2f71cd06c39c1814286ee2bb3b61dca52b72f4e2e07795`
+and `6fc1a5a81523e53e9196a2bd678c10fcb342cba979d1dfa24067a50dcfcbcafa`).
+The web build, typecheck, i18n checks, command and proposal tests, and
+high-severity audit passed. CI, deployment and independent live QA remain
+pending.
+
+The product
 repair in [PR #627](https://github.com/gvangalen/antigravity-trading-tool/pull/627)
 merged as SHA `f91bb7c3031640aa516d744dca7486dca3f49517`.
 The reported production conversation lost its open ETH DCA draft after the

@@ -135,7 +135,8 @@ def _explicit_create_operation_request(message: str) -> str | None:
     """
     conversational_plan_request = bool(re.search(
         r"\b(?:(?:kun|kan)\s+(?:je|jij|u)|(?:could|can)\s+you|kannst\s+du)\b"
-        r"[^?]{0,100}\b(?:trading|trade|handels|beleggings)[-\s]*plan\b[^?]{0,60}"
+        r"[^?]{0,100}\b(?:(?:trading|trade|handels|beleggings)[-\s]*plan|"
+        r"(?:(?:dca|trade|trading)[-\s]*)?setup)\b[^?]{0,60}"
         r"\b(?:maken|make|create|aanmaken|erstellen)\b",
         message, re.I,
     ))

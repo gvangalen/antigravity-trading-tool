@@ -232,6 +232,10 @@ class FinnResponsesProposalSelection:
             and correction.get("operation_id") == contract.operation_id
         )
         old_asset = str(correction.get("previous_asset") or "").upper()
+        if awaiting_instrument and str(verified_asset or "").upper() == old_asset:
+            # The prior draft's asset is contrast in this correction, never a
+            # verified target for the replacement whose ticker is still open.
+            verified_asset = None
         if awaiting_instrument and old_asset in mentioned_assets:
             # In "een aandeel in plaats van ETH", ETH is the rejected target.
             mentioned_assets.discard(old_asset)
@@ -388,6 +392,11 @@ class FinnResponsesProposalSelection:
         inputs = dict(state.collected_inputs)
         asset = str(inputs.get("asset") or inputs.get("symbol") or verified_asset or "").upper() or None
         operation_state = state.dict()
+        if awaiting_instrument and not replacement_asset and "symbol" in state.missing_required_inputs:
+            # Ask for the new ticker before any remaining setup fields. The
+            # old asset was explicitly withdrawn, so asking for type first
+            # makes the replacement look like a continuation of that plan.
+            operation_state["next_missing_input"] = "symbol"
         if contract.operation_id in {"create_setup", "create_strategy"}:
             # This is the owner-bound guided context used by the Responses
             # proposal gate *before* orchestration. Preserve every user turn
@@ -395,6 +404,8 @@ class FinnResponsesProposalSelection:
             # last answer only supplies a name, amount, or execution mode.
             prior = dict(context.get("active_guided_operation") or {})
             messages = list(prior.get("guided_user_messages") or [])
+            if not messages and correction.get("status") == "cancelled":
+                messages = list(correction.get("prior_user_messages") or [])
             prior_origin = str(prior.get("original_request") or "").strip()
             if prior_origin and not messages:
                 messages.append(prior_origin)
@@ -403,7 +414,9 @@ class FinnResponsesProposalSelection:
                 "original_request": prior_origin or str(message or "").strip(),
                 "guided_user_messages": messages[:20],
                 "guided_history_truncated": bool(
-                    prior.get("guided_history_truncated") or len(messages) > 20
+                    prior.get("guided_history_truncated")
+                    or correction.get("prior_history_truncated")
+                    or len(messages) > 20
                 ),
             })
         if contract.operation_id == "create_bot" and (
