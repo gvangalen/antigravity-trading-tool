@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN open-concept correction after independent QA (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION` on `codex/finn-plan-draft-corrections`. The last
+Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. Product
+repair: [PR #618](https://github.com/gvangalen/antigravity-trading-tool/pull/618),
+merged as `5726601cfd310329d276207f40f7b7cf5542e489`. The preceding
 deployed candidate, final SHA `6d18156d459d1a920715915b780a2d3eef4379d3`,
 received `NOT_ACCEPTED` from independent authenticated QA. The complete
 setup-only to fixed €100 DCA correction now worked, but an explicit removal
@@ -24,8 +26,8 @@ preserves the old bounds, while an unrelated “nee” or “wacht” does not v
 a subsequent removal. “Gelijk Kansen” remains a valid literal name; “laat de
 naam gelijk” retains the old name. Setup-only continuation bypasses the
 ambiguous model classifier when the user explicitly defers strategy or amount.
-The pending candidate must still pass the full local gates, CI, deployment
-identity, and a new independent live QA verdict before acceptance.
+The local and deployment gates have passed; a new independent live QA verdict
+is required before acceptance.
 Local evidence on the final repair: **3932 backend tests passed, 4 existing
 skips** (log SHA-256
 `ad1f25a73df2799be80311453b84b3ef1c28e98dc895e1c4d19ed7b09ca4eab2`).
@@ -44,7 +46,15 @@ schema, timeout, parse, or validation failures (artifact SHA-256
 Real Responses regression selection passed **109/109** with zero provider,
 schema, timeout, parse, or validation failures (artifact SHA-256
 `bb5478b75a83a5d5e8e85019c58ee960497ae826acbad124111231323c8476f1`).
-PR CI and independent live QA remain pending.
+[PR CI 40199757959](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40199757959),
+[main CI 40199980104](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40199980104),
+and [Auto Deploy 40200188239](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40200188239)
+passed. Public backend health and frontend build info both returned HTTP 200
+and the exact product SHA `5726601cfd310329d276207f40f7b7cf5542e489`.
+This documentation-only release-status update will create a later public SHA;
+independent QA must verify that final identity and retest the complete agreed
+setup-only, deferral, future-staffel, open-concept correction, swing, and
+negative-capability matrix.
 
 ## FINN open DCA concept scope revision (25 oktober 2026)
 
