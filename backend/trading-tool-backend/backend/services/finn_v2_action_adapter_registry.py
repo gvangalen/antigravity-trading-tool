@@ -315,7 +315,15 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         raw_payload = dict(change.get("setup_fields") or {})
+        plan_scope = raw_payload.pop("plan_scope", None)
         if str(raw_payload.get("setup_type") or "").strip().lower() == "dca":
+            if plan_scope == "setup_only":
+                from backend.domain.finn_dca_plan_contract import validate_dca_setup_only
+
+                validate_dca_setup_only(raw_payload)
+                return await self.setups.save_setup(
+                    SetupCreateSchema.parse_obj(raw_payload), raw_payload, user_id,
+                )
             from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 
             setup_fields, strategy_fields = split_confirmed_dca_plan(raw_payload)

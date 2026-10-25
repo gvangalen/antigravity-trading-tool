@@ -3980,7 +3980,8 @@
       "between": "Score {low} to below {high}: {percent}% = {amount}",
       "above": "Score from {threshold}: {percent}% = {amount}",
       "safetyNote": "These are planned amounts. A missing score or safety limit can prevent or reduce a purchase.",
-      "planOnly": "Confirming saves the setup and strategy. It does not start a bot or make a purchase."
+      "planOnly": "Confirming saves the setup and strategy. It does not start a bot or make a purchase.",
+      "setupOnly": "Confirming saves only the setup. You can choose an amount and strategy later; no bot starts and no purchase is made."
     },
     "surfaceStatus": {
       "active": "active",

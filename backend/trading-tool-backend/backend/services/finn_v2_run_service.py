@@ -2718,6 +2718,12 @@ class FinnV2RunService:
             ):
                 continuation = True
             elif (
+                pending_guided == "create_setup"
+                and requested_slot in FinnV2OperationStateService.DCA_AMOUNT_FIELDS
+                and FinnV2OperationStateService.setup_only_intent(message)
+            ):
+                continuation = True
+            elif (
                 pending_guided == "create_strategy"
                 and corrected_guided_operation_id == "create_strategy"
                 and _pure_strategy_price_reentry(message)

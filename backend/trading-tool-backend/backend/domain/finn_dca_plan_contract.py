@@ -16,6 +16,20 @@ BENCHMARK_COMPONENTS = ("market_score", "macro_score", "technical_score")
 EQUAL_BENCHMARK_WEIGHTS = {component: 1 / 3 for component in BENCHMARK_COMPONENTS}
 
 
+def validate_dca_setup_only(fields: dict[str, Any]) -> None:
+    """A confirmed DCA setup may have cadence and eligibility without an amount rule."""
+    if fields.get("plan_scope") not in {None, "setup_only"} or fields.get("setup_type") != "dca":
+        raise ValueError("dca_setup_only_scope_invalid")
+    if any(fields.get(key) is not None for key in _AMOUNT_FIELDS):
+        raise ValueError("dca_setup_only_cannot_have_strategy_amounts")
+    if fields.get("dca_frequency") not in {"daily", "weekly", "monthly"}:
+        raise ValueError("dca_frequency_required")
+    if fields["dca_frequency"] == "weekly" and not fields.get("dca_day"):
+        raise ValueError("dca_day_required")
+    if fields["dca_frequency"] == "monthly" and not fields.get("dca_month_day"):
+        raise ValueError("dca_month_day_required")
+
+
 def normalize_benchmark_weights(preferences: Any) -> dict[str, float] | None:
     """Match Analyse's missing-field defaults without accepting invalid weights."""
     if preferences is None or preferences == {}:

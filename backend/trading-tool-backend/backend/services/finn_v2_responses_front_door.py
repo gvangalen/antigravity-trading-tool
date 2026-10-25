@@ -1120,6 +1120,11 @@ class FinnResponsesFrontDoor:
                 message=message, contract=contract, registry=self.proposals.registry,
                 requested_slot=requested_slot,
                 )
+                or (
+                    pending_operation == "create_setup"
+                    and requested_slot in FinnV2OperationStateService.DCA_AMOUNT_FIELDS
+                    and states.setup_only_intent(message)
+                )
                 or (states._is_explicit_correction(message) and not switches_operation and "?" not in message)
             ):
                 selected = self.proposals.from_call(

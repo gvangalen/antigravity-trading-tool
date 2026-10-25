@@ -3,7 +3,7 @@ from datetime import date
 
 from backend.domain.finn_dca_plan_contract import (
     split_confirmed_dca_plan, dca_due_on_date, benchmark_score, normalize_benchmark_weights,
-    is_confirmed_dca_amount_rule,
+    is_confirmed_dca_amount_rule, validate_dca_setup_only,
 )
 from backend.engine.decision_engine import decide_amount
 from backend.engine.trading_bot_execution import _get_current_benchmark_weights
@@ -16,6 +16,12 @@ def _schedule():
         "name": "BTC maandag DCA", "symbol": "BTC", "setup_type": "dca",
         "timeframe": "1D", "dca_frequency": "weekly", "dca_day": "monday",
     }
+
+
+def test_setup_only_dca_rejects_a_hidden_amount_rule():
+    validate_dca_setup_only({**_schedule(), "plan_scope": "setup_only"})
+    with pytest.raises(ValueError, match="dca_setup_only_cannot_have_strategy_amounts"):
+        validate_dca_setup_only({**_schedule(), "plan_scope": "setup_only", "base_amount": 100})
 
 
 def test_exact_amount_marker_requires_the_canonical_saved_rule():

@@ -3,6 +3,7 @@ import pytest
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
+from backend.domain.saved_setup_market_condition import explicit_benchmark_bounds
 
 
 def test_setup_name_drops_trailing_non_persistence_safety_instruction():
@@ -29,6 +30,147 @@ def test_guided_dca_reply_keeps_cadence_and_weekday_from_one_sentence():
     assert continued.collected_inputs["dca_frequency"] == "weekly"
     assert continued.collected_inputs["dca_day"] == "friday"
     assert continued.next_missing_input == "dca_amount_mode"
+
+
+def test_explicit_setup_only_dca_keeps_eligibility_and_needs_no_strategy_amount():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak alleen een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag, "
+            "als enige koopvoorwaarde totale benchmarkscore 26 tot 45. "
+            "Geen strategie of bedrag nu."
+        ),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["plan_scope"] == "setup_only"
+    assert state.collected_inputs["dca_frequency"] == "weekly"
+    assert state.collected_inputs["dca_day"] == "friday"
+    assert state.collected_inputs["min_benchmark_score"] == 26
+    assert state.collected_inputs["max_benchmark_score"] == 45
+    assert "base_amount" not in state.collected_inputs
+
+
+def test_generic_buy_condition_does_not_promote_a_price_range_to_benchmark():
+    assert explicit_benchmark_bounds("Mijn koopvoorwaarde is een prijs van €26 tot €45.") == {}
+    assert explicit_benchmark_bounds(
+        "Mijn koopvoorwaarde is een totale benchmarkscore van 26 tot 45."
+    ) == {"min_benchmark_score": 26, "max_benchmark_score": 45}
+
+
+def test_strategy_deferral_completes_an_existing_dca_draft_without_losing_setup_fields():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract,
+        message=("Maak een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag, "
+                 "als koopvoorwaarde totale benchmarkscore 26 tot 45."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert pending.next_missing_input == "dca_amount_mode"
+    assert service.setup_only_intent("Dat bepaal ik later in de strategie")
+    completed = service.resolve(
+        contract=contract, message="Dat bepaal ik later in de strategie",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert completed.status == "complete"
+    assert completed.collected_inputs["plan_scope"] == "setup_only"
+    assert completed.collected_inputs["min_benchmark_score"] == 26
+    assert completed.collected_inputs["max_benchmark_score"] == 45
+    assert "dca_amount_mode" not in completed.collected_inputs
+
+
+def test_future_smart_dca_staffel_does_not_become_a_setup_filter_or_strategy():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak alleen een BTC DCA-setup: naam QA BTC, 1D, wekelijks op vrijdag. "
+                 "De Smart-DCA-staffel van 40 tot 70 bepaal ik later in de strategie."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["plan_scope"] == "setup_only"
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+    assert "low_threshold" not in state.collected_inputs
+
+
+def test_later_bot_does_not_discard_the_strategy_requested_now():
+    assert not FinnV2OperationStateService.setup_only_intent(
+        "Maak een DCA-setup en strategie van €100 per week; later maak ik een bot."
+    )
+    assert not FinnV2OperationStateService.setup_only_intent(
+        "Maak niet alleen een DCA-setup, maar ook een strategie van €100 per week."
+    )
+
+
+def test_open_setup_only_proposal_can_add_fixed_strategy_before_confirmation():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    setup = service.resolve(
+        contract=contract,
+        message=("Maak alleen een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag. "
+                 "Geen strategie of bedrag nu."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    proposed = setup.dict()
+    proposed.update(status="proposed", open_proposal_id="proposal-43")
+    revised = service.resolve(
+        contract=contract,
+        message="Maak er toch een vast bedrag van €80 per keer van.",
+        explicit_asset=None,
+        conversation_context={
+            "active_guided_operation": proposed,
+            "proposal_revision": {"operation_id": "create_setup", "proposal_id": "proposal-43"},
+        },
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert revised.status == "complete"
+    assert revised.collected_inputs["plan_scope"] == "setup_and_strategy"
+    assert revised.collected_inputs["dca_amount_mode"] == "fixed"
+    assert revised.collected_inputs["base_amount"] == 80
+
+
+def test_open_setup_only_proposal_can_ask_for_strategy_amount_later_in_same_draft():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    setup = service.resolve(
+        contract=contract,
+        message=("Maak alleen een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag. "
+                 "Geen strategie of bedrag nu."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    proposed = setup.dict()
+    proposed.update(status="proposed", open_proposal_id="proposal-44")
+    revised = service.resolve(
+        contract=contract,
+        message="Toch ook een strategie erbij, vraag me het bedrag.",
+        explicit_asset=None,
+        conversation_context={
+            "active_guided_operation": proposed,
+            "proposal_revision": {"operation_id": "create_setup", "proposal_id": "proposal-44"},
+        },
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert revised.collected_inputs["plan_scope"] == "setup_and_strategy"
+    assert revised.status == "collecting"
+    assert revised.next_missing_input == "dca_amount_mode"
+
+
+@pytest.mark.parametrize("message", [
+    "Toch geen strategie erbij.", "Ik wil toch geen strategie.",
+    "Toch geen vaste strategie erbij.", "Toch niet die strategie erbij.",
+])
+def test_negated_strategy_addition_does_not_switch_setup_only_draft(message):
+    assert not FinnV2OperationStateService.add_strategy_to_open_setup_intent(message)
 
 
 def test_guided_dca_compound_answer_keeps_every_typed_field_and_clean_name():
