@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN open DCA concept scope revision (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`; repair branch: `codex/finn-plan-scope-revision`.
+Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA; repair branch:
+`codex/finn-plan-scope-revision`, [PR #616](https://github.com/gvangalen/antigravity-trading-tool/pull/616).
 Independent authenticated browser QA returned `NOT_ACCEPTED` on final SHA
 `178833743e9b032800c01bb1492f04c43969bbf9`. The direct setup-only
 26–45 card, amount deferral, guided swing and negative capability cases
@@ -30,20 +31,37 @@ Those are now cleared only on an explicit filter removal, while a request for
 the name occurrence but still recognizes a separate explicit timeframe change.
 Their final read-only reviews found no remaining P1/P2.
 
-The local real Luna/Responses probe starts with an owner-bound setup-only card
+The final restarted local real Luna/Responses probe starts with an owner-bound setup-only card
 having benchmark bounds 26–45, then replaces it with a full fixed €100 BTC
 DCA card on Friday and 1D with no setup filter. The original card is not
 confirmed. It also proves setup-only confirmation writes only the setup, no
 strategy, and rejects cross-owner access. The final full backend suite passed
-**3919 tests, 4 existing skips**. The worker-driven action matrix passed
+**3919 tests, 4 existing skips** (log SHA-256
+`60d4311e232ef7538bdce251449fe76dab22940953d620743f15397af81e394d`).
+The final restarted worker-driven action matrix passed
 **16/16** and adapter checks **21/21**, with zero broker orders, Live calls or
 production connections (artifact SHA-256
-`439dd7810ec068c9bcddb52594170779c5aebeeb832234bc0287b67c5e114005`).
+`d62799d5ec48329b4010c6528fdd4e4508c776e7a87dd77f08d5b4ecfdff4792`).
 Frontend build, typecheck, i18n lint/tests, command/proposal tests and the
 high-severity production audit passed. Real Responses development selector
-passed **20/20** with zero provider/schema/timeout/parse/validation failures.
-Its regression run, final restarted-runtime probe, CI, deployment and
-independent live QA remain pending.
+passed **20/20** (artifact SHA-256
+`8bb583236adcfa218de122f65d2e48847030198f442a31d9f6baa8353f81b523`)
+and regression **109/109** (artifact SHA-256
+`a01d0200a1498df6d9ff698a51325180a2d7668f87581555bf69b4ff3c5f4dae`),
+both with zero provider/schema/timeout/parse/validation failures. The final
+visible chat probe log SHA-256 is
+`8b042ebe0818270948603d8e58fec468da2044f0510010c9b9330a7efa7cc2cc`.
+
+[PR CI 40194566002](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40194566002)
+passed on candidate `4a14a57789f4b63c5711d74090cbcae9bf7fb17f`.
+The product merged as `be729901774299ae7025b5f3afc1cd083d8ad693`.
+[Main CI 40195107531](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40195107531)
+and [Auto Deploy 40195313950](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40195313950)
+passed. Public backend health and frontend build info each returned HTTP 200
+and that exact product SHA. This documentation-only status update will create
+a later public SHA without product-code changes. Independent QA must verify
+that final public identity and rerun the complete agreed setup-only, deferral,
+future-staffel, open-concept correction, swing and negative-capability matrix.
 
 ## FINN setup-only DCA contract and continuing draft repair (25 oktober 2026)
 
