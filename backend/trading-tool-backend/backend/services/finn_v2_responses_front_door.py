@@ -151,9 +151,10 @@ def _explicit_create_operation_request(message: str) -> str | None:
     facts = FinnV2RequestPreprocessorService().preprocess(message=message)
     # A named recent parent makes this a contextual follow-up, even when the
     # user explicitly asks to create a new child object.
-    if facts.action_polarity != "create" or facts.discourse_act not in {
-        "operation_request", "contextual_follow_up",
-    }:
+    # A later sentence may describe a hypothetical future strategy and make
+    # the discourse label "evaluation". The leading imperative still asks for
+    # a setup draft; the typed operation classifier resolves its object.
+    if facts.action_polarity != "create":
         return None
     return FinnV2OperationClassificationService._explicit_guided_create_operation(
         message=message, facts=facts,
@@ -1967,23 +1968,53 @@ class FinnResponsesFrontDoor:
         def saved_read_targets_open_draft(call: FinnResponsesToolCall) -> bool:
             if not open_dca_draft or call.name not in {
                 "get_saved_setup_inventory", "get_active_plan_and_strategy", "get_saved_setup",
-            } or call.answer_mode in {"list", "compare"}:
+            }:
                 return False
             draft_name = str(draft_fields.get("name") or "").strip()
+            latest = message.casefold()
             named_targets = call.setup_names or (
                 (str(call.inputs.get("setup_name")),)
                 if call.inputs.get("setup_name") else ()
             )
+            # The user's deictic reference to the still-open card has stronger
+            # identity than a model-selected saved-inventory mode or a name
+            # invented by that read. Keep explicit reads of a different named
+            # saved setup and collection comparisons on their saved source.
+            explicit_saved_reference = any(
+                not re.search(
+                    r"\b(?:niet|geen|not|no|kein\w*)\s+(?:(?:eerder|yet)\s+)?$",
+                    latest[max(0, match.start() - 20):match.start()],
+                )
+                for match in re.finditer(r"\b(?:opgeslagen|bestaande|saved|existing)\b", latest)
+            )
+            explicit_other_target = explicit_saved_reference or any(
+                name.casefold() != draft_name.casefold() and name.casefold() in latest
+                for name in named_targets
+            )
+            collection_request = bool(re.search(
+                r"\b(?:vergelijk|compare|opgeslagen\s+plannen|saved\s+plans|"
+                r"bestaande\s+plannen|alle\s+setups|all\s+setups)\b", latest,
+            ))
+            draft_reference = bool(re.search(
+                r"\b(?:deze|dit|die|genoemde|this|that)\s+"
+                r"(?:(?:open|huidige|current)\s+)?"
+                r"(?:[\w]+-)?(?:setup|concept|voorstel|kaart|draft|proposal)\b",
+                latest,
+            ))
+            if (
+                (draft_reference or (draft_name and draft_name.casefold() in latest))
+                and not explicit_other_target and not collection_request
+            ):
+                return True
+            if call.answer_mode in {"list", "compare"}:
+                return False
             if named_targets:
                 return (
                     len(named_targets) == 1
                     and bool(draft_name)
                     and named_targets[0].casefold() == draft_name.casefold()
                 )
-            latest = message.casefold()
-            if draft_name and draft_name.casefold() in latest:
-                return True
-            if re.search(r"\b(vergelijk|compare|opgeslagen plannen|saved plans|bestaande plannen)\b", latest):
+            if collection_request:
                 return False
             return bool(re.search(r"\b(deze|dit|die|genoemde|concept|voorstel|kaart|this|that|draft)\b", latest))
 

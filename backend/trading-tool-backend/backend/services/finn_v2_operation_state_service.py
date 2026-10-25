@@ -255,7 +255,9 @@ class FinnV2OperationStateService:
                     requested_slot=requested_slot,
                     known_setup_type=known_setup_type,
                 )
-                if contract.operation_id in {"create_setup", "create_strategy"} or not model_tool_inputs
+                if contract.operation_id in {
+                    "create_setup", "create_strategy", "create_indicator_configuration",
+                } or not model_tool_inputs
                 else {}
             )
         if contract.operation_id == "create_setup":
@@ -338,7 +340,17 @@ class FinnV2OperationStateService:
                 if not self._is_missing(canonical)
                 and (not contract.allowed_values_for(key) or canonical in contract.allowed_values_for(key))
             }
-        for key, value in (supplied_inputs or {}).items():
+        model_inputs = dict(supplied_inputs or {})
+        if (
+            contract.operation_id == "create_indicator_configuration"
+            and model_tool_inputs
+            and self._indicator_matches_in_text(message)
+            and "indicator" not in explicit
+        ):
+            # Competing catalog names without a clear correction are not a
+            # license for the model to pick one for a confirmable card.
+            model_inputs.pop("indicator", None)
+        for key, value in model_inputs.items():
             if is_slot_turn:
                 continue
             if contract.operation_id == "create_strategy" and key == "price_currency" and key not in explicit:
@@ -2089,14 +2101,15 @@ class FinnV2OperationStateService:
         return {field: FinnV2SetupInputCatalog.canonical_input(field, typed_value)}
 
     @staticmethod
-    def _indicator_input_from_text(text: str) -> Optional[dict[str, str]]:
-        """Resolve configured indicators from the canonical indicator catalogs."""
+    def _indicator_matches_in_text(text: str) -> list[dict[str, object]]:
+        """Find distinct catalog identities with their positions in the request."""
         normalized = re.sub(r"[\s_-]+", " ", text.casefold()).strip()
         definitions = [
             *get_active_technical_indicator_definitions(),
             *get_active_macro_indicator_definitions(),
             *get_active_market_indicator_definitions(),
         ]
+        matches: list[dict[str, object]] = []
         for definition in definitions:
             name = str(definition.get("name") or "").strip()
             category = str(definition.get("category") or "").strip()
@@ -2110,11 +2123,43 @@ class FinnV2OperationStateService:
                 *aliases,
                 *(alias.replace("_", " ") for alias in aliases),
             }
-            if any(
-                variant and re.search(rf"(?<!\w){re.escape(variant.casefold())}(?!\w)", normalized)
-                for variant in variants
+            positions = [
+                match.start()
+                for variant in variants if variant
+                for match in [re.search(rf"(?<!\w){re.escape(variant.casefold())}(?!\w)", normalized)]
+                if match is not None
+            ]
+            if positions:
+                matches.append({"name": name, "category": category, "start": min(positions)})
+        return sorted(matches, key=lambda item: int(item["start"]))
+
+    @classmethod
+    def _indicator_input_from_text(cls, text: str) -> Optional[dict[str, str]]:
+        """Choose a named indicator only when the user's target is unambiguous."""
+        matches = cls._indicator_matches_in_text(text)
+        normalized = re.sub(r"[\s_-]+", " ", text.casefold()).strip()
+        if len(matches) == 1:
+            before = normalized[max(0, int(matches[0]["start"]) - 25):int(matches[0]["start"])]
+            indicator_clause = re.split(r"[.;]", normalized[int(matches[0]["start"]):], maxsplit=1)[0]
+            if (
+                re.search(r"\b(?:geen|niet|zonder|no|not|without|kein\w*|ohne|in plaats van|instead of|anstatt)\s+$", before)
+                or re.search(r"\b(?:of|or|oder)\s+[\w-]+", indicator_clause)
+                or re.search(r"\b(?:wil(?:len)?\s+(?:ik|we)\s+niet|do\s+not\s+want|don't\s+want|niet|not|nicht)\b", indicator_clause)
             ):
-                return {"name": name, "category": category}
+                return None
+            return {"name": str(matches[0]["name"]), "category": str(matches[0]["category"])}
+        if len(matches) < 2:
+            return None
+        correction = re.search(r"\b(?:geen|no|kein\w*)\b[^.;]{0,60}\b(?:maar|but|sondern)\b", normalized)
+        if correction:
+            chosen = [item for item in matches if int(item["start"]) >= correction.end()]
+            if len(chosen) == 1:
+                return {"name": str(chosen[0]["name"]), "category": str(chosen[0]["category"])}
+        replacement = re.search(r"\b(?:in plaats van|instead of|anstatt)\b", normalized)
+        if replacement:
+            chosen = [item for item in matches if int(item["start"]) < replacement.start()]
+            if len(chosen) == 1:
+                return {"name": str(chosen[0]["name"]), "category": str(chosen[0]["category"])}
         return None
 
     @staticmethod
