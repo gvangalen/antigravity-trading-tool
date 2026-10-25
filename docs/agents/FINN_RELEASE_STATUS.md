@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN asset switch during an open DCA setup (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Independent QA returned `NOT_ACCEPTED` on live SHA
+Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Independent QA returned `NOT_ACCEPTED` on live SHA
 `4d088a6c753f30529b301787c380d95d71e5e3d6`. The ordinary ETH DCA
 conversation and full-card asset correction passed. Two follow-through paths
 failed: a tickerless ETH-to-AAPL change before the first card eventually
@@ -47,7 +47,18 @@ complete. The affected `create_setup` and `update_setup` cases (`ac16` and
 `ac17`) both passed. This diagnostic is not counted as a green release gate;
 its full artifact SHA-256 is
 `278ce440a6d00a5c167d9ad6279b14d4f67d8f6768260395979a544231e4809c`.
-This repair is not live or independently accepted yet.
+The product change merged in [PR #631](https://github.com/gvangalen/antigravity-trading-tool/pull/631)
+as SHA `b81e54650e20d86ee40a6c9256028781f466f558`. PR CI
+[40234748013](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40234748013)
+and main CI [40234995106](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40234995106)
+passed all five jobs. [Auto Deploy 40235249504](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40235249504)
+succeeded. Public backend health and frontend build-info each returned HTTP
+200 and exact product SHA `b81e54650e20d86ee40a6c9256028781f466f558`.
+This release-status update itself creates a later main SHA; Build must wait
+for its CI and Auto Deploy, verify both public markers on that final SHA,
+then assign the same independent QA Agent the authenticated live hertest.
+The repair is not independently accepted yet. Build has not accessed the
+protected QA fixture or sealed holdout.
 
 ## FINN ETH DCA guided setup repair (25 oktober 2026)
 
