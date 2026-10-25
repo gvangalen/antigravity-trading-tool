@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN generic setup overview with several saved plans (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Repair branch: `codex/finn-generic-setup-ambiguity`.
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Repair branch:
+`codex/finn-generic-setup-ambiguity`, [PR #610](https://github.com/gvangalen/antigravity-trading-tool/pull/610).
 Independent authenticated QA on live SHA
 `33ecc9a68fc304c1ccb821dd03092385919728a0` confirmed the earlier
 selected-setup continuation fix, but returned `NOT_ACCEPTED` for the complete
@@ -36,8 +37,15 @@ A real-Luna local three-turn probe with two synthetic BTC setups named both
 alternatives on the first question, retained the explicitly selected Friday
 1W setup through the score follow-up, left the match unknown without complete
 scores, and made no proposal or order (local artifact
-`/tmp/finn-followup-multiturn-probe.json`). Independent production QA on the
-new final SHA remains pending.
+`/tmp/finn-followup-multiturn-probe.json`). PR checks passed on commit
+`75b9401c2`; the product merged as
+`c357675f9e7ab2d5c89083aed231e2f838e32f55`.
+[Main CI 40178540125](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40178540125)
+and [Auto Deploy 40178722804](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40178722804)
+passed. Backend health and frontend build info each returned HTTP 200 with
+that product SHA. This status-only edit creates a later final SHA. Build must
+verify its main CI, Auto Deploy and both public markers before independent
+production QA; its verdict remains pending.
 
 ## FINN selected-setup continuation after an asset-qualified question (25 oktober 2026)
 
