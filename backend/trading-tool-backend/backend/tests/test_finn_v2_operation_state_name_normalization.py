@@ -627,9 +627,9 @@ def test_open_dca_strategy_corrects_single_currency_amount_without_field_label()
 
 
 @pytest.mark.parametrize("locale, expected", [
-    ("nl-NL", "Welk primair timeframe"),
-    ("en-US", "What is the primary analysis timeframe"),
-    ("de-DE", "Welcher Analysezeitraum"),
+    ("nl-NL", "Welk analysetijdsframe"),
+    ("en-US", "Which analysis timeframe"),
+    ("de-DE", "Welches Analyse-Zeitfenster"),
 ])
 def test_guided_draft_question_uses_requested_language(locale, expected):
     contract = FinnV2OperationRegistry().require_supported("create_setup")
@@ -1549,7 +1549,7 @@ def test_strategy_guided_questions_use_human_slot_copy(slot, question):
 @pytest.mark.parametrize(
     ("slot", "expected"),
     (
-        ("dca_amount_mode", "vast bedrag of Smart DCA"),
+        ("dca_amount_mode", "Smart DCA"),
         ("low_score_percent", "percentage van het basisbedrag"),
         ("budget_total_eur", "totale budgetlimiet"),
         ("paper_initial_cash_eur", "virtueel Paper-startkapitaal"),

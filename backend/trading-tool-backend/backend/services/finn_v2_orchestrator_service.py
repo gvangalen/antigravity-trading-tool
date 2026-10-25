@@ -157,7 +157,7 @@ class FinnV2OrchestratorService:
                     "previous_safe_terminal_operation_id": terminal.get("operation_id"),
                     "previous_safe_terminal_reason": terminal.get("terminal_reason"),
                 })
-        if operation_state.get("operation_id") == "create_strategy":
+        if operation_state.get("operation_id") in {"create_setup", "create_strategy"}:
             operation_state.update({
                 "original_request": guided_state.get("original_request"),
                 "guided_user_messages": list(guided_state.get("guided_user_messages") or []),
@@ -709,15 +709,15 @@ class FinnV2OrchestratorService:
         )
         guided_state = dict(getattr(request_plan, "operation_state", {}) or {})
         if (
-            getattr(request_plan, "operation_id", None) == "create_strategy"
-            and guided_state.get("operation_id") == "create_strategy"
+            getattr(request_plan, "operation_id", None) in {"create_setup", "create_strategy"}
+            and guided_state.get("operation_id") == getattr(request_plan, "operation_id", None)
         ):
             previous_guided = dict(conversation_context.get("active_guided_operation") or {})
-            if _explicit_fresh_create_operation_request(run.message) == "create_strategy":
+            if _explicit_fresh_create_operation_request(run.message) == guided_state.get("operation_id"):
                 previous_guided = {}
             guided_state["original_request"] = (
                 str(previous_guided.get("original_request") or "").strip()
-                if previous_guided.get("operation_id") == "create_strategy"
+                if previous_guided.get("operation_id") == guided_state.get("operation_id")
                 else str(run.message or "").strip()
             )
             prior_messages = list(previous_guided.get("guided_user_messages") or [])

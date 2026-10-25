@@ -1507,7 +1507,10 @@ def test_guided_question_overrides_mismatched_model_copy_for_the_actual_slot():
         },
         locale="nl",
     )
-    assert response["content"] == "Welk primair timeframe wil je voor deze setup gebruiken?"
+    assert response["content"] == (
+        "Welk analysetijdsframe wil je voor deze setup gebruiken, bijvoorbeeld 1D (daggrafiek) "
+        "of 4H (vieruursgrafiek)? Dit bepaalt niet hoe vaak je DCA koopt; dat vraag ik apart."
+    )
     assert response["proposal_id"] is None
     assert response["confirmation_required"] is False
     coach = {"mode": "COACH", "content": "Je plan vraagt om geduld."}

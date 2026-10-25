@@ -742,7 +742,10 @@ class FinnResponsesFrontDoor:
         }
 
     @staticmethod
-    def binds_guided_slot(*, message: str, contract: Any, registry: Any, requested_slot: str) -> bool:
+    def binds_guided_slot(
+        *, message: str, contract: Any, registry: Any, requested_slot: str,
+        collected_inputs: Mapping[str, object] | None = None,
+    ) -> bool:
         """A short typed answer belongs to the persisted slot, not a new model intent."""
         states = FinnV2OperationStateService()
         normalized = message.strip().casefold()
@@ -763,6 +766,38 @@ class FinnResponsesFrontDoor:
             return False
         slot_value = states._requested_slot_value(field=requested_slot, text=message, contract=contract)
         if slot_value is None:
+            # The user may fill another DCA field before the currently asked
+            # slot. Keep a short, unambiguous answer in this owner-bound draft;
+            # free tool selection can otherwise abandon the proposal entirely.
+            if (contract.operation_id == "create_setup"
+                    and str((collected_inputs or {}).get("setup_type") or "").casefold() == "dca"):
+                short_dca_answer = re.fullmatch(
+                        r"\s*(?:(?:elke|iedere|every|jeden?)\s+)?"
+                        r"(?:dagelijks|wekelijks|maandelijks|daily|weekly|monthly|"
+                        r"maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|"
+                        r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+                        r"vast(?:e)?(?:\s+bedrag)?|fixed(?:\s+amount)?|"
+                        r"fest(?:e|er|es)?(?:\s+betrag)?|smart(?:\s+dca)?|"
+                        r"variabel(?:\s+bedrag)?|variable(?:\s+amount)?)"
+                        r"\s*[.!]?\s*", message, re.I,
+                    )
+                draft_asset = str((collected_inputs or {}).get("symbol") or "").upper()
+                same_draft_restatement = bool(
+                    draft_asset and mentioned_catalog_symbols(message) == {draft_asset}
+                    and re.fullmatch(
+                        r"\s*(?:een|a|an)\s+(?:dagelijkse|wekelijkse|maandelijkse|"
+                        r"daily|weekly|monthly)\s+dca[-\s]+setup\s+(?:voor|for)\s+"
+                        r"[a-z0-9]{2,10}\s*[.!]?\s*", message, re.I,
+                    )
+                )
+                if short_dca_answer or same_draft_restatement:
+                    explicit = states.explicit_inputs(
+                        contract=contract, message=message, explicit_asset=None,
+                        known_setup_type="dca",
+                    )
+                    return bool(set(explicit) & {
+                        "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                    })
             return False
         # Even a short answer can contain a separate action after a sentence
         # boundary. Do not consume that new request as only a slot value.
@@ -1123,6 +1158,7 @@ class FinnResponsesFrontDoor:
                 or self.binds_guided_slot(
                 message=message, contract=contract, registry=self.proposals.registry,
                 requested_slot=requested_slot,
+                collected_inputs=dict(guided_state.get("collected_inputs") or {}),
                 )
                 or (
                     pending_operation == "create_setup"

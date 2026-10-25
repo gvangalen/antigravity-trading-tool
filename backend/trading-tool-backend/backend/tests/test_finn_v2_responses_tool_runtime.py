@@ -3253,8 +3253,8 @@ def test_terminal_runtime_failure_follows_current_ui_language_switch():
 
 
 @pytest.mark.parametrize("locale, expected", [
-    ("en", "What is the primary analysis timeframe"),
-    ("de", "Welcher Analysezeitraum"),
+    ("en", "Which analysis timeframe"),
+    ("de", "Welches Analyse-Zeitfenster"),
 ])
 def test_guided_terminal_question_uses_request_locale_over_stale_dutch_choice(locale, expected):
     service = object.__new__(FinnV2RunService)
@@ -5418,6 +5418,9 @@ def test_setup_automatic_rule_evidence_still_requires_coverage(message):
     ("Maak voorstel zonder deze voorwaarden", True),
     ("Begin nieuw voorstel zonder eerdere voorwaarden", True),
     ("Make proposal without these conditions", True),
+    ("Geen extra koopvoorwaarde", True),
+    ("No extra purchase condition", True),
+    ("Keine zusätzliche Kaufbedingung", True),
     ("Start new proposal without previous conditions", True),
     ("Vorschlag ohne diese Bedingungen erstellen", True),
     ("Neuen Vorschlag ohne vorherige Bedingungen beginnen", True),
@@ -5753,6 +5756,29 @@ def test_strategy_proposal_gate_sees_owner_guided_rule_history_before_orchestrat
     state = selected.request_plan.operation_state
     assert state["original_request"] == prior["original_request"]
     assert state["guided_user_messages"] == [prior["original_request"], "BTC Trend"]
+
+
+def test_setup_proposal_gate_keeps_earlier_rule_when_last_answer_is_only_cadence():
+    registry = FinnV2OperationRegistry()
+    call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {}},
+    )
+    prior = {
+        "operation_id": "create_setup", "contract_version": registry.require_supported("create_setup").version,
+        "state_revision": 1, "status": "collecting",
+        "collected_inputs": {"setup_type": "dca", "symbol": "ETH"},
+        "missing_required_inputs": ["timeframe"], "next_missing_input": "timeframe",
+        "original_request": "Maak een ETH DCA-setup, maar koop alleen als RSI onder 30 staat.",
+    }
+    selected = FinnResponsesProposalSelection().from_call(
+        call=call, message="wekelijks",
+        conversation_context={"active_guided_operation": prior}, verified_asset="ETH",
+    )
+    state = selected.request_plan.operation_state
+    assert state["collected_inputs"]["dca_frequency"] == "weekly"
+    assert state["original_request"] == prior["original_request"]
+    assert state["guided_user_messages"] == [prior["original_request"], "wekelijks"]
 
 
 def test_pending_strategy_parent_rejects_negated_owner_setup_name():
@@ -7031,6 +7057,95 @@ def test_persisted_guided_slot_answer_is_bound_before_model_context_switch(
         registry=registry,
         requested_slot=requested_slot,
     ) is expected
+
+
+def test_weekly_dca_answer_updates_open_eth_draft_before_model_tool_choice():
+    registry = FinnV2OperationRegistry()
+    states = FinnV2OperationStateService()
+    contract = registry.require_supported("create_setup")
+    draft = states.resolve(
+        contract=contract, message="Kan je een DCA-setup maken voor ETH?",
+        explicit_asset="ETH", conversation_context={},
+    )
+    assert draft.next_missing_input == "timeframe"
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message="wekelijks", contract=contract, registry=registry,
+        requested_slot="timeframe", collected_inputs=draft.collected_inputs,
+    )
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message="een wekelijkse dca setup voor eth", contract=contract, registry=registry,
+        requested_slot="timeframe", collected_inputs=draft.collected_inputs,
+    )
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message="vast bedrag", contract=contract, registry=registry,
+        requested_slot="base_amount", collected_inputs=draft.collected_inputs,
+    )
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message="smart", contract=contract, registry=registry,
+        requested_slot="base_amount", collected_inputs=draft.collected_inputs,
+    )
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message="maandag", contract=contract, registry=registry,
+        requested_slot="base_amount", collected_inputs=draft.collected_inputs,
+    )
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="een wekelijkse dca setup voor btc", contract=contract, registry=registry,
+        requested_slot="timeframe", collected_inputs=draft.collected_inputs,
+    )
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="vast bedrag; verwijder mijn bot", contract=contract, registry=registry,
+        requested_slot="base_amount", collected_inputs=draft.collected_inputs,
+    )
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="Verwijder mijn BTC-setup; wekelijks", contract=contract,
+        registry=registry, requested_slot="timeframe",
+        collected_inputs=draft.collected_inputs,
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.run_id = "eth-dca-guided"
+    front.user_id = 17
+    front.reads = SimpleNamespace(session_factory=None)
+    front.proposals = SimpleNamespace(
+        registry=registry, states=states,
+        from_call=Mock(side_effect=lambda **kwargs: SimpleNamespace(
+            request_plan=SimpleNamespace(
+                operation_id="create_setup",
+                operation_state=states.resolve(
+                    contract=contract, message=kwargs["message"], explicit_asset="ETH",
+                    conversation_context=kwargs["conversation_context"],
+                ).dict(),
+            ),
+        )),
+    )
+    result = asyncio.run(front.run(
+        message="wekelijks", instructions="",
+        conversation_context={"active_guided_operation": draft.dict()},
+        verified_asset="ETH",
+    ))
+    updated = result.proposal_analysis.request_plan.operation_state
+    assert updated["collected_inputs"]["symbol"] == "ETH"
+    assert updated["collected_inputs"]["dca_frequency"] == "weekly"
+    assert updated["next_missing_input"] == "timeframe"
+    assert any(call["name"] == "guided_slot_binding" for call in result.response.tool_trace)
+
+
+def test_dca_questions_separate_analysis_timeframe_from_purchase_schedule():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    states = FinnV2OperationStateService()
+    for locale, marker in [("nl", "daggrafiek"), ("en", "daily chart"), ("de", "Tageschart")]:
+        question = states.clarification_question(
+            "timeframe", contract=contract,
+            collected_inputs={"symbol": "ETH", "setup_type": "dca"}, locale=locale,
+        )
+        assert marker in question
+        assert "1D" in question and "4H" in question
+        assert "benchmark" not in question.casefold()
+    amount_question = states.clarification_question(
+        "dca_amount_mode", contract=contract,
+        collected_inputs={"symbol": "ETH", "setup_type": "dca"}, locale="nl",
+    )
+    assert "geplande aankoop" in amount_question
+    assert "bedrag aanpast" in amount_question
 
 
 def test_specific_strategy_name_blocks_overlapping_setup_proposal(monkeypatch):
