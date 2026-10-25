@@ -683,6 +683,56 @@ def test_canonical_target_current_asset_requires_choice_before_stale_context():
     assert target.candidate_names == ["BTC DCA", "BTC Swing"]
 
 
+def test_selected_setup_followup_keeps_owner_verified_target_with_explicit_asset():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    rows = [
+        {"id": 11, "name": "QA Review BTC Onder Druk 2410", "symbol": "BTC"},
+        {"id": 12, "name": "QA BTC Custom Benchmark 1810", "symbol": "BTC"},
+        {"id": 13, "name": "ETH Setup", "symbol": "ETH"},
+    ]
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=rows)
+    service.setups.get_setup_by_id = lambda setup_id, user_id: asyncio.sleep(
+        0, result=next((row for row in rows if row["id"] == setup_id), None)
+        if user_id == 388 else None,
+    )
+
+    selected = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"asset": "BTC", "asset_source": "explicit_message"},
+        message="Past deze setup nu bij de actuele BTC-scores?",
+        conversation_context={"canonical_entity_target": {
+            "entity_type": "setup", "entity_id": 11,
+        }},
+    ))
+    assert selected.entity_id == 11
+    assert selected.resolution_source == "active_runtime_context"
+
+    # An explicit different saved name still outranks conversational focus.
+    named = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"asset": "BTC", "asset_source": "explicit_message"},
+        message="Past QA BTC Custom Benchmark 1810 nu bij de BTC-scores?",
+        conversation_context={"canonical_entity_target": {
+            "entity_type": "setup", "entity_id": 11,
+        }},
+    ))
+    assert named.entity_id == 12
+    assert named.resolution_source == "explicit_name"
+
+    # A different asset cannot silently inherit the selected BTC setup.
+    changed_asset = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"asset": "ETH", "asset_source": "explicit_message"},
+        message="Past deze ETH-setup nu bij de actuele ETH-scores?",
+        conversation_context={"canonical_entity_target": {
+            "entity_type": "setup", "entity_id": 11,
+        }},
+    ))
+    assert changed_asset.entity_id == 13
+    assert changed_asset.resolution_source == "explicit_asset"
+
+
 def test_corrected_target_requires_a_visible_exact_name_not_an_old_id():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

@@ -4,9 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN selected-setup continuation after an asset-qualified question (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Repair branch: `codex/finn-setup-followup-target`.
+Independent authenticated browser QA on live SHA
+`786b6bed62711205435a165f386df85c57b31fa5` returned `NOT_ACCEPTED`
+for the broader setup-overview flow: FINN read the explicitly chosen
+`QA Review BTC Onder Druk 2410` correctly, then reported a read of sibling
+`QA BTC Custom Benchmark 1810` when asked whether **this** setup fit the
+current BTC scores. It did not make a purchase claim. The QA account did not
+contain the separate 0–25 / fixed-€100 fixture, so that scenario was not
+live-accepted. The protected browser run did not expose a run ID or typed
+tool trace; the root-cause assessment below is based on code and a local
+reproduction, not a claim about the inaccessible production trace.
+
+The shared target resolver previously considered an explicitly mentioned
+asset before the owner-verified selected setup. With several BTC setups,
+“deze BTC-setup” could be treated as a fresh, ambiguous BTC selection. It now
+re-reads the selected owner-bound setup for a demonstrative follow-up when
+the mentioned asset agrees. A newly named setup and a changed asset still
+override that reference. FINN's answer text remains model-composed.
+
+On the final local source, backend pytest passed **3875 tests, 4 existing
+skips** (log SHA-256 `f43647a5bba7f62c29343145614c837e307be719402ee88f325430cc813012f1`),
+including the new target-precedence regression. Frontend production build
+passed (log SHA-256 `9570a5b4d332a8d16089bd6b97d5e726324a1a12f1dcc525eca13d92a80f1c9d`).
+The restarted local FastAPI/Celery/PostgreSQL/Redis/Responses matrix passed
+**16/16** action contracts and **19/19** adapter checks, without a Live order
+(artifact SHA-256 `d3c4b4310b3a03bd0d597b3431a1785bc8cef5890c2e35f7397df23016df4e86`).
+Real Responses selector evaluations passed **20/20** development and
+**109/109** regression with zero provider or validation failures (artifact
+SHA-256 `e31178e7a30f8a994471385e1a46abf4060f3f148c76c49492aafef3b66b4a20`
+and `58b18472a03ac2a9a86a289179ae08400ebc4b3a8c946c3eaab592dc2ddb76b5`).
+A separate real-Luna three-turn local probe with two synthetic BTC setups
+completed all turns: the selected Friday 1W setup remained the verified
+subject in the third turn, the match stayed unknown without complete scores,
+and no order/proposal was made (artifact SHA-256
+`dad5e9fee8bade19ad203b270d9d7a117da7d20475d6f3329327f93bc7e3359e`).
+Independent authenticated production QA on the new final SHA remains pending.
+
 ## FINN setup overview with current Score 2.0 evidence (25 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`. Product branch:
+Phase: `NOT_ACCEPTED` by the independent targeted browser QA on final SHA
+`786b6bed62711205435a165f386df85c57b31fa5`, for the selected-setup
+continuation described above. Product branch:
 `codex/finn-setup-score-overview`, [PR #606](https://github.com/gvangalen/antigravity-trading-tool/pull/606).
 The saved-setup and linked-strategy reads now include the owner-scoped,
 source-verified Score 2.0 component assessment for the resolved setup asset.
