@@ -195,6 +195,41 @@ def _combined_first_turn_case(base_url: str, *, confirm_local: bool = False) -> 
     return result
 
 
+def _deictic_open_draft_read_case(base_url: str) -> dict:
+    owner = _create_local_user()
+    token = create_access_token({"sub": str(owner["id"]), "role": "user"})
+    session_id, first = _turn(
+        base_url, token, "new",
+        "Maak alleen een BTC DCA-setup met naam QA BTC Uitstel E 2510, timeframe 1D, "
+        "wekelijks op vrijdag, en als enige koopvoorwaarde een totale benchmarkscore "
+        "van 26 tot 45. Geen strategie of bedrag nu. Toon een concept en bevestig niets.",
+    )
+    proposal_id = (first.get("response") or {}).get("proposal_id")
+    if first.get("status") != "completed" or not proposal_id:
+        raise AssertionError(f"deictic_initial_proposal_missing:{first.get('error_code')}")
+    _, second = _turn(
+        base_url, token, session_id,
+        "Dat bepaal ik later in de strategie. Voor deze setup alleen BTC, 1D, "
+        "vrijdag en benchmark 26-45; geen bedrag of bedragmodus.",
+    )
+    answer = str((second.get("response") or {}).get("content") or "")
+    if second.get("status") != "completed" or second.get("error_code"):
+        raise AssertionError(f"deictic_followup_failed:{second.get('error_code')}")
+    if "26" not in answer or "45" not in answer or "vrijdag" not in answer.casefold():
+        raise AssertionError(f"deictic_open_facts_missing:{answer}")
+    if any(phrase in answer.casefold() for phrase in (
+        "alleen de bestaande setups", "geen setup met die naam", "concept voorbereiden",
+    )):
+        raise AssertionError(f"deictic_open_draft_denied:{answer}")
+    with sync_engine.connect() as connection:
+        status = connection.execute(text(
+            "SELECT status FROM finn_v2_proposals WHERE id = :proposal_id AND user_id = :owner_id"
+        ), {"proposal_id": proposal_id, "owner_id": owner["id"]}).scalar_one()
+    if status != "draft":
+        raise AssertionError(f"deictic_open_draft_status:{status}")
+    return {"turns": 2, "open_proposal_retained": True, "confirmed": False}
+
+
 def _score_filter_revision_case(base_url: str, *, remove: bool) -> dict:
     owner = _create_local_user()
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
@@ -264,10 +299,12 @@ def run(base_url: str, *, confirm_local: bool = False) -> dict:
     removed = _score_filter_revision_case(base_url, remove=True)
     retained = _score_filter_revision_case(base_url, remove=False)
     combined_first_turn = _combined_first_turn_case(base_url, confirm_local=confirm_local)
+    deictic_open_draft = _deictic_open_draft_read_case(base_url)
     return {"direct": direct, "continued": continued,
             "future_staffel": future_staffel, "no_zone_named": no_zone_named,
             "scope_revision": revised, "filter_removed": removed,
-            "filter_retained": retained, "combined_first_turn": combined_first_turn}
+            "filter_retained": retained, "combined_first_turn": combined_first_turn,
+            "deictic_open_draft": deictic_open_draft}
 
 
 def main() -> None:

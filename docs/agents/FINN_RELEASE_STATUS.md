@@ -4,6 +4,59 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN owner-bound open DCA draft reading (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Independent authenticated QA returned
+`NOT_ACCEPTED` on final live SHA `2bb326a5e342430cf572c33bf334752a2e334367`.
+The formerly failing direct combined BTC DCA setup plus fixed €100 strategy
+now passed in one turn, as did the other direct and correction routes. The
+remaining content regression was a follow-up to a visible unconfirmed
+setup-only DCA card: “Dat bepaal ik later in de strategie. Voor deze setup
+alleen BTC, 1D, vrijdag en benchmark 26-45; geen bedrag of bedragmodus.”
+FINN kept the card open but said it had read only saved setups, did not find
+that setup and asked whether to prepare a concept. QA confirmed no card was
+saved or executed.
+
+The root cause is evidence-source selection. A model-selected saved inventory
+read in `list` or `compare` mode could bypass the existing open-draft binder
+even when the user referred to “deze setup”. The binder now uses the user's
+deictic reference and the owner-scoped open proposal to select the draft
+source independently of the model's chosen read mode or invented target
+name. Explicit references to a different saved setup and collection reads
+still use the saved source. FINN's answer remains Luna-generated from typed
+facts; no new fixed coach wording or action permission was added. Focused
+source-identity regressions pass. A separate local probe also exposed an
+imperative setup request being classified as an evaluation when the user
+mentioned a hypothetical later Smart-DCA strategy. The leading create request
+now controls typed draft routing; negated and hypothetical create requests
+remain outside that route. The worker-driven action matrix exposed an omitted
+explicit RSI identity. The indicator contract now recovers an unambiguous
+catalog identity from the user's text and asks for clarification when several
+or negated indicator names make that identity unclear. Security independently
+reviewed those source and action boundaries and found no remaining P1/P2 in
+the scoped diff.
+
+On the final local source, the complete backend suite passed **3962 tests,
+4 existing skips** (log SHA-256
+`02791e953c5f5a96024e1d1071e8b815f27dbc02f1c89306a5f29c843ceaea59`).
+The restarted worker-driven action matrix passed **16/16** contracts with
+zero broker orders, Live trading calls, Live bots or production connections
+(artifact SHA-256
+`ef2875876e458417a0b06ec54888b45fd5d0cc473d05d2866b7d3d642df4395d`);
+the adapter suite passed **21/21**. The local FastAPI/Celery/Luna Responses
+probe passed the direct and continued setup-only drafts, future staffel,
+combined setup and strategy, open-draft read, correction and owner-bound
+confirmation cases. It verified cross-owner rejection and idempotent
+confirmation, with no Live order. Frontend build, typecheck, i18n lint/tests,
+command tests and high-severity audit passed on unchanged frontend source.
+The real provider development selector passed **20/20** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`ea944406939176846be4dc42a0fcfa1aae88c0c31305c4af85eab0397d0d3da5`).
+The real provider regression selector passed **109/109** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`7148a2778b8469609b12c55e2e68e1d7875c20f04746be56a82ecd3a5f9482fb`).
+CI, deployment and new independent live QA are pending.
+
 ## FINN combined new DCA plan contract (25 oktober 2026)
 
 Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. Independent QA returned

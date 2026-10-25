@@ -1518,6 +1518,57 @@ def test_named_open_dca_draft_is_read_even_when_model_chooses_saved_inventory():
     assert "€75" in result.response.text
 
 
+@pytest.mark.parametrize("answer_mode, model_name, message", [
+    ("list", None, "Dat bepaal ik later in de strategie. Voor deze setup alleen BTC, 1D, vrijdag en benchmark 26-45; geen bedrag of bedragmodus."),
+    ("explain", "BTC Other Saved Setup", "Dat bepaal ik later in de strategie. Voor deze setup alleen BTC, 1D, vrijdag en benchmark 26-45; geen bedrag of bedragmodus."),
+    ("list", None, "Dit is geen opgeslagen setup; leg deze setup uit."),
+    ("list", None, "This is not yet saved; explain this setup."),
+])
+def test_deictic_open_dca_draft_uses_open_source_despite_saved_read_choice(answer_mode, model_name, message):
+    name = "QA BTC Uitstel E 2510"
+    context = {"proposal_revision": {
+        "operation_id": "create_setup", "proposal_id": "owned-open-draft",
+        "guided_state": {
+            "operation_id": "create_setup", "open_proposal_id": "owned-open-draft",
+            "collected_inputs": {
+                "name": name, "symbol": "BTC", "timeframe": "1D",
+                "setup_type": "dca", "plan_scope": "setup_only",
+                "dca_frequency": "weekly", "dca_day": "friday",
+                "min_benchmark_score": 26, "max_benchmark_score": 45,
+            },
+        },
+    }}
+    fake = FakeResponses(
+        response("wrong-read", calls=[tool_call("wrong-call", "get_saved_setup_inventory", {
+            "asset": "BTC", "timeframe": None, "answer_mode": answer_mode,
+            "setup_names": [model_name] if model_name else [], "strategy_name": None,
+        })]),
+        response("draft-answer", text=(
+            "Dit open concept bevat alleen BTC, 1D, vrijdag en benchmark 26–45. "
+            "Een bedrag en strategie zijn nog niet vastgelegd."
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="open-dca-deictic-read", model_led_coach=True,
+    )
+
+    async def unexpected_saved_read(_call):
+        raise AssertionError("a reference to the open card must not read saved setups")
+
+    front.reads = unexpected_saved_read
+    result = asyncio.run(front.run(
+        message=message,
+        instructions=front._model_led_instructions("nl"),
+        conversation_context=context, verified_asset=None,
+    ))
+    evidence = result.response.tool_trace[0]["result"]["results"][0]
+    assert evidence["scope"] == "read_open_dca_draft"
+    assert evidence["data"]["saved"] is False
+    assert evidence["data"]["fields"]["plan_scope"] == "setup_only"
+    assert "open concept" in result.response.text
+
+
 def test_open_smart_dca_draft_holds_when_benchmark_component_is_missing():
     context = {"proposal_revision": {
         "operation_id": "create_setup", "proposal_id": "smart-draft",
@@ -1586,6 +1637,55 @@ def test_open_dca_draft_does_not_replace_a_different_named_saved_setup():
     ))
     assert len(reads) == 1
     assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_saved_setup_inventory"
+
+
+@pytest.mark.parametrize("model_name", [None, "QA BTC Uitstel E 2510"])
+@pytest.mark.parametrize("message", [
+    "Leg deze setup naast mijn opgeslagen BTC Other Saved Setup.",
+    "Deze setup is niet opgeslagen; hoe verschilt die van mijn opgeslagen BTC Other Saved Setup?",
+])
+def test_explicit_saved_setup_mention_is_not_overridden_by_model_named_open_draft(model_name, message):
+    context = {"proposal_revision": {
+        "operation_id": "create_setup", "proposal_id": "open-draft",
+        "guided_state": {
+            "open_proposal_id": "open-draft",
+            "collected_inputs": {
+                "name": "QA BTC Uitstel E 2510", "symbol": "BTC", "setup_type": "dca",
+            },
+        },
+    }}
+    fake = FakeResponses(
+        response("saved-read", calls=[tool_call("saved-call", "get_saved_setup_inventory", {
+            "asset": "BTC", "timeframe": None, "answer_mode": "list",
+            "setup_names": [model_name] if model_name else [], "strategy_name": None,
+        })]),
+        response("saved-answer", text="BTC Other Saved Setup is opgeslagen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="explicit-other-saved-setup", model_led_coach=True,
+    )
+    reads = []
+
+    async def read(call):
+        reads.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 41, "name": "BTC Other Saved Setup", "symbol": "BTC"}]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message,
+        instructions=front._model_led_instructions("nl"),
+        conversation_context=context, verified_asset=None,
+    ))
+    assert len(reads) == 1
+    trace_result = result.response.tool_trace[0]["result"]
+    if model_name:
+        assert trace_result["reason"] == "setup_names_not_bound_to_user_request"
+    else:
+        assert trace_result["results"][0]["scope"] == "read_saved_setup_inventory"
 
 
 def test_cross_asset_followup_binds_verified_source_and_unique_target():
@@ -4791,6 +4891,7 @@ def test_new_setup_and_strategy_request_does_not_take_strategy_only_route():
     ("Maak alleen een concept voor een ETH trade-setup op 4H met de naam QA ETH cd64 kaart. Laat de kaart zien en sla niets op.", "create_setup"),
     ("Maak een concept voor een ETH trade-setup op 4H met de naam QA ETH cd64 kaart. Toon de conceptkaart; bevestig of sla niets op.", "create_setup"),
     ("Maak een ETH trade-setup, maar geen voorstel.", None),
+    ("Maak alleen een BTC DCA-setup met naam QA BTC Staffel C 2510, timeframe 1D, wekelijks op vrijdag. Ik heb nog geen aparte setupscorevoorwaarde gekozen, dus geen scorefilter. Voor een latere Smart DCA-strategie denk ik aan 100% bedrag bij score 40-70. Die 40-70 is een bedragstaffel, geen setupvoorwaarde. Toon het setupconcept en bevestig niets.", "create_setup"),
     ("Maak hypothetisch een ETH trade-setup als denkoefening.", None),
     ("Ik ben nieuw hier. Kun je een tradingplan voor mij maken?", "create_setup"),
     ("Kan ik zelf een tradingplan maken?", None),
@@ -4802,6 +4903,43 @@ def test_new_setup_and_strategy_request_does_not_take_strategy_only_route():
 ])
 def test_new_draft_operation_boundary_is_shared_across_domains(message, expected):
     assert _explicit_create_operation_request(message) == expected
+
+
+def test_explicit_indicator_identity_survives_model_tool_omission():
+    contract = FinnV2OperationRegistry().require_supported("create_indicator_configuration")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Maak een technische RSI indicatorconfiguratie voor ADA.",
+        explicit_asset="ADA", conversation_context={},
+        supplied_inputs={"asset": "ADA", "category": "technical"},
+        model_tool_inputs=True,
+    )
+    assert state.collected_inputs["indicator"] == "rsi"
+    assert state.collected_inputs["category"] == "technical"
+    assert not state.missing_required_inputs
+
+
+@pytest.mark.parametrize("message,expected", [
+    ("Maak een technische indicatorconfiguratie voor ADA: geen RSI maar MACD.", None),
+    ("Maak MACD voor ADA in plaats van RSI.", None),
+    ("Maak een technische indicatorconfiguratie voor ADA: geen RSI maar ADX.", "adx"),
+    ("Maak ADX voor ADA in plaats van RSI.", "adx"),
+    ("Maak een indicatorconfiguratie voor ADA met RSI of MACD.", None),
+    ("Maak voor ADA een indicatorconfiguratie zonder RSI.", None),
+    ("Create an indicator configuration for ADA without RSI.", None),
+    ("Maak voor ADA een indicatorconfiguratie. RSI wil ik niet.", None),
+    ("Maak voor ADA een indicatorconfiguratie, maar RSI niet.", None),
+])
+def test_indicator_identity_respects_correction_or_remains_unresolved(message, expected):
+    contract = FinnV2OperationRegistry().require_supported("create_indicator_configuration")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract, message=message, explicit_asset="ADA",
+        conversation_context={},
+        supplied_inputs={"asset": "ADA", "category": "technical", "indicator": "rsi"},
+        model_tool_inputs=True,
+    )
+    assert state.collected_inputs.get("indicator") == expected
+    assert ("indicator" in state.missing_required_inputs) == (expected is None)
 
 
 def test_new_setup_request_in_same_conversation_does_not_fill_amount_slot():
