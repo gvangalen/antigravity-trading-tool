@@ -29,10 +29,16 @@ def explicit_benchmark_bounds(text: str) -> dict[str, int]:
     presenting the saved setup back to the user.
     """
     request = " ".join(str(text or "").casefold().split())
-    condition_words = ("koopzone", "scorevoorwaarde", "scorefilter", "scoregrens",
-                       "scorezone", "benchmarkvoorwaarde")
+    condition_words = ("koopzone", "koopvoorwaarde", "setupvoorwaarde",
+                       "setupscorezone", "scorevoorwaarde", "scorefilter",
+                       "scoregrens", "scorezone", "benchmarkvoorwaarde")
     for clause in re.split(r"[.;?!\n]+", request):
         cue = re.search(r"\b(?:" + "|".join(condition_words) + r")\b", clause)
+        if cue is not None and cue.group(0) in {"koopvoorwaarde", "setupvoorwaarde"}:
+            # These generic words can also describe an entry-price level.
+            # Require the user to name a benchmark or score in this clause.
+            if not re.search(r"\b(?:benchmarkscore|totaalscore|scorezone|score)\b", clause[cue.end():]):
+                cue = None
         if cue is None and not re.search(r"\b(?:smart\s*dca|staffel|basisbedrag)\b", request):
             cue = re.search(r"\b(?:benchmarkscore|totaalscore|total(?:e)? score)\b", clause)
         if cue is None:
@@ -50,9 +56,11 @@ def explicit_benchmark_bounds(text: str) -> dict[str, int]:
         condition = re.sub(
             r"^(?:(?:is|wordt|van|tussen|equals|between)\b|[:=])\s*", "", condition,
         )
+        condition = re.sub(r"^(?:een|a|an|eine)\s+", "", condition)
         condition = re.sub(
             r"^(?:de\s+)?(?:totale\s+)?(?:benchmarkscore|totaalscore)\s*", "", condition,
         )
+        condition = re.sub(r"^(?:van|tussen|between|from)\s+", "", condition)
         condition = condition.lstrip(" (")
         range_match = re.match(
             r"(\d{1,3})\s*(?:-|–|—|tot(?:\s+en\s+met)?|en|to|bis)\s*(\d{1,3})\b",

@@ -19,6 +19,39 @@ class FinnV2OperationStateService:
     """Collect only explicit or verified operation inputs, one field at a time."""
 
     CONTEXT_STATE_VERSION = "finn_v2.conversation-contracts.v1"
+    DCA_AMOUNT_FIELDS = frozenset({
+        "dca_amount_mode", "base_amount", "score_source", "low_threshold",
+        "high_threshold", "low_score_percent", "mid_score_percent", "high_score_percent",
+    })
+
+    @staticmethod
+    def setup_only_intent(message: str) -> bool:
+        """A user may save the setup now and choose its strategy in a later step."""
+        text = str(message or "").casefold()
+        if re.search(r"\b(?:niet|not|nicht)\s+(?:alleen|only|nur)\b", text):
+            return False
+        return bool(
+            re.search(r"\b(?:alleen|enkel|uitsluitend|only|nur)\s+(?:een\s+|de\s+|the\s+|die\s+)?(?:\w+\s+){0,3}setup\b", text)
+            or re.search(r"\bsetup\b.{0,100}\b(?:zonder|geen|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy|betrag|bedrag|amount)\b", text)
+            or re.search(r"\b(?:geen|zonder|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy|bedrag|amount|betrag)(?:\s+of\s+(?:bedrag|amount|betrag))?\s+(?:nu|now|jetzt)\b", text)
+            or re.search(r"\b(?:strategie|strategy|bedrag|amount|betrag)\s+(?:(?:bepaal|kies|maak|stel|voeg|choose|add|set)\s+(?:ik|we|i|wir)\s+)?(?:later|später|afterwards)\b", text)
+            or re.search(r"\b(?:later|später|afterwards)\s+(?:in|bij|for|für)\s+(?:de\s+|the\s+|der\s+)?(?:strategie|strategy|bedrag|amount|betrag)\b", text)
+        )
+
+    @staticmethod
+    def add_strategy_to_open_setup_intent(message: str) -> bool:
+        """Recognize an explicit reversal before confirming a setup-only draft."""
+        text = str(message or "").casefold()
+        for clause in re.split(r"[.;!?\n]+", text):
+            if re.search(r"\b(?:geen|zonder|niet|no|without|ohne|keine?)\b", clause):
+                continue
+            if re.search(
+                r"\b(?:toch|alsnog|ook)\b.{0,80}\b(?:strategie|strategy)\b"
+                r"|\b(?:strategie|strategy)\b.{0,40}\b(?:erbij|toevoegen|add|include)\b",
+                clause,
+            ):
+                return True
+        return False
 
     @staticmethod
     def _typed_numeric_value(value: object) -> object:
@@ -162,6 +195,7 @@ class FinnV2OperationStateService:
                     explicit_asset=contract_asset,
                     continuation=existing is not None,
                     requested_slot=requested_slot,
+                    known_setup_type=str(collected.get("setup_type") or "") or None,
                 )
                 if contract.operation_id in {"create_setup", "create_strategy"} or not model_tool_inputs
                 else {}
@@ -171,6 +205,17 @@ class FinnV2OperationStateService:
             # Use only bounds stated by the user; a tool candidate cannot
             # invent or reinterpret either end of this eligibility range.
             explicit.update(explicit_benchmark_bounds(message))
+            if self.setup_only_intent(message):
+                explicit["plan_scope"] = "setup_only"
+            elif (
+                existing is not None
+                and collected.get("plan_scope") == "setup_only"
+                and ("dca_amount_mode" in explicit or "base_amount" in explicit
+                     or self.add_strategy_to_open_setup_intent(message))
+            ):
+                # A revision of the open proposal may add the strategy now.
+                # Never let the old setup-only scope silently discard it.
+                explicit["plan_scope"] = "setup_and_strategy"
         if dca_strategy:
             # The parent setup, not the model's phrasing, determines that
             # entry, stop and targets are inapplicable to this strategy.
@@ -249,6 +294,8 @@ class FinnV2OperationStateService:
                 "min_investment", "min_benchmark_score", "max_benchmark_score",
             } and key not in explicit:
                 continue
+            if contract.operation_id == "create_setup" and key == "plan_scope" and key not in explicit:
+                continue
             if dca_strategy and key in {"entry", "stop_loss", "targets", "risk_profile", "setup_type"}:
                 continue
             if (contract.operation_id == "create_setup" and (
@@ -317,6 +364,13 @@ class FinnV2OperationStateService:
             key: {"source": "explicit", "state_revision": next_revision}
             for key in explicit
         })
+        if contract.operation_id == "create_setup" and collected.get("plan_scope") == "setup_only":
+            # Future strategy details are not part of a setup-only proposal.
+            # Remove both values and provenance from the persisted draft.
+            for key in self.DCA_AMOUNT_FIELDS:
+                collected.pop(key, None)
+                sources.pop(key, None)
+                provenance.pop(key, None)
         if "category" in accepted_inputs and collected.get("indicator"):
             definition = self._indicator_input_from_text(str(collected["indicator"]))
             if definition is not None:

@@ -1871,7 +1871,9 @@ function AIAssistantContent({
           </ul>}
           <p className="mt-2 text-xs">{at("dcaDraft.safetyNote", "Dit zijn geplande bedragen. Een ontbrekende score of veiligheidslimiet kan een aankoop tegenhouden of verlagen.")}</p>
         </div>}
-        {supplied.setup_type === "dca" && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{at("dcaDraft.planOnly", "Bevestigen slaat de setup en strategie op. Er wordt geen bot gestart en geen aankoop gedaan.")}</p>}
+        {supplied.setup_type === "dca" && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{supplied.plan_scope === "setup_only"
+          ? at("dcaDraft.setupOnly", "Bevestigen slaat alleen de setup op. Bedrag en strategie kun je later kiezen; er wordt geen bot gestart of aankoop gedaan.")
+          : at("dcaDraft.planOnly", "Bevestigen slaat de setup en strategie op. Er wordt geen bot gestart en geen aankoop gedaan.")}</p>}
         {omittedRules && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{typeof omittedRules === "string" ? at("draftCards.waivedRulesNamed", "Niet opgeslagen: {rules}.", { rules: omittedRules }) : at("draftCards.waivedSetupRules", "De extra handelsvoorwaarden uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde setupvelden worden opgeslagen.")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, "setup")}</div>

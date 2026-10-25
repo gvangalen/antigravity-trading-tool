@@ -4,9 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN setup-only DCA contract and continuing draft repair (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`; repair branch: `codex/finn-plan-setup-only`.
+Independent live QA returned `NOT_ACCEPTED` on final SHA
+`cd5f309464900f4c07a58282c21eb2e53ecc5681` for the preceding
+trading-plan release. The guided swing request and negative capability
+question passed. DCA setup-only requests failed when the user deferred the
+amount or Smart-DCA bands to a later strategy, and one explicit 26–45 setup
+score zone did not survive the draft. No QA proposal was confirmed.
+
+This repair makes setup-only and setup-plus-strategy separate typed outcomes
+of `create_setup`. A setup-only DCA proposal requires cadence but no amount,
+persists no strategy, and states that scope on the confirmation card. Future
+Smart-DCA bands do not become setup conditions. An explicit setup benchmark
+zone remains attached to the setup, and a user can revise the open concept
+into a full plan. The conversation still uses Luna/Responses; no fixed coach
+answer or extra answer veto was added. Final local validation, CI, deploy
+identity and independent live QA are pending in this section.
+
+Local validation on the repair source: backend pytest **3915 passed, 4
+existing skips**; frontend build, typecheck, i18n lint/tests, command tests
+and proposal tests passed. Real Luna/Responses selector evaluation passed
+**20/20** development and **109/109** regression, with zero provider or
+validation failures. A visible chat probe with synthetic local owners produced
+the direct setup-only proposal, retained it through the amount-deferral turn,
+and kept a future Smart-DCA staffel out of setup score bounds. A separate
+local confirmation created only the Friday setup with benchmark bounds 26–45;
+it created no strategy, rejected a second owner and replayed idempotently.
+The restarted local FastAPI/Celery/PostgreSQL/Redis action matrix passed
+**16/16** contracts and **21/21** adapter checks, with zero broker orders,
+Live calls or production connections (artifact SHA-256
+`f3a97b28e4a0feb1f345c635cdf4d0dc3ce70fbf1730f7c0736ea96e06743cf1`).
+Security and Architecture read-only reviews found no remaining P1/P2 in the
+repaired boundary. PR checks, deployment and independent authenticated live
+QA remain pending.
+
 ## FINN trading-plan contract and continuing draft (25 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`; product branch:
+Phase: `NOT_ACCEPTED` by independent live QA on final SHA
+`cd5f309464900f4c07a58282c21eb2e53ecc5681`; product branch:
 `codex/finn-plan-creation-contract`, [PR #612](https://github.com/gvangalen/antigravity-trading-tool/pull/612).
 The user deferred the OpenAI Decisions
 API. A conversational request for a trading plan now enters the existing
@@ -43,9 +80,9 @@ as `1896134f73e595ebf410609c3a645d03695ed9ff`; [main CI 40186353852](https://git
 and [Auto Deploy 40186547469](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40186547469)
 passed. Public backend health and frontend build info each returned HTTP 200
 with that exact product SHA. This status-only edit creates a later final SHA;
-Build must verify its main CI, Auto Deploy and both public markers before
-assigning independent authenticated browser QA. The live QA verdict remains
-pending.
+Build verified its main CI, Auto Deploy and both public markers before
+independent authenticated browser QA. The live QA verdict and failed cases
+are recorded in the repair section above.
 
 ## FINN generic setup overview with several saved plans (25 oktober 2026)
 

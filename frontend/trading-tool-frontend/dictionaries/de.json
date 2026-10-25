@@ -4122,7 +4122,8 @@
       "between": "Score {low} bis unter {high}: {percent}% = {amount}",
       "above": "Score ab {threshold}: {percent}% = {amount}",
       "safetyNote": "Dies sind geplante Beträge. Ein fehlender Score oder ein Sicherheitslimit kann einen Kauf verhindern oder reduzieren.",
-      "planOnly": "Die Bestätigung speichert Setup und Strategie. Sie startet keinen Bot und führt keinen Kauf aus."
+      "planOnly": "Die Bestätigung speichert Setup und Strategie. Sie startet keinen Bot und führt keinen Kauf aus.",
+      "setupOnly": "Die Bestätigung speichert nur das Setup. Betrag und Strategie kannst du später festlegen; es wird kein Bot gestartet und kein Kauf ausgeführt."
     },
     "surfaceStatus": {
       "active": "active",

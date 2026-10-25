@@ -500,7 +500,11 @@ class FinnResponsesToolCatalog:
                 "Do not put an object's natural name into a different input field to stand in for a "
                 "server-resolved object ID; FINN resolves owner-scoped object references from the user message. "
                 "Use draft_intent=revise only when changing an unconfirmed proposal draft in this conversation; "
-                "updating an existing saved object is draft_intent=new.",
+                "updating an existing saved object is draft_intent=new. "
+                "For create_setup, a DCA setup may be saved without a strategy when the user explicitly "
+                "defers the amount or strategy. In that case leave amount fields out; cadence and any "
+                "explicit total-benchmark setup eligibility bounds belong to the setup. Smart-DCA "
+                "amount bands belong to a later strategy and are not setup eligibility bounds.",
                 "strict": False,
                 "parameters": {
                     "type": "object",

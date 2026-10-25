@@ -79,6 +79,25 @@ def test_confirmed_dca_creates_setup_and_strategy_in_one_transaction(monkeypatch
     session.commit.assert_awaited_once()
 
 
+def test_confirmed_setup_only_dca_creates_no_strategy_and_keeps_score_zone():
+    registry = FinnV2ActionAdapterRegistry(SimpleNamespace())
+    registry.flags.execute_setup_changes_enabled = lambda: True
+    registry.setups.save_setup = AsyncMock(return_value={"setup_id": 91, "name": "BTC Friday"})
+    registry.strategies.save_strategy = AsyncMock()
+    result = asyncio.run(registry._create_setup(390, {"change": {"setup_fields": {
+        "name": "BTC Friday", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "plan_scope": "setup_only",
+        "dca_frequency": "weekly", "dca_day": "friday",
+        "min_benchmark_score": 26, "max_benchmark_score": 45,
+    }}}))
+    assert result["setup_id"] == 91
+    registry.strategies.save_strategy.assert_not_awaited()
+    saved = registry.setups.save_setup.await_args.args[1]
+    assert "plan_scope" not in saved
+    assert saved["min_benchmark_score"] == 26
+    assert saved["max_benchmark_score"] == 45
+
+
 def test_confirmed_swing_setup_keeps_style_and_benchmark_bounds():
     registry = FinnV2ActionAdapterRegistry(SimpleNamespace())
     registry.flags.execute_setup_changes_enabled = lambda: True
