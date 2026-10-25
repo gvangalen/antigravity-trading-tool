@@ -5,6 +5,8 @@ from backend.services.finn_v2_responses_front_door import (
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
 from backend.services.finn_v2_run_service import _prior_inputs_for_open_correction
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.asset_catalog_service import corrected_catalog_instrument
 
 
 def test_same_asset_restatement_binds_to_open_dca_draft():
@@ -117,3 +119,58 @@ def test_unspecified_asset_switch_asks_for_ticker_then_keeps_dca_schedule():
     ).request_plan.operation_state
     assert second["collected_inputs"]["symbol"] == "AAPL"
     assert second["collected_inputs"]["dca_frequency"] == "weekly"
+
+
+def test_explicit_asset_switch_keeps_the_replacement_asset_out_of_old_eth_context():
+    message = (
+        "Correctie: AAPL in plaats van ETH; behoud 1D, wekelijks maandag en "
+        "26–45. Noem de setup QA AAPL Voorwaarde 2510; bevestig niets."
+    )
+    assert corrected_catalog_instrument(message) == "AAPL"
+    assert corrected_catalog_instrument(
+        "Ik wil toch een nieuwe AAPL DCA-setup in plaats van ETH: 1D, vrijdag."
+    ) == "AAPL"
+    assert corrected_catalog_instrument("Wat als ik AAPL in plaats van ETH gebruik?") is None
+
+
+def test_deferred_name_is_not_treated_as_a_literal_setup_name():
+    message = (
+        "Maak een nieuwe ETH DCA-setup op analysetijdsframe 1D, wekelijks "
+        "op maandag, zonder extra scorefilter. De naam geef ik zo. Bevestig niets."
+    )
+    assert FinnV2OperationStateService._requests_name_prompt(message)
+    assert FinnV2OperationStateService._name_input_from_text(message) is None
+
+
+def test_open_setup_asset_switch_retains_explicit_scope_schedule_and_score_bounds():
+    message = (
+        "Correctie: AAPL in plaats van ETH. Behoud het analysetijdsframe 1D, "
+        "wekelijks maandag en de bestaande extra benchmarkscorevoorwaarde "
+        "26-45. Nieuwe naam QA AAPL Voorwaarde 2510. Trek de ETH-kaart in en "
+        "toon het AAPL-concept, bevestig niets."
+    )
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call, message=message,
+        conversation_context={"proposal_correction_result": {
+            "status": "cancelled", "operation_id": "create_setup",
+            "previous_asset": "ETH", "requested_instrument": "AAPL",
+            "prior_inputs": {
+                "setup_type": "dca", "timeframe": "1D", "plan_scope": "setup_only",
+                "dca_frequency": "weekly", "dca_day": "monday",
+                "min_benchmark_score": 26, "max_benchmark_score": 45,
+            },
+        }},
+        verified_asset=None,
+    )
+    state = result.request_plan.operation_state
+    assert state["missing_required_inputs"] == []
+    assert state["collected_inputs"] == {
+        "name": "QA AAPL Voorwaarde 2510", "symbol": "AAPL",
+        "setup_type": "dca", "timeframe": "1D", "plan_scope": "setup_only",
+        "dca_frequency": "weekly", "dca_day": "monday",
+        "min_benchmark_score": 26, "max_benchmark_score": 45,
+    }
