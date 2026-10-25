@@ -7,6 +7,7 @@ a preset; every other bounded setup is Custom.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Any, Mapping
 
 
@@ -18,6 +19,57 @@ _BANDS = (
     ("strong", 76, 100, ("Sterke markt", "Strong market", "Starker Markt")),
 )
 _FIELDS = ("min_benchmark_score", "max_benchmark_score")
+
+
+def explicit_benchmark_bounds(text: str) -> dict[str, int]:
+    """Read only a user's explicit combined-benchmark setup condition.
+
+    This extractor does not infer a trading zone from a market description or
+    from Smart DCA amount bands. It shares the preset boundaries used when
+    presenting the saved setup back to the user.
+    """
+    request = " ".join(str(text or "").casefold().split())
+    condition_words = ("koopzone", "scorevoorwaarde", "scorefilter", "scoregrens",
+                       "scorezone", "benchmarkvoorwaarde")
+    for clause in re.split(r"[.;?!\n]+", request):
+        cue = re.search(r"\b(?:" + "|".join(condition_words) + r")\b", clause)
+        if cue is None and not re.search(r"\b(?:smart\s*dca|staffel|basisbedrag)\b", request):
+            cue = re.search(r"\b(?:benchmarkscore|totaalscore|total(?:e)? score)\b", clause)
+        if cue is None:
+            continue
+        if re.search(r"\b(?:geen|zonder|no|without|ohne)\s+(?:extra\s+)?"
+                     r"(?:scorevoorwaarde|scorefilter|scoregrens|koopzone)\b", clause):
+            continue
+        condition = clause[cue.end():].strip()
+        # A score band for a Smart-DCA amount is never a setup eligibility
+        # range. Ambiguous same-clause wording stays unresolved for FINN to
+        # clarify, rather than silently changing execution conditions.
+        condition = re.split(r"\b(?:staffel|staffels|amount\s+bands)\b", condition, maxsplit=1)[0]
+        if re.search(r"\bis\s+de\s*$", condition):
+            continue
+        condition = re.sub(
+            r"^(?:(?:is|wordt|van|tussen|equals|between)\b|[:=])\s*", "", condition,
+        )
+        condition = re.sub(
+            r"^(?:de\s+)?(?:totale\s+)?(?:benchmarkscore|totaalscore)\s*", "", condition,
+        )
+        condition = condition.lstrip(" (")
+        range_match = re.match(
+            r"(\d{1,3})\s*(?:-|–|—|tot(?:\s+en\s+met)?|en|to|bis)\s*(\d{1,3})\b",
+            condition,
+        )
+        explicit_range = None
+        if range_match:
+            minimum, maximum = map(int, range_match.groups())
+            if 0 <= minimum <= maximum <= 100 and not re.match(r"\s*%", condition[range_match.end():]):
+                explicit_range = {"min_benchmark_score": minimum, "max_benchmark_score": maximum}
+        for _, minimum, maximum, labels in _BANDS:
+            if any(re.match(re.escape(label.casefold()) + r"\b", condition) for label in labels):
+                preset = {"min_benchmark_score": minimum, "max_benchmark_score": maximum}
+                return preset if explicit_range is None or explicit_range == preset else {}
+        if explicit_range is not None:
+            return explicit_range
+    return {}
 
 
 def _number(value: Any) -> Decimal | None:

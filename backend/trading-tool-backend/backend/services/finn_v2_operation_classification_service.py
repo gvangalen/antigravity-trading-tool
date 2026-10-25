@@ -592,7 +592,7 @@ class FinnV2OperationClassificationService:
         text = str(message or "").casefold()
         create_verb = bool(
             re.search(
-                r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b",
+                r"\b(?:maak|maken|aanmaken|make|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b",
                 text,
             )
         )
@@ -600,6 +600,11 @@ class FinnV2OperationClassificationService:
             return None
         if "bot" in facts.explicit_entities and facts.action_polarity == "activate":
             return None
+        # A new trader's request for a trading plan starts the same typed
+        # setup draft as an explicit setup request. The contract then asks for
+        # missing slots and retains them across subsequent turns.
+        if re.search(r"\b(?:trading|trade|handels|beleggings)[-\s]*plan\b", text):
+            return "create_setup"
         # The setup can be a named parent rather than the requested object.
         # Allow that parent phrase before an indefinite strategy target,
         # without promoting a bare mention of an existing strategy to CREATE.

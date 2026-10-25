@@ -4022,6 +4022,8 @@
     "linkedTo": "Verknüpft mit",
     "linkedToName": "verknüpft mit {name}",
     "frequency": "Häufigkeit",
+    "benchmarkCondition": "Bedingung für den Gesamtbenchmark",
+    "noBenchmarkFilter": "Kein Scorefilter",
     "minimumInvestment": "Mindestanlage",
     "missingFields": "Noch benötigt: {fields}.",
     "newSetup": "Neues Setup",

@@ -3981,6 +3981,8 @@
     "linkedTo": "Gekoppeld aan",
     "linkedToName": "gekoppeld aan {name}",
     "frequency": "Frequentie",
+    "benchmarkCondition": "Voorwaarde totale benchmark",
+    "noBenchmarkFilter": "Geen scorefilter",
     "minimumInvestment": "Minimuminvestering",
     "missingFields": "Nog nodig: {fields}.",
     "newSetup": "Nieuwe setup",

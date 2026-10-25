@@ -42,6 +42,7 @@ class SetupInventoryToolAdapter:
                 "symbol": row.get("symbol"),
                 "timeframe": row.get("timeframe"),
                 "setup_type": row.get("setup_type"),
+                "setup_style": row.get("category") if row.get("category") in {"swing", "scalp", "long_term"} else None,
                 "description": row.get("description"),
                 "saved_market_condition": saved_setup_market_condition(row),
                 "dca_frequency": row.get("dca_frequency"),

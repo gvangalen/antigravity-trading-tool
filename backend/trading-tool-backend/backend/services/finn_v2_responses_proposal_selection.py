@@ -376,7 +376,9 @@ class FinnResponsesProposalSelection:
         state = self.states.resolve(
             contract=contract,
             message="" if awaiting_instrument and not replacement_asset else message,
-            explicit_asset=(replacement_asset if awaiting_instrument else supplied_asset) or verified_asset,
+            # A named catalog asset in the user's turn is stronger evidence
+            # than an omitted model tool field. Preserve it in guided replies.
+            explicit_asset=replacement_asset or verified_asset,
             conversation_context=context,
             supplied_inputs=inputs,
             derived_inputs={**correction_inputs, **dict(verified_parent_setup or {})},

@@ -475,6 +475,26 @@ def test_setup_read_preserves_confirmed_dca_fields_in_typed_evidence():
     assert persisted.min_investment == 100
 
 
+def test_setup_read_preserves_confirmed_swing_style_and_benchmark_bounds():
+    import asyncio
+
+    setup = {
+        "id": 326, "name": "BTC Rustig Swingplan", "symbol": "BTC",
+        "timeframe": "1D", "setup_type": "trade", "category": "swing",
+        "min_benchmark_score": 26, "max_benchmark_score": 45,
+    }
+    result = asyncio.run(SetupToolAdapter().execute(
+        setup=setup, setups=[setup], resolution_source="explicit_setup_name",
+    ))
+    persisted = parse_tool_payload(result["schema_name"], result["data"].dict())
+
+    assert persisted.setup_type == "trade"
+    assert persisted.setup_style == "swing"
+    assert persisted.min_benchmark_score == 26
+    assert persisted.max_benchmark_score == 45
+    assert persisted.setups[0]["setup_style"] == "swing"
+
+
 def test_setup_read_explains_numeric_weekday_without_changing_storage_code():
     import asyncio
 

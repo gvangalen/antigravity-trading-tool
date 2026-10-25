@@ -17,6 +17,8 @@ test("renders V2 setup drafts and proposals inside the simple FINN modal", () =>
   assert.match(source, /supplied\.min_investment != null/);
   assert.match(source, /at\("draftCards\.minimumInvestment", "Minimuminvestering"\)/);
   assert.match(source, /euro\(supplied\.min_investment\)/);
+  assert.match(source, /supplied\.min_benchmark_score != null \|\| supplied\.max_benchmark_score != null/);
+  assert.match(source, /draftCards\.noBenchmarkFilter/);
 });
 
 test("builds strategy and bot draft cards from the terminal runtime contract", () => {
