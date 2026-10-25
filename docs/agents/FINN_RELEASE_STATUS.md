@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN combined new DCA plan contract (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Independent authenticated QA returned
+`NOT_ACCEPTED` on final live SHA `82540825709be0e0e2ead2b597d4e49b482e58c5`:
+9/10 agreed cases passed. The earlier Smart-DCA strategy-deferral request
+now produced a setup-only card in one turn. The remaining case requested
+a new BTC DCA setup and a fixed €100 strategy in one sentence. FINN instead
+selected the strategy-only trade contract, asked for entry/stop/target rules,
+and then looked for a saved parent setup. QA confirmed no proposal, plan or
+bot action for that failing case.
+
+The root cause was contract selection: an explicit strategy noun had priority
+over an equally explicit **new setup** in the same request. The create_setup
+contract owns the combined setup-and-strategy DCA proposal and its separate
+confirmation. The classifier now selects it when the new setup appears before
+or after the strategy; a strategy for an **existing saved** setup still uses
+create_strategy. The front door no longer overrides create_setup with its
+strategy-only proposal shortcut. This changes typed routing and retained
+proposal facts, not FINN's coach wording or the confirmation boundary.
+
+The exact failed QA sentence is a unit regression and a real Luna/Responses
+local chat probe. That probe completed the combined card in one turn. In its
+local-only confirmation test, a setup and linked fixed €100 strategy were
+saved with Friday cadence; cross-owner confirmation was rejected and repeat
+confirmation was idempotent. Existing setup-only, open-card revision, score
+filter and confirmation probes passed as well. The final backend suite passed
+**3943 tests, 4 existing skips** (log SHA-256
+`abb70f1ecc53dcbc9c273ddd277a139a661e5015a468a7c6db247a0d13ea66c4`).
+The full real-provider chat probe passed (log SHA-256
+`e2849793fe76040c5a7d8194e07de1c8f789a5a99799320bc52bfb689edfec9a`).
+Frontend build, typecheck, i18n checks, command/proposal tests and
+high-severity audit passed. The worker-driven action matrix passed **16/16**
+contracts with no broker orders or live trading calls (artifact SHA-256
+`60dfcf957316e31a4f600bc43cb05e114425226de0847f2702f21f9e7e13b13b`);
+the adapter suite passed **21/21**. The real provider development selector
+passed **20/20** with no provider, schema, timeout, parse or validation failure
+(artifact SHA-256
+`6c3411f6368a050e36b0ac93a2654a3dfc708491a1aa51e4e753e2d6d2481676`).
+The regression-provider gate, CI, deployment identity and a new independent
+live QA verdict remain required.
+
 ## FINN hyphenated setup-only scope after independent QA (25 oktober 2026)
 
 Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. The repair in

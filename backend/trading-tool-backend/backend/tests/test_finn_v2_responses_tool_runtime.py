@@ -4772,6 +4772,17 @@ def test_paper_strategy_request_with_relative_rules_remains_an_action_request():
     assert _explicit_strategy_proposal_request(message)
 
 
+def test_new_setup_and_strategy_request_does_not_take_strategy_only_route():
+    message = (
+        "Maak nu een compleet BTC DCA-plan met een setup genaamd QA BTC Compleet C 2510 "
+        "op 1D, wekelijks vrijdag, zonder scorefilter, én een strategie met een vast "
+        "bedrag van €100 per week. Ik wil setup en strategie allebei nu als concept "
+        "zien; bevestig niets."
+    )
+    assert _explicit_create_operation_request(message) == "create_setup"
+    assert not _explicit_strategy_proposal_request(message)
+
+
 @pytest.mark.parametrize("message,expected", [
     ("Maak een DCA-setup voor BTC.", "create_setup"),
     ("Maak een Paper-bot voor mijn strategie.", "create_bot"),

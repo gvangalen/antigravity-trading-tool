@@ -134,6 +134,67 @@ def _scope_revision_case(base_url: str) -> dict:
     return {"turns": 2, "proposal_replaced": True, "confirmed": False}
 
 
+def _combined_first_turn_case(base_url: str, *, confirm_local: bool = False) -> dict:
+    owner = _create_local_user()
+    token = create_access_token({"sub": str(owner["id"]), "role": "user"})
+    _, terminal = _turn(
+        base_url, token, "new",
+        "Maak nu een compleet BTC DCA-plan met een setup genaamd QA BTC Compleet C 2510 "
+        "op 1D, wekelijks vrijdag, zonder scorefilter, én een strategie met een vast "
+        "bedrag van €100 per week. Ik wil setup en strategie allebei nu als concept "
+        "zien; bevestig niets.",
+    )
+    supplied = _projection(terminal).get("supplied_inputs") or {}
+    expected = {
+        "name": "QA BTC Compleet C 2510", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca",
+        "dca_frequency": "weekly", "dca_day": "friday",
+        "dca_amount_mode": "fixed", "base_amount": 100,
+    }
+    if terminal.get("status") != "completed" or not (terminal.get("response") or {}).get("proposal_id"):
+        raise AssertionError(f"combined_first_turn_proposal_missing:{terminal.get('error_code')}:{supplied}")
+    if any(supplied.get(key) != value for key, value in expected.items()):
+        raise AssertionError(f"combined_first_turn_fields:{supplied}")
+    if supplied.get("plan_scope") not in (None, "setup_and_strategy"):
+        raise AssertionError(f"combined_first_turn_scope:{supplied}")
+    if any(key in supplied for key in ("min_benchmark_score", "max_benchmark_score",
+                                       "entry", "stop_loss", "targets")):
+        raise AssertionError(f"combined_first_turn_unrequested_fields:{supplied}")
+    result = {"turns": 1, "proposal": True, "confirmed": False}
+    if confirm_local:
+        proposal_id = (terminal.get("response") or {})["proposal_id"]
+        with sync_engine.connect() as connection:
+            payload_hash = connection.execute(text(
+                "SELECT payload_hash FROM finn_v2_proposals WHERE id = :proposal_id"
+            ), {"proposal_id": proposal_id}).scalar_one()
+        other = _create_local_user()
+        other_token = create_access_token({"sub": str(other["id"]), "role": "user"})
+        lifecycle = _proposal_lifecycle(base_url, token, other_token, {
+            "id": proposal_id, "payload_hash": payload_hash,
+        })
+        with sync_engine.connect() as connection:
+            setup = connection.execute(text(
+                "SELECT id, dca_frequency, dca_day FROM setups "
+                "WHERE user_id = :owner_id ORDER BY id DESC LIMIT 1"
+            ), {"owner_id": owner["id"]}).mappings().one_or_none()
+            strategy = connection.execute(text(
+                "SELECT setup_id, execution_mode, base_amount FROM strategies "
+                "WHERE user_id = :owner_id ORDER BY id DESC LIMIT 1"
+            ), {"owner_id": owner["id"]}).mappings().one_or_none()
+        if not (lifecycle["cross_user_rejected"] and lifecycle["confirmed"]
+                and lifecycle["execution_result"] == "succeeded"
+                and lifecycle["idempotency_result"] == "already_executed"):
+            raise AssertionError(f"combined_first_turn_lifecycle:{lifecycle}")
+        if (not setup or not strategy or strategy["setup_id"] != setup["id"]
+                or (setup["dca_frequency"], setup["dca_day"]) != ("weekly", "5")
+                or strategy["execution_mode"] != "fixed"
+                or float(strategy["base_amount"]) != 100):
+            raise AssertionError(f"combined_first_turn_saved_shape:{setup}:{strategy}")
+        result.update({"confirmed": True, "setup_saved": True, "strategy_linked": True,
+                       "cross_user_rejected": True, "idempotent": True})
+    return result
+
+
 def _score_filter_revision_case(base_url: str, *, remove: bool) -> dict:
     owner = _create_local_user()
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
@@ -202,10 +263,11 @@ def run(base_url: str, *, confirm_local: bool = False) -> dict:
     revised = _scope_revision_case(base_url)
     removed = _score_filter_revision_case(base_url, remove=True)
     retained = _score_filter_revision_case(base_url, remove=False)
+    combined_first_turn = _combined_first_turn_case(base_url, confirm_local=confirm_local)
     return {"direct": direct, "continued": continued,
             "future_staffel": future_staffel, "no_zone_named": no_zone_named,
             "scope_revision": revised, "filter_removed": removed,
-            "filter_retained": retained}
+            "filter_retained": retained, "combined_first_turn": combined_first_turn}
 
 
 def main() -> None:

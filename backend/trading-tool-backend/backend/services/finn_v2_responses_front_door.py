@@ -207,8 +207,11 @@ def _explicit_current_levels_strategy_concept(message: str) -> bool:
 
 
 def _explicit_strategy_proposal_request(message: str) -> bool:
-    if _explicit_create_operation_request(message) == "create_strategy":
+    explicit_operation = _explicit_create_operation_request(message)
+    if explicit_operation == "create_strategy":
         return True
+    if explicit_operation == "create_setup":
+        return False
     # The request preprocessor can read "Paper-strategie" or "per uitvoering"
     # as contextual/execute language. A clear imperative to prepare a new
     # strategy still belongs to the create_strategy contract. This does not

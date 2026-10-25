@@ -605,6 +605,36 @@ class FinnV2OperationClassificationService:
         # missing slots and retains them across subsequent turns.
         if re.search(r"\b(?:trading|trade|handels|beleggings)[-\s]*plan\b", text):
             return "create_setup"
+        # A newly requested setup is the parent of the strategy in one plan
+        # draft. Route the whole request through create_setup, which owns both
+        # objects; create_strategy only attaches to an already saved setup.
+        new_setup = re.search(
+            r"\b(?:een|a|an|ein(?:e|en|er|es)?)\s+"
+            r"(?:(?!(?:strategie|strategy|bestaande|opgeslagen|existing|saved)\b)[\w-]+\s+){0,5}"
+            r"(?:[\w]+-)?setup\b",
+            text,
+        )
+        if not new_setup:
+            new_setup = re.search(
+                r"\b(?:een|a|an|ein(?:e|en|er|es)?)\s+"
+                r"(?:nieuwe?|new|neu(?:e|en|er|es)?)[,\s]+"
+                r"(?:nog\s+niet\s+opgeslagen\s+|not\s+yet\s+saved\s+)?"
+                r"(?:[\w-]+\s+){0,4}(?:[\w]+-)?setup\b",
+                text,
+            )
+        strategy_after_setup = bool(
+            new_setup and re.search(r"\b(?:strategie|strategy)\b", text[new_setup.end():])
+        )
+        explicitly_new_setup = bool(
+            new_setup and re.search(
+                r"\b(?:nieuw(?:e)?|new|neu(?:e|en|er|es)?)\b", new_setup.group(0)
+            )
+        )
+        strategy_before_new_setup = bool(
+            explicitly_new_setup and re.search(r"\b(?:strategie|strategy)\b", text[:new_setup.start()])
+        )
+        if strategy_after_setup or strategy_before_new_setup:
+            return "create_setup"
         # The setup can be a named parent rather than the requested object.
         # Allow that parent phrase before an indefinite strategy target,
         # without promoting a bare mention of an existing strategy to CREATE.

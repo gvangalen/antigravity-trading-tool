@@ -541,6 +541,32 @@ def test_named_setup_is_parent_of_new_second_strategy():
     assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == "create_strategy"
 
 
+def test_new_named_setup_and_fixed_dca_strategy_are_one_plan_draft():
+    message = (
+        "Maak nu een compleet BTC DCA-plan met een setup genaamd QA BTC Compleet C 2510 "
+        "op 1D, wekelijks vrijdag, zonder scorefilter, én een strategie met een vast "
+        "bedrag van €100 per week. Ik wil setup en strategie allebei nu als concept "
+        "zien; bevestig niets."
+    )
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == "create_setup"
+
+
+@pytest.mark.parametrize("message, expected", [
+    ("Maak een BTC DCA-setup en een strategie met €100 per week.", "create_setup"),
+    ("Maak een strategie van €100 per week voor een nieuwe BTC DCA-setup op 1D, iedere vrijdag.", "create_setup"),
+    ("Maak een strategie voor een nieuwe DCA-setup op BTC.", "create_setup"),
+    ("Maak een strategie voor een nieuwe, nog niet opgeslagen BTC DCA-setup.", "create_setup"),
+    ("Maak een vaste strategie voor mijn opgeslagen BTC DCA-setup.", "create_strategy"),
+    ("Maak een strategie voor een bestaande BTC DCA-setup.", "create_strategy"),
+])
+def test_new_setup_and_existing_setup_have_distinct_create_contracts(message, expected):
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == expected
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"
