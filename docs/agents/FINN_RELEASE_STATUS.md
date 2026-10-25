@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN owner-bound open DCA draft reading (25 oktober 2026)
 
-Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. Independent authenticated QA returned
+Phase: `ACCEPTED` for the scoped concept and conversation flow on live SHA
+`0b3541141100971fd00c5317fff6b2e3b1422831`. The prior independent QA returned
 `NOT_ACCEPTED` on final live SHA `2bb326a5e342430cf572c33bf334752a2e334367`.
 The formerly failing direct combined BTC DCA setup plus fixed €100 strategy
 now passed in one turn, as did the other direct and correction routes. The
@@ -61,9 +62,26 @@ merged as product SHA `f7883ce62bfa9ebc82a67b25510f950287174d8b`.
 [main CI 40212628834](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40212628834)
 and [Auto Deploy 40212866762](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40212866762)
 passed. Public backend health and frontend build info returned HTTP 200 and
-the exact product SHA. This documentation-only status update creates a later
-SHA. Build must verify the **last** main CI, Auto Deploy and both public
-markers for that final SHA before handing the independent live matrix to QA.
+the exact product SHA. The documentation-only status update created a later
+SHA `0b3541141100971fd00c5317fff6b2e3b1422831`.
+[Final main CI 40213361892](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40213361892)
+and [final Auto Deploy 40213560564](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40213560564)
+passed; main and both public markers reported that exact SHA before QA began.
+
+Independent QA then verified main, the last CI and Auto Deploy, backend
+health and frontend build info on exact SHA
+`0b3541141100971fd00c5317fff6b2e3b1422831` and returned **ACCEPTED**.
+The complete authenticated concept matrix passed: an open setup-only card
+remained available to FINN in the next turn; both direct setup-plus-fixed-€100
+requests, a future Smart-DCA staffel, proposal replacement, score-filter
+removal and retention, timeframe in a name, a strategy for a saved setup,
+guided swing and negative capability intent all behaved as expected. “Geen
+RSI maar ADX” produced only an ADX concept; “zonder RSI” did not produce a
+confirmable RSI card. No cards were confirmed, no QA setup was saved, and no
+order was placed. This verdict does **not** cover persistence after a new
+confirmation, bot execution or a complete new-user onboarding journey.
+This verdict recording is documentation-only and does not change the product
+code evaluated by QA.
 
 ## FINN combined new DCA plan contract (25 oktober 2026)
 
