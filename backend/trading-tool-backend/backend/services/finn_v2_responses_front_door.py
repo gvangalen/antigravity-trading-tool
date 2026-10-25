@@ -474,6 +474,8 @@ class FinnResponsesFrontDoor:
             "This is the effective reply language from the owner's preference and any explicit "
             "language switch. The latest user message or a tool result may be in another language; "
             "do not mirror that language unless the user explicitly requests a switch. "
+            "Translate score component names and tool field labels into the reply language; "
+            "do not expose internal keys as user-facing terminology. "
             "Your entire output is shown directly to the trader. Start with the answer; "
             "never output private planning, compliance notes, tool-selection notes, a draft preamble, "
             "or raw citation markup. "
