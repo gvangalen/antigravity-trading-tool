@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN setup overview with current Score 2.0 evidence (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_DEPLOY`. Product branch:
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Product branch:
 `codex/finn-setup-score-overview`, [PR #606](https://github.com/gvangalen/antigravity-trading-tool/pull/606).
 The saved-setup and linked-strategy reads now include the owner-scoped,
 source-verified Score 2.0 component assessment for the resolved setup asset.
@@ -34,9 +34,14 @@ order (log SHA-256 `bca4efda2004aaa2b655bdbb219cca8e3f9248edf3f01af16e101d7ed667
 All PR CI checks passed on product code SHA
 `881254e884a019b72228b512c83ca2766b9489f3` in
 [run 40171913616](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40171913616).
-This status edit creates a later candidate SHA; merge, main CI, Auto Deploy,
-public backend/frontend SHA parity and independent authenticated browser QA
-remain pending.
+The product merged as `8386f42ca6f3ffd17410893bc1b744bdb26ea74b`.
+[Main CI 40172995327](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40172995327)
+and [Auto Deploy 40173158742](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40173158742)
+both passed. Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` each returned HTTP 200 and the product
+SHA. This status-only edit creates a later final SHA. Build must verify the
+last main CI, Auto Deploy and both public markers on that revision before
+assigning independent authenticated browser QA; that verdict remains pending.
 
 ## Analyse benchmark as the single market-phase view (24 oktober 2026)
 
