@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN setup-only DCA contract and continuing draft repair (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`; repair branch: `codex/finn-plan-setup-only`.
+Phase: `LIVE_CANDIDATE_QA_PENDING`; repair branch:
+`codex/finn-plan-setup-only`, [PR #614](https://github.com/gvangalen/antigravity-trading-tool/pull/614).
 Independent live QA returned `NOT_ACCEPTED` on final SHA
 `cd5f309464900f4c07a58282c21eb2e53ecc5681` for the preceding
 trading-plan release. The guided swing request and negative capability
@@ -37,8 +38,16 @@ The restarted local FastAPI/Celery/PostgreSQL/Redis action matrix passed
 Live calls or production connections (artifact SHA-256
 `f3a97b28e4a0feb1f345c635cdf4d0dc3ce70fbf1730f7c0736ea96e06743cf1`).
 Security and Architecture read-only reviews found no remaining P1/P2 in the
-repaired boundary. PR checks, deployment and independent authenticated live
-QA remain pending.
+repaired boundary. [PR CI 40190742624](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40190742624)
+passed on candidate `4ecaa868d9f6840949fd3a4bbd714a6c45b6b8fc`.
+The product merged as `fe9ea1f2beae416038dd7ad0b79e09b9feb59932`.
+[Main CI 40190985708](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40190985708)
+and [Auto Deploy 40191172701](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40191172701)
+passed. Public backend health and frontend build info each returned HTTP 200
+and that exact product SHA. This status-only edit creates a later final SHA;
+Build must verify its last main CI, Auto Deploy and both public markers before
+assigning independent authenticated browser QA. The live QA verdict remains
+pending.
 
 ## FINN trading-plan contract and continuing draft (25 oktober 2026)
 
