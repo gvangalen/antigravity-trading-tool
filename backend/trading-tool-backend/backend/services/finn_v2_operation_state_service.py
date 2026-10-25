@@ -99,6 +99,9 @@ class FinnV2OperationStateService:
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
+        inherited = dict(derived_inputs or {})
+        prior_plan_scope = collected.get("plan_scope") or inherited.get("plan_scope")
+        known_setup_type = str(collected.get("setup_type") or inherited.get("setup_type") or "") or None
         accepted_inputs = set(contract.input_fields)
         if contract.operation_id == "create_bot" and existing is not None and existing.target_choice_required:
             collected.pop("strategy_id", None)
@@ -137,7 +140,7 @@ class FinnV2OperationStateService:
             # part of this turn, even when the name was the requested slot.
             labelled = self.explicit_inputs(
                 contract=contract, message=message, explicit_asset=contract_asset,
-                known_setup_type=str(collected.get("setup_type") or "") or None,
+                known_setup_type=known_setup_type,
             )
             for key, value in labelled.items():
                 if key in contract.input_fields and key not in collected and not self._is_missing(value):
@@ -168,7 +171,7 @@ class FinnV2OperationStateService:
                 contract=contract,
                 message=message,
                 explicit_asset=contract_asset,
-                known_setup_type=str(collected.get("setup_type") or "") or None,
+                known_setup_type=known_setup_type,
             )
             missing_fields = set(existing.missing_required_inputs)
             # A cadence answer can make its weekday/month-day required in the
@@ -195,7 +198,7 @@ class FinnV2OperationStateService:
                     explicit_asset=contract_asset,
                     continuation=existing is not None,
                     requested_slot=requested_slot,
-                    known_setup_type=str(collected.get("setup_type") or "") or None,
+                    known_setup_type=known_setup_type,
                 )
                 if contract.operation_id in {"create_setup", "create_strategy"} or not model_tool_inputs
                 else {}
@@ -208,10 +211,10 @@ class FinnV2OperationStateService:
             if self.setup_only_intent(message):
                 explicit["plan_scope"] = "setup_only"
             elif (
-                existing is not None
-                and collected.get("plan_scope") == "setup_only"
+                prior_plan_scope == "setup_only"
                 and ("dca_amount_mode" in explicit or "base_amount" in explicit
-                     or self.add_strategy_to_open_setup_intent(message))
+                     or self.add_strategy_to_open_setup_intent(message)
+                     or re.search(r"\b(?:volledig|complete|vollständig)\b.{0,70}\b(?:dca[-\s]+)?plan\b", message, re.I))
             ):
                 # A revision of the open proposal may add the strategy now.
                 # Never let the old setup-only scope silently discard it.
@@ -240,7 +243,12 @@ class FinnV2OperationStateService:
             if collected.get("dca_amount_mode") == "score_bands" or explicit.get("dca_amount_mode") == "score_bands":
                 explicit.update(self._dca_score_percentages(message))
         explicit_chart_timeframe = (
-            FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(message)
+            FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(
+                message, ignored_names=(
+                    str(collected.get("name") or (derived_inputs or {}).get("name") or ""),
+                    str(self._name_input_from_text(message) or ""),
+                ),
+            )
             if contract.operation_id == "create_setup" and model_tool_inputs and not is_slot_turn
             else None
         )
@@ -364,13 +372,6 @@ class FinnV2OperationStateService:
             key: {"source": "explicit", "state_revision": next_revision}
             for key in explicit
         })
-        if contract.operation_id == "create_setup" and collected.get("plan_scope") == "setup_only":
-            # Future strategy details are not part of a setup-only proposal.
-            # Remove both values and provenance from the persisted draft.
-            for key in self.DCA_AMOUNT_FIELDS:
-                collected.pop(key, None)
-                sources.pop(key, None)
-                provenance.pop(key, None)
         if "category" in accepted_inputs and collected.get("indicator"):
             definition = self._indicator_input_from_text(str(collected["indicator"]))
             if definition is not None:
@@ -396,6 +397,33 @@ class FinnV2OperationStateService:
                 collected[key] = self._canonical_input(key, value)
                 sources[key] = "default"
                 provenance[key] = {"source": "default", "state_revision": next_revision}
+        if (contract.operation_id == "create_setup" and re.search(
+            r"\b(?:geen|zonder|no|without|ohne)\s+(?!extra\b)"
+            r"(?:setupscorefilter|scorefilter|setupscorevoorwaarde|scorevoorwaarde|"
+            r"benchmarkvoorwaarde|marktvoorwaarde)\b", message, re.I,
+        )):
+            # A cancelled proposal can donate its old eligibility range via
+            # derived_inputs. An explicit removal must clear that range before
+            # the new proposal becomes confirmable.
+            for key in ("min_benchmark_score", "max_benchmark_score"):
+                collected.pop(key, None)
+                sources.pop(key, None)
+                provenance.pop(key, None)
+        if contract.operation_id == "create_setup" and collected.get("plan_scope") == "setup_only":
+            # A cancelled proposal may donate prior inputs through derived_inputs.
+            # Apply the scope boundary after that merge so future strategy
+            # amounts cannot return to a setup-only draft through correction.
+            for key in self.DCA_AMOUNT_FIELDS:
+                collected.pop(key, None)
+                sources.pop(key, None)
+                provenance.pop(key, None)
+        elif (contract.operation_id == "create_setup" and collected.get("setup_type") == "dca"
+              and collected.get("dca_amount_mode") == "fixed"):
+            for key in ("score_source", "low_threshold", "high_threshold",
+                        "low_score_percent", "mid_score_percent", "high_score_percent"):
+                collected.pop(key, None)
+                sources.pop(key, None)
+                provenance.pop(key, None)
         for key, value in (verified_target_inputs or {}).items():
             if key in {"setup_id", "strategy_id", "bot_id"} and key in accepted_inputs and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
@@ -937,8 +965,14 @@ class FinnV2OperationStateService:
                     )
                     values.setdefault("dca_frequency", "monthly")
             if values.get("setup_type") == "dca" or dca_context:
-                smart_amount = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", lowered))
-                fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b", lowered))
+                # A plan name such as "BTC Staffel Later" is an identity,
+                # not an instruction to select Smart DCA.
+                amount_text = lowered
+                explicit_name = self._name_input_from_text(text)
+                if explicit_name:
+                    amount_text = amount_text.replace(explicit_name.casefold(), " ")
+                smart_amount = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
+                fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b", amount_text))
                 if smart_amount and not fixed_amount:
                     values["dca_amount_mode"] = "score_bands"
                 elif fixed_amount and not smart_amount:
@@ -946,26 +980,26 @@ class FinnV2OperationStateService:
                 if smart_amount:
                     market_only = re.search(
                         r"\b(?:alleen|uitsluitend|only)\s+(?:de\s+)?(?:markt\s*score|marktscore|market\s*score)\b",
-                        lowered,
+                        amount_text,
                     )
                     if not market_only:
                         values["score_source"] = "benchmark_score"
                 amounts = re.findall(
                     r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
                     r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
-                    lowered,
+                    amount_text,
                 )
                 euro_amounts = [self._numeric_value(a or b) for a, b in amounts]
                 named_base = re.search(
                     r"\b(?:basisbedrag|basisinleg|base\s*amount|basisbetrag)\s*"
                     r"(?:van|is|of|:|=)?\s*(?:€|eur)\s*(\d+(?:[.,]\d+)?)",
-                    lowered,
+                    amount_text,
                 )
                 if named_base:
                     values["base_amount"] = self._numeric_value(named_base.group(1))
-                if len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", lowered):
+                if len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values.setdefault("base_amount", euro_amounts[0])
-                if not smart_amount and len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", lowered):
+                if not smart_amount and len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
                     values.update(self._dca_score_percentages(text))
@@ -1715,6 +1749,8 @@ class FinnV2OperationStateService:
             r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
             r"\s+(?:en|and|und)\s+(?:zet|set|gebruik|use|verwende|nutze|stel|setze)\b|"
             r"\s+(?:en|and|und)\s+(?:risico|risk|risiko)\b|"
+            r"\s+(?:en|and|und)\s+(?:(?:de|het|mijn|bestaande|existing|die)\s+)*(?:scorevoorwaarde|setupscorefilter|scorefilter|benchmarkvoorwaarde)\b|"
+            r"\s+(?:en|and|und)\s+(?:geen|zonder|no|without|ohne)\s+(?:extra\s+)?(?:setupscorefilter|scorefilter|setupvoorwaarde|benchmarkvoorwaarde)\b|"
             r"[\"'”’]?[:,;.!?\n]|[\"'”’]?$)",
             text,
             re.IGNORECASE,

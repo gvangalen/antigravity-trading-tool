@@ -4959,6 +4959,7 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
     state = analysis.request_plan.operation_state
     assert state["open_proposal_id"] == "proposal-owned-by-conversation"
     assert state["collected_inputs"]["name"] == "Responses Revised 0923"
+    assert state["collected_inputs"]["timeframe"] == "4H"
     assert state["collected_inputs"]["base_amount"] == 100
     assert state["missing_required_inputs"] == []
     omitted_intent = catalog.validate("create_dca_plan_proposal", {
@@ -4970,6 +4971,7 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
     ).request_plan.operation_state
     assert implicit_revision["open_proposal_id"] == "proposal-owned-by-conversation"
     assert implicit_revision["collected_inputs"]["name"] == "Responses Revised 0923"
+    assert implicit_revision["collected_inputs"]["timeframe"] == "4H"
     assert implicit_revision["missing_required_inputs"] == []
     explicitly_new = catalog.validate("create_dca_plan_proposal", {
         "operation_id": "create_setup", "draft_intent": "new",

@@ -90,6 +90,48 @@ def _case(base_url: str, turns: tuple[str, ...], *, expect_bounds: bool,
     return result
 
 
+def _scope_revision_case(base_url: str) -> dict:
+    owner = _create_local_user()
+    token = create_access_token({"sub": str(owner["id"]), "role": "user"})
+    session_id, first = _turn(
+        base_url, token, "new",
+        "Maak alleen een BTC DCA-setup met naam QA BTC Staffel Later 2510, "
+        "primair timeframe 1D, wekelijks op vrijdag. Als enige setupvoorwaarde "
+        "totale benchmarkscore 26 tot 45. De Smart-DCA-staffel van 40 tot 70 "
+        "bepaal ik later in de strategie.",
+    )
+    first_id = (first.get("response") or {}).get("proposal_id")
+    if not first_id:
+        raise AssertionError("scope_revision_initial_proposal_missing")
+    first_inputs = _projection(first).get("supplied_inputs") or {}
+    if (first_inputs.get("min_benchmark_score") != 26
+            or first_inputs.get("max_benchmark_score") != 45):
+        raise AssertionError(f"scope_revision_initial_bounds_missing:{first_inputs}")
+    _, second = _turn(
+        base_url, token, session_id,
+        "Ik verander dit open concept: maak er een volledig BTC DCA-plan van "
+        "met een vast bedrag van €100 per week op vrijdag. Behoud de naam "
+        "QA BTC Staffel Later 2510 en geen setupscorefilter. Toon de nieuwe "
+        "conceptkaart; bevestig niets.",
+    )
+    second_id = (second.get("response") or {}).get("proposal_id")
+    supplied = _projection(second).get("supplied_inputs") or {}
+    expected = {
+        "name": "QA BTC Staffel Later 2510", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "plan_scope": "setup_and_strategy",
+        "dca_frequency": "weekly", "dca_day": "friday",
+        "dca_amount_mode": "fixed", "base_amount": 100,
+    }
+    if second.get("status") != "completed" or not second_id or second_id == first_id:
+        raise AssertionError(f"scope_revision_replacement_missing:{second.get('error_code')}:{supplied}")
+    if any(supplied.get(key) != value for key, value in expected.items()):
+        raise AssertionError(f"scope_revision_fields:{supplied}")
+    if any(key in supplied for key in ("score_source", "low_threshold", "high_threshold",
+                                       "min_benchmark_score", "max_benchmark_score")):
+        raise AssertionError(f"scope_revision_old_staffel_leaked:{supplied}")
+    return {"turns": 2, "proposal_replaced": True, "confirmed": False}
+
+
 def run(base_url: str, *, confirm_local: bool = False) -> dict:
     base_url = base_url.rstrip("/")
     direct = _case(base_url, (
@@ -107,7 +149,9 @@ def run(base_url: str, *, confirm_local: bool = False) -> dict:
         "wekelijks op vrijdag. De Smart DCA-staffel van 40 tot 70 bepaal ik later "
         "in de strategie; geen setupscorefilter.",
     ), expect_bounds=False)
-    return {"direct": direct, "continued": continued, "future_staffel": future_staffel}
+    revised = _scope_revision_case(base_url)
+    return {"direct": direct, "continued": continued,
+            "future_staffel": future_staffel, "scope_revision": revised}
 
 
 def main() -> None:

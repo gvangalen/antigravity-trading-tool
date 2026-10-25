@@ -2029,7 +2029,23 @@ class FinnV2RunService:
                     if FinnV2OperationStateService._is_explicit_correction(message) and "?" not in message:
                         typed_changes = FinnV2OperationStateService().explicit_inputs(
                             contract=contract, message=message, explicit_asset=None,
+                            known_setup_type=str(origin_inputs.get("setup_type") or "") or None,
                         )
+                        if contract.operation_id == "create_setup":
+                            from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
+
+                            chart_timeframe = FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(
+                                message, ignored_names=(
+                                    str(origin_inputs.get("name") or ""),
+                                    str(FinnV2OperationStateService._name_input_from_text(message) or ""),
+                                ),
+                            )
+                            if chart_timeframe is None:
+                                # "€100 per week" changes DCA cadence, not the
+                                # chart horizon of the open setup draft.
+                                typed_changes.pop("timeframe", None)
+                            else:
+                                typed_changes["timeframe"] = chart_timeframe
                         correction_typed_inputs = dict(typed_changes)
                         if (
                             contract.operation_id == "create_strategy"
