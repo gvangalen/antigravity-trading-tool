@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN owner-bound open DCA draft reading (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Independent authenticated QA returned
+Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. Independent authenticated QA returned
 `NOT_ACCEPTED` on final live SHA `2bb326a5e342430cf572c33bf334752a2e334367`.
 The formerly failing direct combined BTC DCA setup plus fixed €100 strategy
 now passed in one turn, as did the other direct and correction routes. The
@@ -55,7 +55,15 @@ schema, timeout, parse or validation failures (artifact SHA-256
 The real provider regression selector passed **109/109** with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
 `7148a2778b8469609b12c55e2e68e1d7875c20f04746be56a82ecd3a5f9482fb`).
-CI, deployment and new independent live QA are pending.
+[PR #624](https://github.com/gvangalen/antigravity-trading-tool/pull/624)
+merged as product SHA `f7883ce62bfa9ebc82a67b25510f950287174d8b`.
+[PR CI 40212361527](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40212361527),
+[main CI 40212628834](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40212628834)
+and [Auto Deploy 40212866762](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40212866762)
+passed. Public backend health and frontend build info returned HTTP 200 and
+the exact product SHA. This documentation-only status update creates a later
+SHA. Build must verify the **last** main CI, Auto Deploy and both public
+markers for that final SHA before handing the independent live matrix to QA.
 
 ## FINN combined new DCA plan contract (25 oktober 2026)
 
