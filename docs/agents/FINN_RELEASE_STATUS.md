@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN hyphenated setup-only scope after independent QA (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION` on `codex/finn-hyphenated-setup-only`.
+Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. The repair in
+[PR #620](https://github.com/gvangalen/antigravity-trading-tool/pull/620)
+merged as `d8890d3db714c40e8a4b9535869762c9ee82997d`.
 Independent authenticated browser QA returned `NOT_ACCEPTED` on final SHA
 `ca379710e3ac5c6ed13d5ed20a4b6b2395f9cded`: 9/10 agreed cases passed.
 The single P2 failure was a first-turn request for **only** a BTC DCA-setup,
@@ -21,8 +23,8 @@ The typed plan-intent parser recognized `setup` but missed the hyphenated
 `DCA-setup` in the exact QA request. It now recognizes that compound while
 preserving an explicit same-turn request for a setup **and** €100 strategy.
 The exact QA sentence and both strategy-request variants are local regression
-cases. CI, deployment, and a new independent live QA verdict are still
-required for this repair.
+cases. CI and deployment are verified below; a new independent live QA
+verdict is still required for acceptance.
 The final targeted tests passed (163/163), full backend passed **3935 tests,
 4 existing skips** (log SHA-256
 `ae152e7bcffbc02613933fb076905c95bdfd00461ff05e8a71c3c966759ed02f`).
@@ -41,7 +43,14 @@ schema, timeout, parse, or validation failures (artifact SHA-256
 Regression selection passed **109/109** with the same zero-failure categories
 (artifact SHA-256
 `c001d4908d4e7f2e26e631a408c3084d9566b2ac5c36d731035b6ab9958bfb9e`).
-PR CI remains pending.
+[PR CI 40203050631](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40203050631),
+[main CI 40203341849](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40203341849),
+and [Auto Deploy 40203560011](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40203560011)
+passed. Public backend health and frontend build info returned HTTP 200 and
+the exact product SHA `d8890d3db714c40e8a4b9535869762c9ee82997d`.
+This documentation-only status update will create a later public SHA; QA must
+verify that final identity and repeat the exact failed first-turn Smart-DCA
+deferral plus the full agreed browser matrix.
 
 ## FINN open-concept correction after independent QA (25 oktober 2026)
 
