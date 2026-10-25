@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN trading-plan contract and continuing draft (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION_COMPLETE`; candidate branch:
-`codex/finn-plan-creation-contract`. The user deferred the OpenAI Decisions
+Phase: `LIVE_CANDIDATE_QA_PENDING`; product branch:
+`codex/finn-plan-creation-contract`, [PR #612](https://github.com/gvangalen/antigravity-trading-tool/pull/612).
+The user deferred the OpenAI Decisions
 API. A conversational request for a trading plan now enters the existing
 owner-bound `create_setup` contract. Missing inputs remain in the same draft
 across turns. The setup proposal carries only explicit benchmark bounds;
@@ -36,8 +37,15 @@ setup existed before confirmation, rejected a second owner, and saved BTC/1D,
 swing and the explicitly requested 26–45 benchmark range afterward. No
 production plan or order was changed. An independent read-only Security
 review found and verified fixes for Smart-DCA/condition ambiguity and negative
-intent routing; it reported no remaining P1/P2. CI on the final candidate,
-deployment and independent live QA remain pending.
+intent routing; it reported no remaining P1/P2. PR CI passed on candidate
+commit `b0c5008624dbd32dbe2fd95e2deb8c393f34855d`. The product merged
+as `1896134f73e595ebf410609c3a645d03695ed9ff`; [main CI 40186353852](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40186353852)
+and [Auto Deploy 40186547469](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40186547469)
+passed. Public backend health and frontend build info each returned HTTP 200
+with that exact product SHA. This status-only edit creates a later final SHA;
+Build must verify its main CI, Auto Deploy and both public markers before
+assigning independent authenticated browser QA. The live QA verdict remains
+pending.
 
 ## FINN generic setup overview with several saved plans (25 oktober 2026)
 
