@@ -2872,10 +2872,11 @@ def test_saved_setup_bounds_read_never_requires_a_strategy():
     call = catalog.validate("get_saved_setup", {
         "asset": "BTC", "setup_name": "BTC Breakout Full", "reference": "current_request",
     })
-    assert call.read_tools == ("read_active_setup",)
+    assert call.read_tools == ("read_active_setup", "read_asset_scores")
     assert call.inputs["setup_name"] == "BTC Breakout Full"
     definition = next(item for item in catalog.definitions() if item["name"] == "get_saved_setup")
     assert "independent of how many strategies" in definition["description"]
+    assert "current source-verified Score 2.0" in definition["description"]
     with pytest.raises(FinnResponsesToolError, match="read_arguments_invalid"):
         catalog.validate("get_saved_setup", {"strategy_name": "BTC Breakout Full Strategy"})
 
@@ -2926,7 +2927,7 @@ def test_saved_setup_bounds_question_uses_setup_read_without_strategy_disambigua
         instructions=front._model_led_instructions("nl"), conversation_context={}, verified_asset="BTC",
     ))
     assert [call.name for call in calls] == ["get_saved_setup"]
-    assert calls[0].read_tools == ("read_active_setup",)
+    assert calls[0].read_tools == ("read_active_setup", "read_asset_scores")
     assert result.response.answer_kind == "free_text"
     assert "20–60" in result.response.text
 
@@ -9952,9 +9953,9 @@ def test_read_executor_uses_server_owner_and_does_not_invent_as_of():
     executor.reads = FakeReads()
     call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "AAPL"})
     result = asyncio.run(executor(call))
-    assert len(result["results"]) == 2
+    assert len(result["results"]) == 3
     assert result["results"][0]["as_of"] is None
-    assert "not a current market" in result["evidence_boundary"]
+    assert "not a market quote" in result["evidence_boundary"]
     assert all(kwargs["user_id"] == 44 and kwargs["run_id"] == "run-1" for kwargs in executor.reads.calls)
 
 
@@ -10427,7 +10428,7 @@ def test_read_executor_closes_each_database_session_before_provider_resumes(monk
     call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "BTC"})
     result = asyncio.run(executor(call))
     assert opened == []
-    assert len(result["results"]) == 2
+    assert len(result["results"]) == 3
     assert all(item["as_of"] == "2026-09-23T10:00:00Z" for item in result["results"])
 
 

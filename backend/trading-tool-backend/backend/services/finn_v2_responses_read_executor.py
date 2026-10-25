@@ -288,8 +288,9 @@ class FinnResponsesReadExecutor:
                 )
         if call.name == "get_active_plan_and_strategy":
             output["evidence_boundary"] = (
-                "This is a read of saved setup and strategy configuration, not a current market "
-                "or owner-scoped risk evaluation. A numeric dca_day is a stored weekday code, "
+                "This reads saved setup and strategy configuration plus source-verified "
+                "Score 2.0 components, not a market quote or owner-scoped risk evaluation. "
+                "A numeric dca_day is a stored weekday code, "
                 "not a user-facing day; use dca_day_name and translate it into the answer language. "
                 "A chart timeframe, DCA frequency, and broad profile goal do not record the "
                 "owner's holding horizon. Ask for the intended period before classifying the "
@@ -360,7 +361,7 @@ class FinnResponsesReadExecutor:
             item["scope"] == "read_asset_scores" and item["status"] == "completed"
             for item in results
         ):
-            output["evidence_boundary"] = (
+            score_boundary = (
                 "Scores come from the current, source-verified Score 2.0 assessment. "
                 "Only reported_scores with a fresh component_source_status are available. "
                 "A null component is unknown, not zero. "
@@ -368,6 +369,9 @@ class FinnResponsesReadExecutor:
                 "A benchmark_score is available only when all three components are fresh. "
                 "Do not infer a trading signal or personal suitability from a score alone."
             )
+            output["evidence_boundary"] = " ".join(filter(None, (
+                output.get("evidence_boundary"), score_boundary,
+            )))
         if self._facts_only_local_experiment():
             output.pop("evidence_boundary", None)
             output.pop("assessment_boundary", None)

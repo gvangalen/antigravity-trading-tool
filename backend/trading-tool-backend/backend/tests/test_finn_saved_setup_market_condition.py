@@ -10,6 +10,23 @@ from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCat
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_tool_adapters.setup_tool_adapter import SetupToolAdapter
 from backend.services.finn_v2_tool_adapters.setup_inventory_tool_adapter import SetupInventoryToolAdapter
+from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
+
+
+def test_saved_strategy_name_does_not_override_its_fixed_amount_rule():
+    strategy = asyncio.run(StrategyToolAdapter().execute(
+        strategy={
+            "id": 51, "setup_id": 41, "name": "Smart dca strategie",
+            "symbol": "BTC", "execution_mode": "fixed", "base_amount": 100,
+            "data": {"dca_amount_semantics": "planned_exact"},
+        },
+        resolution_source="owner_strategy_id",
+    ))["data"]
+    assert strategy.name == "Smart dca strategie"
+    assert strategy.execution_mode == "fixed"
+    assert strategy.dca_amount_mode == "fixed"
+    assert strategy.base_amount == 100
+    assert strategy.dca_score_bands == []
 
 
 def test_all_five_presets_are_exact_saved_bounds_and_custom_is_not_mislabeled():
@@ -109,7 +126,19 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
             async def execute_tool(self, **kwargs):
                 assert kwargs["user_id"] == 7
                 assert kwargs["selector"]["setup_id"] == saved_id
+                if kwargs["tool_name"] == "read_asset_scores":
+                    assert kwargs["shared_state"]["asset"] == "BTC"
+                    return SimpleNamespace(
+                        success=True, availability="available", freshness_status="fresh",
+                        source="daily_scores_and_source_indicators", asset="BTC",
+                        result={"symbol": "BTC", "benchmark_score": None,
+                                "reported_scores": {"market": 50, "macro": None, "technical": 65},
+                                "component_source_status": {"market": "fresh", "macro": "missing",
+                                                            "technical": "fresh"}},
+                        error_codes=[], as_of="2026-10-25",
+                    )
                 is_strategy = kwargs["tool_name"] == "read_linked_strategy"
+                kwargs["shared_state"]["asset"] = "BTC"
                 return SimpleNamespace(
                     success=True, availability="available", freshness_status="unknown",
                     source="strategies" if is_strategy else "setups", asset="BTC",
@@ -132,6 +161,11 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
             assert evidence["data"]["dca_day_name"] == "friday"
             assert "not merely" in response["evidence_boundary"]
             assert "does not guarantee a purchase" in response["evidence_boundary"]
+            scores = response["results"][1]
+            assert scores["scope"] == "read_asset_scores"
+            assert scores["data"]["benchmark_score"] is None
+            assert scores["data"]["reported_scores"]["macro"] is None
+            assert "null component is unknown" in response["evidence_boundary"]
 
         executor = FinnResponsesReadExecutor(session=object(), user_id=7, run_id="plan-turn")
         executor.reads = Reads()
@@ -142,10 +176,15 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
             inputs={"setup_id": saved_id},
         )
         plan = await executor(plan_tool)
-        setup_evidence, strategy_evidence = (item["data"] for item in plan["results"])
+        setup_evidence, strategy_evidence, score_evidence = (
+            item["data"] for item in plan["results"]
+        )
         assert setup_evidence["saved_market_condition"]["key"] == "pressure"
         assert setup_evidence.get("base_amount") is None
         assert strategy_evidence["base_amount"] == 100
         assert strategy_evidence.get("saved_market_condition") is None
+        assert score_evidence["benchmark_score"] is None
+        assert "saved setup and strategy configuration" in plan["evidence_boundary"]
+        assert "null component is unknown" in plan["evidence_boundary"]
 
     asyncio.run(run())
