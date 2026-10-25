@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN combined new DCA plan contract (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Independent authenticated QA returned
+Phase: `CI_PENDING`. Independent authenticated QA returned
 `NOT_ACCEPTED` on final live SHA `82540825709be0e0e2ead2b597d4e49b482e58c5`:
 9/10 agreed cases passed. The earlier Smart-DCA strategy-deferral request
 now produced a setup-only card in one turn. The remaining case requested
@@ -42,8 +42,11 @@ the adapter suite passed **21/21**. The real provider development selector
 passed **20/20** with no provider, schema, timeout, parse or validation failure
 (artifact SHA-256
 `6c3411f6368a050e36b0ac93a2654a3dfc708491a1aa51e4e753e2d6d2481676`).
-The regression-provider gate, CI, deployment identity and a new independent
-live QA verdict remain required.
+The real provider regression selector passed **109/109** with the same zero
+failure categories (artifact SHA-256
+`ce0c57f3f23d892dce3f7ac1d74ad68185b131b8c8536100ab8840333c10f3cb`).
+PR CI, deployment identity and a new independent live QA verdict remain
+required.
 
 ## FINN hyphenated setup-only scope after independent QA (25 oktober 2026)
 
