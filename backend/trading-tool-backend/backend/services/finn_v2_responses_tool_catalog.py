@@ -97,10 +97,11 @@ class FinnResponsesToolCatalog:
             name: tuple(scope_bindings[scope] for scope in scopes)
             for name, scopes in _READ_SCOPES.items()
         }
+        self.read_tools["get_active_plan_and_strategy"] += ("read_asset_scores",)
         # Collection reads have a distinct typed read adapter. They do not
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
-        self.read_tools["get_saved_setup"] = ("read_active_setup",)
+        self.read_tools["get_saved_setup"] = ("read_active_setup", "read_asset_scores")
         self.read_tools["get_current_asset_scores"] = ("read_active_asset", "read_asset_scores")
         self.read_tools["get_setup_market_matches"] = ("read_setup_market_matches",)
         self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
@@ -176,7 +177,12 @@ class FinnResponsesToolCatalog:
                 )
             if name == "get_active_plan_and_strategy":
                 description += (
-                    " Returns one selected saved setup and its linked strategy, not a list or assessment. "
+                    " Returns one selected saved setup, its linked strategy, and the current "
+                    "source-verified Score 2.0 components for that setup's asset, not a list "
+                    "or a suitability assessment. If the benchmark is unavailable, its "
+                    "current match is unknown; do not treat missing components as zero. "
+                    "The strategy name is a label: execution_mode and dca_amount_mode, "
+                    "not the name, determine whether its amount is fixed or score-based. "
                     "The setup's saved_market_condition is derived from persisted score bounds: "
                     "an exact preset is a real eligibility filter, not merely description text. "
                     "A matching scheduled DCA day still does not guarantee a purchase. "
@@ -200,7 +206,9 @@ class FinnResponsesToolCatalog:
                     "and technical minimum and maximum score boundaries. The derived "
                     "saved_market_condition identifies an exact preset such as Onder druk "
                     "as a saved eligibility condition; description is only the user's free-text "
-                    "background. These are setup fields, "
+                    "background. The read also includes current source-verified Score 2.0 "
+                    "components for the resolved asset, so an unavailable benchmark leaves "
+                    "the current setup match unknown. These are setup fields, "
                     "independent of how many strategies are linked. Do not read or choose a strategy "
                     "to answer a question only about these setup fields."
                 )
