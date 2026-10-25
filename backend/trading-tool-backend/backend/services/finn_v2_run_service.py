@@ -2026,7 +2026,12 @@ class FinnV2RunService:
                             and mentioned_catalog_symbols(message) <= {str(latest_open[0].asset or "").upper()}
                         ):
                             corrected_name = named
-                    if FinnV2OperationStateService._is_explicit_correction(message) and "?" not in message:
+                    setup_filter_removal = bool(
+                        contract.operation_id == "create_setup"
+                        and FinnV2OperationStateService.remove_setup_score_filter_intent(message)
+                    )
+                    if (FinnV2OperationStateService._is_explicit_correction(message)
+                            or setup_filter_removal) and "?" not in message:
                         typed_changes = FinnV2OperationStateService().explicit_inputs(
                             contract=contract, message=message, explicit_asset=None,
                             known_setup_type=str(origin_inputs.get("setup_type") or "") or None,
@@ -2061,6 +2066,14 @@ class FinnV2RunService:
                             and not key.endswith("_id")
                             and origin_inputs.get(key) != value
                         }
+                        if (contract.operation_id == "create_setup"
+                              and FinnV2OperationStateService.remove_setup_score_filter_intent(message)):
+                            # The old owner-bound draft supplies its other
+                            # fields while this eligibility range is removed.
+                            corrected_fields.update({
+                                "min_benchmark_score": None,
+                                "max_benchmark_score": None,
+                            })
                 unspecified_correction = bool(
                     latest_open is not None
                     and requests_unspecified_asset_correction(message, latest_open[0].asset or "")
@@ -2068,7 +2081,11 @@ class FinnV2RunService:
                 explicit_proposal_correction = bool(
                     latest_open is not None
                     and "?" not in message
-                    and FinnV2OperationStateService._is_explicit_correction(message)
+                    and (
+                        FinnV2OperationStateService._is_explicit_correction(message)
+                        or (latest_open[0].operation_type == "create_setup"
+                            and FinnV2OperationStateService.remove_setup_score_filter_intent(message))
+                    )
                 )
                 target_change_requested = bool(
                     explicit_proposal_correction
@@ -2749,6 +2766,11 @@ class FinnV2RunService:
                 message=message, contract=contract, registry=FinnV2OperationRegistry(),
                 requested_slot=requested_slot,
             ):
+                continuation = True
+            elif (pending_guided == "create_setup"
+                  and FinnV2OperationStateService.setup_only_intent(message)):
+                # Deferring strategy details is a direct answer to an open
+                # setup draft even if the model cannot classify the turn.
                 continuation = True
             else:
                 if cls._independent_linked_read(message):

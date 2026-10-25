@@ -19,7 +19,7 @@ from backend.utils.auth_utils import create_access_token
 
 
 def _case(base_url: str, turns: tuple[str, ...], *, expect_bounds: bool,
-          confirm_local: bool = False) -> dict:
+          confirm_local: bool = False, expected_name: str | None = None) -> dict:
     owner = _create_local_user()
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
     session_id = "new"
@@ -39,6 +39,8 @@ def _case(base_url: str, turns: tuple[str, ...], *, expect_bounds: bool,
         raise AssertionError(f"setup_only_proposal_missing:{records}")
     if supplied.get("plan_scope") != "setup_only":
         raise AssertionError(f"setup_only_scope_missing:{records}")
+    if expected_name and (supplied.get("name") != expected_name or supplied.get("timeframe") != "1D"):
+        raise AssertionError(f"setup_only_identity_or_timeframe_wrong:{records}")
     if supplied.get("dca_frequency") != "weekly" or supplied.get("dca_day") != "friday":
         raise AssertionError(f"setup_only_cadence_lost:{records}")
     if any(key in supplied for key in ("base_amount", "dca_amount_mode", "low_threshold", "high_threshold")):
@@ -132,6 +134,46 @@ def _scope_revision_case(base_url: str) -> dict:
     return {"turns": 2, "proposal_replaced": True, "confirmed": False}
 
 
+def _score_filter_revision_case(base_url: str, *, remove: bool) -> dict:
+    owner = _create_local_user()
+    token = create_access_token({"sub": str(owner["id"]), "role": "user"})
+    name = "QA BTC Filter Verwijder" if remove else "QA BTC Filter Behoud"
+    session_id, first = _turn(
+        base_url, token, "new",
+        f"Maak alleen een BTC DCA-setup met naam {name}, timeframe 1D, "
+        "wekelijks op vrijdag, en als enige koopvoorwaarde een totale "
+        "benchmarkscore van 26 tot 45. Geen strategie of bedrag nu. "
+        "Toon een concept en bevestig niets.",
+    )
+    first_id = (first.get("response") or {}).get("proposal_id")
+    if not first_id:
+        raise AssertionError(f"score_filter_initial_proposal_missing:{first.get('error_code')}")
+    correction = (
+        "Haal de benchmarkvoorwaarde 26-45 uit dit open concept. Laat de rest "
+        "gelijk: BTC, 1D, wekelijks vrijdag, geen strategie of bedrag. "
+        "Toon aangepaste conceptkaart; bevestig niets."
+        if remove else
+        "Voeg geen extra scorefilter toe; behoud de bestaande benchmarkzone "
+        "26-45. Laat BTC, 1D, vrijdag en naam gelijk. Toon aangepaste "
+        "conceptkaart; bevestig niets."
+    )
+    _, second = _turn(base_url, token, session_id, correction)
+    second_id = (second.get("response") or {}).get("proposal_id")
+    supplied = _projection(second).get("supplied_inputs") or {}
+    if second.get("status") != "completed" or not second_id or (remove and second_id == first_id):
+        raise AssertionError(
+            f"score_filter_replacement_missing:{second.get('status')}:"
+            f"{second.get('error_code')}:{first_id}:{second_id}:{supplied}"
+        )
+    if supplied.get("name") != name or supplied.get("plan_scope") != "setup_only":
+        raise AssertionError(f"score_filter_identity_or_scope_changed:{supplied}")
+    bounds = (supplied.get("min_benchmark_score"), supplied.get("max_benchmark_score"))
+    if bounds != ((None, None) if remove else (26, 45)):
+        raise AssertionError(f"score_filter_revision_wrong_bounds:{bounds}:{supplied}")
+    return {"turns": 2, "proposal_replaced": second_id != first_id,
+            "bounds": bounds, "confirmed": False}
+
+
 def run(base_url: str, *, confirm_local: bool = False) -> dict:
     base_url = base_url.rstrip("/")
     direct = _case(base_url, (
@@ -149,9 +191,19 @@ def run(base_url: str, *, confirm_local: bool = False) -> dict:
         "wekelijks op vrijdag. De Smart DCA-staffel van 40 tot 70 bepaal ik later "
         "in de strategie; geen setupscorefilter.",
     ), expect_bounds=False)
+    no_zone_named = _case(base_url, (
+        "Maak alleen een BTC DCA-setup met naam QA 4H Naam 2510, primair "
+        "charttijdframe 1D, wekelijks op vrijdag, zonder scorefilter. "
+        "De tekst 4H is alleen onderdeel van de naam en geen timeframekeuze. "
+        "Geen strategie of bedrag. Toon een concept en bevestig niets.",
+    ), expect_bounds=False, expected_name="QA 4H Naam 2510")
     revised = _scope_revision_case(base_url)
+    removed = _score_filter_revision_case(base_url, remove=True)
+    retained = _score_filter_revision_case(base_url, remove=False)
     return {"direct": direct, "continued": continued,
-            "future_staffel": future_staffel, "scope_revision": revised}
+            "future_staffel": future_staffel, "no_zone_named": no_zone_named,
+            "scope_revision": revised, "filter_removed": removed,
+            "filter_retained": retained}
 
 
 def main() -> None:

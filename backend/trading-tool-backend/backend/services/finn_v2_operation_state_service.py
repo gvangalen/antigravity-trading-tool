@@ -34,9 +34,57 @@ class FinnV2OperationStateService:
             re.search(r"\b(?:alleen|enkel|uitsluitend|only|nur)\s+(?:een\s+|de\s+|the\s+|die\s+)?(?:\w+\s+){0,3}setup\b", text)
             or re.search(r"\bsetup\b.{0,100}\b(?:zonder|geen|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy|betrag|bedrag|amount)\b", text)
             or re.search(r"\b(?:geen|zonder|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy|bedrag|amount|betrag)(?:\s+of\s+(?:bedrag|amount|betrag))?\s+(?:nu|now|jetzt)\b", text)
+            or re.search(r"\b(?:geen|zonder|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy)\s+(?:of|or|oder)\s+(?:bedrag|amount|betrag)\b", text)
+            or re.search(r"\b(?:geen|zonder|without|ohne)\s+(?:bedrag|amount|betrag)(?:smodus|mode)?\s+(?:nu|now|jetzt)\b", text)
             or re.search(r"\b(?:strategie|strategy|bedrag|amount|betrag)\s+(?:(?:bepaal|kies|maak|stel|voeg|choose|add|set)\s+(?:ik|we|i|wir)\s+)?(?:later|später|afterwards)\b", text)
             or re.search(r"\b(?:later|später|afterwards)\s+(?:in|bij|for|für)\s+(?:de\s+|the\s+|der\s+)?(?:strategie|strategy|bedrag|amount|betrag)\b", text)
         )
+
+    @staticmethod
+    def remove_setup_score_filter_intent(message: str) -> bool:
+        """Apply the last unambiguous instruction about an open setup's score bounds."""
+        text = str(message or "").casefold()
+        removal = False
+        for clause in re.split(r"[.;!?\n]+", text):
+            if removal and (
+                re.search(r"\b(?:nee|no|nein)\b.{0,25}\b(?:toch\s+)?(?:niet|not|nicht)\b", clause)
+                or re.search(r"\b(?:behoud|bewaar|handhaaf|keep|retain|behalte)\b"
+                             r".{0,20}\b(?:die|dat|deze|it|that)\b", clause)
+                or re.search(r"\btoch\s+niet\b", clause)
+            ):
+                removal = False
+                continue
+            if re.search(
+                r"\b(?:behoud|bewaar|handhaaf|keep|retain|behalte)\b.{0,100}"
+                r"\b(?:scorefilter|scorevoorwaarde|benchmarkvoorwaarde|scoregrens|scorezone|koopzone)\b",
+                clause,
+            ) or re.search(
+                r"\b(?:laat|leave|lass)\b.{0,40}\b(?:die|dat|deze|this)\b"
+                r".{0,60}\b(?:staan|behouden|houden|stay|remain)\b", clause,
+            ):
+                removal = False
+                continue
+            # A negated removal can change bot eligibility. Leave the old
+            # condition in place until the user gives an unambiguous change.
+            if re.search(r"\b(?:niet|not|nicht)\b", clause):
+                continue
+            if re.search(
+                r"\b(?:geen|zonder|no|without|ohne)\s+(?!extra\b)"
+                r"(?:setupscorefilter|scorefilter|setupscorevoorwaarde|scorevoorwaarde|"
+                r"benchmarkvoorwaarde|marktvoorwaarde)\b", clause,
+            ):
+                removal = True
+            elif re.search(
+                r"\b(?:haal|verwijder|schrap|wis|remove|delete|entferne)\b"
+                r".{0,100}\b(?:benchmarkvoorwaarde|setupvoorwaarde|scorevoorwaarde|"
+                r"scorefilter|scoregrens|scorezone|koopzone)\b", clause,
+            ) or re.search(
+                r"\b(?:laat|leave|lass)\b.{0,80}\b(?:benchmarkvoorwaarde|"
+                r"scorevoorwaarde|scorefilter|scoregrens|scorezone|koopzone)\b"
+                r".{0,30}\b(?:weg|uit|out)\b", clause,
+            ):
+                removal = True
+        return removal
 
     @staticmethod
     def add_strategy_to_open_setup_intent(message: str) -> bool:
@@ -397,11 +445,7 @@ class FinnV2OperationStateService:
                 collected[key] = self._canonical_input(key, value)
                 sources[key] = "default"
                 provenance[key] = {"source": "default", "state_revision": next_revision}
-        if (contract.operation_id == "create_setup" and re.search(
-            r"\b(?:geen|zonder|no|without|ohne)\s+(?!extra\b)"
-            r"(?:setupscorefilter|scorefilter|setupscorevoorwaarde|scorevoorwaarde|"
-            r"benchmarkvoorwaarde|marktvoorwaarde)\b", message, re.I,
-        )):
+        if contract.operation_id == "create_setup" and self.remove_setup_score_filter_intent(message):
             # A cancelled proposal can donate its old eligibility range via
             # derived_inputs. An explicit removal must clear that range before
             # the new proposal becomes confirmable.
@@ -1757,7 +1801,10 @@ class FinnV2OperationStateService:
         )
         if not named:
             return None
-        return named.group(1).strip(" .\"'“”‘’") or None
+        value = named.group(1).strip(" .\"'“”‘’")
+        if re.fullmatch(r"(?:gelijk|hetzelfde|ongewijzigd|same|unchanged|unverändert)(?:\s+(?:houden|laten|keep|behouden))?", value, re.I):
+            return None
+        return value or None
 
     @classmethod
     def explicit_draft_rename(cls, text: str) -> Optional[str]:

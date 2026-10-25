@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN open-concept correction after independent QA (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION` on `codex/finn-plan-draft-corrections`. The last
+deployed candidate, final SHA `6d18156d459d1a920715915b780a2d3eef4379d3`,
+received `NOT_ACCEPTED` from independent authenticated QA. The complete
+setup-only to fixed €100 DCA correction now worked, but an explicit removal
+of the open setup's 26–45 score condition left the bounds in the replacement
+card. A request to keep the existing filter could also rename the setup to
+“gelijk”. A setup-only request without score bounds sometimes asked for a
+strategy amount, and one guided continuation ended with
+`guided_turn_continuation_unverified` (run
+`finn-v2-run-fe044fc1b9ba4e0ba27c80d92d4dd36b`). QA made no
+confirmation or write.
+
+This repair treats setup-filter removal as a typed correction of only an open
+`create_setup` proposal. A later explicit reversal in the same user turn
+preserves the old bounds, while an unrelated “nee” or “wacht” does not veto
+a subsequent removal. “Gelijk Kansen” remains a valid literal name; “laat de
+naam gelijk” retains the old name. Setup-only continuation bypasses the
+ambiguous model classifier when the user explicitly defers strategy or amount.
+The pending candidate must still pass the full local gates, CI, deployment
+identity, and a new independent live QA verdict before acceptance.
+Local evidence on the final repair: **3932 backend tests passed, 4 existing
+skips** (log SHA-256
+`ad1f25a73df2799be80311453b84b3ef1c28e98dc895e1c4d19ed7b09ca4eab2`).
+Frontend build, typecheck, i18n lint/tests, command/proposal tests, and
+high-severity audit passed. The restarted real Luna/Responses chat probe
+passed the direct setup-only confirmation, guided deferral, future Smart-DCA
+staffel, no-filter name, setup-only to fixed-amount revision, filter removal,
+and filter retention (log SHA-256
+`f0e1a7a030abc24d2075c3f4ff0d97d4d16764e68443be55ed20d05d41c783ac`).
+The worker-driven action matrix passed **16/16** and adapters **21/21**
+(matrix SHA-256
+`c7569780f84c25b4ff3b130dfbd86b97add4851248ab273304c40c09abbbe961`).
+Real Responses development selection passed **20/20** with zero provider,
+schema, timeout, parse, or validation failures (artifact SHA-256
+`b2b2b201bdcdfeb97ef468f678f2c5ade412643f83fc5178fb27c3f27b364d99`).
+Real Responses regression selection passed **109/109** with zero provider,
+schema, timeout, parse, or validation failures (artifact SHA-256
+`bb5478b75a83a5d5e8e85019c58ee960497ae826acbad124111231323c8476f1`).
+PR CI and independent live QA remain pending.
+
 ## FINN open DCA concept scope revision (25 oktober 2026)
 
 Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA; repair branch:
