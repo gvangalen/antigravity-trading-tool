@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN new asset during an unfinished DCA draft (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_PR`. Independent QA returned `NOT_ACCEPTED` on live SHA
+`05b80ae0a6f8e566746a6069f60aeb7d242b6155`. The earlier tickerless
+asset switch and correction of an open score-filtered card passed. The
+remaining P2 case was a complete request for a new AAPL DCA setup during an
+unfinished ETH draft: AAPL, 1D, weekly Friday, no score filter and a name were
+given, but FINN asked for strategy amount mode before displaying the card.
+
+The typed operation state now treats an explicit replacement request for a
+new setup, with no strategy or amount instruction, as a setup-only proposal.
+It does not infer an amount, write a strategy, or add a fixed coach answer.
+A replacement that does explicitly give a strategy amount still follows the
+setup-and-strategy contract. The exact two-turn QA reproduction now produces
+an unconfirmed AAPL 1D Friday setup card in one correction turn, without the
+old ETH Monday schedule. The prior tickerless-switch and score-filtered-card
+paths were locally rerun with real Responses and still produced their
+expected unconfirmed AAPL cards. A separate replacement that explicitly gave
+€100 as a fixed purchase amount produced the full AAPL Friday setup-and-strategy
+card. No card was confirmed or executed.
+
+Focused backend tests passed 10/10; the full backend suite passed 3978 with
+4 existing skips. Web build, typecheck, i18n lint/tests, command/proposal
+tests and high-severity audit passed. The local worker-driven action matrix
+passed 16/16 contracts and 21/21 adapter checks, with zero broker orders,
+Live calls, Live bots or production connections (artifact SHA-256
+`dd2a8b436ac41e83e0c33ed163b4bfa32c9147ffbaf77cd951313360de2d912b`).
+Real Luna/Responses development selection passed 20/20 with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`ad01c7fd4b60f2d7d0c14152481b6d1f30370c5fa7a17e0ca7e1947e895714f5`).
+The same real Responses regression selection passed 109/109 with zero
+provider, schema, timeout, parse or validation failures (artifact SHA-256
+`483202e829b68088866a9a6a4a65ea60546110da51eeb57d4b0a61785e2937c4`).
+This candidate is not deployed or
+independently accepted yet. Build has not accessed the protected QA fixture
+or sealed holdout.
+
 ## FINN asset switch during an open DCA setup (25 oktober 2026)
 
 Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Independent QA returned `NOT_ACCEPTED` on live SHA

@@ -174,3 +174,41 @@ def test_open_setup_asset_switch_retains_explicit_scope_schedule_and_score_bound
         "dca_frequency": "weekly", "dca_day": "monday",
         "min_benchmark_score": 26, "max_benchmark_score": 45,
     }
+
+
+def test_new_asset_setup_request_during_draft_does_not_require_strategy_amount():
+    message = (
+        "Ik wil toch een nieuwe AAPL DCA-setup in plaats van ETH. Gebruik 1D, "
+        "wekelijks op vrijdag en geen scorefilter. Noem hem QA AAPL Vrijdag 2510 B. "
+        "Toon de conceptkaart en bevestig niets."
+    )
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {}},
+    )
+    result = FinnResponsesProposalSelection().from_call(
+        call=call, message=message,
+        conversation_context={"proposal_correction_result": {
+            "status": "cancelled", "operation_id": "create_setup",
+            "previous_asset": "ETH", "requested_instrument": "AAPL",
+            "prior_inputs": {"setup_type": "dca", "timeframe": "1D",
+                             "dca_frequency": "weekly", "dca_day": "monday"},
+        }},
+        verified_asset=None,
+    )
+    state = result.request_plan.operation_state
+    assert state["missing_required_inputs"] == []
+    assert state["collected_inputs"]["symbol"] == "AAPL"
+    assert state["collected_inputs"]["plan_scope"] == "setup_only"
+    assert state["collected_inputs"]["dca_day"] == "friday"
+    assert state["collected_inputs"]["name"] == "QA AAPL Vrijdag 2510 B"
+    assert "dca_amount_mode" not in state["collected_inputs"]
+
+
+def test_asset_replacement_with_amount_still_builds_strategy():
+    assert not FinnV2OperationStateService.setup_only_intent(
+        "Maak een nieuwe AAPL DCA-setup in plaats van ETH, elke vrijdag €100 vast bedrag."
+    )
+    assert not FinnV2OperationStateService.setup_only_intent(
+        "Maak een nieuwe AAPL DCA-setup in plaats van ETH, bedrag 100 per aankoop."
+    )
