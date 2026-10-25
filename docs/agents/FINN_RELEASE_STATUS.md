@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN new asset during an unfinished DCA draft (25 oktober 2026)
 
-Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Independent QA returned `NOT_ACCEPTED` on live SHA
+Phase: `ACCEPTED` for the asset-switch scope. Independent QA returned `NOT_ACCEPTED` on earlier live SHA
 `05b80ae0a6f8e566746a6069f60aeb7d242b6155`. The earlier tickerless
 asset switch and correction of an open score-filtered card passed. The
 remaining P2 case was a complete request for a new AAPL DCA setup during an
@@ -47,8 +47,24 @@ succeeded. Public backend health and frontend build-info each returned HTTP
 This release-status update itself creates a later main SHA; Build must wait
 for its CI and Auto Deploy, verify both public markers on that final SHA,
 then assign the same independent QA Agent the authenticated live hertest.
-The repair is not independently accepted yet. Build has not accessed the
-protected QA fixture or sealed holdout.
+The final status-update merge produced SHA
+`1d6f9f3e7f1bce74c0c4b1caea3b8b7d1b43183a`. Main CI
+[40239279381](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40239279381)
+and [Auto Deploy 40239511209](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40239511209)
+succeeded. Public backend health and frontend build-info each returned HTTP
+200 with that exact final SHA, with no newer deployment pending at the check.
+The existing independent QA Agent tested that authenticated live SHA and
+returned `ACCEPTED` for the asset-switch scope: the exact incomplete-ETH to
+AAPL-Friday correction produced an immediate unconfirmed setup-only card;
+the tickerless correction retained Monday, the open 26–45 card retained its
+benchmark range, and the explicitly requested €100 Friday variant included
+the fixed strategy amount. No proposal was confirmed or saved and no order
+was executed. QA separately saw one HTTP 502 from
+`/api/assistant/feed?history=false&limit=50`; it did not block these cases
+and is not a coachfeed acceptance result. Build has not accessed the protected
+QA fixture or sealed holdout. This verdict records the product behavior on
+`1d6f9f3e7f1bce74c0c4b1caea3b8b7d1b43183a`; this documentation-only
+verdict update does not change product code.
 
 ## FINN asset switch during an open DCA setup (25 oktober 2026)
 
