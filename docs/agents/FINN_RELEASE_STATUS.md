@@ -4,9 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN asset switch during an open DCA setup (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Independent QA returned `NOT_ACCEPTED` on live SHA
+`4d088a6c753f30529b301787c380d95d71e5e3d6`. The ordinary ETH DCA
+conversation and full-card asset correction passed. Two follow-through paths
+failed: a tickerless ETH-to-AAPL change before the first card eventually
+claimed a setup-only card could not be shown, and a correction of an open ETH
+card to AAPL with benchmark condition 26–45 asked for an already named asset,
+then lost the new name and setup-only scope across extra questions.
+
+Build reproduced both exact QA sequences against isolated local
+PostgreSQL/Redis/FastAPI/Celery with real Responses calls. The root cause of
+the second path was that `Correctie: AAPL in plaats van ETH` was not parsed as
+an explicit replacement asset, so the old card was cancelled without carrying
+the validated draft into a new asset-specific proposal. A related natural
+request, `ik wil toch een nieuwe AAPL DCA-setup in plaats van ETH`, raised
+`proposal_asset_ambiguous`. The first path also treated `De naam geef ik zo`
+as a literal setup name. The repair recognizes these asset replacements and
+name deferrals in the typed input contract; it does not add fixed coach
+answers or new action permissions.
+
+Local reproductions now produce an unconfirmed AAPL setup-only card after the
+tickerless switch and explicit setup-only request, a direct AAPL card with
+1D, Monday and the retained 26–45 benchmark condition after the open ETH
+card correction, and a fresh AAPL card with Friday when the user explicitly
+changes the weekday. In the open-card case the original ETH proposal was
+`cancelled` and only the AAPL proposal remained `draft`. Nothing was
+confirmed or executed. Focused tests passed 8/8; the full backend suite
+passed 3976 tests with 4 existing skips. Web build, typecheck, i18n checks,
+command/proposal checks and high-severity audit passed. The final worker-driven
+action matrix passed 16/16 contracts with zero broker orders, Live calls,
+Live bots or production connections (artifact SHA-256
+`3f70317a048e9c826e3b05bfc8d1580523fa2295af0cea99c5bac544915108b0`).
+The real Responses development selector passed 20/20 and regression passed
+109/109 with zero provider, schema, timeout, parse or validation failures
+(artifact SHA-256 `1ed1df0d605c42f8e6ed4159cc39c530dc2e694a69e482ed391ec70b3c6c24da`
+and `40e7b7c7238d83ab10b933500372a47a74fdd7a516588d13664b75a04ea1352a`).
+An optional broad public-action diagnostic remained red at 11/48: its general
+capability and read routes often have no selected operation even though they
+complete. The affected `create_setup` and `update_setup` cases (`ac16` and
+`ac17`) both passed. This diagnostic is not counted as a green release gate;
+its full artifact SHA-256 is
+`278ce440a6d00a5c167d9ad6279b14d4f67d8f6768260395979a544231e4809c`.
+This repair is not live or independently accepted yet.
+
 ## FINN ETH DCA guided setup repair (25 oktober 2026)
 
-Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA` for the continuation repair. Independent QA returned
+Phase: `NOT_ACCEPTED` for the continuation repair. Earlier independent QA returned
 `NOT_ACCEPTED` on live SHA `b13ad54f51a415bd30395a7db7db196456e860f7`:
 an existing ETH setup diverted the open new ETH-DCA draft into a saved-plan
 read, and correcting an open ETH card to AAPL withdrew the old card but did
@@ -41,7 +86,8 @@ Public backend health and frontend build-info returned HTTP 200 and that exact
 SHA on 25 October 2026. This status update itself creates a later main SHA;
 Build must wait for its CI and Auto Deploy and verify the final public SHA
 before assigning independent QA. Build has not accessed the protected QA
-fixture or sealed holdout. The independent live verdict remains pending.
+fixture or sealed holdout. QA's final verdict for that SHA was `NOT_ACCEPTED`
+for the two follow-through paths recorded above.
 
 The product
 repair in [PR #627](https://github.com/gvangalen/antigravity-trading-tool/pull/627)

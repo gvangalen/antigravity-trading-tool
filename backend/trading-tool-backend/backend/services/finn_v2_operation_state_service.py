@@ -1737,7 +1737,7 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _requests_name_prompt(text: str) -> bool:
-        return bool(re.search(
+        return bool(re.search(r"\b(?:de\s+)?naam\s+(?:geef|kies|bepaal)\s+ik\s+(?:later|zo|straks)\b", text, re.I)) or bool(re.search(
             r"(?:^|[.!?]\s*|\b(?:en|and|und)\s+)"
             r"(?:vraag|ask|frag(?:e)?)\s+(?:mij|me|mich)?\s*"
             r"(?:eerst\s+|first\s+|zuerst\s+)?"
