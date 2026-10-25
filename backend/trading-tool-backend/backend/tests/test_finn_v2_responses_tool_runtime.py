@@ -4366,6 +4366,18 @@ def test_proposal_candidate_does_not_trust_an_unmentioned_model_asset():
         )
 
 
+def test_guided_setup_preserves_user_asset_when_model_omits_symbol():
+    call = FinnResponsesToolCatalog().validate(
+        "create_or_update_trade_plan_proposal",
+        {"operation_id": "create_setup", "inputs": {"setup_type": "swing", "timeframe": "1D"}},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call, message="Ik wil rustig beginnen met BTC swingtrading op 1D.",
+        conversation_context={}, verified_asset=None,
+    )
+    assert analysis.request_plan.operation_state["collected_inputs"]["symbol"] == "BTC"
+
+
 def test_unsupported_pair_is_reported_without_substituting_base_asset():
     from backend.services.asset_catalog_service import (
         corrected_catalog_instrument, requests_unspecified_asset_correction, unsupported_catalog_pair_mention,
@@ -4769,6 +4781,10 @@ def test_paper_strategy_request_with_relative_rules_remains_an_action_request():
     ("Maak een concept voor een ETH trade-setup op 4H met de naam QA ETH cd64 kaart. Toon de conceptkaart; bevestig of sla niets op.", "create_setup"),
     ("Maak een ETH trade-setup, maar geen voorstel.", None),
     ("Maak hypothetisch een ETH trade-setup als denkoefening.", None),
+    ("Ik ben nieuw hier. Kun je een tradingplan voor mij maken?", "create_setup"),
+    ("Kan ik zelf een tradingplan maken?", None),
+    ("Kun je mijn bestaande tradingplan beoordelen?", None),
+    ("Kun je uitleggen hoe ik een tradingplan kan maken?", None),
 ])
 def test_new_draft_operation_boundary_is_shared_across_domains(message, expected):
     assert _explicit_create_operation_request(message) == expected

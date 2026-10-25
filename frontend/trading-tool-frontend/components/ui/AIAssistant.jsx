@@ -1834,7 +1834,7 @@ function AIAssistantContent({
     };
     const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = setupDraftFrequencyLabel(supplied, humanValue);
-    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const scoreLabels = {
@@ -1851,6 +1851,13 @@ function AIAssistantContent({
           {contextLine && <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>}
         </div>
         {frequency && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">{at("draftCards.frequency", "Frequentie")}: <span className="font-semibold">{frequency}</span></p>}
+        <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
+          {at("draftCards.benchmarkCondition", "Voorwaarde totale benchmark")}: <span className="font-semibold">{
+            supplied.min_benchmark_score != null || supplied.max_benchmark_score != null
+              ? `${supplied.min_benchmark_score ?? 0}–${supplied.max_benchmark_score ?? 100} / 100`
+              : at("draftCards.noBenchmarkFilter", "Geen scorefilter")
+          }</span>
+        </p>
         {supplied.min_investment != null && supplied.min_investment !== "" && <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{at("draftCards.minimumInvestment", "Minimuminvestering")}: <span className="font-semibold">{euro(supplied.min_investment)}</span></p>}
         {supplied.setup_type === "dca" && supplied.base_amount != null && <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{at("dcaDraft.baseAmount", "Basisbedrag (100%): {amount}", { amount: euro(supplied.base_amount) })}</p>}
         {isSmartDca && <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-200">

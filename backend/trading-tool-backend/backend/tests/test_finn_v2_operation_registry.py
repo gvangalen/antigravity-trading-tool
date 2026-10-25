@@ -203,6 +203,61 @@ def test_smart_dca_amount_staffel_is_not_stored_as_setup_minimum():
     assert supplied["score_source"] == "benchmark_score"
 
 
+def test_trade_setup_preserves_explicit_total_benchmark_zone_without_inventing_investment():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    message = (
+        "Maak een BTC swing-setup op 1D genaamd BTC Onder Druk Start. "
+        "Mijn koopzone is de totale benchmarkscore Onder druk (26 tot en met 45). "
+        "Toon het voorstel, sla niets op."
+    )
+    state = FinnV2OperationStateService().resolve(
+        contract=contract, message=message, explicit_asset="BTC",
+        conversation_context={}, model_tool_inputs=True,
+        supplied_inputs={"name": "BTC Onder Druk Start", "symbol": "BTC",
+                         "setup_type": "swing", "timeframe": "1D", "min_investment": 26},
+    )
+    assert state.missing_required_inputs == []
+    assert state.collected_inputs["min_benchmark_score"] == 26
+    assert state.collected_inputs["max_benchmark_score"] == 45
+    assert "min_investment" not in state.collected_inputs
+
+
+def test_smart_dca_amount_bands_do_not_become_setup_benchmark_bounds():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak Smart DCA voor BTC op 1D. Gebruik de totale benchmarkscore: "
+            "bij 40–70 koop 100% van het basisbedrag, daaronder 50% en daarboven 150%."
+        ),
+        explicit_asset="BTC", conversation_context={},
+    )
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+
+
+def test_new_plan_draft_keeps_collected_choices_during_next_guided_turn():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    initial = service.resolve(
+        contract=contract,
+        message="Ik ben nieuw hier. Kun je een tradingplan voor mij maken?",
+        explicit_asset=None, conversation_context={},
+    )
+    assert initial.status == "collecting"
+    assert initial.missing_required_inputs
+    continued = service.resolve(
+        contract=contract, message="Ik wil rustig beginnen met BTC swingtrading op 1D.",
+        explicit_asset="BTC",
+        conversation_context={"conversation_state_version": service.CONTEXT_STATE_VERSION,
+                              "active_guided_operation": initial.dict()},
+    )
+    assert continued.collected_inputs["setup_type"] == "swing"
+    assert continued.collected_inputs["symbol"] == "BTC"
+    assert continued.collected_inputs["timeframe"] == "1D"
+    assert continued.missing_required_inputs == ["name"]
+
+
 def test_smart_dca_percentages_do_not_consume_adjacent_score_thresholds():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     supplied = FinnV2OperationStateService().explicit_inputs(

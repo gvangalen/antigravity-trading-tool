@@ -4,9 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN trading-plan contract and continuing draft (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION_COMPLETE`; candidate branch:
+`codex/finn-plan-creation-contract`. The user deferred the OpenAI Decisions
+API. A conversational request for a trading plan now enters the existing
+owner-bound `create_setup` contract. Missing inputs remain in the same draft
+across turns. The setup proposal carries only explicit benchmark bounds;
+Smart-DCA amount bands cannot silently become a setup score filter. The card
+shows the score condition or states that no score filter was supplied. After
+confirmation, a swing style is persisted in the setup category and exposed
+again in typed FINN reads. Luna still composes the conversation; no fixed
+coach answer or extra response veto was added.
+
+Final local backend pytest: **3893 passed, 4 existing skips** (log SHA-256
+`d911fdd16b478d4f0c04e5027cb843fd3836fb58bb091f94e26c426f8d1e6aa4`).
+Frontend production build, typecheck, proposal tests and i18n lint passed
+(build log SHA-256 `efad05a0b340ed3c894e4c35298f543e1cf688a939f981cb63160d2c3d54b9be`).
+The restarted local FastAPI/Celery/PostgreSQL/Redis/Responses matrix passed
+**16/16** action contracts and **20/20** adapter checks, with zero broker
+orders, Live calls or production connections (artifact SHA-256
+`3bd55545f8c759e310f3f4570d3d707945aca0819aa3ad1c436ee4ca0c02a468`).
+Real Luna/Responses selector evaluations passed **20/20** development and
+**109/109** regression, with zero provider or validation failures (artifact
+SHA-256 `c569429af164bb01858a385cb5dc21f2a902ef0d1009999441bb4fce5d1504a0`
+and `58ed437295d4e89a130c0d375f51b997eb9fe3b54baa8b044329d1a45d325dbc`).
+A separate real-Luna synthetic three-turn probe yielded two clarifications
+and then one complete setup proposal. A local confirmation probe proved no
+setup existed before confirmation, rejected a second owner, and saved BTC/1D,
+swing and the explicitly requested 26–45 benchmark range afterward. No
+production plan or order was changed. CI, deployment and independent live QA
+remain pending.
+
 ## FINN generic setup overview with several saved plans (25 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`. Repair branch:
+Phase: `ACCEPTED` for the targeted three-turn live browser scope on final SHA
+`3ccd4248c2d15fd5347e763e8dce410ae412080d`. Repair branch:
 `codex/finn-generic-setup-ambiguity`, [PR #610](https://github.com/gvangalen/antigravity-trading-tool/pull/610).
 Independent authenticated QA on live SHA
 `33ecc9a68fc304c1ccb821dd03092385919728a0` confirmed the earlier
@@ -43,9 +76,11 @@ scores, and made no proposal or order (local artifact
 [Main CI 40178540125](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40178540125)
 and [Auto Deploy 40178722804](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40178722804)
 passed. Backend health and frontend build info each returned HTTP 200 with
-that product SHA. This status-only edit creates a later final SHA. Build must
-verify its main CI, Auto Deploy and both public markers before independent
-production QA; its verdict remains pending.
+that product SHA. The later final SHA passed main CI, Auto Deploy and both
+public identity checks. Independent QA then saw FINN list all seven plans on
+the general first question, hold the explicitly selected Friday BTC setup
+through the score follow-up, and avoid an unproven purchase claim. The missing
+Macro and 0–25/fixed-€100 variants were outside that fixture's proof.
 
 ## FINN selected-setup continuation after an asset-qualified question (25 oktober 2026)
 

@@ -16,6 +16,21 @@ from backend.services.finn_v2_structured_operation_selector_service import FinnV
 CLASSIFIER = FinnV2OperationClassificationService()
 
 
+@pytest.mark.parametrize("message", [
+    "Ik ben nieuw hier. Kun je een tradingplan voor mij maken?",
+    "Can you make a trading plan for me?",
+    "Maak een handelsplan voor BTC dat ik eerst kan beoordelen.",
+])
+def test_new_trader_plan_request_starts_typed_setup_collection(message):
+    selection = CLASSIFIER.classify(message=message)
+    assert selection.operation_id == "create_setup"
+    assert selection.selected_missing_inputs
+
+
+def test_question_about_existing_trading_plan_is_not_a_create_request():
+    assert CLASSIFIER.classify(message="Wat vind je van mijn tradingplan?").operation_id != "create_setup"
+
+
 @pytest.mark.parametrize("question", [
     "Wat was mijn laatst gesloten BTC-Papertrade, bij welke bot hoort die en welk resultaat staat er opgeslagen? Verander niets.",
     "Welke gesloten Paper-trades staan in Reflectie?",

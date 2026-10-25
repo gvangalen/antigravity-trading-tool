@@ -344,12 +344,12 @@ class FinnV2ActionAdapterRegistry:
             return setup_result
         # FINN's typed contract accepts a user's trading style (for example
         # "swing") while SetupService persists its established execution
-        # categories. Keep the original style as metadata and pass only the
-        # existing service's canonical category across that boundary.
+        # categories. Keep the original style in the persisted setup category
+        # and pass only the service's canonical type across that boundary.
         setup_type = str(raw_payload.get("setup_type") or "").strip().lower()
         service_setup_type = {"swing": "trade", "scalp": "trade", "long_term": "position"}.get(setup_type, setup_type)
         if service_setup_type != setup_type:
-            raw_payload["strategy_style"] = setup_type
+            raw_payload.setdefault("category", setup_type)
             raw_payload["setup_type"] = service_setup_type
         setup_payload = SetupCreateSchema.parse_obj(raw_payload)
         return await self.setups.save_setup(setup_payload, raw_payload, user_id)

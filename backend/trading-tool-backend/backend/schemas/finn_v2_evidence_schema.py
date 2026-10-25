@@ -141,6 +141,7 @@ class ActiveSetupData(BaseModel):
     symbol: Optional[str] = None
     timeframe: Optional[str] = None
     setup_type: Optional[str] = None
+    setup_style: Optional[str] = None
     description: Optional[str] = None
     saved_market_condition: Dict[str, Any] = Field(default_factory=dict)
     dca_frequency: Optional[str] = None

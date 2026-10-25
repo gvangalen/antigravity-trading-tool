@@ -7,6 +7,7 @@ from typing import Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
+from backend.domain.saved_setup_market_condition import explicit_benchmark_bounds
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.domain.market_indicator_catalog import get_active_market_indicator_definitions
@@ -84,6 +85,7 @@ class FinnV2OperationStateService:
         contract_asset = (
             explicit_asset
             if existing is None or requested_slot in {"asset", "symbol"}
+            or (contract.operation_id == "create_setup" and "symbol" not in collected)
             else None
         )
         # Only values proven by request parsing may be promoted to supplied
@@ -164,6 +166,11 @@ class FinnV2OperationStateService:
                 if contract.operation_id in {"create_setup", "create_strategy"} or not model_tool_inputs
                 else {}
             )
+        if contract.operation_id == "create_setup":
+            # A benchmark number is a score condition, never a currency amount.
+            # Use only bounds stated by the user; a tool candidate cannot
+            # invent or reinterpret either end of this eligibility range.
+            explicit.update(explicit_benchmark_bounds(message))
         if dca_strategy:
             # The parent setup, not the model's phrasing, determines that
             # entry, stop and targets are inapplicable to this strategy.
@@ -237,6 +244,10 @@ class FinnV2OperationStateService:
             ):
                 # A user's instruction to be asked for a name outranks a
                 # model-generated name candidate for this draft.
+                continue
+            if contract.operation_id == "create_setup" and key in {
+                "min_investment", "min_benchmark_score", "max_benchmark_score",
+            } and key not in explicit:
                 continue
             if dca_strategy and key in {"entry", "stop_loss", "targets", "risk_profile", "setup_type"}:
                 continue
@@ -914,6 +925,7 @@ class FinnV2OperationStateService:
                 if investment:
                     raw_investment = next(group for group in investment.groups() if group)
                     values["min_investment"] = self._numeric_value(raw_investment)
+            values.update(explicit_benchmark_bounds(text))
             if any(token in lowered for token in ("daily trend", "dagtrend", "uptrend", "downtrend")):
                 values["market_condition"] = "trend_defined"
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:

@@ -79,6 +79,24 @@ def test_confirmed_dca_creates_setup_and_strategy_in_one_transaction(monkeypatch
     session.commit.assert_awaited_once()
 
 
+def test_confirmed_swing_setup_keeps_style_and_benchmark_bounds():
+    registry = FinnV2ActionAdapterRegistry(SimpleNamespace())
+    registry.flags.execute_setup_changes_enabled = lambda: True
+    registry.setups.save_setup = AsyncMock(return_value={"setup_id": 91})
+
+    asyncio.run(registry._create_setup(390, {"change": {"setup_fields": {
+        "name": "BTC Swing Zone", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "swing", "min_benchmark_score": 26,
+        "max_benchmark_score": 45,
+    }}}))
+
+    saved = registry.setups.save_setup.await_args.args[1]
+    assert saved["setup_type"] == "trade"
+    assert saved["category"] == "swing"
+    assert saved["min_benchmark_score"] == 26
+    assert saved["max_benchmark_score"] == 45
+
+
 def test_failed_dca_strategy_write_rolls_back_the_setup():
     events = []
 

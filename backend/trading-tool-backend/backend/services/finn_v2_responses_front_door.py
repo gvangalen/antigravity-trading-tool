@@ -133,6 +133,20 @@ def _explicit_create_operation_request(message: str) -> str | None:
     object is not that slot's answer. Questions and negated requests stay in
     the ordinary conversation path.
     """
+    conversational_plan_request = bool(re.search(
+        r"\b(?:kun|kan)\s+(?:je|jij|u)\b[^?]{0,100}\b"
+        r"|\b(?:could|can)\s+you\b[^?]{0,100}\b"
+        r"|\bkannst\s+du\b[^?]{0,100}\b",
+        message, re.I,
+    )) and bool(re.search(
+        r"(?:trading|trade|handels|beleggings)[-\s]*plan\b[^?]{0,60}"
+        r"\b(?:maken|make|create|aanmaken|erstellen)\b",
+        message, re.I,
+    ))
+    if (conversational_plan_request
+            and not re.search(r"\b(?:hoe|uitleggen|explain|how|wie|niet|not|kein)\b", message, re.I)
+            and not _proposal_explicitly_excluded(message)):
+        return "create_setup"
     if "?" in message or _proposal_explicitly_excluded(message) or not re.match(
         r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b", message, re.I,
     ) or re.match(r"^\s*maak\s+geen\b", message, re.I):
@@ -1187,10 +1201,10 @@ class FinnResponsesFrontDoor:
         # "bevestigde les" describes a stored lesson; it is not an instruction
         # to confirm an action. Keep this explicit dossier request read-only.
         is_read_request = (
-            (request_facts.action_polarity == "read" and not imperative_operation)
+            (request_facts.action_polarity == "read" and not imperative_operation and not explicit_create_request)
             or explicit_closed_review_read
         )
-        is_read_only_turn = _is_read_only_coach_turn(
+        is_read_only_turn = not explicit_create_request and _is_read_only_coach_turn(
             polarity=request_facts.action_polarity,
             imperative_operation=imperative_operation,
             explicit_closed_review_read=explicit_closed_review_read,
@@ -3254,7 +3268,7 @@ class FinnResponsesFrontDoor:
                 str(previous_response.get("antecedent_verified_answer") or "")[:1600]
                 if previous_response and use_verified_turn else None
             ),
-            guided_operation_id=None if unsupported_pair else pending_operation or imperative_operation,
+            guided_operation_id=None if unsupported_pair else pending_operation or explicit_create_request or imperative_operation,
             resuming_clarification=resuming_clarification,
             resumed_clarification_reason=(
                 str(pending_clarification.get("reason") or "") or None
