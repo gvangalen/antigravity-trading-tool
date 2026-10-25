@@ -17,24 +17,27 @@ confirmation, a swing style is persisted in the setup category and exposed
 again in typed FINN reads. Luna still composes the conversation; no fixed
 coach answer or extra response veto was added.
 
-Final local backend pytest: **3893 passed, 4 existing skips** (log SHA-256
-`d911fdd16b478d4f0c04e5027cb843fd3836fb58bb091f94e26c426f8d1e6aa4`).
+Final local backend pytest: **3902 passed, 4 existing skips** (log SHA-256
+`dc4cb89c43685fe73dbdf200debdf9615cd54104e91923d06273a7778f1498c8`).
 Frontend production build, typecheck, proposal tests and i18n lint passed
 (build log SHA-256 `efad05a0b340ed3c894e4c35298f543e1cf688a939f981cb63160d2c3d54b9be`).
 The restarted local FastAPI/Celery/PostgreSQL/Redis/Responses matrix passed
 **16/16** action contracts and **20/20** adapter checks, with zero broker
 orders, Live calls or production connections (artifact SHA-256
-`3bd55545f8c759e310f3f4570d3d707945aca0819aa3ad1c436ee4ca0c02a468`).
+`513113926e84b022b2393db24964d44ee825d105e45645892516f3ee447689fb`).
 Real Luna/Responses selector evaluations passed **20/20** development and
 **109/109** regression, with zero provider or validation failures (artifact
-SHA-256 `c569429af164bb01858a385cb5dc21f2a902ef0d1009999441bb4fce5d1504a0`
-and `58ed437295d4e89a130c0d375f51b997eb9fe3b54baa8b044329d1a45d325dbc`).
-A separate real-Luna synthetic three-turn probe yielded two clarifications
-and then one complete setup proposal. A local confirmation probe proved no
+SHA-256 `812cad413a3e22df03e154241407198338566a888ea2311b8d64bcb5120bc411`
+and `28f612357a4bb6b10941e24cfc8d196a325a5c3ae39b86f51adab8b7259d6f8e`).
+A separate real-Luna synthetic three-turn probe on the final source yielded
+two clarifications and then one complete setup proposal. Negative Dutch and
+German capability questions produced no proposal. A local confirmation probe proved no
 setup existed before confirmation, rejected a second owner, and saved BTC/1D,
 swing and the explicitly requested 26–45 benchmark range afterward. No
-production plan or order was changed. CI, deployment and independent live QA
-remain pending.
+production plan or order was changed. An independent read-only Security
+review found and verified fixes for Smart-DCA/condition ambiguity and negative
+intent routing; it reported no remaining P1/P2. CI on the final candidate,
+deployment and independent live QA remain pending.
 
 ## FINN generic setup overview with several saved plans (25 oktober 2026)
 

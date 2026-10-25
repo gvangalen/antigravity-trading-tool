@@ -29,43 +29,46 @@ def explicit_benchmark_bounds(text: str) -> dict[str, int]:
     presenting the saved setup back to the user.
     """
     request = " ".join(str(text or "").casefold().split())
-    condition_cues = list(re.finditer(
-        r"\b(?:koopzone|scorevoorwaarde|scorefilter|scoregrens|scorezone|"
-        r"benchmarkvoorwaarde)\b", request,
-    ))
-    benchmark_cue = re.search(
-        r"\b(?:benchmarkscore|totaalscore|total(?:e)? score)\b"
-        r".{0,35}\b(?:tussen|van|moet)\b", request,
-    )
-    if not condition_cues and not benchmark_cue:
-        return {}
-    if not condition_cues and re.search(r"\b(?:smart\s*dca|staffel|basisbedrag)\b", request):
-        return {}
-    if re.search(r"\b(?:geen|zonder|no|without|ohne)\s+(?:extra\s+)?"
-                 r"(?:scorevoorwaarde|scorefilter|scoregrens|koopzone)\b", request):
-        return {}
-    range_matches = list(re.finditer(
-        r"\b(\d{1,3})\s*(?:-|–|—|tot(?:\s+en\s+met)?|to|bis)\s*(\d{1,3})\b",
-        request,
-    ))
-    explicit_range = None
-    cue = condition_cues[-1] if condition_cues else benchmark_cue
-    range_match = min(
-        range_matches,
-        key=lambda match: min(abs(match.start() - cue.end()), abs(cue.start() - match.end())),
-        default=None,
-    )
-    if range_match:
-        minimum, maximum = map(int, range_match.groups())
-        if 0 <= minimum <= maximum <= 100:
-            explicit_range = {"min_benchmark_score": minimum, "max_benchmark_score": maximum}
-    for _, minimum, maximum, labels in _BANDS:
-        if any(re.search(r"(?<!\w)" + re.escape(label.casefold()) + r"(?!\w)", request)
-               for label in labels):
-            preset = {"min_benchmark_score": minimum, "max_benchmark_score": maximum}
-            return preset if explicit_range is None or explicit_range == preset else {}
-    if explicit_range is not None:
-        return explicit_range
+    condition_words = ("koopzone", "scorevoorwaarde", "scorefilter", "scoregrens",
+                       "scorezone", "benchmarkvoorwaarde")
+    for clause in re.split(r"[.;?!\n]+", request):
+        cue = re.search(r"\b(?:" + "|".join(condition_words) + r")\b", clause)
+        if cue is None and not re.search(r"\b(?:smart\s*dca|staffel|basisbedrag)\b", request):
+            cue = re.search(r"\b(?:benchmarkscore|totaalscore|total(?:e)? score)\b", clause)
+        if cue is None:
+            continue
+        if re.search(r"\b(?:geen|zonder|no|without|ohne)\s+(?:extra\s+)?"
+                     r"(?:scorevoorwaarde|scorefilter|scoregrens|koopzone)\b", clause):
+            continue
+        condition = clause[cue.end():].strip()
+        # A score band for a Smart-DCA amount is never a setup eligibility
+        # range. Ambiguous same-clause wording stays unresolved for FINN to
+        # clarify, rather than silently changing execution conditions.
+        condition = re.split(r"\b(?:staffel|staffels|amount\s+bands)\b", condition, maxsplit=1)[0]
+        if re.search(r"\bis\s+de\s*$", condition):
+            continue
+        condition = re.sub(
+            r"^(?:(?:is|wordt|van|tussen|equals|between)\b|[:=])\s*", "", condition,
+        )
+        condition = re.sub(
+            r"^(?:de\s+)?(?:totale\s+)?(?:benchmarkscore|totaalscore)\s*", "", condition,
+        )
+        condition = condition.lstrip(" (")
+        range_match = re.match(
+            r"(\d{1,3})\s*(?:-|–|—|tot(?:\s+en\s+met)?|en|to|bis)\s*(\d{1,3})\b",
+            condition,
+        )
+        explicit_range = None
+        if range_match:
+            minimum, maximum = map(int, range_match.groups())
+            if 0 <= minimum <= maximum <= 100 and not re.match(r"\s*%", condition[range_match.end():]):
+                explicit_range = {"min_benchmark_score": minimum, "max_benchmark_score": maximum}
+        for _, minimum, maximum, labels in _BANDS:
+            if any(re.match(re.escape(label.casefold()) + r"\b", condition) for label in labels):
+                preset = {"min_benchmark_score": minimum, "max_benchmark_score": maximum}
+                return preset if explicit_range is None or explicit_range == preset else {}
+        if explicit_range is not None:
+            return explicit_range
     return {}
 
 

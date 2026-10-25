@@ -4783,6 +4783,9 @@ def test_paper_strategy_request_with_relative_rules_remains_an_action_request():
     ("Maak hypothetisch een ETH trade-setup als denkoefening.", None),
     ("Ik ben nieuw hier. Kun je een tradingplan voor mij maken?", "create_setup"),
     ("Kan ik zelf een tradingplan maken?", None),
+    ("Kan je geen tradingplan maken?", None),
+    ("Kannst du keinen Tradingplan erstellen?", None),
+    ("Kun je mijn plan bekijken? Later wil ik een tradingplan maken.", None),
     ("Kun je mijn bestaande tradingplan beoordelen?", None),
     ("Kun je uitleggen hoe ik een tradingplan kan maken?", None),
 ])

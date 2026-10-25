@@ -134,17 +134,14 @@ def _explicit_create_operation_request(message: str) -> str | None:
     the ordinary conversation path.
     """
     conversational_plan_request = bool(re.search(
-        r"\b(?:kun|kan)\s+(?:je|jij|u)\b[^?]{0,100}\b"
-        r"|\b(?:could|can)\s+you\b[^?]{0,100}\b"
-        r"|\bkannst\s+du\b[^?]{0,100}\b",
-        message, re.I,
-    )) and bool(re.search(
-        r"(?:trading|trade|handels|beleggings)[-\s]*plan\b[^?]{0,60}"
+        r"\b(?:(?:kun|kan)\s+(?:je|jij|u)|(?:could|can)\s+you|kannst\s+du)\b"
+        r"[^?]{0,100}\b(?:trading|trade|handels|beleggings)[-\s]*plan\b[^?]{0,60}"
         r"\b(?:maken|make|create|aanmaken|erstellen)\b",
         message, re.I,
     ))
     if (conversational_plan_request
-            and not re.search(r"\b(?:hoe|uitleggen|explain|how|wie|niet|not|kein)\b", message, re.I)
+            and not re.search(r"\b(?:hoe|uitleggen|explain|how|wie|niet|geen|"
+                              r"not|no|without|zonder|kein(?:e|en|em|er|es)?)\b", message, re.I)
             and not _proposal_explicitly_excluded(message)):
         return "create_setup"
     if "?" in message or _proposal_explicitly_excluded(message) or not re.match(

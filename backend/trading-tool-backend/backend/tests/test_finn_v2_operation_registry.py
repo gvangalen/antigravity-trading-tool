@@ -236,6 +236,69 @@ def test_smart_dca_amount_bands_do_not_become_setup_benchmark_bounds():
     assert "max_benchmark_score" not in state.collected_inputs
 
 
+def test_undecided_setup_condition_does_not_borrow_smart_dca_staffel_range():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak een Smart DCA-plan. Gebruik een scorevoorwaarde maar vraag eerst welke. "
+            "Staffels: 40-70 100 procent, daarboven 150 procent."
+        ),
+        explicit_asset=None, conversation_context={},
+    )
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+
+
+@pytest.mark.parametrize("undecided", ["nog te kiezen", "nog onduidelijk"])
+def test_undecided_condition_and_staffel_in_one_clause_stay_separate(undecided):
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(f"Maak Smart DCA met scorevoorwaarde {undecided}, "
+                 "maar 40-70 is de staffel voor 100%."),
+        explicit_asset=None, conversation_context={},
+    )
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+
+
+def test_explicit_setup_zone_remains_separate_from_smart_dca_staffel():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak Smart DCA voor BTC. Mijn koopzone is Onder druk (26–45). "
+            "Staffels: 40–70 100 procent, daarboven 150 procent."
+        ),
+        explicit_asset="BTC", conversation_context={},
+    )
+    assert state.collected_inputs["min_benchmark_score"] == 26
+    assert state.collected_inputs["max_benchmark_score"] == 45
+
+
+def test_explicit_setup_range_before_staffel_in_same_clause_is_kept():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Maak een setup met scorevoorwaarde 30-60 en Smart DCA-staffel 40-70.",
+        explicit_asset=None, conversation_context={},
+    )
+    assert state.collected_inputs["min_benchmark_score"] == 30
+    assert state.collected_inputs["max_benchmark_score"] == 60
+
+
+def test_ambiguous_staffel_range_is_not_persisted_as_setup_condition():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Maak Smart DCA met scorevoorwaarde 40-70 is de staffel voor 100%.",
+        explicit_asset=None, conversation_context={},
+    )
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+
+
 def test_new_plan_draft_keeps_collected_choices_during_next_guided_turn():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()
