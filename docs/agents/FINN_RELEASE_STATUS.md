@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN ETH DCA guided setup repair (25 oktober 2026)
 
-Phase: `READY_FOR_CI` on branch `codex/finn-eth-dca-guidance`.
+Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. The product
+repair in [PR #627](https://github.com/gvangalen/antigravity-trading-tool/pull/627)
+merged as SHA `f91bb7c3031640aa516d744dca7486dca3f49517`.
 The reported production conversation lost its open ETH DCA draft after the
 user answered “wekelijks” to a question about the analysis timeframe. The
 typed input parser recognized the weekly cadence, but the front door only
@@ -53,9 +55,14 @@ The complete final local ETH conversation now reaches a confirmable
 unconfirmed proposal after “wekelijks”, the same-asset restatement, “1d”,
 the name, “vast bedrag”, “100 euro” and “maandag” (probe log SHA-256
 `6f54e8f4d77eddf3be40c4717fdb9ac0b53bbc85e2fbbe47635f5960c9bb2869`).
-CI,
-deployment identity and independent authenticated live QA are pending. This
-entry does not claim a live or accepted release.
+[PR CI 40223696494](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40223696494),
+[main CI 40224040707](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40224040707)
+and [Auto Deploy 40224225241](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40224225241)
+passed. Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` returned HTTP 200 and the exact
+product SHA. This documentation-only status update will create a later SHA;
+Build must verify its last main CI, Auto Deploy and both public markers before
+independent QA tests it. This entry does not claim live acceptance.
 
 ## FINN owner-bound open DCA draft reading (25 oktober 2026)
 
