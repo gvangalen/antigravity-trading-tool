@@ -181,6 +181,30 @@ class FinnV2EntityResolutionService:
         # object produced by the preceding confirmed action ("deze setup").
         explicit_asset = self._normalize_symbol(selector.get("asset"))
         asset_source = str(selector.get("asset_source") or "").strip()
+        demonstrative_reference = bool(re.search(
+            rf"\b(?:deze|die|dit|hem|haar|this|that|it|diese[nrms]?|dieser|dieses)\s+(?:{re.escape(entity_type)}|object|plan)\b",
+            str(message or "").casefold(),
+        ))
+        active_target = dict(conversation_context.get("canonical_entity_target") or {})
+        if demonstrative_reference and active_target.get("entity_type") == entity_type:
+            # "Does this BTC setup fit?" names an asset to qualify the
+            # selected setup, not to choose again among every BTC setup.
+            # The target is still re-read for this owner. An asset change or
+            # an explicit saved name above takes precedence over this pointer.
+            active_id = self._coerce_int(active_target.get("entity_id"))
+            active_row = next((
+                row for row in candidates
+                if self._coerce_int(row.get("id") or row.get(f"{entity_type}_id")) == active_id
+            ), None)
+            if active_row is not None and (
+                not explicit_asset or self._candidate_asset(active_row) == explicit_asset
+            ):
+                return await self._canonical_target_by_id(
+                    user_id=user_id,
+                    entity_type=entity_type,
+                    entity_id=active_id,
+                    source="active_runtime_context",
+                )
         if explicit_asset and asset_source == "explicit_message":
             asset_candidates = [
                 row for row in candidates
@@ -203,10 +227,6 @@ class FinnV2EntityResolutionService:
             )
 
         recent_action_results = dict(conversation_context.get("recent_action_results") or {})
-        demonstrative_reference = bool(re.search(
-            rf"\b(?:deze|die|dit|hem|haar|this|that|it|diese[nrms]?|dieser|dieses)\s+(?:{re.escape(entity_type)}|object|plan)\b",
-            str(message or "").casefold(),
-        ))
         if demonstrative_reference and entity_type not in recent_action_results:
             recent_action_results[entity_type] = dict(
                 (conversation_context.get("recent_owner_action_results") or {}).get(entity_type) or {}
