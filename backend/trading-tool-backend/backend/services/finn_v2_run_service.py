@@ -74,6 +74,25 @@ from backend.utils import openai_client
 logger = logging.getLogger(__name__)
 
 
+def _prior_inputs_for_open_correction(
+    origin_inputs: dict[str, object], *, retain_parent_ids: bool,
+    target_change_requested: bool, explicit_proposal_correction: bool,
+    corrected_instrument: str | None, corrected_fields: dict[str, object],
+    corrected_name: str | None,
+) -> dict[str, object]:
+    """Carry a known asset replacement's plan fields into its new draft."""
+    if target_change_requested or (
+        explicit_proposal_correction and not corrected_instrument
+        and not (corrected_fields or corrected_name)
+    ):
+        return {}
+    return {
+        key: value for key, value in origin_inputs.items()
+        if (retain_parent_ids or not key.endswith("_id"))
+        and key not in {"asset", "symbol"}
+    }
+
+
 def _explicit_setup_rule_waiver(message: str) -> bool:
     """Only a specific reply can withdraw an unresolved required setup rule."""
     normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
@@ -2006,6 +2025,58 @@ class FinnV2RunService:
                     and _complete_strategy_price_reentry(message)
                 )
             )
+            collecting_inputs = dict(guided_price_reentry.get("collected_inputs") or {})
+            collecting_asset = str(collecting_inputs.get("symbol") or "").upper()
+            collecting_unspecified_correction = bool(
+                collecting_asset
+                and requests_unspecified_asset_correction(message, collecting_asset)
+            )
+            if (
+                conversation_id and guided_price_reentry.get("status") == "collecting"
+                and guided_price_reentry.get("operation_id") == "create_setup"
+                and (
+                    (corrected_instrument and corrected_instrument != collecting_asset)
+                    or collecting_unspecified_correction
+                )
+                and "?" not in message
+            ):
+                # A correction during collection has no card to cancel yet.
+                # Supersede its owner-bound draft before proposal selection so
+                # the old asset in "AAPL instead of ETH" is only contrast.
+                context["proposal_correction_result"] = {
+                    "proposal_id": None,
+                    "previous_asset": collecting_asset,
+                    "requested_instrument": corrected_instrument,
+                    "corrected_name": None,
+                    "corrected_fields": {},
+                    "awaiting_instrument": collecting_unspecified_correction,
+                    "status": "cancelled",
+                    "target_change_requested": False,
+                    "operation_id": "create_setup",
+                    "prior_user_messages": list(
+                        guided_price_reentry.get("guided_user_messages") or []
+                    ),
+                    "prior_history_truncated": bool(
+                        guided_price_reentry.get("guided_history_truncated")
+                    ),
+                    "prior_inputs": _prior_inputs_for_open_correction(
+                        collecting_inputs, retain_parent_ids=False,
+                        target_change_requested=False,
+                        explicit_proposal_correction=False,
+                        corrected_instrument=corrected_instrument,
+                        corrected_fields={}, corrected_name=None,
+                    ),
+                }
+                context.pop("active_guided_operation", None)
+                context.pop("proposal_revision", None)
+                context.pop("responses_clarification", None)
+                asset_corrected_operation_id = "create_setup"
+                unspecified_correction = collecting_unspecified_correction
+                skip_generic_correction = True
+                await orchestrator.conversations.update_context(
+                    conversation_id=conversation_id, user_id=user_id, context=context,
+                )
+                await session.commit()
             if conversation_id and not skip_generic_correction:
                 latest_open = await FinnV2ProposalRepository(session).get_latest_open_for_conversation(
                     conversation_id=conversation_id, user_id=user_id,
@@ -2119,17 +2190,15 @@ class FinnV2RunService:
                     retain_parent_ids = bool(corrected_fields or corrected_name) and not (
                         corrected_instrument or unspecified_correction or target_change_requested
                     ) and not (explicit_proposal_correction and not (corrected_fields or corrected_name))
-                    prior_inputs = {
-                        key: value for key, value in dict(origin_state.get("collected_inputs") or {}).items()
-                        if (retain_parent_ids or not key.endswith("_id"))
-                        and key not in {"asset", "symbol"}
-                    }
-                    if target_change_requested or (
-                        explicit_proposal_correction and not (corrected_fields or corrected_name)
-                    ):
-                        # The user may be correcting the target itself. Do not
-                        # carry the old target or its fields into the new draft.
-                        prior_inputs = {}
+                    prior_inputs = _prior_inputs_for_open_correction(
+                        dict(origin_state.get("collected_inputs") or {}),
+                        retain_parent_ids=retain_parent_ids,
+                        target_change_requested=target_change_requested,
+                        explicit_proposal_correction=explicit_proposal_correction,
+                        corrected_instrument=corrected_instrument,
+                        corrected_fields=corrected_fields,
+                        corrected_name=corrected_name,
+                    )
                     correction_inputs = FinnV2OperationStateService().explicit_inputs(
                         contract=FinnV2OperationRegistry().require_supported(latest_open[0].operation_type),
                         message=message if corrected_instrument else "", explicit_asset=corrected_instrument,
@@ -2645,6 +2714,20 @@ class FinnV2RunService:
                     # A fresh request must not inherit an unrelated choice as its answer.
                     previous_response = None
         corrected_guided_operation_id: str | None = asset_corrected_operation_id
+        unresolved_asset_correction = dict(context.get("proposal_correction_result") or {})
+        if (
+            not corrected_guided_operation_id
+            and unresolved_asset_correction.get("status") == "cancelled"
+            and unresolved_asset_correction.get("awaiting_instrument")
+            and unresolved_asset_correction.get("operation_id") == "create_setup"
+            and len(mentioned_catalog_symbols(message)) == 1
+            and str(unresolved_asset_correction.get("previous_asset") or "").upper()
+                not in mentioned_catalog_symbols(message)
+        ):
+            # The ticker answers the pending replacement-asset question. Keep
+            # the owner-bound draft in the proposal path, rather than letting
+            # a bare symbol become an unrelated market-data read.
+            corrected_guided_operation_id = "create_setup"
         if pending_guided == "create_strategy" and guided.get("awaiting_price_currency_reentry"):
             if _complete_strategy_price_reentry(message):
                 # These owner-bound price slots answer the currency correction.
@@ -2768,6 +2851,7 @@ class FinnV2RunService:
             elif requested_slot and FinnResponsesFrontDoor.binds_guided_slot(
                 message=message, contract=contract, registry=FinnV2OperationRegistry(),
                 requested_slot=requested_slot,
+                collected_inputs=guided_inputs,
             ):
                 continuation = True
             elif (pending_guided == "create_setup"
@@ -4429,6 +4513,9 @@ class FinnV2RunService:
                         if (
                             prepared.proposal_analysis is not None
                             and prepared.proposal_analysis.request_plan.operation_id == "create_setup"
+                            and not prepared.proposal_analysis.request_plan.operation_state.get(
+                                "missing_required_inputs"
+                            )
                         ):
                             # A fresh complete request can replace the draft
                             # fields, but cannot implicitly waive an earlier
