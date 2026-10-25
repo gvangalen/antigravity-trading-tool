@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN setup overview with current Score 2.0 evidence (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_DEPLOY`. Product branch:
+`codex/finn-setup-score-overview`, [PR #606](https://github.com/gvangalen/antigravity-trading-tool/pull/606).
+The saved-setup and linked-strategy reads now include the owner-scoped,
+source-verified Score 2.0 component assessment for the resolved setup asset.
+FINN can distinguish a saved 0–25 setup condition from an unknown current
+match when Macro is missing. The linked strategy's `execution_mode` and
+`dca_amount_mode`, not its name, determine whether the saved amount is fixed or
+score-based. OpenAI still composes the answer; no fixed coach response was added.
+The response language instruction translates score component labels rather
+than exposing raw English keys in Dutch answers.
+
+On the final local source, root backend pytest passed **3874 tests, 4 existing
+skips** (log SHA-256 `6c5c418f9494c8ceb2a04ae992299da9793336dab187325c7bb8bc761b15efde`).
+The restarted local FastAPI/Celery/PostgreSQL/Redis/Responses action matrix
+passed **16/16** contracts and **19/19** adapter checks with no broker orders,
+Live calls, Live bots or production connections (artifact SHA-256
+`a48c529fd88105b0a9885def194f5bb09104e2fbdd9bcd2b8c252a685ad84e06`).
+Real Responses selector evaluations passed **20/20** development and **109/109**
+regression with zero provider or validation failures (artifact SHA-256
+`829f65112f6d4e82daec6977d9896da43229dd30ba2210d821e824b98d0e67b5`
+and `39e73a727205139da6f56e1238628a687e7762c8ea8468d746e0a66f2a25ec08`).
+A separate real-Luna synthetic plan-read probe answered the exact question
+“Wat is mijn setup?” with the saved DCA cadence, score zone, fixed €100 rule
+and unknown current match because Macro was absent; it made no proposal or
+order (log SHA-256 `bca4efda2004aaa2b655bdbb219cca8e3f9248edf3f01af16e101d7ed667c798`).
+All PR CI checks passed on product code SHA
+`881254e884a019b72228b512c83ca2766b9489f3` in
+[run 40171913616](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40171913616).
+This status edit creates a later candidate SHA; merge, main CI, Auto Deploy,
+public backend/frontend SHA parity and independent authenticated browser QA
+remain pending.
+
 ## Analyse benchmark as the single market-phase view (24 oktober 2026)
 
 Phase: `ACCEPTED` for the targeted independent Analyse browser scope. Product
