@@ -257,6 +257,112 @@ def test_no_extra_scorefilter_keeps_existing_setup_bounds():
     assert state.collected_inputs["name"] == "QA BTC"
 
 
+def test_open_dca_removes_named_benchmark_range_without_renaming_to_gelijk():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    prior = {
+        "name": "QA BTC Zone", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+        "plan_scope": "setup_only", "min_benchmark_score": 26,
+        "max_benchmark_score": 45,
+    }
+    message = (
+        "Haal de benchmarkvoorwaarde 26-45 uit dit open concept. Laat de rest "
+        "gelijk: BTC, 1D, wekelijks vrijdag, geen strategie of bedrag. "
+        "Toon aangepaste conceptkaart; bevestig niets."
+    )
+    state = FinnV2OperationStateService().resolve(
+        contract=contract, message=message, explicit_asset="BTC",
+        conversation_context={}, supplied_inputs={}, derived_inputs=prior,
+        model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["plan_scope"] == "setup_only"
+    assert state.collected_inputs["name"] == "QA BTC Zone"
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+
+
+def test_setup_only_without_score_filter_does_not_request_amount_mode():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    message = (
+        "Maak alleen een BTC DCA-setup met naam QA 4H Naam 2510, primair "
+        "charttijdframe 1D, wekelijks op vrijdag, zonder scorefilter. "
+        "De tekst 4H is alleen onderdeel van de naam en geen timeframekeuze. "
+        "Geen strategie of bedrag. Toon een concept en bevestig niets."
+    )
+    state = FinnV2OperationStateService().resolve(
+        contract=contract, message=message, explicit_asset="BTC",
+        conversation_context={}, supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["plan_scope"] == "setup_only"
+    assert state.collected_inputs["timeframe"] == "1D"
+    assert state.collected_inputs["name"] == "QA 4H Naam 2510"
+    assert "dca_amount_mode" not in state.collected_inputs
+
+
+def test_name_gelijk_is_not_a_rename_instruction():
+    assert FinnV2OperationStateService._name_input_from_text("Laat naam gelijk.") is None
+    assert FinnV2OperationStateService.explicit_draft_rename("Laat naam gelijk.") is None
+    assert FinnV2OperationStateService._name_input_from_text(
+        "Ik wil alleen de naam gelijk houden."
+    ) is None
+
+
+@pytest.mark.parametrize("message", [
+    "Haal de benchmarkvoorwaarde 26-45 niet uit het concept.",
+    "Verwijder de scorefilter niet.",
+    "Laat de scorevoorwaarde niet weg.",
+])
+def test_negated_score_filter_removal_keeps_existing_bounds(message):
+    service = FinnV2OperationStateService()
+    assert not service.remove_setup_score_filter_intent(message)
+    assert not service._is_explicit_correction(message)
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    prior = {
+        "name": "QA BTC", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
+        "plan_scope": "setup_only", "min_benchmark_score": 26,
+        "max_benchmark_score": 45,
+    }
+    state = service.resolve(
+        contract=contract, message=message, explicit_asset="BTC",
+        conversation_context={}, supplied_inputs={}, derived_inputs=prior,
+        model_tool_inputs=True,
+    )
+    assert state.collected_inputs["min_benchmark_score"] == 26
+    assert state.collected_inputs["max_benchmark_score"] == 45
+
+
+def test_named_score_filter_removal_is_an_open_card_correction():
+    message = "Haal de benchmarkvoorwaarde 26-45 uit dit open concept."
+    assert FinnV2OperationStateService.remove_setup_score_filter_intent(message)
+    assert not FinnV2OperationStateService._is_explicit_correction(message)
+
+
+@pytest.mark.parametrize("message", [
+    "Haal de scorevoorwaarde weg. Nee, toch niet; laat die 26-45 staan.",
+    "Verwijder de scorevoorwaarde; maar behoud die toch.",
+    "Verwijder de scorevoorwaarde; toch niet.",
+])
+def test_reversed_score_filter_removal_keeps_the_saved_bounds(message):
+    assert not FinnV2OperationStateService.remove_setup_score_filter_intent(message)
+
+
+@pytest.mark.parametrize("message", [
+    "Nee, geen strategie; haal de scorevoorwaarde 26-45 wel weg.",
+    "Wacht op de strategie; verwijder de benchmarkvoorwaarde uit de setup.",
+])
+def test_unrelated_correction_does_not_veto_later_filter_removal(message):
+    assert FinnV2OperationStateService.remove_setup_score_filter_intent(message)
+
+
+def test_gelijk_kansen_remains_a_valid_explicit_name():
+    assert FinnV2OperationStateService._name_input_from_text(
+        "Noem de setup Gelijk Kansen."
+    ) == "Gelijk Kansen"
+
+
 @pytest.mark.parametrize("message", [
     "Toch geen strategie erbij.", "Ik wil toch geen strategie.",
     "Toch geen vaste strategie erbij.", "Toch niet die strategie erbij.",
