@@ -45,6 +45,17 @@ class FinnV2OperationStateService:
             or re.search(r"\b(?:geen|zonder|without|ohne)\s+(?:bedrag|amount|betrag)(?:smodus|mode)?\s+(?:nu|now|jetzt)\b", text)
             or re.search(r"\b(?:strategie|strategy|bedrag|amount|betrag)\s+(?:(?:bepaal|kies|maak|stel|voeg|choose|add|set)\s+(?:ik|we|i|wir)\s+)?(?:later|später|afterwards)\b", text)
             or re.search(r"\b(?:later|später|afterwards)\s+(?:in|bij|for|für)\s+(?:de\s+|the\s+|der\s+)?(?:strategie|strategy|bedrag|amount|betrag)\b", text)
+            or (
+                # An asset replacement that explicitly asks for a *new setup*
+                # starts a setup draft.  Do not make an unrequested strategy's
+                # amount mode a prerequisite for showing that card.
+                re.search(r"\b(?:nieuwe?|new|neue[rs]?)\b.{0,80}\bsetup\b.{0,100}\b(?:in plaats van|instead of|anstatt)\b", text)
+                and not re.search(
+                    r"\b(?:strategie|strategy|bedrag|amount|betrag|base amount|smart\s*dca)\b"
+                    r"|€|\beur\b|\b\d+(?:[.,]\d+)?\s+per\s+(?:aankoop|week|maand)\b",
+                    text,
+                )
+            )
         )
 
     @staticmethod
