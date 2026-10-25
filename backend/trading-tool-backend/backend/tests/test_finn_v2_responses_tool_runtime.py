@@ -25,6 +25,7 @@ from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
     _explicit_strategy_proposal_request, _explicit_create_operation_request,
     _explicit_fresh_create_operation_request, _is_read_only_coach_turn,
+    _unspecified_setup_overview,
 )
 from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
@@ -305,6 +306,50 @@ def test_factual_tool_result_experiment_cannot_enable_outside_local_fixture(monk
     assert FinnResponsesReadExecutor._facts_only_local_experiment() is False
     monkeypatch.setenv("APP_ENV", "local_finn")
     assert FinnResponsesReadExecutor._facts_only_local_experiment() is True
+
+
+@pytest.mark.parametrize("message", [
+    "Wat is mijn setup?", "Wat is mijn BTC-setup?", "What is my setup?",
+])
+def test_unspecified_setup_overview_is_not_a_selected_plan(message):
+    assert _unspecified_setup_overview(message)
+    assert not _unspecified_setup_overview("Past deze setup bij mijn BTC-score?")
+
+
+def test_generic_setup_overview_gives_luna_complete_owner_inventory():
+    fake = FakeResponses(
+        response("overview-read", calls=[tool_call(
+            "overview-call", "get_active_plan_and_strategy", {"setup_name": "BTC Monday", "reference": "current_request"},
+        )]),
+        response("overview-answer", text="Ik zie BTC Monday en BTC Friday. Welke bedoel je?"),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="generic-setup", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"complete": True, "setups": [
+                {"setup_id": 11, "name": "BTC Monday", "symbol": "BTC", "timeframe": "1D"},
+                {"setup_id": 12, "name": "BTC Friday", "symbol": "BTC", "timeframe": "1W"},
+            ]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Wat is mijn setup?", instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+    ))
+    assert len(calls) == 1
+    assert calls[0].name == "get_saved_setup_inventory"
+    assert calls[0].inputs == {}
+    assert result.response.answer_kind != "saved_setup_collection"
+    assert "BTC Monday" in result.response.text
+    assert "BTC Friday" in result.response.text
 
 
 @pytest.mark.parametrize(

@@ -251,6 +251,17 @@ def _independent_strategy_concept_request(message: str) -> bool:
     ))
 
 
+def _unspecified_setup_overview(message: str) -> bool:
+    """A singular overview question is not evidence of one selected setup."""
+    return bool(re.fullmatch(
+        r"\s*(?:(?:wat|welke)\s+is\s+mijn|what\s+is\s+my|"
+        r"welche\s+ist\s+meine)\s+(?:[A-Z0-9]{2,8}[-\s]+)?"
+        r"(?:opgeslagen\s+|saved\s+|gespeicherte\s+)?"
+        r"(?:setup|set-up|plan)\s*[?.!]?\s*",
+        str(message or ""), re.I,
+    ))
+
+
 def _explicit_rule_transfer_assets(message: str) -> tuple[str, str] | None:
     """Extract the source of a named rule and the other named target asset."""
     assets = mentioned_catalog_symbols(message)
@@ -504,6 +515,9 @@ class FinnResponsesFrontDoor:
             "components for that setup's asset; use get_active_plan_and_strategy when the "
             "question also needs the linked amount rule. Distinguish a saved score condition "
             "from whether the current benchmark is complete and satisfies it. "
+            "If the user asks generically which setup is theirs and the owner-scoped inventory "
+            "contains several, identify the alternatives and ask which one to discuss; a page "
+            "asset or your own preferred row is not the user's selection. "
             "A strategy name does not establish its amount rule; use the saved mode fields. "
             "Keep source ownership explicit: entry, stop and targets read from a strategy "
             "are strategy fields, not setup fields. If asked which strategies are linked "
@@ -1541,6 +1555,10 @@ class FinnResponsesFrontDoor:
             verified_subject and references_selected_setup(message, subject_asset)
             and (not mentioned_assets or mentioned_assets == {subject_asset})
         )
+        unspecified_setup_overview = bool(
+            is_read_request and not verified_subject
+            and _unspecified_setup_overview(message)
+        )
         asks_for_evidence = is_read_request and request_facts.discourse_act == "evidence_follow_up"
         evidence_followup = asks_for_evidence and prior_selected is not None
         listed_ordinal = _listed_setup_ordinal(message) if prior_setup_ids else None
@@ -2170,6 +2188,20 @@ class FinnResponsesFrontDoor:
                         ),
                     }
             if call.operation_id is None:
+                if (unspecified_setup_overview and call.name in {
+                    "get_active_plan_and_strategy", "get_saved_setup",
+                    "get_saved_setup_inventory",
+                }):
+                    # Neither a page asset nor the model's chosen name may
+                    # silently select one plan for a generic first question.
+                    # Give Luna the complete owner-scoped inventory so it can
+                    # name the alternatives or ask which plan the user means.
+                    call = replace(
+                        call, name="get_saved_setup_inventory", inputs={},
+                        read_tools=("read_saved_setup_inventory",),
+                        required_inputs=(), missing_inputs=(),
+                        answer_mode=None, setup_names=(),
+                    )
                 selected_strategy_name = str(call.inputs.get("strategy_name") or "")
                 if selected_strategy_name.casefold() not in message.casefold():
                     selected_strategy_name = ""
