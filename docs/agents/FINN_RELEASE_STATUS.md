@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN ETH DCA guided setup repair (25 oktober 2026)
 
-Phase: `LOCAL_VALIDATION` for the continuation repair. Independent QA returned
+Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA` for the continuation repair. Independent QA returned
 `NOT_ACCEPTED` on live SHA `b13ad54f51a415bd30395a7db7db196456e860f7`:
 an existing ETH setup diverted the open new ETH-DCA draft into a saved-plan
 read, and correcting an open ETH card to AAPL withdrew the old card but did
@@ -33,8 +33,15 @@ timeout, parse or validation failures (artifact SHA-256
 `31a48e4d56cbf6523a2f71cd06c39c1814286ee2bb3b61dca52b72f4e2e07795`
 and `6fc1a5a81523e53e9196a2bd678c10fcb342cba979d1dfa24067a50dcfcbcafa`).
 The web build, typecheck, i18n checks, command and proposal tests, and
-high-severity audit passed. CI, deployment and independent live QA remain
-pending.
+high-severity audit passed. [Candidate PR #629](https://github.com/gvangalen/antigravity-trading-tool/pull/629)
+and [main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40230508817)
+passed all five jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40230734517)
+succeeded for product merge SHA `f61717874d08f32dd5479a2681217d574fd1c691`.
+Public backend health and frontend build-info returned HTTP 200 and that exact
+SHA on 25 October 2026. This status update itself creates a later main SHA;
+Build must wait for its CI and Auto Deploy and verify the final public SHA
+before assigning independent QA. Build has not accessed the protected QA
+fixture or sealed holdout. The independent live verdict remains pending.
 
 The product
 repair in [PR #627](https://github.com/gvangalen/antigravity-trading-tool/pull/627)
