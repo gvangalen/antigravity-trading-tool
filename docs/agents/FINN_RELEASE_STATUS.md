@@ -4,6 +4,59 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN ETH DCA guided setup repair (25 oktober 2026)
+
+Phase: `READY_FOR_CI` on branch `codex/finn-eth-dca-guidance`.
+The reported production conversation lost its open ETH DCA draft after the
+user answered “wekelijks” to a question about the analysis timeframe. The
+typed input parser recognized the weekly cadence, but the front door only
+bound answers to the one requested slot. Free tool selection then treated
+later turns as saved-plan reads and eventually claimed that setup creation
+was unavailable. A fresh conversation could complete a card, but it asked
+an unclear question about optional extra purchase conditions.
+
+The first local continuation test also exposed the same failure when FINN
+asked for an amount and the user answered “vast bedrag” before giving the
+number. The repair binds short explicit DCA values (cadence, weekday or
+fixed/Smart amount mode) and same-asset restatements to the owner-scoped
+open draft even while another slot is requested. Setup drafts
+now retain user turns so an earlier unencoded trading condition cannot be
+lost when the last answer is only a weekday or amount. The guard distinguishes
+the ordinary DCA schedule and fixed amount from an additional market-entry
+condition; an actual unsupported condition still blocks a confirmable card
+until the user explicitly withdraws it. The analysis timeframe, purchase
+cadence, and optional condition questions are distinguished in NL, EN and DE.
+The timeframe wording does not claim that changing 1D or 4H changes the
+Score 2.0 benchmark. No fixed substantive coach answer or new action
+permission was added.
+
+The final local backend suite passed **3968 tests, 4 existing skips** (log
+SHA-256
+`318b55abc3e07888cf0258b76e871b040229372a46c14c2ef69c4af9c0dbc6ea`). Focused affected tests passed
+**1090/1090**. The worker-driven action matrix passed **16/16** with no
+broker orders, Live trading calls, Live bots or production connections
+(artifact SHA-256
+`60d25fef2471ec4efc00350888128cb8d0d3ce5e32dd1d09cc14ad371f4f89cd`);
+the adapter suite passed **21/21**. On the local FastAPI/Celery and real
+Luna/Responses route, the exact off-order ETH sequence kept its draft and a
+complete ETH 1D weekly Monday fixed-€100 sequence reached an unconfirmed
+concept. An unsupported RSI entry condition did not produce a confirmable
+card. Frontend build, typecheck, i18n checks, command, proposal and setup
+tests, and high-severity audit passed on unchanged frontend source.
+The final real-provider development selector passed **20/20** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`68b5cc83b0d172581bfa3a7195c9a3924e7f9a165a9288117d125fd5c593e911`).
+The final real-provider regression selector passed **109/109** with the same zero
+failure categories (artifact SHA-256
+`a8c26328435d06a38b6ca77d5321ccde520427ee50bd428360ad9e3f57e1ddbd`).
+The complete final local ETH conversation now reaches a confirmable
+unconfirmed proposal after “wekelijks”, the same-asset restatement, “1d”,
+the name, “vast bedrag”, “100 euro” and “maandag” (probe log SHA-256
+`6f54e8f4d77eddf3be40c4717fdb9ac0b53bbc85e2fbbe47635f5960c9bb2869`).
+CI,
+deployment identity and independent authenticated live QA are pending. This
+entry does not claim a live or accepted release.
+
 ## FINN owner-bound open DCA draft reading (25 oktober 2026)
 
 Phase: `ACCEPTED` for the scoped concept and conversation flow on live SHA

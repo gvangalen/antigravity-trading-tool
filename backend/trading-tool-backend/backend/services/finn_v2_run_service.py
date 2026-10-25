@@ -79,10 +79,13 @@ def _explicit_setup_rule_waiver(message: str) -> bool:
     normalized = re.sub(r"\s+", " ", str(message or "").strip().casefold()).rstrip(".! ")
     return normalized in {
         "maak voorstel zonder deze voorwaarden",
+        "geen extra koopvoorwaarde",
         "begin nieuw voorstel zonder eerdere voorwaarden",
         "make proposal without these conditions",
+        "no extra purchase condition",
         "start new proposal without previous conditions",
         "vorschlag ohne diese bedingungen erstellen",
+        "keine zusätzliche kaufbedingung",
         "neuen vorschlag ohne vorherige bedingungen beginnen",
     } or bool(re.fullmatch(
         r"(?:ja,?\s+)?(?:laat|schrap|verwijder)\s+(?:die|deze|beide|alle)\s+"
@@ -4435,11 +4438,19 @@ class FinnV2RunService:
                             setup_inputs = dict(
                                 prepared.proposal_analysis.request_plan.operation_state.get("collected_inputs") or {}
                             )
+                            setup_guided_messages = list(
+                                prepared.proposal_analysis.request_plan.operation_state.get("guided_user_messages") or []
+                            )
+                            setup_history_truncated = bool(
+                                prepared.proposal_analysis.request_plan.operation_state.get("guided_history_truncated")
+                            )
                             fresh_setup_request = (
                                 _explicit_fresh_create_operation_request(run_message) == "create_setup"
                             )
                             waiver = _explicit_setup_rule_waiver(run_message)
-                            coverage_message = message
+                            # Check the whole owner-bound draft, not only the
+                            # final answer (often just "Monday" or "fixed").
+                            coverage_message = "\n".join(setup_guided_messages) or message
                             if active_block.get("original_message") and not waiver:
                                 coverage_message = (
                                     "Unresolved required setup condition from this conversation: "
@@ -4449,7 +4460,7 @@ class FinnV2RunService:
                             coverage = (
                                 "none" if waiver or (
                                     not active_block and _plain_setup_creation_request(run_message)
-                                ) else
+                                ) else "unclear" if setup_history_truncated else
                                 await FinnResponsesToolRelevanceGuard(
                                     openai_client.async_client
                                 ).setup_rule_coverage(
@@ -4469,8 +4480,9 @@ class FinnV2RunService:
                                         "setup. Choose ‘Make proposal without these conditions’ if I should "
                                         "omit them. Otherwise I cannot offer a confirmable setup yet."
                                     ) if coverage == "unsupported_required_rule" else (
-                                        "Should the condition you mentioned be enforced by the setup? "
-                                        "Please clarify before I prepare a proposal."
+                                        "Do you want an extra purchase condition besides the schedule "
+                                        "and amount, such as a benchmark score range? If so, describe "
+                                        "what must be true before a purchase; otherwise say no extra condition."
                                     )
                                 elif locale == "de":
                                     question = (
@@ -4479,8 +4491,9 @@ class FinnV2RunService:
                                         "erstellen“, wenn sie entfallen sollen. Andernfalls kann ich noch "
                                         "kein bestätigbares Setup anbieten."
                                     ) if coverage == "unsupported_required_rule" else (
-                                        "Soll die genannte Bedingung vom Setup verbindlich geprüft werden? "
-                                        "Bitte kläre das, bevor ich einen Vorschlag vorbereite."
+                                        "Soll zusätzlich zu Kaufzeitpunkt und Betrag eine Marktbedingung "
+                                        "gelten, etwa ein Benchmark-Scorebereich? Wenn ja, beschreibe "
+                                        "sie; sonst sage, dass keine zusätzliche Bedingung gelten soll."
                                     )
                                 else:
                                     question = (
@@ -4488,8 +4501,9 @@ class FinnV2RunService:
                                         "controleren. Kies ‘Maak voorstel zonder deze voorwaarden’ als ik die "
                                         "mag weglaten. Anders kan ik nog geen bevestigbare setup aanbieden."
                                     ) if coverage == "unsupported_required_rule" else (
-                                        "Moet de genoemde voorwaarde door de setup worden gecontroleerd? "
-                                        "Verduidelijk dat voordat ik een voorstel maak."
+                                        "Wil je naast het aankoopmoment en bedrag een extra koopvoorwaarde, "
+                                        "bijvoorbeeld een bereik voor je benchmarkscore? Zo ja, welke "
+                                        "voorwaarde moet gelden? Zo nee, zeg dat er geen extra voorwaarde is."
                                     )
                                 if active_block and fresh_setup_request:
                                     if locale == "en":
@@ -4519,6 +4533,12 @@ class FinnV2RunService:
                                     "Vorschlag ohne diese Bedingungen erstellen" if locale == "de" else
                                     "Maak voorstel zonder deze voorwaarden"
                                 )
+                                if coverage == "unclear" and not active_block:
+                                    choice = (
+                                        "No extra purchase condition" if locale == "en" else
+                                        "Keine zusätzliche Kaufbedingung" if locale == "de" else
+                                        "Geen extra koopvoorwaarde"
+                                    )
                                 clarification = FinnResponsesVerifiedAnswer(
                                     status="clarification_required", text=question,
                                     reason="setup_rule_not_captured", evidence=(),

@@ -642,11 +642,11 @@ class FinnV2OperationStateService:
                     "name": "What short name would you like to give this proposal?",
                     "symbol": "Which asset is this setup for?",
                     "setup_type": "Would you like a trade setup or a DCA setup?",
-                    "timeframe": "What is the primary analysis timeframe for this setup?",
+                    "timeframe": "Which analysis timeframe should this setup use, for example 1D (daily chart) or 4H (four-hour chart)? This does not set how often DCA buys occur; I will ask that separately.",
                     "dca_frequency": "How often would you like to buy: daily, weekly or monthly?",
                     "dca_day": "On which weekday would you like to buy?",
                     "dca_month_day": "On which day of the month would you like to buy?",
-                    "dca_amount_mode": "Would you like a fixed amount or Smart DCA based on your total benchmark score?",
+                    "dca_amount_mode": "Should each scheduled purchase use the same amount, or should Smart DCA adjust it using your total benchmark score?",
                     "min_investment": "What minimum amount would you like to set for this setup?",
                     "score_source": "Should Smart DCA use your total market, macro and technical benchmark score?",
                     "low_threshold": "Below which total score does the low Smart DCA band apply?",
@@ -676,11 +676,11 @@ class FinnV2OperationStateService:
                     "name": "Welchen kurzen Namen soll dieser Vorschlag bekommen?",
                     "symbol": "Für welchen Vermögenswert ist dieses Setup gedacht?",
                     "setup_type": "Möchtest du ein Trade- oder DCA-Setup erstellen?",
-                    "timeframe": "Welcher Analysezeitraum gilt für dieses Setup?",
+                    "timeframe": "Welches Analyse-Zeitfenster soll dieses Setup verwenden, zum Beispiel 1D (Tageschart) oder 4H (Vier-Stunden-Chart)? Das legt nicht fest, wie oft DCA kauft; danach frage ich getrennt.",
                     "dca_frequency": "Wie oft möchtest du kaufen: täglich, wöchentlich oder monatlich?",
                     "dca_day": "An welchem Wochentag möchtest du kaufen?",
                     "dca_month_day": "An welchem Tag im Monat möchtest du kaufen?",
-                    "dca_amount_mode": "Möchtest du einen festen Betrag oder Smart DCA anhand deines gesamten Benchmark-Scores?",
+                    "dca_amount_mode": "Soll jeder geplante Kauf denselben Betrag verwenden oder soll Smart DCA ihn anhand deines gesamten Benchmark-Scores anpassen?",
                     "min_investment": "Welchen Mindestbetrag möchtest du für dieses Setup festlegen?",
                     "score_source": "Soll Smart DCA deinen gesamten Markt-, Makro- und Technik-Score verwenden?",
                     "low_threshold": "Unter welchem Gesamtscore gilt die niedrige Smart-DCA-Stufe?",
@@ -730,11 +730,11 @@ class FinnV2OperationStateService:
             ),
             "symbol": "Voor welke asset wil je deze setup precies voorbereiden?",
             "setup_type": "Wil je een trade- of DCA-setup voorbereiden?",
-            "timeframe": "Welk primair timeframe wil je voor deze setup gebruiken?",
+            "timeframe": "Welk analysetijdsframe wil je voor deze setup gebruiken, bijvoorbeeld 1D (daggrafiek) of 4H (vieruursgrafiek)? Dit bepaalt niet hoe vaak je DCA koopt; dat vraag ik apart.",
             "dca_frequency": "Hoe vaak wil je volgens deze DCA-setup aankopen: dagelijks, wekelijks of maandelijks?",
             "dca_day": "Op welke weekdag wil je volgens deze DCA-setup aankopen?",
             "dca_month_day": "Op welke dag van de maand wil je volgens deze DCA-setup aankopen?",
-            "dca_amount_mode": "Wil je een vast bedrag of Smart DCA op basis van je totale benchmarkscore?",
+            "dca_amount_mode": "Wil je bij elke geplande aankoop hetzelfde bedrag, of Smart DCA waarbij je totale benchmarkscore het bedrag aanpast?",
             "min_investment": "Welk minimumbedrag wil je voor deze setup vastleggen?",
             "score_source": "Wil je je totale benchmarkscore van markt, macro en technisch als bron voor deze Smart DCA gebruiken?",
             "low_threshold": "Tot welke totaalscore geldt de lage Smart-DCA-band?",
@@ -1034,7 +1034,7 @@ class FinnV2OperationStateService:
                 explicit_name = self._name_input_from_text(text)
                 if explicit_name:
                     amount_text = amount_text.replace(explicit_name.casefold(), " ")
-                smart_amount = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
+                smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
                 fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b", amount_text))
                 if smart_amount and not fixed_amount:
                     values["dca_amount_mode"] = "score_bands"

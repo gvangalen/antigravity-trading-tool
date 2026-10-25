@@ -388,7 +388,7 @@ class FinnResponsesProposalSelection:
         inputs = dict(state.collected_inputs)
         asset = str(inputs.get("asset") or inputs.get("symbol") or verified_asset or "").upper() or None
         operation_state = state.dict()
-        if contract.operation_id == "create_strategy":
+        if contract.operation_id in {"create_setup", "create_strategy"}:
             # This is the owner-bound guided context used by the Responses
             # proposal gate *before* orchestration. Preserve every user turn
             # so an earlier unencoded trading rule cannot disappear when the
