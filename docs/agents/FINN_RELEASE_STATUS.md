@@ -4,9 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN generic setup overview with several saved plans (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Repair branch: `codex/finn-generic-setup-ambiguity`.
+Independent authenticated QA on live SHA
+`33ecc9a68fc304c1ccb821dd03092385919728a0` confirmed the earlier
+selected-setup continuation fix, but returned `NOT_ACCEPTED` for the complete
+three-turn flow: a new conversation's “Wat is mijn setup?” silently described
+one of several BTC setups without naming it or asking which plan was meant.
+The explicitly named setup and its score follow-up both worked; no order was
+made. The QA fixture still lacks the separate 0–25 / fixed-€100 scenario.
+
+The model-led read boundary now converts an unqualified first setup-overview
+read to the complete owner-scoped inventory, even if the model selected one
+setup in its tool arguments. Luna composes the answer from that inventory;
+the change adds no fixed coach answer. An explicit named selection in a later
+turn still resolves to that owner-verified setup.
+
+On the final local source, backend pytest passed **3879 tests, 4 existing
+skips** (log SHA-256 `d023d6415fb6b7185e54f043b64a35f368677869b46de6b86dc5682f9d112756`).
+Frontend production build passed (log SHA-256
+`19e979fd3631fb8647b584676958b68a30c4cca3ef80f11c1de8d9777b111248`).
+The restarted local FastAPI/Celery/PostgreSQL/Redis/Responses matrix passed
+**16/16** action contracts and **19/19** adapter checks, without a Live order
+(artifact SHA-256 `b377afa05395b2be6c54413a6c95caee84f43058e99c267e7704616b7d1cf4d5`).
+Real Responses selector evaluations passed **20/20** development and
+**109/109** regression, with zero provider or validation failures (artifact
+SHA-256 `f7223f272b8697e204f846a588e2fdf8d377823155ea4055efc0a025fb6a9283`
+and `f6a60f82b9a05a6475b8bb891763843f63144d8417116872a4c83af5a383be66`).
+A real-Luna local three-turn probe with two synthetic BTC setups named both
+alternatives on the first question, retained the explicitly selected Friday
+1W setup through the score follow-up, left the match unknown without complete
+scores, and made no proposal or order (local artifact
+`/tmp/finn-followup-multiturn-probe.json`). Independent production QA on the
+new final SHA remains pending.
+
 ## FINN selected-setup continuation after an asset-qualified question (25 oktober 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`. Repair branch:
+Phase: `PARTIAL_NOT_ACCEPTED` by independent QA on final SHA
+`33ecc9a68fc304c1ccb821dd03092385919728a0`: the explicitly selected
+setup and follow-up passed, while the general first-turn ambiguity above
+remained. Repair branch:
 `codex/finn-setup-followup-target`, [PR #608](https://github.com/gvangalen/antigravity-trading-tool/pull/608).
 Independent authenticated browser QA on live SHA
 `786b6bed62711205435a165f386df85c57b31fa5` returned `NOT_ACCEPTED`
