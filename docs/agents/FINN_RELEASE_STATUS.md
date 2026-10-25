@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN hyphenated setup-only scope after independent QA (25 oktober 2026)
+
+Phase: `LOCAL_VALIDATION` on `codex/finn-hyphenated-setup-only`.
+Independent authenticated browser QA returned `NOT_ACCEPTED` on final SHA
+`ca379710e3ac5c6ed13d5ed20a4b6b2395f9cded`: 9/10 agreed cases passed.
+The single P2 failure was a first-turn request for **only** a BTC DCA-setup,
+explicitly deferring a Smart-DCA strategy and its 40–70 amount tier. FINN
+instead asked for an execution amount. The next turn explicitly deferred the
+amount and produced the correct setup-only card. No card was confirmed and
+no plan was saved by QA. The other cases, including open-card filter removal
+and retention, name/timeframe preservation, full €100 revision, guided swing,
+and negative capability, passed.
+
+The typed plan-intent parser recognized `setup` but missed the hyphenated
+`DCA-setup` in the exact QA request. It now recognizes that compound while
+preserving an explicit same-turn request for a setup **and** €100 strategy.
+The exact QA sentence and both strategy-request variants are local regression
+cases. CI, deployment, and a new independent live QA verdict are still
+required for this repair.
+The final targeted tests passed (163/163), full backend passed **3935 tests,
+4 existing skips** (log SHA-256
+`ae152e7bcffbc02613933fb076905c95bdfd00461ff05e8a71c3c966759ed02f`).
+Frontend build, typecheck, i18n lint/tests, command/proposal tests and the
+high-severity audit passed. The restarted real Luna/Responses chat probe
+produced the exact failed QA request's setup-only card in one turn, and the
+other direct, continuation, open-card revision, filter removal/retention,
+owner-isolation and idempotency cases passed (log SHA-256
+`f0e1a7a030abc24d2075c3f4ff0d97d4d16764e68443be55ed20d05d41c783ac`).
+The worker-driven matrix passed **16/16** contracts and **21/21** adapters
+(artifact SHA-256
+`e063fa805ef6ee389250c6e1683d373e310c272cf0c63f39ba639927d228ebdb`).
+Real Responses development selection passed **20/20** with zero provider,
+schema, timeout, parse, or validation failures (artifact SHA-256
+`05fd124d3d20b14aba02292c327b11fbda2f814c77e32ab04f04431e4e8c0081`).
+Regression selection passed **109/109** with the same zero-failure categories
+(artifact SHA-256
+`c001d4908d4e7f2e26e631a408c3084d9566b2ac5c36d731035b6ab9958bfb9e`).
+PR CI remains pending.
+
 ## FINN open-concept correction after independent QA (25 oktober 2026)
 
 Phase: `LIVE_CANDIDATE`, awaiting independent authenticated QA. Product

@@ -101,6 +101,33 @@ def test_future_smart_dca_staffel_does_not_become_a_setup_filter_or_strategy():
     assert "low_threshold" not in state.collected_inputs
 
 
+def test_hyphenated_dca_setup_defers_future_smart_dca_amount_in_qa_question():
+    message = (
+        "Maak alleen een BTC DCA-setup met naam QA BTC Staffel C 2510, timeframe 1D, "
+        "wekelijks op vrijdag. Ik heb nog geen aparte setupscorevoorwaarde gekozen, "
+        "dus geen scorefilter. Voor een latere Smart DCA-strategie denk ik aan "
+        "100% bedrag bij score 40-70. Die 40-70 is een bedragstaffel, geen "
+        "setupvoorwaarde. Toon het setupconcept en bevestig niets."
+    )
+    service = FinnV2OperationStateService()
+    assert service.setup_only_intent(message)
+    state = service.resolve(
+        contract=FinnV2OperationRegistry().require_supported("create_setup"),
+        message=message, explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["plan_scope"] == "setup_only"
+    assert state.collected_inputs["name"] == "QA BTC Staffel C 2510"
+    assert state.collected_inputs["timeframe"] == "1D"
+    assert state.collected_inputs["dca_frequency"] == "weekly"
+    assert state.collected_inputs["dca_day"] == "friday"
+    assert "min_benchmark_score" not in state.collected_inputs
+    assert "max_benchmark_score" not in state.collected_inputs
+    assert "dca_amount_mode" not in state.collected_inputs
+    assert "base_amount" not in state.collected_inputs
+
+
 def test_later_bot_does_not_discard_the_strategy_requested_now():
     assert not FinnV2OperationStateService.setup_only_intent(
         "Maak een DCA-setup en strategie van €100 per week; later maak ik een bot."
@@ -108,6 +135,14 @@ def test_later_bot_does_not_discard_the_strategy_requested_now():
     assert not FinnV2OperationStateService.setup_only_intent(
         "Maak niet alleen een DCA-setup, maar ook een strategie van €100 per week."
     )
+
+
+@pytest.mark.parametrize("message", [
+    "Maak alleen een BTC DCA-setup en strategie van €100 per week.",
+    "Maak alleen een BTC DCA-setup met een strategie van €100 per week.",
+])
+def test_hyphenated_setup_with_strategy_requested_now_is_not_setup_only(message):
+    assert not FinnV2OperationStateService.setup_only_intent(message)
 
 
 def test_open_setup_only_proposal_can_add_fixed_strategy_before_confirmation():

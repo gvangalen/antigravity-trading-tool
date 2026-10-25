@@ -30,8 +30,15 @@ class FinnV2OperationStateService:
         text = str(message or "").casefold()
         if re.search(r"\b(?:niet|not|nicht)\s+(?:alleen|only|nur)\b", text):
             return False
+        if re.search(
+            r"\bsetup\b.{0,40}\b(?:en|met|and|with|und|mit)\s+"
+            r"(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy)\b", text,
+        ) and not re.search(r"\b(?:strategie|strategy)\b.{0,30}\b(?:later|später|afterwards)\b", text):
+            # "Only a setup and strategy" limits the request to those two
+            # objects; it does not defer the strategy itself.
+            return False
         return bool(
-            re.search(r"\b(?:alleen|enkel|uitsluitend|only|nur)\s+(?:een\s+|de\s+|the\s+|die\s+)?(?:\w+\s+){0,3}setup\b", text)
+            re.search(r"\b(?:alleen|enkel|uitsluitend|only|nur)\s+(?:een\s+|de\s+|the\s+|die\s+)?(?:[\w-]+\s+){0,3}(?:[\w]+-)?setup\b", text)
             or re.search(r"\bsetup\b.{0,100}\b(?:zonder|geen|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy|betrag|bedrag|amount)\b", text)
             or re.search(r"\b(?:geen|zonder|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy|bedrag|amount|betrag)(?:\s+of\s+(?:bedrag|amount|betrag))?\s+(?:nu|now|jetzt)\b", text)
             or re.search(r"\b(?:geen|zonder|without|ohne)\s+(?:een\s+|a\s+|eine\s+)?(?:strategie|strategy)\s+(?:of|or|oder)\s+(?:bedrag|amount|betrag)\b", text)
