@@ -187,10 +187,12 @@ def run(base_url: str, *, confirm_local: bool = False) -> dict:
         "Dat bepaal ik later in de strategie.",
     ), expect_bounds=True)
     future_staffel = _case(base_url, (
-        "Maak alleen een BTC DCA-setup met naam QA BTC Vrijdag, primair timeframe 1D, "
-        "wekelijks op vrijdag. De Smart DCA-staffel van 40 tot 70 bepaal ik later "
-        "in de strategie; geen setupscorefilter.",
-    ), expect_bounds=False)
+        "Maak alleen een BTC DCA-setup met naam QA BTC Staffel C 2510, timeframe 1D, "
+        "wekelijks op vrijdag. Ik heb nog geen aparte setupscorevoorwaarde gekozen, "
+        "dus geen scorefilter. Voor een latere Smart DCA-strategie denk ik aan "
+        "100% bedrag bij score 40-70. Die 40-70 is een bedragstaffel, geen "
+        "setupvoorwaarde. Toon het setupconcept en bevestig niets.",
+    ), expect_bounds=False, expected_name="QA BTC Staffel C 2510")
     no_zone_named = _case(base_url, (
         "Maak alleen een BTC DCA-setup met naam QA 4H Naam 2510, primair "
         "charttijdframe 1D, wekelijks op vrijdag, zonder scorefilter. "
