@@ -1,7 +1,7 @@
-"""Keep a daily assessment and a Paper position exit as separate decisions.
+"""Expand decision identity without removing the legacy daily uniqueness.
 
-Existing decisions remain assessments. An exit is unique for the opening
-position ledger entry, including when the entry and exit happen on one day.
+This first release is backward compatible with the previous bot writer. Paper
+auto-exits remain disabled until a later, separately accepted cutover release.
 """
 
 SQL = """
@@ -28,37 +28,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS bot_decisions_one_assessment_per_day
 CREATE UNIQUE INDEX IF NOT EXISTS bot_decisions_one_exit_per_position
     ON bot_decisions (user_id, bot_id, position_open_ledger_id)
     WHERE decision_kind = 'paper_exit';
-
-DO $$
-DECLARE old_constraint RECORD;
-BEGIN
-    FOR old_constraint IN
-        SELECT c.conname
-        FROM pg_constraint c
-        JOIN pg_class t ON t.oid = c.conrelid
-        WHERE t.relname = 'bot_decisions'
-          AND c.contype = 'u'
-          AND pg_get_constraintdef(c.oid) = 'UNIQUE (user_id, bot_id, decision_date)'
-    LOOP
-        EXECUTE format('ALTER TABLE bot_decisions DROP CONSTRAINT %I', old_constraint.conname);
-    END LOOP;
-END $$;
-
-DO $$
-DECLARE old_index RECORD;
-BEGIN
-    FOR old_index IN
-        SELECT n.nspname, i.relname
-        FROM pg_index x
-        JOIN pg_class i ON i.oid=x.indexrelid
-        JOIN pg_namespace n ON n.oid=i.relnamespace
-        WHERE x.indrelid='bot_decisions'::regclass
-          AND x.indisunique AND x.indpred IS NULL
-          AND pg_get_indexdef(i.oid) LIKE '%(user_id, bot_id, decision_date)%'
-          AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid=i.oid)
-    LOOP
-        EXECUTE format('DROP INDEX %I.%I', old_index.nspname, old_index.relname);
-    END LOOP;
-END $$;
 
 """

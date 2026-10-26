@@ -22,6 +22,7 @@ def main() -> None:
         raise RuntimeError("local_only_environment_required")
     from backend.utils.db import get_db_connection
     from backend.engine import trading_bot_execution as engine
+    engine.PAPER_AUTO_EXIT_CUTOVER = True  # Local-only probe exercises stage 2.
 
     now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
     conn = get_db_connection()

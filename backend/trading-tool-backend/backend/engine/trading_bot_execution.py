@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 DEFAULT_SYMBOL = "BTC"
+# Stage 1 leaves the old daily uniqueness constraint in place for rollback.
+# Stage 2 changes this constant only after the compatible release is live.
+PAPER_AUTO_EXIT_CUTOVER = False
 
 ACTIONS = ("buy", "sell", "hold", "observe")
 CONFIDENCE_LEVELS = ("low", "medium", "high")
@@ -2102,8 +2105,10 @@ def run_trading_bot_execution(
 
         for bot in bots:
 
-            exit_result = _maybe_execute_paper_position_exit(
-                conn=conn, user_id=user_id, bot=bot, report_date=report_date,
+            exit_result = (
+                _maybe_execute_paper_position_exit(
+                    conn=conn, user_id=user_id, bot=bot, report_date=report_date,
+                ) if PAPER_AUTO_EXIT_CUTOVER else None
             )
             if exit_result is not None:
                 results.append(exit_result)

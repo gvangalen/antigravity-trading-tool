@@ -1,4 +1,4 @@
-"""Report whether the one-time Paper exit migration needs writer quiescence."""
+"""Report legacy, expanded-compatible, or final Paper exit schema state."""
 
 from backend.utils.db import get_db_connection
 
@@ -29,7 +29,9 @@ def main() -> None:
                 )
             """)
             old_constraint, old_index, kind_exists = cur.fetchone()
-        print("legacy" if old_constraint or old_index or not kind_exists else "current")
+        print("legacy" if not kind_exists else (
+            "expanded" if old_constraint or old_index else "current"
+        ))
     finally:
         conn.close()
 

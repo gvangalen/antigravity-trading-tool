@@ -75,7 +75,7 @@ if [ -f backend/trading-tool-backend/backend/scripts/paper_exit_migration_state.
       echo "❌ Rollback target cannot write assessments against the Paper exit schema. Deploy a forward fix." >&2
       exit 1
     fi
-  elif [ "$paper_exit_schema_state" != legacy ]; then
+  elif [ "$paper_exit_schema_state" != legacy ] && [ "$paper_exit_schema_state" != expanded ]; then
     echo "❌ Cannot verify Paper exit schema before rollback." >&2
     exit 1
   fi
