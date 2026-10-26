@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 DEFAULT_SYMBOL = "BTC"
-# Stage 1 leaves the old daily uniqueness constraint in place for rollback.
-# Stage 2 changes this constant only after the compatible release is live.
-PAPER_AUTO_EXIT_CUTOVER = False
+# The deployment migrates decision identity after stopping every old bot
+# writer, before starting this release's workers. Rollback targets must use
+# the position-aware assessment arbiter on the resulting schema.
+PAPER_AUTO_EXIT_CUTOVER = True
 
 ACTIONS = ("buy", "sell", "hold", "observe")
 CONFIDENCE_LEVELS = ("low", "medium", "high")
@@ -1862,6 +1863,68 @@ def _persist_decision_and_order(
     return decision_id
 
 
+def _open_paper_trade_lots(
+    conn, *, user_id: int, bot_id: int, symbol: str, position_qty: float,
+) -> Optional[list[tuple]]:
+    """Reconstruct the entire open execution episode, newest row first.
+
+    A truncated or inconsistent ledger is unknown evidence, never permission
+    to sell the full position. The oldest open buy is the stable exit identity.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT l.id, l.qty_delta, l.decision_id, d.scores_json, d.strategy_id
+            FROM bot_ledger l
+            JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
+            WHERE l.user_id=%s AND l.bot_id=%s AND l.symbol=%s
+              AND l.entry_type='execute' AND l.qty_delta<>0
+            ORDER BY l.id DESC LIMIT 2001
+        """, (user_id, bot_id, symbol))
+        rows = cur.fetchall()
+    remaining = position_qty
+    tolerance = max(1e-9, position_qty * 1e-7)
+    buys: list[tuple] = []
+    for row in rows:
+        try:
+            delta = float(row[1])
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(delta) or delta == 0:
+            return None
+        if delta > 0:
+            buys.append(row)
+        remaining -= delta
+        if remaining < -tolerance:
+            return None
+        if abs(remaining) <= tolerance:
+            return buys if buys and delta > 0 else None
+    return None
+
+
+def _paper_lot_matches_plan(
+    lot: tuple, *, strategy_id: int, currency: str,
+    entry: float, stop: float, first_target: float,
+) -> bool:
+    try:
+        lot_strategy_id = int(lot[4])
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if lot_strategy_id != strategy_id:
+        return False
+    scores = _safe_json(lot[3], {})
+    plan = scores.get("trade_plan") if isinstance(scores, dict) else None
+    levels = plan.get("source_levels") if isinstance(plan, dict) else None
+    try:
+        return (
+            str(plan["source_price_currency"]).upper() == currency
+            and float(levels["entry"]) == entry
+            and float(levels["stop_loss"]) == stop
+            and float(levels["targets"][0]) == first_target
+        )
+    except (IndexError, KeyError, TypeError, ValueError, OverflowError):
+        return False
+
+
 def _maybe_execute_paper_position_exit(
     *, conn, user_id: int, bot: dict, report_date: date,
 ) -> Optional[dict]:
@@ -1911,20 +1974,14 @@ def _maybe_execute_paper_position_exit(
             return None
         if not math.isfinite(qty) or qty <= 0:
             return None
-        cur.execute("""
-            SELECT l.id, l.decision_id, d.scores_json, d.strategy_id
-            FROM bot_ledger l
-            JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
-            WHERE l.user_id=%s AND l.bot_id=%s AND l.symbol=%s
-              AND l.entry_type='execute' AND l.qty_delta>0
-            ORDER BY l.id DESC LIMIT 1
-        """, (user_id, bot_id, symbol))
-        opened = cur.fetchone()
-        if not opened or int(opened[3]) != int(bot_row[0]):
-            return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
-                    "execution_status": "exit_opening_plan_unavailable"}
-        position_open_ledger_id = int(opened[0])
-        opening_decision_id = int(opened[1])
+    open_lots = _open_paper_trade_lots(
+        conn, user_id=user_id, bot_id=bot_id, symbol=symbol, position_qty=qty,
+    )
+    if not open_lots:
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_opening_plan_unavailable"}
+    position_open_ledger_id = int(open_lots[-1][0])
+    opening_decision_id = int(open_lots[-1][2])
 
     entry_raw, stop_raw, targets_raw, data_raw, _symbol, setup_id = strategy_row
     data = _safe_json(data_raw, {})
@@ -1944,22 +2001,11 @@ def _maybe_execute_paper_position_exit(
         return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
                 "execution_status": "exit_levels_unavailable"}
     currency = str(data.get("price_currency") or "").upper()
-    opening_scores = _safe_json(opened[2], {})
-    opening_plan = opening_scores.get("trade_plan") if isinstance(opening_scores, dict) else None
-    opening_levels = opening_plan.get("source_levels") if isinstance(opening_plan, dict) else None
-    try:
-        opening_targets = opening_levels["targets"]
-        opening_matches = (
-            str(opening_plan["source_price_currency"]).upper() == currency
-            and float(opening_levels["entry"]) == entry
-            and float(opening_levels["stop_loss"]) == stop
-            and float(opening_targets[0]) == first_target
-        )
-    except (IndexError, KeyError, TypeError, ValueError, OverflowError):
-        opening_matches = False
-    if not opening_matches:
-        # A changed strategy needs an explicit new plan decision; an existing
-        # Paper position cannot silently inherit new automatic sell levels.
+    if not all(_paper_lot_matches_plan(
+        lot, strategy_id=int(bot_row[0]), currency=currency,
+        entry=entry, stop=stop, first_target=first_target,
+    ) for lot in open_lots):
+        # Every still-open buy must have the same confirmed exit levels.
         return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
                 "execution_status": "exit_levels_changed"}
     context = _get_trade_quote_fx_context(conn, symbol, require_usd=currency == "USD")
@@ -2807,16 +2853,18 @@ def _recheck_paper_position_exit(
             WHERE user_id=%s AND bot_id=%s AND symbol=%s FOR UPDATE
         """, (user_id, bot_id, symbol))
         position = cur.fetchone()
-        cur.execute("""
-            SELECT id FROM bot_ledger
-            WHERE user_id=%s AND bot_id=%s AND symbol=%s
-              AND entry_type='execute' AND qty_delta>0
-            ORDER BY id DESC LIMIT 1
-        """, (user_id, bot_id, symbol))
-        opened = cur.fetchone()
-    if (not position or float(position[0] or 0) != planned_qty
-            or not opened or int(opened[0]) != int(opened_id)):
+    if not position or float(position[0] or 0) != planned_qty:
         raise BotSafetyBlock("De Paper-positie is gewijzigd; de exit is gestopt.")
+    open_lots = _open_paper_trade_lots(
+        conn, user_id=user_id, bot_id=bot_id, symbol=symbol,
+        position_qty=planned_qty,
+    )
+    if (not open_lots or int(open_lots[-1][0]) != int(opened_id)
+            or not all(_paper_lot_matches_plan(
+                lot, strategy_id=int(bot_strategy), currency=source,
+                entry=entry, stop=stop, first_target=target,
+            ) for lot in open_lots)):
+        raise BotSafetyBlock("De open Paper-aankopen hebben geen gezamenlijk bevestigd uitstapplan.")
     context = _get_trade_quote_fx_context(conn, symbol, require_usd=source == "USD")
     if str(context.get("quote_currency") or "").upper() != source:
         raise BotSafetyBlock("Het handelspaar van de Paper-exit is niet bevestigd.")

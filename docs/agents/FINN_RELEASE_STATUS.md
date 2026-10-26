@@ -6,7 +6,42 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
 
-Current phase: `MACD_COPY_REPAIR_LIVE_AWAITING_QA`. PR #640 deployed as
+Current phase: `STAGE2_LOCAL_VALIDATION`. Independent QA accepted the
+targeted Stage 1 recheck on final live SHA
+`1d75d5ccccfe611a5fd4c73324cc6945eb148ef2`: the localized MACD title,
+explanation and summary, the independently fetched stale AAPL/USD quote, and
+the rejection of ETH/EUR as an unsupported exact pair all passed. The BTC
+Paper bot stayed active without an order. The missing-match case and
+two-owner isolation were not triggered in QA's read-only session and remain
+unproven there. Stage 2 now prepares the per-position exit identity: the
+deployment stops all old bot writers before removing the former date-wide
+unique key; a rollback may target Stage 1, whose writer already uses the
+partial assessment arbiter. Automatic Paper exits remain restricted to
+confirmed direct EUR/USD market quotes and the stored stop or first target.
+They do not infer BTC/EUR from a BTC/USDT quote or an FX conversion. A local
+PostgreSQL migration probe passed twice and allowed an assessment and exit on
+the same day. Nine local Paper probes passed: target, stop, stale quote,
+changed levels, failed execution, USDT target/stop holds, mixed opening plans
+holding, and two matching buys closing once. The exit now reconstructs every
+still-open buy and rechecks its saved strategy, currency and stop/target levels
+at execution; a partial sale remains in the same episode. The focused
+open-lot regressions passed 3/3 and the independent Security recheck found no
+concrete P1/P2. The final full backend run passed 3996 with four existing
+skips. Web build, typecheck, i18n lint/tests, command/proposal tests and
+high-severity audit passed. Real Luna/Responses development selection passed
+20/20 with zero provider, schema, parse, timeout or validation failures
+(artifact SHA-256 `49271029c014490154c31adaed56b3046124c6405fd91be616a250f3c65dfc4d`).
+The local worker-driven action matrix passed 16/16 contracts plus 21/21
+adapter checks, with zero broker orders, Live calls or production connections
+(artifact SHA-256 `666bdaa8f39af87ea6f2082ac81e4fbd2a5cf30260f18774c2a0388f1b77dd63`).
+The real Luna/Responses regression gate passed 109/109 with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`d0ae71c23d424cc3d4b3e4a18fdaccd76e3dc3da5c337711328bc4a504c0a411`).
+Local migrations reached `current` and the deployed writer-drain Python
+parses; `bash -n` and `git diff --check` passed. CI, deployment and
+independent QA of Stage 2 remain pending.
+
+Previous phase: `MACD_COPY_REPAIR_LIVE_AWAITING_QA`. PR #640 deployed as
 `21c8bdf13b6287aa46b7cfccb45768b40e7d469f` after successful main CI
 40403107323 and Auto Deploy 40403569450; both public identity endpoints
 returned HTTP 200 and that exact SHA. Independent QA returned `NOT_ACCEPTED`
@@ -38,7 +73,7 @@ main SHA; Build must wait for its CI and Auto Deploy and verify both public
 markers at the final revision before independent QA begins. Independent live
 QA of the dialog and Stage 1 scope remains pending.
 
-Phase: `STAGE1_QA_NOT_ACCEPTED`; PR #639 merged and Stage 1 is live at
+Earlier phase: `STAGE1_QA_NOT_ACCEPTED`; PR #639 merged and Stage 1 is live at
 `6a72cc65610348cd58e98f3934ef10f6f4a1b493`. Main CI 40397347795
 and Auto Deploy 40397831252 succeeded; backend health and frontend build info
 returned HTTP 200 and the exact SHA. Independent QA found that Analyse

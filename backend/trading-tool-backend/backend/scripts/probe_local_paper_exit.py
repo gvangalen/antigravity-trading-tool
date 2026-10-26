@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 def main() -> None:
     scenario = os.getenv("PAPER_EXIT_PROBE_SCENARIO", "target")
     if scenario not in {"target", "stop", "stale", "changed_levels", "execution_failure",
-                        "usdt_target", "usdt_stop"}:
+                        "usdt_target", "usdt_stop", "mixed_levels", "same_plan_add"}:
         raise RuntimeError("unknown_probe_scenario")
     symbol = "BTC" if scenario.startswith("usdt_") else "AAPL"
     quote_currency = "USDT" if symbol == "BTC" else "USD"
@@ -75,7 +75,7 @@ def main() -> None:
                            VALUES (%s,%s,%s,%s,%s)""", (symbol, price, observed_at, observed_at, quote_currency))
             evidence = {"trade_plan": {
                 "source_price_currency": "USD",
-                "source_levels": {"entry": 347.14, "stop_loss": 342,
+                "source_levels": {"entry": 347.14, "stop_loss": 341 if scenario == "mixed_levels" else 342,
                                   "targets": [357.42, 370]},
             }}
             cur.execute("""INSERT INTO bot_decisions
@@ -83,7 +83,8 @@ def main() -> None:
                             action,confidence,amount_eur,scores_json,status,executed_by)
                            VALUES (%s,%s,%s,%s,%s,%s,%s,'buy','high',400,%s::jsonb,'executed','auto')
                            RETURNING id""",
-                        (user_id, bot_id, strategy_id, setup_id, symbol, date.today(), now,
+                        (user_id, bot_id, strategy_id, setup_id, symbol,
+                         date.today() - timedelta(days=1) if scenario in {"mixed_levels", "same_plan_add"} else date.today(), now,
                          json.dumps(evidence)))
             buy_id = int(cur.fetchone()[0])
             cur.execute("""INSERT INTO bot_orders
@@ -101,6 +102,34 @@ def main() -> None:
             cur.execute("""INSERT INTO bot_portfolios
                            (bot_id,user_id,symbol,cash_eur,position_qty,invested_eur,avg_entry,realized_pnl_eur)
                            VALUES (%s,%s,%s,600,1.2,400,333.33,0)""", (bot_id, user_id, symbol))
+            if scenario in {"mixed_levels", "same_plan_add"}:
+                second_evidence = {"trade_plan": {"source_price_currency": "USD",
+                    "source_levels": {"entry": 347.14, "stop_loss": 342,
+                                      "targets": [357.42, 370]}}}
+                cur.execute("""INSERT INTO bot_decisions
+                               (user_id,bot_id,strategy_id,setup_id,symbol,decision_date,decision_ts,
+                                action,confidence,amount_eur,scores_json,status,executed_by)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,'buy','high',100,%s::jsonb,'executed','auto')
+                               RETURNING id""",
+                            (user_id, bot_id, strategy_id, setup_id, symbol, date.today(), now,
+                             json.dumps(second_evidence)))
+                second_buy_id = int(cur.fetchone()[0])
+                cur.execute("""INSERT INTO bot_orders
+                               (user_id,bot_id,decision_id,symbol,side,order_type,quote_amount_eur,
+                                estimated_price_eur,estimated_qty,status,execution_environment)
+                               VALUES (%s,%s,%s,%s,'buy','market',100,333.33,0.3,'filled','paper') RETURNING id""",
+                            (user_id, bot_id, second_buy_id, symbol))
+                second_order_id = int(cur.fetchone()[0])
+                cur.execute("""INSERT INTO bot_ledger
+                               (user_id,bot_id,decision_id,order_id,entry_type,symbol,cash_delta_eur,
+                                qty_delta,price_eur,note,meta,ts,valuation_version)
+                               VALUES (%s,%s,%s,%s,'execute',%s,-100,0.3,333.33,
+                                       'Local additional Paper buy','{}'::jsonb,%s,2)""",
+                            (user_id, bot_id, second_buy_id, second_order_id, symbol, now))
+                cur.execute("""UPDATE bot_portfolios
+                               SET cash_eur=500,position_qty=1.5,invested_eur=500
+                               WHERE user_id=%s AND bot_id=%s AND symbol=%s""",
+                            (user_id, bot_id, symbol))
             if scenario == "changed_levels":
                 cur.execute("UPDATE strategies SET stop_loss=341 WHERE id=%s AND user_id=%s",
                             (strategy_id, user_id))
@@ -136,26 +165,31 @@ def main() -> None:
               "orders": orders, "portfolio": portfolio}
     print(json.dumps(result, default=str))
     assert first["ok"] and second["ok"], result
-    if scenario in {"target", "stop"}:
-        assert decisions == [("assessment", "buy", "executed"),
-                             ("paper_exit", "sell", "executed")], result
-        assert orders == [("buy", "filled"), ("sell", "filled")], result
+    if scenario in {"target", "stop", "same_plan_add"}:
+        expected_buys = [("assessment", "buy", "executed")] * (
+            2 if scenario == "same_plan_add" else 1)
+        assert decisions == expected_buys + [("paper_exit", "sell", "executed")], result
+        assert orders == [("buy", "filled")] * len(expected_buys) + [("sell", "filled")], result
         assert first["decisions"][0]["trigger"] == (
-            "first_target" if scenario in {"target", "usdt_target"} else "stop_loss"), result
+            "first_target" if scenario in {"target", "same_plan_add"} else "stop_loss"), result
         assert float(portfolio[1]) == 0, result
     else:
-        expected_decisions = [("assessment", "buy", "executed")]
+        expected_decisions = [("assessment", "buy", "executed")] * (
+            2 if scenario == "mixed_levels" else 1)
         if scenario == "execution_failure":
             expected_decisions.append(("paper_exit", "sell", "failed_execution"))
         assert decisions == expected_decisions, result
-        assert orders == [("buy", "filled")], result
-        assert float(portfolio[1]) == 1.2, result
+        assert orders == [("buy", "filled")] * (2 if scenario == "mixed_levels" else 1), result
+        assert float(portfolio[1]) == (1.5 if scenario == "mixed_levels" else 1.2), result
         if scenario == "execution_failure":
             assert first["decisions"][0]["execution_status"] == "failed_execution", result
             assert second["decisions"][0]["action"] == "hold", result
         elif scenario in {"usdt_target", "usdt_stop"}:
             assert first["decisions"][0]["execution_status"] == "exit_trading_pair_unconfirmed", result
             assert second["decisions"][0]["execution_status"] == "exit_trading_pair_unconfirmed", result
+        elif scenario == "mixed_levels":
+            assert first["decisions"][0]["execution_status"] == "exit_levels_changed", result
+            assert second["decisions"][0]["execution_status"] == "exit_levels_changed", result
         else:
             assert first["decisions"][0]["action"] == "hold", result
 
