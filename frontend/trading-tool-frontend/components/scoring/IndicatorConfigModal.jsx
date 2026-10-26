@@ -458,7 +458,7 @@ export default function IndicatorConfigModal({
         error, indicatorLabel, assetSymbol,
         actionFailed: copy.actionFailed.replace("{indicator}", indicatorLabel),
       });
-      if (error?.indicatorCreated) {
+      if (error?.indicatorCreated || error?.configurationSaved) {
         onCompleted?.({ indicator, category, assetSymbol, draft, partial: true, error: message });
         onClose?.();
       } else {

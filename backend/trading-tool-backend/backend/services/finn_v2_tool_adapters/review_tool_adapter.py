@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 import json
 import re
 
 from fastapi import HTTPException
 
 from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
-from backend.infrastructure.repositories.bot_repository import BotRepository
+from backend.services.bot_service import BotService
 from backend.schemas.finn_v2_evidence_schema import ReviewHistoryData
 from backend.services.finn_closed_trade_reflection_service import FinnClosedTradeReflectionService
 
 
 class ReviewToolAdapter:
     def __init__(self, session):
-        self.repository = BotRepository(session)
+        self.bot_service = BotService(session)
         self.sources = FinnV2InformationSourceRegistry()
         self.closed_trades = FinnClosedTradeReflectionService(session)
 
@@ -34,14 +34,15 @@ class ReviewToolAdapter:
     async def execute(self, *, user_id: int, asset: str | None = None, selector: dict | None = None,
                       review_id: int | None = None, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
-        rows = [] if review_id is not None else await self.repository.get_bot_history(
-            user_id, date.today() - timedelta(days=30), date.today()
-        )
+        rows = [] if review_id is not None else await self.bot_service.get_bot_history(user_id, 30)
         if asset:
             rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset.upper()]
         decision_items = [
             f"Botbeslissing, geen bevestigde gesloten trade: {row['decision_ts']}: "
-            f"bot {row['bot_name']} ({row['symbol']}) {row['action']} (status: {row['status']})"
+            f"bot {row['bot_name']} ({row['symbol']}) actie {row['action']}; "
+            f"opslagstatus {row['status']}; veiligheidsstatus "
+            f"{(row.get('safety_check') or {}).get('state') or 'onbekend'}; "
+            f"uitleg {(row.get('safety_check') or {}).get('reason') or 'niet beschikbaar'}"
             for row in rows[:20]
         ]
         if review_id is None:

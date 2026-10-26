@@ -117,6 +117,8 @@ async def update_indicator_settings(
         return {"ok": True, "indicator": payload.indicator}
     except ValueError as e:
         logger.warning("⚠️ Ongeldige indicator settings update: %s", e)
+        if str(e) == "indicator_score_rules_unavailable":
+            raise HTTPException(status_code=422, detail="Voor deze indicator ontbreekt een scoreregel. Kies eerst een eigen scoreregel.")
         raise HTTPException(status_code=400, detail="Ongeldige indicator-instellingen.")
     except Exception as e:
         logger.exception("❌ Error updating indicator settings")
@@ -139,11 +141,14 @@ async def save_custom_rules(
             user_id=user_id,
             symbol=payload.symbol,
             rules=payload.rules,
-            weight=payload.weight
+            weight=payload.weight,
+            create_only=payload.create_only,
         )
         return {"ok": True}
     except ValueError as e:
         logger.warning("⚠️ Ongeldige indicator rules save: %s", e)
+        if str(e) == "indicator_already_configured":
+            raise HTTPException(status_code=409, detail="Deze indicator is al toegevoegd. Bewerk de bestaande indicator.")
         raise HTTPException(status_code=400, detail="Ongeldige indicatorregels.")
     except Exception as e:
         logger.exception("❌ Error saving custom rules")

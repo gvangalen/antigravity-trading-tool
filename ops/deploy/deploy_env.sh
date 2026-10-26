@@ -225,6 +225,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   export BACKEND_APP='$BACKEND_APP'
   export CORE_PM2_APPS='$CORE_PM2_APPS'
   export AUX_PM2_APPS='$AUX_PM2_APPS'
+  export RETIRED_PM2_APPS='$RETIRED_PM2_APPS'
   export EXPECTED_PM2_APPS='$EXPECTED_PM2_APPS'
   export MIGRATION_COMMAND_TIMEOUT_SECONDS=$MIGRATION_COMMAND_TIMEOUT_SECONDS
   export MIN_DEPLOY_AVAILABLE_MEMORY_KB=$MIN_DEPLOY_AVAILABLE_MEMORY_KB
@@ -418,6 +419,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_10_08_indicator_score_templates_v2.py
   run_migration backend/scripts/migrations/2026_10_18_sp500_score_template.py
   run_migration backend/scripts/migrations/2026_10_21_ma200_score_template.py
+  run_migration backend/scripts/migrations/2026_10_26_ma50_macd_score_templates.py
   run_migration backend/scripts/migrations/2026_10_08_dxy_yahoo_source.py
   run_migration backend/scripts/migrations/2026_10_09_retire_ai_reflections.py
   run_migration backend/scripts/migrations/2026_10_09_retire_ai_category_insights.py
@@ -468,6 +470,19 @@ EOF
     echo \"❌ PM2 config $PM2_CONFIG not found on remote host.\" >&2
     exit 1
   fi
+  # Stage 1 is expand-only. The legacy daily unique constraint stays in place
+  # so a failed deployment can still roll back to the previous bot writer.
+  advance_deploy_step 'paper_exit_decision_expand'
+  (cd backend/trading-tool-backend && \
+    run_migration backend/scripts/migrations/2026_10_26_paper_exit_decision_identity.py && \
+    python3 -m backend.scripts.check_finn_v2_schema)
+  paper_exit_schema_state=\"\$(cd backend/trading-tool-backend && \\
+    python3 -m backend.scripts.paper_exit_migration_state | tail -n 1)\"
+  if [ \"\$paper_exit_schema_state\" != expanded ] && [ \"\$paper_exit_schema_state\" != current ]; then
+    echo \"Paper exit expand migration did not reach a compatible schema: \$paper_exit_schema_state\" >&2
+    exit 1
+  fi
+  PM2_DEPLOY_MODE=phased
   check_pm2_apps_online() {
     for attempt in \$(seq 1 20); do
       pm2 jlist >/tmp/tradamind_pm2_jlist.json

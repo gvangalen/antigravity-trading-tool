@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
+
+Phase: `STAGE1_LOCAL_VALIDATION`; this batch has not been pushed or deployed.
+Stage 1 deploys the completed score, FX and FINN diagnostics plus an expand-only
+Paper decision schema. The legacy daily unique constraint stays in place and
+automatic Paper exits remain disabled in the deployed runtime; rollback to the
+previous bot writer remains possible. The local-only Stage 2 AAPL/USD probe
+closes the full position at the first saved
+target or stop, creates one sell after the buy on the same day, does not replay
+the exit, and projects the closed trade into Reflectie. Stale quotes, changed
+levels and a failed execution hold. A BTC/USDT quote with EUR or USD strategy
+levels holds with `exit_trading_pair_unconfirmed`; FX valuation is not treated
+as a direct EUR/USD trading-pair quote. The current product has no persisted
+EUR/USDT pair choice across market data, Score 2.0, chart, plan and bot, so
+this local repair does not claim that full pair flow is complete.
+
+Local evidence: backend 3992 passed, 4 existing skips; web build, typecheck,
+i18n lint/tests, command/proposal tests and high-severity audit passed;
+worker-driven action matrix 16/16 and adapter checks 21/21 passed (artifact
+SHA-256 `864ef0078a4f89de29d9de2c5b198dbd3084bd7a63bffceb184cdb86bcbae379`).
+Real Luna/Responses development selection passed 20/20 (artifact SHA-256
+`de51e2d67791f5e2235dd2f0a272d2df8a3b67ef97484044c9ce4c6cb78ccba9`)
+and the Stage 1 regression selection passed 109/109 (artifact SHA-256
+`446740aa2314de6c5ba075014cfbb17c25ec036e93457d5ebdebd51115bd1977`).
+
+Security review accepted the expand-only compatibility boundary for Stage 1.
+After Stage 1 is live and accepted, Stage 2 may remove the old daily unique
+constraint and enable automatic Paper exits, with Stage 1 as its compatible
+rollback target. No production or independent-QA verdict is claimed yet.
+
 ## Coachfeed transient gateway error during deployment (26 oktober 2026)
 
 Phase: `ACCEPTED` for the tested coachfeed scope. Independent QA observed one HTTP 502 for the

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
+
+from backend.infrastructure.repositories.bot_repository import BotRepository
+from backend.services.bot_service import BotService
 
 from backend.schemas.finn_v2_evidence_schema import BotStatusData, LinkedBotData
 
 
 class BotToolAdapter:
+    def __init__(self, session=None):
+        self.repository = BotRepository(session) if session is not None else None
+        self.bot_service = BotService(session) if session is not None else None
+
     async def execute_linked_bot(self, *, bot: dict, resolution_source: str, **_kwargs):
         payload = LinkedBotData(
             bot_id=bot.get("id"),
@@ -34,8 +42,43 @@ class BotToolAdapter:
             "asset": payload.symbol,
         }
 
-    async def execute_status(self, *, bot: dict, **_kwargs):
+    async def execute_status(self, *, bot: dict, user_id: int | None = None, **_kwargs):
         last_run = bot.get("last_run")
+        latest = None
+        if self.repository is not None and user_id is not None and bot.get("id") is not None:
+            decision = await self.repository.get_latest_bot_decision(user_id, int(bot["id"]))
+            if decision:
+                scores = decision.get("scores_json") or {}
+                if isinstance(scores, str):
+                    try:
+                        scores = json.loads(scores)
+                    except ValueError:
+                        scores = {}
+                if not isinstance(scores, dict):
+                    scores = {}
+                is_exit = decision.get("decision_kind") == "paper_exit"
+                safety = None if is_exit else self.bot_service._safety_contract({
+                    "id": decision["id"], "bot_id": decision["bot_id"],
+                    "status": decision["status"], "created_at": decision.get("decision_ts"),
+                    "guardrails_result": scores.get("guardrails_result"),
+                    "guardrails_checked_at": scores.get("guardrails_checked_at"),
+                    "requested_amount_eur": scores.get("requested_amount_eur"),
+                    "execution_failure": scores.get("execution_failure"),
+                    "strategy_reason": scores.get("strategy_reason"),
+                }, bool(bot.get("is_live")))
+                latest = {
+                    "decision_id": decision["id"], "action": decision["action"],
+                    "decision_kind": decision.get("decision_kind") or "assessment",
+                    "persistence_status": decision["status"],
+                    "decision_at": decision.get("decision_ts"),
+                    "exit_trigger": scores.get("trigger") if is_exit else None,
+                    "execution_failure": scores.get("execution_failure") if is_exit else None,
+                    "safety_state": safety["state"] if safety else None,
+                    "reason_code": safety["reason_code"] if safety else None,
+                    "reason": safety["reason"] if safety else None,
+                    "next_step": safety["next_step"] if safety else None,
+                    "safety_checked_at": safety["checked_at"] if safety else None,
+                }
         payload = BotStatusData(
             bot_id=bot.get("id"),
             is_active=bool(bot.get("is_active")),
@@ -43,6 +86,7 @@ class BotToolAdapter:
             last_run=last_run if isinstance(last_run, datetime) else None,
             mode=bot.get("mode"),
             cadence=bot.get("cadence"),
+            latest_decision=latest,
         )
         return {
             "data": payload,

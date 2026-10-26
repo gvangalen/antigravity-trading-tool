@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 DEFAULT_SYMBOL = "BTC"
+# Stage 1 leaves the old daily uniqueness constraint in place for rollback.
+# Stage 2 changes this constant only after the compatible release is live.
+PAPER_AUTO_EXIT_CUTOVER = False
 
 ACTIONS = ("buy", "sell", "hold", "observe")
 CONFIDENCE_LEVELS = ("low", "medium", "high")
@@ -1808,7 +1811,8 @@ def _persist_decision_and_order(
                 'planned',
                 NOW(), NOW()
             )
-            ON CONFLICT (user_id, bot_id, decision_date) DO UPDATE SET
+            ON CONFLICT (user_id, bot_id, decision_date)
+            WHERE decision_kind = 'assessment' DO UPDATE SET
                 strategy_id = EXCLUDED.strategy_id,
                 setup_id = EXCLUDED.setup_id,
                 symbol = EXCLUDED.symbol,
@@ -1856,7 +1860,207 @@ def _persist_decision_and_order(
     )
 
     return decision_id
-    
+
+
+def _maybe_execute_paper_position_exit(
+    *, conn, user_id: int, bot: dict, report_date: date,
+) -> Optional[dict]:
+    """Close one confirmed trade position at its stop or first target.
+
+    This check runs independently of entry cadence and Score 2.0. The bot,
+    strategy and position stay locked through the Paper ledger write. It never
+    creates a Live order or treats a stored level as an exchange stop order.
+    """
+    if (report_date != date.today() or bot.get("is_live") or
+            bot.get("mode") != "auto" or
+            str(bot.get("setup_type") or "").lower() != "trade"):
+        return None
+    bot_id = int(bot["bot_id"])
+    symbol = str(bot.get("symbol") or "").upper()
+    with conn.cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (user_id, bot_id))
+        cur.execute("""
+            SELECT strategy_id FROM bot_configs
+            WHERE id=%s AND user_id=%s AND is_active=TRUE
+              AND is_live=FALSE AND mode='auto'
+            FOR UPDATE
+        """, (bot_id, user_id))
+        bot_row = cur.fetchone()
+        if not bot_row or int(bot_row[0]) != int(bot["strategy_id"]):
+            return None
+        cur.execute("""
+            SELECT s.entry, s.stop_loss, s.targets, s.data, st.symbol, st.id
+            FROM strategies s
+            JOIN setups st ON st.id=s.setup_id AND st.user_id=s.user_id
+            WHERE s.id=%s AND s.user_id=%s AND s.setup_type='trade'
+            FOR SHARE OF s, st
+        """, (bot_row[0], user_id))
+        strategy_row = cur.fetchone()
+        if not strategy_row or str(strategy_row[4] or "").upper() != symbol:
+            return None
+        cur.execute("""
+            SELECT position_qty FROM bot_portfolios
+            WHERE user_id=%s AND bot_id=%s AND symbol=%s FOR UPDATE
+        """, (user_id, bot_id, symbol))
+        position_row = cur.fetchone()
+        if not position_row:
+            return None
+        try:
+            qty = float(position_row[0])
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(qty) or qty <= 0:
+            return None
+        cur.execute("""
+            SELECT l.id, l.decision_id, d.scores_json, d.strategy_id
+            FROM bot_ledger l
+            JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
+            WHERE l.user_id=%s AND l.bot_id=%s AND l.symbol=%s
+              AND l.entry_type='execute' AND l.qty_delta>0
+            ORDER BY l.id DESC LIMIT 1
+        """, (user_id, bot_id, symbol))
+        opened = cur.fetchone()
+        if not opened or int(opened[3]) != int(bot_row[0]):
+            return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                    "execution_status": "exit_opening_plan_unavailable"}
+        position_open_ledger_id = int(opened[0])
+        opening_decision_id = int(opened[1])
+
+    entry_raw, stop_raw, targets_raw, data_raw, _symbol, setup_id = strategy_row
+    data = _safe_json(data_raw, {})
+    targets = _safe_json(
+        targets_raw, targets_raw.split(",") if isinstance(targets_raw, str) else targets_raw,
+    )
+    try:
+        entry = float(entry_raw)
+        stop = float(stop_raw)
+        first_target = float(targets[0])
+    except (IndexError, KeyError, TypeError, ValueError, OverflowError):
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_levels_unavailable"}
+    if (not all(math.isfinite(level) and level > 0 for level in (entry, stop, first_target))
+            or not stop < entry < first_target
+            or not isinstance(data, dict) or not data.get("price_currency_confirmed")):
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_levels_unavailable"}
+    currency = str(data.get("price_currency") or "").upper()
+    opening_scores = _safe_json(opened[2], {})
+    opening_plan = opening_scores.get("trade_plan") if isinstance(opening_scores, dict) else None
+    opening_levels = opening_plan.get("source_levels") if isinstance(opening_plan, dict) else None
+    try:
+        opening_targets = opening_levels["targets"]
+        opening_matches = (
+            str(opening_plan["source_price_currency"]).upper() == currency
+            and float(opening_levels["entry"]) == entry
+            and float(opening_levels["stop_loss"]) == stop
+            and float(opening_targets[0]) == first_target
+        )
+    except (IndexError, KeyError, TypeError, ValueError, OverflowError):
+        opening_matches = False
+    if not opening_matches:
+        # A changed strategy needs an explicit new plan decision; an existing
+        # Paper position cannot silently inherit new automatic sell levels.
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_levels_changed"}
+    context = _get_trade_quote_fx_context(conn, symbol, require_usd=currency == "USD")
+    if currency not in {"EUR", "USD"}:
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_quote_unavailable"}
+    if str(context.get("quote_currency") or "").upper() != currency:
+        # FX conversion is valid for EUR portfolio valuation, but it does not
+        # turn a USDT market quote into the exact EUR/USD trading pair that
+        # supplied the saved strategy levels. Wait for an explicit pair.
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_trading_pair_unconfirmed"}
+    try:
+        source_price = _paper_exit_price_in_strategy_currency(context, currency)
+        eur_price = float(context["market_price_eur"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_quote_unavailable"}
+    if not all(math.isfinite(value) and value > 0 for value in (source_price, eur_price)):
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_quote_unavailable"}
+    trigger = "stop_loss" if source_price <= stop else (
+        "first_target" if source_price >= first_target else None
+    )
+    if trigger is None:
+        return None
+    checked_at = context.get("market_price_at")
+    evidence = {
+        "decision_kind": "paper_exit", "trigger": trigger,
+        "source_price_currency": currency, "source_price": source_price,
+        "market_quote_currency": context.get("quote_currency"),
+        "source_price_at": checked_at.isoformat() if checked_at else None,
+        "saved_entry": entry, "saved_stop_loss": stop,
+        "saved_first_target": first_target,
+        "position_open_ledger_id": position_open_ledger_id,
+        "opening_decision_id": opening_decision_id,
+        "position_qty": qty,
+    }
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO bot_decisions
+                (user_id, bot_id, strategy_id, setup_id, symbol, decision_date,
+                 decision_kind, position_open_ledger_id, decision_ts, action,
+                 confidence, amount_eur, scores_json, reason_json, status)
+            VALUES (%s,%s,%s,%s,%s,%s,'paper_exit',%s,NOW(),'sell','high',
+                    %s,%s::jsonb,%s::jsonb,'planned')
+            ON CONFLICT (user_id, bot_id, position_open_ledger_id)
+            WHERE decision_kind='paper_exit' DO NOTHING
+            RETURNING id
+        """, (
+            user_id, bot_id, bot_row[0], setup_id, symbol, report_date,
+            position_open_ledger_id, round(qty * eur_price, 2),
+            json.dumps(evidence), json.dumps([trigger]),
+        ))
+        inserted = cur.fetchone()
+    if inserted is None:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, status FROM bot_decisions
+                WHERE user_id=%s AND bot_id=%s
+                  AND decision_kind='paper_exit' AND position_open_ledger_id=%s
+                FOR UPDATE
+            """, (user_id, bot_id, position_open_ledger_id))
+            prior = cur.fetchone()
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "decision_id": int(prior[0]) if prior else None,
+                "execution_status": f"exit_{prior[1]}" if prior else "exit_pending"}
+    decision_id = int(inserted[0])
+    order = {
+        "symbol": symbol, "side": "sell",
+        "quote_amount_eur": round(qty * eur_price, 2),
+        "estimated_price": eur_price, "estimated_qty": qty,
+    }
+    with conn.cursor() as cur:
+        cur.execute("SAVEPOINT paper_position_exit_execution")
+    try:
+        _persist_bot_order(
+            conn=conn, user_id=user_id, bot_id=bot_id,
+            decision_id=decision_id, order=order, is_live=False,
+        )
+        execution_status = _auto_execute_decision(
+            conn=conn, user_id=user_id, bot_id=bot_id,
+            decision_id=decision_id, order=order, is_live=False, mode="auto",
+        )
+    except Exception as exc:
+        with conn.cursor() as cur:
+            cur.execute("ROLLBACK TO SAVEPOINT paper_position_exit_execution")
+        _mark_bot_decision_execution_failed(
+            conn=conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+            reason=str(exc) if isinstance(exc, BotSafetyBlock) else None,
+        )
+        logger.exception("Paper position exit failed for bot=%s", bot_id)
+        execution_status = "failed_execution"
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("RELEASE SAVEPOINT paper_position_exit_execution")
+    return {
+        "bot_id": bot_id, "symbol": symbol, "decision_id": decision_id,
+        "action": "sell", "trigger": trigger, "execution_status": execution_status,
+    }
+
 # =====================================================
 # 🚀 Run Trading Bot Agent
 # =====================================================
@@ -1901,6 +2105,18 @@ def run_trading_bot_execution(
 
         for bot in bots:
 
+            exit_result = (
+                _maybe_execute_paper_position_exit(
+                    conn=conn, user_id=user_id, bot=bot, report_date=report_date,
+                ) if PAPER_AUTO_EXIT_CUTOVER else None
+            )
+            if exit_result is not None:
+                results.append(exit_result)
+                touched_bot_ids.append(bot["bot_id"])
+                # A closed or failed exit must never be followed by a new
+                # entry for the same bot in this assessment run.
+                continue
+
             if bot.get("is_live"):
                 with conn.cursor() as cur:
                     cur.execute("""
@@ -1917,6 +2133,7 @@ def run_trading_bot_execution(
                     cur.execute("""
                         SELECT status FROM bot_decisions
                         WHERE user_id=%s AND bot_id=%s AND decision_date=%s
+                          AND decision_kind='assessment'
                         ORDER BY id DESC LIMIT 1
                     """, (user_id, bot["bot_id"], report_date))
                     prior_decision = cur.fetchone()
@@ -2021,6 +2238,7 @@ def run_trading_bot_execution(
                     cur.execute(
                         """SELECT 1 FROM bot_decisions
                            WHERE user_id=%s AND bot_id=%s AND decision_date=%s
+                             AND decision_kind='assessment'
                              AND status='executed' LIMIT 1""",
                         (user_id, bot["bot_id"], report_date),
                     )
@@ -2530,6 +2748,92 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
     return price
 
 
+def _paper_exit_price_in_strategy_currency(context: dict, currency: str) -> float:
+    """Use the dated direct-pair quote for levels; FX is only for EUR valuation."""
+    if str(context.get("quote_currency") or "").upper() != currency:
+        raise ValueError("exit_trading_pair_unconfirmed")
+    return float(context["market_price"])
+
+
+def _recheck_paper_position_exit(
+    conn, *, user_id: int, bot_id: int, decision_id: int, symbol: str,
+    order_qty: float,
+) -> Optional[float]:
+    """Verify a tagged Paper exit against the current position and strategy."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT d.decision_kind, d.position_open_ledger_id, d.scores_json,
+                   d.strategy_id, b.strategy_id, s.entry, s.stop_loss,
+                   s.targets, s.data, st.symbol
+            FROM bot_decisions d
+            JOIN bot_configs b ON b.id=d.bot_id AND b.user_id=d.user_id
+            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=d.user_id
+            JOIN setups st ON st.id=s.setup_id AND st.user_id=d.user_id
+            WHERE d.id=%s AND d.user_id=%s AND d.bot_id=%s
+            FOR SHARE OF s, st
+        """, (decision_id, user_id, bot_id))
+        row = cur.fetchone()
+    if not row or row[0] != "paper_exit":
+        return None
+    kind, opened_id, evidence_raw, decision_strategy, bot_strategy, entry_raw, stop_raw, targets_raw, data_raw, saved_symbol = row
+    if decision_strategy != bot_strategy or str(saved_symbol or "").upper() != symbol:
+        raise BotSafetyBlock("De Paper-bot is aan een andere strategie gekoppeld.")
+    evidence = _safe_json(evidence_raw, {})
+    data = _safe_json(data_raw, {})
+    targets = _safe_json(
+        targets_raw, targets_raw.split(",") if isinstance(targets_raw, str) else targets_raw,
+    )
+    try:
+        entry = float(entry_raw)
+        stop = float(stop_raw)
+        target = float(targets[0])
+        source = str(data["price_currency"]).upper()
+        planned_qty = float(evidence["position_qty"])
+    except (IndexError, KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise BotSafetyBlock("De opgeslagen Paper-exit is niet volledig onderbouwd.") from exc
+    if (not isinstance(data, dict) or not data.get("price_currency_confirmed")
+            or source not in {"EUR", "USD"}
+            or not all(math.isfinite(value) and value > 0 for value in (entry, stop, target, planned_qty))
+            or not stop < entry < target
+            or evidence.get("saved_entry") != entry
+            or evidence.get("saved_stop_loss") != stop
+            or evidence.get("saved_first_target") != target
+            or evidence.get("source_price_currency") != source
+            or planned_qty != order_qty):
+        raise BotSafetyBlock("De Paper-positie of strategie is gewijzigd; de exit is gestopt.")
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT position_qty FROM bot_portfolios
+            WHERE user_id=%s AND bot_id=%s AND symbol=%s FOR UPDATE
+        """, (user_id, bot_id, symbol))
+        position = cur.fetchone()
+        cur.execute("""
+            SELECT id FROM bot_ledger
+            WHERE user_id=%s AND bot_id=%s AND symbol=%s
+              AND entry_type='execute' AND qty_delta>0
+            ORDER BY id DESC LIMIT 1
+        """, (user_id, bot_id, symbol))
+        opened = cur.fetchone()
+    if (not position or float(position[0] or 0) != planned_qty
+            or not opened or int(opened[0]) != int(opened_id)):
+        raise BotSafetyBlock("De Paper-positie is gewijzigd; de exit is gestopt.")
+    context = _get_trade_quote_fx_context(conn, symbol, require_usd=source == "USD")
+    if str(context.get("quote_currency") or "").upper() != source:
+        raise BotSafetyBlock("Het handelspaar van de Paper-exit is niet bevestigd.")
+    try:
+        source_price = _paper_exit_price_in_strategy_currency(context, source)
+        eur_price = float(context["market_price_eur"])
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise BotSafetyBlock("Er is geen verse koers of valutakoers voor de Paper-exit.") from exc
+    trigger = evidence.get("trigger")
+    if (not all(math.isfinite(value) and value > 0 for value in (source_price, eur_price))
+            or (trigger == "stop_loss" and source_price > stop)
+            or (trigger == "first_target" and source_price < target)
+            or trigger not in {"stop_loss", "first_target"}):
+        raise BotSafetyBlock("Het opgeslagen uitstapniveau is niet meer bereikt.")
+    return eur_price
+
+
 def _auto_execute_decision(
     *,
     conn,
@@ -2589,6 +2893,11 @@ def _auto_execute_decision(
         checked_trade_price = _recheck_paper_trade_entry(
             conn, user_id=user_id, decision_id=decision_id, symbol=symbol,
         ) if side == "buy" else None
+        if side == "sell":
+            checked_trade_price = _recheck_paper_position_exit(
+                conn, user_id=user_id, bot_id=bot_id,
+                decision_id=decision_id, symbol=symbol, order_qty=qty,
+            )
         price = checked_trade_price if checked_trade_price is not None else _get_live_price(
             conn, symbol, paper_execution=True,
         )

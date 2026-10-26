@@ -280,6 +280,8 @@ def test_confirmed_trade_match_uses_saved_score_band_without_invented_confidence
     )
     assert result["confidence"] == 0.0
     assert result["action"] == "buy"
+    assert result["monitoring"] is False
+    assert result["alerts_active"] is False
     assert "Confidence too low" not in result["reason"]
 
     live_policy = run_bot_brain(

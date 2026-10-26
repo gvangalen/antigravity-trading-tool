@@ -54,6 +54,24 @@ def test_provider_preserves_quote_observation_time(monkeypatch):
     assert reading["observed_at"].timestamp() == 1791266400
 
 
+def test_intraday_fx_preserves_source_minute_instead_of_cached_quote_time(monkeypatch):
+    def fake_get(url, params=None, timeout=15):
+        assert url.endswith("/time_series")
+        assert params["interval"] == "1min" and params["timezone"] == "UTC"
+        return _Response({"values": [{"datetime": "2026-10-26 11:48:00", "close": "1.11974"}]})
+
+    monkeypatch.setattr("backend.services.providers.twelve_data_macro_provider.requests.get", fake_get)
+    reading = TwelveDataMacroProvider(api_key="test-key").fetch_intraday_quote_reading("EUR/USD")
+    assert reading["value"] == pytest.approx(1.11974)
+    assert reading["observed_at"].isoformat() == "2026-10-26T11:48:00+00:00"
+
+
+def test_intraday_fx_without_provider_timestamp_is_not_accepted(monkeypatch):
+    monkeypatch.setattr("backend.services.providers.twelve_data_macro_provider.requests.get",
+                        lambda *_args, **_kwargs: _Response({"values": [{"close": "1.12"}]}))
+    assert TwelveDataMacroProvider(api_key="test-key").fetch_intraday_quote_reading("EUR/USD") is None
+
+
 def test_provider_returns_none_for_non_twelve_data_macro():
     provider = TwelveDataMacroProvider(api_key="test-key")
 

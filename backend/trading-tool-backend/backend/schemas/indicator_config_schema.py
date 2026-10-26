@@ -29,6 +29,7 @@ class IndicatorCustomRulesSave(BaseModel):
     indicator: str
     weight: Optional[float] = 1.0
     rules: List[dict] # Allow raw dict because frontend sends score, trend, etc.
+    create_only: bool = False
 
 class IndicatorResetPayload(BaseModel):
     symbol: str

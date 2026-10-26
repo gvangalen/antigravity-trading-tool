@@ -62,6 +62,7 @@ export async function saveCustomRules({
   symbol,
   rules,
   weight,
+  create_only = false,
 }) {
   try {
     return await fetchAuth(`/api/indicator_config/custom`, {
@@ -72,6 +73,7 @@ export async function saveCustomRules({
         symbol,
         rules,
         weight,
+        create_only,
       }),
     });
   } catch (err) {

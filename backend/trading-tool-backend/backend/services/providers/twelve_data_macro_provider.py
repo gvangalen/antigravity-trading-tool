@@ -57,6 +57,38 @@ class TwelveDataMacroProvider:
         reading = self.fetch_quote_reading(provider_symbol)
         return reading["value"] if reading else None
 
+    def fetch_intraday_quote_reading(self, provider_symbol: str) -> dict | None:
+        """Read the latest provider-dated minute close for execution FX.
+
+        The quote endpoint can return a cached weekend timestamp even when
+        minute candles have resumed. We never date a rate by receipt time.
+        """
+        if not self.api_key:
+            return None
+        response = requests.get(
+            TWELVE_DATA_SERIES_URL,
+            params={"symbol": provider_symbol, "interval": "1min", "outputsize": 1,
+                    "timezone": "UTC", "apikey": self.api_key},
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("status") == "error":
+            raise ValueError(payload.get("message") or f"Twelve Data series error for {provider_symbol}")
+        values = payload.get("values") or []
+        if not isinstance(values, list) or not values or not isinstance(values[0], dict):
+            return None
+        value = _float_or_none(values[0].get("close"))
+        try:
+            observed_at = datetime.fromisoformat(str(values[0]["datetime"]).replace("Z", "+00:00"))
+        except (KeyError, TypeError, ValueError):
+            return None
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+        if value is None:
+            return None
+        return {"value": value, "observed_at": observed_at.astimezone(timezone.utc)}
+
     def fetch_quote_reading(self, provider_symbol: str) -> dict | None:
         if not self.api_key:
             return None

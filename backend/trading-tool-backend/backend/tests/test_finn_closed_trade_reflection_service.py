@@ -120,7 +120,7 @@ def test_v2_coach_receives_only_current_owner_confirmed_lesson_as_untrusted_refl
                and "l.evidence_revision=r.input_revision" in sql
                for sql, _ in session.queries if "AS confirmed_lesson" in sql)
     adapter = object.__new__(ReviewToolAdapter)
-    adapter.repository = SimpleNamespace(get_bot_history=lambda *_: None)
+    adapter.bot_service = SimpleNamespace(get_bot_history=lambda *_: None)
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = service
     item = asyncio.run(adapter.execute(user_id=7, review_id=81))["data"].items[0]
@@ -150,7 +150,6 @@ def test_asset_filter_is_applied_before_recent_limit_for_coach_lessons():
         "confirmed_at": "2026-10-15T12:00:00+00:00", "evidence_revision": 2}}
     session = Session({7: rows})
     adapter = object.__new__(ReviewToolAdapter)
-    adapter.repository = SimpleNamespace(get_bot_history=lambda *_: None)
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(session)
 
@@ -158,7 +157,7 @@ def test_asset_filter_is_applied_before_recent_limit_for_coach_lessons():
         async def get_bot_history(self, *_):
             return []
 
-    adapter.repository = Decisions()
+    adapter.bot_service = Decisions()
     result = asyncio.run(adapter.execute(user_id=7, asset="BTC"))["data"]
     assert result.closed_trade_review_ids == [81]
     assert any("Ik noteer de reden voor de exit" in item for item in result.items)
@@ -206,12 +205,13 @@ def test_v2_adapter_keeps_closed_trades_separate_from_bot_decisions():
     from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 
     class Decisions:
-        async def get_bot_history(self, user_id, start, end):
+        async def get_bot_history(self, user_id, days):
             assert user_id in {7, 8}
+            assert days == 30
             return []
 
     adapter = object.__new__(ReviewToolAdapter)
-    adapter.repository = Decisions()
+    adapter.bot_service = Decisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(Session({7: {81: ROW}}))
     own = asyncio.run(adapter.execute(user_id=7))
@@ -244,13 +244,14 @@ def test_v2_adapter_keeps_closed_trades_separate_from_bot_decisions():
 
 def test_review_read_combines_legacy_naive_decision_time_and_aware_trade_exit():
     class Decisions:
-        async def get_bot_history(self, user_id, start, end):
+        async def get_bot_history(self, user_id, days):
             assert user_id == 7
+            assert days == 30
             return [{"decision_ts": datetime(2026, 10, 17), "bot_name": "BTC Paper Bot",
                      "symbol": "BTC", "action": "HOLD", "status": "completed"}]
 
     adapter = object.__new__(ReviewToolAdapter)
-    adapter.repository = Decisions()
+    adapter.bot_service = Decisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(Session({7: {81: ROW}}))
 

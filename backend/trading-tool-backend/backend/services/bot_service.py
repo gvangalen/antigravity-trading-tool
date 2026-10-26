@@ -1810,6 +1810,7 @@ class BotService:
                 "symbol": r["symbol"],
                 "date": str(r["decision_date"]),
                 "decision_ts": r["decision_ts"].isoformat() if r.get("decision_ts") else None,
+                "decision_kind": r.get("decision_kind") or "assessment",
                 "action": r["action"],
                 "confidence": r["confidence"],
                 "decision_basis": scores.get("decision_basis"),

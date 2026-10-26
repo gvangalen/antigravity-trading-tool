@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def _readings() -> list[tuple[str, str, str, float | None, datetime | None]]:
     readings = []
     try:
-        reading = TwelveDataMacroProvider().fetch_quote_reading("EUR/USD")
+        reading = TwelveDataMacroProvider().fetch_intraday_quote_reading("EUR/USD")
         if reading:
             readings.append(("USD", "twelve_data", "EUR/USD", reading["value"], reading["observed_at"]))
     except Exception:
