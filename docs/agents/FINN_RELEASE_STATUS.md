@@ -6,6 +6,31 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
 
+Current phase: `MACD_COPY_REPAIR_LOCAL_VALIDATION`. PR #640 deployed as
+`21c8bdf13b6287aa46b7cfccb45768b40e7d469f` after successful main CI
+40403107323 and Auto Deploy 40403569450; both public identity endpoints
+returned HTTP 200 and that exact SHA. Independent QA returned `NOT_ACCEPTED`
+for full Stage 1 scope: the read-only AAPL/USD plus USD/EUR question and the
+unsupported ETH/EUR pair boundary both passed on this SHA, but the indicator
+dialog still showed `Macd Hist PCT` in its explanation and summary. QA could
+not establish active Paper behavior for missing match or owner isolation in
+its read-only session. The copy root cause was that the role-model helper
+omitted the current locale when resolving its description and summary label.
+The repair passes the locale through every role-model label resolution; a
+focused regression now checks the MACD explanation and summary. Automatic
+Paper exits remain disabled until Stage 1 has an accepted verdict.
+Local repair validation: focused MACD regression 1/1; backend 3993 passed
+with 4 existing skips; web build, typecheck, i18n lint/tests, command,
+proposal and setup tests, and high-severity dependency audit passed. The
+worker-driven action matrix passed 16/16 plus 21/21 adapter checks (artifact
+SHA-256 `d69f9f450f2aa939a646e6fddf081b93c183ce72478b477dff1be84691ecc831`).
+Real Luna/Responses selector evaluations passed 20/20 development (artifact
+SHA-256 `b928b047055d4c860f1ab3a1508e0526ec8ae926e13cafde2e664d283d973929`)
+and 109/109 regression (artifact SHA-256
+`5a0471af5176726bb84f03d441bc6c3af3f6c37760d632d2dbebbbc30fa41b57`),
+with zero provider, schema, timeout, parse or validation failures. CI,
+deployment identity and independent live QA remain pending for this repair.
+
 Phase: `STAGE1_QA_NOT_ACCEPTED`; PR #639 merged and Stage 1 is live at
 `6a72cc65610348cd58e98f3934ef10f6f4a1b493`. Main CI 40397347795
 and Auto Deploy 40397831252 succeeded; backend health and frontend build info
