@@ -150,6 +150,44 @@ def test_save_setup_applies_default_timeframe_for_trade_payload():
     assert "min_benchmark_score" not in raw_payload
 
 
+def test_new_crypto_setup_binds_only_the_exact_verified_pair(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    class FakeMarketService:
+        def __init__(self, _session):
+            pass
+
+        async def resolve(self, base, quote, *, verify_current):
+            assert (base, quote, verify_current) == ("BTC", "EUR", True)
+            return SimpleNamespace(id=83, quote_currency="EUR", pair="BTC/EUR")
+
+    class Repo:
+        async def check_name_exists(self, _name, _user_id):
+            return False
+
+        async def create_setup(self, data, _user_id, _tags):
+            assert data["market_id"] == 83
+            assert data["trading_pair"] == "BTC/EUR"
+            return 91
+
+        async def get_setup_by_id(self, _setup_id, _user_id):
+            return {"id": 91, "name": "BTC EUR", "symbol": "BTC",
+                    "setup_type": "trade", "market_id": 83,
+                    "quote_currency": "EUR", "tradingview_symbol": "BINANCE:BTCEUR"}
+
+    monkeypatch.setattr("backend.services.setup_service.TradingMarketService", FakeMarketService)
+    service = SetupService(None)
+    service.repository = Repo()
+    payload = SetupCreateSchema(name="BTC EUR", symbol="BTC", setup_type="trade")
+    result = asyncio.run(service.save_setup(
+        payload, {"name": "BTC EUR", "symbol": "BTC", "setup_type": "trade",
+                  "quote_currency": "EUR"}, 17, commit=False,
+    ))
+    assert result["setup"]["trading_pair"] == "BTC/EUR"
+    assert result["setup"]["tradingview_symbol"] == "BINANCE:BTCEUR"
+
+
 @pytest.mark.parametrize("raw_day", ["monday", "maandag", "1", 1])
 def test_active_strategy_weekday_normalizer_accepts_legacy_values(raw_day):
     assert normalize_weekday(raw_day) == 1
