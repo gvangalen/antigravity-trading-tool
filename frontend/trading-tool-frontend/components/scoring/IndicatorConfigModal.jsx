@@ -62,7 +62,9 @@ function getCategoryLabel(category, copy) {
   return copy.categories?.[category] || copy.categories?.indicator || "Indicator";
 }
 
-function getIndicatorLabel(indicator) {
+function getIndicatorLabel(indicator, copy) {
+  const translated = copy?.indicatorNames?.[normalizeIndicatorName(indicator)];
+  if (translated) return translated;
   const label = String(indicator || "").replace(/_/g, " ").trim();
   if (!label) return "Indicator";
   return label
@@ -296,7 +298,7 @@ export default function IndicatorConfigModal({
 
   const categoryLabel = useMemo(() => getCategoryLabel(category, copy), [category, copy]);
   const normalizedIndicator = useMemo(() => normalizeIndicatorName(indicator), [indicator]);
-  const indicatorLabel = useMemo(() => getIndicatorLabel(indicator), [indicator]);
+  const indicatorLabel = useMemo(() => getIndicatorLabel(indicator, copy), [indicator, copy]);
   const actionLabel = mode === "edit" ? copy.save : copy.addIndicator.replace("{indicator}", indicatorLabel);
   const roleModel = useMemo(
     () => getRoleModel(category, normalizedIndicator, profileContext, copy),

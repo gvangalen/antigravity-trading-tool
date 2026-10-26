@@ -46,6 +46,13 @@ from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToo
 
 logger = logging.getLogger(__name__)
 
+_QUOTE_QUESTION = re.compile(r"\b(?:koers|koersen|prijs|prijzen|quote|price|prices|kurs|kurse)\b", re.IGNORECASE)
+
+
+def _named_asset_quote_question(message: str) -> bool:
+    """A named asset's price needs a dated quote read, even when stale."""
+    return bool(_QUOTE_QUESTION.search(message) and mentioned_catalog_symbols(message))
+
 _WEEKDAY_REFERENCES = {
     1: ("monday", "maandag", "montag"),
     2: ("tuesday", "dinsdag", "dienstag"),
@@ -1522,6 +1529,15 @@ class FinnResponsesFrontDoor:
             )
         unsupported_pair = unsupported_catalog_pair_mention(message)
         mentioned_assets = mentioned_catalog_symbols(message)
+        # A conversion reference is not the requested instrument. Preserve
+        # the named asset's own dated quote even if the FX pair is not in the
+        # tradable asset catalog; the conversion may remain unavailable.
+        if (
+            is_read_only_turn and unsupported_pair in {"USD/EUR", "EUR/USD", "EUR/USDT", "USDT/EUR"}
+            and _named_asset_quote_question(message)
+            and re.search(r"\b(?:omreken\w*|omgerek\w*|convert\w*|umrechn\w*|wisselkoers|exchange rate|fx)\b", message, re.I)
+        ):
+            unsupported_pair = None
         mentioned_timeframes = {
             value.upper() for value in re.findall(r"\b(?:15m|30m|1h|4h|1d|1w)\b", message, re.I)
         }
@@ -3375,6 +3391,12 @@ class FinnResponsesFrontDoor:
             required_read_tool_name=(
                 "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
+                and pending_operation is None and not resuming_clarification
+                else "get_market_snapshot"
+                if is_read_only_turn and _named_asset_quote_question(message)
+                and not {"plan", "setup", "strategy", "portfolio", "scores"}.intersection(
+                    request_facts.explicit_entities
+                )
                 and pending_operation is None and not resuming_clarification
                 else "get_saved_setup_inventory"
                 if normalized_inventory_read and pending_operation is None

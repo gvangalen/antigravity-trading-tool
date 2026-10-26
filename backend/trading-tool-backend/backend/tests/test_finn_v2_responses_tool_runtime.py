@@ -12738,6 +12738,30 @@ def test_front_door_requires_plan_read_for_multisource_evaluation(monkeypatch):
     assert captured["required_read_tool_name"] == "get_active_plan_and_strategy"
 
 
+def test_front_door_reads_named_last_known_quote_before_answering(monkeypatch):
+    message = (
+        "Wat is de laatst bekende AAPL-koers in USD en, alleen als een directe "
+        "USD/EUR-bron bestaat, omgerekend in EUR? Noem het bronmoment."
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="last-quote")
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees de gedateerde quote.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=message, instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
+    ))
+
+    assert captured["required_read_tool_name"] == "get_market_snapshot"
+    assert captured["catalog_boundary_only"] is False
+
+
+
 def test_open_bot_context_binds_its_strategy_only_for_unnamed_owner_plan(monkeypatch):
     setup = {"id": 11, "name": "QA BTC Friday Setup", "symbol": "BTC",
              "dca_frequency": "weekly", "dca_day": 5}

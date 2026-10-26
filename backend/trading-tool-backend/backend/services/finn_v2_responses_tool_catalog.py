@@ -255,7 +255,11 @@ class FinnResponsesToolCatalog:
                 )
             if name == "get_market_snapshot":
                 description += (
-                    " The market snapshot is a quote measurement, not a Score 2.0 category "
+                    " Use this for both current prices and last known provider-dated prices, "
+                    "including stale ones. A stale measurement may be reported with its source "
+                    "moment and stale status, but cannot establish a current trading price. "
+                    "A missing FX rate does not erase the asset's own quote. "
+                    "The market snapshot is a quote measurement, not a Score 2.0 category "
                     "score. Its as_of is the provider's source moment; an absent source moment "
                     "means quote freshness is unknown. A fresh quote does not verify a saved "
                     "Market score, and a pending Market score does not make the quote stale. "
