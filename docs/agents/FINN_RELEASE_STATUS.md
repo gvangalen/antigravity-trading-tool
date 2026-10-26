@@ -4,9 +4,23 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
-## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
+## Paper exit, Score 2.0 diagnostics and pair identity (27 oktober 2026)
 
-Current phase: `STAGE2_LIVE_AWAITING_QA`. Independent QA accepted the
+Current phase: `STAGE2_LIVE_QA_INCOMPLETE`. The final Stage 2 status update
+merged via PR #644 and Auto Deploy 40414885894 succeeded. Backend health and
+frontend build-info returned HTTP 200 on `2c5431b4cb6446b276b2e1e855a843823885810c`
+at the final identity check. The existing independent QA Agent returned
+`NOT_ACCEPTED` because the protected production runner has no automatic
+Paper-exit fixture profile. Its current auto-Paper profile covers a buy and
+its closed-trade profile covers a manual sale. The target/stop, idempotency,
+Hold, owner-isolation and Reflectie checks after an automatic exit therefore
+remain unproven live; QA reported no confirmed product failure. A protected
+automatic-exit profile and rerun are needed before accepting Stage 2.
+The explicit trading-pair work is local on `codex/explicit-trading-market`;
+its schema and plan/bot identity are not deployed and pair-bound bot execution
+is held until price and Score 2.0 readers use the same market ID.
+
+Independent QA accepted the
 targeted Stage 1 recheck on final live SHA
 `1d75d5ccccfe611a5fd4c73324cc6945eb148ef2`: the localized MACD title,
 explanation and summary, the independently fetched stale AAPL/USD quote, and
