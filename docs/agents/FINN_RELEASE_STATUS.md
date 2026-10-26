@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Coachfeed transient gateway error during deployment (26 oktober 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. Independent QA observed one HTTP 502 for the
+Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Independent QA observed one HTTP 502 for the
 read-only coachfeed GET while testing the already accepted DCA asset-switch
 release. Production Nginx error logs identify the failure at 25 October
 22:18:09 UTC as `connect() failed (111)` to the sole backend upstream at
@@ -32,8 +32,17 @@ The real Luna/Responses development evaluation passed 20/20 (artifact SHA-256
 `1d6be34827ae806ecd540e8942d337a4117d171beb9da61449cd1e3d6c542125`). The real
 Responses regression evaluation passed 109/109 (artifact SHA-256
 `11dae2fb673b35e2db9f0c3ac6b343fd1e3276720656d033d8d03d7d5d3a895d`).
-Deployment checks are still in progress; this candidate is not yet live or
-independently accepted. The single-backend
+The repair merged via [PR #636](https://github.com/gvangalen/antigravity-trading-tool/pull/636)
+as product SHA `e7eaa720385fa5186fc2bdfd9547f3b8f8233824`. PR CI
+[40275489185](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40275489185)
+and main CI [40275757828](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40275757828)
+passed all five jobs. [Auto Deploy 40276015188](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40276015188)
+succeeded. Public backend health and frontend build-info each returned HTTP
+200 and that exact product SHA. This documentation update itself creates a
+later main SHA; Build must wait for its CI and Auto Deploy and verify both
+public markers on the final SHA before assigning the existing QA Agent the
+authenticated live feed hertest. This candidate is not yet independently
+accepted. The single-backend
 deployment can still emit a raw HTTP 502 while it restarts; the repair
 prevents that brief outage from becoming a failed coachfeed experience.
 
