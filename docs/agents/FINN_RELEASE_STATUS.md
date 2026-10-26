@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
 
-Current phase: `MACD_COPY_REPAIR_LOCAL_VALIDATION`. PR #640 deployed as
+Current phase: `MACD_COPY_REPAIR_LIVE_AWAITING_QA`. PR #640 deployed as
 `21c8bdf13b6287aa46b7cfccb45768b40e7d469f` after successful main CI
 40403107323 and Auto Deploy 40403569450; both public identity endpoints
 returned HTTP 200 and that exact SHA. Independent QA returned `NOT_ACCEPTED`
@@ -28,8 +28,15 @@ Real Luna/Responses selector evaluations passed 20/20 development (artifact
 SHA-256 `b928b047055d4c860f1ab3a1508e0526ec8ae926e13cafde2e664d283d973929`)
 and 109/109 regression (artifact SHA-256
 `5a0471af5176726bb84f03d441bc6c3af3f6c37760d632d2dbebbbc30fa41b57`),
-with zero provider, schema, timeout, parse or validation failures. CI,
-deployment identity and independent live QA remain pending for this repair.
+with zero provider, schema, timeout, parse or validation failures. The copy
+repair merged via [PR #641](https://github.com/gvangalen/antigravity-trading-tool/pull/641)
+as product SHA `24999e0794b2a145cfbd835b0333ab5b3f3728d2`. PR CI
+40407140481 and main CI 40407643919 passed all five jobs. Auto Deploy
+40408039473 succeeded. Backend health and frontend build-info each returned
+HTTP 200 and the exact product SHA. This status-only update creates a later
+main SHA; Build must wait for its CI and Auto Deploy and verify both public
+markers at the final revision before independent QA begins. Independent live
+QA of the dialog and Stage 1 scope remains pending.
 
 Phase: `STAGE1_QA_NOT_ACCEPTED`; PR #639 merged and Stage 1 is live at
 `6a72cc65610348cd58e98f3934ef10f6f4a1b493`. Main CI 40397347795
