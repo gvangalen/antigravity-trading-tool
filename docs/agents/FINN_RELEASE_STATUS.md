@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Coachfeed transient gateway error during deployment (26 oktober 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. Independent QA observed one HTTP 502 for the
+read-only coachfeed GET while testing the already accepted DCA asset-switch
+release. Production Nginx error logs identify the failure at 25 October
+22:18:09 UTC as `connect() failed (111)` to the sole backend upstream at
+127.0.0.1:8000. The backend startup log begins at 22:18:17 UTC; the next
+observed successful API request was at 22:18:29 UTC. An earlier feed 502 at
+07:42:52 UTC coincided with the same upstream connection failure for other
+API routes. This is a phased deployment availability gap, not a coachfeed
+query, owner scope, or model failure.
+
+The web feed now retries only read-only GET failures with HTTP 502, 503 or 504
+over a bounded 31-second window. It keeps existing owner-bound items during
+the transient wait, shows a loading state instead of a false empty feed on
+first load, and surfaces a persistent outage after the retries. Other HTTP
+failures remain immediate; writes and action confirmations do not retry.
+Local gateway recovery, permanent failure, owner-change cancellation and
+non-retryable error tests passed 4/4. Full backend tests passed 3978 with four
+existing skips. The web build, typecheck, i18n checks, command/proposal tests
+and high-severity dependency audit passed. The worker-driven action matrix
+passed 16/16 contracts and 21/21 adapter checks with no broker orders,
+Live calls, Live bots or production connections (artifact SHA-256
+`359f4b838ca37cb5c913b3fb52152f5590b3da3867f82d907a4dc2f4d88e565f`).
+The real Luna/Responses development evaluation passed 20/20 (artifact SHA-256
+`1d6be34827ae806ecd540e8942d337a4117d171beb9da61449cd1e3d6c542125`). The real
+Responses regression evaluation passed 109/109 (artifact SHA-256
+`11dae2fb673b35e2db9f0c3ac6b343fd1e3276720656d033d8d03d7d5d3a895d`).
+Deployment checks are still in progress; this candidate is not yet live or
+independently accepted. The single-backend
+deployment can still emit a raw HTTP 502 while it restarts; the repair
+prevents that brief outage from becoming a failed coachfeed experience.
+
 ## FINN new asset during an unfinished DCA draft (25 oktober 2026)
 
 Phase: `ACCEPTED` for the asset-switch scope. Independent QA returned `NOT_ACCEPTED` on earlier live SHA

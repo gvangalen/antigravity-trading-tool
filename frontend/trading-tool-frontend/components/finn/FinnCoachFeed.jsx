@@ -6,6 +6,7 @@ import { ArrowRight, Bell, Check, History } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
+import { readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
 
 export default function FinnCoachFeed({ onDiscuss }) {
   const { user, sessionChecked } = useAuth();
@@ -28,9 +29,13 @@ export default function FinnCoachFeed({ onDiscuss }) {
     const requestedLocale = locale;
     const generation = ++requestGenerationRef.current;
     try {
-      const response = await fetchAuth(`/api/assistant/feed?history=${history ? "true" : "false"}&limit=50`, {
-        method: "GET", forceFresh: true,
-      });
+      const response = await readCoachFeedWithRetry(
+        () => fetchAuth(`/api/assistant/feed?history=${history ? "true" : "false"}&limit=50`, {
+          method: "GET", forceFresh: true,
+        }),
+        { isCurrent: () => generation === requestGenerationRef.current &&
+          ownerRef.current === requestedOwner && localeRef.current === requestedLocale },
+      );
       if (generation === requestGenerationRef.current &&
           ownerRef.current === requestedOwner && localeRef.current === requestedLocale) {
         setItems(Array.isArray(response) ? response : []);
@@ -87,7 +92,9 @@ export default function FinnCoachFeed({ onDiscuss }) {
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLocale === locale ? items : [];
-  const visible = history ? scopedItems : scopedItems.slice(0, 3);
+  const visible = error ? [] : history ? scopedItems : scopedItems.slice(0, 3);
+  const initialLoadPending = sessionChecked && Boolean(user?.id) && !error &&
+    (itemsOwner !== user.id || itemsLocale !== locale);
   return (
     <section aria-label={copy.title} className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#0f172a] lg:p-7">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
@@ -103,7 +110,8 @@ export default function FinnCoachFeed({ onDiscuss }) {
         </button>
       </div>
       {error ? <p role="status" className="py-4 text-sm text-amber-700">{copy.error}</p> : null}
-      {!error && visible.length === 0 ? <p className="py-6 text-sm text-slate-500">{copy.empty}</p> : null}
+      {initialLoadPending ? <p role="status" className="py-6 text-sm text-slate-500">{copy.loading}</p> : null}
+      {!error && !initialLoadPending && visible.length === 0 ? <p className="py-6 text-sm text-slate-500">{copy.empty}</p> : null}
       <div className="divide-y divide-slate-100 dark:divide-slate-800">
         {visible.map((item) => (
           <article key={item.id} className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">

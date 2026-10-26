@@ -36,6 +36,7 @@
   "coachFeed": {
     "title": "Updates von FINN",
     "subtitle": "Was sich für deinen Plan geändert hat",
+    "loading": "Updates werden geladen…",
     "empty": "Keine Updates. FINN meldet sich, wenn dein Plan Aufmerksamkeit braucht.",
     "all": "Alle Updates",
     "active": "Aktuelle Updates",
