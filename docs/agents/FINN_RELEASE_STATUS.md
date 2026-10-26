@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
 
-Current phase: `STAGE2_LOCAL_VALIDATION`. Independent QA accepted the
+Current phase: `STAGE2_LIVE_AWAITING_QA`. Independent QA accepted the
 targeted Stage 1 recheck on final live SHA
 `1d75d5ccccfe611a5fd4c73324cc6945eb148ef2`: the localized MACD title,
 explanation and summary, the independently fetched stale AAPL/USD quote, and
@@ -38,8 +38,19 @@ The real Luna/Responses regression gate passed 109/109 with zero provider,
 schema, timeout, parse or validation failures (artifact SHA-256
 `d0ae71c23d424cc3d4b3e4a18fdaccd76e3dc3da5c337711328bc4a504c0a411`).
 Local migrations reached `current` and the deployed writer-drain Python
-parses; `bash -n` and `git diff --check` passed. CI, deployment and
-independent QA of Stage 2 remain pending.
+parses; `bash -n` and `git diff --check` passed. Stage 2 merged via
+[PR #643](https://github.com/gvangalen/antigravity-trading-tool/pull/643) as
+product SHA `46a93398e3853c08bcb2634d23a2197a24cb9436`. PR CI
+[40412843016](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40412843016)
+and main CI
+[40413308341](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40413308341)
+passed all five jobs. [Auto Deploy 40413669029](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40413669029)
+succeeded; backend health and frontend build-info each returned HTTP 200 and
+that exact SHA, matching main. This evidence-only update creates a later
+main SHA; Build must wait for its CI and Auto Deploy and verify both public
+markers at the final revision before the existing independent QA Agent runs
+the Paper target/stop, holds, owner isolation and Reflectie matrix. No live
+QA verdict or pair-contract claim is made yet.
 
 Previous phase: `MACD_COPY_REPAIR_LIVE_AWAITING_QA`. PR #640 deployed as
 `21c8bdf13b6287aa46b7cfccb45768b40e7d469f` after successful main CI
