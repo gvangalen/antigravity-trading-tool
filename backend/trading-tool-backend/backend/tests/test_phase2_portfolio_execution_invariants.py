@@ -85,8 +85,12 @@ def test_bot_portfolio_state_is_scoped_by_symbol_in_schema_and_runtime_paths():
 
 def test_bot_decision_generation_is_unique_per_user_bot_decision_date():
     source = _read(BACKEND_ROOT / "engine" / "trading_bot_execution.py")
+    migration = _read(BACKEND_ROOT / "scripts" / "migrations" / "2026_10_26_paper_exit_decision_identity.py")
 
-    assert "ON CONFLICT (user_id, bot_id, decision_date) DO UPDATE SET" in source
+    assert "ON CONFLICT (user_id, bot_id, decision_date)" in source
+    assert "WHERE decision_kind = 'assessment' DO UPDATE SET" in source
+    assert "bot_decisions_one_assessment_per_day" in migration
+    assert "bot_decisions_one_exit_per_position" in migration
     assert "RETURNING id" in source
 
 

@@ -63,6 +63,24 @@ if [ -z "$ROLLBACK_COMMIT" ]; then
   fi
 fi
 
+# Once Paper exits have their own per-position identity, older bot code can no
+# longer use the former date-wide ON CONFLICT arbiter. Keep the new schema and
+# require a forward repair rather than restarting an incompatible old worker.
+if [ -f backend/trading-tool-backend/backend/scripts/paper_exit_migration_state.py ]; then
+  paper_exit_schema_state="$(cd backend/trading-tool-backend && \
+    python3 -m backend.scripts.paper_exit_migration_state | tail -n 1)"
+  if [ "$paper_exit_schema_state" = current ]; then
+    if ! git show "$ROLLBACK_COMMIT:backend/trading-tool-backend/backend/engine/trading_bot_execution.py" \
+        | grep -F "WHERE decision_kind = 'assessment' DO UPDATE SET" >/dev/null; then
+      echo "❌ Rollback target cannot write assessments against the Paper exit schema. Deploy a forward fix." >&2
+      exit 1
+    fi
+  elif [ "$paper_exit_schema_state" != legacy ]; then
+    echo "❌ Cannot verify Paper exit schema before rollback." >&2
+    exit 1
+  fi
+fi
+
 echo "↩️ Rolling ${ENVIRONMENT} back to ${ROLLBACK_COMMIT}..."
 for attempt in $(seq 1 5); do
   rm -f .git/index.lock .git/refs/remotes/origin/main.lock .git/refs/remotes/origin/main .git/refs/remotes/origin/develop.lock .git/refs/remotes/origin/develop

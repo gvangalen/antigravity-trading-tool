@@ -132,6 +132,7 @@ class BotRepository:
               created_at, updated_at
             FROM bot_decisions
             WHERE user_id=:user_id AND decision_date=:decision_date
+              AND decision_kind='assessment'
             ORDER BY bot_id ASC, id DESC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "decision_date": decision_date})
@@ -155,7 +156,7 @@ class BotRepository:
         query = text("""
             SELECT
               d.id, d.bot_id, b.name AS bot_name, b.is_live, d.symbol, d.decision_ts, d.decision_date,
-              d.action, d.confidence, d.amount_eur, d.scores_json, d.reason_json, d.status
+              d.decision_kind, d.action, d.confidence, d.amount_eur, d.scores_json, d.reason_json, d.status
             FROM bot_decisions d
             JOIN bot_configs b ON b.id = d.bot_id
             WHERE d.user_id=:user_id AND d.decision_date BETWEEN :start AND :end
@@ -167,7 +168,7 @@ class BotRepository:
     async def get_latest_bot_decision(self, user_id: int, bot_id: int) -> Optional[dict]:
         """Read the same persisted decision fields used by the bot screen."""
         result = await self.session.execute(text("""
-            SELECT id, bot_id, action, status, decision_ts, scores_json
+            SELECT id, bot_id, decision_kind, action, status, decision_ts, scores_json
             FROM bot_decisions
             WHERE user_id=:user_id AND bot_id=:bot_id
             ORDER BY decision_ts DESC, id DESC

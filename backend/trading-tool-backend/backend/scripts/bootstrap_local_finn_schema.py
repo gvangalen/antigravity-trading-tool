@@ -109,6 +109,8 @@ CREATE TABLE IF NOT EXISTS bot_decisions (
     setup_id INTEGER REFERENCES setups(id),
     symbol VARCHAR,
     decision_date DATE NOT NULL,
+    decision_kind TEXT NOT NULL DEFAULT 'assessment',
+    position_open_ledger_id BIGINT,
     decision_ts TIMESTAMP,
     action VARCHAR,
     confidence VARCHAR,
@@ -124,9 +126,17 @@ CREATE TABLE IF NOT EXISTS bot_decisions (
     executed_by VARCHAR,
     executed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, bot_id, decision_date)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE bot_decisions
+    ADD COLUMN IF NOT EXISTS decision_kind TEXT NOT NULL DEFAULT 'assessment',
+    ADD COLUMN IF NOT EXISTS position_open_ledger_id BIGINT;
+CREATE UNIQUE INDEX IF NOT EXISTS bot_decisions_one_assessment_per_day
+    ON bot_decisions (user_id, bot_id, decision_date)
+    WHERE decision_kind = 'assessment';
+CREATE UNIQUE INDEX IF NOT EXISTS bot_decisions_one_exit_per_position
+    ON bot_decisions (user_id, bot_id, position_open_ledger_id)
+    WHERE decision_kind = 'paper_exit';
 CREATE TABLE IF NOT EXISTS bot_trade_plans (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),

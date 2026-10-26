@@ -56,7 +56,8 @@ class BotToolAdapter:
                         scores = {}
                 if not isinstance(scores, dict):
                     scores = {}
-                safety = self.bot_service._safety_contract({
+                is_exit = decision.get("decision_kind") == "paper_exit"
+                safety = None if is_exit else self.bot_service._safety_contract({
                     "id": decision["id"], "bot_id": decision["bot_id"],
                     "status": decision["status"], "created_at": decision.get("decision_ts"),
                     "guardrails_result": scores.get("guardrails_result"),
@@ -67,13 +68,16 @@ class BotToolAdapter:
                 }, bool(bot.get("is_live")))
                 latest = {
                     "decision_id": decision["id"], "action": decision["action"],
+                    "decision_kind": decision.get("decision_kind") or "assessment",
                     "persistence_status": decision["status"],
                     "decision_at": decision.get("decision_ts"),
-                    "safety_state": safety["state"],
-                    "reason_code": safety["reason_code"],
-                    "reason": safety["reason"],
-                    "next_step": safety["next_step"],
-                    "safety_checked_at": safety["checked_at"],
+                    "exit_trigger": scores.get("trigger") if is_exit else None,
+                    "execution_failure": scores.get("execution_failure") if is_exit else None,
+                    "safety_state": safety["state"] if safety else None,
+                    "reason_code": safety["reason_code"] if safety else None,
+                    "reason": safety["reason"] if safety else None,
+                    "next_step": safety["next_step"] if safety else None,
+                    "safety_checked_at": safety["checked_at"] if safety else None,
                 }
         payload = BotStatusData(
             bot_id=bot.get("id"),

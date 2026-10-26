@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
+
+Phase: `LOCAL_VALIDATION_BLOCKED`; this batch has not been pushed or deployed.
+The local AAPL/USD Paper probe closes the full position at the first saved
+target or stop, creates one sell after the buy on the same day, does not replay
+the exit, and projects the closed trade into Reflectie. Stale quotes, changed
+levels and a failed execution hold. A BTC/USDT quote with EUR or USD strategy
+levels holds with `exit_trading_pair_unconfirmed`; FX valuation is not treated
+as a direct EUR/USD trading-pair quote. The current product has no persisted
+EUR/USDT pair choice across market data, Score 2.0, chart, plan and bot, so
+this local repair does not claim that full pair flow is complete.
+
+Local evidence: backend 3991 passed, 4 existing skips; web build, typecheck,
+i18n lint/tests, command/proposal tests and high-severity audit passed;
+worker-driven action matrix 16/16 and adapter checks 21/21 passed (artifact
+SHA-256 `b8111b798bafa7d1c6f161af6f3ff6674122b542e51598bbca15337800eb16a3`).
+Real Luna/Responses development selection passed 20/20 (artifact SHA-256
+`50f4184a3b66febb99aa73492d31eae0f947d6ff728ae1d4c3f0e3ec28d20d42`)
+and regression selection passed 109/109 (artifact SHA-256
+`d94350cf9eeae21268602d24b269512aec2d9f758eedd0d0609df8e08c35d17a`).
+
+Security review found that the one-step Paper exit uniqueness migration makes
+the old bot writer incompatible with the new schema. A post-migration deploy
+failure would therefore have no safe rollback to the current production SHA.
+Build must split this into an expand-only compatibility release and a later
+cutover release before deployment. No production or independent-QA verdict
+is claimed for this batch.
+
 ## Coachfeed transient gateway error during deployment (26 oktober 2026)
 
 Phase: `ACCEPTED` for the tested coachfeed scope. Independent QA observed one HTTP 502 for the

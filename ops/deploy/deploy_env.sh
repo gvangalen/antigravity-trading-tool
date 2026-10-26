@@ -225,6 +225,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   export BACKEND_APP='$BACKEND_APP'
   export CORE_PM2_APPS='$CORE_PM2_APPS'
   export AUX_PM2_APPS='$AUX_PM2_APPS'
+  export RETIRED_PM2_APPS='$RETIRED_PM2_APPS'
   export EXPECTED_PM2_APPS='$EXPECTED_PM2_APPS'
   export MIGRATION_COMMAND_TIMEOUT_SECONDS=$MIGRATION_COMMAND_TIMEOUT_SECONDS
   export MIN_DEPLOY_AVAILABLE_MEMORY_KB=$MIN_DEPLOY_AVAILABLE_MEMORY_KB
@@ -469,6 +470,32 @@ EOF
     echo \"❌ PM2 config $PM2_CONFIG not found on remote host.\" >&2
     exit 1
   fi
+  # Only the first migration needs a quiescent writer cutover. Later releases
+  # leave the running services in the normal phased deployment path.
+  paper_exit_schema_state=\"\$(cd backend/trading-tool-backend && \\
+    python3 -m backend.scripts.paper_exit_migration_state | tail -n 1)\"
+  if [ \"\$paper_exit_schema_state\" = legacy ]; then
+    if [ "$DEPLOY_COMPONENT_SET" = backend_only ]; then
+      echo \"Paper exit schema cutover requires a full-stack deploy so every bot writer restarts.\" >&2
+      exit 1
+    fi
+    advance_deploy_step 'paper_exit_writer_quiesce'
+    IFS=',' read -ra paper_exit_apps <<< \"\$CORE_PM2_APPS,\$AUX_PM2_APPS,\$RETIRED_PM2_APPS\"
+    for app in \"\${paper_exit_apps[@]}\"; do
+      app=\"\$(printf '%s' \"\$app\" | xargs)\"
+      if [ -n \"\$app\" ] && pm2 describe \"\$app\" >/dev/null 2>&1; then
+        pm2 stop \"\$app\"
+      fi
+    done
+  elif [ \"\$paper_exit_schema_state\" != current ]; then
+    echo \"Invalid Paper exit migration state: \$paper_exit_schema_state\" >&2
+    exit 1
+  fi
+  advance_deploy_step 'paper_exit_decision_migration'
+  (cd backend/trading-tool-backend && \
+    run_migration backend/scripts/migrations/2026_10_26_paper_exit_decision_identity.py && \
+    python3 -m backend.scripts.check_finn_v2_schema)
+  PM2_DEPLOY_MODE=phased
   check_pm2_apps_online() {
     for attempt in \$(seq 1 20); do
       pm2 jlist >/tmp/tradamind_pm2_jlist.json

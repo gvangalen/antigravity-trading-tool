@@ -1,6 +1,6 @@
 from datetime import date
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from pathlib import Path
 
 from backend.infrastructure.repositories.bot_repository import BotRepository
@@ -23,5 +23,20 @@ def test_get_bot_decisions_by_date_skips_query_when_optional_table_is_absent():
 
         assert result == []
         session.execute.assert_not_awaited()
+
+    asyncio.run(run())
+
+
+def test_daily_bot_assessment_does_not_select_same_day_paper_exit():
+    async def run():
+        session = AsyncMock()
+        session.execute.return_value = MagicMock()
+        session.execute.return_value.fetchall.return_value = []
+        repository = BotRepository(session)
+        repository.check_table_exists = AsyncMock(return_value=True)
+
+        assert await repository.get_bot_decisions_by_date(7, date(2026, 10, 26)) == []
+        query = str(session.execute.await_args.args[0])
+        assert "decision_kind='assessment'" in query
 
     asyncio.run(run())

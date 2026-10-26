@@ -32,3 +32,26 @@ def test_finn_reads_saved_owner_bot_safety_state_instead_of_planned_label():
     assert latest["persistence_status"] == "planned"
     assert latest["safety_state"] == "error"
     assert latest["reason_code"] == "market_price_stale"
+
+
+def test_finn_keeps_paper_exit_separate_from_assessment_guardrails():
+    checked_at = datetime.now(timezone.utc)
+
+    class Decisions:
+        async def get_latest_bot_decision(self, user_id, bot_id):
+            return {
+                "id": 902, "bot_id": bot_id, "decision_kind": "paper_exit",
+                "action": "sell", "status": "executed", "decision_ts": checked_at,
+                "scores_json": {"trigger": "first_target", "position_qty": 1.2},
+            }
+
+    adapter = BotToolAdapter()
+    adapter.repository = Decisions()
+    adapter.bot_service = BotService(object())
+    latest = asyncio.run(adapter.execute_status(
+        user_id=17, bot={"id": 130, "is_active": True, "is_live": False, "mode": "auto"},
+    ))["data"].latest_decision
+    assert latest["decision_kind"] == "paper_exit"
+    assert latest["exit_trigger"] == "first_target"
+    assert latest["action"] == "sell" and latest["persistence_status"] == "executed"
+    assert latest["safety_state"] is None and latest["reason_code"] is None
