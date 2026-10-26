@@ -470,8 +470,7 @@ EOF
     echo \"❌ PM2 config $PM2_CONFIG not found on remote host.\" >&2
     exit 1
   fi
-  # Stage 1 is expand-only. The legacy daily unique constraint stays in place
-  # so a failed deployment can still roll back to the previous bot writer.
+  # Keep the Stage 1 expansion idempotent. Contract only after old writers stop.
   advance_deploy_step 'paper_exit_decision_expand'
   (cd backend/trading-tool-backend && \
     run_migration backend/scripts/migrations/2026_10_26_paper_exit_decision_identity.py && \
@@ -480,6 +479,46 @@ EOF
     python3 -m backend.scripts.paper_exit_migration_state | tail -n 1)\"
   if [ \"\$paper_exit_schema_state\" != expanded ] && [ \"\$paper_exit_schema_state\" != current ]; then
     echo \"Paper exit expand migration did not reach a compatible schema: \$paper_exit_schema_state\" >&2
+    exit 1
+  fi
+  if [ \"\$paper_exit_schema_state\" = expanded ]; then
+    if [ \"$DEPLOY_COMPONENT_SET\" = backend_only ]; then
+      echo \"Paper exit cutover requires a full deployment so every bot writer can stop.\" >&2
+      exit 1
+    fi
+    advance_deploy_step 'paper_exit_writer_quiesce'
+    IFS=',' read -ra paper_writer_apps <<< \"\$BACKEND_APP,\$AUX_PM2_APPS,\$RETIRED_PM2_APPS\"
+    for app in \"\${paper_writer_apps[@]}\"; do
+      [ -n \"\$app\" ] || continue
+      pm2 stop \"\$app\" >/dev/null 2>&1 || true
+    done
+    pm2 jlist >/tmp/tradamind_paper_exit_pm2.json
+    PAPER_EXIT_WRITER_APPS=\"\$BACKEND_APP,\$AUX_PM2_APPS,\$RETIRED_PM2_APPS\" python3 - <<'PY'
+import json
+import os
+
+raw = open('/tmp/tradamind_paper_exit_pm2.json', encoding='utf-8').read()
+lines = raw.splitlines()
+payload = next(('\n'.join(lines[i:]) for i, line in enumerate(lines)
+                if line.lstrip() == '[' or line.lstrip().startswith('[{')), None)
+if not payload:
+    raise SystemExit('paper_exit_pm2_inventory_unavailable')
+processes = json.loads(payload)
+writers = set(os.environ['PAPER_EXIT_WRITER_APPS'].split(',')) - {''}
+online = [process.get('name') for process in processes
+          if process.get('name') in writers
+          and (process.get('pm2_env') or {}).get('status') == 'online']
+if online:
+    raise SystemExit('paper_exit_old_writers_still_online: ' + ', '.join(online))
+PY
+    advance_deploy_step 'paper_exit_decision_cutover'
+    (cd backend/trading-tool-backend && \
+      run_migration backend/scripts/migrations/2026_10_27_paper_exit_cutover.py)
+  fi
+  paper_exit_schema_state=\"\$(cd backend/trading-tool-backend && \
+    python3 -m backend.scripts.paper_exit_migration_state | tail -n 1)\"
+  if [ \"\$paper_exit_schema_state\" != current ]; then
+    echo \"Paper exit schema did not reach per-position decision identity: \$paper_exit_schema_state\" >&2
     exit 1
   fi
   PM2_DEPLOY_MODE=phased
