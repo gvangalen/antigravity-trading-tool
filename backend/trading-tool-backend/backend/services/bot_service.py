@@ -358,6 +358,13 @@ class BotService:
         normalized_bot = {
             "id": bot.get("id"),
             "bot_id": bot.get("id"),
+            "market_id": bot.get("market_id"),
+            "quote_currency": bot.get("quote_currency"),
+            "trading_pair": (
+                f"{bot.get('symbol')}/{bot.get('quote_currency')}"
+                if bot.get("market_id") and bot.get("symbol") and bot.get("quote_currency")
+                else None
+            ),
             "name": bot.get("name"),
             "strategy_id": bot.get("strategy_id"),
             "is_active": bool(bot.get("is_active", True)),
@@ -472,7 +479,8 @@ class BotService:
         strategy_id = raw_payload.get("strategy_id")
         if strategy_id is not None:
             strategy_query = text("""
-                SELECT s.id, COALESCE(s.symbol, raw.data->>'symbol', st.symbol) AS symbol
+                SELECT s.id, COALESCE(s.symbol, raw.data->>'symbol', st.symbol) AS symbol,
+                       s.market_id, st.market_id AS setup_market_id
                 FROM strategies s
                 LEFT JOIN setups st ON st.id = s.setup_id
                 LEFT JOIN LATERAL (SELECT s.data::jsonb AS data) raw ON TRUE
@@ -487,6 +495,13 @@ class BotService:
                 # asset. Workspace context is only presentation context and
                 # must never leak a previously selected asset into a new bot.
                 raw_payload["symbol"] = str(strategy_row[1]).upper()
+            strategy_market_id = strategy_row[2]
+            setup_market_id = strategy_row[3]
+            if strategy_market_id != setup_market_id:
+                raise HTTPException(409, "Strategie en setup gebruiken niet hetzelfde handelspaar.")
+            if is_update and "market_id" in raw_payload and raw_payload["market_id"] != strategy_market_id:
+                raise HTTPException(409, "Het handelspaar van deze bot kan niet worden gewijzigd.")
+            raw_payload["market_id"] = strategy_market_id
 
             duplicate_strategy_query = text("""
                 SELECT id FROM bot_configs

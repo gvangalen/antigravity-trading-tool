@@ -338,7 +338,7 @@ class _FakeSession:
         if "lower(name)" in sql:
             return _FakeResult(None)
         if "from strategies s" in sql:
-            return _FakeResult((params.get("strategy_id"), "BTC"))
+            return _FakeResult((params.get("strategy_id"), "BTC", None, None))
         if "from bot_configs" in sql and "strategy_id" in sql:
             row = (self.duplicate_strategy_bot_id,) if self.duplicate_strategy_bot_id else None
             return _FakeResult(row)
@@ -1616,6 +1616,33 @@ def test_bot_update_allows_current_bot_strategy_link():
     asyncio.run(service.validate_bot_payload(payload, user_id=1, is_update=True, bot_id=7))
 
     assert payload["symbol"] == "BTC"
+
+
+def test_pair_bound_bot_inherits_exact_market_from_owned_strategy():
+    class Session(_FakeSession):
+        async def execute(self, query, params=None):
+            if "from strategies s" in str(query).lower():
+                return _FakeResult((42, "BTC", 73, 73))
+            return await super().execute(query, params)
+
+    payload = {"name": "BTC/EUR Paper", "strategy_id": 42, "mode": "manual",
+               "is_live": False, "budget_total_eur": 100}
+    asyncio.run(BotService(Session()).validate_bot_payload(payload, user_id=1))
+    assert payload["symbol"] == "BTC"
+    assert payload["market_id"] == 73
+
+
+def test_pair_bound_bot_rejects_strategy_setup_market_disagreement():
+    class Session(_FakeSession):
+        async def execute(self, query, params=None):
+            if "from strategies s" in str(query).lower():
+                return _FakeResult((42, "BTC", 73, 74))
+            return await super().execute(query, params)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(BotService(Session()).validate_bot_payload(
+            {"name": "BTC Paper", "strategy_id": 42}, user_id=1))
+    assert exc.value.status_code == 409
 
 
 def test_bot_contract_exposes_consistent_top_level_ids_and_nested_strategy():

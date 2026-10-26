@@ -61,7 +61,9 @@ class BotRepository:
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.paper_initial_cash_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, """ + base_currency_select + """, b.last_run,
-              COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol, b.created_at, b.updated_at,
+              COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol, b.market_id,
+              tm.quote_currency, tm.provider_symbol, tm.tradingview_symbol,
+              b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               s.execution_mode, s.base_amount, s.decision_curve,
               s.data->>'dca_amount_semantics' AS dca_amount_semantics,
@@ -72,6 +74,7 @@ class BotRepository:
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             LEFT JOIN setups st    ON st.id = s.setup_id AND st.user_id = b.user_id
+            LEFT JOIN trading_markets tm ON tm.id = b.market_id
             WHERE b.user_id = :user_id
             ORDER BY b.id ASC
         """)
@@ -86,7 +89,9 @@ class BotRepository:
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.paper_initial_cash_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
               b.budget_max_order_eur, b.max_asset_exposure_pct, """ + base_currency_select + """, b.last_run,
-              COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol, b.created_at, b.updated_at,
+              COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol, b.market_id,
+              tm.quote_currency, tm.provider_symbol, tm.tradingview_symbol,
+              b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               s.execution_mode, s.base_amount, s.decision_curve,
               s.data->>'dca_amount_semantics' AS dca_amount_semantics,
@@ -97,6 +102,7 @@ class BotRepository:
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             LEFT JOIN setups st    ON st.id = s.setup_id AND st.user_id = b.user_id
+            LEFT JOIN trading_markets tm ON tm.id = b.market_id
             WHERE b.user_id = :user_id AND b.id = :bot_id
             LIMIT 1
         """)
@@ -377,11 +383,11 @@ class BotRepository:
             INSERT INTO bot_configs (
                 user_id, name, strategy_id, mode, is_live, is_active, risk_profile, cadence,
                 budget_total_eur, paper_initial_cash_eur, budget_daily_limit_eur, budget_min_order_eur,
-                budget_max_order_eur, max_asset_exposure_pct, base_currency, symbol, created_at, updated_at
+                budget_max_order_eur, max_asset_exposure_pct, base_currency, symbol, market_id, created_at, updated_at
             )
             VALUES (:user_id, :name, :strategy_id, :mode, :is_live, :is_active, :risk_profile, :cadence,
                     :budget_total_eur, :paper_initial_cash_eur, :budget_daily_limit_eur, :budget_min_order_eur,
-                    :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, :symbol, NOW(), NOW())
+                    :budget_max_order_eur, :max_asset_exposure_pct, :base_currency, :symbol, :market_id, NOW(), NOW())
             RETURNING id
         """)
         result = await self.session.execute(query, payload)

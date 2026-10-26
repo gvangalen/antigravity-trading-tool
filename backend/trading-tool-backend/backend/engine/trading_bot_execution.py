@@ -840,6 +840,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
               st.dca_day,
               st.dca_month_day,
               st.last_validated
+              ,b.market_id
 
             FROM bot_configs b
             JOIN strategies s ON s.id = b.strategy_id
@@ -875,6 +876,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
             dca_day,
             dca_month_day,
             setup_last_validated,
+            market_id,
         ) = r
 
         bots.append(
@@ -885,6 +887,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
                 "is_live": bool(is_live),
                 "risk_profile": risk_profile or "balanced",
                 "strategy_id": int(strategy_id),
+                "market_id": int(market_id) if market_id is not None else None,
 
                 # ✅ CONSISTENT
                 "setup_type": setup_type,
@@ -2150,6 +2153,13 @@ def run_trading_bot_execution(
         price_cache = {}
 
         for bot in bots:
+
+            # Pair-bound plans cannot use the legacy symbol-only score and
+            # price readers. Keep them active but without a new decision until
+            # those readers are keyed by the exact verified market.
+            if bot.get("market_id") is not None:
+                skip_reasons[bot["bot_id"]] = "exact_market_runtime_pending"
+                continue
 
             exit_result = (
                 _maybe_execute_paper_position_exit(

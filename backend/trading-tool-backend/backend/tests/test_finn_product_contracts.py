@@ -97,7 +97,7 @@ class _BotSession:
         if "from strategies s" in sql:
             strategy_id = params.get("strategy_id")
             symbol = "BTC" if strategy_id == 991 else "AAPL"
-            return _Result((strategy_id, symbol))
+            return _Result((strategy_id, symbol, None, None))
         if "from bot_configs" in sql and "strategy_id" in sql:
             return _Result(None)
         return _Result(None)
