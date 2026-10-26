@@ -235,6 +235,7 @@ class BotStatusData(BaseModel):
     last_run: Optional[datetime] = None
     mode: Optional[str] = None
     cadence: Optional[str] = None
+    latest_decision: Optional[dict] = None
 
 
 class WatchlistEntryData(BaseModel):

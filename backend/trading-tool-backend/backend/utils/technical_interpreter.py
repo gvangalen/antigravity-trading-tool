@@ -154,9 +154,9 @@ def normalize_technical_value(indicator: str, value: float) -> float:
             return max(0, min(100, value))
 
         if "ma50" in indicator or "ma_50" in indicator:
-            deviation = abs(value - 1)
-            cap = 0.15
-            return min(100, (deviation / cap) * 100)
+            # The source is close / MA50. Preserve which side of the average
+            # the price is on; absolute distance made a fall look strong.
+            return max(0, min(100, 50 + (value - 1.0) / 0.15 * 50))
 
         if "ma200" in indicator or "ma_200" in indicator:
             # The provider returns close / MA200. Preserve direction: a price
@@ -189,18 +189,19 @@ def normalize_technical_value(indicator: str, value: float) -> float:
 
 def normalize_technical_value_for_rules(conn, indicator: str, value: float,
                                         user_id: int, symbol: str | None = None) -> float:
-    """Keep existing owner MA200 curves on their original distance scale."""
+    """Keep existing owner MA curves on their original distance scale."""
     if not math.isfinite(float(value)):
         raise ValueError("Non-finite technical indicator reading")
     normalized = normalize_indicator_name(indicator)
-    if normalized == "ma_200":
+    if normalized in {"ma_50", "ma_200"}:
         from backend.utils.scoring_engine import fetch_rules_for_indicator
         rules = fetch_rules_for_indicator(
             conn, category="technical", indicator=normalized,
             user_id=user_id, symbol=symbol, enforce_fixed_buckets=False,
         )
         if rules and all(rule.score_mode == "custom" for rule in rules):
-            return min(100, abs(float(value) - 1.0) / 0.2 * 100)
+            cap = 0.15 if normalized == "ma_50" else 0.2
+            return min(100, abs(float(value) - 1.0) / cap * 100)
     return normalize_technical_value(normalized, value)
 
 

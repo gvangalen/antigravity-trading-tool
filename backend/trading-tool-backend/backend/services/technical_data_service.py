@@ -41,6 +41,13 @@ class TechnicalDataService:
             return SimpleNamespace(**catalog_def)
         return db_config
 
+    async def _require_scoring_rules(self, name: str, user_id: int, symbol: str) -> None:
+        from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
+        from backend.services.indicator_config_service import IndicatorConfigService
+
+        service = IndicatorConfigService(IndicatorConfigRepository(self.session))
+        await service.require_scoring_rules("technical", name, user_id, symbol)
+
     async def _get_asset_scope(self, symbol: str) -> dict[str, Any]:
         normalized_symbol = str(symbol or "BTC").strip().upper() or "BTC"
 
@@ -392,6 +399,7 @@ class TechnicalDataService:
             raise ValueError(f"Indicator '{name}' niet gevonden of niet actief.")
 
         if persist_preference:
+            await self._require_scoring_rules(name, user_id, symbol)
             await self.repository.ensure_user_config(
                 user_id,
                 name,

@@ -94,6 +94,8 @@ async def add_technical_indicator(
 
     except ValueError as ve:
         # Expected business logic errors
+        if str(ve) == "indicator_score_rules_unavailable":
+            raise HTTPException(422, "Voor deze indicator ontbreekt een scoreregel. Kies eerst een eigen scoreregel.")
         if "al toegevoegd" in str(ve):
             raise HTTPException(409, str(ve))
         elif "niet gevonden" in str(ve):

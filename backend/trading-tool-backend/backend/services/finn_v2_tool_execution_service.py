@@ -82,7 +82,7 @@ class FinnV2ToolExecutionService:
         self.setup_adapter = SetupToolAdapter()
         self.setup_inventory_adapter = SetupInventoryToolAdapter()
         self.strategy_adapter = StrategyToolAdapter()
-        self.bot_adapter = BotToolAdapter()
+        self.bot_adapter = BotToolAdapter(session)
         self.watchlist_adapter = WatchlistToolAdapter(session)
         self.portfolio_adapter = PortfolioToolAdapter(session)
         self.report_adapter = ReportToolAdapter(session)
@@ -685,7 +685,7 @@ class FinnV2ToolExecutionService:
             return await self.bot_adapter.execute_linked_bot(**resolved)
         if tool_name == "read_bot_status":
             bot_state = await self._ensure_bot(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.bot_adapter.execute_status(bot=bot_state["bot"])
+            return await self.bot_adapter.execute_status(bot=bot_state["bot"], user_id=user_id)
         if tool_name == "read_watchlist":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.watchlist_adapter.execute(user_id=user_id, asset=asset_state["asset"])

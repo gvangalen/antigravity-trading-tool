@@ -3,9 +3,35 @@ from datetime import datetime, time, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from backend.services.technical_data_service import TechnicalDataService
 from backend.services.providers.twelve_data_technical_indicator_adapter import TechnicalSourceRateLimited
 from backend.api.technical_data_api import add_technical_indicator as add_technical_indicator_api
+
+
+@pytest.fixture(autouse=True)
+def scoring_rules_already_configured(monkeypatch):
+    # These provider and persistence tests exercise indicators with a valid
+    # score policy; the missing-policy rejection is covered separately.
+    monkeypatch.setattr(TechnicalDataService, "_require_scoring_rules", AsyncMock())
+
+
+def test_missing_score_rule_rejects_indicator_before_preference_is_saved():
+    service = TechnicalDataService(AsyncMock())
+    service.repository = SimpleNamespace(
+        get_indicator_config=AsyncMock(return_value=None),
+        ensure_user_config=AsyncMock(),
+    )
+    service._get_asset_scope = AsyncMock(return_value={"asset_class": "crypto"})
+    service._require_scoring_rules = AsyncMock(side_effect=ValueError("indicator_score_rules_unavailable"))
+    service._fetch_indicator_value = AsyncMock()
+
+    with pytest.raises(ValueError, match="indicator_score_rules_unavailable"):
+        asyncio.run(service.add_technical_indicator("ADX", 7, symbol="BTC"))
+
+    service.repository.ensure_user_config.assert_not_awaited()
+    service._fetch_indicator_value.assert_not_awaited()
 
 
 def test_crypto_rsi_reuses_distinct_completed_market_source_days():

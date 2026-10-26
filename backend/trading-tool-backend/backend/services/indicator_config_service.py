@@ -79,10 +79,32 @@ class IndicatorConfigService:
                 ))
         return out
 
+    @staticmethod
+    def _has_complete_rules(rules_objects) -> bool:
+        active = [rule for rule in rules_objects if IndicatorConfigService._rule_value(rule, "is_active", True) is not False]
+        buckets = {
+            _bucket_key(
+                IndicatorConfigService._rule_value(rule, "range_min"),
+                IndicatorConfigService._rule_value(rule, "range_max"),
+            ) for rule in active
+        }
+        return buckets == {_bucket_key(low, high) for low, high in FIXED_BUCKETS}
+
+    async def require_scoring_rules(self, category: str, indicator: str, user_id: int, symbol: str) -> None:
+        """Reject a preference that would invalidate an otherwise complete category."""
+        configured = await self.product_repository.get_user_configs(user_id, category, symbol=symbol)
+        row = next((item for item in configured if str(item.indicator).casefold() == str(indicator).casefold()), None)
+        metadata = dict(getattr(row, "config_json", {}) or {})
+        if metadata.get("score_mode") == "custom" and self._has_complete_rules(metadata.get("rules") or []):
+            return
+        templates = await self.repository.get_system_indicator_rules(category, indicator)
+        if not self._has_complete_rules(templates):
+            raise ValueError("indicator_score_rules_unavailable")
+
     async def get_indicator_config(self, category: str, indicator: str, user_id: int, symbol: str) -> IndicatorConfigResponse:
         rules_objs = await self.repository.get_system_indicator_rules(category, indicator)
         configured = await self.product_repository.get_user_configs(user_id, category, symbol=symbol)
-        row = next((item for item in configured if item.indicator == indicator), None)
+        row = next((item for item in configured if str(item.indicator).casefold() == str(indicator).casefold()), None)
         metadata = dict(getattr(row, "config_json", {}) or {})
         score_mode = str(metadata.get("score_mode") or "standard").strip().lower()
         weight = _clamp_weight(metadata.get("weight", getattr(row, "priority", 100) / 100 if row else 1.0))
@@ -102,9 +124,13 @@ class IndicatorConfigService:
         score_mode = (score_mode or "").strip().lower()
         weight = _clamp_weight(weight)
         metadata = {"score_mode": score_mode, "weight": weight}
+        if score_mode == "standard":
+            templates = await self.repository.get_system_indicator_rules(category, indicator)
+            if not self._has_complete_rules(templates):
+                raise ValueError("indicator_score_rules_unavailable")
         if score_mode == "custom":
             configured = await self.product_repository.get_user_configs(user_id, category, symbol=symbol)
-            row = next((item for item in configured if item.indicator == indicator), None)
+            row = next((item for item in configured if str(item.indicator).casefold() == str(indicator).casefold()), None)
             rules = (getattr(row, "config_json", None) or {}).get("rules") if row else None
             if not isinstance(rules, list) or len(rules) != 5:
                 raise ValueError("Aangepaste scoremodus vereist vijf opgeslagen regels.")
@@ -120,10 +146,14 @@ class IndicatorConfigService:
         await self.repository.db.commit()
         queue_indicator_score_refresh(user_id, symbol)
 
-    async def save_custom_rules(self, category: str, indicator: str, user_id: int, symbol: str, rules: list, weight: float):
+    async def save_custom_rules(self, category: str, indicator: str, user_id: int, symbol: str, rules: list, weight: float, create_only: bool = False):
         weight = _clamp_weight(weight)
         if len(rules) != 5:
             raise ValueError("Exact 5 buckets verplicht")
+        if create_only:
+            configured = await self.product_repository.get_user_configs(user_id, category, symbol=symbol)
+            if any(str(row.indicator).casefold() == str(indicator).casefold() for row in configured):
+                raise ValueError("indicator_already_configured")
             
         rules_to_insert = []
         for idx, (bmin, bmax) in enumerate(FIXED_BUCKETS):

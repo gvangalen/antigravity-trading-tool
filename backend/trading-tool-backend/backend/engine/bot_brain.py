@@ -419,12 +419,10 @@ def run_bot_brain(
         or portfolio_context.get("current_price")
     )
 
-    monitoring = (
-        entry_value is not None
-        or stop_value is not None
-        or bool(clean_targets)
-    )
-    alerts_active = monitoring
+    # Stored levels alone do not install an exit monitor or exchange order.
+    # Keep these runtime claims false until a verified monitoring path exists.
+    monitoring = False
+    alerts_active = False
 
     # -------------------------------------------------
     # 6️⃣ Action Decision

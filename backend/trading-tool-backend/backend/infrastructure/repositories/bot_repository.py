@@ -164,6 +164,18 @@ class BotRepository:
         result = await self.session.execute(query, {"user_id": user_id, "start": start_date, "end": end_date})
         return [dict(r._mapping) for r in result.fetchall()]
 
+    async def get_latest_bot_decision(self, user_id: int, bot_id: int) -> Optional[dict]:
+        """Read the same persisted decision fields used by the bot screen."""
+        result = await self.session.execute(text("""
+            SELECT id, bot_id, action, status, decision_ts, scores_json
+            FROM bot_decisions
+            WHERE user_id=:user_id AND bot_id=:bot_id
+            ORDER BY decision_ts DESC, id DESC
+            LIMIT 1
+        """), {"user_id": user_id, "bot_id": bot_id})
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+
     # ==========================
     # MANUAL ORDER / LEDGER
     # ==========================
