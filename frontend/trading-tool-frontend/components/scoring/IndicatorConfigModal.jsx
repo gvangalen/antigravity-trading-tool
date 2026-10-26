@@ -182,7 +182,7 @@ function getRoleModel(category, indicator, profileContext, copy) {
         { id: "contrarian", ...copy.roles.volume.contrarian },
       ],
       recommendedInterpretation: "standard",
-      summaryLabel: getIndicatorLabel(indicator),
+      summaryLabel: getIndicatorLabel(indicator, copy),
       recommendationReason: copy.roles.volume.recommendation,
       recommendationLabel: copy.roles.volume.contextTitle,
     };
@@ -190,7 +190,7 @@ function getRoleModel(category, indicator, profileContext, copy) {
 
   if (category !== "technical") {
     return {
-      description: generic.description.replace("{indicator}", getIndicatorLabel(indicator)),
+      description: generic.description.replace("{indicator}", getIndicatorLabel(indicator, copy)),
       whenQuestion: generic.whenQuestion,
       whenOptions: [{ id: "default", ...generic.always }],
       recommendedWhen: ["default"],
@@ -200,7 +200,7 @@ function getRoleModel(category, indicator, profileContext, copy) {
         { id: "contrarian", ...generic.contrarian },
       ],
       recommendedInterpretation: "standard",
-      summaryLabel: getIndicatorLabel(indicator),
+      summaryLabel: getIndicatorLabel(indicator, copy),
       recommendationReason: generic.recommendation.replace("{profile}", summarySuffix),
     };
   }
@@ -256,7 +256,7 @@ function getRoleModel(category, indicator, profileContext, copy) {
   }
 
   return {
-    description: generic.description.replace("{indicator}", getIndicatorLabel(indicator)),
+    description: generic.description.replace("{indicator}", getIndicatorLabel(indicator, copy)),
     whenQuestion: generic.whenQuestion,
     whenOptions: [{ id: "default", ...generic.always }],
     recommendedWhen: ["default"],
@@ -266,7 +266,7 @@ function getRoleModel(category, indicator, profileContext, copy) {
       { id: "contrarian", ...generic.contrarian },
     ],
     recommendedInterpretation: "standard",
-    summaryLabel: getIndicatorLabel(indicator),
+    summaryLabel: getIndicatorLabel(indicator, copy),
     recommendationReason: generic.recommendation.replace("{profile}", summarySuffix),
   };
 }
