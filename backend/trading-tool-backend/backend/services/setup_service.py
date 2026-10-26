@@ -9,6 +9,7 @@ import logging
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
 from backend.schemas.trading_schema import SetupCreateSchema
+from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
 
 WEEKDAY_TO_NUMBER = {
     "1": 1,
@@ -125,6 +126,13 @@ class SetupService:
             "setup_id": item.get("id"),
             "name": item.get("name"),
             "symbol": item.get("symbol"),
+            "market_id": item.get("market_id"),
+            "quote_currency": item.get("quote_currency"),
+            "trading_pair": (
+                f"{item.get('symbol')}/{item.get('quote_currency')}"
+                if item.get("market_id") and item.get("quote_currency") else None
+            ),
+            "tradingview_symbol": item.get("tradingview_symbol"),
             "timeframe": item.get("timeframe"),
             "setup_type": item.get("setup_type"),
             
@@ -301,6 +309,23 @@ class SetupService:
         raw_payload["symbol"] = str(raw_payload.get("symbol", "")).strip().upper()
         payload.symbol = raw_payload["symbol"]
 
+        # A chosen crypto quote is an exact market identity, not an FX
+        # conversion of the catalog's default quote. Legacy rows without a
+        # selected pair retain NULL market_id until explicitly confirmed.
+        requested_quote = raw_payload.get("quote_currency")
+        if requested_quote is not None:
+            try:
+                market = await TradingMarketService(self.session).resolve(
+                    raw_payload["symbol"], str(requested_quote), verify_current=True,
+                )
+            except MarketUnavailable as exc:
+                raise HTTPException(422, str(exc)) from exc
+            raw_payload["market_id"] = market.id
+            raw_payload["quote_currency"] = market.quote_currency
+            raw_payload["trading_pair"] = market.pair
+        elif raw_payload.get("market_id") is not None:
+            raise HTTPException(422, "Kies een koersvaluta voor dit handelspaar.")
+
         setup_type = payload.setup_type.lower()
 
         exists = await self.repository.check_name_exists(payload.name, user_id)
@@ -326,6 +351,7 @@ class SetupService:
             "status": "success",
             "setup_id": setup_id,
             "setup": self._format_setup(created),
+            "trading_pair": raw_payload.get("trading_pair"),
             "field_sources": {
                 field: "supplied" if raw_payload.get(field) is not None else "absent"
                 for field in self.SETUP_SCORE_DEFAULTS
@@ -382,6 +408,8 @@ class SetupService:
         # Normalize uppercase symbol if being updated
         if "symbol" in raw_payload:
             raw_payload["symbol"] = str(raw_payload["symbol"]).strip().upper()
+            if row.get("market_id") is not None and raw_payload["symbol"] != str(row.get("symbol") or "").upper():
+                raise HTTPException(422, "Wijzig het handelspaar via een nieuw setupvoorstel.")
 
         updates = {}
         for field in self.UPDATE_ALLOWED_FIELDS.difference({"tags"}):

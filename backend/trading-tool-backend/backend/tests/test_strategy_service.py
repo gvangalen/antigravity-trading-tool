@@ -121,6 +121,32 @@ class _Session:
         return None
 
 
+def test_strategy_inherits_exact_setup_quote_and_rejects_mixed_price_currency():
+    class _PairRepository(_MultipleStrategyRepository):
+        async def get_setup_for_verification(self, setup_id, user_id):
+            return {"id": setup_id, "name": "BTC EUR", "symbol": "BTC",
+                    "timeframe": "1D", "setup_type": "trade", "market_id": 23,
+                    "market_quote_currency": "EUR"}
+
+    async def run():
+        service = StrategyService(_Session())
+        service.repository = _PairRepository()
+        strategy = StrategyCreateSchema(setup_id=77, name="BTC EUR trade",
+                                        execution_mode="fixed", base_amount=100)
+        levels = {"entry": 60000, "stop_loss": 58000, "targets": [64000]}
+        saved = await service.save_strategy(strategy, levels.copy(), 9, commit=False)
+        assert saved["trading_pair"] == "BTC/EUR"
+        assert service.repository.rows[0]["market_id"] == 23
+        assert service.repository.rows[0]["data"]["price_currency"] == "EUR"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.save_strategy(strategy, {**levels, "price_currency": "USDT"}, 9, commit=False)
+        assert exc_info.value.status_code == 422
+        assert len(service.repository.rows) == 1
+
+    asyncio.run(run())
+
+
 def test_general_strategy_write_rejects_unvalidated_exact_dca_marker():
     class _DcaRepository(_MultipleStrategyRepository):
         async def get_setup_for_verification(self, setup_id, user_id):

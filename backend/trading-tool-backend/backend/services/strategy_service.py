@@ -77,7 +77,7 @@ class StrategyService:
     @staticmethod
     def _validated_price_currency(value: Any) -> str:
         currency = str(value).strip().upper()
-        if currency not in {"EUR", "USD"}:
+        if currency not in {"EUR", "USD", "USDT"}:
             raise HTTPException(422, "Ongeldige valuta voor koersniveaus")
         return currency
 
@@ -243,6 +243,19 @@ class StrategyService:
         if not setup_row:
             raise HTTPException(403, "Setup niet van gebruiker of beantwoordt niet")
 
+        # The setup fixes the traded market. A strategy may configure EUR
+        # investment size, but all saved entry/stop/target price levels must
+        # use the direct market quote, never a converted default currency.
+        market_id = setup_row.get("market_id")
+        market_quote = str(setup_row.get("market_quote_currency") or "").upper()
+        if market_id is not None:
+            if not market_quote:
+                raise HTTPException(422, "Het handelspaar van de setup is niet beschikbaar.")
+            if price_currency_explicit and raw_data["price_currency"] != market_quote:
+                raise HTTPException(422, "Koersniveaus moeten in de koersvaluta van het handelspaar staan.")
+            raw_data["price_currency"] = market_quote
+            raw_data["price_currency_confirmed"] = True
+
         setup_type = (setup_row.get("setup_type") or "").lower()
         if setup_type not in ["dca", "trade", "position"]:
             raise HTTPException(400, "Ongeldig setup_type")
@@ -275,6 +288,8 @@ class StrategyService:
         strategy_timeframe = explicit_timeframe or normalize_string(setup_row.get("timeframe"))
         if not strategy_symbol or not strategy_timeframe:
             raise HTTPException(400, "symbol en timeframe ontbreken voor deze strategie")
+        if market_id is not None and strategy_symbol != str(setup_row.get("symbol") or "").upper():
+            raise HTTPException(422, "De strategie moet hetzelfde handelspaar als de setup gebruiken.")
 
         curve_id = None
         if execution_mode == "custom":
@@ -287,6 +302,7 @@ class StrategyService:
 
         insert_payload = {
             "setup_id": payload.setup_id,
+            "market_id": market_id,
             "name": strategy_name,
             "canonical_name": canonical_name,
             "symbol": strategy_symbol,
@@ -303,6 +319,9 @@ class StrategyService:
         raw_data["asset_source"] = "explicit" if explicit_symbol else "setup_default"
         raw_data["timeframe_source"] = "explicit" if explicit_timeframe else "setup_default"
         raw_data["setup_name"] = setup_row.get("name")
+        if market_id is not None:
+            raw_data["market_id"] = market_id
+            raw_data["trading_pair"] = f"{strategy_symbol}/{market_quote}"
 
         strategy_id = await self.repository.create_strategy(insert_payload, curve_id, raw_data, user_id)
         if commit:
@@ -315,6 +334,8 @@ class StrategyService:
             "setup_id": payload.setup_id,
             "name": strategy_name,
             "symbol": strategy_symbol,
+            "market_id": market_id,
+            "trading_pair": raw_data.get("trading_pair"),
             "timeframe": strategy_timeframe,
             "message": "✅ Strategie opgeslagen",
         }
@@ -385,6 +406,12 @@ class StrategyService:
             **raw_data,
         }
         merged_data["price_currency"] = self._validated_price_currency(merged_data.get("price_currency", "EUR"))
+        if existing.get("setup_market_id") is not None:
+            expected_quote = str(existing.get("market_quote_currency") or "").upper()
+            if not expected_quote or merged_data["price_currency"] != expected_quote:
+                raise HTTPException(422, "Koersniveaus moeten in de koersvaluta van het handelspaar staan.")
+            if str(merged_data.get("symbol") or "").upper() != str(existing.get("setup_symbol") or "").upper():
+                raise HTTPException(422, "De strategie moet hetzelfde handelspaar als de setup gebruiken.")
         if "price_currency" in raw_data:
             merged_data["price_currency_confirmed"] = True
         execution_mode = (merged_data.get("execution_mode") or "").lower()

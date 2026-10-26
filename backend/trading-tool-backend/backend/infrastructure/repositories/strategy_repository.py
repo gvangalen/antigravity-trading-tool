@@ -12,9 +12,10 @@ class StrategyRepository:
 
     async def get_setup_for_verification(self, setup_id: int, user_id: int) -> Optional[dict]:
         query = text("""
-            SELECT id, name, symbol, timeframe, setup_type
-            FROM setups
-            WHERE id = :setup_id AND user_id = :user_id
+            SELECT s.id, s.name, s.symbol, s.timeframe, s.setup_type,
+                   s.market_id, tm.quote_currency AS market_quote_currency
+            FROM setups s LEFT JOIN trading_markets tm ON tm.id = s.market_id
+            WHERE s.id = :setup_id AND s.user_id = :user_id
         """)
         result = await self.session.execute(query, {"setup_id": setup_id, "user_id": user_id})
         row = result.fetchone()
@@ -74,7 +75,7 @@ class StrategyRepository:
         timeframe = payload.get("timeframe") or raw_data.get("timeframe")
         query = text("""
             INSERT INTO strategies (
-                setup_id, name, canonical_name, symbol, timeframe, setup_type,
+                setup_id, market_id, name, canonical_name, symbol, timeframe, setup_type,
                 execution_mode, base_amount,
                 decision_curve, decision_curve_id,
                 entry, targets, stop_loss,
@@ -82,7 +83,7 @@ class StrategyRepository:
                 data, created_at, user_id
             )
             VALUES (
-                :setup_id, :name, :canonical_name, :symbol, :timeframe, :setup_type,
+                :setup_id, :market_id, :name, :canonical_name, :symbol, :timeframe, :setup_type,
                 :execution_mode, :base_amount,
                 :decision_curve, :decision_curve_id,
                 :entry, :targets, :stop_loss,
@@ -94,6 +95,7 @@ class StrategyRepository:
         
         params = {
             "setup_id": payload["setup_id"],
+            "market_id": payload.get("market_id"),
             "name": name,
             "canonical_name": canonical_name,
             "symbol": symbol,
@@ -125,9 +127,12 @@ class StrategyRepository:
                 st.symbol AS setup_symbol,
                 st.timeframe AS setup_timeframe,
                 st.name AS setup_name,
-                st.setup_type AS existing_setup_type
+                st.setup_type AS existing_setup_type,
+                st.market_id AS setup_market_id,
+                tm.quote_currency AS market_quote_currency
             FROM strategies s
             JOIN setups st ON st.id = s.setup_id
+            LEFT JOIN trading_markets tm ON tm.id = st.market_id
             WHERE s.id = :strategy_id AND s.user_id = :user_id
         """)
         result = await self.session.execute(query, {"strategy_id": strategy_id, "user_id": user_id})
