@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Coachfeed transient gateway error during deployment (26 oktober 2026)
 
-Phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Independent QA observed one HTTP 502 for the
+Phase: `ACCEPTED` for the tested coachfeed scope. Independent QA observed one HTTP 502 for the
 read-only coachfeed GET while testing the already accepted DCA asset-switch
 release. Production Nginx error logs identify the failure at 25 October
 22:18:09 UTC as `connect() failed (111)` to the sole backend upstream at
@@ -38,11 +38,22 @@ as product SHA `e7eaa720385fa5186fc2bdfd9547f3b8f8233824`. PR CI
 and main CI [40275757828](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40275757828)
 passed all five jobs. [Auto Deploy 40276015188](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40276015188)
 succeeded. Public backend health and frontend build-info each returned HTTP
-200 and that exact product SHA. This documentation update itself creates a
-later main SHA; Build must wait for its CI and Auto Deploy and verify both
-public markers on the final SHA before assigning the existing QA Agent the
-authenticated live feed hertest. This candidate is not yet independently
-accepted. The single-backend
+200 and that exact product SHA. The release-evidence update created a later
+main SHA. Main CI
+[40276527790](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40276527790)
+and final [Auto Deploy 40276749313](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/40276749313)
+succeeded. Public backend health and frontend build-info returned HTTP 200
+and final SHA `6a47140ed72872f159c325eb994aaf7c3adb296f`, matching main
+with no newer deploy pending. The existing independent QA Agent returned
+`ACCEPTED` for the feed scope on that exact SHA: two owner-bound active items
+remained after refresh, history reloaded 50 items, navigation between Analyse
+and Mijn Plan preserved the feed, chat remained closed until explicitly opened,
+and no new 502 appeared during the read-only test. QA did not force a live
+backend restart; transient 502 recovery is covered locally, not independently
+proven in production. The empty state was not observable with this account.
+QA separately found `guided_proposal_tool_call_required` in an ETH-to-AAPL
+chat test; that is a separate coach regression and not a feed verdict. This
+documentation-only verdict update does not change product behavior. The single-backend
 deployment can still emit a raw HTTP 502 while it restarts; the repair
 prevents that brief outage from becoming a failed coachfeed experience.
 
