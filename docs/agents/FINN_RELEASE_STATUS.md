@@ -6,7 +6,38 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
 
-Phase: `STAGE1_LOCAL_VALIDATION`; this batch has not been pushed or deployed.
+Phase: `STAGE1_QA_NOT_ACCEPTED`; PR #639 merged and Stage 1 is live at
+`6a72cc65610348cd58e98f3934ef10f6f4a1b493`. Main CI 40397347795
+and Auto Deploy 40397831252 succeeded; backend health and frontend build info
+returned HTTP 200 and the exact SHA. Independent QA found that Analyse
+showed a dated, stale AAPL quote while FINN initially said the last known
+quote could not be established. FINN read it only after the user named the
+screen value. QA also found raw MACD naming and Dutch weight grammar. The
+follow-up repair is being validated locally; no Stage 2 cutover is authorized
+by this verdict.
+The root cause is now reproduced with a synthetic local AAPL quote: a
+USD/EUR conversion reference was classified as an unsupported requested
+instrument, so the first model turn received no quote tool. The repair keeps
+unsupported trading-pair mutations blocked, requires a dated quote read for
+a named-asset price question, and lets a read-only FX conversion reference
+remain an unavailable conversion rather than hiding the asset quote. The
+repeated real Responses local chat read the dated AAPL/USD quote, identified
+it as stale and withheld an unsupported EUR conversion. The indicator dialog
+now presents the MACD histogram and weighting in the active locale.
+Repair candidate local validation: backend 3993 passed, 4 existing skips;
+web build, typecheck, i18n checks, command/proposal tests and high audit
+passed. Worker-driven action matrix 16/16 and adapter checks 21/21 passed
+(artifact SHA-256 `1e78eb163c08f8748f8c14231adf6723433326cb370e05168e224008f6935fd5`).
+Real Luna/Responses selection passed 20/20 development (artifact SHA-256
+`69af36de78c1aca1e95df55550f5a5a0303d3f1f7e75f5b138e23b859d81d4db`)
+and 109/109 regression (artifact SHA-256
+`f8e4f4e2e46a7851567305f109f54a1cf66b0b4d34031330dd6868a35e4db124`).
+A synthetic local quote probe passed on the exact combined
+AAPL/USD plus USD/EUR question: FINN read the dated USD quote, marked it
+stale and withheld the unavailable conversion. Security reviewed the
+read-only catalog exception and found no concrete P1/P2; mutation and order
+requests still use the unsupported-pair boundary. Independent live QA of the
+repair candidate remains open.
 Stage 1 deploys the completed score, FX and FINN diagnostics plus an expand-only
 Paper decision schema. The legacy daily unique constraint stays in place and
 automatic Paper exits remain disabled in the deployed runtime; rollback to the
