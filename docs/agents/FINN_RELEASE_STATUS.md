@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair independent-QA repair candidate (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION_COMPLETE`, branch
+Current phase: `PR_CI_PENDING`, branch
 `codex/exact-pair-qa-repairs`, based on `c37124dd823728223d1e04c80c01975e9eeafcc2`.
 The existing independent QA Agent returned `NOT_ACCEPTED` on that public SHA.
 It confirmed distinct BTC/EUR and BTC/USDT quotes, charts and indicators,
@@ -49,8 +49,10 @@ with zero provider, schema, timeout, parse or validation failures. The first
 regression attempt before the lineage repair was **108/109** and remains
 recorded; the case selected the expected read operation at confidence 0.49,
 then the old confidence gate rejected it. Migration-plan validation passed.
-This candidate has not been committed, merged, deployed or independently
-accepted yet.
+PR #661 contains the source changes. Its first CI run found that the tracked
+frontend `out/` export had been omitted after a successful local build; the
+export is included in the next candidate commit. The candidate has not been
+merged, deployed or independently accepted yet.
 
 ## Exact trading-pair return and Paper-check result (27 oktober 2026)
 
