@@ -6,9 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact trading-pair candidate (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION` on `codex/explicit-trading-market`.
-Production still reports `2c5431b4cb6446b276b2e1e855a843823885810c`;
-the pair flow is **not live** at this status update. The candidate binds a
+Current phase: `DEPLOY_REPAIR` after PR #645 (merge SHA
+`6d78905ba90286cfdc7feb93b019763822215351`). PR and main CI passed.
+Auto Deploy run `40486772524` failed on an unset remote
+`DEPLOY_COMPONENT_SET`; rollback restored the backend to
+`2c5431b4cb6446b276b2e1e855a843823885810c`, but the untracked frontend
+`build-info.json` still reported `6d78905` at the public check. This candidate
+is **not live or QA-ready**. The deploy repair exports the component selection,
+registers the new migration phases in the status writer, and rewrites frontend
+identity during rollback. The candidate binds a
 user-selected BTC/EUR, BTC/USDT, ETH/EUR or ETH/USDT market to setup,
 strategy, bot, exact quote, TradingView chart, indicator materialization,
 Score 2.0, FINN read evidence, Paper decisions and portfolio valuation.
@@ -35,8 +41,8 @@ The full local worker action matrix passed **16/16** contracts, including
 direct and guided SOL/USDT setup creation, with zero broker orders and zero
 Live bots (`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
 `95063b8d649de54942ffc94e8bc12e0162c3d7197e0aa980405cdb46350c33a7`).
-CI, deployment and independent authenticated QA remain outstanding at this
-status update. Local probes do not establish
+Successful deployment, matching public SHAs and independent authenticated QA
+remain outstanding at this status update. Local probes do not establish
 live provider, exchange, chart or broker behavior.
 
 ## Paper exit, Score 2.0 diagnostics and pair identity (27 oktober 2026)

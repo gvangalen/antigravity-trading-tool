@@ -121,10 +121,13 @@ export TRADAMIND_BUILD_COMMIT_SHA="$(git rev-parse HEAD)"
 
 cd frontend/trading-tool-frontend
 rm -rf .next
+git clean -fd out/_next/static
 if [ ! -f out/index.html ]; then
   echo "❌ Prebuilt frontend export missing during rollback: frontend/trading-tool-frontend/out/index.html" >&2
   exit 1
 fi
+printf '{"service":"frontend","commit_sha":"%s","build_time":"%s"}\n' \
+  "$TRADAMIND_BUILD_COMMIT_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > out/build-info.json
 echo "✅ Using prebuilt frontend export from git during rollback."
 
 cd ../..
