@@ -1412,6 +1412,20 @@ def _plain_setup_creation_request(message: str) -> bool:
     )
 
 
+def _scheduled_dca_draft_revision(message: str, origin_inputs: dict[str, object]) -> bool:
+    """A bounded schedule and amount can revise one open DCA proposal.
+
+    An immediate purchase, free-form trading command or a question never
+    qualifies. The caller must verify the owner and the open proposal.
+    """
+    return bool(
+        origin_inputs.get("setup_type") == "dca"
+        and origin_inputs.get("dca_amount_mode") == "fixed"
+        and not re.search(r"\busdt\b", message, re.I)
+        and FinnV2OperationStateService.is_scheduled_dca_plan_phrase(message)
+    )
+
+
 def _plain_strategy_execution_mode_reply(message: str) -> bool:
     """A mode label alone cannot introduce an automatic trading condition."""
     return bool(re.fullmatch(
@@ -2015,6 +2029,7 @@ class FinnV2RunService:
             unspecified_correction = False
             corrected_name = None
             corrected_fields: dict[str, object] = {}
+            scheduled_dca_revision = False
             correction_typed_inputs: dict[str, object] = {}
             explicit_proposal_correction = False
             target_change_requested = False
@@ -2093,6 +2108,13 @@ class FinnV2RunService:
                     origin_state = dict((latest_open[1].state_json or {}).get("guided_state") or {})
                     origin_inputs = dict(origin_state.get("collected_inputs") or {})
                     contract = FinnV2OperationRegistry().require_supported(latest_open[0].operation_type)
+                    scheduled_dca_revision = bool(
+                        contract.operation_id == "create_setup"
+                        and _scheduled_dca_draft_revision(message, origin_inputs)
+                        and len(await FinnV2ProposalRepository(session).list_open_for_conversation(
+                            conversation_id=conversation_id, user_id=user_id,
+                        )) == 1
+                    )
                     if "name" in contract.required_inputs and contract.operation_id.startswith("create_"):
                         named = FinnV2OperationStateService.explicit_draft_rename(message)
                         if (
@@ -2106,7 +2128,7 @@ class FinnV2RunService:
                         and FinnV2OperationStateService.remove_setup_score_filter_intent(message)
                     )
                     if (FinnV2OperationStateService._is_explicit_correction(message)
-                            or setup_filter_removal) and "?" not in message:
+                            or setup_filter_removal or scheduled_dca_revision) and "?" not in message:
                         typed_changes = FinnV2OperationStateService().explicit_inputs(
                             contract=contract, message=message, explicit_asset=None,
                             known_setup_type=str(origin_inputs.get("setup_type") or "") or None,
@@ -2158,6 +2180,7 @@ class FinnV2RunService:
                     and "?" not in message
                     and (
                         FinnV2OperationStateService._is_explicit_correction(message)
+                        or scheduled_dca_revision
                         or (latest_open[0].operation_type == "create_setup"
                             and FinnV2OperationStateService.remove_setup_score_filter_intent(message))
                     )
@@ -2195,7 +2218,7 @@ class FinnV2RunService:
                         dict(origin_state.get("collected_inputs") or {}),
                         retain_parent_ids=retain_parent_ids,
                         target_change_requested=target_change_requested,
-                        explicit_proposal_correction=explicit_proposal_correction,
+                        explicit_proposal_correction=(explicit_proposal_correction and not scheduled_dca_revision),
                         corrected_instrument=corrected_instrument,
                         corrected_fields=corrected_fields,
                         corrected_name=corrected_name,
@@ -2238,7 +2261,7 @@ class FinnV2RunService:
                         "requested_instrument": (
                             corrected_target_asset or corrected_instrument
                             if target_change_requested else
-                            latest_open[0].asset if corrected_name or corrected_fields
+                            latest_open[0].asset if corrected_name or corrected_fields or scheduled_dca_revision
                             else corrected_instrument
                         ),
                         "corrected_name": corrected_name,
@@ -2248,9 +2271,10 @@ class FinnV2RunService:
                         "target_change_requested": target_change_requested,
                         "operation_id": latest_open[0].operation_type,
                         "prior_inputs": prior_inputs,
+                        "scheduled_dca_revision": scheduled_dca_revision,
                     }
                     context["proposal_correction_result"] = correction_result
-                    if (unspecified_correction or corrected_name or corrected_fields
+                    if (unspecified_correction or corrected_name or corrected_fields or scheduled_dca_revision
                             or target_change_requested or resolve_catalog_symbol(corrected_instrument)
                             or (explicit_proposal_correction and contract.operation_id == "create_strategy")):
                         # The owner changed the instrument of this open
@@ -2636,7 +2660,7 @@ class FinnV2RunService:
                     ancestor_run_id = ancestor_state.get("conversation_reference")
             guided = dict(context.get("active_guided_operation") or {})
             pending_clarification = dict(context.get("responses_clarification") or {})
-            if not pending_clarification and not corrected_instrument and not unspecified_correction and not corrected_name and not corrected_fields and not target_change_requested and not (
+            if not pending_clarification and not corrected_instrument and not unspecified_correction and not corrected_name and not corrected_fields and not scheduled_dca_revision and not target_change_requested and not (
                 guided.get("missing_required_inputs")
                 and dict(context.get("proposal_correction_result") or {}).get("awaiting_instrument")
             ):

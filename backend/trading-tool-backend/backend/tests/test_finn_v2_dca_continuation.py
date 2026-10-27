@@ -4,7 +4,9 @@ from backend.services.finn_v2_responses_front_door import (
 )
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
-from backend.services.finn_v2_run_service import _prior_inputs_for_open_correction
+from backend.services.finn_v2_run_service import (
+    _prior_inputs_for_open_correction, _scheduled_dca_draft_revision,
+)
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.asset_catalog_service import corrected_catalog_instrument
 
@@ -215,6 +217,91 @@ def test_scheduled_purchase_sentence_fills_open_dca_draft_without_becoming_its_n
     assert updated["collected_inputs"]["dca_day"] == "friday"
     assert updated["collected_inputs"]["base_amount"] == 40
     assert "name" not in updated["collected_inputs"]
+
+
+def test_dca_name_digits_are_not_a_currency_amount():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    states = FinnV2OperationStateService()
+    message = (
+        "Gebruik de naam AAPL DCA QA Herkeur 2710 en timeframe 1D. "
+        "Toon alleen het concept, bevestig niets."
+    )
+    assert states.explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+        known_setup_type="dca",
+    ).get("base_amount") is None
+    assert states.explicit_inputs(
+        contract=contract,
+        message="Koop elke vrijdag voor 40 euro",
+        explicit_asset=None, known_setup_type="dca",
+    )["base_amount"] == 40
+
+
+def test_only_bounded_schedule_can_revise_open_dca_card():
+    fixed = {"setup_type": "dca", "dca_amount_mode": "fixed"}
+    assert _scheduled_dca_draft_revision("Koop elke vrijdag voor 40 euro", fixed)
+    assert not _scheduled_dca_draft_revision("Koop nu direct AAPL voor 40 euro", fixed)
+    assert not _scheduled_dca_draft_revision("Koop elke vrijdag voor 40 euro zonder bevestiging", fixed)
+    assert not _scheduled_dca_draft_revision("Koop elke vrijdag voor 40 euro en activeer live", fixed)
+    assert not _scheduled_dca_draft_revision("Koop elke vrijdag voor 40 USDT", fixed)
+    assert not _scheduled_dca_draft_revision(
+        "Koop elke vrijdag voor 40 euro", {"setup_type": "dca", "dca_amount_mode": "score_bands"},
+    )
+    assert not _scheduled_dca_draft_revision(
+        "Koop elke vrijdag voor 40 euro", {"setup_type": "trade", "dca_amount_mode": "fixed"},
+    )
+
+
+def test_owner_bound_scheduled_dca_revision_retains_original_fields():
+    original = {
+        "symbol": "AAPL", "name": "AAPL DCA QA Herkeur 2710",
+        "setup_type": "dca", "timeframe": "1D", "dca_day": "friday",
+        "dca_frequency": "weekly", "base_amount": 40.0,
+        "dca_amount_mode": "fixed",
+    }
+    retained = _prior_inputs_for_open_correction(
+        original, retain_parent_ids=False, target_change_requested=False,
+        explicit_proposal_correction=False, corrected_instrument=None,
+        corrected_fields={}, corrected_name=None,
+    )
+    assert retained["base_amount"] == 40.0
+    assert retained["name"] == "AAPL DCA QA Herkeur 2710"
+    assert "symbol" not in retained
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {}},
+    )
+    replacement = FinnResponsesProposalSelection().from_call(
+        call=call, message="Koop elke vrijdag voor 40 euro",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "previous-owner-card", "operation_id": "create_setup",
+            "status": "cancelled", "previous_asset": "AAPL",
+            "requested_instrument": "AAPL", "prior_inputs": retained,
+            "corrected_fields": {}, "scheduled_dca_revision": True,
+        }},
+        verified_asset=None,
+    )
+    inputs = replacement.request_plan.operation_state["collected_inputs"]
+    assert inputs["symbol"] == "AAPL"
+    assert inputs["name"] == "AAPL DCA QA Herkeur 2710"
+    assert inputs["base_amount"] == 40.0
+    assert inputs["dca_day"] == "friday"
+    assert not replacement.request_plan.missing_information
+
+    corrected = FinnResponsesProposalSelection().from_call(
+        call=call, message="Koop elke vrijdag voor 40 euro",
+        conversation_context={"proposal_correction_result": {
+            "proposal_id": "incorrect-owner-card", "operation_id": "create_setup",
+            "status": "cancelled", "previous_asset": "AAPL",
+            "requested_instrument": "AAPL",
+            "prior_inputs": {**retained, "base_amount": 2710.0},
+            "corrected_fields": {"base_amount": 40.0},
+            "scheduled_dca_revision": True,
+        }},
+        verified_asset=None,
+    )
+    assert corrected.request_plan.operation_state["collected_inputs"]["base_amount"] == 40.0
 
 
 def test_open_setup_asset_switch_retains_explicit_scope_schedule_and_score_bounds():

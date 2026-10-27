@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Open DCA amount continuity after QA (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION` on `codex/finn-dca-amount-context`.
+The existing independent QA Agent returned `NOT_ACCEPTED` on public SHA
+`9014392349156f40caad96542f21c450ad857972`. ETH-to-AAPL correction,
+name discussion, exact BTC/EUR versus BTC/USDT readback, and direct purchase
+denial passed. The confirmable AAPL DCA card instead changed the owner's €40
+base amount to €2,710 when its name contained “Herkeur 2710”. In the same
+conversation, “Koop elke vrijdag voor 40 euro” was treated as an unsupported
+immediate order while the incorrect card stayed open. QA did not confirm it.
+
+Build reproduced both turns in the local FastAPI/Celery runtime. The typed
+amount extractor matched `eur` inside “Herkeur”; currency tokens now require
+word boundaries. One owner-bound open DCA card can accept a bounded schedule
+and amount revision through the existing cancel-and-replace proposal path;
+immediate purchases still use the order denial boundary. A local rerun now
+produces an AAPL · 1D · Friday draft with €40, then a replacement €40 draft.
+No proposal has been confirmed or saved in this reproduction. The direct
+immediate-purchase variant remains unavailable. CI, deployment and
+independent QA evidence are pending.
+
+The final-source backend suite passed **4071 tests, 4 existing skips**
+(`.local-finn-parity-artifacts/dca-amount-repair-final-pytest.log`, SHA-256
+`71325794bcfa8acebce4eddc4476cb1d64c3b3048aaa55e2ce2d85c492dce858`).
+Focused DCA, operation-state and Responses runtime tests passed **1058/1058**
+on the final source.
+Web typecheck, i18n lint/tests, command/proposal tests, high-severity audit,
+and production build passed. The restarted final-source local FastAPI/Celery
+action matrix passed **16/16** contracts (`.local-finn-parity-artifacts/full-action-matrix.json`,
+SHA-256 `f61ed84d7c8572cc6d8e04ee7b8a6400c953bb0922efd2a8372db88cf2904d86`)
+and the adapter suite passed **21/21**. The real Luna/Responses
+development selector passed **20/20** (SHA-256
+`2691b4873b6413aae538b0102c486bd6a72a701a9821f66c77f282a3a897c58d`)
+and regression selector **109/109** (SHA-256
+`e9859d81da9715fac186ec53cc6677b598bbdbbae5a5ce403859ab43d6f659f8`),
+both with zero provider, schema, timeout, parse or validation failures.
+Security reviewed the owner-bound cancel-and-replace path read-only and found
+no P1/P2.
+
 ## Guided DCA continuation after an asset correction (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. The existing independent QA Agent tested

@@ -799,14 +799,7 @@ class FinnResponsesFrontDoor:
                         r"[a-z0-9]{2,10}\s*[.!]?\s*", message, re.I,
                     )
                 )
-                scheduled_dca_answer = re.fullmatch(
-                    r"\s*(?:koop|buy|kaufe)\s+(?:elke|iedere|every|jeden?)\s+"
-                    r"(?:dag|week|maand|maandag|dinsdag|woensdag|donderdag|vrijdag|"
-                    r"zaterdag|zondag|monday|tuesday|wednesday|thursday|friday|"
-                    r"saturday|sunday)\s+(?:voor|for|f[uü]r)\s+"
-                    r"(?:€\s*)?\d+(?:[.,]\d{1,2})?\s*(?:euro|eur|usdt|€)?\s*[.!]?\s*",
-                    message, re.I,
-                )
+                scheduled_dca_answer = states.is_scheduled_dca_plan_phrase(message)
                 if short_dca_answer or same_draft_restatement or scheduled_dca_answer:
                     explicit = states.explicit_inputs(
                         contract=contract, message=message, explicit_asset=None,
@@ -1276,6 +1269,41 @@ class FinnResponsesFrontDoor:
             imperative_operation=imperative_operation,
             explicit_closed_review_read=explicit_closed_review_read,
         )
+        scheduled_revision = dict(conversation_context.get("proposal_correction_result") or {})
+        if (
+            scheduled_revision.get("scheduled_dca_revision") is True
+            and scheduled_revision.get("status") == "cancelled"
+            and scheduled_revision.get("operation_id") == "create_setup"
+            and scheduled_revision.get("proposal_id")
+            and scheduled_revision.get("requested_instrument")
+        ):
+            # The owner revised one open DCA card with an exact schedule and
+            # amount. Its old confirmation was cancelled before this point.
+            # Rebuild that card through the proposal contract, never an order.
+            contract = self.proposals.registry.require_supported("create_setup")
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation("create_setup"),
+                    operation_id="create_setup", inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={"en": "I have updated the DCA draft.",
+                          "de": "Ich habe den DCA-Entwurf aktualisiert."}.get(
+                              locale.split("-")[0].lower(),
+                              "Ik heb het DCA-concept aangepast."),
+                    response_id=f"verified-dca-revision-{self.run_id}",
+                    tool_trace=({"name": "verified_dca_draft_revision", "status": "completed",
+                                 "result": {"operation_id": "create_setup"}},),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
         if request_facts.action_polarity == "execute" and not imperative_operation:
             # An execution request without a supported action contract must
             # never be converted into an unrelated proposal by tool selection.
