@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Guided DCA continuation after an asset correction (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. The existing independent QA Agent tested
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. The existing independent QA Agent tested
 public SHA `94730bc87c19ffd80ffa29c4bacfdb9280da70be` and returned
 `NOT_ACCEPTED` for the complete scope. Exact BTC/EUR and BTC/USDT readback,
 pair labels and Paper budget boundaries passed. In the guided DCA flow,
@@ -43,6 +43,15 @@ real-provider regression passed **109/109** (artifact SHA-256
 `42800b7422dfc49fea9c0e447915f48a8467bb139014129176267ea519a1c4b9`).
 Both had zero provider, schema, timeout, parse or validation failures. These
 are local Build results, not a live QA verdict for the repair.
+
+PR #654 merged the repair as SHA `c6cb815b843f473d8a140eb10a6bada8942f4d22`.
+Its pull-request CI run `40533877215`, main CI run `40534486394`, and Auto
+Deploy run `40535031262` succeeded. Public backend health and frontend
+build-info each returned HTTP 200 and exact SHA
+`c6cb815b843f473d8a140eb10a6bada8942f4d22` at the post-deploy check.
+This status update creates a later main SHA and another CI/deploy cycle; the
+existing independent QA Agent must test the last successful public SHA after
+that cycle. Authenticated live behavior remains unaccepted until that verdict.
 
 ## Exact-pair strategy display and guided asset correction (27 oktober 2026)
 
