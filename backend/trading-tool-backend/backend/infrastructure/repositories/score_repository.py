@@ -69,11 +69,15 @@ class ScoreRepository:
                 pass
             return None
 
-    async def fetch_daily_scores(self, user_id: int, symbol: str = "BTC") -> Optional[Dict[str, Any]]:
+    async def fetch_daily_scores(self, user_id: int, symbol: str = "BTC",
+                                 *, market_id: int | None = None) -> Optional[Dict[str, Any]]:
         """
         Native async fetch of daily scores for the dashboard.
         """
-        stmt = text("""
+        if market_id is not None and (type(market_id) is not int or market_id <= 0):
+            raise ValueError("exact_market_id_required")
+        market_scope = "market_id = :market_id" if market_id is not None else "market_id IS NULL"
+        stmt = text(f"""
             SELECT 
                 macro_score, macro_interpretation, macro_top_contributors,
                 technical_score, technical_interpretation, technical_top_contributors,
@@ -81,10 +85,13 @@ class ScoreRepository:
                 setup_score, report_date, calculated_at, indicator_evidence
             FROM daily_scores
             WHERE user_id = :user_id AND report_date = CURRENT_DATE AND symbol = :symbol
-              AND market_id IS NULL
+              AND {market_scope}
             LIMIT 1
         """)
-        result = await self.db.execute(stmt, {"user_id": user_id, "symbol": symbol})
+        params = {"user_id": user_id, "symbol": symbol}
+        if market_id is not None:
+            params["market_id"] = market_id
+        result = await self.db.execute(stmt, params)
         row = result.mappings().first()
         return dict(row) if row else None
 

@@ -38,8 +38,10 @@ portfolio and bot readers from newly stored exact-market rows. A dedicated
 exact-market history bootstrap accepts only completed candles from the verified
 provider symbol and retains the selected market ID and quote currency. The
 Score 2.0 refresh task can now address a market ID without rebuilding the
-legacy base-asset score. Focused tests passed 60/60 and the prior full backend
-run passed 4024 with four existing skips. These changes are still local and
+legacy base-asset score. Typed repository reads select one market ID for prices
+and daily scores; the legacy variants exclude pair rows. Focused tests passed
+60/60, followed by 26/26 and 5/5 additional checks. The latest full backend
+run passed 4028 with four existing skips. These changes are still local and
 do not make a pair-bound plan executable: periodic pair source materialization,
 owner-specific pair configurations, FINN proposal selection, exact-market
 readers across web/mobile and Paper execution remain required before release.
