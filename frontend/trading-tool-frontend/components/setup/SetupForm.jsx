@@ -14,6 +14,7 @@ import React, {
 import { Settings, Save, Rocket, Target } from "lucide-react";
 
 import { saveNewSetup, updateSetup } from "@/lib/api/setups";
+import { fetchTradingMarkets } from "@/lib/api/assets";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
@@ -63,6 +64,8 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   const [scoreConditionsTouched, setScoreConditionsTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [marketChoices, setMarketChoices] = useState([]);
+  const [marketChoiceStatus, setMarketChoiceStatus] = useState(isEdit ? "ready" : "loading");
 
   useEffect(() => {
     if (!legacyUnfilteredTrade && formData.setupType === "trade" && conditionChoice === "off") {
@@ -79,6 +82,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
       return {
         ...current,
         symbol: normalized,
+        quoteCurrency: "",
       };
     });
   }, [isEdit, selectedAsset]);
@@ -98,6 +102,29 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     ]);
   }, [initialData]);
 
+  useEffect(() => {
+    if (isEdit || !formData.symbol) return;
+    let cancelled = false;
+    setMarketChoiceStatus("loading");
+    setMarketChoices([]);
+    fetchTradingMarkets(formData.symbol).then((choices) => {
+      if (cancelled) return;
+      const available = (Array.isArray(choices) ? choices : [])
+        .filter((choice) => choice?.status === "available" && choice?.quote_currency);
+      setMarketChoices(available);
+      setMarketChoiceStatus(available.length ? "ready" : "unavailable");
+      setFormData((current) => ({
+        ...current,
+        quoteCurrency: available.some((choice) => choice.quote_currency === current.quoteCurrency)
+          ? current.quoteCurrency : "",
+      }));
+    }).catch((error) => {
+      if (cancelled) return;
+      setMarketChoiceStatus(error?.status === 404 ? "not_crypto" : "error");
+    });
+    return () => { cancelled = true; };
+  }, [formData.symbol, isEdit]);
+
   // ----------------------------------------------------
   // HANDLERS
   // ----------------------------------------------------
@@ -106,6 +133,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     setFormData((p) => ({
       ...p,
       [name]: name === "dcaMonthDay" ? Number(value) : value,
+      ...(name === "symbol" ? { quoteCurrency: "" } : {}),
     }));
   };
 
@@ -135,6 +163,11 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     if (formRef.current && !formRef.current.reportValidity()) {
       return { ok: false, reason: "validation" };
     }
+    if (!isEdit && marketChoiceStatus !== "not_crypto" &&
+        (marketChoiceStatus !== "ready" || !formData.quoteCurrency)) {
+      setSubmitError(copy.tradingMarketRequired);
+      return { ok: false, reason: "trading_market_required" };
+    }
     if (!conditionChoice || (formData.setupType === "trade" && conditionChoice === "off" && !legacyUnfilteredTrade)) {
       setSubmitError(t?.setups?.marketConditions?.required || "Choose a market condition.");
       return { ok: false, reason: "market_condition_required" };
@@ -147,6 +180,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
       name: formData.name?.trim(),
       description: formData.description?.trim() || null,
       symbol: formData.symbol,
+      ...(!isEdit && formData.quoteCurrency ? { quote_currency: formData.quoteCurrency } : {}),
       setup_type: formData.setupType,
       timeframe: formData.timeframe,
 
@@ -216,6 +250,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     showSnackbar,
     conditionChoice,
     scoreConditionsTouched,
+    marketChoiceStatus,
     t?.setups?.marketConditions?.required,
   ]);
 
@@ -381,6 +416,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
               name="symbol"
               value={formData.symbol}
               onChange={handleChange}
+              disabled={isEdit && Boolean(initialData?.market_id)}
               className={fieldClass}
             >
               {assetOptions.map((symbol) => (
@@ -389,7 +425,31 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
                 </option>
               ))}
             </select>
+            {isEdit && initialData?.market_id && initialData?.quote_currency ? (
+              <p className="ml-1 text-sm font-semibold text-slate-600">
+                {formData.symbol}/{initialData.quote_currency}
+              </p>
+            ) : null}
           </div>
+
+          {!isEdit && marketChoiceStatus !== "not_crypto" ? (
+            <div className="space-y-1.5 flex-1">
+              <label className="text-[10px] font-black uppercase text-[var(--text-light)] ml-1">
+                {copy.tradingMarketLabel}
+              </label>
+              <select name="quoteCurrency" value={formData.quoteCurrency}
+                onChange={handleChange} className={fieldClass}
+                disabled={marketChoiceStatus !== "ready"} required>
+                <option value="">{copy.tradingMarketChoose}</option>
+                {marketChoices.map((choice) => (
+                  <option key={choice.pair} value={choice.quote_currency}>{choice.pair}</option>
+                ))}
+              </select>
+              {marketChoiceStatus === "loading" ? <p className="ml-1 text-xs text-slate-500">{copy.tradingMarketLoading}</p> : null}
+              {["error", "unavailable"].includes(marketChoiceStatus) ?
+                <p className="ml-1 text-xs text-amber-700">{copy.tradingMarketUnavailable}</p> : null}
+            </div>
+          ) : null}
 
           <div className="space-y-1.5 flex-1">
             <label className="text-[10px] font-black uppercase text-[var(--text-light)] ml-1">{copy.timeframeLabel}</label>

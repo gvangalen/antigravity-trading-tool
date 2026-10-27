@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup } from "../lib/setup/benchmarkScale.mjs";
+import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "../lib/setup/benchmarkScale.mjs";
 
 test("benchmark scale follows the saved setup presets without gaps", () => {
   const bands = benchmarkScaleBands();
@@ -61,6 +61,16 @@ test("the chosen setup survives refresh in the URL without replacing asset conte
   assert.equal(params.get("benchmarkSetup"), "42");
   assert.equal(new URLSearchParams(withSelectedBenchmarkSetup(query, null)).has("benchmarkSetup"), false);
   assert.equal(new URLSearchParams(withSelectedBenchmarkSetup(query, "not-an-id")).has("benchmarkSetup"), false);
+});
+
+test("switching trading pairs clears the setup selected for the previous pair", () => {
+  const query = new URLSearchParams(withSelectedTradingQuote(
+    "symbol=BTC&quote=EUR&benchmarkSetup=42&tab=market", "USDT",
+  ));
+  assert.equal(query.get("quote"), "USDT");
+  assert.equal(query.has("benchmarkSetup"), false);
+  assert.equal(query.get("symbol"), "BTC");
+  assert.equal(query.get("tab"), "market");
 });
 
 test("a remembered setup selection is isolated by authenticated owner and asset", () => {

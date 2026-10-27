@@ -47,7 +47,7 @@ import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
-import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup } from "@/lib/setup/benchmarkScale.mjs";
+import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "@/lib/setup/benchmarkScale.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -1054,7 +1054,7 @@ function hasUsableIndicatorValue(name, value) {
   return true;
 }
 
-function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale)) {
+function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale), quoteCurrency = null) {
   if (!hasUsableIndicatorValue(name, value)) return ui.unavailable;
 
   const label = String(name || "").toLowerCase();
@@ -1098,7 +1098,9 @@ function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale)) {
     if (Math.abs(numericValue) <= 1 && label.includes("change")) {
       return formatPercent(numericValue * 100, 2);
     }
-    return formatPrice(numericValue, locale);
+    return quoteCurrency
+      ? formatQuotePrice(numericValue, locale, quoteCurrency)
+      : formatPrice(numericValue, locale);
   }
 
   if (label.includes("rsi") || label.includes("fear") || label.includes("dxy")) {
@@ -1311,7 +1313,7 @@ function explainIndicatorAssessment({
   return specific || genericByTone[tone] || ui.indicatorAssessment(safeLabel, direction, scoreTone(score, ui).label);
 }
 
-function buildRows(items, locale, ui, currentEvidence = null, categoryScore = null) {
+function buildRows(items, locale, ui, currentEvidence = null, categoryScore = null, quoteCurrency = null) {
   const source = Array.isArray(items) ? items : [];
   const evidenceWeight = currentEvidence && normalizeScore(categoryScore) !== null
     ? Object.values(currentEvidence).reduce((sum, entry) =>
@@ -1341,7 +1343,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const ruleOrigin = score === null ? null : evidence?.rule_origin || item?.rule_origin || null;
     const tone = scoreTone(score, ui);
     const direction = score !== null ? toDirectionLabel(item, score, ui) : ui.unavailable;
-    const value = formatIndicatorValue(name, rawValue, locale, ui);
+    const value = formatIndicatorValue(name, rawValue, locale, ui, quoteCurrency);
     const numericValue = parseIndicatorNumber(rawValue);
     const scoreConflict =
       hasValue &&
@@ -2393,6 +2395,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   const [setupMatches, setSetupMatches] = useState(null);
   const [setupMatchError, setSetupMatchError] = useState(false);
+  const [setupMatchLoading, setSetupMatchLoading] = useState(true);
+  const setupMatchesSymbolRef = useRef(activeSymbol);
   const selectedSetupId = urlSetupId || (rememberedSetup.key === setupSelectionKey ? rememberedSetup.id : null);
   const savedPairMatches = useMemo(() => (setupMatches || []).filter(
     (match) => match?.market_id && match?.quote_currency &&
@@ -2482,7 +2486,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   useEffect(() => {
     let cancelled = false;
-    setSetupMatches(null);
+    // Keep the saved trading-pair identity while a refreshed score snapshot
+    // triggers another match read. Clearing it switches the workspace back to
+    // the legacy base asset and can start a EUR/USDT request loop.
+    if (setupMatchesSymbolRef.current !== activeSymbol) {
+      setupMatchesSymbolRef.current = activeSymbol;
+      setSetupMatches(null);
+    }
+    setSetupMatchLoading(true);
     setSetupMatchError(false);
 
     async function loadSetupMatches() {
@@ -2491,12 +2502,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         if (!cancelled) {
           setSetupMatches(result.filter((match) => String(match?.symbol || "").toUpperCase() === activeSymbol));
           setSetupMatchError(false);
+          setSetupMatchLoading(false);
         }
       } catch (error) {
         console.error("Failed to load setup matches for asset workspace", error);
         if (!cancelled) {
-          setSetupMatches(null);
           setSetupMatchError(true);
+          setSetupMatchLoading(false);
         }
       }
     }
@@ -2770,7 +2782,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const sections = useMemo(() => {
     const evidence = workspace?.daily?.indicator_evidence || {};
     const dayEvidence = (category, period, score) => period === "day" ? (normalizeScore(score) === null ? {} : evidence[category] || {}) : null;
-    const marketRows = buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score);
+    const marketRows = buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score, workspace?.quote_currency);
     const macroRows = buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe, macro?.score), macro?.score);
     const technicalRows = buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe, technical?.score), technical?.score);
     const notConfigured = (rows, loadingState, score) =>
@@ -2836,7 +2848,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         emptyAction: showEmptyAction(technical?.score, technicalRows, technicalLoading) ? emptyActionButton("technical") : null,
       },
     ];
-  }, [activeSymbol, isFallbackWorkspace, locale, macro?.score, macroData, macroLoading, macroTimeframe, market?.score, marketDayData, marketLoading, marketTimeframe, technical?.score, technicalData, technicalLoading, technicalTimeframe, ui, workspace?.daily?.indicator_evidence, workspace?.symbol]);
+  }, [activeSymbol, isFallbackWorkspace, locale, macro?.score, macroData, macroLoading, macroTimeframe, market?.score, marketDayData, marketLoading, marketTimeframe, technical?.score, technicalData, technicalLoading, technicalTimeframe, ui, workspace?.daily?.indicator_evidence, workspace?.quote_currency, workspace?.symbol]);
 
   const combinedSummary = useMemo(() => {
     if (Object.values(periods).every((period) => period === "day")) {
@@ -2897,9 +2909,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             <button key={quote} type="button"
               className={`rounded-lg border px-3 py-1.5 font-semibold ${activeQuoteCurrency === quote ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}
               onClick={() => {
-                const query = new URLSearchParams(searchParams.toString());
-                query.set("quote", quote);
-                router.replace(`${pathname || "/asset"}?${query.toString()}`, { scroll: false });
+                if (setupSelectionKey) window.sessionStorage.removeItem(setupSelectionKey);
+                setRememberedSetup({ key: setupSelectionKey, id: null });
+                const query = withSelectedTradingQuote(searchParams.toString(), quote);
+                router.replace(`${pathname || "/asset"}?${query}`, { scroll: false });
               }}>
               {activeSymbol}/{quote}
             </button>
@@ -2957,7 +2970,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           router.replace(`${pathname || "/asset"}?${query.toString()}`, { scroll: false });
         }}
         selectedSetupId={selectedSetupId}
-        setupMatches={activeQuoteCurrency ? setupMatches?.filter((match) =>
+        setupMatches={setupMatchLoading || setupMatchError ? null : activeQuoteCurrency ? setupMatches?.filter((match) =>
           match.market_id && String(match.quote_currency).toUpperCase() === activeQuoteCurrency
         ) : setupMatches}
         setupMatchError={setupMatchError}

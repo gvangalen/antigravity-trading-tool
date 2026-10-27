@@ -5372,12 +5372,14 @@ def test_setup_rule_coverage_checks_full_request_against_enforced_fields(verdict
             "Maak een BTC swing-setup voor 4H. Gebruik 1D voor de trend. "
             "Ik wil alleen instappen als die trend stijgt en de markt niet onder druk staat."
         ),
-        collected_inputs={"setup_type": "trade", "symbol": "BTC", "timeframe": "4H", "name": "BTC Swing"},
+        collected_inputs={"setup_type": "trade", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "4H", "name": "BTC Swing"},
     ))
     assert result == verdict
     sent = json.loads(fake.requests[0]["input"])
     assert "alleen instappen" in sent["latest_user_request"]
     assert sent["captured_setup_fields"]["timeframe"] == "4H"
+    assert sent["captured_setup_fields"]["quote_currency"] == "EUR"
+    assert "not an extra trading rule" in fake.requests[0]["instructions"]
     assert fake.requests[0]["store"] is False
     assert fake.requests[0]["tool_choice"] == "none"
 
@@ -5388,6 +5390,20 @@ def test_setup_rule_coverage_fails_closed_when_provider_cannot_classify():
     assert asyncio.run(guard.setup_rule_coverage(
         message="Maak een setup", collected_inputs={"symbol": "BTC"},
     )) == "unclear"
+
+
+def test_explicit_action_audit_waits_for_a_valid_late_provider_result():
+    class SlowResponses:
+        async def create(self, **_kwargs):
+            await asyncio.sleep(4.25)
+            return response("action-audit", text='{"operation_id":"delete_indicator_configuration"}')
+
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=SlowResponses()))
+    result = asyncio.run(guard.requested_action_contract(
+        message="Verwijder mijn technische RSI indicatorconfiguratie voor SOL.",
+        contracts=[{"operation_id": "delete_indicator_configuration", "purpose": "Remove indicator configuration"}],
+    ))
+    assert result == "delete_indicator_configuration"
 
 
 def test_setup_rule_coverage_does_not_truncate_late_required_condition():

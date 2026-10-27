@@ -8,6 +8,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { fetchLastSetup, fetchSetups, saveNewSetup } from "@/lib/api/setups";
+import { fetchTradingMarkets } from "@/lib/api/assets";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 import { MARKET_CONDITIONS, marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
 import { createStrategy, fetchLastStrategy, fetchStrategyBySetup } from "@/lib/api/strategy";
@@ -130,6 +131,26 @@ export default function OnboardingPlanPage() {
   const [strategy, setStrategy] = useState(DEFAULT_STRATEGY);
   const [savedSetup, setSavedSetup] = useState(null);
   const [savedStrategy, setSavedStrategy] = useState(null);
+  const [marketChoices, setMarketChoices] = useState([]);
+  const [marketChoiceStatus, setMarketChoiceStatus] = useState("loading");
+  const [quoteCurrency, setQuoteCurrency] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setMarketChoices([]);
+    setQuoteCurrency("");
+    setMarketChoiceStatus("loading");
+    fetchTradingMarkets(symbol).then((choices) => {
+      if (cancelled) return;
+      const available = (Array.isArray(choices) ? choices : [])
+        .filter((choice) => choice?.status === "available" && choice?.quote_currency);
+      setMarketChoices(available);
+      setMarketChoiceStatus(available.length ? "ready" : "unavailable");
+    }).catch((error) => {
+      if (!cancelled) setMarketChoiceStatus(error?.status === 404 ? "not_crypto" : "error");
+    });
+    return () => { cancelled = true; };
+  }, [symbol]);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,6 +235,8 @@ export default function OnboardingPlanPage() {
 
   const setupValid = Boolean(
     setup.name.trim() && setup.setupType && setup.timeframe &&
+    (setupDone || marketChoiceStatus === "not_crypto" ||
+      (marketChoiceStatus === "ready" && quoteCurrency)) &&
     conditionChoice && (conditionChoice !== "off" || !isTrade || setupDone) &&
     (conditionChoice !== "custom" || (() => {
       const minimum = Number(setup.min_benchmark_score);
@@ -250,6 +273,7 @@ export default function OnboardingPlanPage() {
       const response = await saveNewSetup({
         name: setup.name.trim(),
         symbol,
+        ...(quoteCurrency ? { quote_currency: quoteCurrency } : {}),
         setup_type: setup.setupType,
         timeframe: setup.timeframe,
         ...marketConditionPayload(conditionChoice, {
@@ -435,6 +459,23 @@ export default function OnboardingPlanPage() {
           savedLabel={copy.savedLabel}
         >
           <div className="grid gap-4 md:grid-cols-3">
+            {(marketChoiceStatus !== "not_crypto" || savedSetup?.quote_currency) ? (
+              <Field label={copy.tradingMarketLabel}>
+                <select value={savedSetup?.quote_currency || quoteCurrency}
+                  onChange={(event) => setQuoteCurrency(event.target.value)}
+                  disabled={setupDone || marketChoiceStatus !== "ready" || savingSetup || loading}
+                  className={inputClassName}>
+                  <option value="">{copy.tradingMarketChoose}</option>
+                  {marketChoices.map((choice) => (
+                    <option key={choice.pair} value={choice.quote_currency}>{choice.pair}</option>
+                  ))}
+                  {savedSetup?.quote_currency && !marketChoices.some((choice) => choice.quote_currency === savedSetup.quote_currency) ?
+                    <option value={savedSetup.quote_currency}>{symbol}/{savedSetup.quote_currency}</option> : null}
+                </select>
+                {["error", "unavailable"].includes(marketChoiceStatus) && !setupDone ?
+                  <span className="mt-1 block text-xs text-amber-700">{copy.tradingMarketUnavailable}</span> : null}
+              </Field>
+            ) : null}
             <Field label={copy.setupNameLabel || "Name"}>
               <input
                 type="text"

@@ -22,6 +22,16 @@ export function withSelectedBenchmarkSetup(search, setupId) {
   return params.toString();
 }
 
+export function withSelectedTradingQuote(search, quoteCurrency) {
+  // A setup selected for the previous quote must not remain selected after
+  // changing the market whose score and conditions are being displayed.
+  const params = new URLSearchParams(withSelectedBenchmarkSetup(search, null));
+  const quote = String(quoteCurrency || "").trim().toUpperCase();
+  if (quote) params.set("quote", quote);
+  else params.delete("quote");
+  return params.toString();
+}
+
 export function benchmarkSetupSessionKey(userId, symbol) {
   const owner = Number(userId);
   const asset = String(symbol || "").trim().toUpperCase();

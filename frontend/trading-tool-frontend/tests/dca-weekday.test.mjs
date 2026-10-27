@@ -37,3 +37,13 @@ test("setup rationale loads into the editor without changing plan fields", () =>
   assert.equal(form.timeframe, "4H");
   assert.equal(initialSetupFormState().description, "");
 });
+
+test("an exact trading pair survives editor initialization", () => {
+  const form = initialSetupFormState({
+    name: "BTC euro DCA", symbol: "BTC", quote_currency: "EUR",
+    market_id: 43, setup_type: "dca", timeframe: "1D",
+  });
+  assert.equal(form.symbol, "BTC");
+  assert.equal(form.quoteCurrency, "EUR");
+  assert.equal(initialSetupFormState().quoteCurrency, "");
+});

@@ -137,6 +137,33 @@ def test_later_bot_does_not_discard_the_strategy_requested_now():
     )
 
 
+def test_explicit_new_dca_setup_without_amount_does_not_require_strategy_amount():
+    message = (
+        "Maak een nieuwe wekelijkse DCA-setup voor exact BTC/EUR, niet BTC/USDT. "
+        "Gebruik vrijdag en 1D. Noem haar QA BTC EUR Paar 2710. "
+        "Toon eerst het voorstel; bevestig nog niets."
+    )
+    service = FinnV2OperationStateService()
+    assert service.setup_only_intent(message)
+    state = service.resolve(
+        contract=FinnV2OperationRegistry().require_supported("create_setup"),
+        message=message, explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["plan_scope"] == "setup_only"
+    assert state.collected_inputs["quote_currency"] == "EUR"
+    assert state.collected_inputs["dca_frequency"] == "weekly"
+    assert state.collected_inputs["dca_day"] == "friday"
+    assert "base_amount" not in state.collected_inputs
+
+
+def test_new_dca_setup_with_investment_amount_still_requests_strategy():
+    assert not FinnV2OperationStateService.setup_only_intent(
+        "Maak een nieuwe wekelijkse DCA-setup voor BTC/EUR van €100 per aankoop."
+    )
+
+
 @pytest.mark.parametrize("message", [
     "Maak alleen een BTC DCA-setup en strategie van €100 per week.",
     "Maak alleen een BTC DCA-setup met een strategie van €100 per week.",

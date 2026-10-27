@@ -100,7 +100,15 @@ def test_trade_setup_clears_dca_fields():
     assert payload["dca_month_day"] is None
 
 
-def test_save_setup_applies_default_timeframe_for_trade_payload():
+def test_save_setup_applies_default_timeframe_for_trade_payload(monkeypatch):
+    class StockCatalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_asset(self, _symbol):
+            return {"asset_class": "stock"}
+
+    monkeypatch.setattr("backend.services.setup_service.AssetCatalogService", StockCatalog)
     service = SetupService(None)
     payload = SetupCreateSchema(name="BTC trade", symbol="BTC", setup_type="trade")
     raw_payload = {
@@ -148,6 +156,27 @@ def test_save_setup_applies_default_timeframe_for_trade_payload():
     assert result["setup"]["timeframe"] == "4H"
     assert result["field_sources"]["min_benchmark_score"] == "absent"
     assert "min_benchmark_score" not in raw_payload
+
+
+def test_new_crypto_setup_requires_an_explicit_trading_pair(monkeypatch):
+    import asyncio
+
+    class CryptoCatalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_asset(self, symbol):
+            assert symbol == "BTC"
+            return {"asset_class": "crypto"}
+
+    monkeypatch.setattr("backend.services.setup_service.AssetCatalogService", CryptoCatalog)
+    service = SetupService(None)
+    payload = SetupCreateSchema(name="BTC plan", symbol="BTC", setup_type="trade")
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(service.save_setup(
+            payload, {"name": "BTC plan", "symbol": "BTC", "setup_type": "trade"}, 17,
+        ))
+    assert error.value.status_code == 422
 
 
 def test_new_crypto_setup_binds_only_the_exact_verified_pair(monkeypatch):

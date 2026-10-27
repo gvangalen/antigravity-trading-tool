@@ -6,7 +6,52 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact trading-pair candidate (27 oktober 2026)
 
-Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #645 introduced the
+Current phase: `QA_NOT_ACCEPTED_REPAIR_LOCAL_VALIDATION`. Independent QA tested
+the final public SHA `75d55fe73fdabd17571e0157ad7a4ed2642a6a2c` and
+returned `NOT_ACCEPTED`: an explicit BTC/EUR read showed its verified quote
+and category scores, but Price, DXY and RSI rows showed no score; after a hard
+refresh the Analyse pair choice returned to BTC/USDT and that unverified pair
+workspace returned `exact_market_not_verified`; Mijn Plan showed only BTC
+instead of BTC/EUR. The setup-only FINN request also asked unnecessarily for
+an amount before the user clarified; no order was placed. Build is repairing
+the verified indicator evidence, pair identity during score refresh, and pair
+labels and explicit pair choice in manual/onboarding setup creation. The
+setup-only request now reaches a setup proposal without requiring a strategy
+amount; an amount given in the request still opens the strategy flow. The
+repair is not live until a new successful CI, Auto Deploy, public SHA parity
+and independent QA on that exact revision.
+
+On the repaired local source, the complete backend suite passed **4059 tests,
+4 existing skips** (`.local-finn-parity-artifacts/exact-pair-qa-repair-release-pytest.log`,
+SHA-256 `8bf1a6c911aaafa793975da7db4f6de2efd322f4ac1f6fbd2f786593c8673603`).
+The restarted FastAPI/Celery worker action matrix passed **16/16** contracts,
+including while a separate real-provider selection evaluation was running,
+with zero broker orders, Live bots, Live trading calls or production connections
+(`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
+`50b0c6bcfb7790a4fe583733ea0fca2a3f615983e4f6cf1fb242601193d28adf`);
+its adapter suite passed **21/21**. Frontend typecheck, i18n lint/tests,
+setup/command/proposal tests, production build and high-severity dependency
+audit passed. Real Luna/Responses development selection passed **20/20**
+operations with zero provider, schema, timeout, parse or validation failures
+(`backend/trading-tool-backend/.local-finn-parity-artifacts/exact-pair-qa-repair-release2-selector-development.json`,
+SHA-256 `5cd9b80b6d1fad605ae80ede6ebe70658950432d834d86fcaeafd20a5b635226`).
+The full real Luna/Responses regression passed **109/109** with 100%
+operation accuracy and zero provider, schema, timeout, parse or validation
+failures (`backend/trading-tool-backend/.local-finn-parity-artifacts/exact-pair-qa-repair-release2-selector-regression.json`,
+SHA-256 `09840b4c122e9e3fc7e3ee7090bd22c74b162daca111ed8888f0664a052b0572`).
+Mobile typecheck, chat checks and web/iOS/Android bundle smokes passed;
+mobile lint completed with existing warnings and no errors.
+An exact local BTC/EUR setup-only chat request produced a proposal with Friday,
+1D and no strategy amount. Adding an unsupported rising-trend execution rule
+instead produced `setup_rule_not_captured` and no proposal. A prior local
+matrix under concurrent provider load scored 15/16 because one explicit
+indicator-removal request became a read answer. Its four-second action-audit
+deadline was a credible cause, but that run did not log the timeout. The
+bounded wait and error logging were improved; a 4.25-second delayed-audit
+regression and subsequent concurrent matrix passed. Security and
+Architecture found no remaining concrete P1/P2 in this repair batch.
+
+PR #645 introduced the
 exact-market candidate (merge SHA `6d78905ba90286cfdc7feb93b019763822215351`).
 Its first Auto Deploy run `40486772524` failed on an unset remote
 `DEPLOY_COMPONENT_SET` and rolled back the backend. PR #646 repaired the deploy

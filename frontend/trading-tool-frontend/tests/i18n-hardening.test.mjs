@@ -139,6 +139,10 @@ test("Dutch setup editor exposes product copy instead of English backend labels"
 
   assert.equal(form.phaseResponse, "Fasereactie");
   assert.equal(form.assetSymbolLabel, "Assetsymbool");
+  assert.equal(form.tradingMarketLabel, "Handelspaar");
+  assert.equal(nl.traderProfile.planOnboardingStep.tradingMarketLabel, "Handelspaar");
+  assert.equal(en.traderProfile.planOnboardingStep.tradingMarketLabel, "Trading pair");
+  assert.equal(de.traderProfile.planOnboardingStep.tradingMarketLabel, "Handelspaar");
   assert.equal(form.timeframeLabel, "Tijdsframe");
   assert.equal(form.dcaBlueprintTitle, "DCA-opzet");
   assert.equal(form.tradeBlueprintTitle, "Trade-opzet");
