@@ -39,6 +39,35 @@ export function benchmarkSetupSessionKey(userId, symbol) {
   return `benchmarkSetup:${owner}:${asset}`;
 }
 
+export function tradingQuoteSessionKey(userId, symbol) {
+  const owner = Number(userId);
+  const asset = String(symbol || "").trim().toUpperCase();
+  if (!Number.isSafeInteger(owner) || owner <= 0 || !/^[A-Z0-9]{1,15}$/.test(asset)) return null;
+  return `tradingQuote:${owner}:${asset}`;
+}
+
+export function availableTradingQuotes(savedMatches, tradingMarkets) {
+  const saved = (Array.isArray(savedMatches) ? savedMatches : [])
+    .map((match) => match?.quote_currency);
+  const supported = (Array.isArray(tradingMarkets) ? tradingMarkets : [])
+    .filter((market) => market?.status === "available")
+    .map((market) => market?.quote_currency);
+  return Array.from(new Set([...saved, ...supported]
+    .map((quote) => String(quote || "").toUpperCase())
+    .filter((quote) => ["EUR", "USD", "USDT"].includes(quote)))).sort();
+}
+
+export function resolveTradingQuote({ explicitQuote, setupQuote, rememberedQuote, availableQuotes }) {
+  const options = Array.isArray(availableQuotes) ? availableQuotes : [];
+  const explicit = String(explicitQuote || "").toUpperCase();
+  const setup = String(setupQuote || "").toUpperCase();
+  const remembered = String(rememberedQuote || "").toUpperCase();
+  if (options.includes(explicit)) return explicit;
+  if (options.includes(setup)) return setup;
+  if (options.includes(remembered)) return remembered;
+  return options[0] || null;
+}
+
 export function selectedBenchmarkSetupMatch(matches, selectedId) {
   const ownerMatches = Array.isArray(matches) ? matches : [];
   return ownerMatches.find((match) => String(match.setup_id) === String(selectedId))

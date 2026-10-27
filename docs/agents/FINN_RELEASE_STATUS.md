@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact trading-pair return and Paper-check result (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. On public SHA
+`a4b2f27832059703fcd944fad731954ffe1d4951`, the existing independent
+QA Agent returned `NOT_ACCEPTED` for the broader exact-pair browser scope.
+BTC/USDT quote, chart, Price and RSI stayed distinct from BTC/EUR, and My
+Plan, the bot and FINN kept their saved pair identities. Two P2 defects
+remained: Analyse reverted to BTC/EUR after BTC/USDT → ETH → BTC, and a
+manual Paper check on a day when the BTC/USDT DCA was not scheduled left no
+visible result after the transient notification disappeared.
+
+Build's repair loads available pair choices from the trading-market catalog
+even before a setup exists, remembers an explicit choice per owner and asset,
+and restores it on asset switching. The Paper screen now keeps the typed
+`not_due` or `already_executed` check outcome visible in the current bot view
+until another check or navigation
+instead of relying only on a snackbar. It does not present that skipped
+check as a safety decision or an order. No backend execution rule changed.
+
+On the current local source, the full backend suite passed **4071 tests,
+4 existing skips** (SHA-256
+`bc18654f9e9f73c87e9271416b2729661b53fb63cd22f564117f79383130c263`).
+The worker-driven action matrix passed **16/16** (SHA-256
+`edaaa06815a8a6beac74411952419b0dbcc127abc5de77bd0eef4f43521cafe4`)
+and the adapter suite **21/21**. Real Luna/Responses selection passed
+**20/20** development cases (SHA-256
+`c275cafd6bdac6780886ccab17b75aafa07852528ae5a086a9f0998e8bd7b1ad`)
+and **109/109** regression cases (SHA-256
+`0db1a540693f7c916a698566284b98c809264734f9957e840b77383dc3734297`),
+both with zero provider, schema, timeout, parse and validation failures.
+Web typecheck, i18n lint and tests, command/proposal/setup tests, production
+build and high-severity dependency audit passed. CI, deployment identity
+and the independent live retest for this candidate are not yet measured.
+
 ## Open DCA amount continuity after QA (27 oktober 2026)
 
 Current phase: `ACCEPTED` for the targeted authenticated browser scope.

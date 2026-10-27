@@ -34,6 +34,7 @@ import { macroDataAdd } from "@/lib/api/macro";
 import { fetchSetupMarketMatches } from "@/lib/api/setups";
 import { technicalDataAdd } from "@/lib/api/technical";
 import { removeFromWatchlist } from "@/lib/api/watchlist";
+import { fetchTradingMarkets } from "@/lib/api/assets";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
@@ -47,7 +48,7 @@ import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
-import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "@/lib/setup/benchmarkScale.mjs";
+import { availableTradingQuotes, benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, resolveTradingQuote, selectedBenchmarkSetupMatch, tradingQuoteSessionKey, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "@/lib/setup/benchmarkScale.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
 
@@ -2337,8 +2338,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
   const setupSelectionKey = sessionChecked ? benchmarkSetupSessionKey(user?.id, activeSymbol) : null;
+  const quoteSelectionKey = sessionChecked ? tradingQuoteSessionKey(user?.id, activeSymbol) : null;
   const urlSetupId = searchParams.get("benchmarkSetup");
   const [rememberedSetup, setRememberedSetup] = useState({ key: null, id: null });
+  const [rememberedQuote, setRememberedQuote] = useState({ key: null, quote: null });
+  const [tradingMarkets, setTradingMarkets] = useState({ symbol: null, markets: [] });
   useEffect(() => {
     if (!setupSelectionKey) {
       setRememberedSetup({ key: null, id: null });
@@ -2348,6 +2352,25 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     if (urlSetupId) window.sessionStorage.setItem(setupSelectionKey, urlSetupId);
     setRememberedSetup({ key: setupSelectionKey, id });
   }, [setupSelectionKey, urlSetupId]);
+  useEffect(() => {
+    if (!quoteSelectionKey) {
+      setRememberedQuote({ key: null, quote: null });
+      return;
+    }
+    setRememberedQuote({ key: quoteSelectionKey, quote: window.sessionStorage.getItem(quoteSelectionKey) });
+  }, [quoteSelectionKey]);
+  useEffect(() => {
+    if (!sessionChecked || !user?.id) return;
+    let canceled = false;
+    setTradingMarkets({ symbol: null, markets: [] });
+    fetchTradingMarkets(activeSymbol).then((markets) => {
+      if (canceled) return;
+      setTradingMarkets({ symbol: activeSymbol, markets: Array.isArray(markets) ? markets : [] });
+    }).catch(() => {
+      if (!canceled) setTradingMarkets({ symbol: activeSymbol, markets: [] });
+    });
+    return () => { canceled = true; };
+  }, [activeSymbol, sessionChecked, user?.id]);
   const [marketTimeframe, setMarketTimeframe] = useState("day");
   const [macroTimeframe, setMacroTimeframe] = useState("day");
   const [technicalTimeframe, setTechnicalTimeframe] = useState("day");
@@ -2402,17 +2425,25 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     (match) => match?.market_id && match?.quote_currency &&
       String(match.symbol || "").toUpperCase() === activeSymbol
   ), [activeSymbol, setupMatches]);
-  const availableQuotes = useMemo(() => Array.from(new Set(
-    savedPairMatches.map((match) => String(match.quote_currency).toUpperCase())
-  )).sort(), [savedPairMatches]);
+  const availableQuotes = useMemo(() => availableTradingQuotes(
+    savedPairMatches,
+    tradingMarkets.symbol === activeSymbol ? tradingMarkets.markets : [],
+  ), [activeSymbol, savedPairMatches, tradingMarkets]);
   const explicitQuote = String(searchParams.get("quote") || "").toUpperCase();
   const selectedPairMatch = savedPairMatches.find((match) =>
     String(match.setup_id) === String(selectedSetupId || ""));
-  const activeQuoteCurrency = (
-    ["EUR", "USDT"].includes(explicitQuote) ? explicitQuote :
-      selectedPairMatch?.quote_currency ||
-      availableQuotes[0] || null
-  );
+  const activeQuoteCurrency = rememberedQuote.key === quoteSelectionKey
+    ? resolveTradingQuote({
+      explicitQuote,
+      setupQuote: selectedPairMatch?.quote_currency,
+      rememberedQuote: rememberedQuote.quote,
+      availableQuotes,
+    }) : null;
+  useEffect(() => {
+    if (!quoteSelectionKey || !availableQuotes.includes(explicitQuote)) return;
+    window.sessionStorage.setItem(quoteSelectionKey, explicitQuote);
+    setRememberedQuote({ key: quoteSelectionKey, quote: explicitQuote });
+  }, [availableQuotes, explicitQuote, quoteSelectionKey]);
 
   const {
     workspace: loadedWorkspace,
@@ -2425,7 +2456,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols, activeQuoteCurrency);
   // Resolve saved pair choices before showing any price or score. Otherwise
   // the initial base-asset response can briefly masquerade as a pair plan.
-  const workspace = setupMatches !== null || activeQuoteCurrency ? loadedWorkspace : null;
+  const workspace = (setupMatches !== null && tradingMarkets.symbol === activeSymbol &&
+    (!quoteSelectionKey || rememberedQuote.key === quoteSelectionKey)) ? loadedWorkspace : null;
   const lastWorkspaceReloadAtRef = useRef(0);
   const scoreRefreshTimersRef = useRef([]);
 
@@ -2872,7 +2904,12 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const handleAssetSelect = (symbol) => {
     const nextSymbol = String(symbol || activeSymbol).toUpperCase();
     setSelectedAsset(nextSymbol);
-    router.push(buildContextHref({ pathname, symbol: nextSymbol, context: initialTab, variant }), {
+    const nextQuoteKey = tradingQuoteSessionKey(user?.id, nextSymbol);
+    const rememberedNextQuote = nextQuoteKey && window.sessionStorage.getItem(nextQuoteKey);
+    const href = buildContextHref({ pathname, symbol: nextSymbol, context: initialTab, variant });
+    const nextHref = ["EUR", "USD", "USDT"].includes(rememberedNextQuote)
+      ? `/asset?${withSelectedTradingQuote(href.split("?")[1], rememberedNextQuote)}` : href;
+    router.push(nextHref, {
       scroll: false,
     });
   };
@@ -2911,6 +2948,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
               onClick={() => {
                 if (setupSelectionKey) window.sessionStorage.removeItem(setupSelectionKey);
                 setRememberedSetup({ key: setupSelectionKey, id: null });
+                if (quoteSelectionKey) window.sessionStorage.setItem(quoteSelectionKey, quote);
+                setRememberedQuote({ key: quoteSelectionKey, quote });
                 const query = withSelectedTradingQuote(searchParams.toString(), quote);
                 router.replace(`${pathname || "/asset"}?${query}`, { scroll: false });
               }}>
