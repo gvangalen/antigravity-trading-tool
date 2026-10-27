@@ -37,6 +37,7 @@ FreshnessStatus = Literal["fresh", "stale", "unknown", "not_applicable"]
 
 class ToolSelector(BaseModel):
     asset: Optional[constr(strip_whitespace=True, min_length=1, max_length=20)] = None
+    quote_currency: Optional[constr(strip_whitespace=True, min_length=3, max_length=8)] = None
     setup_id: Optional[int] = None
     strategy_id: Optional[int] = None
     bot_id: Optional[int] = None

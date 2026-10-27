@@ -28,6 +28,24 @@ _SCORE_STATUS_EXPLANATIONS = {
 }
 
 
+def verified_indicator_evidence(assessment: dict, source_row: dict | None) -> dict:
+    """Expose indicator scores only from the same verified daily score row."""
+    raw = (source_row or {}).get("indicator_evidence") or {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        category: raw.get(category, {})
+        for category in ("market", "macro", "technical")
+        if assessment.get("component_source_status", {}).get(f"{category}_score") == "fresh"
+        and isinstance(raw.get(category), dict)
+    }
+
+
 class SetupMarketMatchService:
     def __init__(self, session, *, daily_rows: dict | None = None):
         self.session = session

@@ -98,6 +98,11 @@ class FinnResponsesToolCatalog:
             for name, scopes in _READ_SCOPES.items()
         }
         self.read_tools["get_active_plan_and_strategy"] += ("read_asset_scores",)
+        # A price or configured-indicator read can be used to answer a question
+        # about that indicator's score. Carry the same verified Score 2.0 row
+        # that Analyse uses instead of leaving the model to infer absence.
+        self.read_tools["get_market_snapshot"] += ("read_asset_scores",)
+        self.read_tools["get_indicator_snapshot"] += ("read_asset_scores",)
         # Collection reads have a distinct typed read adapter. They do not
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
