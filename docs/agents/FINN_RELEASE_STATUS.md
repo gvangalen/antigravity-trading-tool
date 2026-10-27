@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair strategy readback and selected-workspace candidate (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Independent QA tested public SHA
+`bcf275d349185943a401db541393702a6329f8de` and returned `NOT_ACCEPTED`.
+BTC/EUR and BTC/USDT quotes, charts, plans and bot labels stayed distinct;
+skipped Paper `not_due` persisted after refresh; the long ETH-to-AAPL
+correction completed safely. Two defects remained: FINN could not read the
+explicitly named saved BTC/USDT strategy after reading both prices, and
+SOL/EUR Analyse returned `exact_market_not_verified` after refresh. QA did
+not capture the SOL selection POST status or a FINN run ID, so their precise
+production exception paths are not yet proven.
+
+The current repair makes an exact owner-scoped strategy name in the current
+read turn identify its saved parent setup, ahead of a contextual setup ID.
+Conflicting explicitly named objects still fail safely. The web pair-selection
+POST now returns the owner-scoped exact workspace from the same database
+session, removing the separate immediate workspace GET on first display;
+the read-only GET remains available. A missing selected workspace is reported
+as a typed server error rather than shown as another pair's data. Locally,
+SOL/EUR selection and same-session workspace returned the same verified
+market ID and a source-specific quote status.
+
+Focused backend regressions passed **70/70**. The final-source root backend
+suite passed **4079 tests, 4 existing skips** (log SHA-256
+`72bc417903eda6b049a60b8396d82bae5466581512048fa13a16710baac49f6c`).
+Frontend typecheck, i18n lint/tests, command/proposal/setup tests, production
+build and high-severity audit passed with zero high-severity vulnerabilities.
+The restarted local FastAPI/Celery action matrix passed **16/16** contracts
+and adapter checks **21/21** (matrix SHA-256
+`aaf12032a697c716e17346ea5475b3a27cd344bbda5efa62bc340269ba72dc76`).
+Real Luna/Responses selection passed **20/20** development (SHA-256
+`f0acd444dab9e8cecdbe3246ff8122dedfd808890a8896dc49d3f5971df2cb0d`)
+and **109/109** regression cases (SHA-256
+`f3a3cc65ffcc36e3cda7c38fc7e83c16f13f2250f0f8044a57eb5ffdf43e67d2`),
+with zero recorded provider, parse, validation or selector failures. No
+deployment or independent QA acceptance is claimed for this candidate yet.
+
 ## Exact-pair independent-QA repair candidate (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #661 merged as

@@ -11,6 +11,7 @@ from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+from backend.services.exact_market_workspace_service import ExactMarketWorkspaceService
 from backend.utils.auth_utils import get_current_user
 
 router = APIRouter()
@@ -41,9 +42,13 @@ async def select_crypto_trading_market(
     quote_currency: str,
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
+    include_workspace: bool = False,
+    market_period: str = "day",
+    macro_period: str = "day",
+    technical_period: str = "day",
+    watchlist_symbols: str = "",
 ):
     """Verify and register a selected exact market before pair-scoped reads."""
-    _ = current_user
     base = str(symbol or "").strip().upper()
     quote = str(quote_currency or "").strip().upper()
     asset = await AssetCatalogService(session).get_asset(base)
@@ -51,6 +56,12 @@ async def select_crypto_trading_market(
         raise HTTPException(404, "Geen ondersteunde crypto-asset gevonden.")
     if quote not in {"EUR", "USDT"}:
         raise HTTPException(422, "Kies een ondersteund handelspaar.")
+    if include_workspace and (
+        any(period not in {"day", "week", "month", "quarter"}
+            for period in (market_period, macro_period, technical_period))
+        or len(watchlist_symbols) > 250
+    ):
+        raise HTTPException(422, "Ongeldige werkruimtekeuze.")
     try:
         market = await TradingMarketService(session).resolve(base, quote)
     except MarketUnavailable as exc:
@@ -78,7 +89,7 @@ async def select_crypto_trading_market(
             await session.rollback()
             logger.warning("Exact market snapshot pending after selection: pair=%s code=%s",
                            market.pair, type(exc).__name__)
-    return {
+    response = {
         "market_id": market.id,
         "pair": market.pair,
         "quote_currency": market.quote_currency,
@@ -86,6 +97,19 @@ async def select_crypto_trading_market(
         "tradingview_symbol": market.tradingview_symbol,
         "snapshot_status": snapshot_status,
     }
+    if include_workspace:
+        workspace = await ExactMarketWorkspaceService(session).get(
+            int(current_user["id"]), base, quote,
+            periods={"market": market_period, "macro": macro_period,
+                     "technical": technical_period},
+            watchlist_symbols=[item.strip() for item in watchlist_symbols.split(",") if item.strip()],
+        )
+        if workspace is None:
+            logger.error("Selected exact market missing in same-session workspace read: pair=%s id=%s",
+                         market.pair, market.id)
+            raise HTTPException(503, "selected_market_workspace_unavailable")
+        response["workspace"] = workspace
+    return response
 
 
 @router.get("/assets/{symbol}/trading-markets", response_model=List[TradingMarketChoiceResponse])

@@ -75,6 +75,59 @@ def test_selected_pair_without_a_setup_is_registered_and_read_exactly(monkeypatc
     assert session.commits == 1
 
 
+def test_selection_returns_owner_scoped_exact_workspace_in_same_request(monkeypatch):
+    session = _Session()
+    market = SimpleNamespace(id=81, pair="SOL/EUR", quote_currency="EUR",
+                             provider_symbol="SOLEUR", tradingview_symbol="BINANCE:SOLEUR")
+
+    class Catalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_asset(self, symbol):
+            assert symbol == "SOL"
+            return {"asset_class": "crypto"}
+
+    class Markets:
+        def __init__(self, _session):
+            pass
+
+        async def resolve(self, base, quote):
+            assert (base, quote) == ("SOL", "EUR")
+            return market
+
+    class Repository:
+        def __init__(self, _session):
+            pass
+
+        async def get_latest_exact_market_snapshot(self, market_id):
+            assert market_id == 81
+            return SimpleNamespace(source_observed_at=datetime.now(timezone.utc))
+
+    class Workspace:
+        def __init__(self, workspace_session):
+            assert workspace_session is session
+
+        async def get(self, user_id, symbol, quote, *, periods, watchlist_symbols):
+            assert (user_id, symbol, quote) == (8, "SOL", "EUR")
+            assert periods == {"market": "week", "macro": "day", "technical": "day"}
+            assert watchlist_symbols == ["BTC", "ETH"]
+            return {"symbol": symbol, "pair": f"{symbol}/{quote}", "market_id": 81,
+                    "quote": {"price": None, "status": "insufficient_data"}}
+
+    monkeypatch.setattr(asset_catalog_api, "AssetCatalogService", Catalog)
+    monkeypatch.setattr(asset_catalog_api, "TradingMarketService", Markets)
+    monkeypatch.setattr(asset_catalog_api, "MarketDataRepository", Repository)
+    monkeypatch.setattr(asset_catalog_api, "ExactMarketWorkspaceService", Workspace)
+    result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
+        "sol", "eur", current_user={"id": 8}, session=session,
+        include_workspace=True, market_period="week", watchlist_symbols="BTC,ETH",
+    ))
+    assert result["workspace"]["pair"] == "SOL/EUR"
+    assert result["workspace"]["quote"]["price"] is None
+    assert session.commits == 1
+
+
 def test_unverified_pair_never_uses_another_quote(monkeypatch):
     session = _Session()
 
