@@ -116,6 +116,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
                     UNION SELECT symbol FROM setups WHERE user_id = %s
                     UNION SELECT symbol FROM user_indicator_configs
                           WHERE user_id = %s AND enabled = TRUE AND symbol IS NOT NULL
+                            AND market_id IS NULL
                 """, (user_id, user_id, user_id))
                 watchlist = [str(row[0]).upper() for row in cur.fetchall() if row[0]]
             conn.commit()

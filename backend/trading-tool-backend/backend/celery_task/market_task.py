@@ -65,6 +65,7 @@ async def _sync_configured_market_snapshots() -> dict:
                 select(UserIndicatorConfig).where(
                     UserIndicatorConfig.enabled.is_(True),
                     UserIndicatorConfig.symbol.is_not(None),
+                    UserIndicatorConfig.market_id.is_(None),
                 )
             )
         ).scalars().all()
