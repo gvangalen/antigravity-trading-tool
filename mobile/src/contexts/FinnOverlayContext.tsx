@@ -15,6 +15,7 @@ type FinnOverlayParams = {
   prefill?: string;
   source?: string;
   symbol?: string;
+  quoteCurrency?: string | null;
 };
 
 type FinnOverlayValue = {
@@ -127,6 +128,7 @@ function ScopedFinnOverlayProvider({ children, accountKey }: { children: ReactNo
             contextMetric={params?.contextMetric}
             feedItemId={params?.feedItemId}
             symbol={params?.symbol}
+            quoteCurrency={params?.quoteCurrency}
             onClose={closeFinn}
             query={draft}
             onQueryChange={setDraft}

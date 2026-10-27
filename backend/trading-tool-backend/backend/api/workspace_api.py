@@ -15,12 +15,18 @@ async def get_exact_market_workspace(
     request: Request,
     symbol: str = Query(..., min_length=1, max_length=20),
     quote_currency: str = Query(..., regex="^(EUR|USDT)$"),
+    market_period: str = Query("day", regex="^(day|week|month|quarter)$"),
+    macro_period: str = Query("day", regex="^(day|week|month|quarter)$"),
+    technical_period: str = Query("day", regex="^(day|week|month|quarter)$"),
+    watchlist_symbols: str = Query("", max_length=250),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await measure_read_connection_acquire(db, route="workspace", trace_id=getattr(request.state, "trace_id", None))
     payload = await ExactMarketWorkspaceService(db).get(
         int(current_user["id"]), symbol, quote_currency,
+        periods={"market": market_period, "macro": macro_period, "technical": technical_period},
+        watchlist_symbols=[item.strip() for item in watchlist_symbols.split(",") if item.strip()],
     )
     if payload is None:
         raise HTTPException(status_code=404, detail="exact_market_not_verified")

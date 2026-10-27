@@ -11,6 +11,40 @@ from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 from backend.services.bot_service import BotService, _dca_schedule_status
 
 
+def test_paper_price_reads_saved_exact_market_only():
+    now = datetime.now(timezone.utc)
+    service = BotService(_FakeSession())
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"symbol": "ETH", "market_id": 73, "quote_currency": "EUR", "is_live": False}
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            assert market_ids == [73]
+            return {73: {"symbol": "ETH", "quote_currency": "EUR", "price": 2100,
+                         "observed_at": now}}
+        async def get_valuatable_market_prices(self, symbols):
+            raise AssertionError("legacy base price must not be read")
+        async def get_portfolio_fx_rates(self):
+            return {}
+    service.repository = Repo()
+    result = asyncio.run(service.get_paper_price_eur(7, 9))
+    assert result["price_eur"] == 2100
+    assert result["quote_currency"] == "EUR"
+
+
+def test_paper_price_rejects_mismatched_exact_market_row():
+    service = BotService(_FakeSession())
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"symbol": "ETH", "market_id": 73, "quote_currency": "EUR", "is_live": False}
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            return {73: {"symbol": "ETH", "quote_currency": "USDT", "price": 2100,
+                         "observed_at": datetime.now(timezone.utc)}}
+    service.repository = Repo()
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(service.get_paper_price_eur(7, 9))
+    assert error.value.status_code == 409
+
+
 def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
     class Repo:
         async def get_bot_history(self, user_id, start, end):

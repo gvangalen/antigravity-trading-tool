@@ -63,4 +63,9 @@ BEGIN
         EXECUTE format('DROP INDEX %I.%I', old_index.nspname, old_index.relname);
     END LOOP;
 END $$;
+
+-- These earlier expression/asset-scope indexes also span every quote for an
+-- asset. The partial market_id arbiters from expand now own uniqueness.
+DROP INDEX IF EXISTS ux_user_indicator_configs_scope;
+DROP INDEX IF EXISTS ux_user_indicator_configs_canonical_asset_scope;
 """

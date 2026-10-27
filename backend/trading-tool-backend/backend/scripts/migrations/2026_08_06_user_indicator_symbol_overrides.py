@@ -13,12 +13,16 @@ ON user_indicator_configs (user_id, category, symbol);
 CREATE INDEX IF NOT EXISTS idx_user_indicator_configs_user_category_asset_class
 ON user_indicator_configs (user_id, category, asset_class);
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_user_indicator_configs_scope
-ON user_indicator_configs (
-    user_id,
-    category,
-    indicator,
-    COALESCE(symbol, ''),
-    COALESCE(asset_class, '')
-);
+-- The pair cutover replaces this base-wide arbiter. Since deploy reruns old
+-- migrations, recreating it would silently break EUR/USDT coexistence.
+DO $$
+BEGIN
+    IF to_regclass('ux_indicator_configs_exact_market_scope') IS NULL THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_user_indicator_configs_scope
+        ON user_indicator_configs (
+            user_id, category, indicator,
+            COALESCE(symbol, ''), COALESCE(asset_class, '')
+        );
+    END IF;
+END $$;
 """

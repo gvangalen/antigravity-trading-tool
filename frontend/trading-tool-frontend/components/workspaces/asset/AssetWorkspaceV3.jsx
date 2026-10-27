@@ -2391,17 +2391,37 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     [activeSymbol, persistedWatchlistSymbols]
   );
 
+  const [setupMatches, setSetupMatches] = useState(null);
+  const [setupMatchError, setSetupMatchError] = useState(false);
+  const selectedSetupId = urlSetupId || (rememberedSetup.key === setupSelectionKey ? rememberedSetup.id : null);
+  const savedPairMatches = useMemo(() => (setupMatches || []).filter(
+    (match) => match?.market_id && match?.quote_currency &&
+      String(match.symbol || "").toUpperCase() === activeSymbol
+  ), [activeSymbol, setupMatches]);
+  const availableQuotes = useMemo(() => Array.from(new Set(
+    savedPairMatches.map((match) => String(match.quote_currency).toUpperCase())
+  )).sort(), [savedPairMatches]);
+  const explicitQuote = String(searchParams.get("quote") || "").toUpperCase();
+  const selectedPairMatch = savedPairMatches.find((match) =>
+    String(match.setup_id) === String(selectedSetupId || ""));
+  const activeQuoteCurrency = (
+    ["EUR", "USDT"].includes(explicitQuote) ? explicitQuote :
+      selectedPairMatch?.quote_currency ||
+      availableQuotes[0] || null
+  );
+
   const {
-    workspace,
+    workspace: loadedWorkspace,
     watchlist: watchlistData,
     loading: workspaceLoading,
     watchlistLoading,
     isFallbackWorkspace,
     reloadWorkspace,
     reloadWatchlist,
-  } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
-  const [setupMatches, setSetupMatches] = useState(null);
-  const [setupMatchError, setSetupMatchError] = useState(false);
+  } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols, activeQuoteCurrency);
+  // Resolve saved pair choices before showing any price or score. Otherwise
+  // the initial base-asset response can briefly masquerade as a pair plan.
+  const workspace = setupMatches !== null || activeQuoteCurrency ? loadedWorkspace : null;
   const lastWorkspaceReloadAtRef = useRef(0);
   const scoreRefreshTimersRef = useRef([]);
 
@@ -2743,8 +2763,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     activeWatchlistRow?.assetClass || workspaceAsset?.asset_class || null,
   );
   const activeTradingViewSymbol =
-    activeWatchlistRow?.tradingviewSymbol ||
     workspaceAsset?.tradingview_symbol ||
+    activeWatchlistRow?.tradingviewSymbol ||
     null;
 
   const sections = useMemo(() => {
@@ -2868,6 +2888,25 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         ui={ui}
       />
 
+      {availableQuotes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <span className="font-semibold text-slate-700">
+            {locale?.startsWith("de") ? "Handelspaar" : locale?.startsWith("en") ? "Trading pair" : "Handelspaar"}
+          </span>
+          {availableQuotes.map((quote) => (
+            <button key={quote} type="button"
+              className={`rounded-lg border px-3 py-1.5 font-semibold ${activeQuoteCurrency === quote ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}
+              onClick={() => {
+                const query = new URLSearchParams(searchParams.toString());
+                query.set("quote", quote);
+                router.replace(`${pathname || "/asset"}?${query.toString()}`, { scroll: false });
+              }}>
+              {activeSymbol}/{quote}
+            </button>
+          ))}
+        </div>
+      )}
+
       <AssetList
         rows={visibleWatchlistRows}
         activeSymbol={activeSymbol}
@@ -2911,11 +2950,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             window.sessionStorage.setItem(setupSelectionKey, String(setupId));
             setRememberedSetup({ key: setupSelectionKey, id: String(setupId) });
           }
-          const query = withSelectedBenchmarkSetup(searchParams.toString(), setupId);
-          router.replace(`${pathname || "/asset"}?${query}`, { scroll: false });
+          const query = new URLSearchParams(withSelectedBenchmarkSetup(searchParams.toString(), setupId));
+          const chosenMatch = setupMatches?.find((match) => String(match.setup_id) === String(setupId));
+          if (chosenMatch?.quote_currency) query.set("quote", String(chosenMatch.quote_currency).toUpperCase());
+          else query.delete("quote");
+          router.replace(`${pathname || "/asset"}?${query.toString()}`, { scroll: false });
         }}
-        selectedSetupId={urlSetupId || (rememberedSetup.key === setupSelectionKey ? rememberedSetup.id : null)}
-        setupMatches={setupMatches}
+        selectedSetupId={selectedSetupId}
+        setupMatches={activeQuoteCurrency ? setupMatches?.filter((match) =>
+          match.market_id && String(match.quote_currency).toUpperCase() === activeQuoteCurrency
+        ) : setupMatches}
         setupMatchError={setupMatchError}
         ui={ui}
         conditionOptions={t?.setups?.marketConditions?.options}

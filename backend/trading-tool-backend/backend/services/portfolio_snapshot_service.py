@@ -38,7 +38,8 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
                )) AS unverified_ledger,
                p.updated_at,
                EXISTS (SELECT 1 FROM bot_ledger ledger
-                       WHERE ledger.user_id=c.user_id AND ledger.bot_id=c.id) AS has_ledger
+                       WHERE ledger.user_id=c.user_id AND ledger.bot_id=c.id) AS has_ledger,
+               c.market_id
         FROM bot_configs c
         LEFT JOIN strategies s ON s.id=c.strategy_id AND s.user_id=c.user_id
         LEFT JOIN setups st ON st.id=s.setup_id AND st.user_id=s.user_id
@@ -60,7 +61,10 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
     """)
     fx = {str(row[0]).upper(): {"eur_per_unit": row[1], "observed_at": row[2],
                               "provider": row[3], "provider_pair": row[4]} for row in cur.fetchall()}
-    held_symbols = sorted({str(row[1]).upper() for row in bots if float(row[4] or 0) != 0})
+    held_symbols = sorted({str(row[1]).upper() for row in bots
+                           if float(row[4] or 0) != 0 and row[8] is None})
+    held_market_ids = sorted({int(row[8]) for row in bots
+                              if float(row[4] or 0) != 0 and row[8] is not None})
     prices = {}
     if held_symbols:
         cur.execute("""
@@ -71,13 +75,26 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
                   AND m.source_observed_at IS NOT NULL
             ORDER BY m.symbol, m.source_observed_at DESC, m.timestamp DESC
         """, (held_symbols,))
-        prices = {str(row[0]).upper(): row[1:] for row in cur.fetchall()}
+        prices = {(str(row[0]).upper(), None): row[1:] for row in cur.fetchall()}
+    if held_market_ids:
+        cur.execute("""
+            SELECT DISTINCT ON (m.market_id) m.market_id, m.symbol, m.price,
+                   m.source_observed_at, tm.quote_currency, m.id
+            FROM market_data m
+            JOIN trading_markets tm ON tm.id=m.market_id
+            WHERE m.market_id=ANY(%s) AND m.price IS NOT NULL AND m.price>0
+              AND m.source_observed_at IS NOT NULL
+              AND m.quote_currency=tm.quote_currency AND tm.is_active=TRUE
+            ORDER BY m.market_id, m.source_observed_at DESC, m.timestamp DESC
+        """, (held_market_ids,))
+        prices.update({(str(row[1]).upper(), int(row[0])): row[2:]
+                       for row in cur.fetchall()})
     cash = 0.0
     position_value = 0.0
     source_times = []
     evidence = []
     now = datetime.now(timezone.utc)
-    for bot_id, symbol, _initialized, bot_cash, qty, _unverified, portfolio_updated_at, _has_ledger in bots:
+    for bot_id, symbol, _initialized, bot_cash, qty, _unverified, portfolio_updated_at, _has_ledger, market_id in bots:
         cash += float(bot_cash or 0)
         bot_evidence = {
             "bot_id": bot_id, "symbol": symbol,
@@ -88,7 +105,7 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
         evidence.append(bot_evidence)
         if float(qty or 0) == 0:
             continue
-        price_row = prices.get(str(symbol).upper())
+        price_row = prices.get((str(symbol).upper(), int(market_id) if market_id is not None else None))
         if not price_row:
             return False
         price, source_at, quote, price_row_id = price_row
@@ -104,6 +121,7 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
         bot_evidence.update({
             "price_row_id": price_row_id, "source_price": float(price),
             "quote_currency": quote, "price_at": source_at.isoformat(),
+            "market_id": market_id,
             "eur_per_unit": factor, "fx_at": fx_at.isoformat() if fx_at else None,
             "fx_provider": fx_row.get("provider"), "fx_provider_pair": fx_row.get("provider_pair"),
         })
@@ -133,7 +151,7 @@ def _get_latest_price(cur, symbol: str) -> float:
         SELECT m.price, a.quote_currency, m.source_observed_at
         FROM market_data m
         LEFT JOIN asset_catalog a ON a.symbol = m.symbol
-        WHERE m.symbol = %s
+        WHERE m.symbol = %s AND m.market_id IS NULL
           AND m.price IS NOT NULL
           AND m.source_observed_at IS NOT NULL
         ORDER BY m.source_observed_at DESC, m.timestamp DESC
@@ -197,7 +215,8 @@ def snapshot_all_for_user(
                     bp.position_qty,
                     bp.invested_eur,
                     bp.avg_entry,
-                    bp.realized_pnl_eur
+                    bp.realized_pnl_eur,
+                    bc.market_id
                 FROM bot_portfolios bp
                 JOIN bot_configs bc
                     ON bc.id = bp.bot_id
@@ -210,6 +229,11 @@ def snapshot_all_for_user(
             # Do not publish it as account equity until an exchange-backed
             # valuation contract is available.
             if not portfolio_rows:
+                return
+            # The older per-bot snapshot format carries no market identity.
+            # Never value an exact-pair holding with a base-asset quote there.
+            if any(row[7] is not None and float(row[3] or 0) != 0
+                   for row in portfolio_rows):
                 return
 
             # A missing quote makes the complete valuation unknown. Do not
@@ -226,7 +250,7 @@ def snapshot_all_for_user(
                     logger.warning("Portfolio snapshot uitgesteld: gecontroleerde EUR-koers ontbreekt voor bot=%s asset=%s", bot_id, symbol)
                     return
 
-            for bot_id, symbol, b_cash, b_qty, b_invested, b_avg, b_realized in portfolio_rows:
+            for bot_id, symbol, b_cash, b_qty, b_invested, b_avg, b_realized, _market_id in portfolio_rows:
                 symbol = (symbol or "BTC").upper()
                 b_cash = float(b_cash or 0)
                 b_qty = float(b_qty or 0)

@@ -832,6 +832,24 @@ class BotRepository:
             "observed_at": row._mapping["source_observed_at"],
         } for row in result.fetchall()}
 
+    async def get_valuatable_exact_market_prices(self, market_ids: List[int]) -> Dict[int, dict]:
+        """Keep each pair bot's valuation on its saved, verified venue and quote."""
+        ids = sorted({int(value) for value in market_ids if value is not None})
+        if not ids:
+            return {}
+        result = await self.session.execute(text("""
+            SELECT DISTINCT ON (m.market_id) m.market_id, m.symbol, m.price,
+                   m.source_observed_at, tm.quote_currency
+            FROM market_data m
+            JOIN trading_markets tm ON tm.id=m.market_id
+            WHERE m.market_id=ANY(:market_ids) AND m.price IS NOT NULL
+              AND m.price>0 AND m.source_observed_at IS NOT NULL
+              AND m.symbol=tm.asset_symbol
+              AND m.quote_currency=tm.quote_currency AND tm.is_active=TRUE
+            ORDER BY m.market_id, m.source_observed_at DESC, m.timestamp DESC
+        """), {"market_ids": ids})
+        return {int(row._mapping["market_id"]): dict(row._mapping) for row in result.fetchall()}
+
     async def get_asset_quote_currencies(self, symbols: List[str]) -> Dict[str, str]:
         normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})
         if not normalized:
@@ -1040,7 +1058,8 @@ class BotRepository:
                 st.name AS setup_name,
                 COALESCE(c.budget_total_eur, 0) AS budget_total_eur,
                 COALESCE(c.budget_daily_limit_eur, 0) AS budget_daily_limit_eur,
-                COALESCE(c.risk_profile, 'balanced') AS risk_profile
+                COALESCE(c.risk_profile, 'balanced') AS risk_profile,
+                c.market_id AS market_id
             FROM bot_configs c
             LEFT JOIN strategies s     ON s.id = c.strategy_id AND s.user_id = c.user_id
             LEFT JOIN setups st        ON st.id = s.setup_id AND st.user_id = c.user_id
@@ -1059,6 +1078,9 @@ class BotRepository:
         # Get unique symbols and retrieve their live market prices in one query
         symbols = [row._mapping["symbol"] for row in rows]
         price_rows = await self.get_valuatable_market_prices(symbols)
+        exact_price_rows = await self.get_valuatable_exact_market_prices([
+            row._mapping["market_id"] for row in rows if row._mapping["market_id"] is not None
+        ])
         quote_currencies = await self.get_asset_quote_currencies(symbols)
         from backend.services.portfolio_fx_service import price_in_eur
         fx_rates = await self.get_portfolio_fx_rates()
@@ -1089,12 +1111,17 @@ class BotRepository:
             has_live_bot = has_live_bot or is_live
             risk = mapping["risk_profile"]
             
-            price_row = price_rows.get(sym) or {}
+            market_id = mapping["market_id"]
+            exact_row = exact_price_rows.get(int(market_id)) if market_id is not None else None
+            price_row = (exact_row or {}) if market_id is not None else (price_rows.get(sym) or {})
+            if market_id is not None and str(price_row.get("symbol") or "").upper() != str(sym).upper():
+                price_row = {}
             price = price_row.get("price")
             # The market price is in the catalog quote currency. Apply a
             # separately sourced, dated conversion before calling it EUR.
-            quote_currency = quote_currencies.get(sym)
-            observed_at = price_row.get("observed_at")
+            quote_currency = (price_row.get("quote_currency") if market_id is not None
+                              else quote_currencies.get(sym))
+            observed_at = price_row.get("source_observed_at") if market_id is not None else price_row.get("observed_at")
             eur_price, valuation_source_at, fx_factor, fx_at = price_in_eur(
                 price=price, price_at=observed_at, quote_currency=quote_currency,
                 fx=fx_rates.get(str(quote_currency or "").upper()), now=valuation_now,

@@ -751,6 +751,10 @@ function AIAssistantContent({
       locale,
       page_type: pageMap[pathname] || t?.common?.unknown || "Unknown",
       symbol: resolvedWorkspaceSymbol,
+      quote_currency: pathname === "/asset"
+        ? (["EUR", "USDT"].includes(String(routeParams.get("quote") || "").toUpperCase())
+            ? String(routeParams.get("quote")).toUpperCase() : null)
+        : (contextualSetup?.quote_currency || contextualBot?.quote_currency || null),
       asset_resolution_status: assetStatus,
       timeframe:
         searchParams.get("tf") ||

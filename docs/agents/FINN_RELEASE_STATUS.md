@@ -4,9 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact trading-pair candidate (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION` on `codex/explicit-trading-market`.
+Production still reports `2c5431b4cb6446b276b2e1e855a843823885810c`;
+the pair flow is **not live** at this status update. The candidate binds a
+user-selected BTC/EUR, BTC/USDT, ETH/EUR or ETH/USDT market to setup,
+strategy, bot, exact quote, TradingView chart, indicator materialization,
+Score 2.0, FINN read evidence, Paper decisions and portfolio valuation.
+Unavailable or mismatched exact-market evidence remains unknown and cannot
+borrow another quote. EUR investment amounts remain distinct from the traded
+quote currency. The migration cutover rejects a rollback to old daily-score
+writers after pair-scoped unique indexes are installed.
+
+Measured local evidence on the final source: root pytest **4053 passed, four
+skipped**, `.local-finn-parity-artifacts/exact-pair-final-pytest.log` SHA-256
+`06fa300d755bd005edf03ab2601beec0086bfb91842ae1fea68d69b380bade5d`.
+Frontend typecheck, i18n, commands, proposals, production build and high
+dependency audit passed; mobile typecheck, lint (warnings only), web/iOS/
+Android bundle smokes and chat tests passed. Real Responses selector
+development passed **20/20** and regression **109/109**, both with 100%
+operation accuracy and zero provider, schema, timeout, parse or validation
+failures. Their artifacts are `backend/trading-tool-backend/.local-finn-parity-artifacts/
+exact-pair-selector-{development,regression}.json` (SHA-256
+`93d47adc27e86aa57da09555b5b4c91812c0c74332638c11e8ab2d62a18a34ee`
+and `b6cfd8527d1c53beb8e8639ef54ffa09eda742fc32c1aa370628bda938e9a5c1`).
+The isolated exact-pair Paper probe passed: ETH/USDT score independent of
+ETH legacy score, one €50 buy, one filled order and two portfolio snapshots.
+The full local worker action matrix passed **16/16** contracts, including
+direct and guided SOL/USDT setup creation, with zero broker orders and zero
+Live bots (`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
+`95063b8d649de54942ffc94e8bc12e0162c3d7197e0aa980405cdb46350c33a7`).
+CI, deployment and independent authenticated QA remain outstanding at this
+status update. Local probes do not establish
+live provider, exchange, chart or broker behavior.
+
 ## Paper exit, Score 2.0 diagnostics and pair identity (27 oktober 2026)
 
-Current phase: `STAGE2_LIVE_QA_INCOMPLETE`. The final Stage 2 status update
+Earlier Stage 2 status: `STAGE2_LIVE_QA_INCOMPLETE`. The final Stage 2 status update
 merged via PR #644 and Auto Deploy 40414885894 succeeded. Backend health and
 frontend build-info returned HTTP 200 on `2c5431b4cb6446b276b2e1e855a843823885810c`
 at the final identity check. The existing independent QA Agent returned
@@ -36,6 +71,11 @@ trading-pair release.
 The next local batch on `codex/explicit-trading-market` now materializes the
 owner's configured market and technical indicators from completed candles of
 the verified exact pair, then writes a pair-scoped Score 2.0 daily result.
+An authenticated read-only exact-market workspace now resolves the stored
+venue/base/quote identity, returns its own dated quote and owner-scoped
+Score 2.0 assessment, and refuses a quote row with a different currency.
+It does not fall back to a base-asset quote or score. Two focused boundary
+tests and the complete backend suite passed (4035 passed, four skipped).
 FINN's setup proposal selector preserves an explicit ETH/EUR or BTC/USDT
 quote instead of treating the pair as its base asset. A bot follow-up cannot
 bind such a pair request to an earlier base-only ETH setup. The complete

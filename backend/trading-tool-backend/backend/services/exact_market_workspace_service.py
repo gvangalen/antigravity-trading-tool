@@ -21,9 +21,12 @@ class ExactMarketWorkspaceService:
     def __init__(self, session):
         self.session = session
 
-    async def get(self, user_id: int, symbol: str, quote_currency: str) -> dict | None:
+    async def get(self, user_id: int, symbol: str, quote_currency: str,
+                  *, periods: dict[str, str] | None = None,
+                  watchlist_symbols: list[str] | None = None) -> dict | None:
         symbol = str(symbol or "").strip().upper()
         quote_currency = str(quote_currency or "").strip().upper()
+        periods = periods or {"market": "day", "macro": "day", "technical": "day"}
         result = await self.session.execute(select(TradingMarket).where(
             TradingMarket.asset_symbol == symbol,
             TradingMarket.quote_currency == quote_currency,
@@ -54,6 +57,7 @@ class ExactMarketWorkspaceService:
         workspace = WorkspaceDataService(self.session)
         macro_rows = await workspace._macro_rows(user_id, symbol, "day", asset_class="crypto")
         score_values = assessment["reported_scores"]
+        source_row = assessment.get("as_of")
         categories = {}
         for category, rows, source in (
             ("market", market_rows, "market_data_indicators"),
@@ -65,17 +69,21 @@ class ExactMarketWorkspaceService:
             )
             score = score_values.get(f"{category}_score")
             payload["score"].update({
-                "score": score,
-                "status": "available" if score is not None else "insufficient_data",
+                "score": score if periods.get(category) == "day" else None,
+                "status": "available" if score is not None and periods.get(category) == "day" else "insufficient_data",
                 "basis": "verified_exact_market_indicator_evidence",
-                "reason": None if score is not None else assessment["component_source_status"].get(f"{category}_score"),
+                "reason": ("unsupported_period" if periods.get(category) != "day" else
+                           None if score is not None else assessment["component_source_status"].get(f"{category}_score")),
             })
             categories[category] = payload
 
+        daily_period = all(periods.get(category) == "day" for category in ("market", "macro", "technical"))
         return {
             "symbol": symbol,
             "market_id": int(market.id),
             "pair": f"{symbol}/{quote_currency}",
+            "quote_currency": quote_currency,
+            "periods": periods,
             "asset": {"symbol": symbol, "asset_class": "crypto",
                       "tradingview_symbol": market.tradingview_symbol},
             "quote": {
@@ -88,14 +96,27 @@ class ExactMarketWorkspaceService:
                              STALE_AFTER_SECONDS["quote"], "exact_market_data"),
             },
             "categories": categories,
+            "daily": {
+                "market": {"score": score_values.get("market_score"),
+                           "source_status": assessment["component_source_status"].get("market_score")},
+                "macro": {"score": score_values.get("macro_score"),
+                          "source_status": assessment["component_source_status"].get("macro_score")},
+                "technical": {"score": score_values.get("technical_score"),
+                              "source_status": assessment["component_source_status"].get("technical_score")},
+                "benchmark_score": assessment["benchmark_score"],
+                "calculated_at": source_row.isoformat() if hasattr(source_row, "isoformat") else source_row,
+                "indicator_evidence": {},
+            },
+            "master": {"weights": assessment["benchmark_weights"], "master_bias": "–"},
             "combined": {
-                "score": assessment["benchmark_score"],
+                "score": assessment["benchmark_score"] if daily_period else None,
                 "weights": assessment["benchmark_weights"],
                 "basis": "verified_exact_market_score_2_0",
-                "status": "available" if assessment["benchmark_score"] is not None else "insufficient_data",
-                "source_status": assessment["source_status"],
+                "status": "available" if daily_period and assessment["benchmark_score"] is not None else "insufficient_data",
+                "source_status": assessment["source_status"] if daily_period else "unsupported_period",
             },
             "setup_matches": assessment["matches"],
+            "watchlist": await workspace.get_watchlist(user_id, watchlist_symbols or []),
             "score_source_observed_at": assessment["component_source_observed_at"],
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "ai_calls": 0,

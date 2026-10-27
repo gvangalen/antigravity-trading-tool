@@ -3,14 +3,33 @@ from __future__ import annotations
 from backend.schemas.finn_v2_evidence_schema import TechnicalSnapshotData, TechnicalSnapshotItem
 from backend.services.technical_data_service import TechnicalDataService
 from backend.utils.scoring_utils import score_source_is_fresh
+from sqlalchemy import select
+from backend.infrastructure.models import TechnicalDataIndicator
 
 
 class TechnicalToolAdapter:
     def __init__(self, session):
+        self.session = session
         self.service = TechnicalDataService(session)
 
-    async def execute(self, *, user_id: int, asset: str, **_kwargs):
-        rows = await self.service.get_day_indicators(user_id, symbol=asset)
+    async def execute(self, *, user_id: int, asset: str, market_id: int | None = None,
+                      quote_currency: str | None = None, **_kwargs):
+        if market_id is None:
+            rows = await self.service.get_day_indicators(user_id, symbol=asset)
+        else:
+            result = await self.session.execute(select(TechnicalDataIndicator).where(
+                TechnicalDataIndicator.user_id == user_id,
+                TechnicalDataIndicator.symbol == asset,
+                TechnicalDataIndicator.market_id == market_id,
+            ).order_by(TechnicalDataIndicator.source_observed_at.desc(),
+                       TechnicalDataIndicator.id.desc()))
+            seen = set()
+            rows = []
+            for row in result.scalars().all():
+                key = str(row.indicator or "").lower()
+                if key not in seen:
+                    rows.append(row)
+                    seen.add(key)
         if not rows:
             raise LookupError("source_unavailable")
         payload = [
@@ -42,7 +61,10 @@ class TechnicalToolAdapter:
             ) for row in measured) else "stale"
         )
         return {
-            "data": TechnicalSnapshotData(symbol=asset, items=payload),
+            "data": TechnicalSnapshotData(
+                symbol=asset, market_id=market_id,
+                pair=f"{asset}/{quote_currency}" if market_id is not None else None,
+                items=payload),
             "summary": {"title": "technical_snapshot", "symbol": asset, "count": len(payload)},
             "as_of": latest,
             "freshness_status": freshness_status,

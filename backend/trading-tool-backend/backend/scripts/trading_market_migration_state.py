@@ -26,10 +26,13 @@ def main() -> None:
                            SELECT 1 FROM pg_index x JOIN pg_class i ON i.oid=x.indexrelid
                            WHERE x.indrelid='user_indicator_configs'::regclass
                              AND x.indisunique
-                             AND pg_get_indexdef(i.oid) LIKE
-                                 '%(user_id, symbol, category, indicator)%'
-                             AND (x.indpred IS NULL OR
-                                  pg_get_expr(x.indpred, x.indrelid) NOT LIKE '%market_id%')
+                             AND (
+                               i.relname='ux_user_indicator_configs_scope'
+                               OR (pg_get_indexdef(i.oid) LIKE
+                                   '%(user_id, symbol, category, indicator)%'
+                                   AND (x.indpred IS NULL OR
+                                        pg_get_expr(x.indpred, x.indrelid) NOT LIKE '%market_id%'))
+                             )
                        )
             """)
             (market_table, legacy_score_index, exact_score_index,

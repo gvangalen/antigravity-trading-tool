@@ -62,6 +62,23 @@ export function WatchlistScreen() {
   const { openFinn } = useFinnOverlay();
   const { language } = useAppPreferences();
   const selectedSymbol = context.asset;
+  const fetchPairMatches = useCallback(async () => {
+    const response = await intelligenceApi.marketMatches(selectedSymbol);
+    return Array.isArray(response) ? response : [];
+  }, [selectedSymbol]);
+  const pairMatchesResource = useApiResource<Record<string, unknown>[]>({
+    fallbackData: [],
+    fetcher: fetchPairMatches,
+  });
+  const availableQuotes = useMemo(() => Array.from(new Set(
+    pairMatchesResource.data
+      .filter((match) => String(match.symbol || '').toUpperCase() === selectedSymbol && match.market_id)
+      .map((match) => String(match.quote_currency || '').toUpperCase())
+      .filter(Boolean),
+  )).sort(), [pairMatchesResource.data, selectedSymbol]);
+  const selectedQuote = availableQuotes.includes(String(context.quoteCurrency || '').toUpperCase())
+    ? String(context.quoteCurrency).toUpperCase()
+    : availableQuotes[0] || null;
   const [chartInterval, setChartInterval] = useState<TradingViewInterval>(DEFAULT_TRADINGVIEW_INTERVAL);
   const [chartPreferenceLoaded, setChartPreferenceLoaded] = useState(false);
   const [watchlistActionAsset, setWatchlistActionAsset] = useState<MobileOverviewAsset | null>(null);
@@ -153,12 +170,12 @@ export function WatchlistScreen() {
   });
   const fetchWorkspaceAsset = useCallback(
     () =>
-      intelligenceApi.workspaceAsset(selectedSymbol, {
+      selectedQuote ? intelligenceApi.exactMarketWorkspace(selectedSymbol, selectedQuote) : intelligenceApi.workspaceAsset(selectedSymbol, {
         market_period: 'day',
         macro_period: 'day',
         technical_period: 'day',
       }),
-    [selectedSymbol],
+    [selectedSymbol, selectedQuote],
   );
   const workspaceAssetResource = useApiResource<WorkspaceAssetResponse | undefined>({
     fallbackData: undefined,
@@ -169,15 +186,27 @@ export function WatchlistScreen() {
     () => (overviewResource.data?.watchlist?.filter(Boolean) ?? []).filter((asset) => asset?.symbol),
     [overviewResource.data],
   );
+  const exactWorkspace = selectedQuote &&
+    workspaceAssetResource.data?.quote_currency === selectedQuote &&
+    workspaceAssetResource.data?.symbol === selectedSymbol
+    ? workspaceAssetResource.data : undefined;
+  const visibleWorkspace = selectedQuote ? exactWorkspace : workspaceAssetResource.data;
   const derivedAsset = useMemo(
-    () => buildFallbackAnalysisAsset(selectedSymbol, latestResource.data, workspaceAssetResource.data),
-    [latestResource.data, selectedSymbol, workspaceAssetResource.data],
+    () => buildFallbackAnalysisAsset(
+      selectedSymbol,
+      selectedQuote ? visibleWorkspace?.quote as MarketLatestResponse | undefined : latestResource.data,
+      visibleWorkspace,
+    ),
+    [latestResource.data, selectedQuote, selectedSymbol, visibleWorkspace],
   );
   const workspaceAssets = useMemo(
-    () => (assets.length > 0 ? assets : derivedAsset ? [derivedAsset] : []),
-    [assets, derivedAsset],
+    () => (assets.length > 0 ? assets.map((asset) =>
+      selectedQuote && asset.symbol === selectedSymbol ? derivedAsset || asset : asset
+    ) : derivedAsset ? [derivedAsset] : []),
+    [assets, derivedAsset, selectedQuote, selectedSymbol],
   );
-  const selectedAsset = workspaceAssets.find((asset) => asset.symbol === selectedSymbol) ?? workspaceAssets[0];
+  const selectedAsset = selectedQuote && !exactWorkspace ? undefined :
+    workspaceAssets.find((asset) => asset.symbol === selectedSymbol) ?? workspaceAssets[0];
   const hasAnalysisBootstrap =
     workspaceAssets.length > 0 ||
     Boolean(overviewResource.data?.watchlist?.length) ||
@@ -186,7 +215,7 @@ export function WatchlistScreen() {
 
   const fetchChart = useCallback(() => intelligenceApi.marketChart7d(selectedSymbol), [selectedSymbol]);
   const chartResource = useApiResource<MarketChartPoint[]>({
-    enabled: hasAnalysisBootstrap,
+    enabled: hasAnalysisBootstrap && !selectedQuote,
     fallbackData: [],
     fetcher: fetchChart,
   });
@@ -222,7 +251,7 @@ export function WatchlistScreen() {
     hasAnalysisBootstrap ||
     Boolean(insightResource.data);
   const analysisBootstrapLoading =
-    !hasRenderableAnalysisCore &&
+    (!hasRenderableAnalysisCore || (Boolean(selectedQuote) && !exactWorkspace)) &&
     (overviewResource.loading || latestResource.loading || workspaceAssetResource.loading);
   const analysisFallbackError =
     overviewResource.error?.message ||
@@ -232,7 +261,7 @@ export function WatchlistScreen() {
 
   async function selectAsset(symbol: string) {
     await triggerHaptic('selection');
-    updateContext({ asset: symbol, screen: 'Analysis' });
+    updateContext({ asset: symbol, quoteCurrency: null, screen: 'Analysis' });
   }
 
   async function openAssetActions(asset: MobileOverviewAsset) {
@@ -303,6 +332,7 @@ export function WatchlistScreen() {
       prefill: `Explain the ${item.row.label} indicator for ${selectedSymbol} in the ${item.sectionTitle} section. Summarize what ${item.row.value} means, why the current state is ${item.row.development}, and what I should monitor next.`,
       source: 'analysis-indicator-row',
       symbol: selectedSymbol,
+      quoteCurrency: selectedQuote,
     });
   }
 
@@ -447,10 +477,24 @@ export function WatchlistScreen() {
               onSelect={selectAsset}
               selectedSymbol={selectedSymbol}
             />
+            {availableQuotes.length > 0 ? (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {availableQuotes.map((quote) => (
+                  <Pressable
+                    key={quote}
+                    accessibilityRole="button"
+                    onPress={() => updateContext({ quoteCurrency: quote })}
+                    style={{ borderColor: selectedQuote === quote ? '#2563EB' : '#CBD5E1', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}
+                  >
+                    <Text>{selectedSymbol}/{quote}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
             <CompactLiveChart
               errorMessage={chartResource.error?.message}
               interval={chartInterval}
-              symbol={selectedSymbol}
+              symbol={selectedQuote ? visibleWorkspace?.asset?.tradingview_symbol || '' : selectedSymbol}
               loading={chartResource.loading}
               onIntervalChange={setChartInterval}
             />
@@ -462,13 +506,13 @@ export function WatchlistScreen() {
                 overviewResource.refresh();
                 workspaceAssetResource.refresh();
               }}
-              workspaceAsset={workspaceAssetResource.data}
+              workspaceAsset={visibleWorkspace}
             />
             <AnalysisEvidenceSections
               asset={selectedAsset}
               hiddenIndicatorKeys={hiddenIndicatorKeys}
               onHideIndicator={promptHideIndicator}
-              workspaceAsset={workspaceAssetResource.data}
+              workspaceAsset={visibleWorkspace}
               onAskFinnIndicator={askFinnAboutIndicator}
               onOpenIndicatorActions={openIndicatorActions}
               onOpenIndicatorDetail={openIndicatorDetail}

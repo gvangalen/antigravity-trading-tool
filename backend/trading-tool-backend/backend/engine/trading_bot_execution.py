@@ -87,12 +87,26 @@ def _safe_json(v, fallback):
 
 def _get_live_price(
     conn, symbol: str, max_age_seconds: Optional[int] = None,
-    *, paper_execution: bool = False,
+    *, paper_execution: bool = False, market_id: int | None = None,
 ) -> Optional[float]:
     symbol = (symbol or DEFAULT_SYMBOL).upper()
 
     with conn.cursor() as cur:
-        cur.execute(
+        if market_id is not None:
+            cur.execute("""
+                SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.source_observed_at)) AS age_seconds,
+                       tm.quote_currency, m.source_observed_at, m.quote_currency
+                FROM market_data m
+                JOIN trading_markets tm ON tm.id=m.market_id
+                WHERE m.market_id=%s AND tm.id=%s AND tm.asset_symbol=%s
+                  AND m.symbol=tm.asset_symbol
+                  AND tm.venue='BINANCE' AND tm.is_active=TRUE
+                  AND m.price IS NOT NULL AND m.source_observed_at IS NOT NULL
+                  AND m.quote_currency=tm.quote_currency
+                ORDER BY m.source_observed_at DESC, m.timestamp DESC LIMIT 1
+            """, (market_id, market_id, symbol))
+        else:
+            cur.execute(
             """
             SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
                    a.quote_currency, m.source_observed_at, m.quote_currency
@@ -107,7 +121,7 @@ def _get_live_price(
             LIMIT 1
             """,
             (symbol,),
-        )
+            )
         row = cur.fetchone()
 
     if not row or row[0] is None:
@@ -148,10 +162,16 @@ def _get_live_price(
     return eur_price
 
 
-def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True) -> dict:
+def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True,
+                                market_id: int | None = None) -> dict:
     """Read the verified row quote and independent dated FX sources."""
     with conn.cursor() as cur:
-        cur.execute("SELECT quote_currency FROM asset_catalog WHERE symbol=%s LIMIT 1", (symbol,))
+        if market_id is not None:
+            cur.execute("""SELECT quote_currency FROM trading_markets
+                WHERE id=%s AND asset_symbol=%s AND venue='BINANCE' AND is_active=TRUE LIMIT 1""",
+                (market_id, symbol))
+        else:
+            cur.execute("SELECT quote_currency FROM asset_catalog WHERE symbol=%s LIMIT 1", (symbol,))
         row = cur.fetchone()
     catalog_quote = str(row[0] or "").upper() if row else ""
     with conn.cursor() as cur:
@@ -163,14 +183,22 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True) 
             str(currency).upper(): {"eur_per_unit": factor, "observed_at": at}
             for currency, factor, at in cur.fetchall()
         }
-        cur.execute("""
+        if market_id is not None:
+            cur.execute("""
+                SELECT price, source_observed_at, quote_currency FROM market_data
+                WHERE symbol=%s AND market_id=%s AND price IS NOT NULL
+                  AND source_observed_at IS NOT NULL AND quote_currency=%s
+                ORDER BY source_observed_at DESC, timestamp DESC LIMIT 1
+            """, (symbol, market_id, catalog_quote))
+        else:
+            cur.execute("""
             SELECT price, source_observed_at, quote_currency FROM market_data
             WHERE symbol=%s AND price IS NOT NULL
               AND market_id IS NULL
               AND source_observed_at IS NOT NULL
               AND quote_currency IS NOT NULL
             ORDER BY source_observed_at DESC, timestamp DESC LIMIT 1
-        """, (symbol,))
+            """, (symbol,))
         market_row = cur.fetchone()
     from backend.services.portfolio_fx_service import trade_quote_context
     verified = trade_quote_context(
@@ -916,6 +944,61 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
 
     return bots
 
+
+def _verified_pair_bot_identity(conn, user_id: int, bot: dict) -> dict | None:
+    """Require the bot, strategy, setup and active provider market to agree."""
+    market_id = bot.get("market_id")
+    if market_id is None:
+        return None
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT tm.asset_symbol, tm.quote_currency, tm.provider_symbol
+            FROM bot_configs b
+            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+            JOIN setups st ON st.id=s.setup_id AND st.user_id=b.user_id
+            JOIN trading_markets tm ON tm.id=b.market_id
+            WHERE b.id=%s AND b.user_id=%s AND b.strategy_id=%s
+              AND b.market_id=%s AND s.market_id=b.market_id
+              AND st.market_id=b.market_id AND st.id=%s
+              AND tm.asset_symbol=st.symbol AND tm.venue='BINANCE'
+              AND tm.is_active=TRUE AND tm.quote_currency IN ('EUR','USDT')
+            LIMIT 1
+        """, (bot["bot_id"], user_id, bot["strategy_id"], market_id, bot["setup_id"]))
+        row = cur.fetchone()
+    if not row or str(row[0]).upper() != str(bot.get("symbol") or "").upper():
+        return None
+    return {"market_id": int(market_id), "symbol": str(row[0]).upper(),
+            "quote_currency": str(row[1]).upper(), "provider_symbol": str(row[2])}
+
+
+def _require_pair_paper_order_identity(conn, *, user_id: int, bot_id: int,
+                                       decision_id: int, market_id: int,
+                                       symbol: str) -> str:
+    """Recheck every persisted owner-bound identity before a Paper fill."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT tm.quote_currency
+            FROM bot_configs b
+            JOIN bot_decisions d ON d.bot_id=b.id AND d.user_id=b.user_id
+            JOIN bot_orders o ON o.decision_id=d.id AND o.bot_id=b.id AND o.user_id=b.user_id
+            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+            JOIN setups st ON st.id=s.setup_id AND st.user_id=b.user_id
+            JOIN trading_markets tm ON tm.id=b.market_id
+            WHERE b.id=%s AND b.user_id=%s AND d.id=%s AND b.market_id=%s
+              AND b.is_live=FALSE AND b.is_active=TRUE
+              AND d.market_id=b.market_id AND o.market_id=b.market_id
+              AND s.market_id=b.market_id AND st.market_id=b.market_id
+              AND d.strategy_id=s.id AND d.setup_id=st.id
+              AND d.symbol=%s AND o.symbol=d.symbol AND st.symbol=d.symbol
+              AND tm.asset_symbol=d.symbol AND tm.venue='BINANCE'
+              AND tm.is_active=TRUE AND tm.quote_currency IN ('EUR','USDT')
+            LIMIT 1
+        """, (bot_id, user_id, decision_id, market_id, symbol))
+        row = cur.fetchone()
+    if not row or str(row[0]).upper() not in {"EUR", "USDT"}:
+        raise BotSafetyBlock("Het gekozen handelspaar van deze Paper-order is niet bevestigd.")
+    return str(row[0]).upper()
+
 # =====================================================
 # 📦 Bot Proposal (MARKET_DATA FIXED)
 # =====================================================
@@ -978,11 +1061,13 @@ def build_order_proposal(
 # =====================================================
 # 📊 Daily scores (single source of truth)
 # =====================================================
-def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC") -> Dict[str, Any]:
+def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC",
+                      market_id: int | None = None) -> Dict[str, Any]:
     """Read only current, source-verified Score 2.0 components."""
     symbol = (symbol or DEFAULT_SYMBOL).upper()
 
     with conn.cursor() as cur:
+        market_scope = "AND market_id=%s" if market_id is not None else "AND market_id IS NULL"
         cur.execute(
             """
             SELECT macro_score, technical_score, market_score, calculated_at, indicator_evidence
@@ -990,10 +1075,11 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
             WHERE user_id=%s
               AND report_date=%s
               AND symbol=%s
-              AND market_id IS NULL
+              """ + market_scope + """
             LIMIT 1
             """,
-            (user_id, report_date, symbol),
+            (user_id, report_date, symbol, market_id) if market_id is not None
+            else (user_id, report_date, symbol),
         )
         row = cur.fetchone()
 
@@ -1006,7 +1092,8 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
     macro, technical, market, calculated_at, indicator_evidence = row
     score_row = {"calculated_at": calculated_at, "indicator_evidence": indicator_evidence}
 
-    source_fresh = _benchmark_component_source_freshness(conn, user_id, symbol, score_row)
+    source_fresh = _benchmark_component_source_freshness(
+        conn, user_id, symbol, score_row, market_id=market_id)
     verified = {
         "macro": _verified_score(macro) if source_fresh["macro_score"] else None,
         "technical": _verified_score(technical) if source_fresh["technical_score"] else None,
@@ -1025,7 +1112,8 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
     }
 
 
-def _benchmark_component_source_freshness(conn, user_id: int, symbol: str, score_row: dict) -> dict[str, bool]:
+def _benchmark_component_source_freshness(conn, user_id: int, symbol: str, score_row: dict,
+                                          market_id: int | None = None) -> dict[str, bool]:
     """Use the same raw-source freshness rule as FINN and reports."""
     from backend.services.setup_market_match_sync import _fresh
 
@@ -1033,7 +1121,9 @@ def _benchmark_component_source_freshness(conn, user_id: int, symbol: str, score
     for category in ("macro", "technical", "market"):
         component = f"{category}_score"
         try:
-            result[component] = _fresh(conn, user_id, symbol, category, score_row)
+            result[component] = (_fresh(conn, user_id, symbol, category, score_row,
+                                        market_id=market_id) if market_id is not None
+                                 else _fresh(conn, user_id, symbol, category, score_row))
         except Exception:
             logger.exception("Cannot verify %s source freshness", component)
             result[component] = False
@@ -1059,7 +1149,7 @@ def _get_saved_setup_conditions(conn, user_id: int, setup_id: int | None) -> dic
         return None
     columns = (
         "id", "name", "symbol", "timeframe", "setup_type",
-        "min_benchmark_score", "max_benchmark_score",
+        "min_benchmark_score", "max_benchmark_score", "market_id",
     )
     with conn.cursor() as cur:
         cur.execute(
@@ -1255,6 +1345,7 @@ def record_bot_ledger_entry(
     meta: Optional[dict] = None,
     fill_sequence: int = 0,
     valuation_version: int = 1,
+    market_id: int | None = None,
 ):
     with conn.cursor() as cur:
         # 1. Insert Ledger
@@ -1262,10 +1353,10 @@ def record_bot_ledger_entry(
             """
             INSERT INTO bot_ledger (
                 user_id, bot_id, decision_id, order_id, entry_type,
-                symbol, cash_delta_eur, qty_delta, price_eur, note, meta,
+                symbol, market_id, cash_delta_eur, qty_delta, price_eur, note, meta,
                 fill_sequence, valuation_version, ts
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
             ON CONFLICT (user_id, order_id, entry_type, fill_sequence)
             WHERE entry_type = 'execute' AND order_id IS NOT NULL
             DO NOTHING
@@ -1278,6 +1369,7 @@ def record_bot_ledger_entry(
                 order_id,
                 entry_type,
                 symbol,
+                market_id,
                 cash_delta_eur,
                 qty_delta,
                 price_eur,
@@ -1493,6 +1585,7 @@ def _persist_bot_order(
     decision_id: int,
     order: dict,
     is_live: bool = False,
+    market_id: int | None = None,
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -1502,6 +1595,7 @@ def _persist_bot_order(
                 bot_id,
                 decision_id,
                 symbol,
+                market_id,
                 side,
                 order_type,
                 quote_amount_eur,
@@ -1514,7 +1608,7 @@ def _persist_bot_order(
             )
             VALUES (
                 %s,%s,%s,
-                %s,%s,
+                %s,%s,%s,
                 'market',
                 %s,%s,%s,
                 %s,
@@ -1528,6 +1622,7 @@ def _persist_bot_order(
                 bot_id,
                 decision_id,
                 order["symbol"],
+                market_id,
                 order["side"],
                 order["quote_amount_eur"],
                 order["estimated_price"],
@@ -1690,6 +1785,7 @@ def _persist_decision_and_order(
     decision: Dict[str, Any],
     scores: Dict[str, Any],
     setup_revision: Optional[str] = None,
+    market_id: int | None = None,
 ) -> int:
 
     action = _normalize_action(decision.get("action"))
@@ -1724,6 +1820,7 @@ def _persist_decision_and_order(
     scores_payload = {
         "score_semantics": "verified_score_2",
         "setup_revision": setup_revision,
+        "market_id": market_id,
         **verified_components,
         "setup": (scores.get("_setup_match") or {}).get("score"),
         "setup_match": decision.get("setup_match"),
@@ -1799,6 +1896,7 @@ def _persist_decision_and_order(
                 strategy_id,
                 setup_id,
                 symbol,
+                market_id,
                 decision_date,
                 decision_ts,
                 action,
@@ -1812,7 +1910,7 @@ def _persist_decision_and_order(
             )
             VALUES (
                 %s,%s,%s,%s,
-                %s,%s,
+                %s,%s,%s,
                 NOW(),
                 %s,%s,%s,
                 %s::jsonb,
@@ -1825,6 +1923,7 @@ def _persist_decision_and_order(
                 strategy_id = EXCLUDED.strategy_id,
                 setup_id = EXCLUDED.setup_id,
                 symbol = EXCLUDED.symbol,
+                market_id = EXCLUDED.market_id,
                 decision_ts = EXCLUDED.decision_ts,
                 action = EXCLUDED.action,
                 confidence = EXCLUDED.confidence,
@@ -1842,6 +1941,7 @@ def _persist_decision_and_order(
                 strategy_id,
                 setup_id,
                 symbol,
+                market_id,
                 report_date,
                 action,
                 confidence,
@@ -1881,7 +1981,8 @@ def _open_paper_trade_lots(
     """
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT l.id, l.qty_delta, l.decision_id, d.scores_json, d.strategy_id
+            SELECT l.id, l.qty_delta, l.decision_id, d.scores_json, d.strategy_id,
+                   l.market_id, d.market_id
             FROM bot_ledger l
             JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
             WHERE l.user_id=%s AND l.bot_id=%s AND l.symbol=%s
@@ -1912,12 +2013,15 @@ def _open_paper_trade_lots(
 def _paper_lot_matches_plan(
     lot: tuple, *, strategy_id: int, currency: str,
     entry: float, stop: float, first_target: float,
+    market_id: int | None = None,
 ) -> bool:
     try:
         lot_strategy_id = int(lot[4])
     except (TypeError, ValueError, OverflowError):
         return False
     if lot_strategy_id != strategy_id:
+        return False
+    if market_id is not None and (len(lot) < 7 or lot[5] != market_id or lot[6] != market_id):
         return False
     scores = _safe_json(lot[3], {})
     plan = scores.get("trade_plan") if isinstance(scores, dict) else None
@@ -2009,15 +2113,21 @@ def _maybe_execute_paper_position_exit(
         return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
                 "execution_status": "exit_levels_unavailable"}
     currency = str(data.get("price_currency") or "").upper()
+    if currency == "USDT" and bot.get("market_id") is None:
+        return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
+                "execution_status": "exit_trading_pair_unconfirmed"}
     if not all(_paper_lot_matches_plan(
         lot, strategy_id=int(bot_row[0]), currency=currency,
         entry=entry, stop=stop, first_target=first_target,
+        market_id=bot.get("market_id"),
     ) for lot in open_lots):
         # Every still-open buy must have the same confirmed exit levels.
         return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
                 "execution_status": "exit_levels_changed"}
-    context = _get_trade_quote_fx_context(conn, symbol, require_usd=currency == "USD")
-    if currency not in {"EUR", "USD"}:
+    context = _get_trade_quote_fx_context(
+        conn, symbol, require_usd=currency == "USD",
+        **({"market_id": bot["market_id"]} if bot.get("market_id") is not None else {}))
+    if currency not in {"EUR", "USD", "USDT"}:
         return {"bot_id": bot_id, "symbol": symbol, "action": "hold",
                 "execution_status": "exit_quote_unavailable"}
     if str(context.get("quote_currency") or "").upper() != currency:
@@ -2044,6 +2154,7 @@ def _maybe_execute_paper_position_exit(
     evidence = {
         "decision_kind": "paper_exit", "trigger": trigger,
         "source_price_currency": currency, "source_price": source_price,
+        "market_id": bot.get("market_id"),
         "market_quote_currency": context.get("quote_currency"),
         "source_price_at": checked_at.isoformat() if checked_at else None,
         "saved_entry": entry, "saved_stop_loss": stop,
@@ -2055,16 +2166,16 @@ def _maybe_execute_paper_position_exit(
     with conn.cursor() as cur:
         cur.execute("""
             INSERT INTO bot_decisions
-                (user_id, bot_id, strategy_id, setup_id, symbol, decision_date,
+                (user_id, bot_id, strategy_id, setup_id, symbol, market_id, decision_date,
                  decision_kind, position_open_ledger_id, decision_ts, action,
                  confidence, amount_eur, scores_json, reason_json, status)
-            VALUES (%s,%s,%s,%s,%s,%s,'paper_exit',%s,NOW(),'sell','high',
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'paper_exit',%s,NOW(),'sell','high',
                     %s,%s::jsonb,%s::jsonb,'planned')
             ON CONFLICT (user_id, bot_id, position_open_ledger_id)
             WHERE decision_kind='paper_exit' DO NOTHING
             RETURNING id
         """, (
-            user_id, bot_id, bot_row[0], setup_id, symbol, report_date,
+            user_id, bot_id, bot_row[0], setup_id, symbol, bot.get("market_id"), report_date,
             position_open_ledger_id, round(qty * eur_price, 2),
             json.dumps(evidence), json.dumps([trigger]),
         ))
@@ -2093,6 +2204,7 @@ def _maybe_execute_paper_position_exit(
         _persist_bot_order(
             conn=conn, user_id=user_id, bot_id=bot_id,
             decision_id=decision_id, order=order, is_live=False,
+            market_id=bot.get("market_id"),
         )
         execution_status = _auto_execute_decision(
             conn=conn, user_id=user_id, bot_id=bot_id,
@@ -2158,13 +2270,17 @@ def run_trading_bot_execution(
         price_cache = {}
 
         for bot in bots:
-
-            # Pair-bound plans cannot use the legacy symbol-only score and
-            # price readers. Keep them active but without a new decision until
-            # those readers are keyed by the exact verified market.
-            if bot.get("market_id") is not None:
-                skip_reasons[bot["bot_id"]] = "exact_market_runtime_pending"
-                continue
+            market_id = bot.get("market_id")
+            pair_identity = None
+            if market_id is not None:
+                pair_identity = _verified_pair_bot_identity(conn, user_id, bot)
+                if pair_identity is None:
+                    skip_reasons[bot["bot_id"]] = "exact_market_identity_invalid"
+                    continue
+                if bot.get("is_live"):
+                    # Live execution needs a separate exchange pair contract.
+                    skip_reasons[bot["bot_id"]] = "exact_market_live_execution_unavailable"
+                    continue
 
             exit_result = (
                 _maybe_execute_paper_position_exit(
@@ -2211,12 +2327,14 @@ def run_trading_bot_execution(
             # =========================
             # SCORES (SYMBOL SPECIFIC)
             # =========================
-            scores = _get_daily_scores(conn, user_id, report_date, symbol)
+            scores = _get_daily_scores(conn, user_id, report_date, symbol,
+                                       market_id=market_id) if market_id is not None else _get_daily_scores(
+                                           conn, user_id, report_date, symbol)
 
             # =========================
             # LIVE PRICE (CACHED)
             # =========================
-            price_key = (symbol, bool(bot.get("is_live")))
+            price_key = (symbol, market_id, bool(bot.get("is_live")))
             if price_key not in price_cache:
                 if bot.get("is_live"):
                     from backend.services.bot_service import LIVE_MARKET_PRICE_STALE_AFTER_SECONDS
@@ -2231,7 +2349,9 @@ def run_trading_bot_execution(
                             logger.warning("Verified live EUR price unavailable for %s", symbol)
                     price_cache[price_key] = live_price
                 else:
-                    price_cache[price_key] = _get_live_price(conn, symbol)
+                    price_cache[price_key] = (_get_live_price(conn, symbol, market_id=market_id,
+                                                               paper_execution=True)
+                                              if market_id is not None else _get_live_price(conn, symbol))
             live_price = price_cache[price_key]
 
             # =========================
@@ -2260,7 +2380,8 @@ def run_trading_bot_execution(
                 scores["_benchmark_weights"] = None
                 scores["_benchmark_weight_source"] = "unavailable"
             saved_setup = _get_saved_setup_conditions(conn, user_id, bot.get("setup_id"))
-            if saved_setup and str(saved_setup.get("symbol") or "").upper() == symbol:
+            if (saved_setup and str(saved_setup.get("symbol") or "").upper() == symbol
+                    and saved_setup.get("market_id") == market_id):
                 current_match = match_setup_from_daily_scores(saved_setup, scores, scores.get("_benchmark_weights"))
             else:
                 current_match = match_setup_from_daily_scores({}, scores, scores.get("_benchmark_weights"))
@@ -2322,16 +2443,24 @@ def run_trading_bot_execution(
             if setup_payload.get("setup_type") == "trade":
                 trade_fx_context = _get_trade_quote_fx_context(
                     conn, symbol, require_usd=setup_payload.get("price_currency") == "USD",
+                    **({"market_id": market_id} if market_id is not None else {}),
                 )
                 setup_payload["market_quote_currency"] = trade_fx_context["quote_currency"]
                 if not bot.get("is_live"):
                     live_price = trade_fx_context.get("live_price_eur")
                     setup_payload["market_price_verified"] = live_price is not None
                     setup_payload["market_price_reason"] = trade_fx_context.get("reason")
-                if setup_payload.get("price_currency") == "USD" and snapshot:
-                    factor = trade_fx_context.get("eur_per_unit")
+                if (market_id is not None and setup_payload.get("price_currency") !=
+                        pair_identity["quote_currency"]):
+                    setup_payload["price_currency_confirmed"] = False
+                    setup_payload["market_price_verified"] = False
+                    live_price = None
+                if setup_payload.get("price_currency") in {"USD", "USDT"} and snapshot:
+                    factor = (trade_fx_context.get("market_fx_eur_per_unit")
+                              if market_id is not None else trade_fx_context.get("eur_per_unit"))
                     if (not bot.get("is_live") and setup_payload.get("price_currency_confirmed") and
-                            trade_fx_context.get("quote_currency") in {"USD", "USDT", "EUR"}
+                            (market_id is None or
+                             trade_fx_context.get("quote_currency") == setup_payload.get("price_currency"))
                             and factor and live_price is not None):
                         source_trade_levels = dict(snapshot)
                         snapshot = _convert_trade_snapshot_to_eur(snapshot, factor)
@@ -2486,6 +2615,7 @@ def run_trading_bot_execution(
             decision = {
                 "bot_id": bot["bot_id"],
                 "symbol": symbol,
+                "market_id": market_id,
 
                 "action": action,
                 "confidence": _map_confidence(float(brain.get("confidence") or 0.0)),
@@ -2549,6 +2679,7 @@ def run_trading_bot_execution(
                 decision=decision,
                 scores=scores,
                 setup_revision=bot.get("setup_revision"),
+                market_id=market_id,
             )
             if decision_id is None:
                 continue
@@ -2581,6 +2712,7 @@ def run_trading_bot_execution(
                     decision_id=decision_id,
                     order=order,
                     is_live=bool(bot.get("is_live")),
+                    market_id=market_id,
                 )
 
                 # A planned order is not consent to execute it. Manual and
@@ -2761,7 +2893,8 @@ def _recheck_auto_buy_limits(
         )
 
 
-def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: str) -> Optional[float]:
+def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: str,
+                               market_id: int | None = None) -> Optional[float]:
     """Return a fresh EUR execution price for a trade or None for DCA."""
     with conn.cursor() as cur:
         cur.execute(
@@ -2781,7 +2914,9 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
     plan = _safe_json(row[2], {})
     source = str(plan.get("source_price_currency") or "").upper()
     levels = plan.get("source_levels") or {}
-    if not saved.get("price_currency_confirmed") or source not in {"EUR", "USD"}:
+    if source == "USDT" and market_id is None:
+        raise BotSafetyBlock("Voor USDT-prijsniveaus ontbreekt een bevestigd handelspaar.")
+    if not saved.get("price_currency_confirmed") or source not in {"EUR", "USD", "USDT"}:
         raise BotSafetyBlock("De koersvaluta van deze Paper-beslissing is niet bevestigd. Maak een nieuwe beslissing.")
     if str(saved.get("price_currency") or "").upper() != source:
         raise BotSafetyBlock("De koersvaluta van de strategie is gewijzigd. Maak een nieuwe beslissing.")
@@ -2799,11 +2934,17 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
             or not current_targets or current_entry != entry
             or current_stop != planned_stop or current_targets != planned_targets):
         raise BotSafetyBlock("De strategieprijzen zijn gewijzigd. Maak een nieuwe Paper-beslissing.")
-    context = _get_trade_quote_fx_context(conn, symbol, require_usd=source == "USD")
+    context = _get_trade_quote_fx_context(
+        conn, symbol, require_usd=source == "USD",
+        **({"market_id": market_id} if market_id is not None else {}))
     price = context.get("market_price_eur")
     if price is None:
         raise BotSafetyBlock("De marktprijs of valutakoers is niet recent genoeg voor Paper-uitvoering.")
-    entry_eur = entry * float(context["usd_fx_eur_per_unit"]) if source == "USD" else entry
+    if market_id is not None and context.get("quote_currency") != source:
+        raise BotSafetyBlock("Het handelspaar wijkt af van de opgeslagen koersniveaus.")
+    factor = (context.get("market_fx_eur_per_unit") if market_id is not None
+              else context.get("usd_fx_eur_per_unit"))
+    entry_eur = entry * float(factor) if source in {"USD", "USDT"} else entry
     if not entry_eur <= price <= entry_eur * 1.01:
         raise BotSafetyBlock("De actuele prijs ligt buiten de opgeslagen instapzone. Maak een nieuwe Paper-beslissing.")
     return price
@@ -2818,7 +2959,7 @@ def _paper_exit_price_in_strategy_currency(context: dict, currency: str) -> floa
 
 def _recheck_paper_position_exit(
     conn, *, user_id: int, bot_id: int, decision_id: int, symbol: str,
-    order_qty: float,
+    order_qty: float, market_id: int | None = None,
 ) -> Optional[float]:
     """Verify a tagged Paper exit against the current position and strategy."""
     with conn.cursor() as cur:
@@ -2853,7 +2994,7 @@ def _recheck_paper_position_exit(
     except (IndexError, KeyError, TypeError, ValueError, OverflowError) as exc:
         raise BotSafetyBlock("De opgeslagen Paper-exit is niet volledig onderbouwd.") from exc
     if (not isinstance(data, dict) or not data.get("price_currency_confirmed")
-            or source not in {"EUR", "USD"}
+            or source not in {"EUR", "USD", "USDT"}
             or not all(math.isfinite(value) and value > 0 for value in (entry, stop, target, planned_qty))
             or not stop < entry < target
             or evidence.get("saved_entry") != entry
@@ -2862,6 +3003,8 @@ def _recheck_paper_position_exit(
             or evidence.get("source_price_currency") != source
             or planned_qty != order_qty):
         raise BotSafetyBlock("De Paper-positie of strategie is gewijzigd; de exit is gestopt.")
+    if source == "USDT" and market_id is None:
+        raise BotSafetyBlock("Voor deze Paper-exit ontbreekt een bevestigd USDT-handelspaar.")
     with conn.cursor() as cur:
         cur.execute("""
             SELECT position_qty FROM bot_portfolios
@@ -2878,9 +3021,12 @@ def _recheck_paper_position_exit(
             or not all(_paper_lot_matches_plan(
                 lot, strategy_id=int(bot_strategy), currency=source,
                 entry=entry, stop=stop, first_target=target,
+                market_id=market_id,
             ) for lot in open_lots)):
         raise BotSafetyBlock("De open Paper-aankopen hebben geen gezamenlijk bevestigd uitstapplan.")
-    context = _get_trade_quote_fx_context(conn, symbol, require_usd=source == "USD")
+    context = _get_trade_quote_fx_context(
+        conn, symbol, require_usd=source == "USD",
+        **({"market_id": market_id} if market_id is not None else {}))
     if str(context.get("quote_currency") or "").upper() != source:
         raise BotSafetyBlock("Het handelspaar van de Paper-exit is niet bevestigd.")
     try:
@@ -2943,10 +3089,15 @@ def _auto_execute_decision(
         raise RuntimeError("Automatic execution requires an active auto bot")
     if bool(current_bot[1]) != bool(is_live):
         raise RuntimeError("Bot execution environment changed")
-    if current_bot[8] is not None:
-        raise BotSafetyBlock("Deze bot wacht op koers- en scoregegevens voor zijn gekozen handelspaar.")
+    market_id = current_bot[8]
+    if market_id is not None and is_live:
+        raise BotSafetyBlock("Live-uitvoering voor dit handelspaar is nog niet beschikbaar.")
     symbol = (order.get("symbol") or DEFAULT_SYMBOL).upper()
     side = (order.get("side") or "buy").lower().strip()
+    if market_id is not None:
+        _require_pair_paper_order_identity(
+            conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+            market_id=market_id, symbol=symbol)
 
     qty = float(order.get("estimated_qty") or 0.0)
     price = float(order.get("estimated_price") or 0.0)
@@ -2957,14 +3108,17 @@ def _auto_execute_decision(
     if not is_live:
         checked_trade_price = _recheck_paper_trade_entry(
             conn, user_id=user_id, decision_id=decision_id, symbol=symbol,
+            **({"market_id": market_id} if market_id is not None else {}),
         ) if side == "buy" else None
         if side == "sell":
             checked_trade_price = _recheck_paper_position_exit(
                 conn, user_id=user_id, bot_id=bot_id,
                 decision_id=decision_id, symbol=symbol, order_qty=qty,
+                **({"market_id": market_id} if market_id is not None else {}),
             )
         price = checked_trade_price if checked_trade_price is not None else _get_live_price(
             conn, symbol, paper_execution=True,
+            **({"market_id": market_id} if market_id is not None else {}),
         )
         if price is None:
             raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
@@ -3122,6 +3276,7 @@ def _auto_execute_decision(
                 order_id=bot_order_id,
                 note="Auto execution",
                 valuation_version=1 if is_live else 2,
+                market_id=market_id,
                 meta={
                     "side": side,
                     "price": price,
@@ -3198,8 +3353,7 @@ def execute_manual_decision(
         bot_row = cur.fetchone()
     if bot_row is None:
         raise RuntimeError("Bot not found")
-    if bot_row[7] is not None:
-        raise BotSafetyBlock("Deze bot wacht op koers- en scoregegevens voor zijn gekozen handelspaar.")
+    market_id = bot_row[7]
     bot_live = bool(bot_row[0])
     if not bot_row[1]:
         raise RuntimeError("Bot is paused")
@@ -3207,6 +3361,16 @@ def execute_manual_decision(
         # This legacy confirmation route still books a sent limit order as a
         # fill. Use the reconciled Live manual-order path instead.
         raise RuntimeError("Live botbeslissing kan pas na bevestigde exchange-fill worden uitgevoerd")
+    if market_id is not None:
+        with conn.cursor() as cur:
+            cur.execute("SELECT symbol FROM bot_decisions WHERE id=%s AND bot_id=%s AND user_id=%s",
+                        (decision_id, bot_id, user_id))
+            decision_row = cur.fetchone()
+        if not decision_row:
+            raise BotSafetyBlock("De opgeslagen Paper-beslissing is niet beschikbaar.")
+        _require_pair_paper_order_identity(
+            conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+            market_id=market_id, symbol=str(decision_row[0]).upper())
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
         user_id=user_id,
@@ -3251,9 +3415,11 @@ def execute_manual_decision(
         if not bot_live:
             checked_trade_price = _recheck_paper_trade_entry(
                 conn, user_id=user_id, decision_id=decision_id, symbol=symbol,
+                **({"market_id": market_id} if market_id is not None else {}),
             ) if side == "buy" else None
             price = checked_trade_price if checked_trade_price is not None else _get_live_price(
                 conn, symbol, paper_execution=True,
+                **({"market_id": market_id} if market_id is not None else {}),
             )
             if price is None:
                 raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
@@ -3319,6 +3485,7 @@ def execute_manual_decision(
                 order_id=bot_order_id,
                 note="Manual execution",
                 valuation_version=1 if bot_live else 2,
+                market_id=market_id,
                 meta={
                     "side": side,
                     "price": price,

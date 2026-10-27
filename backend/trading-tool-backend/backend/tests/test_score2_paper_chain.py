@@ -129,7 +129,7 @@ class _Cursor:
             self.rows = []
         elif "SELECT indicator FROM user_indicator_configs" in sql:
             self.rows = [(self.store.names[params[1]],)]
-        elif "SELECT indicator, updated_at FROM user_indicator_configs" in sql:
+        elif "updated_at FROM user_indicator_configs" in sql:
             self.rows = [(self.store.names[params[1]], self.store.now - timedelta(hours=2))]
         elif "SELECT DISTINCT ON" in sql:
             category = next(key for key, table in (
@@ -220,11 +220,15 @@ def test_pair_bound_auto_bot_cannot_execute_queued_base_asset_order():
             return False
 
         def execute(self, sql, params):
-            assert "FROM bot_configs" in sql and "FOR UPDATE" in sql
-            assert params == (11, 7)
+            assert "FROM bot_configs" in sql
+            self.locked = "FOR UPDATE" in sql
+            if self.locked:
+                assert params == (11, 7)
+            else:
+                assert params == (11, 7, 13, 73, "BTC")
 
         def fetchone(self):
-            return ("auto", False, True, 100, 200, 50, 5, 100, 73)
+            return ("auto", False, True, 100, 200, 50, 5, 100, 73) if self.locked else None
 
     class Connection:
         def cursor(self):

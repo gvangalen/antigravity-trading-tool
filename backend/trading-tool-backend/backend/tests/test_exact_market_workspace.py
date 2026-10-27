@@ -39,6 +39,7 @@ def test_exact_market_workspace_never_borrows_base_quote_or_score(monkeypatch):
     }))
     workspace = SimpleNamespace(
         _macro_rows=AsyncMock(return_value=[]),
+        get_watchlist=AsyncMock(return_value={"rows": []}),
         _category_payload=lambda rows, *_args, **_kwargs: {"rows": rows, "score": {}},
     )
     monkeypatch.setattr(module, "MarketDataRepository", lambda _session: quote_reader)
@@ -58,3 +59,33 @@ def test_exact_market_workspace_never_borrows_base_quote_or_score(monkeypatch):
 def test_unknown_exact_market_returns_no_legacy_workspace():
     session = SimpleNamespace(execute=AsyncMock(return_value=_Result([])))
     assert asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR")) is None
+
+
+def test_non_daily_period_does_not_show_daily_combined_score(monkeypatch):
+    observed = datetime.now(timezone.utc).replace(tzinfo=None)
+    market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
+                             tradingview_symbol="BINANCE:ETHEUR")
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[
+        _Result([market]), _Result([]), _Result([]),
+    ]))
+    matcher = SimpleNamespace(for_asset=AsyncMock(return_value={
+        "benchmark_score": 65, "benchmark_weights": {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3},
+        "reported_scores": {"market_score": 50, "macro_score": 80, "technical_score": 65},
+        "component_source_status": {}, "source_status": "available", "matches": [],
+        "component_source_observed_at": {},
+    }))
+    workspace = SimpleNamespace(
+        _macro_rows=AsyncMock(return_value=[]),
+        get_watchlist=AsyncMock(return_value={"rows": []}),
+        _category_payload=lambda rows, *_args, **_kwargs: {"rows": rows, "score": {}},
+    )
+    monkeypatch.setattr(module, "MarketDataRepository", lambda _session: SimpleNamespace(
+        get_latest_exact_market_snapshot=AsyncMock(return_value=None)))
+    monkeypatch.setattr(module, "SetupMarketMatchService", lambda _session: matcher)
+    monkeypatch.setattr(module, "WorkspaceDataService", lambda _session: workspace)
+
+    result = asyncio.run(module.ExactMarketWorkspaceService(session).get(
+        7, "ETH", "EUR", periods={"market": "week", "macro": "day", "technical": "day"}))
+    assert result["daily"]["benchmark_score"] == 65
+    assert result["combined"]["score"] is None
+    assert result["combined"]["source_status"] == "unsupported_period"

@@ -140,10 +140,10 @@ class TradingMarketService:
                 asset_symbol, quote_currency, venue, provider, provider_symbol,
                 tradingview_symbol, source_verified_at
             )
-            SELECT :base, :quote, 'BINANCE', 'binance', :provider_symbol,
+            SELECT CAST(:base AS TEXT), :quote, 'BINANCE', 'binance', :provider_symbol,
                    :tradingview_symbol, :verified_at
             WHERE EXISTS (SELECT 1 FROM asset_catalog
-                          WHERE symbol=:base AND asset_class='crypto' AND is_active=TRUE)
+                          WHERE symbol=CAST(:base AS TEXT) AND asset_class='crypto' AND is_active=TRUE)
             ON CONFLICT (asset_symbol, quote_currency, venue) DO UPDATE
             SET source_verified_at=EXCLUDED.source_verified_at,
                 is_active=TRUE

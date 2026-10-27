@@ -19,6 +19,12 @@ class BotToolAdapter:
             bot_id=bot.get("id"),
             name=bot.get("name"),
             symbol=bot.get("symbol") or bot.get("setup_symbol"),
+            market_id=bot.get("market_id") or bot.get("setup_market_id"),
+            quote_currency=bot.get("quote_currency") or bot.get("setup_quote_currency"),
+            pair=(f'{bot.get("symbol") or bot.get("setup_symbol")}/'
+                  f'{bot.get("quote_currency") or bot.get("setup_quote_currency")}')
+                 if (bot.get("symbol") or bot.get("setup_symbol")) and
+                    (bot.get("quote_currency") or bot.get("setup_quote_currency")) else None,
             strategy_id=bot.get("strategy_id"),
             strategy_name=bot.get("strategy_name"),
             setup_id=bot.get("setup_id"),

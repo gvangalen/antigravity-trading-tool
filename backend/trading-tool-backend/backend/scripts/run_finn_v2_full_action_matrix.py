@@ -32,7 +32,7 @@ ACTION_SPECS = (
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
     ("update_indicator_configuration", "Werk mijn technische RSI indicatorconfiguratie voor BTC bij en zet de periode naar 21.", "Pas mijn technische RSI indicatorconfiguratie aan.", "Voor BTC en zet de periode naar 21."),
     ("delete_indicator_configuration", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "Verwijder mijn technische RSI indicatorconfiguratie.", "Voor SOL."),
-    ("create_setup", "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup.", "Maak een swing setup voor SOL.", "Op 4 uur met de naam Matrix Nieuwe Setup."),
+    ("create_setup", "Maak een swing setup voor SOL/USDT op 4 uur met de naam Matrix Nieuwe Setup.", "Maak een swing setup voor SOL.", "Op 4 uur met de naam Matrix Nieuwe Setup voor SOL/USDT."),
     ("update_setup", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur.", "Werk een setup bij.", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur."),
     ("delete_setup", "Verwijder de setup Matrix Delete Setup.", "Verwijder een setup.", "Verwijder de setup Matrix Delete Setup."),
     ("create_strategy", "Maak voor Matrix Strategy Parent een strategie met de naam Matrix Nieuwe Strategie, vaste uitvoering van 100 euro, entry 76000, stop-loss 72000, targets 83000 en 87000 en gebalanceerd risico.", "Maak een strategie voor Matrix Strategy Parent.", "Maak voor Matrix Strategy Parent een strategie met de naam Matrix Nieuwe Strategie, vaste uitvoering van 100 euro, entry 76000, stop-loss 72000, targets 83000 en 87000 en gebalanceerd risico."),
@@ -54,7 +54,11 @@ GUIDED_SLOT_ANSWERS = {
     "create_indicator_configuration": ("Voor ADA.",),
     "update_indicator_configuration": ("Voor BTC.", "Zet de periode op 21."),
     "delete_indicator_configuration": ("Voor SOL.",),
-    "create_setup": ("Op 4 uur.", "Noem hem Matrix Nieuwe Setup."),
+    "create_setup": {
+        "quote_currency": "USDT als koersvaluta; SOL/USDT.",
+        "timeframe": "Op 4 uur.",
+        "name": "Noem hem Matrix Nieuwe Setup.",
+    },
     "update_setup": ("Matrix Update Setup.", "Zet het tijdframe op 1 uur."),
     "delete_setup": ("Matrix Delete Setup.",),
     "create_strategy": {
@@ -358,7 +362,8 @@ def _run_follow_up(base_url: str, token: str, spec: tuple[str, str, str, str], f
     for index in range(len(answers)):
         if isinstance(answers, dict):
             projection = _runtime_record(previous["run_id"])["terminal_projection"]
-            requested_slot = (projection.get("action_draft") or {}).get("requested_slot")
+            requested_slot = ((projection.get("action_draft") or {}).get("requested_slot")
+                              or next(iter(projection.get("missing_inputs") or []), None))
             answer = answers.get(requested_slot)
             if answer is None:
                 break
@@ -518,12 +523,12 @@ def _run_contract(
                 result.get("confirmed_strategy_followup", {}).get("owner_scoped_strategy_read"),
                 result.get("confirmed_strategy_followup", {}).get("mentions_saved_amount"),
             ))),
-            # Only create_strategy requires a multi-turn slot-collection
+            # Setup and strategy creation require a multi-turn slot-collection
             # proof in this action matrix. Other actions are fully proven by
             # their natural first turn plus proposal/confirmation/execution;
             # their follow-up is retained as diagnostic evidence and must not
             # turn an already-completed action into a false matrix failure.
-            (operation_id != "create_strategy" or follow_up["passed"]),
+            (operation_id not in {"create_setup", "create_strategy"} or follow_up["passed"]),
         )) else "FAIL"
     except Exception as exc:  # Preserve all cases in the artifact instead of failing fast.
         result["error"] = f"{type(exc).__name__}:{exc}"

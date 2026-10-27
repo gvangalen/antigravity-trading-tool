@@ -163,9 +163,12 @@ class StrategyRepository:
                 s.created_at,
                 st.symbol AS setup_symbol,
                 st.timeframe AS setup_timeframe,
-                st.name AS setup_name
+                st.name AS setup_name,
+                st.market_id AS setup_market_id,
+                tm.quote_currency AS market_quote_currency
             FROM strategies s
             LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = s.user_id
+            LEFT JOIN trading_markets tm ON tm.id = st.market_id
             WHERE s.user_id = :user_id
         """
         params = {"user_id": user_id}

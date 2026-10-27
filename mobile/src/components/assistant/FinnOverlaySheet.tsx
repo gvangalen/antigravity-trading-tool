@@ -28,6 +28,7 @@ type FinnOverlaySheetProps = {
   prefill?: string;
   source?: string;
   symbol?: string;
+  quoteCurrency?: string | null;
   query: string;
   onQueryChange: Dispatch<SetStateAction<string>>;
   messages: AssistantFeedItem[];
@@ -45,7 +46,7 @@ function renderAssistantText(value: string) {
   );
 }
 
-export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, source, symbol, query, onQueryChange: setQuery, messages, onMessagesChange: setMessages, sessionId, onSessionIdChange: setSessionId, onNewConversation }: FinnOverlaySheetProps) {
+export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, source, symbol, quoteCurrency, query, onQueryChange: setQuery, messages, onMessagesChange: setMessages, sessionId, onSessionIdChange: setSessionId, onNewConversation }: FinnOverlaySheetProps) {
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const { context, updateContext } = useIntelligenceContext();
@@ -82,10 +83,11 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
     () => ({
       page_type: 'FINN',
       symbol: activeSymbol,
+      quote_currency: quoteCurrency || (activeSymbol === context.asset ? context.quoteCurrency : null),
       timeframe: activeTimeframe,
       ...(pendingFeedItemId ? { feed_item_id: pendingFeedItemId } : {}),
     }),
-    [activeSymbol, activeTimeframe, pendingFeedItemId],
+    [activeSymbol, activeTimeframe, context.asset, context.quoteCurrency, pendingFeedItemId, quoteCurrency],
   );
 
   useEffect(() => {

@@ -131,6 +131,17 @@ test("sending from the visible bot ignores a stale chat asset and prior bot flow
   assert.equal(noBot.symbol, "BTC");
 });
 
+test("pair context follows the visible market and clears on asset switch", () => {
+  const livePageContext = { page: "/asset", symbol: "BTC", quote_currency: "EUR" };
+  const current = resolveFinnSubmissionContext({ pathname: "/asset", livePageContext,
+    latestAssistantState: { current_flow: "analysis", symbol: "BTC", quote_currency: "USDT" } });
+  assert.equal(current.quote_currency, "EUR");
+  const switched = resolveFinnSubmissionContext({ pathname: "/asset", livePageContext,
+    chatAssetOverride: "ETH" });
+  assert.equal(switched.symbol, "ETH");
+  assert.equal(switched.quote_currency, null);
+});
+
 test("explicit bot review button keeps its named target instead of the open bot", () => {
   const submitted = resolveFinnSubmissionContext({
     pathname: "/bot",

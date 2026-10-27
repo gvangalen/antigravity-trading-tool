@@ -2953,6 +2953,20 @@ def test_selected_strategy_name_is_a_valid_owner_scoped_read_selector():
     assert call.inputs["strategy_name"] == "Apple Full Strategy"
 
 
+def test_pair_quote_declared_on_read_tool_is_accepted_by_runtime_validator():
+    catalog = FinnResponsesToolCatalog()
+    call = catalog.validate("get_active_plan_and_strategy", {
+        "asset": None, "timeframe": None, "setup_name": None,
+        "strategy_name": None, "reference": "previous_response",
+        "quote_currency": None,
+    })
+    assert call.inputs == {"reference": "previous_response"}
+    scoped = catalog.validate("get_current_asset_scores", {
+        "asset": "BTC", "quote_currency": "EUR",
+    })
+    assert scoped.inputs["quote_currency"] == "EUR"
+
+
 def test_named_strategy_read_uses_full_owner_name_when_model_shortens_it(monkeypatch):
     import backend.services.finn_v2_responses_front_door as front_module
 
@@ -7061,6 +7075,23 @@ def test_persisted_guided_slot_answer_is_bound_before_model_context_switch(
         registry=registry,
         requested_slot=requested_slot,
     ) is expected
+
+
+def test_guided_pair_quote_reply_stays_in_open_setup_contract():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    states = FinnV2OperationStateService()
+    reply = "USDT als koersvaluta; SOL/USDT."
+    assert states._requested_slot_value(
+        field="quote_currency", text=reply, contract=contract,
+    ) == "USDT"
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=reply, contract=contract, registry=registry,
+        requested_slot="quote_currency", collected_inputs={"symbol": "SOL"},
+    )
+    assert states._requested_slot_value(
+        field="quote_currency", text="EUR of USDT?", contract=contract,
+    ) is None
 
 
 def test_weekly_dca_answer_updates_open_eth_draft_before_model_tool_choice():

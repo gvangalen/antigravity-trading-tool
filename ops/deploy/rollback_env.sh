@@ -81,6 +81,23 @@ if [ -f backend/trading-tool-backend/backend/scripts/paper_exit_migration_state.
   fi
 fi
 
+# The exact-market cutover removes the old date-wide score arbiter. A worker
+# from before that cutover would fail every daily score UPSERT after rollback.
+if [ -f backend/trading-tool-backend/backend/scripts/trading_market_migration_state.py ]; then
+  market_identity_schema_state="$(cd backend/trading-tool-backend && \
+    python3 -m backend.scripts.trading_market_migration_state | tail -n 1)"
+  if [ "$market_identity_schema_state" = current ]; then
+    if ! git show "$ROLLBACK_COMMIT:backend/trading-tool-backend/backend/celery_task/store_daily_scores_task.py" \
+        | grep -F 'ON CONFLICT (user_id, symbol, report_date) WHERE market_id IS NULL' >/dev/null; then
+      echo "❌ Rollback target cannot write daily scores against the exact-market schema. Deploy a forward fix." >&2
+      exit 1
+    fi
+  elif [ "$market_identity_schema_state" != legacy ] && [ "$market_identity_schema_state" != expanded ]; then
+    echo "❌ Cannot verify exact-market schema before rollback." >&2
+    exit 1
+  fi
+fi
+
 echo "↩️ Rolling ${ENVIRONMENT} back to ${ROLLBACK_COMMIT}..."
 for attempt in $(seq 1 5); do
   rm -f .git/index.lock .git/refs/remotes/origin/main.lock .git/refs/remotes/origin/main .git/refs/remotes/origin/develop.lock .git/refs/remotes/origin/develop

@@ -592,11 +592,12 @@ def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
             return {"asset": "BTC"}
 
         async def assessment(_user_id, _symbol):
-            return {"symbol": "BTC", "as_of": date.today(), "source_status": "available",
+            return {"symbol": "BTC", "market_id": None, "as_of": date.today(), "source_status": "available",
                     "matches": [match_setup(setup(1, min_benchmark_score=50),
                                             {"macro": 50, "technical": 50, "market": 70})]}
 
         service._ensure_asset = asset
+        service._resolve_read_market_scope = AsyncMock(return_value={"market_id": None, "quote_currency": None})
         monkeypatch.setattr(execution_module, "FinnSharedContextService",
                             lambda _session: SimpleNamespace(benchmark_for_asset=assessment))
         payload = await service._dispatch_tool(
@@ -606,6 +607,32 @@ def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
         assert payload["schema_name"] == "SetupMarketMatchesData"
         assert payload["data"].matches[0]["status"] == "matches"
         assert payload["asset"] == "BTC"
+
+    asyncio.run(run())
+
+
+def test_finn_match_tool_preserves_selected_market_identity(monkeypatch):
+    async def run():
+        service = object.__new__(execution_module.FinnV2ToolExecutionService)
+        service.session = object()
+        service._ensure_asset = AsyncMock(return_value={"asset": "BTC"})
+        service._resolve_read_market_scope = AsyncMock(return_value={
+            "market_id": 73, "quote_currency": "EUR"})
+        assessment = AsyncMock(return_value={
+            "symbol": "BTC", "market_id": 73, "as_of": None,
+            "source_status": "missing_scores",
+            "matches": [],
+        })
+        monkeypatch.setattr(execution_module, "FinnSharedContextService",
+                            lambda _session: SimpleNamespace(benchmark_for_asset=assessment))
+        payload = await service._dispatch_tool(
+            tool_name="read_setup_market_matches", user_id=7,
+            selector={"asset": "BTC", "quote_currency": "EUR"},
+            run=SimpleNamespace(), shared_state={},
+        )
+        assessment.assert_awaited_once_with(7, "BTC", market_id=73)
+        assert payload["data"].market_id == 73
+        assert payload["data"].pair == "BTC/EUR"
 
     asyncio.run(run())
 
@@ -631,6 +658,7 @@ def test_finn_match_tool_limits_a_verified_setup_reference_to_one_owner_match(mo
             }
 
         service._ensure_asset = asset
+        service._resolve_read_market_scope = AsyncMock(return_value={"market_id": None, "quote_currency": None})
         monkeypatch.setattr(execution_module, "FinnSharedContextService",
                             lambda _session: SimpleNamespace(benchmark_for_asset=assessment))
         payload = await service._dispatch_tool(

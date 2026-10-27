@@ -184,8 +184,16 @@ class BotService:
         symbol = str(bot.get("symbol") or "").upper()
         if not symbol:
             raise HTTPException(409, "Botasset ontbreekt.")
-        quote = (await self.repository.get_asset_quote_currencies([symbol])).get(symbol)
-        market = (await self.repository.get_valuatable_market_prices([symbol])).get(symbol)
+        market_id = bot.get("market_id")
+        if market_id is not None:
+            quote = str(bot.get("quote_currency") or "").upper()
+            market = (await self.repository.get_valuatable_exact_market_prices([int(market_id)])).get(int(market_id))
+            if not market or str(market.get("symbol") or "").upper() != symbol or \
+                    str(market.get("quote_currency") or "").upper() != quote:
+                raise HTTPException(409, "Geen gecontroleerde koers voor het gekozen handelspaar.")
+        else:
+            quote = (await self.repository.get_asset_quote_currencies([symbol])).get(symbol)
+            market = (await self.repository.get_valuatable_market_prices([symbol])).get(symbol)
         fx = (await self.repository.get_portfolio_fx_rates()).get(str(quote or "").upper())
         price, observed_at, factor, fx_at = price_in_eur(
             price=market.get("price") if market else None,

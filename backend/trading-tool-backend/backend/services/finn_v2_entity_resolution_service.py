@@ -591,6 +591,8 @@ class FinnV2EntityResolutionService:
         client_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         explicit = self._normalize_symbol(selector.get("asset"))
+        if explicit and "/" in explicit:
+            explicit = explicit.split("/", 1)[0]
         if explicit:
             return {"asset": explicit, "resolution_source": "explicit_selector"}
 
