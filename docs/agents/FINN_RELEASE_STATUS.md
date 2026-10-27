@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Named saved strategy amount repair candidate (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATED_AWAITING_CI`. Independent QA returned `NOT_ACCEPTED` on
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA returned `NOT_ACCEPTED` on
 public backend/frontend SHA `c1fccf254d0153501ce4c2cf56e0b93fc71fa0d8`.
 It confirmed distinct BTC/EUR and BTC/USDT market data, SOL/EUR after refresh,
 the skipped Paper state after refresh, and the safe ETH-to-AAPL correction.
@@ -38,11 +38,16 @@ selected operation. That is not a green gate. The complete solo rerun passed
 **16/16** action contracts and **21/21** adapter checks (matrix SHA-256
 `3768031faf4d62cad4b3b903924bfa8259dcc101bf72643c9dfe60372d9cb69a`),
 with zero broker orders, Live trading calls or production connections.
-Nothing from this candidate has been deployed or independently accepted.
+PR #665 merged as `005db2b25694f946c3142f8ef9966ed8cbfdb560`. PR CI run
+`40580798536`, main CI run `40581398601`, and Auto Deploy run `40581789536`
+all succeeded. Public backend health and frontend build-info each returned
+HTTP 200 and that exact SHA. This status-only update will produce a later main
+SHA and deploy cycle; independent QA must test the final public revision.
+No independent QA acceptance is claimed for this repair yet.
 
 ## Exact-pair strategy readback and selected-workspace candidate (27 oktober 2026)
 
-Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA tested public SHA
+Current phase: `INDEPENDENT_QA_NOT_ACCEPTED`. Independent QA tested public SHA
 `bcf275d349185943a401db541393702a6329f8de` and returned `NOT_ACCEPTED`.
 BTC/EUR and BTC/USDT quotes, charts, plans and bot labels stayed distinct;
 skipped Paper `not_due` persisted after refresh; the long ETH-to-AAPL
