@@ -5287,6 +5287,46 @@ def test_guided_name_suggestion_is_a_question_until_user_accepts_it():
     assert custom.proposal_analysis.request_plan.operation_state["collected_inputs"]["name"] == "ETH Rustig Plan"
 
 
+def test_name_suggestion_can_fill_a_missing_name_before_the_requested_timeframe():
+    catalog = FinnResponsesToolCatalog()
+    selection = FinnResponsesProposalSelection()
+    first = selection.from_call(
+        call=catalog.validate("create_dca_plan_proposal", {
+            "operation_id": "create_setup", "inputs": {
+                "symbol": "AAPL", "setup_type": "dca", "dca_frequency": "weekly",
+                "dca_day": "friday", "base_amount": 40,
+            },
+        }),
+        message="Maak een AAPL DCA-setup op vrijdag voor €40",
+        conversation_context={}, verified_asset="AAPL",
+    )
+    state = first.request_plan.operation_state
+    assert state["next_missing_input"] == "timeframe"
+    assert "name" in state["missing_required_inputs"]
+    fake = FakeResponses()
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=21,
+        run_id="out-of-order-name",
+    )
+    context = {"active_guided_operation": state}
+    suggestion = asyncio.run(front.run(
+        message="Welke naam raad je aan?", instructions="",
+        conversation_context=context, verified_asset="AAPL",
+    ))
+    assert suggestion.proposal_analysis is None
+    assert "AAPL" in suggestion.response.text
+    accepted = asyncio.run(front.run(
+        message="Ja, gebruik die naam", instructions="",
+        conversation_context=context, verified_asset="AAPL",
+        previous_response={"tool_trace": suggestion.response.tool_trace},
+    ))
+    updated = accepted.proposal_analysis.request_plan.operation_state
+    assert updated["collected_inputs"]["name"].startswith("AAPL")
+    assert updated["collected_inputs"]["symbol"] == "AAPL"
+    assert updated["next_missing_input"] == "timeframe"
+    assert not fake.requests
+
+
 def test_asking_finn_to_request_a_name_does_not_supply_a_name():
     message = "Maak een ETH trade-setup op 4H. Vraag mij om de naam en sla niets op."
     states = FinnV2OperationStateService()

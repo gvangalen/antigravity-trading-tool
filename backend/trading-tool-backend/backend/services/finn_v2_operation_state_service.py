@@ -1444,6 +1444,7 @@ class FinnV2OperationStateService:
                 if (
                     not self._is_short_slot_answer(value, requested_slot="name")
                     or "," in value
+                    or re.search(r"\b(?:koop|buy|kaufe)\b", value, re.I)
                     or re.search(r"\b(?:toon|show|zeige|bevestig|confirm|bestätige|sla\s+op|save|speicher|"
                                  r"maak|create|erstelle|wijzig|change|ändere)\b", value, re.I)
                     or re.search(r"[;!?\n]", value)
