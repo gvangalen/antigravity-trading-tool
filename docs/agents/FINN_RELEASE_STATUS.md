@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Open DCA amount continuity after QA (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION` on `codex/finn-dca-amount-context`.
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`.
 The existing independent QA Agent returned `NOT_ACCEPTED` on public SHA
 `9014392349156f40caad96542f21c450ad857972`. ETH-to-AAPL correction,
 name discussion, exact BTC/EUR versus BTC/USDT readback, and direct purchase
@@ -22,8 +22,8 @@ and amount revision through the existing cancel-and-replace proposal path;
 immediate purchases still use the order denial boundary. A local rerun now
 produces an AAPL · 1D · Friday draft with €40, then a replacement €40 draft.
 No proposal has been confirmed or saved in this reproduction. The direct
-immediate-purchase variant remains unavailable. CI, deployment and
-independent QA evidence are pending.
+immediate-purchase variant remains unavailable. Independent authenticated
+QA evidence is pending.
 
 The final-source backend suite passed **4071 tests, 4 existing skips**
 (`.local-finn-parity-artifacts/dca-amount-repair-final-pytest.log`, SHA-256
@@ -42,6 +42,16 @@ and regression selector **109/109** (SHA-256
 both with zero provider, schema, timeout, parse or validation failures.
 Security reviewed the owner-bound cancel-and-replace path read-only and found
 no P1/P2.
+
+PR #656 merged as `ad2c99342bb3778d4f408933a2ee9eac23b4ad85`.
+The PR CI run `40543858703`, main CI run `40544482469`, and Auto Deploy
+run `40545106467` all succeeded. Public backend health and frontend
+build-info each returned HTTP 200 and exact SHA
+`ad2c99342bb3778d4f408933a2ee9eac23b4ad85` after deployment. This
+status update creates a later main SHA and CI/deploy cycle; the existing
+independent QA Agent must test the last successful public SHA after that
+cycle, not the earlier one. No authenticated live verdict exists yet for
+this repair.
 
 ## Guided DCA continuation after an asset correction (27 oktober 2026)
 
