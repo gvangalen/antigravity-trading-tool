@@ -194,6 +194,7 @@ class FinnV2ToolExecutionService:
                 user_id=user_id,
                 selector=selector,
                 message=run_context.message,
+                prefer_explicit_strategy_parent=tool_name == "read_linked_strategy",
                 **({"skip_entities": frozenset({"strategy"})}
                    if tool_name in {"read_active_setup", "read_linked_strategies"} else {}),
             )

@@ -807,6 +807,7 @@ class FinnV2EntityResolutionService:
         selector: Dict[str, Any],
         message: str,
         skip_entities: frozenset[str] = frozenset(),
+        prefer_explicit_strategy_parent: bool = False,
     ) -> Dict[str, Any]:
         """Resolve exact owner-scoped names for read-tool context.
 
@@ -814,6 +815,36 @@ class FinnV2EntityResolutionService:
         guide evidence hydration without changing the registry-owned schema.
         """
         enriched = dict(selector)
+        if prefer_explicit_strategy_parent and "strategy" not in skip_entities:
+            # A strategy named in this turn identifies its saved parent setup.
+            # A page or previous read can still carry another setup_id for the
+            # same asset; that contextual ID must not defeat the current name.
+            strategy_rows = [dict(row) for row in await self.strategies.query_strategies(user_id, {})]
+            positive_message = self._positive_correction_clause(message)
+            named = self._explicit_message_matches(
+                positive_message if positive_message is not None else message,
+                strategy_rows,
+            )
+            if len(named) > 1:
+                raise LookupError("strategy_ambiguous")
+            if len(named) == 1:
+                strategy = named[0]
+                setup_name = enriched.get("setup_name")
+                if setup_name and self._message_mentions_name(message, setup_name):
+                    # An explicitly named, conflicting parent is an error,
+                    # rather than a reason to silently switch plans.
+                    parent = await self.setups.get_setup_by_id(
+                        self._coerce_int(strategy.get("setup_id")), user_id,
+                    )
+                    if not parent or self._normalized_name(parent.get("name")) != self._normalized_name(setup_name):
+                        raise LookupError("strategy_not_resolved")
+                enriched["strategy_id"] = self._coerce_int(strategy.get("id") or strategy.get("strategy_id"))
+                enriched.pop("strategy_name", None)
+                enriched.pop("setup_id", None)
+                if not setup_name or not self._message_mentions_name(message, setup_name):
+                    enriched.pop("setup_name", None)
+                enriched.pop("bot_id", None)
+                enriched.pop("bot_name", None)
         if self.is_setup_collection_request(message):
             enriched["setup_collection_requested"] = True
         # An explicitly described cadence is an object reference, just like

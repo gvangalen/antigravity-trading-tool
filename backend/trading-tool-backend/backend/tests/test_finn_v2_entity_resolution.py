@@ -69,6 +69,63 @@ def test_explicit_strategy_selector_survives_excluded_name_in_message():
     assert "strategy_id" not in selected
 
 
+def test_named_strategy_read_uses_its_saved_parent_over_stale_btc_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    service.strategies.query_strategies = lambda _user_id, _filters: asyncio.sleep(0, result=[
+        {"id": 309, "name": "QA BTC EUR Strategie", "setup_id": 293},
+        {"id": 310, "name": "QA BTC USDT Strategie 2710", "setup_id": 294},
+    ])
+    service.strategies.get_raw_strategy_with_setup = lambda strategy_id, _user_id: asyncio.sleep(
+        0, result={"id": 310, "name": "QA BTC USDT Strategie 2710", "setup_id": 294}
+        if strategy_id == 310 else None,
+    )
+    service.setups = _FakeSetupRepo()
+    service.setups.get_setup_by_id = lambda setup_id, _user_id: asyncio.sleep(
+        0, result={"id": 294, "name": "QA BTC USDT Plan", "symbol": "BTC", "quote_currency": "USDT"}
+        if setup_id == 294 else None,
+    )
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "QA BTC EUR Plan", "symbol": "BTC"},
+        {"id": 294, "name": "QA BTC USDT Plan", "symbol": "BTC"},
+    ])
+    service.bots = _FakeBotRepo()
+
+    selected = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=388,
+        selector={"asset": "BTC", "setup_id": 293, "strategy_name": "QA BTC EUR Strategie"},
+        message="Lees QA BTC USDT Strategie 2710 terug.",
+        prefer_explicit_strategy_parent=True,
+    ))
+    assert selected["strategy_id"] == 310
+    assert "setup_id" not in selected
+    parent = asyncio.run(service.resolve_setup(user_id=388, selector=selected, asset="BTC"))
+    assert parent["setup"]["id"] == 294
+    strategy = asyncio.run(service.resolve_strategy(
+        user_id=388, selector=selected, setup=parent["setup"],
+    ))
+    assert strategy["strategy"]["id"] == 310
+
+
+def test_named_strategy_read_rejects_conflicting_explicit_setup_name():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    service.strategies.query_strategies = lambda _user_id, _filters: asyncio.sleep(0, result=[
+        {"id": 310, "name": "QA BTC USDT Strategie", "setup_id": 294},
+    ])
+    service.setups = _FakeSetupRepo()
+    service.setups.get_setup_by_id = lambda _setup_id, _user_id: asyncio.sleep(
+        0, result={"id": 294, "name": "QA BTC USDT Plan"},
+    )
+    with pytest.raises(LookupError, match="strategy_not_resolved"):
+        asyncio.run(service.enrich_tool_selector_from_message(
+            user_id=388,
+            selector={"setup_name": "QA BTC EUR Plan"},
+            message="Lees QA BTC USDT Strategie bij QA BTC EUR Plan.",
+            prefer_explicit_strategy_parent=True,
+        ))
+
+
 def test_strategy_collection_selector_keeps_parent_when_two_children_are_named():
     service = FinnV2EntityResolutionService(session=object())
     service.strategies = _FakeStrategyRepo()

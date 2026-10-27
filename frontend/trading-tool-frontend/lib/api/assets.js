@@ -8,10 +8,20 @@ export async function fetchTradingMarkets(symbol) {
 }
 
 export async function selectTradingMarket(symbol, quoteCurrency, options = {}) {
+  const { periods, watchlistSymbols = [], includeWorkspace = false, ...requestOptions } = options;
+  const params = new URLSearchParams();
+  if (includeWorkspace) params.set("include_workspace", "true");
+  if (periods) {
+    params.set("market_period", periods.market || "day");
+    params.set("macro_period", periods.macro || "day");
+    params.set("technical_period", periods.technical || "day");
+  }
+  if (watchlistSymbols.length) params.set("watchlist_symbols", watchlistSymbols.join(","));
   return await fetchAuth(
     `/api/assets/${encodeURIComponent(String(symbol || "").toUpperCase())}` +
-      `/trading-markets/${encodeURIComponent(String(quoteCurrency || "").toUpperCase())}/select`,
-    { method: "POST", ...options },
+      `/trading-markets/${encodeURIComponent(String(quoteCurrency || "").toUpperCase())}/select` +
+      (params.size ? `?${params.toString()}` : ""),
+    { method: "POST", ...requestOptions },
   );
 }
 
