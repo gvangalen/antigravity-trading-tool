@@ -331,8 +331,8 @@ class FinnV2OperationStateService:
                 explicit["dca_amount_mode"] = "fixed"
             if "base_amount" not in explicit and not re.search(r"\bminim(?:um|ale)\b", lowered):
                 amounts = re.findall(
-                    r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
-                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+                    r"(?:(?<!\w)(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\w))",
                     lowered,
                 )
                 if len(amounts) == 1:
@@ -361,8 +361,8 @@ class FinnV2OperationStateService:
             and not re.search(r"\bminim(?:um|ale)\b", message.casefold())
         ):
             amounts = re.findall(
-                r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
-                r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+                r"(?:(?<!\w)(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\w))",
                 message.casefold(),
             )
             if len(amounts) == 1:
@@ -430,7 +430,7 @@ class FinnV2OperationStateService:
                     # Score boundaries must occur in the user's own text.
                     # Currency amounts do not count as boundary evidence.
                     without_currency = re.sub(
-                        r"(?:€|eur)\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s*(?:€|eur|euros?|euro)(?!\d)",
+                        r"(?<!\w)(?:€|eur)\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s*(?:€|eur|euros?|euro)(?!\w)",
                         " ", message.casefold(),
                     )
                     without_currency = re.sub(r"\d+(?:[.,]\d+)?\s*%", " ", without_currency)
@@ -1106,8 +1106,8 @@ class FinnV2OperationStateService:
                     if not market_only:
                         values["score_source"] = "benchmark_score"
                 amounts = re.findall(
-                    r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
-                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+                    r"(?:(?<!\w)(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\w))",
                     amount_text,
                 )
                 euro_amounts = [self._numeric_value(a or b) for a, b in amounts]
@@ -1127,8 +1127,8 @@ class FinnV2OperationStateService:
             if "min_investment" in accepted_inputs:
                 investment = re.search(
                     r"\bminim(?:um|ale)\s*(?:investering|inleg|bedrag)?\s*(?:van|is|:|=)?\s*"
-                    r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
-                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+                    r"(?:(?<!\w)(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\w))",
                     lowered,
                 )
                 if investment:
@@ -1352,6 +1352,18 @@ class FinnV2OperationStateService:
         }
 
     @staticmethod
+    def is_scheduled_dca_plan_phrase(message: str) -> bool:
+        """Recognize an exact recurring schedule and amount, never an immediate order."""
+        return bool(re.fullmatch(
+            r"\s*(?:koop|buy|kaufe)\s+(?:elke|iedere|every|jeden?)\s+"
+            r"(?:dag|week|maand|maandag|dinsdag|woensdag|donderdag|vrijdag|"
+            r"zaterdag|zondag|monday|tuesday|wednesday|thursday|friday|"
+            r"saturday|sunday)\s+(?:voor|for|f[uü]r)\s+"
+            r"(?:€\s*)?\d+(?:[.,]\d{1,2})?\s*(?:euro|eur|usdt|€)?\s*[.!]?\s*",
+            message, re.I,
+        ))
+
+    @staticmethod
     def _is_explicit_correction(text: str) -> bool:
         return bool(re.search(
             r"\b(?:corrigeer|correct|correctie|wijzig|verander|pas\s+aan|update|change|"
@@ -1376,8 +1388,8 @@ class FinnV2OperationStateService:
         if re.search(r"\b(?:entry|instap|einstieg|stop|target|doel|ziel|minim\w*)\b", message, re.I):
             return None
         amounts = re.findall(
-            r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
-            r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\d))",
+            r"(?:(?<!\w)(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+            r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro)(?!\w))",
             message.casefold(),
         )
         if len(amounts) != 1:

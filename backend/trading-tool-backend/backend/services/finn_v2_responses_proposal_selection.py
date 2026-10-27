@@ -92,7 +92,8 @@ class FinnResponsesProposalSelection:
             and correction_context.get("operation_id") == contract.operation_id
             and correction_context.get("proposal_id")
             and correction_context.get("previous_asset") == correction_context.get("requested_instrument")
-            and (correction_context.get("corrected_fields") or correction_context.get("corrected_name"))
+            and (correction_context.get("corrected_fields") or correction_context.get("corrected_name")
+                 or correction_context.get("scheduled_dca_revision"))
             and call.target_reference != "other_saved_plan"
             and not mentions_recent_plan
         )
@@ -263,7 +264,8 @@ class FinnResponsesProposalSelection:
             and correction.get("operation_id") == contract.operation_id
             and (correction_target in mentioned_assets or awaiting_instrument
                  or correction.get("corrected_name") or correction.get("corrected_fields")
-                 or correction.get("target_change_requested"))
+                 or correction.get("target_change_requested")
+                 or correction.get("scheduled_dca_revision"))
         ):
             # The old proposal is irrevocably cancelled. Its owner-scoped,
             # user-supplied non-asset fields may seed a replacement after an
