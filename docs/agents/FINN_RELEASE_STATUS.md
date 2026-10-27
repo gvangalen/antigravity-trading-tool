@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact trading-pair return and Paper-check result (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. On public SHA
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. On public SHA
 `a4b2f27832059703fcd944fad731954ffe1d4951`, the existing independent
 QA Agent returned `NOT_ACCEPTED` for the broader exact-pair browser scope.
 BTC/USDT quote, chart, Price and RSI stayed distinct from BTC/EUR, and My
@@ -35,8 +35,12 @@ and **109/109** regression cases (SHA-256
 `0db1a540693f7c916a698566284b98c809264734f9957e840b77383dc3734297`),
 both with zero provider, schema, timeout, parse and validation failures.
 Web typecheck, i18n lint and tests, command/proposal/setup tests, production
-build and high-severity dependency audit passed. CI, deployment identity
-and the independent live retest for this candidate are not yet measured.
+build and high-severity dependency audit passed. PR #659 merged as
+`b6f7c781070b6025579862a84ad800ce8a3623fc`. PR CI run `40555261059`,
+main CI run `40555791623`, and Auto Deploy run `40556380847` succeeded.
+Public backend health and frontend build-info each returned HTTP 200 and that
+exact SHA. This status-only update triggers a later main CI/deploy cycle;
+the independent QA Agent must test the last successful public SHA after it.
 
 ## Open DCA amount continuity after QA (27 oktober 2026)
 
