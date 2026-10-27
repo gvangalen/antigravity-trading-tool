@@ -1,0 +1,60 @@
+import asyncio
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+from backend.services import exact_market_workspace_service as module
+
+
+class _Result:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self.rows[0] if self.rows else None
+
+    def all(self):
+        return self.rows
+
+
+def test_exact_market_workspace_never_borrows_base_quote_or_score(monkeypatch):
+    observed = datetime.now(timezone.utc).replace(tzinfo=None)
+    market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
+                             tradingview_symbol="BINANCE:ETHEUR")
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[
+        _Result([market]), _Result([]), _Result([]),
+    ]))
+    quote_reader = SimpleNamespace(get_latest_exact_market_snapshot=AsyncMock(
+        return_value=SimpleNamespace(price=2400, change_24h=1, volume=100,
+                                     quote_currency="USDT", source_observed_at=observed)))
+    matcher = SimpleNamespace(for_asset=AsyncMock(return_value={
+        "benchmark_score": None, "benchmark_weights": {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3},
+        "reported_scores": {"market_score": None, "macro_score": None, "technical_score": None},
+        "component_source_status": {"market_score": "missing_score", "macro_score": "missing_score",
+                                    "technical_score": "missing_score"},
+        "source_status": "missing_scores", "matches": [], "component_source_observed_at": {},
+    }))
+    workspace = SimpleNamespace(
+        _macro_rows=AsyncMock(return_value=[]),
+        _category_payload=lambda rows, *_args, **_kwargs: {"rows": rows, "score": {}},
+    )
+    monkeypatch.setattr(module, "MarketDataRepository", lambda _session: quote_reader)
+    monkeypatch.setattr(module, "SetupMarketMatchService", lambda _session: matcher)
+    monkeypatch.setattr(module, "WorkspaceDataService", lambda _session: workspace)
+
+    result = asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "eth", "eur"))
+
+    assert result["pair"] == "ETH/EUR"
+    assert result["asset"]["tradingview_symbol"] == "BINANCE:ETHEUR"
+    assert result["quote"]["price"] is None
+    assert result["combined"]["score"] is None
+    matcher.for_asset.assert_awaited_once_with(7, "ETH", market_id=43)
+    quote_reader.get_latest_exact_market_snapshot.assert_awaited_once_with(43)
+
+
+def test_unknown_exact_market_returns_no_legacy_workspace():
+    session = SimpleNamespace(execute=AsyncMock(return_value=_Result([])))
+    assert asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR")) is None
