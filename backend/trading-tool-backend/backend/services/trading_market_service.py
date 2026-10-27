@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -67,6 +68,42 @@ def verify_binance_pair(payload: dict, base: str, quote: str) -> str:
 class TradingMarketService:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def inspect_crypto_quotes(self, base: str, quotes: tuple[str, ...] = ("EUR", "USDT")) -> list[dict]:
+        """Read-only choice list; a provider outage never becomes an unsupported pair.
+
+        No market row or price observation is written while showing choices.
+        The exact pair is checked again when a user confirms a plan.
+        """
+        base = str(base or "").strip().upper()
+        if not _ASSET_CODE.fullmatch(base):
+            raise MarketUnavailable("Ongeldige asset.")
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            async def inspect(quote: str) -> dict:
+                _, quote = normalize_pair(base, quote)
+                pair = f"{base}/{quote}"
+                provider_symbol = f"{base}{quote}"
+                try:
+                    response = await client.get(_BINANCE_EXCHANGE_INFO,
+                                                params={"symbol": provider_symbol})
+                    if response.status_code in {400, 404}:
+                        return {"pair": pair, "quote_currency": quote,
+                                "status": "unavailable"}
+                    response.raise_for_status()
+                    verified_symbol = verify_binance_pair(response.json(), base, quote)
+                except MarketUnavailable:
+                    return {"pair": pair, "quote_currency": quote,
+                            "status": "unavailable"}
+                except (httpx.HTTPError, ValueError):
+                    return {"pair": pair, "quote_currency": quote,
+                            "status": "verification_unavailable"}
+                return {"pair": pair, "quote_currency": quote,
+                        "status": "available", "venue": "BINANCE",
+                        "provider_symbol": verified_symbol,
+                        "tradingview_symbol": f"BINANCE:{verified_symbol}"}
+
+            return list(await asyncio.gather(*(inspect(quote) for quote in quotes)))
 
     async def _stored(self, base: str, quote: str) -> TradingMarket | None:
         result = await self.session.execute(text("""

@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 
 import pytest
+import httpx
 
 from backend.schemas.market_provider_schema import PriceSnapshotDTO
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
@@ -9,6 +10,7 @@ from backend.services.market_data_ingestion_service import MarketDataIngestionSe
 from backend.services.trading_market_service import (
     MarketUnavailable,
     TradingMarket,
+    TradingMarketService,
     normalize_pair,
     verify_binance_pair,
 )
@@ -44,6 +46,54 @@ def test_pair_does_not_treat_usdt_as_usd_or_eur():
         verify_binance_pair(_exchange_info(quote="USDT"), "BTC", "USD")
     with pytest.raises(MarketUnavailable):
         normalize_pair("ETH", "ETH")
+
+
+def test_market_choices_show_only_exact_verified_pairs_without_writing(monkeypatch):
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, *, params):
+            assert url.endswith("/exchangeInfo")
+            symbol = params["symbol"]
+            if symbol == "BTCEUR":
+                return httpx.Response(200, json=_exchange_info(),
+                                      request=httpx.Request("GET", url))
+            return httpx.Response(400, json={"code": -1121},
+                                  request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("backend.services.trading_market_service.httpx.AsyncClient",
+                        lambda **_kwargs: Client())
+    session = _FakeSession()
+    choices = asyncio.run(TradingMarketService(session).inspect_crypto_quotes("btc"))
+    assert choices == [
+        {"pair": "BTC/EUR", "quote_currency": "EUR", "status": "available",
+         "venue": "BINANCE", "provider_symbol": "BTCEUR",
+         "tradingview_symbol": "BINANCE:BTCEUR"},
+        {"pair": "BTC/USDT", "quote_currency": "USDT", "status": "unavailable"},
+    ]
+    assert session.rows == []
+
+
+def test_market_choice_provider_outage_is_not_reported_as_unsupported(monkeypatch):
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, *, params):
+            raise httpx.ConnectError("offline", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("backend.services.trading_market_service.httpx.AsyncClient",
+                        lambda **_kwargs: Client())
+    choices = asyncio.run(TradingMarketService(_FakeSession()).inspect_crypto_quotes("btc"))
+    assert [choice["status"] for choice in choices] == [
+        "verification_unavailable", "verification_unavailable"]
 
 
 class _FakeSession:
