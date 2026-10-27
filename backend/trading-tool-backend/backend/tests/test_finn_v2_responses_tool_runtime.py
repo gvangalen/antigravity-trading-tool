@@ -4480,14 +4480,18 @@ def test_guided_setup_preserves_user_asset_when_model_omits_symbol():
 
 def test_unsupported_pair_is_reported_without_substituting_base_asset():
     from backend.services.asset_catalog_service import (
-        corrected_catalog_instrument, requests_unspecified_asset_correction, unsupported_catalog_pair_mention,
+            corrected_catalog_instrument, requested_catalog_trading_pair,
+            requests_unspecified_asset_correction, unsupported_catalog_pair_mention,
     )
 
     assert unsupported_catalog_pair_mention("ETH, niet ETH/EUR") is None
-    assert unsupported_catalog_pair_mention("ETH/EUR, niet ETH") == "ETH/EUR"
+    assert unsupported_catalog_pair_mention("ETH/EUR, niet ETH") is None
+    assert requested_catalog_trading_pair("ETH/EUR, niet ETH") == ("ETH", "EUR")
+    assert requested_catalog_trading_pair("ETH, niet ETH/EUR") is None
     assert unsupported_catalog_pair_mention("Paper/live-status en handmatige uitvoering") is None
     assert unsupported_catalog_pair_mention("prijs/volume naast elkaar") is None
-    assert unsupported_catalog_pair_mention("SOL/USDT") == "SOL/USDT"
+    assert unsupported_catalog_pair_mention("SOL/USDT") is None
+    assert requested_catalog_trading_pair("SOL/USDT") == ("SOL", "USDT")
     assert unsupported_catalog_pair_mention("XYZ/EUR") == "XYZ/EUR"
     assert corrected_catalog_instrument("Ik bedoel ETH/EUR, niet ETH.") == "ETH/EUR"
     assert corrected_catalog_instrument("I mean AAPL, not ETH.") == "AAPL"
@@ -4509,14 +4513,14 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
         "create_dca_plan_proposal",
         {"operation_id": "create_setup", "inputs": {"setup_type": "dca", "symbol": "ETH"}},
     )
-    with pytest.raises(FinnResponsesToolError, match="asset_pair_not_in_catalog") as caught:
-        FinnResponsesProposalSelection().from_call(
-            call=call,
-            message="Maak een Smart DCA-plan voor ETH/EUR.",
-            conversation_context={}, verified_asset=None,
-        )
-    assert caught.value.details["requested_instrument"] == "ETH/EUR"
-    assert caught.value.details["status"] == "unsupported"
+    selected = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Maak een Smart DCA-plan voor ETH/EUR.",
+        conversation_context={}, verified_asset=None,
+    )
+    collected = selected.request_plan.operation_state["collected_inputs"]
+    assert collected["symbol"] == "ETH"
+    assert collected["quote_currency"] == "EUR"
 
 
 def test_unspecified_asset_correction_collects_ticker_without_reusing_rejected_asset():

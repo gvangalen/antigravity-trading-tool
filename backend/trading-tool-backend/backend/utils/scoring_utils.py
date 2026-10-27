@@ -68,6 +68,35 @@ def normalize_indicator_name(name: str) -> str:
     return NAME_ALIASES.get(normalized, normalized)
 
 
+def score_exact_market_measurement(category: str, name: str, value: float,
+                                   user_id: int, symbol: str, market_id: int) -> dict:
+    """Apply the existing Score 2.0 rules to one verified pair measurement."""
+    from backend.utils.market_interpreter import normalize_market_value_with_history
+    from backend.utils.technical_interpreter import normalize_technical_value_for_rules
+    from backend.utils.scoring_engine import score_indicator
+
+    conn = get_db_connection()
+    if conn is None:
+        raise RuntimeError("exact_market_scoring_database_unavailable")
+    try:
+        if category == "market":
+            normalized = normalize_market_value_with_history(
+                conn, symbol, name, value, market_id=market_id)
+        else:
+            normalized = normalize_technical_value_for_rules(
+                conn, name, value, user_id, symbol, market_id=market_id)
+        if normalized is None:
+            return {"score": None, "trend": None, "interpretation": None, "action": None}
+        result = score_indicator(
+            conn, category, name, normalized, user_id=user_id,
+            symbol=symbol, market_id=market_id)
+        if result.get("rule_origin") not in {"custom", "system_template"}:
+            return {"score": None, "trend": None, "interpretation": None, "action": None}
+        return result
+    finally:
+        conn.close()
+
+
 def score_snapshot_diagnosis(category: str, symbol: str, configurations,
                              readings, evidence, calculated_at) -> str:
     """Explain why a saved category cannot currently be used as a score.

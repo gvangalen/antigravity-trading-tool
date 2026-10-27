@@ -6,7 +6,8 @@ import re
 from typing import Any, Mapping, Sequence
 
 from backend.services.asset_catalog_service import (
-    mentioned_catalog_symbols, resolve_catalog_symbol, unsupported_catalog_pair_mention,
+    mentioned_catalog_symbols, requested_catalog_trading_pair,
+    resolve_catalog_symbol, unsupported_catalog_pair_mention,
 )
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -171,6 +172,9 @@ class FinnResponsesProposalSelection:
             # Explicit user input outranks a model candidate that shortened the name.
             inputs["name"] = explicitly_named
         if contract.operation_id == "create_setup":
+            requested_pair = requested_catalog_trading_pair(message)
+            if requested_pair is not None:
+                inputs["symbol"], inputs["quote_currency"] = requested_pair
             explicit_day = self.states.explicit_inputs(
                 contract=contract, message=message, explicit_asset=None,
             ).get("dca_day")

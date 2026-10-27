@@ -80,7 +80,7 @@ def test_configured_snapshot_refresh_does_not_call_provider_without_watchlist_as
 
 
 def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
-    from backend.services import indicator_history_bootstrap
+    from backend.services import exact_market_indicator_service, indicator_history_bootstrap
 
     calls = []
     row = {"id": 73, "asset_symbol": "BTC", "quote_currency": "EUR",
@@ -126,13 +126,28 @@ def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
             calls.append((market.id, "history"))
             return {"status": "ready", "observed_days": 16}
 
+    class Indicators:
+        def __init__(self, _session):
+            pass
+
+        async def materialize(self, market):
+            calls.append((market.id, "indicators"))
+            return {"owners": [7], "written": 2}
+
+    def build_score(user_id, market_id):
+        calls.append((user_id, market_id, "score"))
+        return {"market_id": market_id}
+
     monkeypatch.setattr(market_task, "async_session_factory", Context)
     monkeypatch.setattr(market_task, "MarketDataIngestionService", Ingestion)
     monkeypatch.setattr(indicator_history_bootstrap, "IndicatorHistoryBootstrap", History)
+    monkeypatch.setattr(exact_market_indicator_service, "ExactMarketIndicatorService", Indicators)
+    monkeypatch.setattr("backend.celery_task.store_daily_scores_task.build_daily_scores_for_market", build_score)
 
     result = asyncio.run(market_task._sync_exact_market_snapshots())
 
-    assert calls == [(73, "BTCEUR", "EUR"), (73, "history")]
+    assert calls == [(73, "BTCEUR", "EUR"), (73, "history"),
+                     (73, "indicators"), (7, 73, "score")]
     assert result["scopes"][0]["market_id"] == 73
 
 

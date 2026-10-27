@@ -12,7 +12,8 @@ from time import monotonic
 from typing import Any, Mapping
 
 from backend.services.asset_catalog_service import (
-    DEFAULT_ASSET_CATALOG, mentioned_catalog_symbols, resolve_catalog_symbol,
+    DEFAULT_ASSET_CATALOG, mentioned_catalog_symbols, requested_catalog_trading_pair,
+    resolve_catalog_symbol,
     unsupported_catalog_pair_mention,
 )
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
@@ -988,6 +989,12 @@ class FinnResponsesFrontDoor:
                 selected, previous_response, locale=locale,
             )
         unsupported_pair = unsupported_catalog_pair_mention(message)
+        # A newly supported pair still cannot inherit a base-only bot target.
+        # Pair-bound bot execution remains held until its own exact-market
+        # runtime is available and the confirmed action names that market ID.
+        requested_pair = requested_catalog_trading_pair(message)
+        if requested_pair and conversation_context.get("immediate_bot_pair_semantic_candidate"):
+            unsupported_pair = f"{requested_pair[0]}/{requested_pair[1]}"
         semantic_candidate = bool(
             conversation_context.get("immediate_bot_pair_semantic_candidate")
             and conversation_context.get("immediate_bot_pair_guard_reason") == "unsupported_utterance"

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import requests
 import json
@@ -154,7 +155,9 @@ async def _sync_exact_market_snapshots() -> dict:
     this same identity end to end.
     """
     from backend.services.indicator_history_bootstrap import IndicatorHistoryBootstrap
+    from backend.services.exact_market_indicator_service import ExactMarketIndicatorService
     from backend.services.trading_market_service import TradingMarket
+    from backend.celery_task.store_daily_scores_task import build_daily_scores_for_market
 
     async with async_session_factory() as session:
         result = await session.execute(text("""
@@ -185,10 +188,21 @@ async def _sync_exact_market_snapshots() -> dict:
                 snapshot = await MarketDataIngestionService(session).ingest_exact_market_snapshot(market)
                 history = await IndicatorHistoryBootstrap(session).bootstrap_exact_market(
                     market, required_days=200)
+                indicators = await ExactMarketIndicatorService(session).materialize(market)
+                score_outcomes = []
+                for user_id in indicators["owners"]:
+                    try:
+                        score_outcomes.append(await asyncio.to_thread(
+                            build_daily_scores_for_market, user_id, market.id))
+                    except Exception as score_exc:
+                        logger.warning("Exact market score pending: market_id=%s user_id=%s code=%s",
+                                       market.id, user_id, type(score_exc).__name__)
                 outcomes.append({"market_id": market.id, "status": "ready",
                                  "observed_at": snapshot.get("observed_at"),
                                  "history_status": history["status"],
-                                 "observed_days": history["observed_days"]})
+                                 "observed_days": history["observed_days"],
+                                 "indicator_count": indicators["written"],
+                                 "score_count": len(score_outcomes)})
             except Exception as exc:
                 await session.rollback()
                 logger.warning("Exact market refresh pending: market_id=%s code=%s",
