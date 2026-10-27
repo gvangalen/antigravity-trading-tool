@@ -21,13 +21,17 @@ its schema and plan/bot identity are not deployed and pair-bound bot execution
 is held until price and Score 2.0 readers use the same market ID. The local
 pair cutover now rejects pair-bound bots in manual preview, preflight, order
 creation, queued manual and automatic decision execution, and scheduled execution before legacy
-base-symbol quotes can be used. The market schema expansion is registered in
-the deploy order, and Score 2.0 rule lookup and price history can select the
-exact market ID. Focused pair and Paper tests pass; the complete backend run
-passed 4022 tests with four existing skips. This is not release evidence: the pair-specific
-indicator writers, daily-score uniqueness and readers, FINN pair proposal
-selection, web/mobile chart binding, and end-to-end provider/runtime gates are
-still incomplete. Do not deploy this branch as a partial trading-pair release.
+base-symbol quotes can be used. The market schema expansion and drained-writer
+uniqueness cutover are registered in the deploy order. Score 2.0 rule lookup,
+price history and the new daily-score writer can select an exact market ID.
+The cutover was executed in a disposable local PostgreSQL database: one legacy
+BTC score and independent BTC/EUR and BTC/USDT scores and indicator configs
+coexisted. The full backend run passed 4022 tests with four existing skips;
+`bash -n` and `git diff --check` passed. This is not release evidence: the
+pair-specific indicator/source writers and readers, FINN pair proposal
+selection, web/mobile chart binding, Paper execution and end-to-end
+provider/runtime gates are incomplete. Do not deploy this branch as a partial
+trading-pair release.
 
 Independent QA accepted the
 targeted Stage 1 recheck on final live SHA

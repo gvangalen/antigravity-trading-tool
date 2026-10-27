@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON, UniqueConstraint, Index
 from datetime import datetime
 
 from backend.infrastructure.database import Base
@@ -330,8 +330,10 @@ class DailySetupScore(Base):
 class DailyScore(Base):
     __tablename__ = 'daily_scores'
     __table_args__ = (
-        UniqueConstraint("user_id", "symbol", "report_date",
-                         name="daily_scores_user_symbol_report_date_unique"),
+        Index("ux_daily_scores_legacy_market_scope", "user_id", "symbol", "report_date",
+              unique=True, postgresql_where=text("market_id IS NULL")),
+        Index("ux_daily_scores_exact_market_scope", "user_id", "market_id", "report_date",
+              unique=True, postgresql_where=text("market_id IS NOT NULL")),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)

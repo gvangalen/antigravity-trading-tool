@@ -522,6 +522,48 @@ PY
     echo \"Paper exit schema did not reach per-position decision identity: \$paper_exit_schema_state\" >&2
     exit 1
   fi
+  market_identity_schema_state=\"\$(cd backend/trading-tool-backend && \
+    python3 -m backend.scripts.trading_market_migration_state | tail -n 1)\"
+  if [ \"\$market_identity_schema_state\" = expanded ]; then
+    if [ \"\$DEPLOY_COMPONENT_SET\" = backend_only ]; then
+      echo \"Trading-market score cutover requires a full deployment to stop old writers.\" >&2
+      exit 1
+    fi
+    advance_deploy_step 'market_identity_writer_quiesce'
+    IFS=',' read -ra market_writer_apps <<< \"\$BACKEND_APP,\$AUX_PM2_APPS,\$RETIRED_PM2_APPS\"
+    for app in \"\${market_writer_apps[@]}\"; do
+      [ -n \"\$app\" ] || continue
+      pm2 stop \"\$app\" >/dev/null 2>&1 || true
+    done
+    pm2 jlist >/tmp/tradamind_market_identity_pm2.json
+    MARKET_WRITER_APPS=\"\$BACKEND_APP,\$AUX_PM2_APPS,\$RETIRED_PM2_APPS\" python3 - <<'PY'
+import json
+import os
+
+raw = open('/tmp/tradamind_market_identity_pm2.json', encoding='utf-8').read()
+lines = raw.splitlines()
+payload = next(('\n'.join(lines[i:]) for i, line in enumerate(lines)
+                if line.lstrip() == '[' or line.lstrip().startswith('[{')), None)
+if not payload:
+    raise SystemExit('market_identity_pm2_inventory_unavailable')
+processes = json.loads(payload)
+writers = set(os.environ['MARKET_WRITER_APPS'].split(',')) - {''}
+online = [process.get('name') for process in processes
+          if process.get('name') in writers
+          and (process.get('pm2_env') or {}).get('status') == 'online']
+if online:
+    raise SystemExit('market_identity_old_writers_still_online: ' + ', '.join(online))
+PY
+    advance_deploy_step 'market_identity_score_cutover'
+    (cd backend/trading-tool-backend && \
+      run_migration backend/scripts/migrations/2026_10_28_trading_market_identity_cutover.py)
+  fi
+  market_identity_schema_state=\"\$(cd backend/trading-tool-backend && \
+    python3 -m backend.scripts.trading_market_migration_state | tail -n 1)\"
+  if [ \"\$market_identity_schema_state\" != current ]; then
+    echo \"Trading-market score schema did not reach exact-market uniqueness: \$market_identity_schema_state\" >&2
+    exit 1
+  fi
   PM2_DEPLOY_MODE=phased
   check_pm2_apps_online() {
     for attempt in \$(seq 1 20); do

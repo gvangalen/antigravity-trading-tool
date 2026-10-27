@@ -46,4 +46,14 @@ CREATE INDEX IF NOT EXISTS idx_daily_scores_market_date
 CREATE INDEX IF NOT EXISTS idx_user_indicator_configs_market
     ON user_indicator_configs (user_id, market_id, category, enabled)
     WHERE market_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_scores_legacy_market_scope
+    ON daily_scores (user_id, symbol, report_date) WHERE market_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_scores_exact_market_scope
+    ON daily_scores (user_id, market_id, report_date) WHERE market_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_indicator_configs_legacy_market_scope
+    ON user_indicator_configs (user_id, symbol, category, indicator)
+    WHERE symbol IS NOT NULL AND market_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_indicator_configs_exact_market_scope
+    ON user_indicator_configs (user_id, market_id, category, indicator)
+    WHERE market_id IS NOT NULL;
 """

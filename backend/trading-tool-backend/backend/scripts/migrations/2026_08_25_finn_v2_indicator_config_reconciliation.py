@@ -56,8 +56,7 @@ WITH legacy_scoped AS (
         legacy.id
     FROM legacy_scoped AS legacy
     JOIN asset_catalog AS asset ON UPPER(asset.symbol) = legacy.symbol
-    ON CONFLICT (user_id, symbol, category, indicator) WHERE symbol IS NOT NULL
-    DO NOTHING
+    ON CONFLICT DO NOTHING
     RETURNING id
 )
 INSERT INTO finn_v2_indicator_config_reconciliations (
