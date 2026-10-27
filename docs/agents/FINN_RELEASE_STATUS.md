@@ -6,15 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact trading-pair candidate (27 oktober 2026)
 
-Current phase: `DEPLOY_REPAIR` after PR #645 (merge SHA
-`6d78905ba90286cfdc7feb93b019763822215351`). PR and main CI passed.
-Auto Deploy run `40486772524` failed on an unset remote
-`DEPLOY_COMPONENT_SET`; rollback restored the backend to
-`2c5431b4cb6446b276b2e1e855a843823885810c`, but the untracked frontend
-`build-info.json` still reported `6d78905` at the public check. This candidate
-is **not live or QA-ready**. The deploy repair exports the component selection,
-registers the new migration phases in the status writer, and rewrites frontend
-identity during rollback. The candidate binds a
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #645 introduced the
+exact-market candidate (merge SHA `6d78905ba90286cfdc7feb93b019763822215351`).
+Its first Auto Deploy run `40486772524` failed on an unset remote
+`DEPLOY_COMPONENT_SET` and rolled back the backend. PR #646 repaired the deploy
+and rollback paths (merge SHA `ade793f82a6fff17b9246678b5cd00e9fd1446c0`).
+Its main CI run `40488895280` and Auto Deploy run `40489339123` both succeeded.
+The cutover migration applied; the deploy deep-health gates passed and recorded
+`ade793f` as last good. Public backend health and frontend build-info both
+returned HTTP 200 with exact SHA `ade793f82a6fff17b9246678b5cd00e9fd1446c0`
+at the post-deploy check. This status-only commit will itself trigger a later
+main CI and Auto Deploy; independent QA must use the final public SHA after
+those runs finish. The candidate binds a
 user-selected BTC/EUR, BTC/USDT, ETH/EUR or ETH/USDT market to setup,
 strategy, bot, exact quote, TradingView chart, indicator materialization,
 Score 2.0, FINN read evidence, Paper decisions and portfolio valuation.
@@ -41,8 +44,8 @@ The full local worker action matrix passed **16/16** contracts, including
 direct and guided SOL/USDT setup creation, with zero broker orders and zero
 Live bots (`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
 `95063b8d649de54942ffc94e8bc12e0162c3d7197e0aa980405cdb46350c33a7`).
-Successful deployment, matching public SHAs and independent authenticated QA
-remain outstanding at this status update. Local probes do not establish
+Independent authenticated QA remains outstanding at this status update. Local
+probes and deployment identity do not establish
 live provider, exchange, chart or broker behavior.
 
 ## Paper exit, Score 2.0 diagnostics and pair identity (27 oktober 2026)
