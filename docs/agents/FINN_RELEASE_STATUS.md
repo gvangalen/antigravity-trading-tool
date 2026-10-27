@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair independent-QA repair candidate (27 oktober 2026)
 
-Current phase: `PR_CI_PENDING`, branch
-`codex/exact-pair-qa-repairs`, based on `c37124dd823728223d1e04c80c01975e9eeafcc2`.
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #661 merged as
+`5c13584754f316b2df130eab84c43ab2dd57437b`.
 The existing independent QA Agent returned `NOT_ACCEPTED` on that public SHA.
 It confirmed distinct BTC/EUR and BTC/USDT quotes, charts and indicators,
 but found that a skipped manual Paper assessment disappeared after refresh,
@@ -51,8 +51,12 @@ recorded; the case selected the expected read operation at confidence 0.49,
 then the old confidence gate rejected it. Migration-plan validation passed.
 PR #661 contains the source changes. Its first CI run found that the tracked
 frontend `out/` export had been omitted after a successful local build; the
-export is included in the next candidate commit. The candidate has not been
-merged, deployed or independently accepted yet.
+export was added before the green PR CI run `40567404691`. Main CI run
+`40567889672` and Auto Deploy run `40568383689` both succeeded. Public backend
+health and frontend build-info each returned HTTP 200 with exact merge SHA
+`5c13584754f316b2df130eab84c43ab2dd57437b`. This status-only update will
+create a later main SHA and deploy cycle; QA must test the last successfully
+deployed public SHA. Independent authenticated QA has not accepted this repair.
 
 ## Exact trading-pair return and Paper-check result (27 oktober 2026)
 
