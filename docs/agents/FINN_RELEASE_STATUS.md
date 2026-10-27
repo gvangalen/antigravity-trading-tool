@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair strategy display and guided asset correction (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. Independent QA accepted the earlier
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA accepted the earlier
 BTC/EUR proposal and Score 2.0 readback on public SHA
 `f2751910699f6d6cb02f1064f7a2260ba6305fa6`. Its broader owner-bound
 browser test found that saved EUR/USDT strategies and Paper bots were shown as
@@ -43,8 +43,14 @@ The real Luna/Responses regression evaluation passed **109/109** operations,
 zero provider, schema, parse or validation failure rates
 (`backend/trading-tool-backend/.local-finn-parity-artifacts/pair-guided-final-regression.json`,
 SHA-256 `e60714b5e6c63ef26681bca12a058732088a4471c8392e80b5dd6963a1f850cd`).
-No new candidate has been pushed or deployed. Authenticated live behavior
-remains unaccepted.
+PR #652 merged the repair as SHA `e44b1a405541e6be1eaf50f69a5fecdff2844a7f`.
+Its pull-request CI run `40524696628`, main CI run `40525320338`, and Auto
+Deploy run `40525800016` all succeeded. Public backend health and frontend
+build-info each returned HTTP 200 and exact SHA
+`e44b1a405541e6be1eaf50f69a5fecdff2844a7f` at the post-deploy check.
+This status update creates a later main SHA and another CI/deploy cycle; the
+existing independent QA Agent must test the last successful public SHA after
+that cycle. Authenticated live behavior remains unaccepted until that verdict.
 
 ## Exact-pair FINN QA repair (27 oktober 2026)
 
