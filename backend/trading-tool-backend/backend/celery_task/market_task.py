@@ -17,7 +17,7 @@ from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.services.market_data_service import MarketDataService
 from backend.services.technical_data_service import TechnicalDataService
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 # =====================================================
 # ⚙️ Config
@@ -143,6 +143,65 @@ async def _sync_configured_market_snapshots() -> dict:
         result["rehydration_failures"] = rehydration_failures
         result["deferred_scope_count"] = deferred_scope_count
         return result
+
+
+async def _sync_exact_market_snapshots() -> dict:
+    """Refresh verified spot pairs referenced by saved plans.
+
+    The legacy symbol-wide job cannot supply a pair quote. Each provider read
+    is bound to the persisted venue symbol and writes its own market ID.
+    Pair-bound bots remain held until the score and execution consumers use
+    this same identity end to end.
+    """
+    from backend.services.indicator_history_bootstrap import IndicatorHistoryBootstrap
+    from backend.services.trading_market_service import TradingMarket
+
+    async with async_session_factory() as session:
+        result = await session.execute(text("""
+            SELECT DISTINCT tm.id, tm.asset_symbol, tm.quote_currency, tm.venue,
+                   tm.provider, tm.provider_symbol, tm.tradingview_symbol,
+                   tm.source_verified_at
+            FROM trading_markets tm
+            JOIN setups s ON s.market_id = tm.id
+            WHERE tm.is_active = TRUE
+            ORDER BY tm.id, tm.asset_symbol, tm.quote_currency, tm.venue,
+                     tm.provider, tm.provider_symbol, tm.tradingview_symbol,
+                     tm.source_verified_at
+        """))
+        markets = [TradingMarket(**row) for row in result.mappings().all()]
+        if not markets:
+            return {"scopes": [], "deferred_scope_count": 0}
+        window = _configured_scope_window(
+            [(market.id, market.asset_symbol, market.quote_currency) for market in markets],
+            window_index=int(time.time() // 300),
+        )
+        selected_ids = {scope[0] for scope in window}
+        await session.rollback()
+        outcomes = []
+        for market in markets:
+            if market.id not in selected_ids:
+                continue
+            try:
+                snapshot = await MarketDataIngestionService(session).ingest_exact_market_snapshot(market)
+                history = await IndicatorHistoryBootstrap(session).bootstrap_exact_market(
+                    market, required_days=200)
+                outcomes.append({"market_id": market.id, "status": "ready",
+                                 "observed_at": snapshot.get("observed_at"),
+                                 "history_status": history["status"],
+                                 "observed_days": history["observed_days"]})
+            except Exception as exc:
+                await session.rollback()
+                logger.warning("Exact market refresh pending: market_id=%s code=%s",
+                               market.id, type(exc).__name__)
+                outcomes.append({"market_id": market.id, "status": "source_unavailable",
+                                 "error_code": type(exc).__name__})
+        return {"scopes": outcomes,
+                "deferred_scope_count": len(markets) - len(selected_ids)}
+
+
+@shared_task(name="backend.celery_task.market_task.sync_exact_market_snapshots")
+def sync_exact_market_snapshots():
+    return run_celery_coroutine(_sync_exact_market_snapshots())
 
 # =====================================================
 # 🔁 Safe HTTP-get met retry

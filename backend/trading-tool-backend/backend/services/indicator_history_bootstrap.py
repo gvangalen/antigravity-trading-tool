@@ -27,14 +27,18 @@ class IndicatorHistoryBootstrap:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def bootstrap_exact_market(self, market: TradingMarket) -> dict:
+    async def bootstrap_exact_market(self, market: TradingMarket, *,
+                                     required_days: int = RSI_SOURCE_DAYS) -> dict:
         """Backfill completed candles for one verified pair only.
 
         The source rows retain their quote unit and market ID. A legacy BTC
         candle or a BTC/USDT candle cannot count toward BTC/EUR coverage.
         """
+        if type(required_days) is not int or not RSI_SOURCE_DAYS <= required_days <= 220:
+            raise ValueError("exact_market_history_requirement_invalid")
         today = datetime.now(timezone.utc).date()
-        cutoff_day = today - timedelta(days=30)
+        history_days = max(40, required_days + 20)
+        cutoff_day = today - timedelta(days=history_days)
         existing = (await self.session.execute(
             select(MarketData.source_observed_at).where(
                 MarketData.market_id == market.id,
@@ -44,7 +48,7 @@ class IndicatorHistoryBootstrap:
             )
         )).scalars().all()
         existing_days = {stamp.date() for stamp in existing if stamp}
-        if len(existing_days) >= RSI_SOURCE_DAYS:
+        if len(existing_days) >= required_days:
             return {"inserted": 0, "status": "ready", "observed_days": len(existing_days),
                     "market_id": market.id}
 
@@ -59,7 +63,7 @@ class IndicatorHistoryBootstrap:
         })
         provider = MarketDataProviderRegistry().resolve_for_asset(asset)
         await self.session.rollback()
-        candles = await provider.fetch_candles(asset, "1d", limit=40)
+        candles = await provider.fetch_candles(asset, "1d", limit=history_days)
         inserted = 0
         for candle in candles:
             day = candle.period_start.date()
@@ -87,7 +91,7 @@ class IndicatorHistoryBootstrap:
         if inserted:
             await self.session.commit()
         return {"inserted": inserted,
-                "status": "ready" if len(existing_days) >= RSI_SOURCE_DAYS else "insufficient_history",
+                "status": "ready" if len(existing_days) >= required_days else "insufficient_history",
                 "observed_days": len(existing_days), "market_id": market.id}
 
     async def market_coverage(self, symbol: str) -> dict[str, int]:
