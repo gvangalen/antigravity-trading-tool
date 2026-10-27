@@ -589,6 +589,7 @@ def test_owner_inventory_exposes_linked_strategy_mode_without_execution_prices()
         strategies=[{
             "strategy_id": 21, "setup_id": 11, "name": "Strategy A",
             "execution_mode": "fixed", "risk_profile": "conservative",
+            "base_amount": 10,
             "entry": "100", "stop_loss": "90",
         }],
     ))
@@ -596,6 +597,7 @@ def test_owner_inventory_exposes_linked_strategy_mode_without_execution_prices()
     assert linked == {
         "strategy_id": 21, "name": "Strategy A",
         "execution_mode": "fixed", "risk_profile": "conservative",
+        "base_amount": 10, "currency": "EUR",
     }
 
 
