@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Named saved strategy amount repair candidate (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATED_AWAITING_CI`. Independent QA returned `NOT_ACCEPTED` on
+public backend/frontend SHA `c1fccf254d0153501ce4c2cf56e0b93fc71fa0d8`.
+It confirmed distinct BTC/EUR and BTC/USDT market data, SOL/EUR after refresh,
+the skipped Paper state after refresh, and the safe ETH-to-AAPL correction.
+In the remaining failure, FINN found the explicitly named BTC/USDT strategy's
+correct parent setup and pair but said its stored amount was unavailable; the
+strategy editor showed €10. The QA browser did not expose a tool trace or run
+ID for that nonterminal answer.
+
+The owner-scoped setup inventory supplied linked strategy names and modes but
+omitted each strategy's saved `base_amount`. That incomplete relationship
+explains how a setup inventory read can identify the right pair yet not answer
+the amount question. The candidate adds the saved amount and its EUR unit to
+each linked strategy row. It does not infer an amount from setup minimums or
+bot budgets and does not change any model answer or trading action.
+The direct two-pair regression passes. The full root backend suite passed
+**4080 tests, 4 existing skips** (log SHA-256
+`148fb655cce4a6d692a3f53bff763ba7377927a06d530af0a5972575e41b7826`).
+Frontend typecheck, i18n lint/tests, command/proposal/setup tests, production
+build and high-severity audit passed with zero high-severity vulnerabilities.
+Real Luna/Responses development selection passed **20/20** with zero provider,
+parse, validation or selector failures (artifact SHA-256
+`239cd8039d2052340a658d90ea5b9d8e4b9c8f5bd24229ebebb9ff4ec17bd3e5`).
+The real provider regression passed **109/109** with zero provider, parse,
+validation or selector failures (artifact SHA-256
+`66f8dd415d975cd747f84cdf23a741dcce6c8a5ee99b5a406202d6fa469c2a3e`).
+An action-matrix run concurrent with that provider evaluation was red **15/16**:
+the `create_setup` contract ended with `responses_provider_timeout` and no
+selected operation. That is not a green gate. The complete solo rerun passed
+**16/16** action contracts and **21/21** adapter checks (matrix SHA-256
+`3768031faf4d62cad4b3b903924bfa8259dcc101bf72643c9dfe60372d9cb69a`),
+with zero broker orders, Live trading calls or production connections.
+Nothing from this candidate has been deployed or independently accepted.
+
 ## Exact-pair strategy readback and selected-workspace candidate (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA tested public SHA

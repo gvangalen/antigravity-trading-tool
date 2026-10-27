@@ -81,6 +81,30 @@ def test_saved_setup_reads_expose_pair_identity():
     assert inventory.setups[0]["pair"] == "ETH/EUR"
 
 
+def test_owner_inventory_keeps_named_strategy_amount_with_exact_pair():
+    rows = [
+        {"id": 9, "name": "QA BTC EUR", "symbol": "BTC", "quote_currency": "EUR"},
+        {"id": 10, "name": "QA BTC USDT", "symbol": "BTC", "quote_currency": "USDT"},
+    ]
+    strategies = [
+        {"id": 21, "setup_id": 9, "name": "QA BTC EUR Strategie", "base_amount": 20},
+        {"id": 22, "setup_id": 10, "name": "QA BTC USDT Strategie", "base_amount": 10},
+    ]
+    evidence = asyncio.run(SetupInventoryToolAdapter().execute(
+        setups=rows, strategies=strategies,
+    ))["data"].setups
+    assert evidence[0]["pair"] == "BTC/EUR"
+    assert evidence[0]["linked_strategies"] == [
+        {"strategy_id": 21, "name": "QA BTC EUR Strategie", "base_amount": 20,
+         "currency": "EUR"},
+    ]
+    assert evidence[1]["pair"] == "BTC/USDT"
+    assert evidence[1]["linked_strategies"] == [
+        {"strategy_id": 22, "name": "QA BTC USDT Strategie", "base_amount": 10,
+         "currency": "EUR"},
+    ]
+
+
 def test_linked_strategy_keeps_trade_pair_separate_from_investment_currency():
     evidence = asyncio.run(StrategyToolAdapter().execute(
         strategy={"id": 22, "setup_id": 9, "setup_symbol": "ETH",

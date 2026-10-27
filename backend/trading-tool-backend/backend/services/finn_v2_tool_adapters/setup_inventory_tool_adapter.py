@@ -23,6 +23,12 @@ class SetupInventoryToolAdapter:
                 "strategy_id": strategy_id, "name": strategy.get("name"),
                 **{field: strategy[field] for field in ("execution_mode", "risk_profile")
                    if strategy.get(field) is not None},
+                # The saved amount belongs to the strategy, not the setup's
+                # minimum investment or a bot budget. Keep it with its owner-
+                # scoped strategy identity in collection reads so a coach can
+                # answer a named strategy question without guessing a value.
+                **({"base_amount": strategy["base_amount"], "currency": "EUR"}
+                   if strategy.get("base_amount") is not None else {}),
             })
         linked_bots: dict[int, list[dict]] = {}
         for bot in bots or []:

@@ -2977,8 +2977,8 @@ class FinnResponsesFrontDoor:
                         and read_result.get("status") == "completed"
                     ):
                         # A comparison, selected strategy or explanation of a
-                        # single saved DCA plan needs linked evidence. The
-                        # inventory alone cannot establish its amount rule.
+                        # single saved DCA plan needs full linked evidence.
+                        # Inventory gives the base amount but not score bands.
                         details: list[dict[str, Any]] = []
                         selected_names = {
                             row["setup_id"]: str(row.get("name") or "")
