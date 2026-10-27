@@ -4497,7 +4497,7 @@ def test_guided_setup_preserves_user_asset_when_model_omits_symbol():
 
 def test_unsupported_pair_is_reported_without_substituting_base_asset():
     from backend.services.asset_catalog_service import (
-            corrected_catalog_instrument, requested_catalog_trading_pair,
+            corrected_catalog_instrument, requested_catalog_trading_pair, resolve_catalog_symbol,
             requests_unspecified_asset_correction, unsupported_catalog_pair_mention,
     )
 
@@ -4509,6 +4509,9 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
     assert unsupported_catalog_pair_mention("prijs/volume naast elkaar") is None
     assert unsupported_catalog_pair_mention("SOL/USDT") is None
     assert requested_catalog_trading_pair("SOL/USDT") == ("SOL", "USDT")
+    assert resolve_catalog_symbol("AAPL/USD") == "AAPL"
+    assert unsupported_catalog_pair_mention("AAPL/USD") is None
+    assert unsupported_catalog_pair_mention("AAPL/EUR") == "AAPL/EUR"
     assert unsupported_catalog_pair_mention("XYZ/EUR") == "XYZ/EUR"
     assert corrected_catalog_instrument("Ik bedoel ETH/EUR, niet ETH.") == "ETH/EUR"
     assert corrected_catalog_instrument("I mean AAPL, not ETH.") == "AAPL"
@@ -4516,6 +4519,14 @@ def test_unsupported_pair_is_reported_without_substituting_base_asset():
     assert corrected_catalog_instrument("Niet ETH maar AAPL (Apple-aandelen).") == "AAPL"
     assert corrected_catalog_instrument("Ik wil toch AAPL als Apple-aandelen in plaats van ETH.") == "AAPL"
     assert corrected_catalog_instrument("Maak dit plan voor AAPL, niet voor ETH.") == "AAPL"
+    assert corrected_catalog_instrument(
+        "Nee, laat deze ETH-setup vallen. Ik wil in plaats daarvan een NIEUWE setup "
+        "voor Apple (AAPL) maken, niet een extra handelsvoorwaarde voor ETH. "
+        "Noem hem Apple Swing QA 2710. Sla nog niets op."
+    ) == "AAPL"
+    assert corrected_catalog_instrument(
+        "Stop met de ETH-setup. Start nu een nieuwe AAPL-setup met naam Apple Swing QA 2710."
+    ) == "AAPL"
     assert corrected_catalog_instrument(
         "Correctie: gebruik AAPL (Apple) in plaats van ETH voor dit vaste DCA-concept."
     ) == "AAPL"

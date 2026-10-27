@@ -1540,7 +1540,7 @@ def test_low_confidence_lineage_selection_requires_safe_persisted_context():
     class Selector:
         def select(self, **_kwargs):
             return type("Selection", (), {
-                "operation_id": "explain_previous_evidence", "confidence": 0.6,
+                "operation_id": "explain_previous_evidence", "confidence": 0.49,
                 "entities": {}, "target_asset": None,
                 "conversation_reference": "previous_verified_response", "missing_inputs": (),
             })(), None
@@ -1554,6 +1554,23 @@ def test_low_confidence_lineage_selection_requires_safe_persisted_context():
 
     assert without_context.operation_id == "unavailable"
     assert with_context.operation_id == "explain_previous_evidence"
+
+
+def test_low_confidence_mutation_selection_remains_unavailable_with_lineage():
+    class Selector:
+        def select(self, **_kwargs):
+            return type("Selection", (), {
+                "operation_id": "watchlist_add", "confidence": 0.49,
+                "entities": {"symbol": "ETH"}, "target_asset": "ETH",
+                "conversation_reference": None, "missing_inputs": (),
+            })(), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Voeg ETH toe aan mijn watchlist.",
+        conversation_context={"last_verified_context": {"verified_response_id": "verified-1"}},
+    )
+
+    assert result.operation_id == "unavailable"
 
 
 @pytest.mark.parametrize("lineage_key", ["last_released_context", "last_verified_context"])

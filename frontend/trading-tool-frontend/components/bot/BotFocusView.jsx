@@ -258,7 +258,7 @@ export default function BotFocusView({
               </section>
             )}
 
-            {paperCheckResult && !activeBot.is_live && (
+            {paperCheckResult && !activeBot.is_live && ["not_due", "already_executed", "no_new_decision"].includes(paperCheckResult.reason) && (
               <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950" role="status" aria-live="polite">
                 <h3 className="font-bold">{paperCheckMessage}</h3>
                 <p className="mt-1 text-xs">{formatDateTime(paperCheckResult.checkedAt, locale, {

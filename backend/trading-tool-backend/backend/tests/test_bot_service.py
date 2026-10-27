@@ -1540,6 +1540,9 @@ def test_paper_reassessment_reports_execution_outcome_and_worker_failure(monkeyp
     class Repo:
         async def get_bot_config(self, user_id, bot_id):
             return {"is_live": False, "is_active": True}
+        async def record_paper_assessment(self, user_id, bot_id, decision_date, outcome, trace_id):
+            assert (user_id, bot_id, outcome) == (1, 9, "execution_failed")
+            return {"outcome": outcome, "checked_at": datetime.now(timezone.utc)}
 
     service = BotService(_FakeSession())
     service.repository = Repo()
@@ -1550,6 +1553,7 @@ def test_paper_reassessment_reports_execution_outcome_and_worker_failure(monkeyp
     assert failed_execution["generated"] is True
     assert failed_execution["paper_order_filled"] is False
     assert failed_execution["execution_failed"] is True
+    assert failed_execution["paper_assessment"]["outcome"] == "execution_failed"
 
     monkeypatch.setattr(module, "sync_run_trading_bot_execution", lambda *_args: {"ok": False})
     with pytest.raises(HTTPException) as exc:
@@ -1579,6 +1583,9 @@ def test_paper_reassessment_uses_server_today_even_with_caller_date(monkeypatch)
     class Repo:
         async def get_bot_config(self, user_id, bot_id):
             return {"is_live": False, "is_active": True}
+        async def record_paper_assessment(self, user_id, bot_id, decision_date, outcome, trace_id):
+            assert (user_id, bot_id, decision_date, outcome) == (1, 9, date.today(), "no_new_decision")
+            return {"outcome": outcome, "checked_at": datetime.now(timezone.utc)}
 
     calls = []
 
@@ -1793,6 +1800,9 @@ def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
                 "budget_daily_limit_eur": 100, "budget_min_order_eur": 1,
                 "budget_max_order_eur": 100, "max_asset_exposure_pct": 100,
             }]
+        async def latest_paper_assessments(self, user_id):
+            assert user_id == 7
+            return {9: {"outcome": "not_due", "checked_at": datetime.now(timezone.utc)}}
 
     service = BotService(_FakeSession())
     service.repository = Repo()
@@ -1804,6 +1814,7 @@ def test_bot_list_keeps_saved_setup_schedule_separate_from_strategy_timeframe():
     assert bot["strategy"]["setup"]["dca_frequency"] == "monthly"
     assert bot["strategy"]["setup"]["dca_month_day"] == 5
     assert bot["paper_initial_cash_eur"] == 25
+    assert bot["paper_last_assessment"]["outcome"] == "not_due"
     assert bot["dca_schedule_status"]["next_due_date"]
 
 

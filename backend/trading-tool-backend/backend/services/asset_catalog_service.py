@@ -656,6 +656,13 @@ def resolve_catalog_symbol(value: object) -> str | None:
     normalized = str(value or "").strip().casefold()
     if not normalized:
         return None
+    if "/" in normalized:
+        base, separator, quote = normalized.partition("/")
+        stock = DEFAULT_ASSET_CATALOG.get(base.upper()) or {}
+        if (separator and str(stock.get("asset_class") or "").lower() == "stock"
+                and quote.upper() == str(stock.get("quote_currency") or "").upper()):
+            return base.upper()
+        return None
     for symbol, asset in DEFAULT_ASSET_CATALOG.items():
         candidates = {
             symbol.casefold(), str(asset.get("display_name") or "").casefold(),
@@ -727,6 +734,25 @@ def corrected_catalog_instrument(value: object) -> str | None:
     how FINN should answer or turn a quoted pair into its base asset.
     """
     text = str(value or "")
+    # A user can abandon a draft and request a new setup in the same turn.
+    # In that case the new asset is the target, even when the old asset is
+    # mentioned later as contrast rather than directly after "niet".
+    if "?" not in text and re.search(
+        r"\b(?:laat|stop|annuleer|cancel|discard)\b[^.!?]{0,100}\b(?:setup|plan)\b",
+        text, re.I,
+    ):
+        replacement = re.search(
+            r"\b(?:nieuw(?:e)?|new)\s+(?:setup\s+(?:voor|for)\s+"
+            r"(?P<after_setup>[A-Za-z0-9]{2,20})|"
+            r"(?P<before_setup>[A-Za-z0-9]{2,20})[-\s]+setup)\b",
+            text, re.I,
+        )
+        if replacement:
+            symbol = resolve_catalog_symbol(
+                replacement.group("after_setup") or replacement.group("before_setup")
+            )
+            if symbol:
+                return symbol
     instrument = r"[A-Za-z0-9]{2,20}(?:/[A-Za-z0-9]{2,10})?"
     patterns = (
         rf"^\s*(?:correctie\s*:\s*)?(?P<instrument>{instrument})\s+"

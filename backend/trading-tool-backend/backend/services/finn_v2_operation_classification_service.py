@@ -300,7 +300,6 @@ class FinnV2OperationClassificationService:
             or (
                 selection.operation_id in lineage_operations
                 and (has_safe_lineage or safe_terminal_explanation)
-                and selection.confidence >= 0.5
             )
         ):
             return self._result(

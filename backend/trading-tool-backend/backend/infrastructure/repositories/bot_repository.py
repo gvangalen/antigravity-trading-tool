@@ -110,6 +110,38 @@ class BotRepository:
         row = result.fetchone()
         return dict(row._mapping) if row else None
 
+    async def record_paper_assessment(
+        self, user_id: int, bot_id: int, decision_date: date,
+        outcome: str, trace_id: str | None,
+    ) -> dict:
+        """Record an owner-bound manual check, including a no-decision result."""
+        result = await self.session.execute(text("""
+            INSERT INTO bot_paper_assessments
+                (user_id, bot_id, checked_at, decision_date, outcome, trace_id)
+            SELECT CAST(:user_id AS INTEGER), b.id, clock_timestamp(),
+                   :decision_date, :outcome, :trace_id
+            FROM bot_configs b WHERE b.id=:bot_id AND b.user_id=:user_id
+            RETURNING id, checked_at, decision_date, outcome
+        """), {
+            "user_id": user_id, "bot_id": bot_id, "decision_date": decision_date,
+            "outcome": outcome, "trace_id": trace_id,
+        })
+        row = result.mappings().first()
+        if row is None:
+            raise LookupError("paper_assessment_bot_not_owned")
+        return dict(row)
+
+    async def latest_paper_assessments(self, user_id: int) -> dict[int, dict]:
+        result = await self.session.execute(text("""
+            SELECT DISTINCT ON (a.bot_id) a.bot_id, a.checked_at,
+                   a.decision_date, a.outcome
+            FROM bot_paper_assessments a
+            JOIN bot_configs b ON b.id=a.bot_id AND b.user_id=a.user_id
+            WHERE a.user_id=:user_id
+            ORDER BY a.bot_id, a.checked_at DESC, a.id DESC
+        """), {"user_id": user_id})
+        return {int(row["bot_id"]): dict(row) for row in result.mappings()}
+
     async def get_active_bots_with_setups(self, user_id: int) -> List[dict]:
         query = text("""
             SELECT b.id, b.name, b.is_live, b.updated_at AS bot_updated_at,
