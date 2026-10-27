@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair FINN QA repair (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATED_AWAITING_CI`. The existing independent QA Agent tested the
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. The existing independent QA Agent tested the
 previous final public SHA `b935810512476c9146e824d6bf9cda6191544140` and
 returned `NOT_ACCEPTED`. An exact BTC/EUR setup-only request in a new chat did
 not produce a proposal when the owner also had BTC/USDT; a price/indicator read
@@ -46,7 +46,13 @@ accuracy, and zero provider, schema, timeout, parse or validation failures
 (`backend/trading-tool-backend/.local-finn-parity-artifacts/
 exact-pair-finn-qa-repair-regression.json`, SHA-256
 `d2e526d346c956734057feacd22dc3bd46a9f07e5c8e49ca23384fffb72d315d`).
-The repair is not yet live and authenticated QA is still required.
+PR #650 merged this repair as SHA `ffd9dee054b8af0939b85c3fe61f654b772fbc96`.
+Main CI run `40512246605` and Auto Deploy run `40512964259` both succeeded.
+Public backend health and frontend build-info each returned HTTP 200 and exact
+SHA `ffd9dee054b8af0939b85c3fe61f654b772fbc96` at the post-deploy check.
+This status update creates a later main SHA and another CI/deploy cycle; the
+existing independent QA Agent must test the last successful public SHA after
+that cycle. Authenticated live behavior remains unaccepted until that verdict.
 
 ## Exact trading-pair candidate (27 oktober 2026)
 
