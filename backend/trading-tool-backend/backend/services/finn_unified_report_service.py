@@ -416,6 +416,7 @@ async def _load_period_context(user_id: int, period: str) -> dict[str, Any]:
                    calculated_at, indicator_evidence
             FROM daily_scores
             WHERE user_id = :user_id AND report_date BETWEEN :start AND :end
+              AND market_id IS NULL
             ORDER BY report_date ASC, symbol ASC LIMIT 150
             """), params)).mappings().all()
             decisions = (await session.execute(text("""

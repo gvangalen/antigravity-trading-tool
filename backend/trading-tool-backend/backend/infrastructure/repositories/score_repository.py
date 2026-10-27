@@ -81,6 +81,7 @@ class ScoreRepository:
                 setup_score, report_date, calculated_at, indicator_evidence
             FROM daily_scores
             WHERE user_id = :user_id AND report_date = CURRENT_DATE AND symbol = :symbol
+              AND market_id IS NULL
             LIMIT 1
         """)
         result = await self.db.execute(stmt, {"user_id": user_id, "symbol": symbol})
@@ -106,6 +107,7 @@ class ScoreRepository:
             .where(
                 DailyScore.user_id == user_id,
                 DailyScore.symbol.in_(normalized),
+                DailyScore.market_id.is_(None),
             )
             .subquery()
         )
@@ -146,9 +148,11 @@ class ScoreRepository:
             LEFT JOIN (
                 SELECT DISTINCT ON (symbol, timestamp::date) symbol, price, timestamp::date as d
                 FROM market_data
+                WHERE market_id IS NULL
                 ORDER BY symbol, timestamp::date, timestamp DESC
             ) md ON md.symbol = ds.symbol AND md.d = ds.report_date
             WHERE ds.user_id = :user_id AND ds.symbol = :symbol
+            AND ds.market_id IS NULL
             AND ds.report_date >= CURRENT_DATE - INTERVAL '1 day' * :days
             ORDER BY ds.report_date ASC
         """)

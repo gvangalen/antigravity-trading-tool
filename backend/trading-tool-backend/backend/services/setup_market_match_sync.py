@@ -64,7 +64,8 @@ def current_setup_market_assessment(conn, user_id: int, symbol: str) -> dict[str
         cur.execute(
             "SELECT report_date, macro_score, technical_score, market_score, "
             "calculated_at, indicator_evidence "
-            "FROM daily_scores WHERE user_id=%s AND symbol=%s AND report_date=CURRENT_DATE LIMIT 1",
+            "FROM daily_scores WHERE user_id=%s AND symbol=%s AND market_id IS NULL "
+            "AND report_date=CURRENT_DATE LIMIT 1",
             (user_id, symbol),
         )
         daily_row = cur.fetchone()

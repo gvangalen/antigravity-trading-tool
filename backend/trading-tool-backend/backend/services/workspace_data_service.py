@@ -768,6 +768,7 @@ class WorkspaceDataService:
                 func.count(func.distinct(day)).filter(MarketData.volume.is_not(None)).label("volume_days"),
             ).where(
                 MarketData.symbol == symbol,
+                MarketData.market_id.is_(None),
                 MarketData.source_observed_at >= now - timedelta(days=30),
             )
             counts = (await self.session.execute(stmt)).one()

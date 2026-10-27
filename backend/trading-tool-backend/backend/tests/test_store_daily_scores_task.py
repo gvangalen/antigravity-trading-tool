@@ -22,6 +22,31 @@ def test_indicator_change_rebuilds_only_its_asset(monkeypatch):
     assert built == [(7, ["ETH"])]
 
 
+def test_exact_market_refresh_never_rebuilds_the_legacy_asset(monkeypatch):
+    from backend.celery_task import store_daily_scores_task as task_module
+    from backend.celery_task.celery_app import celery_app
+    from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
+
+    queued = []
+    exact = []
+    monkeypatch.setattr(celery_app, "send_task", lambda name, kwargs: queued.append((name, kwargs)))
+    monkeypatch.setattr(task_module, "build_daily_scores_for_market",
+                        lambda user_id, market_id: exact.append((user_id, market_id)))
+    monkeypatch.setattr(task_module, "build_daily_scores_for_user",
+                        lambda *_args, **_kwargs: raise_if_called())
+
+    def invoke():
+        assert queue_indicator_score_refresh(7, "BTC", market_id=23)
+        task_module.store_daily_scores_task.run(**queued[0][1])
+
+    def raise_if_called():
+        raise AssertionError("legacy_score_writer_called_for_exact_market")
+
+    invoke()
+    assert queued[0][1] == {"user_id": 7, "market_id": 23}
+    assert exact == [(7, 23)]
+
+
 def test_run_rule_based_daily_scores_skips_when_previous_run_is_active(monkeypatch):
     import backend.celery_task.store_daily_scores_task as task_module
 

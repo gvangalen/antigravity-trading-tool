@@ -19,7 +19,7 @@ class MarketDataRepository:
     async def get_latest_market_data(self, symbol: str) -> Optional[MarketData]:
         stmt = (
             select(MarketData)
-            .where(MarketData.symbol == symbol)
+            .where(MarketData.symbol == symbol, MarketData.market_id.is_(None))
             .order_by(desc(MarketData.timestamp))
             .limit(1)
         )
@@ -29,11 +29,26 @@ class MarketDataRepository:
     async def get_latest_snapshot(self, symbol: str = 'BTC') -> Optional[MarketData]:
         return await self.get_latest_market_data(symbol.upper())
 
+    async def get_latest_exact_market_snapshot(self, market_id: int) -> Optional[MarketData]:
+        """Read a chosen pair by immutable market ID, never by base symbol."""
+        if type(market_id) is not int or market_id <= 0:
+            raise ValueError("exact_market_id_required")
+        stmt = (
+            select(MarketData)
+            .where(MarketData.market_id == market_id)
+            .where(MarketData.source_observed_at.is_not(None))
+            .where(MarketData.quote_currency.is_not(None))
+            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def get_latest_quoted_snapshot(self, symbol: str) -> Optional[MarketData]:
         """Use a provider-dated row with its own unit for factual price reads."""
         stmt = (
             select(MarketData)
-            .where(MarketData.symbol == symbol.upper())
+            .where(MarketData.symbol == symbol.upper(), MarketData.market_id.is_(None))
             .where(MarketData.source_observed_at.is_not(None))
             .where(MarketData.quote_currency.is_not(None))
             .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
@@ -53,6 +68,7 @@ class MarketDataRepository:
         latest = (
             select(MarketData.id)
             .where(MarketData.symbol == requested.c.symbol)
+            .where(MarketData.market_id.is_(None))
             .where(MarketData.source_observed_at.is_not(None))
             .where(MarketData.quote_currency.is_not(None))
             .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
@@ -82,6 +98,7 @@ class MarketDataRepository:
         latest = (
             select(MarketData.id)
             .where(MarketData.symbol == requested.c.symbol)
+            .where(MarketData.market_id.is_(None))
             .order_by(MarketData.timestamp.desc())
             .limit(1)
             .correlate(requested)
@@ -100,6 +117,7 @@ class MarketDataRepository:
         stmt = (
             select(MarketData)
             .where(MarketData.timestamp >= min_timestamp)
+            .where(MarketData.market_id.is_(None))
             .order_by(desc(MarketData.timestamp))
         )
         result = await self.session.execute(stmt)

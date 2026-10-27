@@ -453,7 +453,8 @@ def recover_coach_feed_events():
 @shared_task(
     name="backend.celery_task.store_daily_scores_task.store_daily_scores_task"
 )
-def store_daily_scores_task(user_id: int, symbol: str | None = None):
+def store_daily_scores_task(user_id: int, symbol: str | None = None,
+                            market_id: int | None = None):
     """
     Bouwt daily scores voor precies één user.
 
@@ -462,7 +463,10 @@ def store_daily_scores_task(user_id: int, symbol: str | None = None):
     """
     if user_id is None:
         raise ValueError("❌ user_id is verplicht voor store_daily_scores_task")
-
+    if market_id is not None:
+        if symbol is not None or type(market_id) is not int or market_id <= 0:
+            raise ValueError("exact_market_score_scope_invalid")
+        return build_daily_scores_for_market(user_id, market_id)
     build_daily_scores_for_user(user_id, [symbol] if symbol else None)
 
 

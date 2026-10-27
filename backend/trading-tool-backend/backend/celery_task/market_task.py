@@ -347,6 +347,7 @@ def fetch_market_data_7d():
             cur.execute("""
                 SELECT price, volume, change_24h, timestamp
                 FROM market_data
+                WHERE market_id IS NULL
                 ORDER BY timestamp DESC
                 LIMIT 1
             """)
@@ -570,7 +571,7 @@ def fetch_and_process_market_indicators(user_id: int):
             cur.execute("""
                 SELECT volume
                 FROM market_data
-                WHERE volume IS NOT NULL
+                WHERE volume IS NOT NULL AND market_id IS NULL
                 ORDER BY timestamp DESC
                 LIMIT 8
             """)
@@ -595,6 +596,7 @@ def fetch_and_process_market_indicators(user_id: int):
             cur.execute("""
                 SELECT price, change_24h, source_observed_at
                 FROM market_data
+                WHERE market_id IS NULL
                 ORDER BY timestamp DESC
                 LIMIT 1
             """)

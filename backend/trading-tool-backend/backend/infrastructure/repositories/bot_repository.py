@@ -761,6 +761,7 @@ class BotRepository:
             FROM market_data m
             LEFT JOIN asset_catalog a ON a.symbol = m.symbol
             WHERE m.symbol=:symbol
+              AND m.market_id IS NULL
             ORDER BY m.timestamp DESC
             LIMIT 1
         """)
@@ -787,6 +788,7 @@ class BotRepository:
             SELECT DISTINCT ON (symbol) symbol, price
             FROM market_data
             WHERE symbol = ANY(:symbols)
+              AND market_id IS NULL
             ORDER BY symbol, timestamp DESC
         """)
         result = await self.session.execute(query, {"symbols": normalized})
@@ -807,6 +809,7 @@ class BotRepository:
             SELECT DISTINCT ON (symbol) symbol, timestamp
             FROM market_data
             WHERE symbol = ANY(:symbols) AND price IS NOT NULL AND price > 0
+              AND market_id IS NULL
             ORDER BY symbol, timestamp DESC
         """), {"symbols": normalized})
         return {str(row._mapping["symbol"]).upper(): row._mapping["timestamp"] for row in result.fetchall()}
@@ -820,6 +823,7 @@ class BotRepository:
             SELECT DISTINCT ON (symbol) symbol, price, source_observed_at
             FROM market_data
             WHERE symbol=ANY(:symbols) AND price IS NOT NULL AND price>0
+                  AND market_id IS NULL
                   AND source_observed_at IS NOT NULL
             ORDER BY symbol, source_observed_at DESC, timestamp DESC
         """), {"symbols": normalized})

@@ -33,6 +33,17 @@ selection, web/mobile chart binding, Paper execution and end-to-end
 provider/runtime gates are incomplete. Do not deploy this branch as a partial
 trading-pair release.
 
+Subsequent local work isolates legacy base-symbol quote, indicator, score,
+portfolio and bot readers from newly stored exact-market rows. A dedicated
+exact-market history bootstrap accepts only completed candles from the verified
+provider symbol and retains the selected market ID and quote currency. The
+Score 2.0 refresh task can now address a market ID without rebuilding the
+legacy base-asset score. Focused tests passed 60/60 and the prior full backend
+run passed 4024 with four existing skips. These changes are still local and
+do not make a pair-bound plan executable: periodic pair source materialization,
+owner-specific pair configurations, FINN proposal selection, exact-market
+readers across web/mobile and Paper execution remain required before release.
+
 Independent QA accepted the
 targeted Stage 1 recheck on final live SHA
 `1d75d5ccccfe611a5fd4c73324cc6945eb148ef2`: the localized MACD title,

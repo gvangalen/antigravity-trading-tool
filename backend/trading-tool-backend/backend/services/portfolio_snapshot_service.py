@@ -67,6 +67,7 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
             SELECT DISTINCT ON (m.symbol) m.symbol, m.price, m.source_observed_at, a.quote_currency, m.id
             FROM market_data m LEFT JOIN asset_catalog a ON a.symbol=m.symbol
             WHERE m.symbol = ANY(%s) AND m.price IS NOT NULL AND m.price>0
+                  AND m.market_id IS NULL
                   AND m.source_observed_at IS NOT NULL
             ORDER BY m.symbol, m.source_observed_at DESC, m.timestamp DESC
         """, (held_symbols,))

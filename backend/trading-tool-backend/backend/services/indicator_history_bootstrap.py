@@ -13,6 +13,7 @@ from backend.infrastructure.models import MacroData, MarketData
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.market_data_provider_registry import MarketDataProviderRegistry
+from backend.services.trading_market_service import TradingMarket
 from backend.utils.macro_interpreter import fetch_absolute_macro_history
 
 
@@ -26,12 +27,76 @@ class IndicatorHistoryBootstrap:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def bootstrap_exact_market(self, market: TradingMarket) -> dict:
+        """Backfill completed candles for one verified pair only.
+
+        The source rows retain their quote unit and market ID. A legacy BTC
+        candle or a BTC/USDT candle cannot count toward BTC/EUR coverage.
+        """
+        today = datetime.now(timezone.utc).date()
+        cutoff_day = today - timedelta(days=30)
+        existing = (await self.session.execute(
+            select(MarketData.source_observed_at).where(
+                MarketData.market_id == market.id,
+                MarketData.source_observed_at >= datetime.combine(cutoff_day, time.min),
+                MarketData.source_observed_at < datetime.combine(today, time.min),
+                MarketData.price.is_not(None),
+            )
+        )).scalars().all()
+        existing_days = {stamp.date() for stamp in existing if stamp}
+        if len(existing_days) >= RSI_SOURCE_DAYS:
+            return {"inserted": 0, "status": "ready", "observed_days": len(existing_days),
+                    "market_id": market.id}
+
+        asset_payload = await AssetCatalogService(self.session).get_asset(market.asset_symbol)
+        if not asset_payload or str(asset_payload.get("asset_class") or "").lower() != "crypto":
+            raise ValueError("exact_market_asset_unavailable")
+        asset = AssetRecord(**{
+            **asset_payload, "provider": market.provider,
+            "primary_provider": market.provider, "fallback_provider": None,
+            "provider_symbol": market.provider_symbol, "exchange": market.venue,
+            "quote_currency": market.quote_currency,
+        })
+        provider = MarketDataProviderRegistry().resolve_for_asset(asset)
+        await self.session.rollback()
+        candles = await provider.fetch_candles(asset, "1d", limit=40)
+        inserted = 0
+        for candle in candles:
+            day = candle.period_start.date()
+            if (day in existing_days or not cutoff_day <= day < today
+                    or not candle.is_final
+                    or str(candle.provider_symbol or "").upper() != market.provider_symbol
+                    or str(candle.provider or "").lower() != market.provider.lower()
+                    or str(candle.symbol or "").upper() != market.asset_symbol):
+                continue
+            price = float(candle.close)
+            volume = float(candle.volume) if candle.volume is not None else None
+            if (not isfinite(price) or price <= 0
+                    or (volume is not None and (not isfinite(volume) or volume < 0))):
+                continue
+            observed_at = datetime.combine(day, time(23, 59, 59))
+            self.session.add(MarketData(
+                symbol=market.asset_symbol, market_id=market.id,
+                quote_currency=market.quote_currency, price_provider=market.provider,
+                price=price, volume=volume,
+                open=candle.open, high=candle.high, low=candle.low,
+                timestamp=observed_at, source_observed_at=observed_at,
+            ))
+            existing_days.add(day)
+            inserted += 1
+        if inserted:
+            await self.session.commit()
+        return {"inserted": inserted,
+                "status": "ready" if len(existing_days) >= RSI_SOURCE_DAYS else "insufficient_history",
+                "observed_days": len(existing_days), "market_id": market.id}
+
     async def market_coverage(self, symbol: str) -> dict[str, int]:
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
         today = datetime.combine(datetime.now(timezone.utc).date(), time.min)
         rows = (await self.session.execute(
             select(MarketData.source_observed_at, MarketData.price, MarketData.volume).where(
                 MarketData.symbol == symbol,
+                MarketData.market_id.is_(None),
                 MarketData.source_observed_at >= cutoff,
                 MarketData.source_observed_at < today,
             )
@@ -78,6 +143,7 @@ class IndicatorHistoryBootstrap:
         existing = (await self.session.execute(
             select(MarketData.source_observed_at, MarketData.price, MarketData.volume).where(
                 MarketData.symbol == normalized_symbol,
+                MarketData.market_id.is_(None),
                 MarketData.source_observed_at >= datetime.combine(cutoff_day, time.min),
             )
         )).all()

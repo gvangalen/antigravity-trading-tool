@@ -99,6 +99,7 @@ def _get_live_price(
             FROM market_data m
             LEFT JOIN asset_catalog a ON a.symbol = m.symbol
             WHERE m.symbol = %s
+              AND m.market_id IS NULL
               AND m.price IS NOT NULL
               AND m.source_observed_at IS NOT NULL
               AND m.quote_currency IS NOT NULL
@@ -165,6 +166,7 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True) 
         cur.execute("""
             SELECT price, source_observed_at, quote_currency FROM market_data
             WHERE symbol=%s AND price IS NOT NULL
+              AND market_id IS NULL
               AND source_observed_at IS NOT NULL
               AND quote_currency IS NOT NULL
             ORDER BY source_observed_at DESC, timestamp DESC LIMIT 1
@@ -372,6 +374,7 @@ def _validate_live_auto_order_risk(
                 FROM market_data m
                 LEFT JOIN asset_catalog a ON a.symbol = m.symbol
                 WHERE m.symbol=%s AND m.price IS NOT NULL
+                  AND m.market_id IS NULL
                 ORDER BY m.timestamp DESC LIMIT 1
             """, (asset,))
             market = cur.fetchone()
@@ -466,6 +469,7 @@ def get_asset_position_value(
             SELECT price
             FROM market_data
             WHERE symbol=%s
+              AND market_id IS NULL
               AND price IS NOT NULL
             ORDER BY timestamp DESC
             LIMIT 1
@@ -986,6 +990,7 @@ def _get_daily_scores(conn, user_id: int, report_date: date, symbol: str = "BTC"
             WHERE user_id=%s
               AND report_date=%s
               AND symbol=%s
+              AND market_id IS NULL
             LIMIT 1
             """,
             (user_id, report_date, symbol),

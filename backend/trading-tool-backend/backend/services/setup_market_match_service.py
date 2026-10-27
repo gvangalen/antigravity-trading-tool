@@ -129,6 +129,7 @@ class SetupMarketMatchService:
                        calculated_at, indicator_evidence
                 FROM daily_scores
                 WHERE user_id = :user_id AND symbol = :symbol AND report_date = CURRENT_DATE
+                  AND market_id IS NULL
                 LIMIT 1
             """), {"user_id": user_id, "symbol": symbol})
             row = result.mappings().first()
@@ -230,6 +231,7 @@ class SetupMarketMatchService:
                        calculated_at, indicator_evidence
                 FROM daily_scores WHERE user_id = :user_id AND report_date = CURRENT_DATE
                   AND symbol = ANY(:symbols)
+                  AND market_id IS NULL
             """), {"user_id": user_id, "symbols": symbols})
             self.daily_rows = {str(row["symbol"]).upper(): row for row in result.mappings().all()}
         matches = []
