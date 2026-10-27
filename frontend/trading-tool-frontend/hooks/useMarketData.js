@@ -7,6 +7,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   fetchMarketData7d,
   fetchLatestPrice,
+  fetchExactMarketPrice,
   fetchForwardReturnsWeek,
   fetchForwardReturnsMonth,
   fetchForwardReturnsQuarter,
@@ -82,6 +83,8 @@ export function useMarketData(symbol = "BTC", options = {}) {
     includeMarketDayData,
     includeIndicators,
     timeframe = "day",
+    marketId = null,
+    quoteCurrency = null,
   } = options;
   const [sevenDayData, setSevenDayData] = useState([]);
   const [btcLive, setBtcLive] = useState(null);
@@ -99,6 +102,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
   const [marketDayData, setMarketDayData] = useState([]);
   const [activeMarketIndicators, setActiveMarketIndicators] = useState([]);
   const normalizedSymbol = useMemo(() => String(symbol || "BTC").toUpperCase(), [symbol]);
+  const normalizedQuote = String(quoteCurrency || "").toUpperCase();
   const [preferences, setPreferences] = useState({
     scope: "default",
     symbol: normalizedSymbol,
@@ -138,6 +142,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const livePriceFetchingRef = useRef(false);
+  const livePriceRequestKeyRef = useRef("");
 
   const shouldLoadExtended = mode !== "live" && includeExtendedData !== false;
   const shouldLoadSevenDayData = includeSevenDayData ?? shouldLoadExtended;
@@ -178,8 +183,9 @@ export function useMarketData(symbol = "BTC", options = {}) {
      INIT
   -------------------------------------------------------- */
   useEffect(() => {
+    setBtcLive(null);
     loadAll();
-  }, [normalizedSymbol, timeframe]);
+  }, [normalizedSymbol, timeframe, marketId, normalizedQuote]);
 
   useEffect(() => {
     loadPreferences();
@@ -189,7 +195,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
     intervalMs: 60000,
     backgroundIntervalMs: 300000,
     runImmediately: false,
-    deps: [normalizedSymbol],
+    deps: [normalizedSymbol, marketId, normalizedQuote],
   });
 
   /* --------------------------------------------------------
@@ -316,7 +322,9 @@ export function useMarketData(symbol = "BTC", options = {}) {
   }, [
     commonT,
     configuredMarketIndicatorNames,
+    marketId,
     normalizedSymbol,
+    normalizedQuote,
     shouldLoadDailyScores,
     shouldLoadExtended,
     shouldLoadForwardData,
@@ -374,14 +382,30 @@ export function useMarketData(symbol = "BTC", options = {}) {
      LIVE PRICE
   -------------------------------------------------------- */
   async function loadLivePrice(options = { forceFresh: true }) {
-    if (livePriceFetchingRef.current) return;
+    const requestKey = `${normalizedSymbol}:${marketId ?? "base"}:${normalizedQuote}`;
+    if (livePriceFetchingRef.current && livePriceRequestKeyRef.current === requestKey) return;
     livePriceFetchingRef.current = true;
+    livePriceRequestKeyRef.current = requestKey;
     try {
-      setBtcLive(await fetchLatestPrice(normalizedSymbol, options));
+      if (marketId != null && ["EUR", "USDT"].includes(normalizedQuote)) {
+        const exact = await fetchExactMarketPrice(marketId);
+        const price = (
+          Number(exact?.market_id) === Number(marketId)
+          && exact?.symbol === normalizedSymbol
+          && exact?.quote_currency === normalizedQuote
+          && !exact?.stale ? exact.price : null
+        );
+        if (livePriceRequestKeyRef.current === requestKey) setBtcLive(price);
+      } else if (marketId == null) {
+        const price = await fetchLatestPrice(normalizedSymbol, options);
+        if (livePriceRequestKeyRef.current === requestKey) setBtcLive(price);
+      } else if (livePriceRequestKeyRef.current === requestKey) {
+        setBtcLive(null);
+      }
     } catch {
-      setBtcLive(null);
+      if (livePriceRequestKeyRef.current === requestKey) setBtcLive(null);
     } finally {
-      livePriceFetchingRef.current = false;
+      if (livePriceRequestKeyRef.current === requestKey) livePriceFetchingRef.current = false;
     }
   }
 

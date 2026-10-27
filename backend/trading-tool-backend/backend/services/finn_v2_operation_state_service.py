@@ -295,7 +295,17 @@ class FinnV2OperationStateService:
             # Use only bounds stated by the user; a tool candidate cannot
             # invent or reinterpret either end of this eligibility range.
             explicit.update(explicit_benchmark_bounds(message))
-            if self.setup_only_intent(message):
+            if self.setup_only_intent(message) and not (
+                dict((conversation_context or {}).get("proposal_correction_result") or {}).get("status") == "cancelled"
+                and inherited.get("base_amount") is not None
+                and inherited.get("dca_amount_mode")
+                and not re.search(
+                    r"\b(?:alleen|enkel|uitsluitend|only|nur)\b|"
+                    r"\b(?:zonder|geen|without|ohne)\b.{0,30}\b(?:strategie|strategy|bedrag|amount|betrag)\b|"
+                    r"\b(?:strategie|strategy|bedrag|amount|betrag)\b.{0,30}\b(?:later|später|afterwards)\b",
+                    message, re.I,
+                )
+            ):
                 explicit["plan_scope"] = "setup_only"
             elif (
                 prior_plan_scope == "setup_only"
@@ -1798,6 +1808,9 @@ class FinnV2OperationStateService:
     @staticmethod
     def _requests_name_prompt(text: str) -> bool:
         return bool(re.search(r"\b(?:de\s+)?naam\s+(?:geef|kies|bepaal)\s+ik\s+(?:later|zo|straks)\b", text, re.I)) or bool(re.search(
+            r"\b(?:welke|wat\s+voor\s+een)\s+naam\s+(?:raad\s+je\s+aan|stel\s+je\s+voor|zou\s+je\s+(?:kiezen|voorstellen))\b",
+            text, re.I,
+        )) or bool(re.search(
             r"(?:^|[.!?]\s*|\b(?:en|and|und)\s+)"
             r"(?:vraag|ask|frag(?:e)?)\s+(?:mij|me|mich)?\s*"
             r"(?:eerst\s+|first\s+|zuerst\s+)?"

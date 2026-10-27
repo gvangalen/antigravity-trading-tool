@@ -89,7 +89,8 @@ def _prior_inputs_for_open_correction(
     return {
         key: value for key, value in origin_inputs.items()
         if (retain_parent_ids or not key.endswith("_id"))
-        and key not in {"asset", "symbol"}
+        and key not in ({"asset", "symbol", "quote_currency", "market_id"}
+                        if corrected_instrument else {"asset", "symbol"})
     }
 
 

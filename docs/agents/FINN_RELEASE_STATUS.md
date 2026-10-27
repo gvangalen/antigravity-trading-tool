@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair strategy display and guided asset correction (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Independent QA accepted the earlier
+BTC/EUR proposal and Score 2.0 readback on public SHA
+`f2751910699f6d6cb02f1064f7a2260ba6305fa6`. Its broader owner-bound
+browser test found that saved EUR/USDT strategies and Paper bots were shown as
+only BTC, so the trading pair was unclear. A natural correction of an open ETH
+DCA draft to Apple (`maak een nieuwe setup voor Apple in plaats van ETH`)
+failed with `guided_proposal_tool_call_required`; an explicit stop-and-restart
+phrasing worked. No Live action or broker order occurred.
+
+This batch preserves the exact saved market and quote on strategy readback,
+shows the pair in strategy and bot surfaces, and uses an authenticated
+exact-market quote for strategy price comparison. Missing, stale, mismatched
+or unsupported quotes yield no comparison; a base-asset quote cannot stand in
+for BTC/EUR or BTC/USDT. The guided correction now retires the ETH target,
+retains the user's applicable DCA cadence and amount, and starts an AAPL
+draft; a request for a name suggestion is not stored as the plan name.
+
+Measured local evidence: root backend suite **4065 passed, 4 existing skips**
+(`.local-finn-parity-artifacts/pair-guided-final-pytest.log`, SHA-256
+`24897329be3e0ee5e6f503a449d970fac70332528d64ed653d6bbebbc6973162`).
+The restarted FastAPI/Celery worker action matrix passed **16/16** contracts
+(`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
+`dc1c9e8e2338e6b6b4425ef0398128b66ec9a021a139beefbed6361dc7ff4b25`);
+the adapter suite passed **21/21**. A local owner-bound conversation verified
+the natural ETH-to-Apple correction, preserved Monday/1D/€100 inputs, and
+produced an AAPL proposal without a write. A local exact-market endpoint probe
+returned separate EUR and USDT prices from isolated pair snapshots. Frontend
+typecheck, i18n/command/proposal/setup checks, new pair-label and USDT-format
+tests, high-severity dependency audit, and production build passed. The real
+Luna/Responses development selector evaluation passed **20/20** operations
+(`backend/trading-tool-backend/.local-finn-parity-artifacts/pair-guided-final-development.json`,
+SHA-256 `bd89c3322d7a7f3b2a90d5e3e6c5414df7ec14f6aa5d8174f0ec3e0f59e1a375`).
+The real Luna/Responses regression evaluation passed **109/109** operations,
+100% entity and action-polarity accuracy, 91.7% missing-input accuracy, and
+zero provider, schema, parse or validation failure rates
+(`backend/trading-tool-backend/.local-finn-parity-artifacts/pair-guided-final-regression.json`,
+SHA-256 `e60714b5e6c63ef26681bca12a058732088a4471c8392e80b5dd6963a1f850cd`).
+No new candidate has been pushed or deployed. Authenticated live behavior
+remains unaccepted.
+
 ## Exact-pair FINN QA repair (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. The existing independent QA Agent tested the

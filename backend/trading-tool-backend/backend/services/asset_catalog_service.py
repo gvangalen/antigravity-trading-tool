@@ -742,6 +742,8 @@ def corrected_catalog_instrument(value: object) -> str | None:
         rf"niet|not)\s+{instrument}\b",
         rf"\b(?:maak|create|erstelle)\b[^.!?]*\b(?:voor|for|für)\s+"
         rf"(?P<instrument>{instrument})\b[^.!?]*\b(?:niet|not|kein)\s+(?:(?:voor|for|für)\s+)?{instrument}\b",
+        rf"\b(?:maak|create|erstelle)\b[^.!?]*\b(?:voor|for|für)\s+"
+        rf"(?P<instrument>{instrument})\b[^.!?]*\b(?:in\s+plaats\s+van|instead\s+of|statt)\s+{instrument}\b",
     )
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)

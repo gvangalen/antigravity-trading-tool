@@ -55,6 +55,9 @@ export const fetchLatestPrice = (symbol = "BTC", options = {}) => {
   inflightLatestPriceRequests.set(requestKey, request);
   return request;
 };
+
+export const fetchExactMarketPrice = (marketId) =>
+  fetchAuth(`/api/market_data/exact-market/${Number(marketId)}/latest`, { method: "GET" });
 export const fetchLatestBTC = () => fetchLatestPrice("BTC"); // Fallback
 
 export const syncMarketData7d = (symbol = "BTC", overwrite = false) =>

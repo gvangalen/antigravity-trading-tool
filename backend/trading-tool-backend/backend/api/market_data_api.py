@@ -3,6 +3,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from backend.infrastructure.models import TradingMarket
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+from backend.services.workspace_data_service import STALE_AFTER_SECONDS, _freshness
 
 from backend.infrastructure.database import get_db
 from backend.services.market_data_service import MarketDataService
@@ -321,6 +324,29 @@ async def list_market_data(
     except Exception as e:
         logger.error(f"❌ [list] DB-fout: {e}")
         raise HTTPException(500, "❌ Kon marktdata niet ophalen.")
+
+@router.get("/market_data/exact-market/{market_id}/latest")
+async def get_latest_exact_market_price(
+    market_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """A quote for one verified market; never substitute a base-asset price."""
+    market = await db.get(TradingMarket, market_id)
+    if market is None or not market.is_active:
+        raise HTTPException(404, "exact_market_not_verified")
+    snapshot = await MarketDataRepository(db).get_latest_exact_market_snapshot(market_id)
+    if snapshot is not None and str(snapshot.quote_currency or "").upper() != market.quote_currency:
+        snapshot = None
+    observed_at = snapshot.source_observed_at if snapshot is not None else None
+    return {
+        "market_id": market.id,
+        "symbol": market.asset_symbol,
+        "quote_currency": market.quote_currency,
+        "price": float(snapshot.price) if snapshot is not None and snapshot.price is not None else None,
+        **_freshness(observed_at, STALE_AFTER_SECONDS["quote"], "exact_market_data"),
+    }
+
 
 @router.get("/market_data/{symbol}/latest", response_model=MarketDataResponse)
 async def get_latest_price(
