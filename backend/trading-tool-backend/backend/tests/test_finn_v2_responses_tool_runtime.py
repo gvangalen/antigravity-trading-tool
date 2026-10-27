@@ -4440,9 +4440,12 @@ def test_model_cannot_invent_weekday_for_a_weekly_setup():
     assert explicit.request_plan.operation_state["collected_inputs"]["dca_day"] == "saturday"
 
 
-def test_saved_indicator_configuration_does_not_bundle_unavailable_current_values():
+def test_indicator_and_price_reads_include_verified_scores_separately():
     catalog = FinnResponsesToolCatalog()
-    assert catalog.validate("get_indicator_snapshot", {}).read_tools == ("read_indicator_configuration",)
+    assert catalog.validate("get_indicator_snapshot", {}).read_tools == (
+        "read_indicator_configuration", "read_asset_scores",
+    )
+    assert catalog.validate("get_market_snapshot", {}).read_tools[-1] == "read_asset_scores"
     assert catalog.validate("get_current_technical_snapshot", {}).read_tools == ("read_technical_snapshot",)
 
 
@@ -10608,6 +10611,12 @@ def test_market_source_moment_is_formatted_only_after_tool_freshness_check():
                     success=False, availability="unavailable", freshness_status="unknown",
                     as_of=None, source="macro_data", asset="ETH", result=None,
                     error_codes=["source_unavailable"],
+                )
+            if tool == "read_asset_scores":
+                return SimpleNamespace(
+                    success=False, availability="unavailable", freshness_status="unknown",
+                    as_of=None, source="daily_scores", asset="ETH", result=None,
+                    error_codes=["missing_score"],
                 )
             assert tool == "read_market_snapshot"
             return SimpleNamespace(

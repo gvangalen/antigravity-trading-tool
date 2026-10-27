@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair FINN QA repair (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATED_AWAITING_CI`. The existing independent QA Agent tested the
+previous final public SHA `b935810512476c9146e824d6bf9cda6191544140` and
+returned `NOT_ACCEPTED`. An exact BTC/EUR setup-only request in a new chat did
+not produce a proposal when the owner also had BTC/USDT; a price/indicator read
+said that the Price indicator had no separate score although Analyse showed
+Price 30. QA also saw one transient `/api/setups/market-matches?symbol=BTC`
+HTTP 502 that recovered without a confirmed cause. No order was placed.
+
+Build reproduced the proposal failure locally with both saved pairs: the
+factual read received only the base symbol and returned
+`market_pair_ambiguous`, which downgraded the proposal. The typed read selector
+now carries the operation's explicitly resolved quote currency. In five local
+worker-driven repeats the exact BTC/EUR setup-only request produced five
+BTC/EUR proposals with Friday and 1D, including Analyse and Mijn Plan context.
+The score read now carries verified per-indicator Score 2.0 evidence from the
+same daily score row as Analyse; market and indicator snapshots include that
+read, without stored interpretation or action prose. No canned coach answer
+was added. The isolated HTTP 502 has no established root cause and remains a
+specific observation for the next independent live run.
+
+Measured local validation on this repair: root backend pytest **4061 passed,
+4 existing skips** (`.local-finn-parity-artifacts/exact-pair-finn-qa-repair-pytest.log`,
+SHA-256 `565498c0cf0bad9e7f0d726000a57c2a2e776a38af9017171f2e83395744015c`);
+the restarted local FastAPI/Celery worker action matrix **16/16**
+(`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
+`2335d1acb9efb757109b201be90c759016e77d381f5b6cb6435057cff042b0cd`)
+and adapter suite **21/21**. Frontend typecheck, i18n lint/tests,
+command and proposal tests, high-severity dependency audit and production
+build passed. Mobile typecheck, chat tests, web/iOS/Android bundle smokes and
+lint passed (lint warnings, no errors). The real Luna/Responses development
+selector evaluation passed **20/20**, with zero provider, schema, timeout,
+parse or validation failures (`backend/trading-tool-backend/.local-finn-parity-artifacts/
+exact-pair-finn-qa-repair-development.json`, SHA-256
+`fadc11db556273eb836ae1f27f4cf7e131ba4b00c4e49ff81f69601aa47d7ba7`).
+The real Luna/Responses regression then completed: **109/109** operation
+choices, 100% entity/asset/action-polarity accuracy, 91.7% missing-input
+accuracy, and zero provider, schema, timeout, parse or validation failures
+(`backend/trading-tool-backend/.local-finn-parity-artifacts/
+exact-pair-finn-qa-repair-regression.json`, SHA-256
+`d2e526d346c956734057feacd22dc3bd46a9f07e5c8e49ca23384fffb72d315d`).
+The repair is not yet live and authenticated QA is still required.
+
 ## Exact trading-pair candidate (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #648 repaired

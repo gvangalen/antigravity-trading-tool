@@ -54,6 +54,11 @@ class FinnV2ToolPlanService:
         )
         selector_values = {
             "asset": selector_asset,
+            # The operation state has already resolved an explicitly chosen
+            # trading pair. Pass its quote to factual reads as well; a base
+            # symbol alone becomes ambiguous once the owner has plans for
+            # both EUR and USDT. The tool still verifies the exact market.
+            "quote_currency": collected_inputs.get("quote_currency"),
             "environment": collected_inputs.get("environment") if operation_id in ("read_portfolio", "evaluate_portfolio") else None,
             "setup_id": analysis.explicit_setup_id or collected_inputs.get("setup_id"),
             "strategy_id": analysis.explicit_strategy_id or collected_inputs.get("strategy_id"),

@@ -45,6 +45,25 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
     assert plan.read_only is True
 
 
+def test_exact_pair_create_passes_confirmed_quote_to_required_asset_read():
+    analysis = FinnV2RequestAnalysisService().analyze(
+        message=(
+            "Maak een nieuwe wekelijkse DCA-setup voor exact BTC/EUR, niet BTC/USDT. "
+            "Gebruik vrijdag en 1D. Noem haar QA BTC EUR Paar 2710 Herkeur. "
+            "Toon eerst het voorstel; bevestig nog niets."
+        )
+    )
+    plan = FinnV2ToolPlanService().build(
+        run_id="exact-pair-create", analysis=analysis,
+        domain_plan=FinnV2DomainRequirementService().determine(analysis),
+    )
+    assert analysis.request_plan.operation_id == "create_setup"
+    assert analysis.request_plan.operation_state["collected_inputs"]["quote_currency"] == "EUR"
+    assert plan.tool_inputs["read_active_asset"] == {
+        "asset": "BTC", "quote_currency": "EUR",
+    }
+
+
 def test_live_portfolio_environment_reaches_read_tool_for_read_and_evaluate():
     analysis_service = FinnV2RequestAnalysisService()
     domain_service = FinnV2DomainRequirementService()

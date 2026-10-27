@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
+from types import SimpleNamespace
 
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 
@@ -84,3 +85,51 @@ def test_score_adapter_presents_component_source_times_without_milliseconds():
     assert result["data"].component_source_observed_at == {
         "market": {"price": "2026-10-10T04:20:11+00:00"},
     }
+
+
+def test_exact_pair_score_adapter_exposes_verified_indicator_scores_only():
+    evidence = {
+        "market": {"price": {"score": 30, "value": 71854.09,
+                              "interpretation": "old generated copy", "action": "buy"}},
+        "macro": {"dxy": {"score": 20, "value": 101.84}},
+        "technical": {"rsi": {"score": 50, "value": 53.1}},
+    }
+
+    class SharedContext:
+        matches = SimpleNamespace(last_source_row={"indicator_evidence": evidence})
+
+        async def benchmark_for_asset(self, user_id, asset, *, setups, market_id):
+            assert (user_id, asset, setups, market_id) == (17, "BTC", [], 43)
+            return {
+                "symbol": "BTC", "as_of": date.today(), "source_status": "available",
+                "benchmark_score": 33.3, "benchmark_weights": None,
+                "reported_scores": {"market_score": 30, "macro_score": 20,
+                                    "technical_score": 50},
+                "component_source_status": {"market_score": "fresh",
+                                            "macro_score": "fresh",
+                                            "technical_score": "fresh"},
+            }
+
+    adapter = object.__new__(ScoreToolAdapter)
+    adapter.context = SharedContext()
+    result = asyncio.run(adapter.execute(
+        user_id=17, asset="BTC", market_id=43, quote_currency="EUR"))
+    assert result["data"].pair == "BTC/EUR"
+    assert result["data"].indicator_evidence == {
+        **evidence,
+        "market": {"price": {"score": 30, "value": 71854.09}},
+    }
+
+    SharedContext.matches.last_source_row = {"indicator_evidence": evidence}
+    # A category with an invalid source must never be represented as current.
+    original = SharedContext.benchmark_for_asset
+
+    async def stale_macro(self, *args, **kwargs):
+        assessment = await original(self, *args, **kwargs)
+        assessment["component_source_status"]["macro_score"] = "stale_source"
+        return assessment
+
+    SharedContext.benchmark_for_asset = stale_macro
+    stale = asyncio.run(adapter.execute(
+        user_id=17, asset="BTC", market_id=43, quote_currency="EUR"))
+    assert "macro" not in stale["data"].indicator_evidence

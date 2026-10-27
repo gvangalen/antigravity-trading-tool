@@ -83,6 +83,7 @@ class AssetScoresData(BaseModel):
     component_status_explanation: Dict[str, str] = Field(default_factory=dict)
     component_source_observed_at: Dict[str, Dict[str, Optional[str]]] = Field(default_factory=dict)
     component_indicator_source_status: Dict[str, Dict[str, str]] = Field(default_factory=dict)
+    indicator_evidence: Dict[str, Dict[str, Dict[str, Any]]] = Field(default_factory=dict)
 
 
 class SetupMarketMatchesData(BaseModel):

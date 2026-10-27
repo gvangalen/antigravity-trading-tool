@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -11,7 +10,7 @@ from backend.infrastructure.models import (
     MarketDataIndicator, TechnicalDataIndicator, TradingMarket,
 )
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
-from backend.services.setup_market_match_service import SetupMarketMatchService
+from backend.services.setup_market_match_service import SetupMarketMatchService, verified_indicator_evidence
 from backend.services.workspace_data_service import (
     STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _market_row,
     _technical_row,
@@ -46,7 +45,7 @@ class ExactMarketWorkspaceService:
         assessment = await matcher.for_asset(
             user_id, symbol, market_id=int(market.id),
         )
-        indicator_evidence = self._verified_evidence(
+        indicator_evidence = verified_indicator_evidence(
             assessment, getattr(matcher, "last_source_row", None)
         )
         market_result = await self.session.execute(select(MarketDataIndicator).where(
@@ -146,17 +145,4 @@ class ExactMarketWorkspaceService:
 
     @staticmethod
     def _verified_evidence(assessment: dict, source_row: dict | None) -> dict:
-        raw = (source_row or {}).get("indicator_evidence") or {}
-        if isinstance(raw, str):
-            try:
-                raw = json.loads(raw)
-            except json.JSONDecodeError:
-                return {}
-        if not isinstance(raw, dict):
-            return {}
-        return {
-            category: raw.get(category, {})
-            for category in ("market", "macro", "technical")
-            if assessment.get("component_source_status", {}).get(f"{category}_score") == "fresh"
-            and isinstance(raw.get(category), dict)
-        }
+        return verified_indicator_evidence(assessment, source_row)
