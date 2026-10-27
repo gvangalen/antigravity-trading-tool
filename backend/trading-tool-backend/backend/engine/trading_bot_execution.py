@@ -2926,7 +2926,7 @@ def _auto_execute_decision(
             """
             SELECT mode, is_live, is_active, max_asset_exposure_pct,
                    budget_total_eur, budget_daily_limit_eur,
-                   budget_min_order_eur, budget_max_order_eur
+                   budget_min_order_eur, budget_max_order_eur, market_id
             FROM bot_configs
             WHERE id=%s AND user_id=%s
             FOR UPDATE
@@ -2938,6 +2938,8 @@ def _auto_execute_decision(
         raise RuntimeError("Automatic execution requires an active auto bot")
     if bool(current_bot[1]) != bool(is_live):
         raise RuntimeError("Bot execution environment changed")
+    if current_bot[8] is not None:
+        raise BotSafetyBlock("Deze bot wacht op koers- en scoregegevens voor zijn gekozen handelspaar.")
     symbol = (order.get("symbol") or DEFAULT_SYMBOL).upper()
     side = (order.get("side") or "buy").lower().strip()
 

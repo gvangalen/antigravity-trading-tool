@@ -211,6 +211,33 @@ def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
         )
 
 
+def test_pair_bound_auto_bot_cannot_execute_queued_base_asset_order():
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql, params):
+            assert "FROM bot_configs" in sql and "FOR UPDATE" in sql
+            assert params == (11, 7)
+
+        def fetchone(self):
+            return ("auto", False, True, 100, 200, 50, 5, 100, 73)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    with pytest.raises(RuntimeError, match="gekozen handelspaar"):
+        paper_worker._auto_execute_decision(
+            conn=Connection(), user_id=7, bot_id=11, decision_id=13,
+            order={"symbol": "BTC", "side": "buy", "estimated_qty": 0.001,
+                   "estimated_price": 50000}, is_live=False, mode="auto",
+        )
+
+
 def test_legacy_manual_live_bot_decision_cannot_book_unconfirmed_fill(monkeypatch):
     class BotCursor:
         def __enter__(self):
