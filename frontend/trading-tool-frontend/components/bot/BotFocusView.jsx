@@ -15,6 +15,7 @@ import { marketPairLabel } from "@/lib/marketPairLabel.mjs";
 
 export default function BotFocusView({
   bots, activeBot, onSelectBot, decision, pendingOrder, portfolio, trades, allTrades,
+  paperCheckResult, paperCheckMessage,
   loading, onLoadBotTrades, onLoadAllTrades, onCreateBot, onOpenSettings,
   onUpdateBot, onGenerate, onTrade, tradeActive, onBacktest,
   history,
@@ -254,6 +255,15 @@ export default function BotFocusView({
               <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950" role="status">
                 <h3 className="font-bold">{copy.dcaNotDueTitle}</h3>
                 <p className="mt-1 text-sm">{copy.dcaNotDueBody?.replace("{date}", nextDcaDate || dcaSchedule.next_due_date)}</p>
+              </section>
+            )}
+
+            {paperCheckResult && !activeBot.is_live && (
+              <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950" role="status" aria-live="polite">
+                <h3 className="font-bold">{paperCheckMessage}</h3>
+                <p className="mt-1 text-xs">{formatDateTime(paperCheckResult.checkedAt, locale, {
+                  day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                })}</p>
               </section>
             )}
 

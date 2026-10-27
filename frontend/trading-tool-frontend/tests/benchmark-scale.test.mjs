@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, selectedBenchmarkSetupMatch, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "../lib/setup/benchmarkScale.mjs";
+import { availableTradingQuotes, benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, resolveTradingQuote, selectedBenchmarkSetupMatch, tradingQuoteSessionKey, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "../lib/setup/benchmarkScale.mjs";
 
 test("benchmark scale follows the saved setup presets without gaps", () => {
   const bands = benchmarkScaleBands();
@@ -79,6 +79,28 @@ test("a remembered setup selection is isolated by authenticated owner and asset"
   assert.equal(benchmarkSetupSessionKey(18, "BTC"), "benchmarkSetup:18:BTC");
   assert.equal(benchmarkSetupSessionKey(null, "BTC"), null);
   assert.equal(benchmarkSetupSessionKey(17, "BTC?symbol=ETH"), null);
+});
+
+test("a trading pair choice is isolated by authenticated owner and asset", () => {
+  assert.equal(tradingQuoteSessionKey(17, "btc"), "tradingQuote:17:BTC");
+  assert.equal(tradingQuoteSessionKey(17, "ETH"), "tradingQuote:17:ETH");
+  assert.equal(tradingQuoteSessionKey(18, "BTC"), "tradingQuote:18:BTC");
+  assert.equal(tradingQuoteSessionKey(null, "BTC"), null);
+  assert.equal(tradingQuoteSessionKey(17, "BTC?symbol=ETH"), null);
+});
+
+test("a new asset offers verified markets and restores its own chosen pair", () => {
+  const quotes = availableTradingQuotes([], [
+    { quote_currency: "USDT", status: "available" },
+    { quote_currency: "EUR", status: "available" },
+    { quote_currency: "USD", status: "unavailable" },
+  ]);
+  assert.deepEqual(quotes, ["EUR", "USDT"]);
+  assert.equal(resolveTradingQuote({ availableQuotes: quotes, rememberedQuote: "USDT" }), "USDT");
+  assert.equal(resolveTradingQuote({ availableQuotes: quotes, rememberedQuote: "EUR", explicitQuote: "USDT" }), "USDT");
+  assert.equal(resolveTradingQuote({ availableQuotes: quotes, rememberedQuote: "USDT", setupQuote: "EUR" }), "EUR");
+  assert.equal(resolveTradingQuote({ availableQuotes: ["USDT"], rememberedQuote: "EUR" }), "USDT");
+  assert.deepEqual(availableTradingQuotes([{ quote_currency: "USD" }], []), ["USD"]);
 });
 
 test("returning from another page restores only a setup in the owner's loaded list", () => {

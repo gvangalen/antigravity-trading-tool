@@ -156,6 +156,7 @@ function BotPageInner() {
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
   const [generatingBotId, setGeneratingBotId] = useState(null);
+  const [paperCheckResults, setPaperCheckResults] = useState({});
   const [continuing, setContinuing] = useState(false);
   const copy = t?.botPage || {};
   const botGuideCopy = copy.onboardingGuide || {};
@@ -662,7 +663,14 @@ function BotPageInner() {
   const handleGenerateDecision = async (bot, { silent = false } = {}) => {
     try {
       setGeneratingBotId(bot.id);
+      setPaperCheckResults((current) => ({ ...current, [bot.id]: null }));
       const result = await generateDecisionForBot({ bot_id: bot.id });
+      if (result?.generated === false) {
+        setPaperCheckResults((current) => ({
+          ...current,
+          [bot.id]: { reason: result.skip_reason || "no_new", checkedAt: new Date().toISOString() },
+        }));
+      }
       if (!silent) {
         const noNewCopy = result?.skip_reason === "not_due" ? copy.paperRecheckNotDue
           : result?.skip_reason === "already_executed" ? copy.paperRecheckAlreadyExecuted
@@ -985,6 +993,10 @@ function BotPageInner() {
             <BotFocusView
               bots={rankedBots.map((bot) => ({ ...bot, decision: decisionsByBot?.[bot.id], pendingOrder: today?.orders?.find((order) => order.bot_id === bot.id) }))}
               activeBot={activeBot}
+              paperCheckResult={paperCheckResults[activeBot?.id] || null}
+              paperCheckMessage={paperCheckResults[activeBot?.id]?.reason === "not_due" ? copy.paperRecheckNotDue
+                : paperCheckResults[activeBot?.id]?.reason === "already_executed" ? copy.paperRecheckAlreadyExecuted
+                  : copy.paperRecheckNoNew}
               onSelectBot={(bot) => {
                 setActiveBot(bot);
                 setExpandedBotId(bot.id);
