@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair strategy readback and selected-workspace candidate (27 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. Independent QA tested public SHA
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA tested public SHA
 `bcf275d349185943a401db541393702a6329f8de` and returned `NOT_ACCEPTED`.
 BTC/EUR and BTC/USDT quotes, charts, plans and bot labels stayed distinct;
 skipped Paper `not_due` persisted after refresh; the long ETH-to-AAPL
@@ -38,8 +38,13 @@ Real Luna/Responses selection passed **20/20** development (SHA-256
 `f0acd444dab9e8cecdbe3246ff8122dedfd808890a8896dc49d3f5971df2cb0d`)
 and **109/109** regression cases (SHA-256
 `f3a3cc65ffcc36e3cda7c38fc7e83c16f13f2250f0f8044a57eb5ffdf43e67d2`),
-with zero recorded provider, parse, validation or selector failures. No
-deployment or independent QA acceptance is claimed for this candidate yet.
+with zero recorded provider, parse, validation or selector failures. PR #663
+merged as `4ab46a03e7433a35fee7a965f08fcbd6d8bb6b15`; PR CI run
+`40574314202`, main CI run `40574839382` and Auto Deploy run `40575327893`
+all succeeded. Public backend health and frontend build-info each returned
+HTTP 200 and that exact merge SHA. This status-only update will produce a
+later main SHA and deploy cycle; independent QA must test the final public
+revision. No independent QA acceptance is claimed for this repair yet.
 
 ## Exact-pair independent-QA repair candidate (27 oktober 2026)
 
