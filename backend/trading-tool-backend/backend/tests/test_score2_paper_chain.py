@@ -224,7 +224,7 @@ def test_legacy_manual_live_bot_decision_cannot_book_unconfirmed_fill(monkeypatc
             assert params == (11, 7)
 
         def fetchone(self):
-            return True, True
+            return True, True, None, None, None, None, None, None
 
     class BotConnection:
         def cursor(self):

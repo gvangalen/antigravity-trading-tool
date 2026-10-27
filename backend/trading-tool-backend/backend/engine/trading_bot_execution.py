@@ -3184,13 +3184,15 @@ def execute_manual_decision(
         cur.execute(
             """SELECT is_live, is_active, max_asset_exposure_pct,
                       budget_total_eur, budget_daily_limit_eur,
-                      budget_min_order_eur, budget_max_order_eur
+                      budget_min_order_eur, budget_max_order_eur, market_id
                FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE""",
             (bot_id, user_id),
         )
         bot_row = cur.fetchone()
     if bot_row is None:
         raise RuntimeError("Bot not found")
+    if bot_row[7] is not None:
+        raise BotSafetyBlock("Deze bot wacht op koers- en scoregegevens voor zijn gekozen handelspaar.")
     bot_live = bool(bot_row[0])
     if not bot_row[1]:
         raise RuntimeError("Bot is paused")
