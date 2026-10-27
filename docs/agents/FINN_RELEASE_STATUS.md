@@ -6,20 +6,31 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact trading-pair candidate (27 oktober 2026)
 
-Current phase: `QA_NOT_ACCEPTED_REPAIR_LOCAL_VALIDATION`. Independent QA tested
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #648 repaired
+the exact-market QA findings (merge SHA
+`3f178ff5b25c92989d315c0f25d8d065c959dc97`). Main CI
+`40502793099` and Auto Deploy `40503223877` both succeeded. Public
+`https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` each returned HTTP 200 and exact
+SHA `3f178ff5b25c92989d315c0f25d8d065c959dc97` after deploy.
+This status update itself triggers another main CI and Auto Deploy; the
+independent QA run must use the last successful public SHA after that
+deployment. The repair has not yet received an independent live verdict.
+
+The previous independent QA tested
 the final public SHA `75d55fe73fdabd17571e0157ad7a4ed2642a6a2c` and
 returned `NOT_ACCEPTED`: an explicit BTC/EUR read showed its verified quote
 and category scores, but Price, DXY and RSI rows showed no score; after a hard
 refresh the Analyse pair choice returned to BTC/USDT and that unverified pair
 workspace returned `exact_market_not_verified`; Mijn Plan showed only BTC
 instead of BTC/EUR. The setup-only FINN request also asked unnecessarily for
-an amount before the user clarified; no order was placed. Build is repairing
+an amount before the user clarified; no order was placed. Build repaired
 the verified indicator evidence, pair identity during score refresh, and pair
 labels and explicit pair choice in manual/onboarding setup creation. The
 setup-only request now reaches a setup proposal without requiring a strategy
 amount; an amount given in the request still opens the strategy flow. The
-repair is not live until a new successful CI, Auto Deploy, public SHA parity
-and independent QA on that exact revision.
+product source is live; its authenticated behavior still needs independent
+QA on the final public revision.
 
 On the repaired local source, the complete backend suite passed **4059 tests,
 4 existing skips** (`.local-finn-parity-artifacts/exact-pair-qa-repair-release-pytest.log`,
