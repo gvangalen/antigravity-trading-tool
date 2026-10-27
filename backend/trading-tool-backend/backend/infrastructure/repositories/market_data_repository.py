@@ -150,6 +150,7 @@ class MarketDataRepository:
             .where(MarketDataIndicator.name == name)
             .where(MarketDataIndicator.user_id == user_id)
             .where(MarketDataIndicator.symbol == symbol)
+            .where(MarketDataIndicator.market_id.is_(None))
             .limit(1)
         )
         result = await self.session.execute(stmt)
@@ -165,6 +166,7 @@ class MarketDataRepository:
             select(MarketDataIndicator)
             .where(MarketDataIndicator.user_id == user_id)
             .where(MarketDataIndicator.symbol == symbol)
+            .where(MarketDataIndicator.market_id.is_(None))
             .order_by(desc(MarketDataIndicator.timestamp))
             .limit(limit)
         )
@@ -177,6 +179,7 @@ class MarketDataRepository:
             .where(MarketDataIndicator.name == name)
             .where(MarketDataIndicator.user_id == user_id)
             .where(MarketDataIndicator.symbol == symbol)
+            .where(MarketDataIndicator.market_id.is_(None))
         )
         result = await self.session.execute(stmt)
         return result.rowcount > 0
@@ -189,6 +192,7 @@ class MarketDataRepository:
             select(MarketDataIndicator)
             .where(MarketDataIndicator.user_id == user_id)
             .where(MarketDataIndicator.symbol == symbol)
+            .where(MarketDataIndicator.market_id.is_(None))
             .order_by(desc(MarketDataIndicator.timestamp))
         )
         result = await self.session.execute(stmt)
@@ -218,6 +222,7 @@ class MarketDataRepository:
                 and_(
                     MarketDataIndicator.user_id == user_id,
                     MarketDataIndicator.symbol == symbol,
+                    MarketDataIndicator.market_id.is_(None),
                 )
             )
             .group_by(func.date(MarketDataIndicator.timestamp))
@@ -236,6 +241,7 @@ class MarketDataRepository:
                 and_(
                     MarketDataIndicator.user_id == user_id,
                     MarketDataIndicator.symbol == symbol,
+                    MarketDataIndicator.market_id.is_(None),
                     func.date(MarketDataIndicator.timestamp).in_(dates),
                 )
             )

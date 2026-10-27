@@ -767,7 +767,8 @@ class TechnicalDataRepository:
             .where(
                 and_(
                     func.lower(TechnicalDataIndicator.indicator) == func.lower(name),
-                    TechnicalDataIndicator.user_id == user_id
+                    TechnicalDataIndicator.user_id == user_id,
+                    TechnicalDataIndicator.market_id.is_(None),
                 )
             )
         )
@@ -826,7 +827,8 @@ class TechnicalDataRepository:
             .distinct(TechnicalDataIndicator.indicator)
             .where(and_(
                 TechnicalDataIndicator.user_id == user_id,
-                TechnicalDataIndicator.symbol == symbol
+                TechnicalDataIndicator.symbol == symbol,
+                TechnicalDataIndicator.market_id.is_(None),
             ))
             .order_by(TechnicalDataIndicator.indicator, TechnicalDataIndicator.timestamp.desc())
         )
@@ -847,7 +849,8 @@ class TechnicalDataRepository:
             select(func.cast(week_trunc, Date))
             .where(and_(
                 TechnicalDataIndicator.user_id == user_id,
-                TechnicalDataIndicator.symbol == symbol
+                TechnicalDataIndicator.symbol == symbol,
+                TechnicalDataIndicator.market_id.is_(None),
             ))
             .distinct()
             .order_by(func.cast(week_trunc, Date).desc())
@@ -865,6 +868,7 @@ class TechnicalDataRepository:
                 and_(
                     TechnicalDataIndicator.user_id == user_id,
                     TechnicalDataIndicator.symbol == symbol,
+                    TechnicalDataIndicator.market_id.is_(None),
                     func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), Date).in_(weeks)
                 )
             )
@@ -884,7 +888,8 @@ class TechnicalDataRepository:
             .where(
                 and_(
                     func.lower(TechnicalDataIndicator.indicator) == func.lower(indicator),
-                    TechnicalDataIndicator.user_id == user_id
+                    TechnicalDataIndicator.user_id == user_id,
+                    TechnicalDataIndicator.market_id.is_(None),
                 )
             )
         )
@@ -948,7 +953,8 @@ class TechnicalDataRepository:
                 and_(
                     func.lower(TechnicalDataIndicator.indicator) == func.lower(indicator_name),
                     TechnicalDataIndicator.user_id == user_id,
-                    TechnicalDataIndicator.symbol == symbol
+                    TechnicalDataIndicator.symbol == symbol,
+                    TechnicalDataIndicator.market_id.is_(None),
                 )
             )
             .order_by(TechnicalDataIndicator.timestamp.desc())
