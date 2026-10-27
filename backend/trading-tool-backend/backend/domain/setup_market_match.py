@@ -57,6 +57,12 @@ def match_setup(
         "setup_id": setup.get("id") or setup.get("setup_id"),
         "name": setup.get("name"),
         "symbol": setup.get("symbol"),
+        "market_id": setup.get("market_id"),
+        "quote_currency": setup.get("quote_currency"),
+        "trading_pair": (
+            f"{setup.get('symbol')}/{setup.get('quote_currency')}"
+            if setup.get("market_id") is not None and setup.get("quote_currency") else None
+        ),
         "timeframe": setup.get("timeframe"),
         "setup_type": setup.get("setup_type"),
         "trend": setup.get("trend"),

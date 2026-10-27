@@ -269,13 +269,17 @@ def test_discuss_setup_rechecks_current_match_and_marks_old_notification_histori
         def __init__(self, _session):
             pass
 
-        async def for_asset(self, user_id, symbol):
+        async def for_asset(self, user_id, symbol, *, setups=None, market_id=None):
             assert (user_id, symbol) == (7, "ETH")
             return {"source_status": "stale_sources", "matches": [
                 {"setup_id": 11, "name": "ETH Eigen Plan", "status": "insufficient_data"}]}
 
     monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
     monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.setup_repository.SetupRepository.get_setup_by_id",
+        AsyncMock(return_value={"id": 11, "symbol": "ETH", "market_id": None}),
+    )
     service = FinnV2ReasoningContextService(SimpleNamespace())
     historical, current = asyncio.run(service._current_feed_evidence(SimpleNamespace(
         user_id=7, client_context_json={"feed_item_id": item_id})))

@@ -378,11 +378,11 @@ class SetupService:
         from backend.services.setup_market_match_service import SetupMarketMatchService
 
         service = SetupMarketMatchService(self.session)
+        matches = (await service.for_all_assets(user_id))["matches"]
         if not symbol:
-            return (await service.for_all_assets(user_id))["matches"]
-        assessment = await service.for_asset(user_id, symbol)
-        return [{**match, "as_of": assessment["as_of"],
-                 "source_status": assessment["source_status"]} for match in assessment["matches"]]
+            return matches
+        return [match for match in matches
+                if str(match.get("symbol") or "").upper() == str(symbol).upper()]
 
     async def update_setup(self, setup_id: int, raw_payload: dict, user_id: int) -> dict:
         row = await self.repository.get_setup_by_id(setup_id, user_id)
@@ -499,23 +499,29 @@ class SetupService:
     async def get_active_setup(self, user_id: int, symbol: str = "BTC") -> dict:
         from backend.services.setup_market_match_service import SetupMarketMatchService
 
-        assessment = await SetupMarketMatchService(self.session).for_asset(
-            user_id, symbol, setups=await self.repository.get_all_setups(user_id)
-        )
-        best = next((match for match in assessment["matches"] if match["is_best"]), None)
+        matches = (await SetupMarketMatchService(self.session).for_all_assets(user_id))["matches"]
+        asset_matches = [match for match in matches
+                         if str(match.get("symbol") or "").upper() == symbol.upper()]
+        active_markets = {match.get("market_id") for match in asset_matches if match["is_active"]}
+        if len(active_markets) > 1:
+            return {"active": None, "source_status": "ambiguous_market", "as_of": None}
+        best = next((match for match in asset_matches if match["is_best"]), None)
         if best is None:
-            return {"active": None, "source_status": assessment["source_status"], "as_of": assessment["as_of"]}
+            return {"active": None,
+                    "source_status": asset_matches[0]["source_status"] if asset_matches else "missing_scores",
+                    "as_of": asset_matches[0]["as_of"] if asset_matches else None}
         return {
             "active": {**best, "ai_explanation": "Berekend uit de opgeslagen scorevoorwaarden."},
-            "source_status": assessment["source_status"],
-            "as_of": assessment["as_of"],
+            "source_status": best["source_status"],
+            "as_of": best["as_of"],
         }
 
     async def explain_setup_status(self, setup_id: int, user_id: int) -> dict:
         from backend.services.setup_market_match_service import SetupMarketMatchService
 
         setup = await self.get_setup_by_id(setup_id, user_id)
-        assessment = await SetupMarketMatchService(self.session).for_asset(user_id, setup["symbol"], setups=[setup])
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, setup["symbol"], setups=[setup], market_id=setup.get("market_id"))
         match = assessment["matches"][0]
         return {
             "status": match["status"],

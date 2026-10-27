@@ -485,6 +485,38 @@ def test_all_asset_match_keeps_each_asset_and_source_status():
     asyncio.run(run())
 
 
+def test_same_asset_exact_markets_use_separate_score_rows_and_setups():
+    async def run():
+        evidence = {"report_date": date.today(), "macro_score": 30,
+                    "technical_score": 30, "market_score": 30,
+                    "calculated_at": datetime.now(timezone.utc),
+                    "indicator_evidence": {}}
+        service = SetupMarketMatchService(SimpleNamespace(), daily_rows={
+            ("BTC", 23): dict(evidence),
+            ("BTC", 24): {**evidence, "macro_score": 80,
+                          "technical_score": 80, "market_score": 80},
+        })
+        service._benchmark_weights = AsyncMock(return_value={"market_score": 0.4, "macro_score": 0.3, "technical_score": 0.3})
+        service._source_is_fresh = AsyncMock(return_value=True)
+        plans = [setup(1, "BTC", market_id=23, quote_currency="EUR",
+                       min_benchmark_score=20, max_benchmark_score=40),
+                 setup(2, "BTC", market_id=24, quote_currency="USDT",
+                       min_benchmark_score=20, max_benchmark_score=40)]
+        result = await service.for_all_assets(7, setups=plans)
+
+        by_id = {row["setup_id"]: row for row in result["matches"]}
+        assert by_id[1]["market_id"] == 23
+        assert by_id[1]["trading_pair"] == "BTC/EUR"
+        assert by_id[1]["status"] == "matches"
+        assert by_id[2]["market_id"] == 24
+        assert by_id[2]["trading_pair"] == "BTC/USDT"
+        assert by_id[2]["status"] == "outside_conditions"
+        assert by_id[1]["benchmark_score"] == 30
+        assert by_id[2]["benchmark_score"] == 80
+
+    asyncio.run(run())
+
+
 def test_twenty_assets_keep_distinct_owner_setup_ids():
     async def run():
         owned = [setup(index, f"ASSET{index}", min_benchmark_score=50)

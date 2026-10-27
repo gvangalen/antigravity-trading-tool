@@ -158,7 +158,10 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
 
     try:
         with conn.cursor() as cur:
-            config_scope = "AND market_id = %s" if market_id is not None else "AND market_id IS NULL"
+            # The owner's asset indicator choices apply to both exact quotes.
+            # A pair-specific choice overrides the same base indicator when
+            # one is explicitly configured; it is never inferred as a price.
+            config_scope = "AND (market_id = %s OR market_id IS NULL)" if market_id is not None else "AND market_id IS NULL"
             cur.execute(f"""
                 SELECT indicator FROM user_indicator_configs
                 WHERE user_id = %s AND category = %s AND symbol = %s

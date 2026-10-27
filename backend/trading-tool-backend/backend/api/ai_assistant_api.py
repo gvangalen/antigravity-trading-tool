@@ -452,9 +452,7 @@ async def _try_v2_visible_delivery(
         if item.get("symbol"):
             context_payload["symbol"] = item["symbol"]
         if item.get("subject_type") == "setup" and item.get("subject_id"):
-            assessment = await SetupMarketMatchService(db).for_asset(
-                user_id, item["symbol"],
-            )
+            assessment = await SetupMarketMatchService(db).for_all_assets(user_id)
             current = next((match for match in assessment.get("matches", [])
                             if str(match.get("setup_id")) == str(item["subject_id"])), None)
             if current is not None:

@@ -1021,11 +1021,17 @@ class FinnV2EntityResolutionService:
             for row in await self.setups.get_user_setups(user_id)
         ]
         matcher = SetupMarketMatchService(self.session)
+        pair_candidates = any(row.get("market_id") is not None for row in candidates)
         assessment = (
-            await matcher.for_asset(user_id, asset, setups=candidates)
-            if asset else await matcher.for_all_assets(user_id, setups=candidates)
+            await matcher.for_all_assets(user_id, setups=candidates)
+            if pair_candidates or not asset
+            else await matcher.for_asset(user_id, asset, setups=candidates)
         )
-        best = next((match for match in assessment["matches"] if match["is_active"]), None)
+        scoped_matches = [match for match in assessment["matches"]
+                          if not asset or str(match.get("symbol") or "").upper() == asset.upper()]
+        active_markets = {match.get("market_id") for match in scoped_matches if match["is_active"]}
+        best = (next((match for match in scoped_matches if match["is_active"]), None)
+                if len(active_markets) <= 1 else None)
         active_setup = next(
             (row for row in candidates if best and row.get("id") == best["setup_id"]), None
         )

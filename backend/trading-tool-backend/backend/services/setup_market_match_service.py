@@ -63,20 +63,27 @@ class SetupMarketMatchService:
 
     async def _source_is_fresh(self, user_id: int, symbol: str, category: str,
                                row: dict, source_moments: dict | None = None,
-                               diagnostics: dict | None = None) -> bool:
+                               diagnostics: dict | None = None,
+                               market_id: int | None = None) -> bool:
         table, name_column = {
             "macro": ("macro_data", "name"),
             "technical": ("technical_indicators", "indicator"),
             "market": ("market_data_indicators", "name"),
         }[category]
         parameters = {"user_id": user_id, "symbol": symbol}
-        configured_result = await self.session.execute(text("""
-            SELECT indicator, updated_at FROM user_indicator_configs
+        market_scope = "AND market_id = :market_id" if market_id is not None else "AND market_id IS NULL"
+        config_scope = "AND (market_id = :market_id OR market_id IS NULL)" if market_id is not None else "AND market_id IS NULL"
+        if market_id is not None:
+            parameters["market_id"] = market_id
+        configured_result = await self.session.execute(text(f"""
+            SELECT DISTINCT ON (indicator) indicator, updated_at FROM user_indicator_configs
             WHERE user_id = :user_id AND category = :category
               AND symbol = :symbol AND enabled = TRUE
+              {config_scope}
+            ORDER BY indicator, market_id DESC NULLS LAST
         """), {**parameters, "category": category})
         configured = configured_result.fetchall()
-        asset_clause = "" if category == "macro" else "AND symbol = :symbol"
+        asset_clause = "" if category == "macro" else f"AND symbol = :symbol {market_scope}"
         # Table and column names are selected from the constant map above.
         result = await self.session.execute(text(f"""
             SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at
@@ -115,23 +122,32 @@ class SetupMarketMatchService:
             diagnostics[f"{category}_score"] = diagnosis
         return diagnosis == "fresh"
 
-    async def for_asset(self, user_id: int, symbol: str, *, setups=None) -> dict:
+    async def for_asset(self, user_id: int, symbol: str, *, setups=None,
+                        market_id: int | None = None) -> dict:
         symbol = str(symbol or "").strip().upper()
+        if market_id is not None and (type(market_id) is not int or market_id <= 0):
+            raise ValueError("exact_market_id_required")
         owned = list(setups) if setups is not None else await self.setups.get_all_setups(user_id)
-        selected = [dict(row) for row in owned if str(row.get("symbol") or "").upper() == symbol]
+        selected = [dict(row) for row in owned
+                    if str(row.get("symbol") or "").upper() == symbol
+                    and row.get("market_id") == market_id]
         weights = await self._benchmark_weights(user_id)
 
         if self.daily_rows is not None:
-            row = self.daily_rows.get(symbol)
+            row = self.daily_rows.get((symbol, market_id)) if market_id is not None else self.daily_rows.get(symbol)
         else:
-            result = await self.session.execute(text("""
+            market_scope = "market_id = :market_id" if market_id is not None else "market_id IS NULL"
+            params = {"user_id": user_id, "symbol": symbol}
+            if market_id is not None:
+                params["market_id"] = market_id
+            result = await self.session.execute(text(f"""
                 SELECT report_date, macro_score, technical_score, market_score,
                        calculated_at, indicator_evidence
                 FROM daily_scores
                 WHERE user_id = :user_id AND symbol = :symbol AND report_date = CURRENT_DATE
-                  AND market_id IS NULL
+                  AND {market_scope}
                 LIMIT 1
-            """), {"user_id": user_id, "symbol": symbol})
+            """), params)
             row = result.mappings().first()
         self.last_source_row = dict(row) if row else None
         scores = None
@@ -167,7 +183,7 @@ class SetupMarketMatchService:
                     component_source_status[score_key] = (
                         "fresh" if await self._source_is_fresh(
                             user_id, symbol, category, row, component_source_observed_at,
-                            score_diagnostics,
+                            score_diagnostics, market_id=market_id,
                         )
                         else str(score_diagnostics.get(score_key) or "stale_source")
                     )
@@ -210,6 +226,7 @@ class SetupMarketMatchService:
                     "component_source_status": component_source_status} for match in matches]
         return {
             "symbol": symbol,
+            "market_id": market_id,
             "as_of": row["report_date"] if row else None,
             "source_status": source_status,
             "benchmark_score": total_benchmark,
@@ -225,18 +242,27 @@ class SetupMarketMatchService:
     async def for_all_assets(self, user_id: int, *, setups=None) -> dict:
         owned = list(setups) if setups is not None else await self.setups.get_all_setups(user_id)
         symbols = sorted({str(row.get("symbol") or "").upper() for row in owned if row.get("symbol")})
+        scopes = sorted({(str(row.get("symbol") or "").upper(), row.get("market_id"))
+                         for row in owned if row.get("symbol")},
+                        key=lambda item: (item[0], item[1] or 0))
         if self.daily_rows is None and symbols:
             result = await self.session.execute(text("""
-                SELECT symbol, report_date, macro_score, technical_score, market_score,
+                SELECT symbol, market_id, report_date, macro_score, technical_score, market_score,
                        calculated_at, indicator_evidence
                 FROM daily_scores WHERE user_id = :user_id AND report_date = CURRENT_DATE
                   AND symbol = ANY(:symbols)
-                  AND market_id IS NULL
             """), {"user_id": user_id, "symbols": symbols})
-            self.daily_rows = {str(row["symbol"]).upper(): row for row in result.mappings().all()}
+            self.daily_rows = {
+                ((str(row["symbol"]).upper(), row.get("market_id"))
+                 if row.get("market_id") is not None else str(row["symbol"]).upper()): row
+                for row in result.mappings().all()
+            }
         matches = []
-        for symbol in symbols:
-            assessment = await self.for_asset(user_id, symbol, setups=owned)
+        for symbol, market_id in scopes:
+            kwargs = {"setups": owned}
+            if market_id is not None:
+                kwargs["market_id"] = market_id
+            assessment = await self.for_asset(user_id, symbol, **kwargs)
             matches.extend({**match, "as_of": assessment["as_of"],
                             "source_status": assessment["source_status"]}
                            for match in assessment["matches"])
