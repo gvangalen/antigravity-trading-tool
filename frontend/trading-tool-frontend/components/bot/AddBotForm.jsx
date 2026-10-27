@@ -33,6 +33,7 @@ import {
 } from "@/lib/bot/riskAcknowledgement.mjs";
 import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
+import { marketPairLabel } from "@/lib/marketPairLabel.mjs";
 
 const RISK_PROFILE_ICONS = {
   conservative: Shield,
@@ -509,7 +510,7 @@ const AddBotForm = forwardRef(function AddBotForm({
 
         {isEdit || (guidedMode && selectedStrategy) ? (
           <div className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-muted cursor-not-allowed flex items-center justify-between">
-            <span>{selectedStrategy ? `${selectedStrategy.name} · ${selectedStrategy.symbol}` : "—"}</span>
+            <span>{selectedStrategy ? `${selectedStrategy.name} · ${marketPairLabel(selectedStrategy)}` : "—"}</span>
             <div className="inline-flex items-center gap-1 text-[9px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md uppercase tracking-tighter">
               <Lock size={10} />
               {copy.lockedLabel}
@@ -534,7 +535,7 @@ const AddBotForm = forwardRef(function AddBotForm({
               <option value="">{copy.strategyPlaceholder}</option>
               {strategies.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.display_name || `${s.name} · ${s.symbol} · ${s.timeframe}`}
+                  {`${s.name} · ${marketPairLabel(s)} · ${s.timeframe}`}
                 </option>
               ))}
             </select>

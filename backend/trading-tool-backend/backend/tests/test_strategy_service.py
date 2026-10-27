@@ -252,6 +252,18 @@ def test_strategy_read_prefers_its_own_asset_and_timeframe_over_the_parent_setup
     assert formatted["timeframe_source"] == "explicit"
 
 
+def test_strategy_read_exposes_saved_market_pair_separately_from_euro_funding():
+    formatted = StrategyService(db_session=None)._format_strategy_row({
+        "id": 8, "setup_id": 77, "name": "BTC DCA", "symbol": "BTC",
+        "setup_market_id": 12, "market_quote_currency": "USDT",
+        "base_amount": 20, "data": {"base_currency": "EUR"},
+    })
+    assert formatted["market_id"] == 12
+    assert formatted["quote_currency"] == "USDT"
+    assert formatted["trading_pair"] == "BTC/USDT"
+    assert formatted["base_amount"] == 20
+
+
 def test_strategy_read_preserves_trade_level_currency_separately_from_euro_amount():
     formatted = StrategyService(db_session=None)._format_strategy_row({
         "id": 3, "setup_id": 77, "name": "BTC USD levels", "setup_type": "trade",

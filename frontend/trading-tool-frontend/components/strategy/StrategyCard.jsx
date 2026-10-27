@@ -24,14 +24,19 @@ import {
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { getIntlLocale } from "@/lib/i18n";
 import { formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
+import { marketPairLabel } from "@/lib/marketPairLabel.mjs";
+import { formatMarketPrice } from "@/lib/marketPriceFormat.mjs";
 
 export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] }) {
   if (!strategy || typeof strategy !== "object") return null;
   const { t, locale } = useTranslation();
   const copy = t?.strategies?.card || {};
+  const marketLabel = marketPairLabel(strategy);
 
   const { openConfirm, showSnackbar } = useModal();
-  const { btcLive } = useMarketData(strategy.symbol, { mode: "live" });
+  const { btcLive } = useMarketData(strategy.symbol, {
+    mode: "live", marketId: strategy.market_id, quoteCurrency: strategy.quote_currency,
+  });
 
   const [justUpdated, setJustUpdated] = useState(false);
   const [finnLoading, setFinnLoading] = useState(false);
@@ -70,8 +75,9 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
     ? strategy.targets.map(t => (typeof t === 'object' ? t.price : t))
     : [];
 
-  const currentPrice = btcLive; // In a multi-asset system, we'd filter by symbol
-  const distToEntry = currentPrice && entry && strategy.price_currency_confirmed && strategy.price_currency === "USD"
+  const currentPrice = btcLive;
+  const priceQuote = strategy.market_id ? strategy.quote_currency : "USD";
+  const distToEntry = currentPrice && entry && strategy.price_currency_confirmed && strategy.price_currency === priceQuote
     ? ((currentPrice - entry) / entry) * 100 : null;
 
   /* ==========================================================
@@ -100,11 +106,13 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
         page: "/strategy",
         page_type: "Strategies",
         symbol,
+        quote_currency: strategy.quote_currency || null,
+        market_id: strategy.market_id || null,
         strategy_id: id,
         setup_id: strategy.setup_id || null,
       };
       const response = await assistantChat(
-        `Beoordeel deze strategie voor ${symbol} en controleer in dezelfde review of deze nog bij mijn plan past.`,
+        `Beoordeel deze strategie voor ${marketLabel} en controleer in dezelfde review of deze nog bij mijn plan past.`,
         context,
         []
       );
@@ -132,7 +140,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
     openConfirm({
       title: copy.deleteTitle,
       statusLabel: copy.deleteStatus,
-      context: <p>{strategyName} · {symbol} · {timeframe}</p>,
+      context: <p>{strategyName} · {marketLabel} · {timeframe}</p>,
       impact: <p>{copy.deleteImpact}</p>,
       safety: <p>{copy.deleteSafety}</p>,
       consequence: <p>{copy.deleteConsequence}</p>,
@@ -151,17 +159,14 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
      UI HELPERS
   ========================================================== */
   const formatCurrency = (v) => {
-    if (v === null || v === undefined || isNaN(v)) return "---";
-    return new Intl.NumberFormat(getIntlLocale(locale), { style: "currency", currency: "USD" }).format(v);
+    return formatMarketPrice(v, getIntlLocale(locale), priceQuote);
   };
   const formatStrategyPrice = (v) => {
     if (v === null || v === undefined || isNaN(v)) return "---";
     if (!strategy.price_currency_confirmed) {
       return `${new Intl.NumberFormat(getIntlLocale(locale)).format(v)} · ${copy.priceCurrencyUnconfirmed}`;
     }
-    return new Intl.NumberFormat(getIntlLocale(locale), {
-      style: "currency", currency: strategy.price_currency,
-    }).format(v);
+    return formatMarketPrice(v, getIntlLocale(locale), strategy.price_currency);
   };
   const formatAmountEur = (value) => {
     if (value === null || value === undefined || isNaN(value)) return "---";
@@ -204,7 +209,7 @@ export default function StrategyCard({ strategy, onRefresh, onEdit, bots = [] })
             <div>
               <h3 className="text-lg font-black uppercase tracking-tight text-slate-800">{strategyName}</h3>
               <div className="flex items-center gap-2 mt-1">
-                <span className="bg-[var(--color-border-subtle)] text-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase">{symbol}</span>
+                <span className="bg-[var(--color-border-subtle)] text-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase">{marketLabel}</span>
                 <span className="bg-[var(--color-border-subtle)] text-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase">{timeframe}</span>
                 <span className="bg-[var(--primary-soft)] text-[var(--primary-dark)] px-2 py-0.5 rounded text-[10px] font-bold uppercase">{strategyType}</span>
               </div>

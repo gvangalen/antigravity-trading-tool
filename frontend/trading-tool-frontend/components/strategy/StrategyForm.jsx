@@ -16,6 +16,7 @@ import { Wallet, TrendingUp } from "lucide-react";
 import CurveEditor from "@/components/decision/CurveEditor";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { getSetupId } from "@/lib/setup/activeSetup";
+import { marketPairLabel } from "@/lib/marketPairLabel.mjs";
 
 const StrategyForm = forwardRef(function StrategyForm({
   onSubmit,
@@ -355,7 +356,7 @@ const StrategyForm = forwardRef(function StrategyForm({
         <option value="">{copy.setupPlaceholder}</option>
         {availableSetups.map((s) => (
           <option key={getSetupId(s)} value={getSetupId(s) ?? ""}>
-            {s.name} ({s.symbol})
+            {s.name} ({marketPairLabel(s)})
           </option>
         ))}
       </select>

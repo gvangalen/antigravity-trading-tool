@@ -37,6 +37,7 @@ def test_known_asset_replacement_preserves_dca_fields_but_not_old_asset():
         "timeframe": "1D", "dca_frequency": "weekly", "dca_day": "monday",
         "dca_amount_mode": "fixed", "base_amount": 100,
         "min_benchmark_score": None, "setup_id": 123,
+        "market_id": 456, "quote_currency": "EUR",
     }
     carried = _prior_inputs_for_open_correction(
         origin, retain_parent_ids=False, target_change_requested=False,
@@ -92,6 +93,39 @@ def test_collecting_asset_switch_keeps_prior_user_rules_for_coverage():
     assert state["guided_history_truncated"] is True
 
 
+def test_asset_replacement_keeps_explicit_dca_amount_without_silent_setup_only_downgrade():
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {}},
+    )
+    correction = {
+        "status": "cancelled", "operation_id": "create_setup",
+        "previous_asset": "ETH", "requested_instrument": "AAPL",
+        "prior_inputs": {
+            "setup_type": "dca", "timeframe": "1D", "dca_frequency": "weekly",
+            "dca_day": "monday", "dca_amount_mode": "fixed", "base_amount": 100,
+        },
+    }
+    state = FinnResponsesProposalSelection().from_call(
+        call=call, message="Ik bedoel: maak een nieuwe setup voor Apple in plaats van ETH",
+        conversation_context={"proposal_correction_result": correction},
+        verified_asset=None,
+    ).request_plan.operation_state
+    assert state["collected_inputs"]["symbol"] == "AAPL"
+    assert state["collected_inputs"]["base_amount"] == 100
+    assert state["collected_inputs"]["dca_amount_mode"] == "fixed"
+    assert state["collected_inputs"].get("plan_scope") != "setup_only"
+
+    setup_only = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Ik bedoel: maak alleen een nieuwe setup voor Apple in plaats van ETH, zonder strategie.",
+        conversation_context={"proposal_correction_result": correction},
+        verified_asset=None,
+    ).request_plan.operation_state
+    assert setup_only["collected_inputs"]["plan_scope"] == "setup_only"
+    assert "base_amount" not in setup_only["collected_inputs"]
+
+
 def test_unspecified_asset_switch_asks_for_ticker_then_keeps_dca_schedule():
     call = FinnResponsesToolCatalog().validate(
         "create_dca_plan_proposal",
@@ -130,6 +164,9 @@ def test_explicit_asset_switch_keeps_the_replacement_asset_out_of_old_eth_contex
     assert corrected_catalog_instrument(
         "Ik wil toch een nieuwe AAPL DCA-setup in plaats van ETH: 1D, vrijdag."
     ) == "AAPL"
+    assert corrected_catalog_instrument(
+        "Ik bedoel: maak een nieuwe setup voor Apple in plaats van ETH"
+    ) == "AAPL"
     assert corrected_catalog_instrument("Wat als ik AAPL in plaats van ETH gebruik?") is None
 
 
@@ -140,6 +177,9 @@ def test_deferred_name_is_not_treated_as_a_literal_setup_name():
     )
     assert FinnV2OperationStateService._requests_name_prompt(message)
     assert FinnV2OperationStateService._name_input_from_text(message) is None
+    assert FinnV2OperationStateService._name_input_from_text(
+        "Maak een wekelijkse DCA-setup voor ETH. Welke naam raad je aan?"
+    ) is None
 
 
 def test_open_setup_asset_switch_retains_explicit_scope_schedule_and_score_bounds():

@@ -11,6 +11,7 @@ import { openFinnContext } from "@/lib/finnCommandSearch";
 import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
 import { selectLastBotDecision } from "@/lib/bot/lastDecision.mjs";
 import { paperPriceMessageKey } from "@/lib/bot/paperPriceMessage.mjs";
+import { marketPairLabel } from "@/lib/marketPairLabel.mjs";
 
 export default function BotFocusView({
   bots, activeBot, onSelectBot, decision, pendingOrder, portfolio, trades, allTrades,
@@ -83,7 +84,7 @@ export default function BotFocusView({
   const availableCash = portfolio?.stats?.paper_cash_configured
     ? money(portfolio.stats.paper_cash_eur)
     : copy.notConfigured;
-  const symbol = activeBot?.strategy?.setup?.symbol || activeBot?.symbol || portfolio?.symbol || "—";
+  const symbol = marketPairLabel(activeBot);
   const timeframe = activeBot?.strategy?.setup?.timeframe || activeBot?.strategy?.timeframe || "—";
   const modeLabel = copy.modes?.[activeBot?.mode] || activeBot?.mode || "—";
   const recentActivity = useMemo(() => {
@@ -220,7 +221,7 @@ export default function BotFocusView({
               return <button key={bot.id} type="button" aria-pressed={selected} onClick={() => onSelectBot(bot)}
                 className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-b-0 dark:border-slate-800 ${selected ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb] dark:bg-blue-950/30" : "hover:bg-slate-50 dark:hover:bg-slate-900"}`}>
                 <span className="flex-1 min-w-0"><strong className="block truncate text-sm text-slate-950 dark:text-white">{bot.name}</strong>
-                  <small className="text-slate-500">{bot.strategy?.setup?.symbol || bot.symbol || "—"} · {bot.strategy?.setup?.timeframe || "—"} · {bot.is_live ? copy.live : copy.paper}</small></span>
+                  <small className="text-slate-500">{marketPairLabel(bot)} · {bot.strategy?.setup?.timeframe || "—"} · {bot.is_live ? copy.live : copy.paper}</small></span>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{copy.states?.[botRisk] || botRisk}</span>
                 <ChevronRight size={16} className="text-slate-400" />
               </button>;

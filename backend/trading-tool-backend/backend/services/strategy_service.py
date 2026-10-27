@@ -145,6 +145,13 @@ class StrategyService:
             "decision_curve_id": row.get("decision_curve_id") or data.get("decision_curve_id"),
 
             "symbol": symbol,
+            "market_id": row.get("setup_market_id"),
+            "quote_currency": row.get("market_quote_currency"),
+            "trading_pair": (
+                f"{symbol}/{str(row['market_quote_currency']).upper()}"
+                if row.get("setup_market_id") and symbol and row.get("market_quote_currency")
+                else None
+            ),
             "timeframe": timeframe,
             "asset_source": data.get("asset_source"),
             "timeframe_source": data.get("timeframe_source"),
