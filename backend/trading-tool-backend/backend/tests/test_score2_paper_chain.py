@@ -251,7 +251,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     )
     monkeypatch.setattr(scoring_utils, "get_db_connection", lambda: store)
     monkeypatch.setattr(store_daily_scores_task, "get_db_connection", lambda: store)
-    monkeypatch.setattr(market_interpreter, "normalize_market_value_with_history", lambda *args: args[-1])
+    monkeypatch.setattr(market_interpreter, "normalize_market_value_with_history", lambda *_args, **_kwargs: _args[3])
     monkeypatch.setattr(macro_interpreter, "normalize_macro_value_with_history", lambda *args: args[-1])
     monkeypatch.setattr(technical_interpreter, "normalize_technical_value", lambda _name, value: value)
     scores_by_category = {"market": 80, "macro": 70, "technical": 60}

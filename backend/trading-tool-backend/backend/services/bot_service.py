@@ -2112,6 +2112,7 @@ class BotService:
                 raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order plaatst.")
             if bot.get("is_live"):
                 raise HTTPException(409, "Botmodus is gewijzigd. Controleer het voorstel opnieuw.")
+            self._require_manual_order_bot_symbol(bot, payload)
             if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
                 raise HTTPException(409, "Botasset is gewijzigd. Controleer het voorstel opnieuw.")
             paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
@@ -2354,6 +2355,11 @@ class BotService:
         return result
 
     def _require_manual_order_bot_symbol(self, bot: Dict[str, Any], payload: BotManualOrderSchema) -> None:
+        if bot.get("market_id") is not None:
+            raise HTTPException(409, {
+                "code": "EXACT_MARKET_EXECUTION_PENDING",
+                "message": "Deze bot wacht op koers- en scoregegevens voor zijn gekozen handelspaar.",
+            })
         if str(payload.symbol or "").strip().upper() != str(bot.get("symbol") or "").strip().upper():
             raise HTTPException(400, "Orderasset wijkt af van de gekoppelde botasset.")
 

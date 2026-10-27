@@ -673,6 +673,31 @@ def test_live_manual_order_rejects_asset_outside_bot_before_exchange():
     assert repo.created_orders == 0
 
 
+@pytest.mark.parametrize("route", ["preview_manual_order", "preflight_manual_order", "create_manual_order"])
+@pytest.mark.parametrize("is_live", [False, True])
+def test_pair_bound_bot_rejects_base_symbol_manual_order_before_quote_or_execution(route, is_live):
+    class PairRepo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(market_id=123, is_live=is_live, is_active=True)
+            return bot
+
+    service = BotService(_FakeSession())
+    repo = PairRepo()
+    service.repository = repo
+    payload = BotManualOrderSchema(
+        bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000,
+        idempotency_key="pair-bound-manual", risk_acknowledged=True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(getattr(service, route)(payload, user_id=7))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "EXACT_MARKET_EXECUTION_PENDING"
+    assert repo.created_orders == 0
+
+
 @pytest.mark.parametrize("field,value", [
     ("quantity", float("nan")), ("price", float("nan")),
     ("value_eur", float("inf")), ("quantity", float("inf")),

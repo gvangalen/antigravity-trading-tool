@@ -447,6 +447,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_10_25_finn_trade_review_projection_status.py
   run_migration backend/scripts/migrations/2026_10_26_paper_cash_transfers.py
   run_migration backend/scripts/migrations/2026_10_27_market_price_quote_provenance.py
+  run_migration backend/scripts/migrations/2026_10_28_trading_market_identity_expand.py
   advance_deploy_step 'schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \
