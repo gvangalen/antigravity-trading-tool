@@ -175,6 +175,10 @@ class FinnResponsesProposalSelection:
             requested_pair = requested_catalog_trading_pair(message)
             if requested_pair is not None:
                 inputs["symbol"], inputs["quote_currency"] = requested_pair
+            else:
+                # The model cannot select a trading quote from the catalog
+                # default or an unrelated workspace asset.
+                inputs.pop("quote_currency", None)
             explicit_day = self.states.explicit_inputs(
                 contract=contract, message=message, explicit_asset=None,
             ).get("dca_day")
