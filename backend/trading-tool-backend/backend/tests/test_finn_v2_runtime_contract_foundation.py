@@ -1519,6 +1519,22 @@ def test_guided_question_overrides_mismatched_model_copy_for_the_actual_slot():
     ) is coach
 
 
+def test_asset_correction_is_visible_in_guided_clarification():
+    response = FinnV2RunService._align_guided_clarification(
+        {"mode": "CLARIFICATION", "content": "old question"},
+        terminal_status="clarification_required",
+        guided_draft={
+            "operation_id": "create_setup", "draft_status": "collecting",
+            "requested_slot": "timeframe",
+            "supplied_inputs": {"symbol": "AAPL", "setup_type": "dca"},
+        },
+        locale="nl",
+        user_message="Ik bedoel Apple in plaats van ETH",
+    )
+    assert response["content"].startswith("Ik gebruik nu AAPL voor dit concept.")
+    assert "analysetijdsframe" in response["content"]
+
+
 def test_cancelled_guided_draft_uses_natural_terminal_copy():
     run_service = FinnV2RunService(session=object())
 

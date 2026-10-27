@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Guided DCA continuation after an asset correction (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. The existing independent QA Agent tested
+public SHA `94730bc87c19ffd80ffa29c4bacfdb9280da70be` and returned
+`NOT_ACCEPTED` for the complete scope. Exact BTC/EUR and BTC/USDT readback,
+pair labels and Paper budget boundaries passed. In the guided DCA flow,
+FINN accepted a change from ETH to Apple internally but repeated a generic
+timeframe question without acknowledging AAPL; a following request for a
+name suggestion lost the active setup context. The phrase “Koop elke vrijdag
+voor 40 euro” was also classified as an immediate purchase instead of a
+scheduled detail for an open DCA concept. QA confirmed no proposal and no
+order were executed in those failing turns.
+
+Build reproduced the first three turns through the local FastAPI/Celery
+runtime. The typed draft already contained AAPL, Friday and €40; the loss was
+in continuation and visible clarification. The repair keeps the owner-bound
+draft when a missing name is discussed before the currently requested
+timeframe, acknowledges an explicit asset correction in the next question,
+and binds a bounded recurring purchase sentence to the open DCA draft while
+leaving immediate order requests outside that route. Local reruns produced
+an AAPL DCA proposal only after the user accepted the suggested name and
+provided 1D; no write occurred. A separate local sequence retained Friday
+and €40 without treating the sentence as the setup name or an order.
+
+Measured local checks on this source: root backend pytest **4068 passed,
+4 existing skips** (`.local-finn-parity-artifacts/guided-pending-repair-pytest.log`,
+SHA-256 `ab84fc9dbb2c84dcf13468830f145d86ebb8b8f5137e3dfb1ccf29a672e3e04e`);
+focused FINN runtime and contract tests **951 passed**; the restarted local
+FastAPI/Celery worker action matrix **16/16** contracts
+(`.local-finn-parity-artifacts/guided-pending-repair-action-matrix.json`,
+SHA-256 `9fb1fc0c4b4398767bad09d4c2bead41674838f145ee72042f0a347a75a7274c`)
+and adapter suite **21/21** passed. Frontend typecheck, i18n lint/tests,
+command/proposal tests, dependency audit and production build passed. Real
+Luna/Responses development selection passed **20/20** (artifact SHA-256
+`5fa54789214353b82c7cf5c248469ee84704e05d4f21097ad059d67288e4c78f`);
+real-provider regression passed **109/109** (artifact SHA-256
+`42800b7422dfc49fea9c0e447915f48a8467bb139014129176267ea519a1c4b9`).
+Both had zero provider, schema, timeout, parse or validation failures. These
+are local Build results, not a live QA verdict for the repair.
+
 ## Exact-pair strategy display and guided asset correction (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA accepted the earlier

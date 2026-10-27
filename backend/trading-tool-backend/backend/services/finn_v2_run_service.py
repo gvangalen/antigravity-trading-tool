@@ -2829,7 +2829,7 @@ class FinnV2RunService:
                     if len(matching) == 1:
                         corrected_guided_operation_id = matching[0].operation_id
                 continuation = False
-            elif requested_slot == "name" and (
+            elif "name" in set(guided.get("missing_required_inputs") or ()) and (
                 FinnV2OperationStateService.is_name_suggestion_request(message)
                 or (
                     FinnV2OperationStateService.is_name_suggestion_acceptance(message)
@@ -3163,7 +3163,7 @@ class FinnV2RunService:
             )
             if (
                 guided.get("status") == "collecting"
-                and guided.get("next_missing_input") == "name"
+                and "name" in set(guided.get("missing_required_inputs") or ())
                 and any(call.get("name") == "guided_name_suggestion"
                         for call in result.response.tool_trace)
             ):
@@ -3466,6 +3466,7 @@ class FinnV2RunService:
         response_json = self._align_guided_clarification(
             response_json, terminal_status=next_status,
             guided_draft=guided_draft, locale=responses_locale,
+            user_message=str(getattr(current_run, "message", "") or ""),
         )
         terminal_reason = self._terminal_reason(
             terminal_status=next_status,
@@ -3565,6 +3566,7 @@ class FinnV2RunService:
     def _align_guided_clarification(
         response: Dict[str, Any], *, terminal_status: str,
         guided_draft: Dict[str, Any], locale: Optional[str],
+        user_message: str = "",
     ) -> Dict[str, Any]:
         if terminal_status != "clarification_required" or guided_draft.get("draft_status") != "collecting":
             return response
@@ -3576,12 +3578,24 @@ class FinnV2RunService:
         from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
         aligned = dict(response)
-        aligned["content"] = FinnV2OperationStateService.clarification_question(
+        question = FinnV2OperationStateService.clarification_question(
             requested_slot,
             contract=FinnV2OperationRegistry().require_supported(operation_id),
             collected_inputs=dict(guided_draft.get("supplied_inputs") or {}),
             locale=locale,
         )
+        from backend.services.asset_catalog_service import corrected_catalog_instrument
+
+        corrected_asset = corrected_catalog_instrument(user_message)
+        supplied_asset = str(dict(guided_draft.get("supplied_inputs") or {}).get("symbol") or "")
+        if corrected_asset and corrected_asset == supplied_asset:
+            language = str(locale or "nl").split("-")[0].lower()
+            acknowledgement = {
+                "en": f"I will use {corrected_asset} for this draft. ",
+                "de": f"Ich verwende {corrected_asset} für diesen Entwurf. ",
+            }.get(language, f"Ik gebruik nu {corrected_asset} voor dit concept. ")
+            question = acknowledgement + question
+        aligned["content"] = question
         aligned["mode"] = "CLARIFICATION"
         aligned["proposal_id"] = None
         aligned["confirmation_required"] = False

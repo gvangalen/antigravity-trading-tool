@@ -799,13 +799,22 @@ class FinnResponsesFrontDoor:
                         r"[a-z0-9]{2,10}\s*[.!]?\s*", message, re.I,
                     )
                 )
-                if short_dca_answer or same_draft_restatement:
+                scheduled_dca_answer = re.fullmatch(
+                    r"\s*(?:koop|buy|kaufe)\s+(?:elke|iedere|every|jeden?)\s+"
+                    r"(?:dag|week|maand|maandag|dinsdag|woensdag|donderdag|vrijdag|"
+                    r"zaterdag|zondag|monday|tuesday|wednesday|thursday|friday|"
+                    r"saturday|sunday)\s+(?:voor|for|f[uü]r)\s+"
+                    r"(?:€\s*)?\d+(?:[.,]\d{1,2})?\s*(?:euro|eur|usdt|€)?\s*[.!]?\s*",
+                    message, re.I,
+                )
+                if short_dca_answer or same_draft_restatement or scheduled_dca_answer:
                     explicit = states.explicit_inputs(
                         contract=contract, message=message, explicit_asset=None,
                         known_setup_type="dca",
                     )
                     return bool(set(explicit) & {
                         "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                        "base_amount",
                     })
             return False
         # Even a short answer can contain a separate action after a sentence
@@ -1110,7 +1119,8 @@ class FinnResponsesFrontDoor:
                 and not unsupported_catalog_pair_mention(message)):
             contract = self.proposals.registry.require_supported(pending_operation)
             states = self.proposals.states
-            if requested_slot == "name" and states.is_name_suggestion_request(message):
+            name_needed = "name" in set(guided_state.get("missing_required_inputs") or ())
+            if name_needed and states.is_name_suggestion_request(message):
                 suggestion = _guided_name_suggestion(pending_operation, guided_state)
                 language = str(locale or "nl").split("-")[0].lower()
                 answer = {
@@ -1130,7 +1140,7 @@ class FinnResponsesFrontDoor:
                 )
             accepted_name = (
                 _previous_guided_name_suggestion(previous_response, pending_operation)
-                if requested_slot == "name" and states.is_name_suggestion_acceptance(message)
+                if name_needed and states.is_name_suggestion_acceptance(message)
                 else None
             )
             if accepted_name:

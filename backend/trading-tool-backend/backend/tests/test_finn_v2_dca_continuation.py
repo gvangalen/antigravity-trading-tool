@@ -182,6 +182,41 @@ def test_deferred_name_is_not_treated_as_a_literal_setup_name():
     ) is None
 
 
+def test_scheduled_purchase_sentence_fills_open_dca_draft_without_becoming_its_name():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    state = FinnV2OperationStateService()
+    sentence = "Koop elke vrijdag voor 40 euro"
+    assert state._requested_slot_value(field="name", text=sentence, contract=contract) is None
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=sentence, contract=contract, registry=registry,
+        requested_slot="name",
+        collected_inputs={"symbol": "ETH", "setup_type": "dca", "timeframe": "1D"},
+    )
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="Koop nu ETH voor 40 euro", contract=contract, registry=registry,
+        requested_slot="name",
+        collected_inputs={"symbol": "ETH", "setup_type": "dca", "timeframe": "1D"},
+    )
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "draft_intent": "new", "inputs": {}},
+    )
+    original = FinnResponsesProposalSelection().from_call(
+        call=call, message="Maak een ETH DCA-setup op 1D",
+        conversation_context={}, verified_asset="ETH",
+    ).request_plan.operation_state
+    updated = FinnResponsesProposalSelection().from_call(
+        call=call, message=sentence,
+        conversation_context={"active_guided_operation": original},
+        verified_asset="ETH",
+    ).request_plan.operation_state
+    assert updated["collected_inputs"]["symbol"] == "ETH"
+    assert updated["collected_inputs"]["dca_day"] == "friday"
+    assert updated["collected_inputs"]["base_amount"] == 40
+    assert "name" not in updated["collected_inputs"]
+
+
 def test_open_setup_asset_switch_retains_explicit_scope_schedule_and_score_bounds():
     message = (
         "Correctie: AAPL in plaats van ETH. Behoud het analysetijdsframe 1D, "
