@@ -206,7 +206,7 @@ def test_smart_dca_amount_staffel_is_not_stored_as_setup_minimum():
 def test_trade_setup_preserves_explicit_total_benchmark_zone_without_inventing_investment():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     message = (
-        "Maak een BTC swing-setup op 1D genaamd BTC Onder Druk Start. "
+        "Maak een BTC/EUR swing-setup op 1D genaamd BTC Onder Druk Start. "
         "Mijn koopzone is de totale benchmarkscore Onder druk (26 tot en met 45). "
         "Toon het voorstel, sla niets op."
     )
@@ -310,7 +310,7 @@ def test_new_plan_draft_keeps_collected_choices_during_next_guided_turn():
     assert initial.status == "collecting"
     assert initial.missing_required_inputs
     continued = service.resolve(
-        contract=contract, message="Ik wil rustig beginnen met BTC swingtrading op 1D.",
+        contract=contract, message="Ik wil rustig beginnen met BTC/EUR swingtrading op 1D.",
         explicit_asset="BTC",
         conversation_context={"conversation_state_version": service.CONTEXT_STATE_VERSION,
                               "active_guided_operation": initial.dict()},
@@ -407,6 +407,7 @@ def test_create_dca_setup_binds_weekday_before_proposal_execution():
                 "timeframe": "4H",
                 "name": "FINN DCA Flow",
                 "symbol": "BTC",
+                "quote_currency": "EUR",
                 "dca_frequency": "weekly",
             },
             "input_sources": {},
@@ -474,7 +475,7 @@ def test_create_dca_setup_extracts_compound_weekly_schedule_without_polluting_na
     supplied = FinnV2OperationStateService().explicit_inputs(
         contract=contract,
         message=(
-            "Maak een wekelijkse DCA-setup voor BTC op 4H met de naam "
+            "Maak een wekelijkse DCA-setup voor BTC/EUR op 4H met de naam "
             "FINN DCA Live en koop op maandag."
         ),
         explicit_asset="BTC",
@@ -485,7 +486,7 @@ def test_create_dca_setup_extracts_compound_weekly_schedule_without_polluting_na
     assert supplied["dca_frequency"] == "weekly"
     assert supplied["dca_day"] == "monday"
     assert contract.required_inputs_for(supplied) == (
-        "setup_type", "timeframe", "name", "symbol", "dca_frequency", "dca_amount_mode", "base_amount", "dca_day",
+        "setup_type", "timeframe", "name", "symbol", "quote_currency", "dca_frequency", "dca_amount_mode", "base_amount", "dca_day",
     )
     assert FinnV2OperationStateService().explicit_inputs(
         contract=contract,
@@ -527,7 +528,7 @@ def test_runtime_contract_preserves_registry_conditional_inputs():
         conversation_reference_kind=None,
         supplied_inputs={
             "setup_type": "dca", "timeframe": "4H", "name": "DCA SOL",
-            "symbol": "SOL", "dca_frequency": "daily",
+            "symbol": "SOL", "quote_currency": "EUR", "dca_frequency": "daily",
         },
     )
 

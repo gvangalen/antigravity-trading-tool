@@ -30,6 +30,8 @@ class UserPreferencesData(BaseModel):
 
 class ActiveAssetData(BaseModel):
     symbol: str
+    market_id: Optional[int] = None
+    pair: Optional[str] = None
     display_name: Optional[str] = None
     asset_class: Optional[str] = None
     provider: Optional[str] = None
@@ -53,6 +55,8 @@ class IndicatorConfigurationItem(BaseModel):
 
 class IndicatorConfigurationData(BaseModel):
     symbol: str
+    market_id: Optional[int] = None
+    pair: Optional[str] = None
     asset_class: Optional[str] = None
     owner_user_id: Optional[int] = None
     requested_symbol: Optional[str] = None
@@ -67,6 +71,9 @@ class IndicatorConfigurationData(BaseModel):
 
 class AssetScoresData(BaseModel):
     symbol: str
+    market_id: Optional[int] = None
+    quote_currency: Optional[str] = None
+    pair: Optional[str] = None
     as_of: Optional[date] = None
     source_status: str
     benchmark_score: Optional[float] = None
@@ -80,6 +87,9 @@ class AssetScoresData(BaseModel):
 
 class SetupMarketMatchesData(BaseModel):
     symbol: str
+    market_id: Optional[int] = None
+    quote_currency: Optional[str] = None
+    pair: Optional[str] = None
     as_of: Optional[date] = None
     source_status: str
     benchmark_score: Optional[float] = None
@@ -94,6 +104,8 @@ class SetupMarketMatchesData(BaseModel):
 
 class MarketSnapshotData(BaseModel):
     symbol: str
+    market_id: Optional[int] = None
+    pair: Optional[str] = None
     price: Optional[float] = None
     quote_currency: Optional[str] = None
     price_provider: Optional[str] = None
@@ -132,6 +144,8 @@ class TechnicalSnapshotItem(BaseModel):
 
 class TechnicalSnapshotData(BaseModel):
     symbol: str
+    market_id: Optional[int] = None
+    pair: Optional[str] = None
     items: List[TechnicalSnapshotItem] = Field(default_factory=list)
 
 
@@ -139,6 +153,9 @@ class ActiveSetupData(BaseModel):
     setup_id: int
     name: Optional[str] = None
     symbol: Optional[str] = None
+    market_id: Optional[int] = None
+    quote_currency: Optional[str] = None
+    pair: Optional[str] = None
     timeframe: Optional[str] = None
     setup_type: Optional[str] = None
     setup_style: Optional[str] = None
@@ -176,6 +193,9 @@ class LinkedStrategyData(BaseModel):
     setup_id: Optional[int] = None
     name: Optional[str] = None
     symbol: Optional[str] = None
+    market_id: Optional[int] = None
+    quote_currency: Optional[str] = None
+    pair: Optional[str] = None
     timeframe: Optional[str] = None
     execution_mode: Optional[str] = None
     risk_profile: Optional[str] = None
@@ -216,6 +236,9 @@ class LinkedBotData(BaseModel):
     bot_id: int
     name: Optional[str] = None
     symbol: Optional[str] = None
+    market_id: Optional[int] = None
+    quote_currency: Optional[str] = None
+    pair: Optional[str] = None
     strategy_id: Optional[int] = None
     strategy_name: Optional[str] = None
     setup_id: Optional[int] = None

@@ -8,15 +8,25 @@ class MarketToolAdapter:
     def __init__(self, session):
         self.repository = MarketDataRepository(session)
 
-    async def execute(self, *, asset: str, user_id: int, **_kwargs):
-        snapshot = await self.repository.get_latest_quoted_snapshot(asset)
+    async def execute(self, *, asset: str, user_id: int, market_id: int | None = None,
+                      quote_currency: str | None = None, **_kwargs):
+        snapshot = (await self.repository.get_latest_exact_market_snapshot(market_id)
+                    if market_id is not None else
+                    await self.repository.get_latest_quoted_snapshot(asset))
         if snapshot is None:
             raise LookupError("source_unavailable")
+        if market_id is not None and (
+            str(snapshot.symbol or "").upper() != asset or
+            str(snapshot.quote_currency or "").upper() != quote_currency
+        ):
+            raise LookupError("exact_market_source_mismatch")
         # Receipt/update time does not establish the age of the provider's
         # price. Missing source provenance must stay unknown to the coach.
         observed_at = getattr(snapshot, "source_observed_at", None)
         payload = {
             "symbol": snapshot.symbol,
+            "market_id": market_id,
+            "pair": f"{asset}/{quote_currency}" if market_id is not None else None,
             "price": float(snapshot.price) if snapshot.price is not None else None,
             "quote_currency": (
                 str(snapshot.quote_currency).upper()

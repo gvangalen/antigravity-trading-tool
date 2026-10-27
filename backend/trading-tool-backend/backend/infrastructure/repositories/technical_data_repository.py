@@ -23,6 +23,7 @@ CANONICAL_USER_INDICATOR_CONFIG_COLUMNS = {
     "indicator",
     "category",
     "symbol",
+    "market_id",
     "asset_class",
     "priority",
     "enabled",
@@ -154,6 +155,7 @@ class TechnicalDataRepository:
             "created_at",
             "category",
             "symbol",
+            "market_id",
             "asset_class",
             "config_json",
             "provenance",
@@ -163,6 +165,8 @@ class TechnicalDataRepository:
 
         conditions = ["user_id = :user_id"]
         params: dict[str, Any] = {"user_id": user_id}
+        if "market_id" in columns:
+            conditions.append("market_id IS NULL")
 
         if "category" in columns:
             conditions.append("category = :category")
@@ -362,6 +366,8 @@ class TechnicalDataRepository:
             "user_id = :user_id",
             "LOWER(indicator) = LOWER(:indicator)",
         ]
+        if "market_id" in columns:
+            conditions.append("market_id IS NULL")
         params: dict[str, Any] = {
             "user_id": user_id,
             "indicator": indicator,
@@ -385,6 +391,7 @@ class TechnicalDataRepository:
             "created_at",
             "category",
             "symbol",
+            "market_id",
             "asset_class",
             "config_json",
             "provenance",
@@ -535,6 +542,8 @@ class TechnicalDataRepository:
             "user_id = :user_id",
             "LOWER(indicator) = LOWER(:indicator)",
         ]
+        if "market_id" in columns:
+            conditions.append("market_id IS NULL")
         params: dict[str, Any] = {
             "user_id": user_id,
             "indicator": indicator,
@@ -594,6 +603,8 @@ class TechnicalDataRepository:
 
         conditions = ["user_id = :user_id"]
         params: dict[str, Any] = {"user_id": user_id}
+        if "market_id" in columns:
+            conditions.append("market_id IS NULL")
         if "category" in columns:
             conditions.append("category = :category")
             params["category"] = category
@@ -667,6 +678,7 @@ class TechnicalDataRepository:
                   AND symbol = :symbol
                   AND category = :category
                   AND LOWER(indicator) = LOWER(:indicator)
+                  AND market_id IS NULL
                 """
             ),
             {
@@ -703,6 +715,8 @@ class TechnicalDataRepository:
         )
         columns = await self._get_user_config_columns()
         conditions = ["user_id = :user_id", "LOWER(indicator) = LOWER(:indicator)"]
+        if "market_id" in columns:
+            conditions.append("market_id IS NULL")
         params: dict[str, Any] = {"user_id": user_id, "indicator": indicator}
         if "category" in columns:
             conditions.append("category = :category")
@@ -721,7 +735,10 @@ class TechnicalDataRepository:
         return bool(getattr(result, "rowcount", 0))
 
     async def get_latest_for_user(self, user_id: int, symbol: Optional[str] = None, limit: int = 50) -> List[TechnicalDataIndicator]:
-        stmt = select(TechnicalDataIndicator).where(TechnicalDataIndicator.user_id == user_id)
+        stmt = select(TechnicalDataIndicator).where(
+            TechnicalDataIndicator.user_id == user_id,
+            TechnicalDataIndicator.market_id.is_(None),
+        )
         if symbol:
             stmt = stmt.where(TechnicalDataIndicator.symbol == symbol)
         
@@ -750,7 +767,8 @@ class TechnicalDataRepository:
             .where(
                 and_(
                     func.lower(TechnicalDataIndicator.indicator) == func.lower(name),
-                    TechnicalDataIndicator.user_id == user_id
+                    TechnicalDataIndicator.user_id == user_id,
+                    TechnicalDataIndicator.market_id.is_(None),
                 )
             )
         )
@@ -809,7 +827,8 @@ class TechnicalDataRepository:
             .distinct(TechnicalDataIndicator.indicator)
             .where(and_(
                 TechnicalDataIndicator.user_id == user_id,
-                TechnicalDataIndicator.symbol == symbol
+                TechnicalDataIndicator.symbol == symbol,
+                TechnicalDataIndicator.market_id.is_(None),
             ))
             .order_by(TechnicalDataIndicator.indicator, TechnicalDataIndicator.timestamp.desc())
         )
@@ -830,7 +849,8 @@ class TechnicalDataRepository:
             select(func.cast(week_trunc, Date))
             .where(and_(
                 TechnicalDataIndicator.user_id == user_id,
-                TechnicalDataIndicator.symbol == symbol
+                TechnicalDataIndicator.symbol == symbol,
+                TechnicalDataIndicator.market_id.is_(None),
             ))
             .distinct()
             .order_by(func.cast(week_trunc, Date).desc())
@@ -848,6 +868,7 @@ class TechnicalDataRepository:
                 and_(
                     TechnicalDataIndicator.user_id == user_id,
                     TechnicalDataIndicator.symbol == symbol,
+                    TechnicalDataIndicator.market_id.is_(None),
                     func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), Date).in_(weeks)
                 )
             )
@@ -867,7 +888,8 @@ class TechnicalDataRepository:
             .where(
                 and_(
                     func.lower(TechnicalDataIndicator.indicator) == func.lower(indicator),
-                    TechnicalDataIndicator.user_id == user_id
+                    TechnicalDataIndicator.user_id == user_id,
+                    TechnicalDataIndicator.market_id.is_(None),
                 )
             )
         )
@@ -931,7 +953,8 @@ class TechnicalDataRepository:
                 and_(
                     func.lower(TechnicalDataIndicator.indicator) == func.lower(indicator_name),
                     TechnicalDataIndicator.user_id == user_id,
-                    TechnicalDataIndicator.symbol == symbol
+                    TechnicalDataIndicator.symbol == symbol,
+                    TechnicalDataIndicator.market_id.is_(None),
                 )
             )
             .order_by(TechnicalDataIndicator.timestamp.desc())

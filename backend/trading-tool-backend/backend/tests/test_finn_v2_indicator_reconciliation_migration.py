@@ -13,7 +13,9 @@ def test_indicator_reconciliation_migration_preserves_unknown_asset_scope_for_us
     assert "legacy_payload_migrated" in source
     assert "ON CONFLICT (source_key)" in source
     assert "COALESCE(LOWER(BTRIM(score_mode)), 'standard')" in source
-    assert "ON CONFLICT (user_id, symbol, category, indicator)" in source
+    # Both legacy and exact-market indicator indexes may arbitrate writes after
+    # the pair cutover; the historical replay must not require the old index.
+    assert "ON CONFLICT DO NOTHING" in source
     assert "technical_indicator_rules" in source
     assert "market_indicator_rules" in source
     assert "macro_indicator_rules" in source

@@ -615,11 +615,11 @@ def test_guided_setup_state_collects_verified_inputs_without_premature_proposal(
         "timeframe": "4H",
         "market_condition": "trend_defined",
     }
-    assert first_turn.request_plan.operation_state["missing_required_inputs"] == ["name"]
+    assert first_turn.request_plan.operation_state["missing_required_inputs"] == ["name", "quote_currency"]
     assert first_turn.request_plan.clarification_required is True
 
     second_turn = SERVICE.analyze(
-        message="De naam is BTC swing daily-4H.",
+        message="De naam is BTC swing daily-4H. Gebruik BTC/EUR.",
         conversation_context={"operation_state": first_turn.request_plan.operation_state},
     )
 
@@ -630,7 +630,7 @@ def test_guided_setup_state_collects_verified_inputs_without_premature_proposal(
 
 
 def test_guided_setup_state_accepts_natural_name_follow_up():
-    first_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
+    first_turn = SERVICE.analyze(message="Help me een nieuwe BTC/EUR-setup als concept te maken.")
 
     type_turn = SERVICE.analyze(
         message="Gebruik een swing setup.",
@@ -869,11 +869,11 @@ def test_guided_operation_state_retains_verified_context_without_reasking_fields
     assert state["resolved_entities"] == {"asset": "BTC", "setup_id": 309, "strategy_id": 325, "bot_id": 186}
     assert state["previous_verified_conclusion"] == "De bestaande BTC-setup gebruikt 4H voor entries."
     assert state["previous_evidence_refs"] == ["artifact-asset", "artifact-setup"]
-    assert state["missing_required_inputs"] == ["timeframe", "name"]
+    assert state["missing_required_inputs"] == ["timeframe", "name", "quote_currency"]
 
 
 def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract():
-    first = SERVICE.analyze(message="Maak een BTC-setup.")
+    first = SERVICE.analyze(message="Maak een BTC/EUR-setup.")
     assert first.request_plan.operation_state["missing_required_inputs"] == [
         "setup_type", "timeframe", "name"
     ]
@@ -902,7 +902,7 @@ def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract
     assert final.request_plan.operation_state["missing_required_inputs"] == []
     assert final.request_plan.operation_state["state_revision"] == 4
     assert final.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "BTC",
+        "symbol": "BTC", "quote_currency": "EUR",
         "setup_type": "swing",
         "timeframe": "4H",
         "name": "BTC Contract QA",
@@ -910,7 +910,7 @@ def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract
 
 
 def test_guided_setup_keeps_canonical_state_for_natural_timeframe_and_name_answers():
-    first = SERVICE.analyze(message="Maak een BTC-setup.")
+    first = SERVICE.analyze(message="Maak een BTC/EUR-setup.")
     second = SERVICE.analyze(
         message="Kies een swing setup.",
         conversation_context={"active_guided_operation": first.request_plan.operation_state},
@@ -927,7 +927,7 @@ def test_guided_setup_keeps_canonical_state_for_natural_timeframe_and_name_answe
     assert final.request_plan.operation_id == "create_setup"
     assert final.request_plan.operation_state["missing_required_inputs"] == []
     assert final.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "BTC", "setup_type": "swing", "timeframe": "4H", "name": "BTC Rustige Pullback",
+        "symbol": "BTC", "quote_currency": "EUR", "setup_type": "swing", "timeframe": "4H", "name": "BTC Rustige Pullback",
     }
 
 
@@ -941,7 +941,7 @@ def test_guided_setup_accepts_a_short_natural_setup_type_reply():
 
     assert second.request_plan.operation_id == "create_setup"
     assert second.request_plan.operation_state["collected_inputs"]["setup_type"] == "trade"
-    assert second.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+    assert second.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name", "quote_currency"]
 
 
 def test_setup_name_does_not_include_a_trailing_non_persistence_clause():
@@ -958,14 +958,14 @@ def test_setup_name_does_not_include_a_trailing_non_persistence_clause():
 
 def test_complete_natural_setup_sentence_resolves_all_typed_inputs():
     result = SERVICE.analyze(
-        message="Werk voor DOT een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."
+        message="Werk voor DOT/EUR een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."
     )
 
     assert result.request_plan.operation_id == "create_setup"
     assert result.request_plan.target_asset == "DOT"
     assert result.request_plan.operation_state["missing_required_inputs"] == []
     assert result.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "DOT",
+        "symbol": "DOT", "quote_currency": "EUR",
         "setup_type": "trade",
         "timeframe": "2H",
         "name": "Polkadot Uitbraak",
@@ -974,14 +974,14 @@ def test_complete_natural_setup_sentence_resolves_all_typed_inputs():
 
 def test_setup_catalog_canonicalizes_natural_slots_without_losing_user_display_name():
     result = SERVICE.analyze(
-        message="Zet voor Solana een position setup klaar op dagbasis met de naam SOL Kompas."
+        message="Zet voor SOL/EUR een position setup klaar op dagbasis met de naam SOL Kompas."
     )
 
     assert result.request_plan.operation_id == "create_setup"
     assert result.request_plan.target_asset == "SOL"
     assert result.request_plan.operation_state["missing_required_inputs"] == []
     assert result.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "SOL", "setup_type": "position", "timeframe": "1D", "name": "SOL Kompas",
+        "symbol": "SOL", "quote_currency": "EUR", "setup_type": "position", "timeframe": "1D", "name": "SOL Kompas",
     }
 
 
@@ -1043,13 +1043,13 @@ def test_setup_state_canonicalizes_supplied_values_before_missing_checks_without
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     state = FinnV2OperationStateService().resolve(
         contract=contract,
-        message="Maak een setup voor SOL.", explicit_asset="SOL", conversation_context={},
+        message="Maak een setup voor SOL/EUR.", explicit_asset="SOL", conversation_context={},
         supplied_inputs={"setup_type": "Position", "timeframe": "dagbasis", "name": "SOL Kompas"},
         derived_inputs={"setup_type": "trade", "timeframe": None, "name": "sol kompas", "symbol": "BTC"},
     )
 
     assert state.collected_inputs == {
-        "symbol": "SOL", "setup_type": "position", "timeframe": "1D", "name": "SOL Kompas",
+        "symbol": "SOL", "quote_currency": "EUR", "setup_type": "position", "timeframe": "1D", "name": "SOL Kompas",
     }
     assert state.missing_required_inputs == []
 
@@ -1061,7 +1061,7 @@ def test_setup_state_leaves_actually_missing_type_and_timeframe_missing():
         explicit_asset="SOL", conversation_context={}, supplied_inputs={"name": "SOL Kompas"},
     )
 
-    assert state.missing_required_inputs == ["setup_type", "timeframe"]
+    assert state.missing_required_inputs == ["setup_type", "timeframe", "quote_currency"]
 
 
 def test_contract_state_collects_registry_declared_asset_and_identifier_slots_generically():
@@ -1090,7 +1090,7 @@ def test_natural_dutch_position_setup_is_a_supplied_type_not_a_missing_slot():
     assert result.request_plan.operation_state["collected_inputs"] == {
         "symbol": "SOL", "setup_type": "position",
     }
-    assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+    assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name", "quote_currency"]
 
 
 def test_compound_setup_type_is_canonicalized_before_missing_input_reconciliation():
@@ -1100,7 +1100,7 @@ def test_compound_setup_type_is_canonicalized_before_missing_input_reconciliatio
     assert result.request_plan.operation_state["collected_inputs"] == {
         "symbol": "XRP", "setup_type": "swing",
     }
-    assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+    assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name", "quote_currency"]
 
 
 def test_timeframe_catalog_canonicalizes_compositional_dutch_english_and_german_forms():
@@ -1117,21 +1117,21 @@ def test_timeframe_catalog_canonicalizes_compositional_dutch_english_and_german_
 
 def test_complete_avax_compound_timeframe_setup_preserves_supplied_values():
     result = SERVICE.analyze(
-        message="Bereid voor Avalanche een swingopzet voor op de vieruursgrafiek en noem hem AVAX Rustige Instap."
+        message="Bereid voor AVAX/EUR een swingopzet voor op de vieruursgrafiek en noem hem AVAX Rustige Instap."
     )
     assert result.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "AVAX", "setup_type": "swing", "timeframe": "4H", "name": "AVAX Rustige Instap",
+        "symbol": "AVAX", "quote_currency": "EUR", "setup_type": "swing", "timeframe": "4H", "name": "AVAX Rustige Instap",
     }
     assert result.request_plan.operation_state["missing_required_inputs"] == []
 
 
 def test_dutch_swingtrade_setup_preserves_its_explicit_name_and_canonical_type():
     result = SERVICE.analyze(
-        message="Maak een swingtrade setup voor BTC op 4H met de naam Nederlandse Doorbraak."
+        message="Maak een swingtrade setup voor BTC/EUR op 4H met de naam Nederlandse Doorbraak."
     )
 
     assert result.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "BTC", "setup_type": "swing", "timeframe": "4H", "name": "Nederlandse Doorbraak",
+        "symbol": "BTC", "quote_currency": "EUR", "setup_type": "swing", "timeframe": "4H", "name": "Nederlandse Doorbraak",
     }
     assert result.request_plan.operation_state["missing_required_inputs"] == []
 

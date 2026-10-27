@@ -4,6 +4,8 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.schemas.finn_v2_evidence_schema import IndicatorConfigurationData, IndicatorConfigurationItem
 from backend.services.asset_catalog_service import AssetCatalogService
+from sqlalchemy import or_, select
+from backend.infrastructure.models import UserIndicatorConfig
 
 
 class IndicatorToolAdapter:
@@ -28,18 +30,40 @@ class IndicatorToolAdapter:
             for row in rows
         ]
 
-    async def execute(self, *, user_id: int, asset: str, **_kwargs):
+    async def execute(self, *, user_id: int, asset: str, market_id: int | None = None,
+                      quote_currency: str | None = None, **_kwargs):
         requested_symbol = str(asset or "").strip().upper()
         self.source_registry.get("indicator_configuration").validate_request(
             user_id=user_id,
             symbol=requested_symbol,
         )
         asset_meta = await AssetCatalogService(self.session).get_asset(requested_symbol)
-        configuration = await self.repository.get_canonical_indicator_configuration(
-            user_id,
-            symbol=requested_symbol,
-            asset_class=asset_meta.get("asset_class"),
-        )
+        if market_id is None:
+            configuration = await self.repository.get_canonical_indicator_configuration(
+                user_id, symbol=requested_symbol, asset_class=asset_meta.get("asset_class"),
+            )
+        else:
+            result = await self.session.execute(select(UserIndicatorConfig).where(
+                UserIndicatorConfig.user_id == user_id,
+                UserIndicatorConfig.symbol == requested_symbol,
+                or_(UserIndicatorConfig.market_id == market_id,
+                    UserIndicatorConfig.market_id.is_(None)),
+                UserIndicatorConfig.enabled.is_(True),
+            ).order_by(UserIndicatorConfig.market_id.desc().nullslast()))
+            selected = {}
+            for row in result.scalars().all():
+                # Score 2.0 uses a shared asset rule unless this pair has an
+                # enabled rule for the same indicator and category.
+                selected.setdefault((row.category, str(row.indicator).lower()), row)
+            rows = list(selected.values())
+            configuration = {
+                "technical": [row for row in rows if row.category == "technical"],
+                "market": [row for row in rows if row.category == "market"],
+                "macro": [row for row in rows if row.category == "macro"],
+                "asset_class": asset_meta.get("asset_class"),
+                "scope_by_category": {category: "exact_market_with_shared_defaults"
+                                      for category in ("technical", "market", "macro")},
+            }
         technical = self._serialize(configuration["technical"])
         market = self._serialize(configuration["market"])
         macro = self._serialize(configuration["macro"])
@@ -53,6 +77,8 @@ class IndicatorToolAdapter:
         return {
             "data": IndicatorConfigurationData(
                 symbol=requested_symbol,
+                market_id=market_id,
+                pair=f"{requested_symbol}/{quote_currency}" if market_id is not None else None,
                 asset_class=configuration.get("asset_class"),
                 owner_user_id=user_id,
                 requested_symbol=requested_symbol,

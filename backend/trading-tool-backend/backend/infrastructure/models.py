@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON, UniqueConstraint, Index
 from datetime import datetime
 
 from backend.infrastructure.database import Base
@@ -146,6 +146,7 @@ class MarketData(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String, nullable=False)
+    market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
     price = Column(Numeric)
     open = Column(Numeric)
     high = Column(Numeric)
@@ -169,6 +170,7 @@ class MarketDataIndicator(Base):
     action = Column(String)
     score = Column(Numeric)
     symbol = Column(String, default="BTC")
+    market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
     source_observed_at = Column(DateTime, nullable=True)
@@ -203,6 +205,7 @@ class UserIndicatorConfig(Base):
     indicator = Column(String, nullable=False) # e.g. 'rsi', 'ma200'
     category = Column(String, default='technical') # 'technical', 'macro', 'market'
     symbol = Column(String, nullable=True)
+    market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
     asset_class = Column(String, nullable=True)
     priority = Column(Integer, default=100)
     enabled = Column(Boolean, default=True)
@@ -254,6 +257,7 @@ class TechnicalDataIndicator(Base):
     advies = Column(String)
     uitleg = Column(String)
     symbol = Column(String, default="BTC")
+    market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
     user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
     timestamp = Column(DateTime, default=datetime.utcnow)
     source_observed_at = Column(DateTime, nullable=True)
@@ -308,6 +312,7 @@ class Setup(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
     name = Column(String, nullable=False)
     symbol = Column(String)
+    market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
     timeframe = Column(String)
     explanation = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -325,8 +330,10 @@ class DailySetupScore(Base):
 class DailyScore(Base):
     __tablename__ = 'daily_scores'
     __table_args__ = (
-        UniqueConstraint("user_id", "symbol", "report_date",
-                         name="daily_scores_user_symbol_report_date_unique"),
+        Index("ux_daily_scores_legacy_market_scope", "user_id", "symbol", "report_date",
+              unique=True, postgresql_where=text("market_id IS NULL")),
+        Index("ux_daily_scores_exact_market_scope", "user_id", "market_id", "report_date",
+              unique=True, postgresql_where=text("market_id IS NOT NULL")),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -337,6 +344,7 @@ class DailyScore(Base):
     market_score = Column(Numeric)
     setup_score = Column(Numeric)
     symbol = Column(String, default="BTC")
+    market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
     calculated_at = Column(DateTime(timezone=True), nullable=True)
     indicator_evidence = Column(JSON, nullable=True)
 
@@ -417,6 +425,22 @@ class AssetCatalog(Base):
     metadata_json = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TradingMarket(Base):
+    """An exact venue/base/quote identity, separate from the base asset catalog."""
+    __tablename__ = 'trading_markets'
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    asset_symbol = Column(String, ForeignKey('asset_catalog.symbol'), nullable=False)
+    quote_currency = Column(String(12), nullable=False)
+    venue = Column(String(80), nullable=False)
+    provider = Column(String(80), nullable=False)
+    provider_symbol = Column(String(80), nullable=False)
+    tradingview_symbol = Column(String(120), nullable=False)
+    source_verified_at = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
 class ConversationState(Base):

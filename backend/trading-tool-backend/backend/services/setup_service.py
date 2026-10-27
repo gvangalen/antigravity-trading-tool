@@ -9,6 +9,7 @@ import logging
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
 from backend.schemas.trading_schema import SetupCreateSchema
+from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
 
 WEEKDAY_TO_NUMBER = {
     "1": 1,
@@ -125,6 +126,13 @@ class SetupService:
             "setup_id": item.get("id"),
             "name": item.get("name"),
             "symbol": item.get("symbol"),
+            "market_id": item.get("market_id"),
+            "quote_currency": item.get("quote_currency"),
+            "trading_pair": (
+                f"{item.get('symbol')}/{item.get('quote_currency')}"
+                if item.get("market_id") and item.get("quote_currency") else None
+            ),
+            "tradingview_symbol": item.get("tradingview_symbol"),
             "timeframe": item.get("timeframe"),
             "setup_type": item.get("setup_type"),
             
@@ -301,6 +309,23 @@ class SetupService:
         raw_payload["symbol"] = str(raw_payload.get("symbol", "")).strip().upper()
         payload.symbol = raw_payload["symbol"]
 
+        # A chosen crypto quote is an exact market identity, not an FX
+        # conversion of the catalog's default quote. Legacy rows without a
+        # selected pair retain NULL market_id until explicitly confirmed.
+        requested_quote = raw_payload.get("quote_currency")
+        if requested_quote is not None:
+            try:
+                market = await TradingMarketService(self.session).resolve(
+                    raw_payload["symbol"], str(requested_quote), verify_current=True,
+                )
+            except MarketUnavailable as exc:
+                raise HTTPException(422, str(exc)) from exc
+            raw_payload["market_id"] = market.id
+            raw_payload["quote_currency"] = market.quote_currency
+            raw_payload["trading_pair"] = market.pair
+        elif raw_payload.get("market_id") is not None:
+            raise HTTPException(422, "Kies een koersvaluta voor dit handelspaar.")
+
         setup_type = payload.setup_type.lower()
 
         exists = await self.repository.check_name_exists(payload.name, user_id)
@@ -326,6 +351,7 @@ class SetupService:
             "status": "success",
             "setup_id": setup_id,
             "setup": self._format_setup(created),
+            "trading_pair": raw_payload.get("trading_pair"),
             "field_sources": {
                 field: "supplied" if raw_payload.get(field) is not None else "absent"
                 for field in self.SETUP_SCORE_DEFAULTS
@@ -352,11 +378,11 @@ class SetupService:
         from backend.services.setup_market_match_service import SetupMarketMatchService
 
         service = SetupMarketMatchService(self.session)
+        matches = (await service.for_all_assets(user_id))["matches"]
         if not symbol:
-            return (await service.for_all_assets(user_id))["matches"]
-        assessment = await service.for_asset(user_id, symbol)
-        return [{**match, "as_of": assessment["as_of"],
-                 "source_status": assessment["source_status"]} for match in assessment["matches"]]
+            return matches
+        return [match for match in matches
+                if str(match.get("symbol") or "").upper() == str(symbol).upper()]
 
     async def update_setup(self, setup_id: int, raw_payload: dict, user_id: int) -> dict:
         row = await self.repository.get_setup_by_id(setup_id, user_id)
@@ -382,6 +408,8 @@ class SetupService:
         # Normalize uppercase symbol if being updated
         if "symbol" in raw_payload:
             raw_payload["symbol"] = str(raw_payload["symbol"]).strip().upper()
+            if row.get("market_id") is not None and raw_payload["symbol"] != str(row.get("symbol") or "").upper():
+                raise HTTPException(422, "Wijzig het handelspaar via een nieuw setupvoorstel.")
 
         updates = {}
         for field in self.UPDATE_ALLOWED_FIELDS.difference({"tags"}):
@@ -471,23 +499,29 @@ class SetupService:
     async def get_active_setup(self, user_id: int, symbol: str = "BTC") -> dict:
         from backend.services.setup_market_match_service import SetupMarketMatchService
 
-        assessment = await SetupMarketMatchService(self.session).for_asset(
-            user_id, symbol, setups=await self.repository.get_all_setups(user_id)
-        )
-        best = next((match for match in assessment["matches"] if match["is_best"]), None)
+        matches = (await SetupMarketMatchService(self.session).for_all_assets(user_id))["matches"]
+        asset_matches = [match for match in matches
+                         if str(match.get("symbol") or "").upper() == symbol.upper()]
+        active_markets = {match.get("market_id") for match in asset_matches if match["is_active"]}
+        if len(active_markets) > 1:
+            return {"active": None, "source_status": "ambiguous_market", "as_of": None}
+        best = next((match for match in asset_matches if match["is_best"]), None)
         if best is None:
-            return {"active": None, "source_status": assessment["source_status"], "as_of": assessment["as_of"]}
+            return {"active": None,
+                    "source_status": asset_matches[0]["source_status"] if asset_matches else "missing_scores",
+                    "as_of": asset_matches[0]["as_of"] if asset_matches else None}
         return {
             "active": {**best, "ai_explanation": "Berekend uit de opgeslagen scorevoorwaarden."},
-            "source_status": assessment["source_status"],
-            "as_of": assessment["as_of"],
+            "source_status": best["source_status"],
+            "as_of": best["as_of"],
         }
 
     async def explain_setup_status(self, setup_id: int, user_id: int) -> dict:
         from backend.services.setup_market_match_service import SetupMarketMatchService
 
         setup = await self.get_setup_by_id(setup_id, user_id)
-        assessment = await SetupMarketMatchService(self.session).for_asset(user_id, setup["symbol"], setups=[setup])
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, setup["symbol"], setups=[setup], market_id=setup.get("market_id"))
         match = assessment["matches"][0]
         return {
             "status": match["status"],

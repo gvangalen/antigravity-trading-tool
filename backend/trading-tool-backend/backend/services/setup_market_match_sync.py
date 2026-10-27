@@ -21,26 +21,33 @@ SETUP_COLUMNS = (
 )
 
 
-def _fresh(conn, user_id: int, symbol: str, category: str, row: dict) -> bool:
+def _fresh(conn, user_id: int, symbol: str, category: str, row: dict,
+           market_id: int | None = None) -> bool:
     table, name_column = {
         "macro": ("macro_data", "name"),
         "technical": ("technical_indicators", "indicator"),
         "market": ("market_data_indicators", "name"),
     }[category]
     with conn.cursor() as cur:
+        config_scope = ("AND (market_id=%s OR market_id IS NULL)" if market_id is not None
+                        else "AND market_id IS NULL")
         cur.execute(
-            "SELECT indicator, updated_at FROM user_indicator_configs "
-            "WHERE user_id=%s AND category=%s AND symbol=%s AND enabled=TRUE",
-            (user_id, category, symbol),
+            "SELECT DISTINCT ON (indicator) indicator, updated_at FROM user_indicator_configs "
+            "WHERE user_id=%s AND category=%s AND symbol=%s AND enabled=TRUE "
+            + config_scope + " ORDER BY indicator, market_id DESC NULLS LAST",
+            (user_id, category, symbol, market_id) if market_id is not None
+            else (user_id, category, symbol),
         )
         configured = cur.fetchall()
         # Identifiers come only from the fixed map above.
+        market_scope = ("AND market_id=%s " if market_id is not None else "AND market_id IS NULL ")
         cur.execute(
             f"SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at "
             f"FROM {table} WHERE user_id=%s "
-            + ("" if category == "macro" else "AND symbol=%s ")
+            + ("" if category == "macro" else "AND symbol=%s " + market_scope)
             + f"ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST",
-            (user_id,) if category == "macro" else (user_id, symbol),
+            (user_id,) if category == "macro" else
+            (user_id, symbol, market_id) if market_id is not None else (user_id, symbol),
         )
         rows = cur.fetchall()
     evidence = row.get("indicator_evidence") or {}
@@ -64,7 +71,8 @@ def current_setup_market_assessment(conn, user_id: int, symbol: str) -> dict[str
         cur.execute(
             "SELECT report_date, macro_score, technical_score, market_score, "
             "calculated_at, indicator_evidence "
-            "FROM daily_scores WHERE user_id=%s AND symbol=%s AND report_date=CURRENT_DATE LIMIT 1",
+            "FROM daily_scores WHERE user_id=%s AND symbol=%s AND market_id IS NULL "
+            "AND report_date=CURRENT_DATE LIMIT 1",
             (user_id, symbol),
         )
         daily_row = cur.fetchone()

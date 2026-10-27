@@ -12,6 +12,7 @@ class DashboardRepository:
                 symbol, price, volume, change_24h, timestamp
             FROM market_data
             WHERE symbol = :symbol
+              AND market_id IS NULL
             ORDER BY symbol, timestamp DESC
         """)
         result = await self.session.execute(query, {"symbol": symbol})
@@ -94,6 +95,7 @@ class DashboardRepository:
                 symbol, price, change_24h
             FROM market_data
             WHERE symbol = ANY(:symbols)
+              AND market_id IS NULL
             ORDER BY symbol, timestamp DESC
         """)
         result = await self.session.execute(query, {"symbols": symbols})

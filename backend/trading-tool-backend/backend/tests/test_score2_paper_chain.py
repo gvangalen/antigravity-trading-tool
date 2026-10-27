@@ -129,7 +129,7 @@ class _Cursor:
             self.rows = []
         elif "SELECT indicator FROM user_indicator_configs" in sql:
             self.rows = [(self.store.names[params[1]],)]
-        elif "SELECT indicator, updated_at FROM user_indicator_configs" in sql:
+        elif "updated_at FROM user_indicator_configs" in sql:
             self.rows = [(self.store.names[params[1]], self.store.now - timedelta(hours=2))]
         elif "SELECT DISTINCT ON" in sql:
             category = next(key for key, table in (
@@ -211,6 +211,37 @@ def test_auto_executor_rechecks_current_bot_before_exchange(saved_bot, error):
         )
 
 
+def test_pair_bound_auto_bot_cannot_execute_queued_base_asset_order():
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql, params):
+            assert "FROM bot_configs" in sql
+            self.locked = "FOR UPDATE" in sql
+            if self.locked:
+                assert params == (11, 7)
+            else:
+                assert params == (11, 7, 13, 73, "BTC")
+
+        def fetchone(self):
+            return ("auto", False, True, 100, 200, 50, 5, 100, 73) if self.locked else None
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    with pytest.raises(RuntimeError, match="gekozen handelspaar"):
+        paper_worker._auto_execute_decision(
+            conn=Connection(), user_id=7, bot_id=11, decision_id=13,
+            order={"symbol": "BTC", "side": "buy", "estimated_qty": 0.001,
+                   "estimated_price": 50000}, is_live=False, mode="auto",
+        )
+
+
 def test_legacy_manual_live_bot_decision_cannot_book_unconfirmed_fill(monkeypatch):
     class BotCursor:
         def __enter__(self):
@@ -224,7 +255,7 @@ def test_legacy_manual_live_bot_decision_cannot_book_unconfirmed_fill(monkeypatc
             assert params == (11, 7)
 
         def fetchone(self):
-            return True, True
+            return True, True, None, None, None, None, None, None
 
     class BotConnection:
         def cursor(self):
@@ -251,7 +282,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     )
     monkeypatch.setattr(scoring_utils, "get_db_connection", lambda: store)
     monkeypatch.setattr(store_daily_scores_task, "get_db_connection", lambda: store)
-    monkeypatch.setattr(market_interpreter, "normalize_market_value_with_history", lambda *args: args[-1])
+    monkeypatch.setattr(market_interpreter, "normalize_market_value_with_history", lambda *_args, **_kwargs: _args[3])
     monkeypatch.setattr(macro_interpreter, "normalize_macro_value_with_history", lambda *args: args[-1])
     monkeypatch.setattr(technical_interpreter, "normalize_technical_value", lambda _name, value: value)
     scores_by_category = {"market": 80, "macro": 70, "technical": 60}

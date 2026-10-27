@@ -19,6 +19,22 @@ export function fetchAssetWorkspace(symbol, periods = {}, options = {}) {
   return fetchAuth(`/api/workspace/asset?${params.toString()}`, { method: "GET", ...fetchOptions });
 }
 
+export function fetchExactMarketWorkspace(symbol, quoteCurrency, periods = {}, options = {}) {
+  const { watchlistSymbols = [], ...fetchOptions } = options;
+  const params = new URLSearchParams({
+    symbol: String(symbol || "").toUpperCase(),
+    quote_currency: String(quoteCurrency || "").toUpperCase(),
+    market_period: periods.market || "day",
+    macro_period: periods.macro || "day",
+    technical_period: periods.technical || "day",
+  });
+  const normalizedWatchlist = Array.from(new Set(
+    watchlistSymbols.map((item) => String(item || "").toUpperCase()).filter(Boolean)
+  ));
+  if (normalizedWatchlist.length) params.set("watchlist_symbols", normalizedWatchlist.join(","));
+  return fetchAuth(`/api/workspace/exact-market?${params.toString()}`, { method: "GET", ...fetchOptions });
+}
+
 export function fetchWorkspaceWatchlist(symbols = [], options = {}) {
   const normalized = Array.from(
     new Set(symbols.map((symbol) => String(symbol || "").toUpperCase()).filter(Boolean))

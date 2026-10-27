@@ -92,9 +92,14 @@ export function resolveFinnSubmissionContext({
     const focused = explicitBotAction ? commandContext : livePageContext;
     request.bot_id = focused.bot_id || null;
     request.symbol = focused.symbol || null;
+    request.quote_currency = focused.quote_currency || null;
     request.setup_id = focused.setup_id || null;
     request.strategy_id = focused.strategy_id || null;
   }
+  request.quote_currency = commandContext.quote_currency || (
+    String(request.symbol || "").toUpperCase() === String(livePageContext?.symbol || "").toUpperCase()
+      ? livePageContext?.quote_currency || null : null
+  );
   return request;
 }
 

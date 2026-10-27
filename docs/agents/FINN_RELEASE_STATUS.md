@@ -4,9 +4,103 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
-## Paper exit, Score 2.0 diagnostics and pair identity (26 oktober 2026)
+## Exact trading-pair candidate (27 oktober 2026)
 
-Current phase: `STAGE2_LIVE_AWAITING_QA`. Independent QA accepted the
+Current phase: `LOCAL_VALIDATION` on `codex/explicit-trading-market`.
+Production still reports `2c5431b4cb6446b276b2e1e855a843823885810c`;
+the pair flow is **not live** at this status update. The candidate binds a
+user-selected BTC/EUR, BTC/USDT, ETH/EUR or ETH/USDT market to setup,
+strategy, bot, exact quote, TradingView chart, indicator materialization,
+Score 2.0, FINN read evidence, Paper decisions and portfolio valuation.
+Unavailable or mismatched exact-market evidence remains unknown and cannot
+borrow another quote. EUR investment amounts remain distinct from the traded
+quote currency. The migration cutover rejects a rollback to old daily-score
+writers after pair-scoped unique indexes are installed.
+
+Measured local evidence on the final source: root pytest **4053 passed, four
+skipped**, `.local-finn-parity-artifacts/exact-pair-final-pytest.log` SHA-256
+`06fa300d755bd005edf03ab2601beec0086bfb91842ae1fea68d69b380bade5d`.
+Frontend typecheck, i18n, commands, proposals, production build and high
+dependency audit passed; mobile typecheck, lint (warnings only), web/iOS/
+Android bundle smokes and chat tests passed. Real Responses selector
+development passed **20/20** and regression **109/109**, both with 100%
+operation accuracy and zero provider, schema, timeout, parse or validation
+failures. Their artifacts are `backend/trading-tool-backend/.local-finn-parity-artifacts/
+exact-pair-selector-{development,regression}.json` (SHA-256
+`93d47adc27e86aa57da09555b5b4c91812c0c74332638c11e8ab2d62a18a34ee`
+and `b6cfd8527d1c53beb8e8639ef54ffa09eda742fc32c1aa370628bda938e9a5c1`).
+The isolated exact-pair Paper probe passed: ETH/USDT score independent of
+ETH legacy score, one €50 buy, one filled order and two portfolio snapshots.
+The full local worker action matrix passed **16/16** contracts, including
+direct and guided SOL/USDT setup creation, with zero broker orders and zero
+Live bots (`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
+`95063b8d649de54942ffc94e8bc12e0162c3d7197e0aa980405cdb46350c33a7`).
+CI, deployment and independent authenticated QA remain outstanding at this
+status update. Local probes do not establish
+live provider, exchange, chart or broker behavior.
+
+## Paper exit, Score 2.0 diagnostics and pair identity (27 oktober 2026)
+
+Earlier Stage 2 status: `STAGE2_LIVE_QA_INCOMPLETE`. The final Stage 2 status update
+merged via PR #644 and Auto Deploy 40414885894 succeeded. Backend health and
+frontend build-info returned HTTP 200 on `2c5431b4cb6446b276b2e1e855a843823885810c`
+at the final identity check. The existing independent QA Agent returned
+`NOT_ACCEPTED` because the protected production runner has no automatic
+Paper-exit fixture profile. Its current auto-Paper profile covers a buy and
+its closed-trade profile covers a manual sale. The target/stop, idempotency,
+Hold, owner-isolation and Reflectie checks after an automatic exit therefore
+remain unproven live; QA reported no confirmed product failure. A protected
+automatic-exit profile and rerun are needed before accepting Stage 2.
+The explicit trading-pair work is local on `codex/explicit-trading-market`;
+its schema and plan/bot identity are not deployed and pair-bound bot execution
+is held until price and Score 2.0 readers use the same market ID. The local
+pair cutover now rejects pair-bound bots in manual preview, preflight, order
+creation, queued manual and automatic decision execution, and scheduled execution before legacy
+base-symbol quotes can be used. The market schema expansion and drained-writer
+uniqueness cutover are registered in the deploy order. Score 2.0 rule lookup,
+price history and the new daily-score writer can select an exact market ID.
+The cutover was executed in a disposable local PostgreSQL database: one legacy
+BTC score and independent BTC/EUR and BTC/USDT scores and indicator configs
+coexisted. The full backend run passed 4022 tests with four existing skips;
+`bash -n` and `git diff --check` passed. This is not release evidence: the
+pair-specific indicator/source writers and readers, FINN pair proposal
+selection, web/mobile chart binding, Paper execution and end-to-end
+provider/runtime gates are incomplete. Do not deploy this branch as a partial
+trading-pair release.
+
+The next local batch on `codex/explicit-trading-market` now materializes the
+owner's configured market and technical indicators from completed candles of
+the verified exact pair, then writes a pair-scoped Score 2.0 daily result.
+An authenticated read-only exact-market workspace now resolves the stored
+venue/base/quote identity, returns its own dated quote and owner-scoped
+Score 2.0 assessment, and refuses a quote row with a different currency.
+It does not fall back to a base-asset quote or score. Two focused boundary
+tests and the complete backend suite passed (4035 passed, four skipped).
+FINN's setup proposal selector preserves an explicit ETH/EUR or BTC/USDT
+quote instead of treating the pair as its base asset. A bot follow-up cannot
+bind such a pair request to an earlier base-only ETH setup. The complete
+backend suite passed **4033 tests, four skipped** after the scoring changes;
+the focused pair-selection regressions passed **22/22** after the selector
+changes. These are local code checks only. The chosen quote is not yet a
+required choice in every crypto setup draft; the web and mobile Analyse/chart
+readers still use the base-asset workspace, and pair-bound bot execution
+remains held. This candidate remains **not deployable** until those paths and
+the independent release gates are complete.
+
+Subsequent local work isolates legacy base-symbol quote, indicator, score,
+portfolio and bot readers from newly stored exact-market rows. A dedicated
+exact-market history bootstrap accepts only completed candles from the verified
+provider symbol and retains the selected market ID and quote currency. The
+Score 2.0 refresh task can now address a market ID without rebuilding the
+legacy base-asset score. Typed repository reads select one market ID for prices
+and daily scores; the legacy variants exclude pair rows. Focused tests passed
+60/60, followed by 26/26 and 5/5 additional checks. The latest full backend
+run passed 4028 with four existing skips. These changes are still local and
+do not make a pair-bound plan executable: periodic pair source materialization,
+owner-specific pair configurations, FINN proposal selection, exact-market
+readers across web/mobile and Paper execution remain required before release.
+
+Independent QA accepted the
 targeted Stage 1 recheck on final live SHA
 `1d75d5ccccfe611a5fd4c73324cc6945eb148ef2`: the localized MACD title,
 explanation and summary, the independently fetched stale AAPL/USD quote, and

@@ -20,7 +20,7 @@ from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningF
     [
         ("de-DE", "create_indicator_configuration", {"asset": "ETH", "category": "technical", "indicator": "ADX"}, "Ich kann ADX für ETH"),
         ("en-US", "create_indicator_configuration", {"asset": "ETH", "category": "technical", "indicator": "ADX"}, "I can add ADX"),
-        ("de-DE", "create_setup", {"symbol": "BTC", "setup_type": "dca", "timeframe": "1D", "name": "BTC Aufbau", "dca_frequency": "weekly", "dca_day": "friday", "dca_amount_mode": "fixed", "base_amount": 10}, "Ich kann einen Vorschlag für BTC"),
+        ("de-DE", "create_setup", {"symbol": "BTC", "quote_currency": "EUR", "setup_type": "dca", "timeframe": "1D", "name": "BTC Aufbau", "dca_frequency": "weekly", "dca_day": "friday", "dca_amount_mode": "fixed", "base_amount": 10}, "Ich kann einen Vorschlag für BTC"),
     ],
 )
 def test_deterministic_proposal_copy_respects_full_request_locale(locale, operation_id, inputs, expected):
@@ -317,6 +317,7 @@ def test_deterministic_setup_proposal_uses_completed_typed_state_without_write()
                 "collected_inputs": {
                     "name": "BTC Daily 4H concept",
                     "symbol": "BTC",
+                    "quote_currency": "EUR",
                     "setup_type": "trade",
                     "timeframe": "4H",
                 },
@@ -448,6 +449,7 @@ def test_deterministic_proposals_find_active_asset_by_contract_scope_not_tool_na
                 "collected_inputs": {
                     "name": "Contract scope",
                     "symbol": "BTC",
+                    "quote_currency": "EUR",
                     "setup_type": "swing",
                     "timeframe": "4H",
                 },

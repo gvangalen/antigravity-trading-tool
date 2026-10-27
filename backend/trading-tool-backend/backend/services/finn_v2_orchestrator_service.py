@@ -457,7 +457,7 @@ class FinnV2OrchestratorService:
             {"price_currency": collected_inputs["price_currency"]}
             if operation_id == "create_strategy"
             and dict(operation_state.get("input_sources") or {}).get("price_currency") == "explicit"
-            and collected_inputs.get("price_currency") in {"EUR", "USD"}
+            and collected_inputs.get("price_currency") in {"EUR", "USD", "USDT"}
             else {}
         )
         state = self.analysis.operation_state.resolve(

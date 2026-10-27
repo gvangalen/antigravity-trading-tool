@@ -87,7 +87,7 @@ class FinnV2EvidenceValidatorService:
                 continue
             for code in outcome.error_codes:
                 severity = "warning"
-                if code in {"setup_ambiguous", "strategy_ambiguous", "bot_ambiguous", "asset_ambiguous"}:
+                if code in {"setup_ambiguous", "strategy_ambiguous", "bot_ambiguous", "asset_ambiguous", "market_pair_ambiguous"}:
                     clarifications.append(self._clarification(domain, code))
                 issues.append(EvidenceIssue(code=code, severity=severity, domain=domain, artifact_id=outcome.artifact_id, message=code))
             if outcome.status == "stale":
@@ -177,6 +177,7 @@ class FinnV2EvidenceValidatorService:
     def _clarification(self, domain: str, code: str) -> ClarificationCandidate:
         question_map = {
             "asset_ambiguous": ("ambiguous_asset", "Over welke asset wil je dat ik dit beoordeel?", "asset"),
+            "market_pair_ambiguous": ("ambiguous_market_pair", "Welk handelspaar bedoel je: EUR of USDT?", "market_pair"),
             "setup_ambiguous": ("ambiguous_setup", "Ik zie meerdere setups voor deze asset. Welke setup bedoel je precies?", "setup"),
             "strategy_ambiguous": ("ambiguous_strategy", "Ik zie meerdere strategieën die hierbij kunnen horen. Welke strategie bedoel je precies?", "strategy"),
             "bot_ambiguous": ("ambiguous_bot", "Ik zie meerdere bots die hierbij kunnen horen. Welke bot bedoel je precies?", "bot"),

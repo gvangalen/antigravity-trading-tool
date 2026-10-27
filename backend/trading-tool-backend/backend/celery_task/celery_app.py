@@ -199,6 +199,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.market_task.sync_configured_market_snapshots",
         crontab(minute="*/5"),
     ),
+    "sync_exact_market_snapshots": build_task_schedule_entry(
+        "backend.celery_task.market_task.sync_exact_market_snapshots",
+        crontab(minute="*/5"),
+    ),
     "bootstrap_indicator_histories": build_task_schedule_entry(
         "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
         crontab(minute=7),

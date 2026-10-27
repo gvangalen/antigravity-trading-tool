@@ -11,6 +11,40 @@ from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 from backend.services.bot_service import BotService, _dca_schedule_status
 
 
+def test_paper_price_reads_saved_exact_market_only():
+    now = datetime.now(timezone.utc)
+    service = BotService(_FakeSession())
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"symbol": "ETH", "market_id": 73, "quote_currency": "EUR", "is_live": False}
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            assert market_ids == [73]
+            return {73: {"symbol": "ETH", "quote_currency": "EUR", "price": 2100,
+                         "observed_at": now}}
+        async def get_valuatable_market_prices(self, symbols):
+            raise AssertionError("legacy base price must not be read")
+        async def get_portfolio_fx_rates(self):
+            return {}
+    service.repository = Repo()
+    result = asyncio.run(service.get_paper_price_eur(7, 9))
+    assert result["price_eur"] == 2100
+    assert result["quote_currency"] == "EUR"
+
+
+def test_paper_price_rejects_mismatched_exact_market_row():
+    service = BotService(_FakeSession())
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"symbol": "ETH", "market_id": 73, "quote_currency": "EUR", "is_live": False}
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            return {73: {"symbol": "ETH", "quote_currency": "USDT", "price": 2100,
+                         "observed_at": datetime.now(timezone.utc)}}
+    service.repository = Repo()
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(service.get_paper_price_eur(7, 9))
+    assert error.value.status_code == 409
+
+
 def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
     class Repo:
         async def get_bot_history(self, user_id, start, end):
@@ -338,7 +372,7 @@ class _FakeSession:
         if "lower(name)" in sql:
             return _FakeResult(None)
         if "from strategies s" in sql:
-            return _FakeResult((params.get("strategy_id"), "BTC"))
+            return _FakeResult((params.get("strategy_id"), "BTC", None, None))
         if "from bot_configs" in sql and "strategy_id" in sql:
             row = (self.duplicate_strategy_bot_id,) if self.duplicate_strategy_bot_id else None
             return _FakeResult(row)
@@ -670,6 +704,31 @@ def test_live_manual_order_rejects_asset_outside_bot_before_exchange():
 
     assert exc.value.status_code == 400
     assert "Orderasset" in str(exc.value.detail)
+    assert repo.created_orders == 0
+
+
+@pytest.mark.parametrize("route", ["preview_manual_order", "preflight_manual_order", "create_manual_order"])
+@pytest.mark.parametrize("is_live", [False, True])
+def test_pair_bound_bot_rejects_base_symbol_manual_order_before_quote_or_execution(route, is_live):
+    class PairRepo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(market_id=123, is_live=is_live, is_active=True)
+            return bot
+
+    service = BotService(_FakeSession())
+    repo = PairRepo()
+    service.repository = repo
+    payload = BotManualOrderSchema(
+        bot_id=9, symbol="BTC", side="buy", quantity=0.001, price=50000,
+        idempotency_key="pair-bound-manual", risk_acknowledged=True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(getattr(service, route)(payload, user_id=7))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "EXACT_MARKET_EXECUTION_PENDING"
     assert repo.created_orders == 0
 
 
@@ -1616,6 +1675,33 @@ def test_bot_update_allows_current_bot_strategy_link():
     asyncio.run(service.validate_bot_payload(payload, user_id=1, is_update=True, bot_id=7))
 
     assert payload["symbol"] == "BTC"
+
+
+def test_pair_bound_bot_inherits_exact_market_from_owned_strategy():
+    class Session(_FakeSession):
+        async def execute(self, query, params=None):
+            if "from strategies s" in str(query).lower():
+                return _FakeResult((42, "BTC", 73, 73))
+            return await super().execute(query, params)
+
+    payload = {"name": "BTC/EUR Paper", "strategy_id": 42, "mode": "manual",
+               "is_live": False, "budget_total_eur": 100}
+    asyncio.run(BotService(Session()).validate_bot_payload(payload, user_id=1))
+    assert payload["symbol"] == "BTC"
+    assert payload["market_id"] == 73
+
+
+def test_pair_bound_bot_rejects_strategy_setup_market_disagreement():
+    class Session(_FakeSession):
+        async def execute(self, query, params=None):
+            if "from strategies s" in str(query).lower():
+                return _FakeResult((42, "BTC", 73, 74))
+            return await super().execute(query, params)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(BotService(Session()).validate_bot_payload(
+            {"name": "BTC Paper", "strategy_id": 42}, user_id=1))
+    assert exc.value.status_code == 409
 
 
 def test_bot_contract_exposes_consistent_top_level_ids_and_nested_strategy():

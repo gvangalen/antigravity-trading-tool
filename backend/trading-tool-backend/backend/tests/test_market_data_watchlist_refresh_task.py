@@ -79,6 +79,78 @@ def test_configured_snapshot_refresh_does_not_call_provider_without_watchlist_as
     assert result["success_count"] == 0
 
 
+def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
+    from backend.services import exact_market_indicator_service, indicator_history_bootstrap
+
+    calls = []
+    row = {"id": 73, "asset_symbol": "BTC", "quote_currency": "EUR",
+           "venue": "BINANCE", "provider": "binance",
+           "provider_symbol": "BTCEUR", "tradingview_symbol": "BINANCE:BTCEUR",
+           "source_verified_at": None}
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [row]
+
+    class Session:
+        async def execute(self, _statement):
+            return Result()
+
+        async def rollback(self):
+            pass
+
+    class Context:
+        async def __aenter__(self):
+            return Session()
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class Ingestion:
+        def __init__(self, _session):
+            pass
+
+        async def ingest_exact_market_snapshot(self, market):
+            calls.append((market.id, market.provider_symbol, market.quote_currency))
+            return {"observed_at": "2026-10-27T07:00:00Z"}
+
+    class History:
+        def __init__(self, _session):
+            pass
+
+        async def bootstrap_exact_market(self, market, *, required_days):
+            assert required_days == 200
+            calls.append((market.id, "history"))
+            return {"status": "ready", "observed_days": 16}
+
+    class Indicators:
+        def __init__(self, _session):
+            pass
+
+        async def materialize(self, market):
+            calls.append((market.id, "indicators"))
+            return {"owners": [7], "written": 2}
+
+    def build_score(user_id, market_id):
+        calls.append((user_id, market_id, "score"))
+        return {"market_id": market_id}
+
+    monkeypatch.setattr(market_task, "async_session_factory", Context)
+    monkeypatch.setattr(market_task, "MarketDataIngestionService", Ingestion)
+    monkeypatch.setattr(indicator_history_bootstrap, "IndicatorHistoryBootstrap", History)
+    monkeypatch.setattr(exact_market_indicator_service, "ExactMarketIndicatorService", Indicators)
+    monkeypatch.setattr("backend.celery_task.store_daily_scores_task.build_daily_scores_for_market", build_score)
+
+    result = asyncio.run(market_task._sync_exact_market_snapshots())
+
+    assert calls == [(73, "BTCEUR", "EUR"), (73, "history"),
+                     (73, "indicators"), (7, 73, "score")]
+    assert result["scopes"][0]["market_id"] == 73
+
+
 def test_configured_snapshot_refresh_rehydrates_owner_scoped_indicator_without_watchlist(monkeypatch):
     captured = {"calls": []}
     config = SimpleNamespace(user_id=7, symbol="AAPL", category="technical", enabled=True)

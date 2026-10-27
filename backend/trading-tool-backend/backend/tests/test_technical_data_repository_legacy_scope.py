@@ -64,6 +64,7 @@ def test_explicit_asset_read_never_falls_back_to_asset_class_or_default_rows():
     for call in session.execute.await_args_list:
         query = str(call.args[0])
         assert "symbol = :symbol" in query
+        assert "market_id IS NULL" in query
         assert "symbol IS NULL" not in query
         assert call.args[1]["user_id"] == 406
         assert call.args[1]["symbol"] == "BTC"

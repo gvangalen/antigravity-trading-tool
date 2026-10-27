@@ -162,6 +162,67 @@ def test_market_backfill_uses_closed_dated_candles_and_is_idempotent(monkeypatch
     assert len({row.source_observed_at.date() for row in session.rows}) == 6
 
 
+def test_exact_market_backfill_keeps_quote_history_separate(monkeypatch):
+    from backend.services import indicator_history_bootstrap as module
+    from backend.services.trading_market_service import TradingMarket
+    from sqlalchemy.dialects import postgresql
+
+    market = TradingMarket(23, "BTC", "EUR", "BINANCE", "binance", "BTCEUR",
+                           "BINANCE:BTCEUR", datetime.now(timezone.utc))
+
+    class _Asset:
+        async def get_asset(self, _symbol):
+            return {"symbol": "BTC", "display_name": "Bitcoin", "asset_class": "crypto",
+                    "provider": "binance", "primary_provider": "binance"}
+
+    class _Provider:
+        async def fetch_candles(self, asset, _timeframe, *, limit):
+            assert (asset.provider_symbol, asset.quote_currency, limit) == ("BTCEUR", "EUR", 40)
+            return [SimpleNamespace(
+                period_start=datetime.combine(_day(offset), time.min, timezone.utc),
+                is_final=True, close=100 + offset, volume=1000,
+                open=99, high=102, low=98, provider_symbol="BTCEUR",
+                provider="binance", symbol="BTC",
+            ) for offset in range(1, 18)]
+
+    class _Session:
+        def __init__(self):
+            self.rows = []
+
+        async def execute(self, query):
+            sql = str(query.compile(dialect=postgresql.dialect(),
+                                    compile_kwargs={"literal_binds": True}))
+            assert "market_data.market_id = 23" in sql
+            return _Result([row.source_observed_at for row in self.rows
+                            if row.market_id == market.id])
+
+        def add(self, row):
+            self.rows.append(row)
+
+        async def rollback(self):
+            pass
+
+        async def commit(self):
+            pass
+
+    monkeypatch.setattr(module, "AssetCatalogService", lambda _session: _Asset())
+    monkeypatch.setattr(module, "MarketDataProviderRegistry", lambda: SimpleNamespace(
+        resolve_for_asset=lambda _asset: _Provider(),
+    ))
+    session = _Session()
+    session.rows.append(SimpleNamespace(market_id=99,
+        source_observed_at=datetime.combine(_day(1), time(23, 59, 59))))
+
+    first = asyncio.run(IndicatorHistoryBootstrap(session).bootstrap_exact_market(market))
+    second = asyncio.run(IndicatorHistoryBootstrap(session).bootstrap_exact_market(market))
+
+    assert first["status"] == "ready" and first["inserted"] == 17
+    assert second["inserted"] == 0
+    assert len([row for row in session.rows if row.market_id == market.id]) == 17
+    assert all(row.quote_currency == "EUR" and row.price_provider == "binance"
+               for row in session.rows if row.market_id == market.id)
+
+
 def test_rsi_backfill_continues_after_price_has_five_days(monkeypatch):
     from backend.services import indicator_history_bootstrap as module
 

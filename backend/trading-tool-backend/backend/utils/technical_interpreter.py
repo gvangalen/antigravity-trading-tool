@@ -188,7 +188,8 @@ def normalize_technical_value(indicator: str, value: float) -> float:
 
 
 def normalize_technical_value_for_rules(conn, indicator: str, value: float,
-                                        user_id: int, symbol: str | None = None) -> float:
+                                        user_id: int, symbol: str | None = None,
+                                        market_id: int | None = None) -> float:
     """Keep existing owner MA curves on their original distance scale."""
     if not math.isfinite(float(value)):
         raise ValueError("Non-finite technical indicator reading")
@@ -198,6 +199,7 @@ def normalize_technical_value_for_rules(conn, indicator: str, value: float,
         rules = fetch_rules_for_indicator(
             conn, category="technical", indicator=normalized,
             user_id=user_id, symbol=symbol, enforce_fixed_buckets=False,
+            market_id=market_id,
         )
         if rules and all(rule.score_mode == "custom" for rule in rules):
             cap = 0.15 if normalized == "ma_50" else 0.2

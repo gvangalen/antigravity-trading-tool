@@ -210,6 +210,7 @@ def fetch_rules_for_indicator(
     only_active: bool = True,
     enforce_fixed_buckets: bool = True,
     symbol: Optional[str] = None,
+    market_id: Optional[int] = None,
 ) -> List[RuleRow]:
     rules_table, _ = _table_names(category)
     indicator = (indicator or "").strip()
@@ -271,12 +272,16 @@ def fetch_rules_for_indicator(
     # Legacy user rules have no asset identity and must not override them.
     if user_id is not None and symbol:
         with conn.cursor() as cur:
+            market_scope = "AND (market_id = %s OR market_id IS NULL)" if market_id is not None else "AND market_id IS NULL"
             cur.execute(
-                """SELECT id, config_json, priority FROM user_indicator_configs
+                f"""SELECT id, config_json, priority FROM user_indicator_configs
                    WHERE user_id = %s AND symbol = %s AND category = %s
                      AND LOWER(indicator) = LOWER(%s) AND enabled = TRUE
+                     {market_scope}
+                   ORDER BY market_id DESC NULLS LAST
                    LIMIT 1""",
-                (user_id, symbol.upper(), category, indicator),
+                (user_id, symbol.upper(), category, indicator, market_id)
+                if market_id is not None else (user_id, symbol.upper(), category, indicator),
             )
             config = cur.fetchone()
         if config is None:
@@ -404,6 +409,7 @@ def score_indicator(
     value: Any,
     user_id: Optional[int] = None,  # ✅ nieuw
     symbol: Optional[str] = None,
+    market_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Engine contract:
@@ -421,6 +427,7 @@ def score_indicator(
         only_active=True,
         enforce_fixed_buckets=True,
         symbol=symbol,
+        market_id=market_id,
     )
     rule = pick_rule_for_value(rules, v)
 

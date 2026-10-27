@@ -28,9 +28,19 @@ SET category = LOWER(BTRIM(category))
 WHERE category IS NOT NULL
   AND category <> LOWER(BTRIM(category));
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_user_indicator_configs_canonical_asset_scope
-ON user_indicator_configs (user_id, symbol, category, indicator)
-WHERE symbol IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name='user_indicator_configs' AND column_name='market_id') THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_user_indicator_configs_canonical_asset_scope
+        ON user_indicator_configs (user_id, symbol, category, indicator)
+        WHERE symbol IS NOT NULL AND market_id IS NULL;
+    ELSE
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_user_indicator_configs_canonical_asset_scope
+        ON user_indicator_configs (user_id, symbol, category, indicator)
+        WHERE symbol IS NOT NULL;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_user_indicator_configs_canonical_lookup
 ON user_indicator_configs (user_id, symbol, category, enabled, priority, id)

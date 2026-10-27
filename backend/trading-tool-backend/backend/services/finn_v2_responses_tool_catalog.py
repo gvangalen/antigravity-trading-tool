@@ -310,6 +310,13 @@ class FinnResponsesToolCatalog:
                 "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
                 "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
             }
+            if name in {"get_current_asset_scores", "get_setup_market_matches",
+                        "get_market_snapshot", "get_saved_setup", "get_active_plan_and_strategy",
+                        "get_indicator_snapshot", "get_current_technical_snapshot"}:
+                properties["quote_currency"] = {
+                    "type": ["string", "null"], "enum": ["EUR", "USDT", None],
+                    "description": "Only the quote currency explicitly chosen by the user; the server resolves the market ID.",
+                }
             if name == "get_closed_trade_review":
                 # The server extracts the review ID from the original user
                 # message and checks ownership. A model-supplied asset filter
@@ -565,6 +572,10 @@ class FinnResponsesToolCatalog:
             return FinnResponsesToolCall(name, None, {}, (), (), ())
         if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
+            if name in {"get_current_asset_scores", "get_setup_market_matches",
+                        "get_market_snapshot", "get_saved_setup", "get_active_plan_and_strategy",
+                        "get_indicator_snapshot", "get_current_technical_snapshot"}:
+                allowed.add("quote_currency")
             if name == "get_closed_trade_review":
                 allowed = set()
             if name in {"get_portfolio_and_exposure", "get_saved_bots"}:

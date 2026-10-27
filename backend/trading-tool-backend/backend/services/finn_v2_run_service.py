@@ -574,7 +574,7 @@ def _asks_to_drop_blocked_strategy_rules(message: str) -> bool:
 def _strategy_price_currency_conflict(origin_inputs: dict[str, object], message: str) -> bool:
     original = str(origin_inputs.get("price_currency") or "")
     proposed = FinnV2OperationStateService._explicit_trade_price_currency(message)
-    return original in {"EUR", "USD"} and proposed in {"EUR", "USD", "MIXED"} and proposed != original
+    return original in {"EUR", "USD", "USDT"} and proposed in {"EUR", "USD", "USDT", "MIXED"} and proposed != original
 
 
 def _mixed_strategy_price_request(message: str) -> bool:
@@ -1125,7 +1125,7 @@ def _proposal_from_blocked_strategy(block: dict, verified_parent_setup: dict[str
         {"operation_id": "create_strategy", "inputs": inputs},
     )
     restored_message = f"Naam: {inputs['name']}" if inputs.get("name") else ""
-    if inputs.get("price_currency") in {"EUR", "USD"}:
+    if inputs.get("price_currency") in {"EUR", "USD", "USDT"}:
         # This unit was recovered from all three explicitly labelled prices
         # in the owner's blocked request. State resolution deliberately
         # rejects a model-supplied unit unless the message carries it.

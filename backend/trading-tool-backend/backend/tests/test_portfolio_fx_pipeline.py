@@ -20,13 +20,20 @@ class _Cursor:
         statement = " ".join(sql.lower().split())
         self.queries.append((statement, params))
         if "from bot_configs c" in statement:
-            self.rows = [row if len(row) == 8 else (*row, False) for row in self.bots]
+            self.rows = [(row if len(row) == 9 else
+                          (*row, None) if len(row) == 8 else
+                          (*row, False, None)) for row in self.bots]
         elif "from portfolio_fx_rates" in statement and "quote_currency in" in statement:
             self.rows = self.fx
         elif "from portfolio_fx_rates" in statement:
             quote = params[0]
             match = next((row for row in self.fx if row[0] == quote), None)
             self.rows = [(match[1], match[2])] if match else []
+        elif "from market_data m" in statement and "join trading_markets" in statement:
+            self.rows = [(market_id, symbol, *self.prices[(symbol, market_id)], market_id)
+                         for market_id in params[0]
+                         for symbol in ("ETH", "BTC")
+                         if (symbol, market_id) in self.prices]
         elif "from market_data m" in statement and "any(%s)" in statement:
             self.rows = [(symbol, *self.prices[symbol], index) for index, symbol in enumerate(params[0]) if symbol in self.prices]
         elif "from market_data m" in statement:
@@ -111,6 +118,28 @@ def test_twenty_assets_use_one_price_read_and_one_complete_snapshot():
     assert _snapshot_verified_paper(cursor, 17, "1h", now)
     assert cursor.snapshots[0][3:7] == (2200.0, 200.0, 2000.0, 20)
     assert sum("from market_data m" in sql for sql, _ in cursor.queries) == 1
+
+
+def test_pair_paper_snapshot_uses_exact_market_price_without_base_fallback():
+    now = datetime.now(timezone.utc)
+    cursor = _Cursor(
+        bots=[(1, "ETH", True, 100, 1, False, now, True, 73)],
+        prices={"ETH": (1000, now, "USDT"), ("ETH", 73): (2000, now, "EUR")},
+        fx=[],
+    )
+    assert _snapshot_verified_paper(cursor, 17, "1h", now) is True
+    assert cursor.snapshots[0][3:7] == (2100.0, 100.0, 2000.0, 1)
+    evidence = json.loads(cursor.snapshots[0][-1])["positions"][0]
+    assert evidence["market_id"] == 73
+    assert evidence["quote_currency"] == "EUR"
+    assert not any("m.market_id is null" in sql for sql, _ in cursor.queries)
+
+    missing_exact = _Cursor(
+        bots=[(1, "ETH", True, 100, 1, False, now, True, 73)],
+        prices={"ETH": (1000, now, "USDT")}, fx=[],
+    )
+    assert _snapshot_verified_paper(missing_exact, 17, "1h", now) is False
+    assert missing_exact.snapshots == []
 
 
 def test_legacy_unverified_paper_ledger_never_enters_verified_history():

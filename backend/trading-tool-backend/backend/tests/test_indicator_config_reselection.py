@@ -25,6 +25,7 @@ def test_reselecting_ma200_keeps_owner_scoring_config():
     assert rows[0].config_json["score_mode"] == "custom"
     query, params = session.calls[0]
     assert "LOWER(indicator) NOT IN" in query
+    assert "market_id IS NULL" in query
     assert params["retained"] == ["ma_200"]
     repo.ensure_user_config.assert_awaited_once_with(
         7, "ma_200", category="technical", symbol="BTC", asset_class="crypto", priority=1,
@@ -46,6 +47,7 @@ def test_empty_preference_still_removes_all_indicators():
     assert asyncio.run(repo.replace_scope_configs(7, [], symbol="BTC")) == []
     query, params = session.calls[0]
     assert "NOT IN" not in query
+    assert "market_id IS NULL" in query
     assert params == {"user_id": 7, "category": "technical", "symbol": "BTC"}
 
 

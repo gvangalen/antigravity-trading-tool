@@ -1,11 +1,12 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
 from backend.utils.auth_utils import get_current_user
 
 router = APIRouter()
@@ -18,6 +19,32 @@ class AssetSearchItemResponse(BaseModel):
     exchange: str | None = None
     tradingview_symbol: str | None = None
     logo_url: str | None = None
+
+
+class TradingMarketChoiceResponse(BaseModel):
+    pair: str
+    quote_currency: str
+    status: str
+    venue: str | None = None
+    provider_symbol: str | None = None
+    tradingview_symbol: str | None = None
+
+
+@router.get("/assets/{symbol}/trading-markets", response_model=List[TradingMarketChoiceResponse])
+async def get_crypto_trading_markets(
+    symbol: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    _ = current_user
+    base = str(symbol or "").strip().upper()
+    asset = await AssetCatalogService(session).get_asset(base)
+    if not asset or str(asset.get("asset_class") or "").lower() != "crypto":
+        raise HTTPException(404, "Geen ondersteunde crypto-asset gevonden.")
+    try:
+        return await TradingMarketService(session).inspect_crypto_quotes(base)
+    except MarketUnavailable as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/assets/search", response_model=List[AssetSearchItemResponse])

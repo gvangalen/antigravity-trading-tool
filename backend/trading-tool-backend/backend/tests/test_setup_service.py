@@ -150,6 +150,44 @@ def test_save_setup_applies_default_timeframe_for_trade_payload():
     assert "min_benchmark_score" not in raw_payload
 
 
+def test_new_crypto_setup_binds_only_the_exact_verified_pair(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    class FakeMarketService:
+        def __init__(self, _session):
+            pass
+
+        async def resolve(self, base, quote, *, verify_current):
+            assert (base, quote, verify_current) == ("BTC", "EUR", True)
+            return SimpleNamespace(id=83, quote_currency="EUR", pair="BTC/EUR")
+
+    class Repo:
+        async def check_name_exists(self, _name, _user_id):
+            return False
+
+        async def create_setup(self, data, _user_id, _tags):
+            assert data["market_id"] == 83
+            assert data["trading_pair"] == "BTC/EUR"
+            return 91
+
+        async def get_setup_by_id(self, _setup_id, _user_id):
+            return {"id": 91, "name": "BTC EUR", "symbol": "BTC",
+                    "setup_type": "trade", "market_id": 83,
+                    "quote_currency": "EUR", "tradingview_symbol": "BINANCE:BTCEUR"}
+
+    monkeypatch.setattr("backend.services.setup_service.TradingMarketService", FakeMarketService)
+    service = SetupService(None)
+    service.repository = Repo()
+    payload = SetupCreateSchema(name="BTC EUR", symbol="BTC", setup_type="trade")
+    result = asyncio.run(service.save_setup(
+        payload, {"name": "BTC EUR", "symbol": "BTC", "setup_type": "trade",
+                  "quote_currency": "EUR"}, 17, commit=False,
+    ))
+    assert result["setup"]["trading_pair"] == "BTC/EUR"
+    assert result["setup"]["tradingview_symbol"] == "BINANCE:BTCEUR"
+
+
 @pytest.mark.parametrize("raw_day", ["monday", "maandag", "1", 1])
 def test_active_strategy_weekday_normalizer_accepts_legacy_values(raw_day):
     assert normalize_weekday(raw_day) == 1
@@ -157,55 +195,16 @@ def test_active_strategy_weekday_normalizer_accepts_legacy_values(raw_day):
 
 def test_get_active_setup_filters_candidates_by_symbol(monkeypatch):
     service = SetupService(None)
+    async def matched(_self, user_id):
+        assert user_id == 42
+        return {"matches": [
+            {"setup_id": 1, "name": "ETH Smart DCA", "symbol": "ETH",
+             "is_active": True, "is_best": True, "source_status": "available", "as_of": date.today()},
+            {"setup_id": 2, "name": "BTC Smart DCA", "symbol": "BTC",
+             "is_active": True, "is_best": True, "source_status": "available", "as_of": date.today()},
+        ]}
 
-    class Repo:
-        async def get_all_setups(self, user_id):
-            return [
-                {
-                    "id": 1,
-                    "name": "ETH Smart DCA",
-                    "symbol": "ETH",
-                    "timeframe": "1W",
-                    "setup_type": "dca",
-                    "min_macro_score": 0,
-                    "max_macro_score": 100,
-                    "min_technical_score": 0,
-                    "max_technical_score": 100,
-                    "min_benchmark_score": 0,
-                    "max_benchmark_score": 100,
-                },
-                {
-                    "id": 2,
-                    "name": "BTC Smart DCA",
-                    "symbol": "BTC",
-                    "timeframe": "1W",
-                    "setup_type": "dca",
-                    "min_macro_score": 0,
-                    "max_macro_score": 100,
-                    "min_technical_score": 0,
-                    "max_technical_score": 100,
-                    "min_benchmark_score": 0,
-                    "max_benchmark_score": 100,
-                },
-            ]
-
-    class Session:
-        async def execute(self, *args, **kwargs):
-            class Result:
-                def mappings(self):
-                    return self
-
-                def first(self):
-                    return {"report_date": date.today(), "macro_score": 50,
-                            "technical_score": 50, "market_score": 50}
-            return Result()
-
-    async def fresh(*_args):
-        return True
-
-    monkeypatch.setattr(SetupMarketMatchService, "_source_is_fresh", fresh)
-    service.repository = Repo()
-    service.session = Session()
+    monkeypatch.setattr(SetupMarketMatchService, "for_all_assets", matched)
 
     import asyncio
     result = asyncio.run(service.get_active_setup(42, "BTC"))
@@ -213,6 +212,20 @@ def test_get_active_setup_filters_candidates_by_symbol(monkeypatch):
     assert result["active"]["setup_id"] == 2
     assert result["active"]["name"] == "BTC Smart DCA"
     assert result["active"]["symbol"] == "BTC"
+
+
+def test_get_active_setup_does_not_choose_between_two_active_quotes(monkeypatch):
+    async def matched(_self, _user_id):
+        return {"matches": [
+            {"setup_id": 1, "symbol": "BTC", "market_id": 21,
+             "is_active": True, "is_best": True},
+            {"setup_id": 2, "symbol": "BTC", "market_id": 22,
+             "is_active": True, "is_best": True},
+        ]}
+
+    monkeypatch.setattr(SetupMarketMatchService, "for_all_assets", matched)
+    result = asyncio.run(SetupService(None).get_active_setup(42, "BTC"))
+    assert result == {"active": None, "source_status": "ambiguous_market", "as_of": None}
 
 
 def test_delete_setup_dependency_names_the_owner_scoped_strategy():

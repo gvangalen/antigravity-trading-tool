@@ -36,6 +36,10 @@ class StrategyToolAdapter:
             setup_id=strategy.get("setup_id"),
             name=strategy.get("name"),
             symbol=strategy.get("symbol") or raw_data.get("symbol") or strategy.get("setup_symbol"),
+            market_id=strategy.get("setup_market_id"),
+            quote_currency=strategy.get("market_quote_currency"),
+            pair=(f'{strategy.get("setup_symbol")}/{strategy.get("market_quote_currency")}'
+                  if strategy.get("setup_symbol") and strategy.get("market_quote_currency") else None),
             timeframe=strategy.get("timeframe") or raw_data.get("timeframe") or strategy.get("setup_timeframe"),
             execution_mode=strategy.get("execution_mode"),
             risk_profile=strategy.get("risk_profile"),

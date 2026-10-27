@@ -204,6 +204,10 @@ export type WorkspaceCategoryPayload = {
 };
 export type WorkspaceAssetResponse = {
   symbol: string;
+  market_id?: number | null;
+  pair?: string | null;
+  quote_currency?: string | null;
+  asset?: { tradingview_symbol?: string | null } | null;
   periods: {
     market: string;
     macro: string;
@@ -211,6 +215,7 @@ export type WorkspaceAssetResponse = {
   };
   quote?: {
     price?: number | null;
+    quote_currency?: string | null;
     change_24h?: number | null;
     volume?: number | null;
     stale?: boolean;
@@ -463,6 +468,19 @@ export const intelligenceApi = {
         market_period: options?.market_period ?? 'day',
         macro_period: options?.macro_period ?? 'day',
         technical_period: options?.technical_period ?? 'day',
+      },
+      timeoutMs: 30000,
+    });
+  },
+
+  exactMarketWorkspace(symbol: string, quoteCurrency: string) {
+    return apiClient.request<WorkspaceAssetResponse>('/api/workspace/exact-market', {
+      query: {
+        symbol,
+        quote_currency: quoteCurrency,
+        market_period: 'day',
+        macro_period: 'day',
+        technical_period: 'day',
       },
       timeoutMs: 30000,
     });

@@ -32,7 +32,7 @@ class SetupRepository:
     async def create_setup(self, payload: dict, user_id: int, tags: list) -> int:
         query = text("""
             INSERT INTO setups (
-                name, symbol, timeframe,
+                name, symbol, market_id, timeframe,
                 setup_type,
                 dca_frequency, dca_day, dca_month_day,
                 account_type, min_investment, tags, trend, score_logic,
@@ -44,7 +44,7 @@ class SetupRepository:
                 created_at, user_id
             )
             VALUES (
-                :name, :symbol, :timeframe,
+                :name, :symbol, :market_id, :timeframe,
                 :setup_type,
                 :dca_frequency, :dca_day, :dca_month_day,
                 :account_type, :min_investment, CAST(:tags AS text[]), :trend, :score_logic,
@@ -61,6 +61,7 @@ class SetupRepository:
         params = {
             "name": payload.get("name"),
             "symbol": payload.get("symbol"),
+            "market_id": payload.get("market_id"),
             "timeframe": payload.get("timeframe"),
             "setup_type": payload.get("setup_type"),
             
@@ -101,24 +102,37 @@ class SetupRepository:
         return row[0] if row else None
 
     async def get_setup_by_id(self, setup_id: int, user_id: int) -> dict:
-        query = text("SELECT * FROM setups WHERE id = :setup_id AND user_id = :user_id LIMIT 1")
+        query = text("""
+            SELECT s.*, tm.quote_currency, tm.venue, tm.provider_symbol,
+                   tm.tradingview_symbol
+            FROM setups s LEFT JOIN trading_markets tm ON tm.id = s.market_id
+            WHERE s.id = :setup_id AND s.user_id = :user_id LIMIT 1
+        """)
         result = await self.session.execute(query, {"setup_id": setup_id, "user_id": user_id})
         return result.mappings().first()
 
     async def get_last_setup(self, user_id: int) -> dict:
-        query = text("SELECT * FROM setups WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1")
+        query = text("""
+            SELECT s.*, tm.quote_currency, tm.venue, tm.provider_symbol,
+                   tm.tradingview_symbol
+            FROM setups s LEFT JOIN trading_markets tm ON tm.id = s.market_id
+            WHERE s.user_id = :user_id ORDER BY s.created_at DESC LIMIT 1
+        """)
         result = await self.session.execute(query, {"user_id": user_id})
         return result.mappings().first()
 
     async def get_all_setups(self, user_id: int, setup_type: str = None) -> List[dict]:
-        q = "SELECT * FROM setups WHERE user_id = :user_id"
+        q = ("SELECT s.*, tm.quote_currency, tm.venue, tm.provider_symbol, "
+             "tm.tradingview_symbol FROM setups s "
+             "LEFT JOIN trading_markets tm ON tm.id = s.market_id "
+             "WHERE s.user_id = :user_id")
         params = {"user_id": user_id}
         
         if setup_type:
-            q += " AND LOWER(setup_type) = LOWER(:setup_type)"
+            q += " AND LOWER(s.setup_type) = LOWER(:setup_type)"
             params["setup_type"] = setup_type
             
-        q += " ORDER BY created_at DESC LIMIT 200"
+        q += " ORDER BY s.created_at DESC LIMIT 200"
         
         query = text(q)
         result = await self.session.execute(query, params)

@@ -358,6 +358,7 @@ class TechnicalDataService:
         rows = (await self.session.execute(
             select(MarketData.source_observed_at, MarketData.price).where(
                 MarketData.symbol == symbol.upper(),
+                MarketData.market_id.is_(None),
                 MarketData.source_observed_at >= cutoff,
                 MarketData.source_observed_at < datetime.combine(today, time.min),
                 MarketData.price.is_not(None),

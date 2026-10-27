@@ -116,6 +116,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
                     UNION SELECT symbol FROM setups WHERE user_id = %s
                     UNION SELECT symbol FROM user_indicator_configs
                           WHERE user_id = %s AND enabled = TRUE AND symbol IS NOT NULL
+                            AND market_id IS NULL
                 """, (user_id, user_id, user_id))
                 watchlist = [str(row[0]).upper() for row in cur.fetchall() if row[0]]
             conn.commit()
@@ -163,7 +164,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
                         %s::jsonb, %s::jsonb, %s::jsonb,
                         CURRENT_TIMESTAMP, %s::jsonb
                     )
-                    ON CONFLICT (user_id, symbol, report_date)
+                    ON CONFLICT (user_id, symbol, report_date) WHERE market_id IS NULL
                     DO UPDATE SET
                         macro_score = EXCLUDED.macro_score,
                         technical_score = EXCLUDED.technical_score,
@@ -208,6 +209,84 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
             reconcile_coach_feed_score.delay(user_id, symbol)
         except Exception:
             logger.warning("FINN feed dispatch failed for %s", symbol, exc_info=True)
+
+
+def build_daily_scores_for_market(user_id: int, market_id: int) -> dict:
+    """Persist Score 2.0 for one exact pair without touching the base-asset row.
+
+    Pair observations and indicator settings must already carry this market ID.
+    No score is synthesized from the catalog's default pair or an FX conversion.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        raise RuntimeError("exact_market_score_database_unavailable")
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_lock(%s, %s)",
+                        (SCORE_OWNER_LOCK_NAMESPACE, int(user_id)))
+        conn.commit()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT asset_symbol FROM trading_markets
+                WHERE id=%s AND is_active=TRUE
+            """, (market_id,))
+            row = cur.fetchone()
+        if not row:
+            raise ValueError("exact_market_not_found")
+        symbol = str(row[0]).upper()
+        results = {
+            category: generate_scores_db(category, user_id=user_id,
+                                         symbol=symbol, market_id=market_id)
+            for category in ("macro", "technical", "market")
+        }
+        scores = {category: _confirmed_component_score(results[category])
+                  for category in results}
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO daily_scores (
+                    report_date, user_id, symbol, market_id,
+                    macro_score, technical_score, market_score, setup_score,
+                    macro_interpretation, technical_interpretation, market_interpretation,
+                    macro_top_contributors, technical_top_contributors, market_top_contributors,
+                    calculated_at, indicator_evidence
+                ) VALUES (
+                    CURRENT_DATE, %s, %s, %s,
+                    %s, %s, %s, NULL,
+                    %s, %s, %s,
+                    %s::jsonb, %s::jsonb, %s::jsonb,
+                    CURRENT_TIMESTAMP, %s::jsonb
+                )
+                ON CONFLICT (user_id, market_id, report_date) WHERE market_id IS NOT NULL
+                DO UPDATE SET
+                    macro_score=EXCLUDED.macro_score,
+                    technical_score=EXCLUDED.technical_score,
+                    market_score=EXCLUDED.market_score,
+                    setup_score=EXCLUDED.setup_score,
+                    macro_interpretation=EXCLUDED.macro_interpretation,
+                    technical_interpretation=EXCLUDED.technical_interpretation,
+                    market_interpretation=EXCLUDED.market_interpretation,
+                    macro_top_contributors=EXCLUDED.macro_top_contributors,
+                    technical_top_contributors=EXCLUDED.technical_top_contributors,
+                    market_top_contributors=EXCLUDED.market_top_contributors,
+                    calculated_at=EXCLUDED.calculated_at,
+                    indicator_evidence=EXCLUDED.indicator_evidence
+            """, (
+                user_id, symbol, market_id,
+                scores["macro"], scores["technical"], scores["market"],
+                "Rule-based macro scan", "Rule-based technical scan", "Rule-based market scan",
+                _jsonb(list(results["macro"].get("scores", {}).keys())),
+                _jsonb(list(results["technical"].get("scores", {}).keys())),
+                _jsonb(list(results["market"].get("scores", {}).keys())),
+                _jsonb({category: result.get("scores", {}) for category, result in results.items()}),
+            ))
+        conn.commit()
+        return {"user_id": user_id, "symbol": symbol, "market_id": market_id,
+                "scores": scores}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 @shared_task(name="backend.celery_task.store_daily_scores_task.reconcile_coach_feed_score")
@@ -374,7 +453,8 @@ def recover_coach_feed_events():
 @shared_task(
     name="backend.celery_task.store_daily_scores_task.store_daily_scores_task"
 )
-def store_daily_scores_task(user_id: int, symbol: str | None = None):
+def store_daily_scores_task(user_id: int, symbol: str | None = None,
+                            market_id: int | None = None):
     """
     Bouwt daily scores voor precies één user.
 
@@ -383,7 +463,10 @@ def store_daily_scores_task(user_id: int, symbol: str | None = None):
     """
     if user_id is None:
         raise ValueError("❌ user_id is verplicht voor store_daily_scores_task")
-
+    if market_id is not None:
+        if symbol is not None or type(market_id) is not int or market_id <= 0:
+            raise ValueError("exact_market_score_scope_invalid")
+        return build_daily_scores_for_market(user_id, market_id)
     build_daily_scores_for_user(user_id, [symbol] if symbol else None)
 
 

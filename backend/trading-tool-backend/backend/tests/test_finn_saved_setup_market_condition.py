@@ -84,7 +84,7 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
             if "INSERT INTO setups" in sql:
                 rows[41] = {**params, "id": 41}
                 return Result(inserted=True)
-            if "SELECT * FROM setups WHERE id" in sql:
+            if "FROM setups s LEFT JOIN trading_markets tm" in sql and "s.user_id = :user_id" in sql:
                 row = rows.get(params["setup_id"])
                 return Result(row if row and row["user_id"] == params["user_id"] else None)
             raise AssertionError(sql)

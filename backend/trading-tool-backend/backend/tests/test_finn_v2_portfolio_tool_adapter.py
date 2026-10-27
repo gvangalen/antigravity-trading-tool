@@ -138,14 +138,14 @@ def test_portfolio_context_keeps_named_bot_beyond_first_eight_rows():
 def test_portfolio_repository_keeps_saved_asset_for_bot_without_linked_strategy():
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
+        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT, market_id INTEGER)"))
         connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
         connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
         connection.execute(text("CREATE TABLE bot_portfolios (user_id INTEGER, bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
         connection.execute(text("CREATE TABLE portfolio_unverified_paper_bots (user_id INTEGER, bot_id INTEGER)"))
         connection.execute(text("CREATE TABLE bot_ledger (user_id INTEGER, bot_id INTEGER, entry_type TEXT, valuation_version INTEGER)"))
         connection.execute(text("CREATE TABLE asset_catalog (symbol TEXT, quote_currency TEXT)"))
-        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'Apple Paper', 'AAPL', NULL, 1, 0, 'manual', 110, 0, 'balanced')"))
+        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'Apple Paper', 'AAPL', NULL, 1, 0, 'manual', 110, 0, 'balanced', NULL)"))
         connection.execute(text("INSERT INTO bot_portfolios VALUES (99, 1, 'AAPL', 900, 0, 0, 0, 0)"))
 
         class _Session:
@@ -168,13 +168,13 @@ def test_portfolio_repository_keeps_saved_asset_for_bot_without_linked_strategy(
 def test_native_usdt_quote_is_not_reported_as_eur_portfolio_value():
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
+        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT, market_id INTEGER)"))
         connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
         connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
         connection.execute(text("CREATE TABLE bot_portfolios (user_id INTEGER, bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
         connection.execute(text("CREATE TABLE portfolio_unverified_paper_bots (user_id INTEGER, bot_id INTEGER)"))
         connection.execute(text("CREATE TABLE bot_ledger (user_id INTEGER, bot_id INTEGER, entry_type TEXT, valuation_version INTEGER)"))
-        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'ETH Paper', 'ETH', NULL, 1, 0, 'manual', 500, 0, 'balanced')"))
+        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'ETH Paper', 'ETH', NULL, 1, 0, 'manual', 500, 0, 'balanced', NULL)"))
         connection.execute(text("INSERT INTO bot_portfolios VALUES (17, 1, 'ETH', 100, 1, 2000, 2000, 0)"))
 
         class _Session:
@@ -198,13 +198,13 @@ def test_dated_usdt_fx_values_a_position_without_treating_usdt_as_eur():
     now = datetime.now(timezone.utc)
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
+        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT, market_id INTEGER)"))
         connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
         connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
         connection.execute(text("CREATE TABLE bot_portfolios (user_id INTEGER, bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
         connection.execute(text("CREATE TABLE portfolio_unverified_paper_bots (user_id INTEGER, bot_id INTEGER)"))
         connection.execute(text("CREATE TABLE bot_ledger (user_id INTEGER, bot_id INTEGER, entry_type TEXT, valuation_version INTEGER)"))
-        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'ETH Paper', 'ETH', NULL, 1, 0, 'manual', 500, 0, 'balanced')"))
+        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'ETH Paper', 'ETH', NULL, 1, 0, 'manual', 500, 0, 'balanced', NULL)"))
         connection.execute(text("INSERT INTO bot_portfolios VALUES (17, 1, 'ETH', 100, 1, 2000, 2000, 0)"))
 
         class _Session:
@@ -233,13 +233,13 @@ def test_dated_usdt_fx_values_a_position_without_treating_usdt_as_eur():
 def test_old_eur_quote_is_not_reported_as_current_value():
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT)"))
+        connection.execute(text("CREATE TABLE bot_configs (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT, strategy_id INTEGER, is_active INTEGER, is_live INTEGER, mode TEXT, budget_total_eur REAL, budget_daily_limit_eur REAL, risk_profile TEXT, market_id INTEGER)"))
         connection.execute(text("CREATE TABLE strategies (id INTEGER, user_id INTEGER, setup_id INTEGER, name TEXT)"))
         connection.execute(text("CREATE TABLE setups (id INTEGER, user_id INTEGER, name TEXT, symbol TEXT)"))
         connection.execute(text("CREATE TABLE bot_portfolios (user_id INTEGER, bot_id INTEGER, symbol TEXT, cash_eur REAL, position_qty REAL, invested_eur REAL, avg_entry REAL, realized_pnl_eur REAL)"))
         connection.execute(text("CREATE TABLE portfolio_unverified_paper_bots (user_id INTEGER, bot_id INTEGER)"))
         connection.execute(text("CREATE TABLE bot_ledger (user_id INTEGER, bot_id INTEGER, entry_type TEXT, valuation_version INTEGER)"))
-        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'EUR Paper', 'BTCEUR', NULL, 1, 0, 'manual', 500, 0, 'balanced')"))
+        connection.execute(text("INSERT INTO bot_configs VALUES (1, 17, 'EUR Paper', 'BTCEUR', NULL, 1, 0, 'manual', 500, 0, 'balanced', NULL)"))
         connection.execute(text("INSERT INTO bot_portfolios VALUES (17, 1, 'BTCEUR', 100, 1, 2000, 2000, 0)"))
 
         class _Session:

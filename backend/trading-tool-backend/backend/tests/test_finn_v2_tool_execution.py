@@ -210,6 +210,7 @@ def test_current_score_read_uses_asset_resolved_from_workspace(monkeypatch):
 
     monkeypatch.setattr(execution_module, "FinnSharedContextService", Context)
     service = FinnV2ToolExecutionService(session=_FakeSession())
+    service._resolve_read_market_scope = AsyncMock(return_value={"market_id": None, "quote_currency": None})
     result = asyncio.run(service._dispatch_tool(
         tool_name="read_setup_market_matches", user_id=7,
         selector={"asset": None}, run=SimpleNamespace(),

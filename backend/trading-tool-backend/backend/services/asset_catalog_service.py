@@ -666,6 +666,29 @@ def resolve_catalog_symbol(value: object) -> str | None:
     return None
 
 
+def requested_catalog_trading_pair(value: object) -> tuple[str, str] | None:
+    """Return one explicit supported crypto pair, without choosing a venue.
+
+    Provider verification is still required when the owner confirms a plan.
+    A conversion reference or a negated pair is not a market selection.
+    """
+    positive_text = re.sub(
+        r"\b(?:niet|not|geen|kein)\s+[A-Za-z0-9]{2,10}/[A-Za-z0-9]{2,10}",
+        " ", str(value or ""), flags=re.IGNORECASE,
+    )
+    pairs = {(match.group(1).upper(), match.group(2).upper()) for match in re.finditer(
+        r"(?<![A-Za-z0-9])([A-Za-z0-9]{2,10})/([A-Za-z0-9]{2,10})(?![A-Za-z0-9])",
+        positive_text,
+    )}
+    if len(pairs) != 1:
+        return None
+    base, quote = next(iter(pairs))
+    asset = DEFAULT_ASSET_CATALOG.get(base) or {}
+    if str(asset.get("asset_class") or "").lower() != "crypto" or quote not in {"EUR", "USDT"}:
+        return None
+    return base, quote
+
+
 def unsupported_catalog_pair_mention(value: object) -> str | None:
     """Identify an explicitly requested pair absent from the asset catalog.
 
@@ -692,6 +715,8 @@ def unsupported_catalog_pair_mention(value: object) -> str | None:
     if len(pairs) != 1:
         return None
     pair = next(iter(pairs))
+    if requested_catalog_trading_pair(positive_text) is not None:
+        return None
     return pair if resolve_catalog_symbol(pair) is None else None
 
 
@@ -722,7 +747,11 @@ def corrected_catalog_instrument(value: object) -> str | None:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             candidate = match.group("instrument")
-            resolved = unsupported_catalog_pair_mention(candidate) or resolve_catalog_symbol(candidate)
+            requested_pair = requested_catalog_trading_pair(candidate)
+            resolved = (
+                f"{requested_pair[0]}/{requested_pair[1]}" if requested_pair else
+                unsupported_catalog_pair_mention(candidate) or resolve_catalog_symbol(candidate)
+            )
             if resolved:
                 return resolved
     return None

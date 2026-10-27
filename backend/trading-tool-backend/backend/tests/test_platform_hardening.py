@@ -234,7 +234,7 @@ class _FakeCursor:
             self._rows = [(price, self.quotes.get(symbol, "EUR"), datetime.now(timezone.utc))] if price is not None else []
             return
         if "from bot_portfolios" in sql_lower:
-            self._rows = list(self.portfolios)
+            self._rows = [(*row, None) if len(row) == 7 else row for row in self.portfolios]
             return
         if "insert into bot_portfolio_snapshots" in sql_lower:
             self.inserted_bot_snapshots.append(params)

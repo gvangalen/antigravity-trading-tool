@@ -2,6 +2,7 @@ import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
 
 type IntelligenceContextState = {
   asset: string;
+  quoteCurrency?: string | null;
   timeframe: string;
   screen?: string;
   page?: string;

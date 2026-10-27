@@ -184,8 +184,16 @@ class BotService:
         symbol = str(bot.get("symbol") or "").upper()
         if not symbol:
             raise HTTPException(409, "Botasset ontbreekt.")
-        quote = (await self.repository.get_asset_quote_currencies([symbol])).get(symbol)
-        market = (await self.repository.get_valuatable_market_prices([symbol])).get(symbol)
+        market_id = bot.get("market_id")
+        if market_id is not None:
+            quote = str(bot.get("quote_currency") or "").upper()
+            market = (await self.repository.get_valuatable_exact_market_prices([int(market_id)])).get(int(market_id))
+            if not market or str(market.get("symbol") or "").upper() != symbol or \
+                    str(market.get("quote_currency") or "").upper() != quote:
+                raise HTTPException(409, "Geen gecontroleerde koers voor het gekozen handelspaar.")
+        else:
+            quote = (await self.repository.get_asset_quote_currencies([symbol])).get(symbol)
+            market = (await self.repository.get_valuatable_market_prices([symbol])).get(symbol)
         fx = (await self.repository.get_portfolio_fx_rates()).get(str(quote or "").upper())
         price, observed_at, factor, fx_at = price_in_eur(
             price=market.get("price") if market else None,
@@ -358,6 +366,13 @@ class BotService:
         normalized_bot = {
             "id": bot.get("id"),
             "bot_id": bot.get("id"),
+            "market_id": bot.get("market_id"),
+            "quote_currency": bot.get("quote_currency"),
+            "trading_pair": (
+                f"{bot.get('symbol')}/{bot.get('quote_currency')}"
+                if bot.get("market_id") and bot.get("symbol") and bot.get("quote_currency")
+                else None
+            ),
             "name": bot.get("name"),
             "strategy_id": bot.get("strategy_id"),
             "is_active": bool(bot.get("is_active", True)),
@@ -472,7 +487,8 @@ class BotService:
         strategy_id = raw_payload.get("strategy_id")
         if strategy_id is not None:
             strategy_query = text("""
-                SELECT s.id, COALESCE(s.symbol, raw.data->>'symbol', st.symbol) AS symbol
+                SELECT s.id, COALESCE(s.symbol, raw.data->>'symbol', st.symbol) AS symbol,
+                       s.market_id, st.market_id AS setup_market_id
                 FROM strategies s
                 LEFT JOIN setups st ON st.id = s.setup_id
                 LEFT JOIN LATERAL (SELECT s.data::jsonb AS data) raw ON TRUE
@@ -487,6 +503,13 @@ class BotService:
                 # asset. Workspace context is only presentation context and
                 # must never leak a previously selected asset into a new bot.
                 raw_payload["symbol"] = str(strategy_row[1]).upper()
+            strategy_market_id = strategy_row[2]
+            setup_market_id = strategy_row[3]
+            if strategy_market_id != setup_market_id:
+                raise HTTPException(409, "Strategie en setup gebruiken niet hetzelfde handelspaar.")
+            if is_update and "market_id" in raw_payload and raw_payload["market_id"] != strategy_market_id:
+                raise HTTPException(409, "Het handelspaar van deze bot kan niet worden gewijzigd.")
+            raw_payload["market_id"] = strategy_market_id
 
             duplicate_strategy_query = text("""
                 SELECT id FROM bot_configs
@@ -2097,6 +2120,7 @@ class BotService:
                 raise HTTPException(409, "Deze bot is gepauzeerd. Hervat de bot voordat je een order plaatst.")
             if bot.get("is_live"):
                 raise HTTPException(409, "Botmodus is gewijzigd. Controleer het voorstel opnieuw.")
+            self._require_manual_order_bot_symbol(bot, payload)
             if str(payload.symbol).upper() != str(bot.get("symbol") or "").upper():
                 raise HTTPException(409, "Botasset is gewijzigd. Controleer het voorstel opnieuw.")
             paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
@@ -2339,6 +2363,11 @@ class BotService:
         return result
 
     def _require_manual_order_bot_symbol(self, bot: Dict[str, Any], payload: BotManualOrderSchema) -> None:
+        if bot.get("market_id") is not None:
+            raise HTTPException(409, {
+                "code": "EXACT_MARKET_EXECUTION_PENDING",
+                "message": "Deze bot wacht op koers- en scoregegevens voor zijn gekozen handelspaar.",
+            })
         if str(payload.symbol or "").strip().upper() != str(bot.get("symbol") or "").strip().upper():
             raise HTTPException(400, "Orderasset wijkt af van de gekoppelde botasset.")
 

@@ -38,6 +38,7 @@ async def _bootstrap_indicator_histories(
         query = select(UserIndicatorConfig).where(
             UserIndicatorConfig.enabled.is_(True),
             UserIndicatorConfig.symbol.is_not(None),
+            UserIndicatorConfig.market_id.is_(None),
             UserIndicatorConfig.category.in_(("market", "macro", "technical")),
         )
         if user_id is not None:

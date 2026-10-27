@@ -751,6 +751,10 @@ function AIAssistantContent({
       locale,
       page_type: pageMap[pathname] || t?.common?.unknown || "Unknown",
       symbol: resolvedWorkspaceSymbol,
+      quote_currency: pathname === "/asset"
+        ? (["EUR", "USDT"].includes(String(routeParams.get("quote") || "").toUpperCase())
+            ? String(routeParams.get("quote")).toUpperCase() : null)
+        : (contextualSetup?.quote_currency || contextualBot?.quote_currency || null),
       asset_resolution_status: assetStatus,
       timeframe:
         searchParams.get("tf") ||
@@ -1832,9 +1836,12 @@ function AIAssistantContent({
       const normalized = String(value).trim();
       return normalized ? at(`valueLabels.${normalized.toLowerCase()}`, normalized) : null;
     };
-    const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
+    const selectedMarket = supplied.quote_currency
+      ? `${String(supplied.symbol || "").toUpperCase()}/${String(supplied.quote_currency).toUpperCase()}`
+      : supplied.symbol;
+    const contextLine = [selectedMarket, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = setupDraftFrequencyLabel(supplied, humanValue);
-    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", quote_currency: "koersvaluta", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const scoreLabels = {

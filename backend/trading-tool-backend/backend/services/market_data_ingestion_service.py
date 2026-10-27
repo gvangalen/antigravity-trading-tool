@@ -10,6 +10,7 @@ from backend.infrastructure.models import MarketData
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.market_data_provider_registry import MarketDataProviderRegistry
 from backend.schemas.market_provider_schema import AssetRecord, PriceSnapshotDTO
+from backend.services.trading_market_service import TradingMarket
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,50 @@ class MarketDataIngestionService:
         self.session = session
         self.asset_catalog_service = AssetCatalogService(session)
         self.provider_registry = MarketDataProviderRegistry()
+
+    async def ingest_exact_market_snapshot(
+        self, market: TradingMarket, *, commit: bool = True,
+    ) -> dict[str, Any]:
+        """Fetch one verified pair without the base asset's default quote or FX.
+
+        The legacy symbol-wide ingester remains separate until its score and
+        bot consumers have switched to ``market_id``. A provider response for
+        another pair is rejected before any row is written.
+        """
+        asset_payload = await self.asset_catalog_service.get_asset(market.asset_symbol)
+        if not asset_payload or str(asset_payload.get("asset_class") or "").lower() != "crypto":
+            raise ValueError("market_asset_not_found")
+        asset = AssetRecord(**{
+            **asset_payload,
+            "provider": market.provider,
+            "primary_provider": market.provider,
+            "fallback_provider": None,
+            "provider_symbol": market.provider_symbol,
+            "exchange": market.venue,
+            "quote_currency": market.quote_currency,
+        })
+        snapshot = await self._fetch_snapshot(asset)
+        if str(snapshot.provider_symbol or "").upper() != market.provider_symbol:
+            raise ValueError("market_provider_symbol_mismatch")
+        if str(snapshot.symbol or "").upper() != market.asset_symbol:
+            raise ValueError("market_base_symbol_mismatch")
+        if str(snapshot.provider or "").lower() != market.provider.lower():
+            raise ValueError("market_provider_mismatch")
+        record = self._build_market_data_row(snapshot)
+        record.market_id = market.id
+        self.session.add(record)
+        if commit:
+            await self.session.commit()
+        else:
+            await self.session.flush()
+        return {
+            "market_id": market.id,
+            "pair": market.pair,
+            "provider_symbol": market.provider_symbol,
+            "price": snapshot.price,
+            "quote_currency": market.quote_currency,
+            "observed_at": snapshot.observed_at.isoformat() if snapshot.observed_at else None,
+        }
 
     async def ingest_latest_snapshots(
         self,

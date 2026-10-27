@@ -9,8 +9,9 @@ LEGACY_BASELINE = """
 -- The score writer upserts one row per owner, asset and day. Older disposable
 -- databases may have been created before DailyScore declared this key;
 -- create_all cannot add it to an existing table.
-CREATE UNIQUE INDEX IF NOT EXISTS daily_scores_user_symbol_report_date_unique
-    ON daily_scores (user_id, symbol, report_date);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_scores_legacy_market_scope
+    ON daily_scores (user_id, symbol, report_date)
+    WHERE market_id IS NULL;
 -- ORM create_all maps the generic JSON column to PostgreSQL JSON, while the
 -- deployed Score 2.0 migration and pre-start health contract require JSONB.
 ALTER TABLE daily_scores

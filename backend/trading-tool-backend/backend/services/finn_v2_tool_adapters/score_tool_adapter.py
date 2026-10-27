@@ -9,8 +9,10 @@ class ScoreToolAdapter:
     def __init__(self, session):
         self.context = FinnSharedContextService(session)
 
-    async def execute(self, *, user_id: int, asset: str, **_kwargs):
-        assessment = await self.context.benchmark_for_asset(user_id, asset, setups=[])
+    async def execute(self, *, user_id: int, asset: str, market_id: int | None = None,
+                      quote_currency: str | None = None, **_kwargs):
+        assessment = await self.context.benchmark_for_asset(
+            user_id, asset, setups=[], **({"market_id": market_id} if market_id is not None else {}))
         payload = {key: assessment[key] for key in (
             "symbol", "as_of", "source_status", "benchmark_score",
             "benchmark_weights", "reported_scores", "component_source_status",
@@ -24,6 +26,9 @@ class ScoreToolAdapter:
             for component, indicators in (assessment.get("component_source_observed_at") or {}).items()
         }
         payload["component_indicator_source_status"] = assessment.get("component_indicator_source_status") or {}
+        payload["market_id"] = market_id
+        payload["quote_currency"] = quote_currency
+        payload["pair"] = f"{asset}/{quote_currency}" if market_id is not None else None
         return {
             "data": AssetScoresData(**payload),
             "summary": {"title": "asset_scores", "symbol": asset, "source_status": assessment["source_status"]},

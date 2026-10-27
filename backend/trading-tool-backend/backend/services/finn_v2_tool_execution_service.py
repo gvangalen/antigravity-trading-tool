@@ -8,8 +8,10 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
 
 from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.models import TradingMarket
 from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER, ToolExecutionResult
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
@@ -551,21 +553,28 @@ class FinnV2ToolExecutionService:
         if tool_name == "read_active_asset":
             resolved = await self.resolver.resolve_asset(user_id=user_id, selector=selector, workspace_hints=workspace_hints, client_context=client_context)
             shared_state.update(resolved)
-            return await self.asset_adapter.execute(**resolved)
+            scope = await self._resolve_read_market_scope(user_id=user_id, asset=resolved["asset"], selector=selector, run=run, shared_state=shared_state)
+            return await self.asset_adapter.execute(**resolved, **scope)
         if tool_name == "read_indicator_configuration":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.indicator_adapter.execute(user_id=user_id, asset=asset_state["asset"])
+            scope = await self._resolve_read_market_scope(user_id=user_id, asset=asset_state["asset"], selector=selector, run=run, shared_state=shared_state)
+            return await self.indicator_adapter.execute(user_id=user_id, asset=asset_state["asset"], **scope)
         if tool_name == "read_asset_scores":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.score_adapter.execute(user_id=user_id, asset=asset_state["asset"])
+            scope = await self._resolve_read_market_scope(user_id=user_id, asset=asset_state["asset"], selector=selector, run=run, shared_state=shared_state)
+            return await self.score_adapter.execute(user_id=user_id, asset=asset_state["asset"], **scope)
         if tool_name == "read_setup_market_matches":
             context_service = FinnSharedContextService(self.session)
             requested_asset = (selector.get("asset") if isinstance(selector, dict) else None) or shared_state.get("asset")
-            if requested_asset:
+            if requested_asset or selector.get("setup_id") or selector.get("setup_name") or selector.get("quote_currency"):
                 asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-                assessment = await context_service.benchmark_for_asset(user_id, asset_state["asset"])
+                scope = await self._resolve_read_market_scope(user_id=user_id, asset=asset_state["asset"], selector=selector, run=run, shared_state=shared_state)
+                assessment = await context_service.benchmark_for_asset(
+                    user_id, asset_state["asset"],
+                    **({"market_id": scope["market_id"]} if scope["market_id"] is not None else {}))
             else:
                 assessment = await context_service.matches.for_all_assets(user_id)
+                scope = {"market_id": None, "quote_currency": None}
             selected_setup_id = (
                 self.resolver._coerce_int(selector.get("setup_id"))
                 if selector.get("setup_id") is not None else None
@@ -578,7 +587,11 @@ class FinnV2ToolExecutionService:
                 if len(selected_matches) != 1:
                     raise LookupError("setup_not_resolved")
                 assessment = {**assessment, "matches": selected_matches}
-            payload = SetupMarketMatchesData(**assessment)
+            payload = SetupMarketMatchesData(
+                **{**assessment, "market_id": scope["market_id"]},
+                quote_currency=scope["quote_currency"],
+                pair=(f"{assessment['symbol']}/{scope['quote_currency']}"
+                      if scope["market_id"] is not None else None))
             return {
                 "data": payload,
                 "summary": {"title": "setup_market_matches", "symbol": assessment["symbol"],
@@ -593,13 +606,15 @@ class FinnV2ToolExecutionService:
             }
         if tool_name == "read_market_snapshot":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.market_adapter.execute(asset=asset_state["asset"], user_id=user_id)
+            scope = await self._resolve_read_market_scope(user_id=user_id, asset=asset_state["asset"], selector=selector, run=run, shared_state=shared_state)
+            return await self.market_adapter.execute(asset=asset_state["asset"], user_id=user_id, **scope)
         if tool_name == "read_macro_snapshot":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.macro_adapter.execute(user_id=user_id, asset=asset_state["asset"])
         if tool_name == "read_technical_snapshot":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.technical_adapter.execute(user_id=user_id, asset=asset_state["asset"])
+            scope = await self._resolve_read_market_scope(user_id=user_id, asset=asset_state["asset"], selector=selector, run=run, shared_state=shared_state)
+            return await self.technical_adapter.execute(user_id=user_id, asset=asset_state["asset"], **scope)
         if tool_name == "read_active_setup":
             # A newly persisted setup is still a valid owner-scoped read even
             # when the user has not selected a workspace asset yet. An
@@ -809,6 +824,85 @@ class FinnV2ToolExecutionService:
         )
         shared_state.update(resolved)
         return resolved
+
+    async def _resolve_read_market_scope(self, *, user_id: int, asset: str,
+                                         selector: Dict[str, Any], run,
+                                         shared_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Bind factual reads to one owner-selected pair, never a base-asset substitute."""
+        asset = str(asset or "").upper()
+        requested_asset = str(selector.get("asset") or "").upper()
+        pair_quote = requested_asset.split("/", 1)[1] if "/" in requested_asset else None
+        hints = dict(getattr(run, "workspace_hints_json", {}) or {})
+        context = dict(getattr(run, "client_context_json", {}) or {})
+        hinted_asset = str(hints.get("symbol") or context.get("symbol") or "").upper()
+        hinted_quote = (hints.get("quote_currency") or context.get("quote_currency")) \
+            if hinted_asset == asset and (not requested_asset or requested_asset.split("/", 1)[0] == asset) else None
+        requested_quote = str(selector.get("quote_currency") or pair_quote or "").upper() or None
+        if requested_quote and requested_quote not in {"EUR", "USDT"}:
+            raise LookupError("market_quote_not_supported")
+
+        selected_setup = shared_state.get("setup")
+        if selected_setup is None and (selector.get("setup_id") or selector.get("setup_name")):
+            selected_setup = (await self.resolver.resolve_setup(
+                user_id=user_id, selector=selector, asset=asset))["setup"]
+        if selected_setup is None and selector.get("strategy_id"):
+            strategy = await self.resolver.strategies.get_raw_strategy_with_setup(
+                int(selector["strategy_id"]), user_id)
+            if strategy:
+                selected_setup = await self.resolver.setups.get_setup_by_id(
+                    int(strategy["setup_id"]), user_id)
+        if selected_setup is None and selector.get("bot_id"):
+            bot = await self.resolver.bots.get_bot_config(user_id, int(selector["bot_id"]))
+            if bot and bot.get("setup_id"):
+                selected_setup = await self.resolver.setups.get_setup_by_id(
+                    int(bot["setup_id"]), user_id)
+        if selected_setup is not None:
+            if str(selected_setup.get("symbol") or "").upper() != asset:
+                raise LookupError("market_asset_mismatch")
+            market_id = selected_setup.get("market_id")
+            quote = str(selected_setup.get("quote_currency") or "").upper() or None
+            if requested_quote and quote != requested_quote:
+                raise LookupError("market_quote_mismatch")
+            return {"market_id": int(market_id) if market_id is not None else None,
+                    "quote_currency": quote}
+
+        explicit_quote = requested_quote or str(hinted_quote or "").upper() or None
+        if explicit_quote and explicit_quote not in {"EUR", "USDT"}:
+            raise LookupError("market_quote_not_supported")
+        if explicit_quote:
+            result = await self.session.execute(select(TradingMarket).where(
+                TradingMarket.asset_symbol == asset,
+                TradingMarket.quote_currency == explicit_quote,
+                TradingMarket.venue == "BINANCE",
+                TradingMarket.is_active.is_(True),
+            ).limit(1))
+            market = result.scalars().first()
+            if market is None:
+                raise LookupError("market_pair_not_supported")
+            return {"market_id": int(market.id), "quote_currency": explicit_quote}
+
+        # A base symbol alone is insufficient when this owner has evidence for
+        # more than one saved market. Include configured indicators as well as
+        # setups, because a pair can be analysed before its first plan exists.
+        scopes = {row.get("market_id") for row in
+                  await self.resolver.setups.get_all_setups(user_id)
+                  if str(row.get("symbol") or "").upper() == asset}
+        result = await self.session.execute(text("""
+            SELECT DISTINCT market_id FROM user_indicator_configs
+            WHERE user_id=:user_id AND symbol=:asset AND enabled=TRUE
+        """), {"user_id": user_id, "asset": asset})
+        scopes.update(row[0] for row in result.fetchall())
+        if len(scopes) > 1:
+            raise LookupError("market_pair_ambiguous")
+        market_id = next(iter(scopes)) if scopes else None
+        if market_id is None:
+            return {"market_id": None, "quote_currency": None}
+        result = await self.session.execute(select(TradingMarket).where(
+            TradingMarket.id == int(market_id), TradingMarket.is_active.is_(True)).limit(1))
+        market = result.scalars().first()
+        if market is None or str(market.asset_symbol or "").upper() != asset:
+            raise LookupError("market_pair_not_supported")
+        return {"market_id": int(market_id), "quote_currency": str(market.quote_currency).upper()}
 
     async def _ensure_setup(self, *, user_id: int, selector: Dict[str, Any], run, shared_state: Dict[str, Any]) -> Dict[str, Any]:
         if "setup" in shared_state:

@@ -307,7 +307,18 @@ class FinnV2ReasoningContextService:
             current_facts = None
             if symbol and event_type in {"plan_match", "data_blocked", "market_move"}:
                 from backend.services.setup_market_match_service import SetupMarketMatchService
-                assessment = await SetupMarketMatchService(self.session).for_asset(run.user_id, symbol)
+                matcher = SetupMarketMatchService(self.session)
+                if subject == "setup" and item.get("subject_id"):
+                    from backend.infrastructure.repositories.setup_repository import SetupRepository
+                    owned_setup = await SetupRepository(self.session).get_setup_by_id(
+                        int(item["subject_id"]), run.user_id)
+                    assessment = await matcher.for_asset(
+                        run.user_id, symbol,
+                        setups=[dict(owned_setup)] if owned_setup else [],
+                        market_id=owned_setup.get("market_id") if owned_setup else None,
+                    )
+                else:
+                    assessment = await matcher.for_asset(run.user_id, symbol)
                 current_facts = {"feed_item_id": item_id,
                                  "current_source_status": assessment.get("source_status"),
                                  "current_trade_signal_confirmed": False}

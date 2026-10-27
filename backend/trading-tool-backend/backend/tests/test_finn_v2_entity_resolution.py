@@ -214,7 +214,7 @@ def test_entity_resolution_selects_the_asset_specific_active_setup_before_other_
 
         async def for_asset(self, user_id, asset, *, setups):
             assert asset == "ETH"
-            return {"matches": [{"setup_id": 294, "is_active": True}]}
+            return {"matches": [{"setup_id": 294, "symbol": "ETH", "is_active": True}]}
 
     monkeypatch.setattr("backend.services.finn_v2_entity_resolution_service.SetupMarketMatchService", _MatchService)
     service = FinnV2EntityResolutionService(session=object())

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
-import { fetchAssetWorkspace } from "@/lib/api/workspace";
+import { fetchAssetWorkspace, fetchExactMarketWorkspace } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { syncMarketPreferences } from "@/lib/api/market";
 import { syncMacroPreferences } from "@/lib/api/macro";
@@ -179,8 +179,9 @@ function buildWorkspaceFallback(symbol, periods, quote, daily) {
   };
 }
 
-export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
+export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCurrency = null) {
   const { user } = useAuth() || {};
+  const selectedQuote = quoteCurrency ? String(quoteCurrency).toUpperCase() : null;
   const snapshotScope = String(user?.id || "anonymous");
   const watchlistKey = Array.from(
     new Set((watchlistSymbols || []).map((item) => String(item || "").toUpperCase()).filter(Boolean))
@@ -192,6 +193,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const workspaceKey = JSON.stringify({
     user: snapshotScope,
     symbol: String(symbol || "BTC").toUpperCase(),
+    quoteCurrency: selectedQuote,
     market: periods?.market || "day",
     macro: periods?.macro || "day",
     technical: periods?.technical || "day",
@@ -245,12 +247,12 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   useEffect(() => {
     requestSequenceRef.current += 1;
     activeReloadPromiseRef.current = null;
-    const fallbackWorkspace = stateScopeRef.current === snapshotScope && matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods)
+    const fallbackWorkspace = stateScopeRef.current === snapshotScope && matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods, selectedQuote)
       ? latestWorkspaceRef.current : null;
     const fallbackWatchlist = Array.isArray(fallbackWorkspace?.watchlist?.rows)
       ? fallbackWorkspace.watchlist.rows
       : stateScopeRef.current === snapshotScope ? latestWatchlistRef.current : [];
-    const nextWorkspace = matchesWorkspaceAsset(cachedWorkspace, assetSymbol, periods)
+    const nextWorkspace = matchesWorkspaceAsset(cachedWorkspace, assetSymbol, periods, selectedQuote)
       ? cachedWorkspace : fallbackWorkspace;
     const nextWatchlist = cachedWorkspace
       ? cachedWatchlist
@@ -268,15 +270,15 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     latestWorkspaceRef.current = nextWorkspace;
     latestWatchlistRef.current = nextWatchlist;
     lastSuccessfulRefreshAtRef.current = cachedWorkspace ? Date.now() : 0;
-  }, [assetSymbol, cachedWatchlist, cachedWorkspace, periods, workspaceKey, snapshotScope]);
+  }, [assetSymbol, cachedWatchlist, cachedWorkspace, periods, selectedQuote, workspaceKey, snapshotScope]);
 
   useEffect(() => {
     if (workspaceScope !== snapshotScope) return;
     latestWorkspaceRef.current = workspace || null;
-    if (matchesWorkspaceAsset(workspace, assetSymbol, periods)) {
+    if (!selectedQuote && matchesWorkspaceAsset(workspace, assetSymbol, periods)) {
       setWorkspaceSnapshot(assetSymbol, workspace, snapshotScope);
     }
-  }, [assetSymbol, periods, snapshotScope, workspace, workspaceScope]);
+  }, [assetSymbol, periods, selectedQuote, snapshotScope, workspace, workspaceScope]);
 
   useEffect(() => {
     if (workspaceScope !== snapshotScope) return;
@@ -338,11 +340,15 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     if (!request) {
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
-      const requestPromise = fetchAssetWorkspace(symbol, periods, {
+      const requestPromise = (selectedQuote ? fetchExactMarketWorkspace(symbol, selectedQuote, periods, {
         signal: controller.signal,
         forceFresh: forceNetwork,
         watchlistSymbols: normalizedWatchlistSymbols,
-      }).finally(() => {
+      }) : fetchAssetWorkspace(symbol, periods, {
+        signal: controller.signal,
+        forceFresh: forceNetwork,
+        watchlistSymbols: normalizedWatchlistSymbols,
+      })).finally(() => {
         window.clearTimeout(timeoutId);
         const activeRequest = workspaceInFlightRequests.get(workspaceKey);
         if (activeRequest?.promise === requestPromise) {
@@ -376,7 +382,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       return payload;
     } catch (nextError) {
       if (requestId !== requestSequenceRef.current || currentScopeRef.current !== snapshotScope || currentWorkspaceKeyRef.current !== workspaceKey) return null;
-      const liveWorkspace = matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods)
+      const liveWorkspace = matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods, selectedQuote)
         ? latestWorkspaceRef.current : null;
       if (liveWorkspace) {
         if (!fallbackStartedAtRef.current) {
@@ -393,6 +399,14 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         return liveWorkspace;
       }
 
+      if (selectedQuote) {
+        // A failed exact-pair read must never display a base-symbol price or
+        // Score 2.0 result under the selected EUR/USDT market label.
+        setWorkspace(null);
+        setError(nextError);
+        setIsFallbackWorkspace(false);
+        return null;
+      }
       const [quoteResult, dailyScoresResult] = await Promise.allSettled([
         fetchLatestPrice(symbol, { forceFresh: false }),
         getDailyScores(symbol),
@@ -439,9 +453,10 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
 
     activeReloadPromiseRef.current = { key: workspaceKey, promise: reloadPromise };
     return reloadPromise;
-  }, [assetSymbol, cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey, snapshotScope]);
+  }, [assetSymbol, cachedWatchlist.length, normalizedWatchlistSymbols, periods, selectedQuote, symbol, workspaceKey, snapshotScope]);
 
   useEffect(() => {
+    if (selectedQuote) return;
     const baseWorkspace = matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods)
       ? latestWorkspaceRef.current : null;
     const baseWatchlist = Array.isArray(latestWatchlistRef.current) ? latestWatchlistRef.current : [];
@@ -515,7 +530,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     return () => {
       cancelled = true;
     };
-  }, [assetSymbol, periods, workspaceKey, watchlist, snapshotScope]);
+  }, [assetSymbol, periods, selectedQuote, workspaceKey, watchlist, snapshotScope]);
 
   const refreshWorkspaceIfStale = useCallback(() => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
@@ -542,7 +557,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   }, [workspaceKey]);
 
   useEffect(() => {
-    if (!matchesWorkspaceAsset(workspace, assetSymbol, periods)) return;
+    if (selectedQuote || !matchesWorkspaceAsset(workspace, assetSymbol, periods)) return;
     const pendingCategories = pendingWorkspaceEvidenceCategories(workspace);
     if (pendingCategories.length === 0) {
       evidenceMaterializationKeyRef.current = "";
@@ -584,7 +599,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       cancelled = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
-  }, [assetSymbol, periods, reloadWorkspace, workspace, workspaceKey]);
+  }, [assetSymbol, periods, reloadWorkspace, selectedQuote, workspace, workspaceKey]);
 
   useEffect(() => {
     return subscribeWorkspaceRefresh((payload) => {
@@ -618,10 +633,10 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     backgroundIntervalMs: 300_000,
     runImmediately: false,
     triggerOnVisible: false,
-    deps: [symbol, periods.market, periods.macro, periods.technical, watchlistKey],
+    deps: [symbol, selectedQuote, periods.market, periods.macro, periods.technical, watchlistKey],
   });
 
-  const visibleWorkspace = workspaceScope === snapshotScope && matchesWorkspaceAsset(workspace, assetSymbol, periods)
+  const visibleWorkspace = workspaceScope === snapshotScope && matchesWorkspaceAsset(workspace, assetSymbol, periods, selectedQuote)
     ? workspace : null;
   return {
     workspace: visibleWorkspace,

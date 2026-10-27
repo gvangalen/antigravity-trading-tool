@@ -35,8 +35,9 @@ class FinnSharedContextService:
         self.matches = SetupMarketMatchService(session)
         self.indicators = IndicatorToolAdapter(session)
 
-    async def benchmark_for_asset(self, user_id: int, symbol: str, *, setups=None) -> dict[str, Any]:
-        return await self.matches.for_asset(user_id, symbol, setups=setups)
+    async def benchmark_for_asset(self, user_id: int, symbol: str, *, setups=None,
+                                  market_id: int | None = None) -> dict[str, Any]:
+        return await self.matches.for_asset(user_id, symbol, setups=setups, market_id=market_id)
 
     async def for_user(self, user_id: int, *, symbol: str | None = None) -> dict[str, Any]:
         user = await self.users.get_by_id(user_id)
