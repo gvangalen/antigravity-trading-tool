@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[4]
 STATUS_WRITER = REPO_ROOT / "ops" / "deploy" / "write_deploy_status.py"
 DEPLOY_SCRIPT = REPO_ROOT / "ops" / "deploy" / "deploy_env.sh"
+ROLLBACK_SCRIPT = REPO_ROOT / "ops" / "deploy" / "rollback_env.sh"
 SHA = "a" * 40
 
 
@@ -85,6 +88,10 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert "DEPLOY_STATUS_WRITER_B64" in source
     assert "export MIN_DEPLOY_AVAILABLE_MEMORY_KB=$MIN_DEPLOY_AVAILABLE_MEMORY_KB" in source
     assert "export DEPLOY_MEMORY_HEADROOM_ATTEMPTS=$DEPLOY_MEMORY_HEADROOM_ATTEMPTS" in source
+    assert "export DEPLOY_COMPONENT_SET='$DEPLOY_COMPONENT_SET'" in source
+    declared_steps = runpy.run_path(str(STATUS_WRITER))["CANONICAL_DEPLOY_STEPS"]
+    used_steps = set(re.findall(r"advance_deploy_step '([^']+)'", source))
+    assert used_steps <= declared_steps
     for variable in (
         "PM2_DEPLOY_MODE",
         "BACKEND_APP",
@@ -118,6 +125,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert 'Unable to persist local deploy phase' in source
     assert 'worker_log_path=/home/ubuntu/.pm2/logs/celery-worker-finn-interactive-error.log' in source
     assert 'tail -n +\\$((start_line + 1))' in source
+
+
     assert "grep -Fq 'production-finn-interactive'" in source
     assert "grep -Fq ' ready.'" in source
     assert "check_worker_queue_readiness.py /tmp/tradamind_deep_health.json" in source
@@ -139,6 +148,13 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
         "release_complete",
     ):
         assert step in source
+
+
+def test_rollback_restores_frontend_identity_with_rolled_back_commit() -> None:
+    source = ROLLBACK_SCRIPT.read_text(encoding="utf-8")
+    assert 'export TRADAMIND_BUILD_COMMIT_SHA="$(git rev-parse HEAD)"' in source
+    assert 'git clean -fd out/_next/static' in source
+    assert '"$TRADAMIND_BUILD_COMMIT_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > out/build-info.json' in source
 
 
 def test_worker_queue_readiness_requires_registered_topology_consumers() -> None:
