@@ -74,7 +74,7 @@ def normalize_market_value(indicator: str, value: float) -> float:
 
 
 def normalize_market_value_with_history(conn, symbol: str, indicator: str,
-                                        value: float) -> float | None:
+                                        value: float, *, market_id: int | None = None) -> float | None:
     """Use asset-relative context for absolute price and volume readings.
 
     A EUR or USD price and a trading volume are not percentages. Without a
@@ -84,13 +84,14 @@ def normalize_market_value_with_history(conn, symbol: str, indicator: str,
         return normalize_market_value(indicator, value)
     column = "price" if indicator == "price" else "volume"
     with conn.cursor() as cur:
+        market_filter = "market_id = %s" if market_id is not None else "market_id IS NULL AND symbol = %s"
         cur.execute(f"""
             SELECT DISTINCT ON (source_observed_at::date) {column}
             FROM market_data
-            WHERE symbol = %s AND source_observed_at >= NOW() - INTERVAL '30 days'
+            WHERE {market_filter} AND source_observed_at >= NOW() - INTERVAL '30 days'
               AND source_observed_at IS NOT NULL AND {column} IS NOT NULL
             ORDER BY source_observed_at::date, source_observed_at DESC
-        """, (symbol,))
+        """, (market_id if market_id is not None else symbol,))
         history = [float(row[0]) for row in cur.fetchall()]
     if len(history) < 5:
         return None
