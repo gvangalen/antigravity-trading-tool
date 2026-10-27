@@ -147,7 +147,7 @@ async def _sync_configured_market_snapshots() -> dict:
 
 
 async def _sync_exact_market_snapshots() -> dict:
-    """Refresh verified spot pairs referenced by saved plans.
+    """Refresh verified spot pairs selected in Analyse or referenced by plans.
 
     The legacy symbol-wide job cannot supply a pair quote. Each provider read
     is bound to the persisted venue symbol and writes its own market ID.
@@ -165,7 +165,6 @@ async def _sync_exact_market_snapshots() -> dict:
                    tm.provider, tm.provider_symbol, tm.tradingview_symbol,
                    tm.source_verified_at
             FROM trading_markets tm
-            JOIN setups s ON s.market_id = tm.id
             WHERE tm.is_active = TRUE
             ORDER BY tm.id, tm.asset_symbol, tm.quote_currency, tm.venue,
                      tm.provider, tm.provider_symbol, tm.tradingview_symbol,

@@ -7,6 +7,14 @@ export async function fetchTradingMarkets(symbol) {
   });
 }
 
+export async function selectTradingMarket(symbol, quoteCurrency, options = {}) {
+  return await fetchAuth(
+    `/api/assets/${encodeURIComponent(String(symbol || "").toUpperCase())}` +
+      `/trading-markets/${encodeURIComponent(String(quoteCurrency || "").toUpperCase())}/select`,
+    { method: "POST", ...options },
+  );
+}
+
 export async function searchAssets(query, options = {}) {
   const {
     assetClasses = ["crypto", "stock"],

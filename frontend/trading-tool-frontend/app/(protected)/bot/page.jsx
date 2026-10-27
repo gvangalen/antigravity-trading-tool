@@ -993,9 +993,11 @@ function BotPageInner() {
             <BotFocusView
               bots={rankedBots.map((bot) => ({ ...bot, decision: decisionsByBot?.[bot.id], pendingOrder: today?.orders?.find((order) => order.bot_id === bot.id) }))}
               activeBot={activeBot}
-              paperCheckResult={paperCheckResults[activeBot?.id] || null}
-              paperCheckMessage={paperCheckResults[activeBot?.id]?.reason === "not_due" ? copy.paperRecheckNotDue
-                : paperCheckResults[activeBot?.id]?.reason === "already_executed" ? copy.paperRecheckAlreadyExecuted
+              paperCheckResult={paperCheckResults[activeBot?.id] || (activeBot?.paper_last_assessment?.outcome
+                ? { reason: activeBot.paper_last_assessment.outcome, checkedAt: activeBot.paper_last_assessment.checked_at }
+                : null)}
+              paperCheckMessage={(paperCheckResults[activeBot?.id]?.reason || activeBot?.paper_last_assessment?.outcome) === "not_due" ? copy.paperRecheckNotDue
+                : (paperCheckResults[activeBot?.id]?.reason || activeBot?.paper_last_assessment?.outcome) === "already_executed" ? copy.paperRecheckAlreadyExecuted
                   : copy.paperRecheckNoNew}
               onSelectBot={(bot) => {
                 setActiveBot(bot);

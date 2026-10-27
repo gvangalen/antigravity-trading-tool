@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair independent-QA repair candidate (27 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION_COMPLETE`, branch
+`codex/exact-pair-qa-repairs`, based on `c37124dd823728223d1e04c80c01975e9eeafcc2`.
+The existing independent QA Agent returned `NOT_ACCEPTED` on that public SHA.
+It confirmed distinct BTC/EUR and BTC/USDT quotes, charts and indicators,
+but found that a skipped manual Paper assessment disappeared after refresh,
+ETH Analyse without a setup returned `exact_market_not_verified`, and a long
+ETH-to-AAPL draft correction failed. It also saw AAPL/USD rejected after
+clarification and a transient missing bot quote label.
+
+This repair persists an owner-bound Paper assessment separately from a decision
+or order, registers an explicitly selected verified pair before its exact
+workspace read, refreshes selected pair sources even before a setup exists,
+exposes the stored bot pair identity, and treats AAPL/USD as the catalog's
+USD-priced stock. The long correction was reproduced through local
+FastAPI/Celery and completed with a new AAPL draft and no write. The read-only
+lineage selector now accepts a schema-valid model choice when verified prior
+evidence exists, while low-confidence mutation selections remain unavailable.
+No Live execution behavior is enabled by this batch.
+An authenticated local ETH/USDT selection without a saved setup returned its
+verified exact market and the subsequent exact-workspace GET returned HTTP 200.
+A local PostgreSQL write/read confirmed that `not_due` survives a new bot-config
+read and that a second owner cannot see that assessment.
+
+Final-source root pytest passed **4076 tests, 4 existing skips**
+(`/tmp/finn-exact-pair-final-pytest.log`, SHA-256
+`18123d341754c80c5502e8be2bdf4b416759a46dabb60bb7688e1b8a8cabb76a`).
+Frontend typecheck, i18n lint/tests, command/proposal tests, build and
+high-severity dependency audit passed with zero reported vulnerabilities.
+Mobile typecheck and chat tests passed (**16/16**); no native mobile runtime
+was exercised by Build in this candidate.
+The restarted PostgreSQL/Redis/FastAPI/Celery action matrix passed **16/16**
+contracts, adapter tests **21/21**, with zero broker orders, Live trading calls
+or production connections (artifact SHA-256
+`6bebcc800e2d5f1b2763a71957081d21b81ab150af05661340361e65503364fd`).
+The final-source real Luna/Responses selector passed **20/20** development
+(artifact SHA-256
+`dcb37f61a4b2201cb1f18a5ccf8bc8bbb5792b18beed1cf1bdbec0ed599a0c3f`)
+and **109/109** regression cases (artifact SHA-256
+`0275ffcccf1bb33cb770b38a0017addb17a5394daef51ec4be2fceda62c1a188`),
+with zero provider, schema, timeout, parse or validation failures. The first
+regression attempt before the lineage repair was **108/109** and remains
+recorded; the case selected the expected read operation at confidence 0.49,
+then the old confidence gate rejected it. Migration-plan validation passed.
+This candidate has not been committed, merged, deployed or independently
+accepted yet.
+
 ## Exact trading-pair return and Paper-check result (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. On public SHA

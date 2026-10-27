@@ -407,6 +407,7 @@ class BotService:
     # ==========================
     async def get_bot_configs(self, user_id: int) -> List[dict]:
         rows = await self.repository.get_bot_configs(user_id)
+        paper_assessments = await self.repository.latest_paper_assessments(user_id)
         out = []
         for r in rows:
             strategy = None
@@ -438,6 +439,11 @@ class BotService:
                 "risk_profile": r["risk_profile"] or "balanced",
                 "strategy_id": r.get("strategy_id"),
                 "symbol": r.get("symbol"),
+                "market_id": r.get("market_id"),
+                "quote_currency": r.get("quote_currency"),
+                "provider_symbol": r.get("provider_symbol"),
+                "tradingview_symbol": r.get("tradingview_symbol"),
+                "paper_last_assessment": paper_assessments.get(int(r["id"])),
                 "base_currency": r.get("base_currency") or "EUR",
                 "paper_initial_cash_eur": float(r.get("paper_initial_cash_eur") or 0),
                 "last_run": r["last_run"].isoformat() if r.get("last_run") else None,
@@ -2435,6 +2441,20 @@ class BotService:
         skip_reasons = result.get("skip_reasons") or {}
         skip_reason = skip_reasons.get(bot_id) or skip_reasons.get(str(bot_id))
         execution_statuses = [str(row.get("execution_status") or "") for row in decisions]
+        if paper_only:
+            outcome = (
+                "execution_failed" if any(status.startswith("failed:") for status in execution_statuses)
+                else "paper_order_filled" if "filled" in execution_statuses
+                else "decision_created" if decisions
+                else skip_reason if skip_reason in {"not_due", "already_executed"}
+                else "no_new_decision"
+            )
+            assessment = await self.repository.record_paper_assessment(
+                user_id, bot_id, report_date, outcome, trace_id,
+            )
+            await self.session.commit()
+        else:
+            assessment = None
         return {
             "ok": True, "bot_id": bot_id, "date": str(report_date),
             "generated": bool(decisions),
@@ -2443,6 +2463,7 @@ class BotService:
             "execution_failed": any(status.startswith("failed:") for status in execution_statuses),
             "decision_ids": [row.get("decision_id") for row in decisions if row.get("decision_id") is not None],
             "trace_id": trace_id,
+            "paper_assessment": assessment,
         }
 
     async def mark_bot_executed(self, bot_id: int, decision_id: int, user_id: int) -> dict:

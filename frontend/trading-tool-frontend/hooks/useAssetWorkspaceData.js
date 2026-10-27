@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAssetWorkspace, fetchExactMarketWorkspace } from "@/lib/api/workspace";
+import { selectTradingMarket } from "@/lib/api/assets";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { syncMarketPreferences } from "@/lib/api/market";
 import { syncMacroPreferences } from "@/lib/api/macro";
@@ -340,11 +341,13 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
     if (!request) {
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
-      const requestPromise = (selectedQuote ? fetchExactMarketWorkspace(symbol, selectedQuote, periods, {
+      const requestPromise = (selectedQuote ? selectTradingMarket(symbol, selectedQuote, {
+        signal: controller.signal,
+      }).then(() => fetchExactMarketWorkspace(symbol, selectedQuote, periods, {
         signal: controller.signal,
         forceFresh: forceNetwork,
         watchlistSymbols: normalizedWatchlistSymbols,
-      }) : fetchAssetWorkspace(symbol, periods, {
+      })) : fetchAssetWorkspace(symbol, periods, {
         signal: controller.signal,
         forceFresh: forceNetwork,
         watchlistSymbols: normalizedWatchlistSymbols,

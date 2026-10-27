@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,9 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.database import get_db
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
+from backend.services.market_data_ingestion_service import MarketDataIngestionService
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.utils.auth_utils import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class AssetSearchItemResponse(BaseModel):
@@ -28,6 +33,59 @@ class TradingMarketChoiceResponse(BaseModel):
     venue: str | None = None
     provider_symbol: str | None = None
     tradingview_symbol: str | None = None
+
+
+@router.post("/assets/{symbol}/trading-markets/{quote_currency}/select")
+async def select_crypto_trading_market(
+    symbol: str,
+    quote_currency: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Verify and register a selected exact market before pair-scoped reads."""
+    _ = current_user
+    base = str(symbol or "").strip().upper()
+    quote = str(quote_currency or "").strip().upper()
+    asset = await AssetCatalogService(session).get_asset(base)
+    if not asset or str(asset.get("asset_class") or "").lower() != "crypto":
+        raise HTTPException(404, "Geen ondersteunde crypto-asset gevonden.")
+    if quote not in {"EUR", "USDT"}:
+        raise HTTPException(422, "Kies een ondersteund handelspaar.")
+    try:
+        market = await TradingMarketService(session).resolve(base, quote)
+    except MarketUnavailable as exc:
+        raise HTTPException(422, str(exc)) from exc
+    await session.commit()
+    snapshot = await MarketDataRepository(session).get_latest_exact_market_snapshot(market.id)
+    observed_at = getattr(snapshot, "source_observed_at", None)
+
+    def is_current(value: datetime | None) -> bool:
+        if value is None:
+            return False
+        age = (datetime.now(timezone.utc) - value.replace(
+            tzinfo=value.tzinfo or timezone.utc,
+        )).total_seconds()
+        return -30 <= age <= 120
+
+    snapshot_status = "available" if is_current(observed_at) else "pending"
+    if snapshot_status == "pending":
+        try:
+            ingested = await MarketDataIngestionService(session).ingest_exact_market_snapshot(market)
+            captured_at = ingested.get("observed_at")
+            parsed_at = datetime.fromisoformat(captured_at) if captured_at else None
+            snapshot_status = "available" if is_current(parsed_at) else "pending"
+        except Exception as exc:
+            await session.rollback()
+            logger.warning("Exact market snapshot pending after selection: pair=%s code=%s",
+                           market.pair, type(exc).__name__)
+    return {
+        "market_id": market.id,
+        "pair": market.pair,
+        "quote_currency": market.quote_currency,
+        "provider_symbol": market.provider_symbol,
+        "tradingview_symbol": market.tradingview_symbol,
+        "snapshot_status": snapshot_status,
+    }
 
 
 @router.get("/assets/{symbol}/trading-markets", response_model=List[TradingMarketChoiceResponse])
