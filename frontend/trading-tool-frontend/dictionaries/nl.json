@@ -955,6 +955,9 @@
       "pendingScore": "De score of actualiteit van een gekozen indicator is nog niet bevestigd. Probeer de indicator opnieuw te synchroniseren; tot die tijd kan je niet verder naar Mijn plan."
     },
     "planOnboardingStep": {
+      "tradingMarketLabel": "Handelspaar",
+      "tradingMarketChoose": "Kies EUR of USDT",
+      "tradingMarketUnavailable": "De handelparen kunnen nu niet worden bevestigd. Probeer het later opnieuw.",
       "dcaScoreExplanation": "Het DCA-ritme bepaalt wanneer een aankoop wordt beoordeeld. Scoregrenzen zijn optioneel: buiten die grenzen wacht een gekoppelde bot. Zonder grenzen blijft het ritme staan, maar andere controles kunnen een aankoop nog tegenhouden. Een ontbrekende score is geen koopsignaal.",
       "strategyDcaAmountLabel": "Bedrag per uitvoering (€)",
       "strategyReviewBeforeSave": "Controleer vóór opslaan",
@@ -3442,6 +3445,11 @@
       "tradeBlueprintTitle": "Trade-opzet",
       "tradeBlueprintBody": "Focus op execution-ready setups en technische validatie.",
       "assetSymbolLabel": "Assetsymbool",
+      "tradingMarketLabel": "Handelspaar",
+      "tradingMarketChoose": "Kies EUR of USDT",
+      "tradingMarketLoading": "Beschikbare handelparen controleren…",
+      "tradingMarketUnavailable": "De handelparen kunnen nu niet worden bevestigd. Probeer het later opnieuw.",
+      "tradingMarketRequired": "Kies eerst een bevestigd handelspaar.",
       "assetBtc": "BTC (Bitcoin)",
       "assetEth": "ETH (Ethereum)",
       "assetSol": "SOL (Solana)",

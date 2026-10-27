@@ -5,6 +5,7 @@ export function initialSetupFormState(setup = null) {
     name: setup?.name ?? "",
     description: setup?.description ?? "",
     symbol: setup?.symbol ?? "BTC",
+    quoteCurrency: setup?.quote_currency ?? "",
     setupType: setup?.setup_type ?? "dca",
     timeframe: setup?.timeframe ?? "1W",
     dcaFrequency: setup?.dca_frequency ?? "weekly",

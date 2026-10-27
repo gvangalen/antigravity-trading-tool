@@ -89,3 +89,55 @@ def test_non_daily_period_does_not_show_daily_combined_score(monkeypatch):
     assert result["daily"]["benchmark_score"] == 65
     assert result["combined"]["score"] is None
     assert result["combined"]["source_status"] == "unsupported_period"
+
+
+def test_exact_market_rows_show_only_verified_score_evidence(monkeypatch):
+    observed = datetime.now(timezone.utc).replace(microsecond=0)
+    timestamp = observed.isoformat()
+    market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
+                             tradingview_symbol="BINANCE:ETHEUR")
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[
+        _Result([market]),
+        _Result([SimpleNamespace(name="price", value=2400, score=None, trend=None,
+                                 interpretation=None, action=None, timestamp=observed,
+                                 source_observed_at=observed)]),
+        _Result([]),
+    ]))
+    evidence = {"price": {"value": 2400, "score": 30,
+                          "source_observed_at": timestamp,
+                          "rule_origin": "system_template", "weight": 1}}
+    matcher = SimpleNamespace(
+        last_source_row={"indicator_evidence": {"market": evidence}},
+        for_asset=AsyncMock(return_value={
+            "benchmark_score": None,
+            "benchmark_weights": {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3},
+            "reported_scores": {"market_score": 30, "macro_score": None,
+                                "technical_score": None},
+            "component_source_status": {"market_score": "fresh",
+                                        "macro_score": "missing_score",
+                                        "technical_score": "missing_score"},
+            "source_status": "missing_scores", "matches": [],
+            "component_source_observed_at": {},
+        }),
+    )
+    workspace = SimpleNamespace(
+        _macro_rows=AsyncMock(return_value=[]),
+        get_watchlist=AsyncMock(return_value={"rows": []}),
+        _category_payload=lambda rows, *_args, **_kwargs: {"rows": rows, "score": {}},
+    )
+    monkeypatch.setattr(module, "MarketDataRepository", lambda _session: SimpleNamespace(
+        get_latest_exact_market_snapshot=AsyncMock(return_value=None)))
+    monkeypatch.setattr(module, "SetupMarketMatchService", lambda _session: matcher)
+    monkeypatch.setattr(module, "WorkspaceDataService", lambda _session: workspace)
+
+    result = asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR"))
+
+    assert result["categories"]["market"]["rows"][0]["score"] == 30
+    assert result["daily"]["indicator_evidence"]["market"] == evidence
+    assert "macro" not in result["daily"]["indicator_evidence"]
+
+    matcher.component_source_status = "stale_source"
+    assert module.ExactMarketWorkspaceService._verified_evidence(
+        {"component_source_status": {"market_score": "stale_source"}},
+        matcher.last_source_row,
+    ) == {}

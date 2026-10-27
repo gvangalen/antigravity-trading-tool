@@ -1,5 +1,12 @@
 import { fetchAuth } from "@/lib/api/auth";
 
+export async function fetchTradingMarkets(symbol) {
+  return await fetchAuth(`/api/assets/${encodeURIComponent(String(symbol || "").toUpperCase())}/trading-markets`, {
+    method: "GET",
+    forceFresh: true,
+  });
+}
+
 export async function searchAssets(query, options = {}) {
   const {
     assetClasses = ["crypto", "stock"],

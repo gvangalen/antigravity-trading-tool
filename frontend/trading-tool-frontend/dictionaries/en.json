@@ -954,6 +954,9 @@
       "pendingScore": "The score or freshness of a selected indicator has not been confirmed yet. Try syncing it again; you cannot continue to My Plan until then."
     },
     "planOnboardingStep": {
+      "tradingMarketLabel": "Trading pair",
+      "tradingMarketChoose": "Choose EUR or USDT",
+      "tradingMarketUnavailable": "Trading pairs cannot be verified right now. Please try again later.",
       "dcaScoreExplanation": "The DCA schedule determines when a purchase is evaluated. Score limits are optional: a linked bot waits when scores are outside them. Without limits, the schedule remains, but other checks can still prevent a purchase. A missing score is not a buy signal.",
       "strategyDcaAmountLabel": "Amount per execution (€)",
       "strategyReviewBeforeSave": "Review before saving",
@@ -3441,6 +3444,11 @@
       "tradeBlueprintTitle": "Trade blueprint",
       "tradeBlueprintBody": "Focus on execution-ready setups and technical validation.",
       "assetSymbolLabel": "Asset symbol",
+      "tradingMarketLabel": "Trading pair",
+      "tradingMarketChoose": "Choose EUR or USDT",
+      "tradingMarketLoading": "Checking available trading pairs…",
+      "tradingMarketUnavailable": "Trading pairs cannot be verified right now. Please try again later.",
+      "tradingMarketRequired": "Choose a verified trading pair first.",
       "assetBtc": "BTC (Bitcoin)",
       "assetEth": "ETH (Ethereum)",
       "assetSol": "SOL (Solana)",

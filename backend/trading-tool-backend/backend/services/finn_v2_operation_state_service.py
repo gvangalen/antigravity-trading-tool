@@ -61,6 +61,17 @@ class FinnV2OperationStateService:
                     text,
                 )
             )
+            or (
+                # A direct request to create a new setup is complete as a
+                # setup request when no strategy or investment amount is asked
+                # for. The user can add a strategy in a later turn.
+                re.search(r"\b(?:maak|create|erstelle)\b.{0,100}\b(?:nieuwe?|new|neue[rs]?)\b.{0,100}\b(?:[\w]+-)?setup\b", text)
+                and not re.search(
+                    r"\b(?:strategie|strategy|bedrag|amount|betrag|inleg|investment|smart\s*dca|plan)\b"
+                    r"|€|\b\d+(?:[.,]\d+)?\s+per\s+(?:aankoop|week|maand)\b",
+                    text,
+                )
+            )
         )
 
     @staticmethod

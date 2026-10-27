@@ -9,6 +9,7 @@ import logging
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
 from backend.schemas.trading_schema import SetupCreateSchema
+from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
 
 WEEKDAY_TO_NUMBER = {
@@ -310,8 +311,8 @@ class SetupService:
         payload.symbol = raw_payload["symbol"]
 
         # A chosen crypto quote is an exact market identity, not an FX
-        # conversion of the catalog's default quote. Legacy rows without a
-        # selected pair retain NULL market_id until explicitly confirmed.
+        # conversion of the catalog's default quote. Existing legacy rows may
+        # retain NULL market_id, but a newly saved crypto setup needs a pair.
         requested_quote = raw_payload.get("quote_currency")
         if requested_quote is not None:
             try:
@@ -325,6 +326,8 @@ class SetupService:
             raw_payload["trading_pair"] = market.pair
         elif raw_payload.get("market_id") is not None:
             raise HTTPException(422, "Kies een koersvaluta voor dit handelspaar.")
+        elif (await AssetCatalogService(self.session).get_asset(raw_payload["symbol"])).get("asset_class") == "crypto":
+            raise HTTPException(422, "Kies eerst het exacte handelspaar voor deze crypto-setup.")
 
         setup_type = payload.setup_type.lower()
 

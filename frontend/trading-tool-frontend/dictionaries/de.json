@@ -955,6 +955,9 @@
       "pendingScore": "Der Score oder die Aktualität eines gewählten Indikators ist noch nicht bestätigt. Versuche, ihn erneut zu synchronisieren; bis dahin kannst du nicht zu Mein Plan fortfahren."
     },
     "planOnboardingStep": {
+      "tradingMarketLabel": "Handelspaar",
+      "tradingMarketChoose": "EUR oder USDT wählen",
+      "tradingMarketUnavailable": "Handelspaare können derzeit nicht bestätigt werden. Bitte später erneut versuchen.",
       "dcaScoreExplanation": "Der DCA-Rhythmus bestimmt, wann ein Kauf geprüft wird. Score-Grenzen sind optional: Außerhalb dieser Grenzen wartet ein verknüpfter Bot. Ohne Grenzen bleibt der Rhythmus bestehen, aber andere Prüfungen können einen Kauf verhindern. Ein fehlender Score ist kein Kaufsignal.",
       "strategyDcaAmountLabel": "Betrag pro Ausführung (€)",
       "strategyReviewBeforeSave": "Vor dem Speichern prüfen",
@@ -3458,6 +3461,11 @@
       "tradeBlueprintTitle": "Trade blueprint",
       "tradeBlueprintBody": "Focus on execution-ready setups and technical validation.",
       "assetSymbolLabel": "Asset symbol",
+      "tradingMarketLabel": "Handelspaar",
+      "tradingMarketChoose": "EUR oder USDT wählen",
+      "tradingMarketLoading": "Verfügbare Handelspaare werden geprüft…",
+      "tradingMarketUnavailable": "Handelspaare können derzeit nicht bestätigt werden. Bitte später erneut versuchen.",
+      "tradingMarketRequired": "Wähle zuerst ein bestätigtes Handelspaar.",
       "assetBtc": "BTC (Bitcoin)",
       "assetEth": "ETH (Ethereum)",
       "assetSol": "SOL (Solana)",

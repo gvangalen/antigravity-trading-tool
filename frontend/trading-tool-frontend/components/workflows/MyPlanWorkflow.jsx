@@ -414,6 +414,14 @@ function BenchmarkStatus({ match, copy }) {
   );
 }
 
+function planAssetLabel(setup, strategy, fallback = "–") {
+  const symbol = setup?.symbol || strategy?.symbol || fallback;
+  const quote = setup?.market_id && setup?.quote_currency
+    ? setup.quote_currency : strategy?.market_id && strategy?.quote_currency
+      ? strategy.quote_currency : null;
+  return quote ? `${symbol}/${quote}` : symbol;
+}
+
 export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const searchParams = useSearchParams();
   const { selectedAsset } = useAsset();
@@ -800,7 +808,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
               icon={Layers3}
               eyebrow={`${copy.setupTerm} · ${copy.setupHelp}`}
               title={activePlan.setup?.name || copy.setupTerm}
-              meta={`${activePlan.setup?.symbol || activeSymbol} · ${activePlan.setup?.timeframe || "–"}`}
+              meta={`${planAssetLabel(activePlan.setup, activePlan.strategy, activeSymbol)} · ${activePlan.setup?.timeframe || "–"}`}
               detail={t?.setups?.marketConditions
                 ? formatSetupScoreConditions(activePlan.setup, t.setups.marketConditions)
                 : copy.notReady}
@@ -994,7 +1002,7 @@ function PlanRow({ plan, copy, matchesLoading, feedAnchorId, onEditSetup, onDupl
           <SetupMatchStatus match={plan.match} copy={copy} loading={matchesLoading} />
           <BenchmarkStatus match={plan.match} copy={copy} />
         </div>
-        <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{plan.setup?.symbol || plan.strategy?.symbol || "–"} · {plan.setup?.timeframe || plan.strategy?.timeframe || "–"}</p>
+        <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{planAssetLabel(plan.setup, plan.strategy)} · {plan.setup?.timeframe || plan.strategy?.timeframe || "–"}</p>
         <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
           {getBotStatusLabel(plan.bot, copy)}
         </p>

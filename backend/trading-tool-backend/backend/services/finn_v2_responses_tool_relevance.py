@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from typing import Any
 
 from backend.services.asset_catalog_service import mentioned_catalog_symbols
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 from backend.services.finn_v2_responses_model import finn_responses_model_options
+
+logger = logging.getLogger(__name__)
 
 
 class FinnResponsesToolRelevanceGuard:
@@ -106,7 +109,7 @@ class FinnResponsesToolRelevanceGuard:
         fields = {
             key: value for key, value in collected_inputs.items()
             if key in {
-                "setup_type", "symbol", "timeframe", "dca_frequency", "dca_day",
+                "setup_type", "symbol", "quote_currency", "timeframe", "dca_frequency", "dca_day",
                 "dca_month_day", "dca_amount_mode", "base_amount", "score_source",
                 "low_threshold", "high_threshold", "low_score_percent",
                 "mid_score_percent", "high_score_percent", "min_benchmark_score",
@@ -126,6 +129,10 @@ class FinnResponsesToolRelevanceGuard:
                         "enforced. For DCA, a fixed amount, scheduled cadence and weekday "
                         "are already represented by the amount mode, amount and schedule "
                         "fields; they are not additional market-entry conditions. "
+                        "An exact trading-pair choice or exclusion (for example BTC/EUR, "
+                        "not BTC/USDT) defines the instrument, not an extra trading rule. "
+                        "A request to show a proposal without confirming it defines the "
+                        "consent boundary, not an execution rule. "
                         "Do not invent a score threshold from phrases like 'market "
                         "not under pressure'. Treat 'only buy if', 'do not enter unless', "
                         "'enter once', and equivalent phrasing in any language as a required "
@@ -291,7 +298,10 @@ class FinnResponsesToolRelevanceGuard:
         remaining = remaining_lifecycle_seconds()
         if remaining is not None and remaining <= 5:
             return None
-        timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
+        # A tool-free first pass needs one bounded chance to recover a clear
+        # mutation request. Four seconds was below normal provider tail
+        # latency when other FINN turns were active, silently dropping it.
+        timeout = min(8.0, remaining - 3 if remaining is not None else 8.0)
         client = (
             self.client.with_options(max_retries=0, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
@@ -328,7 +338,8 @@ class FinnResponsesToolRelevanceGuard:
             )
             operation_id = json.loads(str(getattr(response, "output_text", "") or "")).get("operation_id")
             return operation_id if operation_id in allowed else None
-        except Exception:
+        except Exception as exc:
+            logger.warning("FINN action request audit unavailable: %s", type(exc).__name__)
             return None
 
     def __init__(self, client: Any) -> None:

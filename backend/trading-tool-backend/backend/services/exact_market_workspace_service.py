@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -12,7 +13,7 @@ from backend.infrastructure.models import (
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.services.setup_market_match_service import SetupMarketMatchService
 from backend.services.workspace_data_service import (
-    STALE_AFTER_SECONDS, WorkspaceDataService, _freshness, _market_row,
+    STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _market_row,
     _technical_row,
 )
 
@@ -41,8 +42,12 @@ class ExactMarketWorkspaceService:
         # A bad provider row must never relabel another quote as this pair.
         if latest is not None and str(latest.quote_currency or "").upper() != quote_currency:
             latest = None
-        assessment = await SetupMarketMatchService(self.session).for_asset(
+        matcher = SetupMarketMatchService(self.session)
+        assessment = await matcher.for_asset(
             user_id, symbol, market_id=int(market.id),
+        )
+        indicator_evidence = self._verified_evidence(
+            assessment, getattr(matcher, "last_source_row", None)
         )
         market_result = await self.session.execute(select(MarketDataIndicator).where(
             MarketDataIndicator.user_id == user_id,
@@ -57,6 +62,14 @@ class ExactMarketWorkspaceService:
         workspace = WorkspaceDataService(self.session)
         macro_rows = await workspace._macro_rows(user_id, symbol, "day", asset_class="crypto")
         score_values = assessment["reported_scores"]
+        verified_daily = {
+            "indicator_evidence": indicator_evidence,
+            **{category: {"source_status": assessment["component_source_status"].get(f"{category}_score")}
+               for category in ("market", "macro", "technical")},
+        }
+        market_rows = _current_indicator_rows(market_rows, "market", verified_daily)
+        macro_rows = _current_indicator_rows(macro_rows, "macro", verified_daily)
+        technical_rows = _current_indicator_rows(technical_rows, "technical", verified_daily)
         source_row = assessment.get("as_of")
         categories = {}
         for category, rows, source in (
@@ -105,7 +118,7 @@ class ExactMarketWorkspaceService:
                               "source_status": assessment["component_source_status"].get("technical_score")},
                 "benchmark_score": assessment["benchmark_score"],
                 "calculated_at": source_row.isoformat() if hasattr(source_row, "isoformat") else source_row,
-                "indicator_evidence": {},
+                "indicator_evidence": indicator_evidence,
             },
             "master": {"weights": assessment["benchmark_weights"], "master_bias": "–"},
             "combined": {
@@ -130,3 +143,20 @@ class ExactMarketWorkspaceService:
             if name and name not in by_name:
                 by_name[name] = serializer(reading)
         return list(by_name.values())
+
+    @staticmethod
+    def _verified_evidence(assessment: dict, source_row: dict | None) -> dict:
+        raw = (source_row or {}).get("indicator_evidence") or {}
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {
+            category: raw.get(category, {})
+            for category in ("market", "macro", "technical")
+            if assessment.get("component_source_status", {}).get(f"{category}_score") == "fresh"
+            and isinstance(raw.get(category), dict)
+        }
