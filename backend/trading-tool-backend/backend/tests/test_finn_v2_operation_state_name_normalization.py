@@ -16,7 +16,7 @@ def test_guided_dca_reply_keeps_cadence_and_weekday_from_one_sentence():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()
     pending = service.resolve(
-        contract=contract, message="Ik wil een BTC DCA-setup op 1D.",
+        contract=contract, message="Ik wil een BTC/EUR DCA-setup op 1D.",
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"name": "QA concept BTC"}, model_tool_inputs=True,
     )
@@ -37,7 +37,7 @@ def test_explicit_setup_only_dca_keeps_eligibility_and_needs_no_strategy_amount(
     state = FinnV2OperationStateService().resolve(
         contract=contract,
         message=(
-            "Maak alleen een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag, "
+            "Maak alleen een BTC/EUR DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag, "
             "als enige koopvoorwaarde totale benchmarkscore 26 tot 45. "
             "Geen strategie of bedrag nu."
         ),
@@ -65,7 +65,7 @@ def test_strategy_deferral_completes_an_existing_dca_draft_without_losing_setup_
     service = FinnV2OperationStateService()
     pending = service.resolve(
         contract=contract,
-        message=("Maak een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag, "
+        message=("Maak een BTC/EUR DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag, "
                  "als koopvoorwaarde totale benchmarkscore 26 tot 45."),
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
@@ -89,7 +89,7 @@ def test_future_smart_dca_staffel_does_not_become_a_setup_filter_or_strategy():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     state = FinnV2OperationStateService().resolve(
         contract=contract,
-        message=("Maak alleen een BTC DCA-setup: naam QA BTC, 1D, wekelijks op vrijdag. "
+        message=("Maak alleen een BTC/EUR DCA-setup: naam QA BTC, 1D, wekelijks op vrijdag. "
                  "De Smart-DCA-staffel van 40 tot 70 bepaal ik later in de strategie."),
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
@@ -103,7 +103,7 @@ def test_future_smart_dca_staffel_does_not_become_a_setup_filter_or_strategy():
 
 def test_hyphenated_dca_setup_defers_future_smart_dca_amount_in_qa_question():
     message = (
-        "Maak alleen een BTC DCA-setup met naam QA BTC Staffel C 2510, timeframe 1D, "
+        "Maak alleen een BTC/EUR DCA-setup met naam QA BTC Staffel C 2510, timeframe 1D, "
         "wekelijks op vrijdag. Ik heb nog geen aparte setupscorevoorwaarde gekozen, "
         "dus geen scorefilter. Voor een latere Smart DCA-strategie denk ik aan "
         "100% bedrag bij score 40-70. Die 40-70 is een bedragstaffel, geen "
@@ -150,7 +150,7 @@ def test_open_setup_only_proposal_can_add_fixed_strategy_before_confirmation():
     service = FinnV2OperationStateService()
     setup = service.resolve(
         contract=contract,
-        message=("Maak alleen een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag. "
+        message=("Maak alleen een BTC/EUR DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag. "
                  "Geen strategie of bedrag nu."),
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
@@ -178,7 +178,7 @@ def test_open_setup_only_proposal_can_ask_for_strategy_amount_later_in_same_draf
     service = FinnV2OperationStateService()
     setup = service.resolve(
         contract=contract,
-        message=("Maak alleen een BTC DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag. "
+        message=("Maak alleen een BTC/EUR DCA-setup met naam QA BTC, 1D, wekelijks op vrijdag. "
                  "Geen strategie of bedrag nu."),
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
@@ -203,13 +203,13 @@ def test_open_setup_only_proposal_can_ask_for_strategy_amount_later_in_same_draf
 def test_cancelled_setup_only_proposal_can_become_full_dca_without_old_state():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     message = (
-        "Ik verander dit open concept: maak er een volledig BTC DCA-plan van "
+        "Ik verander dit open concept: maak er een volledig BTC/EUR DCA-plan van "
         "met een vast bedrag van €100 per week op vrijdag. Behoud de naam "
         "QA BTC Staffel Later 2510 en geen setupscorefilter. Toon de nieuwe "
         "conceptkaart; bevestig niets."
     )
     prior = {
-        "name": "QA BTC Staffel Later 2510", "symbol": "BTC", "timeframe": "1D",
+        "name": "QA BTC Staffel Later 2510", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "1D",
         "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
         "plan_scope": "setup_only", "min_benchmark_score": 26,
         "max_benchmark_score": 45,
@@ -233,13 +233,13 @@ def test_cancelled_setup_only_proposal_can_become_full_dca_without_old_state():
 def test_open_dca_revision_ignores_timeframe_code_inside_preserved_name():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     prior = {
-        "name": "QA BTC 4H", "symbol": "BTC", "timeframe": "1D",
+        "name": "QA BTC 4H", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "1D",
         "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
         "plan_scope": "setup_only",
     }
     state = FinnV2OperationStateService().resolve(
         contract=contract,
-        message=("Maak er een volledig BTC DCA-plan van met vast €100 per week. "
+        message=("Maak er een volledig BTC/EUR DCA-plan van met vast €100 per week. "
                  "Behoud de naam QA BTC 4H en geen setupscorefilter."),
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"name": "QA BTC 4H"}, derived_inputs=prior,
@@ -253,13 +253,13 @@ def test_open_dca_revision_ignores_timeframe_code_inside_preserved_name():
 def test_open_dca_revision_allows_explicit_timeframe_same_as_name():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     prior = {
-        "name": "4H", "symbol": "BTC", "timeframe": "1D",
+        "name": "4H", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "1D",
         "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
         "plan_scope": "setup_only",
     }
     state = FinnV2OperationStateService().resolve(
         contract=contract,
-        message=("Maak er een volledig BTC DCA-plan van met vast €100 per week. "
+        message=("Maak er een volledig BTC/EUR DCA-plan van met vast €100 per week. "
                  "Behoud de naam 4H, wijzig primair timeframe naar 4H."),
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"name": "4H"}, derived_inputs=prior,
@@ -272,14 +272,14 @@ def test_open_dca_revision_allows_explicit_timeframe_same_as_name():
 def test_no_extra_scorefilter_keeps_existing_setup_bounds():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     prior = {
-        "name": "QA BTC", "symbol": "BTC", "timeframe": "1D",
+        "name": "QA BTC", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "1D",
         "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
         "plan_scope": "setup_only", "min_benchmark_score": 26,
         "max_benchmark_score": 45,
     }
     state = FinnV2OperationStateService().resolve(
         contract=contract,
-        message=("Maak er een volledig BTC DCA-plan van met vast €100 per week. "
+        message=("Maak er een volledig BTC/EUR DCA-plan van met vast €100 per week. "
                  "Behoud de naam QA BTC en de bestaande scorevoorwaarde 26 tot 45 "
                  "en geen extra scorefilter."),
         explicit_asset="BTC", conversation_context={},
@@ -295,14 +295,14 @@ def test_no_extra_scorefilter_keeps_existing_setup_bounds():
 def test_open_dca_removes_named_benchmark_range_without_renaming_to_gelijk():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     prior = {
-        "name": "QA BTC Zone", "symbol": "BTC", "timeframe": "1D",
+        "name": "QA BTC Zone", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "1D",
         "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "friday",
         "plan_scope": "setup_only", "min_benchmark_score": 26,
         "max_benchmark_score": 45,
     }
     message = (
         "Haal de benchmarkvoorwaarde 26-45 uit dit open concept. Laat de rest "
-        "gelijk: BTC, 1D, wekelijks vrijdag, geen strategie of bedrag. "
+        "gelijk: BTC/EUR, 1D, wekelijks vrijdag, geen strategie of bedrag. "
         "Toon aangepaste conceptkaart; bevestig niets."
     )
     state = FinnV2OperationStateService().resolve(
@@ -320,7 +320,7 @@ def test_open_dca_removes_named_benchmark_range_without_renaming_to_gelijk():
 def test_setup_only_without_score_filter_does_not_request_amount_mode():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     message = (
-        "Maak alleen een BTC DCA-setup met naam QA 4H Naam 2510, primair "
+        "Maak alleen een BTC/EUR DCA-setup met naam QA 4H Naam 2510, primair "
         "charttijdframe 1D, wekelijks op vrijdag, zonder scorefilter. "
         "De tekst 4H is alleen onderdeel van de naam en geen timeframekeuze. "
         "Geen strategie of bedrag. Toon een concept en bevestig niets."
@@ -410,7 +410,7 @@ def test_guided_dca_compound_answer_keeps_every_typed_field_and_clean_name():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()
     pending = service.resolve(
-        contract=contract, message="Ik wil een BTC DCA-setup maken.",
+        contract=contract, message="Ik wil een BTC/EUR DCA-setup maken.",
         explicit_asset="BTC", conversation_context={},
         supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
     )
@@ -423,7 +423,7 @@ def test_guided_dca_compound_answer_keeps_every_typed_field_and_clean_name():
         supplied_inputs={}, model_tool_inputs=True,
     )
     assert continued.collected_inputs == {
-        "symbol": "BTC", "setup_type": "dca", "timeframe": "1D",
+        "symbol": "BTC", "quote_currency": "EUR", "setup_type": "dca", "timeframe": "1D",
         "name": "QA concept BTC 13 oktober", "dca_frequency": "weekly",
         "dca_day": "friday", "dca_amount_mode": "fixed",
     }
@@ -642,7 +642,7 @@ def test_create_setup_recovers_explicit_timeframe_when_model_tool_omits_it():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     state = FinnV2OperationStateService().resolve(
         contract=contract,
-        message="Erstelle ein taegliches DCA-Setup fuer SOL auf 4 Stunden mit dem Namen Chain DCA Setup.",
+        message="Erstelle ein taegliches DCA-Setup fuer SOL/EUR auf 4 Stunden mit dem Namen Chain DCA Setup.",
         explicit_asset="SOL",
         conversation_context={},
         supplied_inputs={
@@ -661,7 +661,7 @@ def test_smart_dca_collects_full_ladder_from_first_turn_without_model_band_input
     state = FinnV2OperationStateService().resolve(
         contract=contract,
         message=(
-            "Maak een Smart DCA-plan voor BTC met de naam BTC Smart DCA QA oktober: 1D, "
+            "Maak een Smart DCA-plan voor BTC/EUR met de naam BTC Smart DCA QA oktober: 1D, "
             "elke maandag, basisbedrag €100. Gebruik de totale benchmarkscore van markt, "
             "macro en technisch met mijn huidige Analyse-weging. Onder score 40 koop 50% "
             "van het basisbedrag, van 40 tot onder 70 koop 100%, vanaf 70 koop 150%. "
@@ -687,7 +687,7 @@ def test_smart_dca_guided_reply_fills_all_three_percentages_without_smart_keywor
     service = FinnV2OperationStateService()
     existing = service.resolve(
         contract=contract,
-        message="Maak Smart DCA voor BTC op 1D elke maandag met basisbedrag €100: onder score 40, van 40 tot onder 70, vanaf 70.",
+        message="Maak Smart DCA voor BTC/EUR op 1D elke maandag met basisbedrag €100: onder score 40, van 40 tot onder 70, vanaf 70.",
         explicit_asset="BTC",
         conversation_context={},
         supplied_inputs={"name": "BTC Smart DCA", "low_threshold": 40, "high_threshold": 70},
@@ -713,7 +713,7 @@ def test_monthly_dca_collects_ordinal_month_day_from_first_turn():
     state = FinnV2OperationStateService().resolve(
         contract=contract,
         message=(
-            "Maak een vast DCA-plan voor ETH: naam ETH Maandelijkse DCA QA, "
+            "Maak een vast DCA-plan voor ETH/EUR: naam ETH Maandelijkse DCA QA, "
             "elke 5e van de maand €75 per aankoop, timeframe 1D. Toon alleen een voorstel; sla niets op."
         ),
         explicit_asset="ETH",

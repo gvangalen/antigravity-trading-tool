@@ -3782,7 +3782,7 @@ def test_catalog_uses_registry_for_required_and_conditional_inputs():
         "create_dca_plan_proposal",
         {"operation_id": "create_setup", "inputs": {"setup_type": "dca", "symbol": "BTC"}},
     )
-    assert call.missing_inputs == ("timeframe", "name", "dca_frequency", "dca_amount_mode", "base_amount")
+    assert call.missing_inputs == ("timeframe", "name", "quote_currency", "dca_frequency", "dca_amount_mode", "base_amount")
     assert call.operation_id == "create_setup"
     assert len(catalog.definitions()) == 2 + len(catalog.read_tools) + len(catalog.proposal_operations) + len(catalog.evaluation_contracts)
     assert "answer_directly" not in {item["name"] for item in catalog.definitions()}
@@ -4016,7 +4016,7 @@ def test_catalog_rejects_model_owned_identity_and_undeclared_inputs():
     plain_trade = catalog.validate("create_or_update_trade_plan_proposal", {
         "payload": {
             "operation_id": "create_setup", "draft_intent": "new",
-            "inputs": {"symbol": "ETH", "setup_type": "trade", "timeframe": "4H", "name": "ETH rustige trade"},
+                "inputs": {"symbol": "ETH", "quote_currency": "EUR", "setup_type": "trade", "timeframe": "4H", "name": "ETH rustige trade"},
         },
     })
     assert plain_trade.operation_id == "create_setup"
@@ -4158,7 +4158,7 @@ def test_incompatible_specialized_proposal_retries_with_registry_sibling():
 def test_model_dca_proposal_uses_existing_guided_input_canonicalization():
     call = FinnResponsesToolCatalog().validate("create_dca_plan_proposal", {
         "operation_id": "create_setup", "draft_intent": "new", "inputs": {
-            "name": "Build Smoke BTC", "symbol": "BTC", "timeframe": "4H",
+            "name": "Build Smoke BTC", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "4H",
             "setup_type": "DCA", "dca_frequency": "wekelijks", "dca_day": "maandag",
             "dca_amount_mode": "fixed", "base_amount": 100,
         },
@@ -4243,7 +4243,7 @@ def test_proposal_candidate_uses_registry_contract_and_existing_guided_state():
     assert plan.operation_id == "create_setup"
     assert plan.selector_source == "responses_tool_call"
     assert plan.operation_state["collected_inputs"]["symbol"] == "BTC"
-    assert plan.missing_information == ["timeframe", "name", "dca_frequency", "dca_amount_mode", "base_amount"]
+    assert plan.missing_information == ["timeframe", "name", "quote_currency", "dca_frequency", "dca_amount_mode", "base_amount"]
 
 
 def test_strategy_update_rejects_model_field_alias_and_uses_explicit_canonical_change():
@@ -4373,7 +4373,7 @@ def test_explicit_setup_name_overrides_truncated_model_candidate():
     call = FinnResponsesToolCatalog().validate(
         "create_dca_plan_proposal",
         {"operation_id": "create_setup", "inputs": {
-            "setup_type": "dca", "symbol": "BTC", "timeframe": "4H",
+            "setup_type": "dca", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "4H",
             "name": "Responses Build DCA", "dca_frequency": "weekly",
             "min_investment": 150,
         }},
@@ -5091,7 +5091,7 @@ def test_revised_dca_draft_retains_prior_fields_and_changes_only_amount():
         "operation_id": "create_setup", "contract_version": contract.version,
         "status": "proposed", "open_proposal_id": "proposal-owned-by-conversation",
         "collected_inputs": {
-            "setup_type": "dca", "symbol": "BTC", "timeframe": "4H",
+            "setup_type": "dca", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "4H",
             "name": "Responses Revised 0923", "dca_frequency": "wekelijks",
             "dca_day": "maandag", "dca_amount_mode": "fixed", "base_amount": 150,
         },
@@ -5149,7 +5149,7 @@ def test_open_trade_proposal_survives_model_new_label_on_followup():
     prior_state = {
         "operation_id": "create_setup", "contract_version": contract.version,
         "status": "proposed", "open_proposal_id": "owner-proposal",
-        "collected_inputs": {"symbol": "ETH", "setup_type": "trade",
+        "collected_inputs": {"symbol": "ETH", "quote_currency": "EUR", "setup_type": "trade",
                              "timeframe": "4H", "name": "QA Paneel ETH 1410"},
         "missing_required_inputs": [],
     }
@@ -5184,7 +5184,7 @@ def test_model_tool_call_fills_only_pending_guided_slot():
             "operation_id": "create_setup",
             "inputs": {"setup_type": "dca", "symbol": "BTC", "timeframe": "4H"},
         }),
-        message="Maak een BTC DCA-setup op 4H",
+        message="Maak een BTC/EUR DCA-setup op 4H",
         conversation_context={},
         verified_asset="BTC",
     )
@@ -5452,7 +5452,7 @@ def test_blocked_setup_choice_restores_latest_partial_draft_without_old_identity
     assert state["collected_inputs"]["base_amount"] == 50
     assert "name" not in state["collected_inputs"]
     assert "timeframe" not in state["collected_inputs"]
-    assert state["missing_required_inputs"] == ["timeframe", "name"]
+    assert state["missing_required_inputs"] == ["timeframe", "name", "quote_currency"]
 
 
 def test_blocked_setup_waiver_discards_unstored_trend_condition_without_terminal_error():
@@ -10060,7 +10060,7 @@ def test_dca_proposal_uses_explicit_asset_when_another_asset_is_negated():
     })
     analysis = FinnResponsesProposalSelection().from_call(
         call=call,
-        message="Maak Smart DCA voor ETH, niet BTC: naam ETH Smart Test, timeframe 1D, "
+        message="Maak Smart DCA voor ETH/EUR, niet BTC: naam ETH Smart Test, timeframe 1D, "
                 "iedere maandag, basisbedrag €100. Onder 40 50%, 40 tot 70 100%, "
                 "vanaf 70 150% van de totale benchmarkscore.",
         conversation_context={}, verified_asset=None, read_context=[],
@@ -13128,7 +13128,7 @@ def test_front_door_prepares_existing_action_pipeline_without_writing():
 
     front.reads = no_reads
     result = asyncio.run(front.run(
-        message="Maak een BTC DCA-setup op 4H met de naam DCA test, wekelijks op maandag voor 100 euro.", instructions="Gebruik tools",
+        message="Maak een BTC/EUR DCA-setup op 4H met de naam DCA test, wekelijks op maandag voor 100 euro.", instructions="Gebruik tools",
         conversation_context={}, verified_asset="BTC",
     ))
     assert result.proposal_analysis.request_plan.operation_id == "create_setup"

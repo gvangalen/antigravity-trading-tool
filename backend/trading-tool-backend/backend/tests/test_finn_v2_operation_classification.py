@@ -715,10 +715,10 @@ def test_validator_allows_safe_degraded_lineage_without_promoting_a_conclusion(o
 def test_typed_input_projection_does_not_treat_model_entities_as_user_supplied_slots():
     result = CLASSIFIER.classify(message="Maak een BTC breakout-setup op 4H.")
 
-    assert result.required_inputs == ("setup_type", "timeframe", "name", "symbol")
+    assert result.required_inputs == ("setup_type", "timeframe", "name", "symbol", "quote_currency")
     assert result.supplied_inputs == {"symbol": "BTC", "setup_type": "trade", "timeframe": "4H"}
     assert result.derived_inputs == {"target_asset": "BTC"}
-    assert result.selected_missing_inputs == ("name",)
+    assert result.selected_missing_inputs == ("name", "quote_currency")
 
 
 def test_typed_setup_slots_fill_a_lossy_structured_entity_projection():
@@ -905,7 +905,7 @@ def test_guided_setup_turn_accepts_multiple_explicit_missing_contract_fields():
             "operation_id": "create_setup",
             "contract_version": contract.version,
             "state_revision": 2,
-            "collected_inputs": {"symbol": "BTC"},
+            "collected_inputs": {"symbol": "BTC", "quote_currency": "EUR"},
             "missing_required_inputs": ["setup_type", "timeframe", "name"],
             "next_missing_input": "setup_type",
             "status": "collecting",
@@ -1294,7 +1294,7 @@ def test_explicit_indicator_read_keeps_named_concept_when_selector_omits_entity(
 
 def test_complete_setup_slots_remove_model_reported_missing_inputs():
     result = CLASSIFIER.classify(
-        message="Werk voor DOT een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."
+        message="Werk voor DOT/EUR een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."
     )
 
     assert result.operation_id == "create_setup"
@@ -1317,7 +1317,7 @@ def test_guided_setup_request_preserves_creation_contract_and_requires_slot_coll
     result = CLASSIFIER.classify(message=message)
 
     assert result.operation_id == "create_setup"
-    assert result.selected_missing_inputs == ("setup_type", "timeframe", "name")
+    assert result.selected_missing_inputs == ("setup_type", "timeframe", "name", "quote_currency")
     assert result.clarification_required is True
 
 
@@ -1325,7 +1325,7 @@ def test_direct_incomplete_setup_request_does_not_misrepresent_a_guided_exchange
     result = CLASSIFIER.classify(message="Maak een Solana-setup.")
 
     assert result.operation_id == "create_setup"
-    assert result.selected_missing_inputs == ("setup_type", "timeframe", "name")
+    assert result.selected_missing_inputs == ("setup_type", "timeframe", "name", "quote_currency")
     assert result.clarification_required is False
 
 

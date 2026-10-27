@@ -11,7 +11,9 @@ from backend.domain.saved_setup_market_condition import explicit_benchmark_bound
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.domain.market_indicator_catalog import get_active_market_indicator_definitions
-from backend.services.asset_catalog_service import resolve_catalog_symbol_mention
+from backend.services.asset_catalog_service import (
+    requested_catalog_trading_pair, resolve_catalog_symbol_mention,
+)
 from backend.schemas.finn_v2_orchestrator_schema import FinnV2OperationState
 
 
@@ -28,6 +30,9 @@ class FinnV2OperationStateService:
     def setup_only_intent(message: str) -> bool:
         """A user may save the setup now and choose its strategy in a later step."""
         text = str(message or "").casefold()
+        # An explicit crypto quote is part of the asset name, not an extra
+        # word between "alleen" and "setup" in the intent phrase.
+        text = re.sub(r"\b([a-z]{2,10})/(?:eur|usdt)\b", r"\1", text)
         if re.search(r"\b(?:niet|not|nicht)\s+(?:alleen|only|nur)\b", text):
             return False
         if re.search(
@@ -272,6 +277,9 @@ class FinnV2OperationStateService:
                 else {}
             )
         if contract.operation_id == "create_setup":
+            pair = requested_catalog_trading_pair(message)
+            if pair is not None:
+                explicit["symbol"], explicit["quote_currency"] = pair
             # A benchmark number is a score condition, never a currency amount.
             # Use only bounds stated by the user; a tool candidate cannot
             # invent or reinterpret either end of this eligibility range.
@@ -368,6 +376,10 @@ class FinnV2OperationStateService:
                 # A quote unit changes the meaning of every trade level. The
                 # model cannot infer it from an asset or market snapshot.
                 continue
+            if contract.operation_id == "create_setup" and key == "quote_currency" and key not in explicit:
+                # A quote cannot be inferred from a workspace default, an
+                # amount written in euros, or the model's own suggestion.
+                continue
             if (
                 key == "name" and model_tool_inputs
                 and contract.operation_id.startswith("create_")
@@ -443,6 +455,12 @@ class FinnV2OperationStateService:
             explicit["name"] = self._trim_linked_strategy_clause(str(explicit["name"]))
         sources = dict(existing.input_sources) if existing is not None else {}
         provenance = dict(existing.input_provenance) if existing is not None else {}
+        if (contract.operation_id == "create_setup" and existing is not None
+                and explicit.get("symbol") and explicit["symbol"] != collected.get("symbol")
+                and "quote_currency" not in explicit):
+            collected.pop("quote_currency", None)
+            sources.pop("quote_currency", None)
+            provenance.pop("quote_currency", None)
         collected.update(explicit)
         sources.update({key: "explicit" for key in explicit})
         next_revision = (existing.state_revision + 1) if existing is not None else 1
@@ -652,6 +670,7 @@ class FinnV2OperationStateService:
                 "en": {
                     "name": "What short name would you like to give this proposal?",
                     "symbol": "Which asset is this setup for?",
+                    "quote_currency": "Which exact trading pair do you want for this crypto plan: EUR or USDT? This choice also sets its chart and price levels.",
                     "setup_type": "Would you like a trade setup or a DCA setup?",
                     "timeframe": "Which analysis timeframe should this setup use, for example 1D (daily chart) or 4H (four-hour chart)? This does not set how often DCA buys occur; I will ask that separately.",
                     "dca_frequency": "How often would you like to buy: daily, weekly or monthly?",
@@ -686,6 +705,7 @@ class FinnV2OperationStateService:
                 "de": {
                     "name": "Welchen kurzen Namen soll dieser Vorschlag bekommen?",
                     "symbol": "Für welchen Vermögenswert ist dieses Setup gedacht?",
+                    "quote_currency": "Welches genaue Handelspaar möchtest du für diesen Krypto-Plan: EUR oder USDT? Diese Wahl bestimmt auch Chart und Kursniveaus.",
                     "setup_type": "Möchtest du ein Trade- oder DCA-Setup erstellen?",
                     "timeframe": "Welches Analyse-Zeitfenster soll dieses Setup verwenden, zum Beispiel 1D (Tageschart) oder 4H (Vier-Stunden-Chart)? Das legt nicht fest, wie oft DCA kauft; danach frage ich getrennt.",
                     "dca_frequency": "Wie oft möchtest du kaufen: täglich, wöchentlich oder monatlich?",
@@ -740,6 +760,7 @@ class FinnV2OperationStateService:
                 else "Welke korte naam wil je voor deze setup gebruiken?"
             ),
             "symbol": "Voor welke asset wil je deze setup precies voorbereiden?",
+            "quote_currency": "Welk handelspaar wil je voor dit cryptoplan gebruiken: EUR of USDT? Dit bepaalt ook de grafiek en de valuta van koersniveaus.",
             "setup_type": "Wil je een trade- of DCA-setup voorbereiden?",
             "timeframe": "Welk analysetijdsframe wil je voor deze setup gebruiken, bijvoorbeeld 1D (daggrafiek) of 4H (vieruursgrafiek)? Dit bepaalt niet hoe vaak je DCA koopt; dat vraag ik apart.",
             "dca_frequency": "Hoe vaak wil je volgens deze DCA-setup aankopen: dagelijks, wekelijks of maandelijks?",
@@ -879,9 +900,14 @@ class FinnV2OperationStateService:
                         if currency:
                             values["price_currency"] = currency
                     return values
+        if contract.operation_id == "create_setup":
+            pair = requested_catalog_trading_pair(text)
+            if pair is not None:
+                values["symbol"], values["quote_currency"] = pair
         if explicit_asset:
             for field in {"asset", "symbol"}.intersection(accepted_inputs):
-                values[field] = explicit_asset
+                if field not in values:
+                    values[field] = explicit_asset
         # Clarification owns a single free-text slot. Only a reply to an
         # existing clarification flow may fill it; the initial vague request
         # must remain eligible for the focused question.
@@ -1406,6 +1432,9 @@ class FinnV2OperationStateService:
             return FinnV2SetupInputCatalog.display_name(named) if contract.operation_id == "create_setup" else named
         if field in {"asset", "symbol"}:
             return resolve_catalog_symbol_mention(value)
+        if field == "quote_currency":
+            normalized = value.strip().upper()
+            return normalized if normalized in {"EUR", "USDT"} else None
         if field == "dca_frequency":
             return self._canonical_dca_frequency(value)
         if field == "dca_day":

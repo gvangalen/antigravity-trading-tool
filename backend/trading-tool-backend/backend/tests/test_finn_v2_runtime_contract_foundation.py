@@ -1097,7 +1097,7 @@ def test_runtime_contract_derives_guided_inputs_from_the_canonical_action_contra
         "version": FinnV2OperationRegistry.VERSION,
     }
     assert selected["supplied_inputs"] == {"symbol": "ETH", "timeframe": "4h"}
-    assert selected["missing_inputs"] == ["setup_type", "name"]
+    assert selected["missing_inputs"] == ["setup_type", "name", "quote_currency"]
 
 
 def test_runtime_contract_uses_create_strategy_contract_for_optional_and_missing_inputs():

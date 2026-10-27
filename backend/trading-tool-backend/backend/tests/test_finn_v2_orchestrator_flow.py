@@ -874,7 +874,7 @@ def test_responses_guided_slot_survives_owner_reference_resolution():
             "operation_id": "create_setup",
             "inputs": {"symbol": "BTC", "setup_type": "dca", "timeframe": "4H"},
         }),
-        message="Maak een BTC DCA-setup op 4H", conversation_context={}, verified_asset="BTC",
+        message="Maak een BTC/EUR DCA-setup op 4H", conversation_context={}, verified_asset="BTC",
     )
     context = {"active_guided_operation": first.request_plan.operation_state}
     second = selector.from_call(

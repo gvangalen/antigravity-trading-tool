@@ -341,8 +341,17 @@ class OperationContract:
 
     def required_inputs_for(self, supplied_inputs: Mapping[str, object]) -> tuple[str, ...]:
         """Return required fields after evaluating registry-owned conditions."""
+        from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+
+        symbol = str(supplied_inputs.get("symbol") or "").strip().upper()
+        crypto_pair_required = (
+            self.operation_id == "create_setup"
+            and DEFAULT_ASSET_CATALOG.get(symbol, {}).get("asset_class") == "crypto"
+        )
         if self.operation_id == "create_setup" and supplied_inputs.get("setup_type") == "dca" and supplied_inputs.get("plan_scope") == "setup_only":
             required = list(self.required_inputs)
+            if crypto_pair_required:
+                required.append("quote_currency")
             required.append("dca_frequency")
             frequency = supplied_inputs.get("dca_frequency")
             if frequency == "weekly":
@@ -359,6 +368,8 @@ class OperationContract:
                 ))
             return tuple(required)
         required = list(self.required_inputs)
+        if crypto_pair_required:
+            required.append("quote_currency")
         for field, dependency, expected in self.conditional_required_inputs:
             actual = str(supplied_inputs.get(dependency) or "").strip().casefold()
             if actual == expected.casefold():
