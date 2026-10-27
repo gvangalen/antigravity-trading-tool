@@ -8,6 +8,7 @@ from backend.schemas.market_provider_schema import PriceSnapshotDTO
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.utils.market_interpreter import normalize_market_value_with_history
 from backend.utils.scoring_utils import generate_scores_db
+from backend.utils.scoring_engine import fetch_rules_for_indicator
 
 from backend.services.trading_market_service import (
     MarketUnavailable,
@@ -133,6 +134,45 @@ def test_pair_scoring_does_not_consume_legacy_symbol_indicator_configuration(mon
     sql, params = connection.cursor_instance.calls[0]
     assert "market_id = %s" in sql
     assert params == (9, "market", "BTC", 73)
+
+
+def test_pair_score_rule_looks_up_only_the_chosen_market_configuration():
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, sql, params):
+            self.calls.append((sql, params))
+
+        def fetchone(self):
+            return None
+
+        def fetchall(self):
+            return []
+
+    class Connection:
+        cursor_instance = Cursor()
+
+        def cursor(self):
+            return self.cursor_instance
+
+    connection = Connection()
+    connection.cursor_instance.calls = []
+    fetch_rules_for_indicator(connection, "market", "price", user_id=9,
+                              symbol="BTC", market_id=73)
+    sql, params = connection.cursor_instance.calls[0]
+    assert "market_id = %s" in sql
+    assert params == (9, "BTC", "market", "price", 73)
+
+    connection.cursor_instance.calls = []
+    fetch_rules_for_indicator(connection, "market", "price", user_id=9,
+                              symbol="BTC")
+    sql, params = connection.cursor_instance.calls[0]
+    assert "market_id IS NULL" in sql
+    assert params == (9, "BTC", "market", "price")
 
 
 def test_pair_market_history_is_partitioned_from_other_quote_and_legacy_rows():

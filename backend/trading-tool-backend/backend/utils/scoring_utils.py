@@ -221,7 +221,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 normalized_value = normalize_macro_value_with_history(conn, user_id, indicator, value)
             else:
                 normalized_value = normalize_technical_value_for_rules(
-                    conn, indicator, value, user_id, symbol,
+                    conn, indicator, value, user_id, symbol, market_id=market_id,
                 )
             if normalized_value is None:
                 return {"scores": {}, "total_score": None, "top_contributors": [],
@@ -233,6 +233,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 value=normalized_value,
                 user_id=user_id,
                 symbol=symbol,
+                market_id=market_id,
             )
             if scored.get("rule_origin") in {"missing", "generated_fallback"}:
                 return {"scores": {}, "total_score": None, "top_contributors": [],
