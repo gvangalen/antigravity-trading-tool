@@ -33,6 +33,20 @@ selection, web/mobile chart binding, Paper execution and end-to-end
 provider/runtime gates are incomplete. Do not deploy this branch as a partial
 trading-pair release.
 
+The next local batch on `codex/explicit-trading-market` now materializes the
+owner's configured market and technical indicators from completed candles of
+the verified exact pair, then writes a pair-scoped Score 2.0 daily result.
+FINN's setup proposal selector preserves an explicit ETH/EUR or BTC/USDT
+quote instead of treating the pair as its base asset. A bot follow-up cannot
+bind such a pair request to an earlier base-only ETH setup. The complete
+backend suite passed **4033 tests, four skipped** after the scoring changes;
+the focused pair-selection regressions passed **22/22** after the selector
+changes. These are local code checks only. The chosen quote is not yet a
+required choice in every crypto setup draft; the web and mobile Analyse/chart
+readers still use the base-asset workspace, and pair-bound bot execution
+remains held. This candidate remains **not deployable** until those paths and
+the independent release gates are complete.
+
 Subsequent local work isolates legacy base-symbol quote, indicator, score,
 portfolio and bot readers from newly stored exact-market rows. A dedicated
 exact-market history bootstrap accepts only completed candles from the verified
