@@ -2391,10 +2391,13 @@ class BotService:
         return result
 
     def _require_manual_order_bot_symbol(self, bot: Dict[str, Any], payload: BotManualOrderSchema) -> None:
-        if bot.get("market_id") is not None:
+        # Live pair routing still needs an exchange-specific execution contract.
+        # Paper orders settle in virtual EUR and already bind their preview to
+        # the bot's exact market quote, FX source and owner-scoped score match.
+        if bot.get("is_live") and bot.get("market_id") is not None:
             raise HTTPException(409, {
                 "code": "EXACT_MARKET_EXECUTION_PENDING",
-                "message": "Deze bot wacht op koers- en scoregegevens voor zijn gekozen handelspaar.",
+                "message": "Handmatige Live-orders voor dit handelspaar zijn nog niet beschikbaar.",
             })
         if str(payload.symbol or "").strip().upper() != str(bot.get("symbol") or "").strip().upper():
             raise HTTPException(400, "Orderasset wijkt af van de gekoppelde botasset.")

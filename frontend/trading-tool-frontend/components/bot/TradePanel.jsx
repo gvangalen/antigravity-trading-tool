@@ -37,9 +37,8 @@ const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
 export default function TradePanel({
   price = 66744,
-  balanceQuote = 0,
   balanceBase = 0,
-  availableQuote = balanceQuote,
+  availableQuote = 0,
   quoteSymbol = "EUR",
   baseSymbol = "BTC",
   strategy = {},
@@ -320,21 +319,18 @@ export default function TradePanel({
         </div>
 
         <div className="text-right">
-          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{side === "buy" ? copy.remainingBotBudget : copy.positionQuantity}</div>
+          <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{side === "buy" ? (paperMarketOnly ? copy.availableForOrder : copy.liveMaxFromLimits) : copy.positionQuantity}</div>
           <div className="flex items-center gap-2 justify-end">
              {side === "buy"
                ? (
                  <div className="flex flex-col items-end">
                     <div className="text-lg font-black text-blue-600 tracking-tighter">{fmt(availableQuote, locale)} <span className="text-[10px] opacity-60 ml-0.5">{quoteSymbol}</span></div>
-                    {availableQuote < balanceQuote && (
-                      <div className="text-[8px] font-bold text-orange-500 uppercase tracking-tighter">{copy.cappedByBudget}</div>
-                    )}
                  </div>
                )
                : <div className="text-lg font-black text-emerald-600 tracking-tighter">{fmt(balanceBase, locale, 8)} <span className="text-[10px] opacity-60 ml-0.5">{baseSymbol}</span></div>
              }
           </div>
-          {side === "buy" ? <div className="mt-1 max-w-48 text-[10px] text-slate-500">{copy.budgetIsNotCash}</div> : null}
+          {side === "buy" ? <div className="mt-1 max-w-48 text-[10px] text-slate-500">{paperMarketOnly ? copy.paperAvailableContext : copy.budgetIsNotCash}</div> : null}
         </div>
       </div>
 

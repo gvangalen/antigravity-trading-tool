@@ -115,6 +115,14 @@ def test_pair_bound_paper_buy_uses_same_market_scope_as_saved_setup(monkeypatch)
     assert result["allowed"] is False
     assert result["status"] == "outside_conditions"
     assert for_asset.await_args.kwargs["market_id"] == 42
+    preview = asyncio.run(service.preview_manual_order(_payload(), user_id=3))
+    assert preview["blocked"] is True
+    assert "Benchmark 28 ligt onder minimum 61" in preview["message"]
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(_payload(), user_id=3))
+    assert exc.value.detail["code"] == "PAPER_SETUP_MATCH_REQUIRED"
+    assert for_asset.await_args.kwargs["market_id"] == 42
+    service.repository.create_manual_order.assert_not_awaited()
 
 
 def test_matching_setup_allows_paper_buy_check(monkeypatch):

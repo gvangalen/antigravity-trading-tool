@@ -9,6 +9,8 @@ import { fetchLatestPrice } from "@/lib/api/market";
 import { fetchPaperPriceEur } from "@/lib/api/botApi";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
+import { manualTradeAvailableQuote } from "@/lib/bot/manualTradeBudget.mjs";
 
 export default function TradePanelContainer({
   bot,
@@ -38,7 +40,6 @@ export default function TradePanelContainer({
   const [price, setPrice] = useState(null);
   const priceFetchingRef = useRef(false);
 
-  const [balanceQuote, setBalanceQuote] = useState(0);
   const [availableQuote, setAvailableQuote] = useState(0);
   const [balanceBase, setBalanceBase] = useState(0);
 
@@ -102,21 +103,11 @@ export default function TradePanelContainer({
 
     /* ---------- CALCULATE CAPS ---------- */
 
-    const remainingTotal = Math.max(0, totalBudget - invested);
-    const remainingDaily = dailyLimit > 0 ? Math.max(0, dailyLimit - todaySpent) : Infinity;
-
-    // Available for trade is the tightest of all limits
-    let cappedAvailable = remainingTotal;
-    if (remainingDaily < cappedAvailable) cappedAvailable = remainingDaily;
-    if (maxOrder > 0 && maxOrder < cappedAvailable) cappedAvailable = maxOrder;
-    if (!bot?.is_live) {
-      const paperCash = Number(portfolio?.stats?.paper_cash_eur);
-      cappedAvailable = portfolio?.stats?.paper_cash_eur == null
-        ? 0 : Math.min(cappedAvailable, Math.max(0, paperCash));
-    }
-
-    setBalanceQuote(remainingTotal);
-    setAvailableQuote(cappedAvailable);
+    const { available } = manualTradeAvailableQuote({
+      totalBudget, invested, dailyLimit, todaySpent, maxOrder,
+      isLive: Boolean(bot?.is_live), paperCash: portfolio?.stats?.paper_cash_eur,
+    });
+    setAvailableQuote(available);
 
     /* ---------- BTC HOLDINGS ---------- */
 
@@ -132,11 +123,17 @@ export default function TradePanelContainer({
   }, [
     bot?.budget?.total_eur,
     bot?.budget_total_eur,
+    bot?.budget?.daily_limit_eur,
+    bot?.budget_daily_limit_eur,
+    bot?.budget?.max_order_eur,
+    bot?.budget_max_order_eur,
     bot?.is_live,
     portfolio?.stats?.net_executed_cash_delta_eur,
     portfolio?.stats?.invested_eur,
     portfolio?.stats?.net_qty,
     portfolio?.stats?.paper_cash_eur,
+    portfolio?.stats?.today_spent_eur,
+    portfolio?.stats?.today_spent,
     decision
   ]);
 
@@ -289,7 +286,7 @@ export default function TradePanelContainer({
         side: order.side,
         bot_id: botId,
         is_live: Boolean(bot?.is_live),
-        message: err.message || copy.previewFailed,
+        message: getBotApiErrorMessage(err, copy.previewFailed),
       });
     } finally {
       setLoading(false);
@@ -348,8 +345,9 @@ export default function TradePanelContainer({
       window.dispatchEvent(new Event("portfolio:updated"));
 
     } catch (err) {
-      showSnackbar(err.message || copy.orderFailed, "danger");
-      setError(err.message || copy.orderFailed);
+      const message = getBotApiErrorMessage(err, copy.orderFailed);
+      showSnackbar(message, "danger");
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -393,7 +391,6 @@ export default function TradePanelContainer({
     <>
       <TradePanel
         price={price}
-        balanceQuote={balanceQuote}
         availableQuote={availableQuote}
         balanceBase={balanceBase}
         quoteSymbol={bot?.is_live ? (bot?.base_currency || "EUR") : "EUR"}
