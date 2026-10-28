@@ -1682,6 +1682,7 @@
           "levels_unconfirmed": "Kursniveaus sind nicht vollständig bestätigt", "configured_check_unverified": "Eingerichtet; eine aktuelle Ausstiegskontrolle wurde nicht separat erfasst",
           "unknown": "Nicht feststellbar"
         },
+        "reasons": { "scheduled_dca_amount": "Der regelmäßige Kaufbetrag folgt dem bestätigten Plan.", "outside_conditions": "Die gespeicherten Setupbedingungen passen nicht zum aktuellen Benchmark.", "insufficient_data": "Die aktuellen Benchmarkdaten reichen für eine Entscheidung nicht aus.", "unconfigured": "Für dieses Setup sind keine prüfbaren Scorebedingungen festgelegt." },
         "actions": { "BUY": "Kauf", "SELL": "Verkauf", "HOLD": "Halten", "buy": "Kauf", "sell": "Verkauf", "hold": "Halten", "other": "Bewertung" }
       },
       "marketReportDescription": "Verfolge Markt, Makro und Technik, um die Marktlage besser zu verstehen.",
@@ -1717,6 +1718,7 @@
       "hudScoresByAsset": "Gespeicherte Bewertungen je Asset",
       "hudIndicatorLabels": {
         "price": "Preis",
+        "prijs": "Preis",
         "volume": "Volumen",
         "change_24h": "Kursänderung 24 Stunden",
         "inflation_rate": "Inflationsrate",

@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dagrapport: beslisreden in gekozen taal (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION_PASSED_CI_PENDING`. Candidate branch:
+`codex/daily-report-reason-i18n`. The preceding report batch is live on SHA
+`d0d5ca9d21c7318e5c60cb052f5f19055d81c4ad`; main CI `40760867896`
+and Auto Deploy `40761389628` succeeded, and public backend health and
+frontend build-info both returned HTTP 200 with that SHA.
+
+Independent authenticated QA found report time in Europe/Amsterdam and UTC,
+separate current bot observation time, a later decision labelled “Na het
+rapport”, and no false claim of a recent automatic exit check. It found a P2
+language defect: stored bot reasons appeared verbatim in EN/DE. The indicator
+label “Prijs” also remained Dutch. This repair carries typed reason keys for
+known persisted bot decisions and translates them in the report UI; historical
+“Prijs” source labels are localized in the report HUD. A real open QA Paper
+position was unavailable, so live display of quantity, stop, first target and
+price currency remains unproven. The AAPL outside-hours case also did not
+appear in that browser run. No Live order was made.
+
+Final local evidence for this repair: backend suite **4100 passed, 4 skipped**;
+web typecheck, i18n lint/tests, command/proposal tests, production build and
+high-severity audit passed. Real Luna/Responses development passed **20/20**
+and regression **109/109**, with zero provider, schema, timeout, parse or
+validation failures. The preceding batch's full public action matrix passed
+16/16; this presentation-only repair does not change action contracts. CI,
+Auto Deploy, final public identity and independent live recheck remain pending.
+
 ## Dagrapport: actuele posities, botbeslissingen en lokale tijd (28 oktober 2026)
 
 Current phase: `LIVE_READBACK_PASSED_AWAITING_QA`. Candidate branch:
