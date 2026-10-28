@@ -6,9 +6,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair manual Paper follow-up (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. Candidate branch:
-`codex/paper-pair-manual-qa-fixes`; production remains on
-`3aa760dd007e35c075f1459dd65029959515a873` until this batch is released.
+Current phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Candidate branch:
+`codex/paper-pair-manual-qa-fixes`. PR #678 passed all five CI jobs in run
+`40692573419`. Main CI `40693044939` and Auto Deploy `40693545897`
+succeeded for merge SHA `2b9ef6500db65538f1b1e8817d28f886767de771`.
+Public backend health and frontend build-info each returned HTTP 200 and that
+exact SHA. This documentation-only status commit creates a later main SHA;
+its CI, deploy and public identity must also finish before QA tests the final
+public revision.
 
 Independent QA on that production SHA returned `NOT_ACCEPTED`. For a new
 BTC/EUR Paper bot whose saved benchmark range was 61–75 and current score
@@ -39,7 +44,7 @@ SHA-256 `569a529da62656390d9f87581376f2d56ed801428d24889541abb70b713dfa5c`;
 zero Live trading calls). Real Luna/Responses development `20/20` and
 regression `109/109` operation accuracy passed with the provider configured;
 provider, schema, timeout, parse and validation failure rates were zero.
-CI, deployment and independent live QA for this batch are pending. This local
+Independent live QA for this batch is pending. This local
 evidence does not prove a new production Paper pair order or resolve the
 protected runner failure.
 
