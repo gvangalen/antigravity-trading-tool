@@ -69,6 +69,31 @@ def safe_closed_paper_chat_error(error: Exception) -> str:
     return code if code in SAFE_CLOSED_PAPER_CHAT_ERRORS else "closed_paper_review_chat_runtime_error"
 
 
+SAFE_CLOSED_PAPER_REVIEW_ERRORS = frozenset({
+    "closed_paper_review_fixture_not_authorized",
+    "closed_paper_entry_decision_missing",
+    "closed_paper_open_fill_missing",
+    "closed_paper_sell_not_filled",
+    "closed_paper_review_projection_failed",
+    "closed_paper_review_analysis_failed",
+    "closed_paper_review_missing",
+    "closed_paper_review_duplicate",
+    "closed_paper_lesson_not_readable",
+    "closed_paper_review_dossier_incomplete",
+})
+
+
+def profile_error_category(profile: str, error: Exception) -> str:
+    """The published QA error category must not contain private fixture text."""
+    if profile == "closed_paper_trade_review_chat":
+        return safe_closed_paper_chat_error(error)
+    if profile == "closed_paper_trade_review":
+        code = str(error)
+        return (code if code in SAFE_CLOSED_PAPER_REVIEW_ERRORS
+                else "closed_paper_review_runtime_error")
+    return str(error)
+
+
 def _safe_review_read_diagnostic(private_read: Any) -> Dict[str, Any] | None:
     """Export only bounded tool states, never a dossier or model response."""
     if not isinstance(private_read, dict) or not private_read:
@@ -1350,12 +1375,37 @@ def run_protected_closed_paper_probe(report: Dict[str, Any], probe, namespace: s
         report[key] = probe(namespace, include_chat=True,
                             on_execution_attempt=count_execution_attempt)
     else:
-        # Preserve the existing count contract for the original fixture
-        # profile; only the new chat profile reports observed attempts.
-        report["safety"]["execution_calls"] = 2
-        report[key] = probe(namespace)
+        # The original fixture does not report when execution begins. Two is
+        # its expected number of Paper steps, not evidence that either ran.
+        report["safety"]["execution_calls"] = None
+        report["safety"]["execution_call_basis"] = "not_instrumented"
+        report["closed_paper_probe_checkpoint"] = "fixture_running"
+        try:
+            report[key] = probe(namespace)
+        except Exception as error:
+            report["closed_paper_probe_diagnostic"] = {
+                "checkpoint": "fixture_running",
+                "exception_kind": safe_protected_probe_exception_kind(error),
+            }
+            raise
+        report["closed_paper_probe_checkpoint"] = "fixture_completed"
     report["outcome"] = "passed"
     report["qa_status"] = "COMPLETED"
+
+
+def safe_protected_probe_exception_kind(error: Exception) -> str:
+    """Keep protected fixture errors actionable without exporting private data."""
+    if isinstance(error, TypeError):
+        return "type_error"
+    if isinstance(error, AttributeError):
+        return "attribute_error"
+    if isinstance(error, KeyError):
+        return "key_error"
+    if isinstance(error, AssertionError):
+        return "assertion_error"
+    if type(error).__module__.startswith(("psycopg", "sqlalchemy")):
+        return "database_error"
+    return "other"
 
 
 def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dict[str, int | bool]:
@@ -2190,10 +2240,7 @@ def main() -> int:
                     else "failed"
                 )
     except (RuntimeError, ValueError) as error:
-        report["error_category"] = (
-            safe_closed_paper_chat_error(error)
-            if args.profile == "closed_paper_trade_review_chat" else str(error)
-        )
+        report["error_category"] = profile_error_category(args.profile, error)
         if args.profile == "closed_paper_trade_review_chat":
             diagnostic = safe_closed_paper_chat_diagnostic(error)
             if diagnostic is not None:

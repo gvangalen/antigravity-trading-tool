@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper exit quote order and protected review diagnostics (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATED_AWAITING_CI`. Candidate branch:
+`codex/paper-exit-qa-diagnostics`. The automatic Paper-exit path now selects a
+unique newest market row when two rows share the same source and ingest time.
+The existing protected closed-trade runner no longer reports two Paper
+execution calls before its fixture starts. It marks that count unobserved and
+publishes only a bounded exception kind and allowlisted error category if the
+fixture fails; it never exports the raw protected exception message for this
+profile.
+
+Measured local evidence: the direct AAPL Paper stop, first-target and
+same-plan add-on probes each closed the virtual position once, made no second
+sell on repeated assessment, and projected one owner-bound closed-trade
+Reflectie dossier. A separate same-timestamp quote probe chose the newest
+inserted market row and closed at the first target. Stale quotes, changed
+plan levels, execution failure, unconfirmed USDT pairs and mixed opening
+levels held without a sell. All ten local exit scenarios passed against the
+disposable local database; no Live order was placed. The independent QA Agent
+reviewed the diff read-only and confirmed that the original runner's raw
+exception leak was repaired; it did not execute the protected profile.
+
+Final local backend suite: **4097 passed, 4 skipped** (artifact SHA-256
+`f3c0156053856a5589e6a647ccd94598a3bb204644ed61099fe1653ff19e12a3`).
+Frontend typecheck, i18n lint/tests, command/proposal tests, production build
+and high-severity audit passed. The local worker action matrix passed **16/16**
+contracts and **21/21** adapter checks (artifact SHA-256
+`5ace55b399a50c196dcbb0461c23ed4e5026e551f4838aed65f5e0939af4ffd5`).
+Real Luna/Responses development passed **20/20** with no provider, parse or
+validation failures (SHA-256
+`8d964e44740a18e9df8638cfe0539f49698f8ac6637d2ffc0879ab0b62046a61`);
+regression passed **109/109** with the same zero failure rates (SHA-256
+`0cd510c068644abebdef1fcf5427144d0c269fafb2b9f06f4f4862b23742d605`).
+
+This local result does not prove that an ordinary production AAPL position
+crossed a stop or target. The existing protected closed-trade profile tests a
+synthetic sell and currently has only a `runner_internal` verdict from its
+earlier run. A protected automatic-exit fixture is not yet part of the QA
+contract. The next official QA run must use the final deployed SHA and report
+those limits separately.
+
 ## Exact-pair manual Paper follow-up (28 oktober 2026)
 
 Current phase: `ACCEPTED_FOR_TESTED_SCOPE`. Candidate branch:
