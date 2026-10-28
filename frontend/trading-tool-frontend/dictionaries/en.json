@@ -1663,6 +1663,22 @@
       }
     },
     "report": {
+      "traderStatus": {
+        "title": "Positions and bot status", "separation": "The report is a snapshot. The data below was retrieved separately and reflects current state.",
+        "refresh": "Refresh status", "loading": "Loading…", "reportAt": "Report time (NL)", "utcAt": "Report time", "currentAt": "Status retrieved",
+        "outsideHours": "For {assets}, the report time was outside regular US market hours. The displayed price may be the last available close.",
+        "loadError": "Current bot status could not be loaded.", "noBots": "No bots found.", "openPositions": "Open bot positions",
+        "noOpenPositions": "No open bot positions are known.", "live": "Live", "paper": "Paper", "active": "Active", "paused": "Paused", "viewBot": "View bot",
+        "position": "Quantity", "positionValue": "Position value", "stop": "Saved stop", "firstTarget": "First target",
+        "exitStatus": "Automatic exit", "lastAssessment": "Last bot assessment", "priceSource": "Price source", "latestDecision": "Latest bot decision",
+        "noDecision": "No decision recorded", "afterReport": "After the report", "unknown": "Unknown",
+        "monitoring": {
+          "not_applicable": "Not applicable to this position", "not_configured": "Not configured for automatic Paper exit",
+          "levels_unconfirmed": "Price levels have not been fully confirmed", "configured_check_unverified": "Configured; a recent exit check was not recorded separately",
+          "unknown": "Cannot determine"
+        },
+        "actions": { "BUY": "Buy", "SELL": "Sell", "HOLD": "Hold", "buy": "Buy", "sell": "Sell", "hold": "Hold", "other": "Assessment" }
+      },
       "marketReportDescription": "Follow market, macro and technical changes to build a clearer view of the market.",
       "pageEyebrow": "Tradamind Intelligence",
       "title": "Tradamind Reports",

@@ -10,6 +10,9 @@ import { fetchAuth } from '@/lib/api/auth';
 export const fetchDailyReportLatest = async (options = {}) =>
   fetchAuth('/api/report/daily/latest', options);
 
+export const fetchDailyTraderStatus = async () =>
+  fetchAuth('/api/report/daily/trader-status', { forceFresh: true });
+
 export const fetchDailyReportByDate = async (date, options = {}) =>
   fetchAuth(`/api/report/daily/by-date?date=${encodeURIComponent(date)}`, options);
 
