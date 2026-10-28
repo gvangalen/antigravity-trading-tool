@@ -6,14 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper exit quote order and protected review diagnostics (28 oktober 2026)
 
-Current phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Candidate branch:
+Current phase: `LIVE_READBACK_PASSED_AUTO_EXIT_NOT_ACCEPTED`. Candidate branch:
 `codex/paper-exit-qa-diagnostics`. [PR #681](https://github.com/gvangalen/antigravity-trading-tool/pull/681)
 passed all five CI jobs in run `40709933856`. Main CI `40710508152` and Auto
 Deploy `40711080097` succeeded for merge SHA
 `1704b0dc69fa6973609fa2109f9b829eedd5052c`; public backend health and
-frontend build-info each returned HTTP 200 and that exact SHA. This
-documentation-only status commit creates a later main SHA; its CI, deploy and
-public identity must also finish before QA tests the final public revision.
+frontend build-info each returned HTTP 200 and that exact SHA. The later
+documentation-only status commit became SHA
+`3a5cd351897ad67fea6f7d670e26e98ad3ea3c47`; main CI `40712403479` and
+Auto Deploy `40712887435` succeeded, and public backend/frontend each
+returned HTTP 200 and that exact SHA before QA began.
 The automatic Paper-exit path now selects a
 unique newest market row when two rows share the same source and ingest time.
 The existing protected closed-trade runner no longer reports two Paper
@@ -45,12 +47,23 @@ validation failures (SHA-256
 regression passed **109/109** with the same zero failure rates (SHA-256
 `0cd510c068644abebdef1fcf5427144d0c269fafb2b9f06f4f4862b23742d605`).
 
-This local result does not prove that an ordinary production AAPL position
-crossed a stop or target. The existing protected closed-trade profile tests a
-synthetic sell and currently has only a `runner_internal` verdict from its
-earlier run. A protected automatic-exit fixture is not yet part of the QA
-contract. The next official QA run must use the final deployed SHA and report
-those limits separately.
+Independent QA tested the final product revision
+`3a5cd351897ad67fea6f7d670e26e98ad3ea3c47` in an authenticated browser.
+Backend and frontend each returned HTTP 200 and that exact SHA twice. The
+QA-account AAPL bot was paused and manual with €100 Paper cash, zero open
+position and no executed trades. Reflectie retained two BTC closed-trade
+dossiers after refresh, but no AAPL dossier. The visible AAPL plan was a fixed
+DCA plan without stop/target levels. QA therefore passed the read-only status
+and readback scope but did **not accept** automatic AAPL stop/target-to-dossier
+behavior as live-proven. No protected run or order was made.
+
+The existing protected closed-trade profile tests a synthetic sell and still
+has only its earlier `runner_internal` verdict; the new diagnostics have not
+yet been exercised in an official run. A guarded protected automatic-exit
+fixture is not part of the authorized QA contract. This verdict-recording
+documentation commit changes the public SHA again; its final CI, deploy and
+backend/frontend identity must be checked separately. The product code and
+tested behavior remain those of the QA-tested revision.
 
 ## Exact-pair manual Paper follow-up (28 oktober 2026)
 
