@@ -277,7 +277,8 @@ def _cleanup(namespace: str, user_id: int, bot_id: int) -> None:
                 raise RuntimeError("fixture_cleanup_bot_mismatch")
             for table in (
                 "bot_trade_plans", "bot_executions", "bot_ledger", "bot_orders",
-                "bot_decisions", "bot_portfolio_snapshots", "portfolio_balance_snapshots",
+                "bot_decisions", "portfolio_value_snapshots_v2",
+                "bot_portfolio_snapshots", "portfolio_balance_snapshots",
                 "bot_portfolios", "bot_configs", "strategies", "setups", "daily_scores",
                 "macro_data", "technical_indicators", "market_data_indicators",
                 "user_indicator_configs",

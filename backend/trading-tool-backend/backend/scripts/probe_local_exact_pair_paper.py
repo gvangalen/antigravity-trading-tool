@@ -12,6 +12,7 @@ import os
 from backend.scripts.probe_local_score2_positive_paper import (
     QUEUE, _assert_local_only, _seed_fixture,
 )
+from backend.scripts.probe_protected_score2_exact_pair_paper import _verify as verify_protected_pair
 from backend.utils.db import get_db_connection
 
 
@@ -177,6 +178,9 @@ def main() -> None:
                 "result": result, "decision": decision, "orders": orders,
                 "fills": fills, "snapshots": snapshots,
             }, default=str))
+        # Exercise the protected verifier against this local worker-driven fill.
+        verify_protected_pair(user_id, bot_id, report_date, market_id, quote,
+                              25000 * (0.92 if quote == "USDT" else 1))
         print(json.dumps({"result": "PASS", "market_id": market_id,
                           "pair": f"ETH/{quote}", "decision": decision[0],
                           "amount_eur": float(decision[1]), "orders": len(orders),
