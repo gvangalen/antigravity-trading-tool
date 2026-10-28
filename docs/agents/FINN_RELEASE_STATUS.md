@@ -6,7 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair Analyse watchlist parity (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. Independent QA on final deployed SHA
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #673 CI
+`40659506444` passed all five jobs; main CI `40660046663` and Auto Deploy
+`40660387033` succeeded for SHA
+`ad83e3629d49fd1f71c6f312c354350f8b1ed302`. Backend health and frontend
+build-info each returned HTTP 200 with that SHA. The status-only release
+commit requires its own final CI, deployment identity check and independent
+browser recheck before acceptance.
+
+Independent QA on prior deployed SHA
 `c6bb35db5af5735acc1dee4e1de760d3fa7dfa3c` accepted the protected
 ETH/EUR and ETH/USDT direct Paper probes (workflows `40657045165` and
 `40657186911`). Each had a complete controlled exact-pair Score 2.0,
@@ -27,8 +35,7 @@ FINN action matrix passed 16/16 contracts plus 21 targeted regressions
 (artifact SHA-256 `cd0498f723f333f676f854c1632f95647596a5509cc595fcb01e7b4e0a204ccf`).
 The Luna/Responses implementation is unchanged from the prior real-provider
 20/20 development and 109/109 regression evidence in this status file.
-CI, deployment and independent browser recheck remain to be recorded from
-measured results. The protected Paper probes use
+Independent browser recheck of the watchlist correction remains open. The protected Paper probes use
 controlled indicator evidence and direct engine execution; provider ingest
 and Celery scheduling remain outside their proof boundary.
 
