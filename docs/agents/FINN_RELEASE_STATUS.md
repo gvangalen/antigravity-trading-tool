@@ -6,14 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair manual Paper follow-up (28 oktober 2026)
 
-Current phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Candidate branch:
+Current phase: `ACCEPTED_FOR_TESTED_SCOPE`. Candidate branch:
 `codex/paper-pair-manual-qa-fixes`. PR #678 passed all five CI jobs in run
 `40692573419`. Main CI `40693044939` and Auto Deploy `40693545897`
 succeeded for merge SHA `2b9ef6500db65538f1b1e8817d28f886767de771`.
 Public backend health and frontend build-info each returned HTTP 200 and that
 exact SHA. This documentation-only status commit creates a later main SHA;
 its CI, deploy and public identity must also finish before QA tests the final
-public revision.
+public revision. Final main CI `40694548978` and Auto Deploy `40695087126`
+subsequently succeeded; main, public backend health and public frontend
+build-info each reported SHA `50c8e3be2b837b38b8f5a79d923d82cabf472f08`
+with HTTP 200 before QA began. This verdict-recording documentation commit
+will create another SHA; its CI/deploy identity must be checked separately.
 
 Independent QA on that production SHA returned `NOT_ACCEPTED`. For a new
 BTC/EUR Paper bot whose saved benchmark range was 61–75 and current score
@@ -45,8 +49,29 @@ zero Live trading calls). Real Luna/Responses development `20/20` and
 regression `109/109` operation accuracy passed with the provider configured;
 provider, schema, timeout, parse and validation failure rates were zero.
 Independent live QA for this batch is pending. This local
-evidence does not prove a new production Paper pair order or resolve the
-protected runner failure.
+evidence alone did not prove a production Paper pair order or resolve the
+protected runner failure; the independent browser result follows below.
+
+Independent authenticated browser QA on SHA
+`50c8e3be2b837b38b8f5a79d923d82cabf472f08` returned `ACCEPTED` for the
+targeted Paper-planflow. A BTC/EUR bot with score 33.3 below its saved 61–75
+band refused a €10 preview with the specific benchmark reason; confirm was
+disabled and its cash and trade history were unchanged. A second BTC/EUR
+bot with saved 26–45 band and score 33.3 completed exactly one €10 Paper buy
+and one full Paper sell at €72,354.23 for 0.00013786 BTC. Virtual cash moved
+€50 → €40 → €49.97 and the ending position was zero. Optional bot limits at
+€0 did not mask available Paper cash. [Reflectie dossier #26](https://tradamind.com/report?trade_review_id=26)
+appeared after projection, included the linked entry setup and strategy,
+and did not claim proven plan adherence. Analyse showed BTC/EUR 33.3 and
+BTC/USDT 30 from their respective score components; Mijn Plan distinguished
+asset-wide and pair scores. No Live order was placed.
+
+Proof limits: the disabled UI prevented a separate out-of-band backend
+submit attempt; no old planless closed dossier existed in the QA account.
+The protected closed-trade runner `40687033998` remains
+`INCOMPLETE/runner_internal` without a narrower phase and was not rerun.
+AAPL automatic stop/target exit remains untested. These are not included in
+the targeted browser acceptance.
 
 ## Manual Paper plan boundary and entry evidence (28 oktober 2026)
 
