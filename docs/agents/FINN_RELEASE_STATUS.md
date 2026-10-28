@@ -6,18 +6,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair Analyse watchlist parity (28 oktober 2026)
 
-Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #673 CI
+Current phase: `ACCEPTED_FOR_TESTED_SCOPE`. PR #673 CI
 `40659506444` passed all five jobs; main CI `40660046663` and Auto Deploy
 `40660387033` succeeded for SHA
 `ad83e3629d49fd1f71c6f312c354350f8b1ed302`. Backend health and frontend
 build-info each returned HTTP 200 with that SHA. The status-only release
-commit requires its own final CI, deployment identity check and independent
-browser recheck before acceptance.
+commit passed main CI `40661133215` and Auto Deploy `40661564360`; public
+backend and frontend both returned HTTP 200 and final SHA
+`e14e6669629780e04ac90915f2c6816bb51f3a56` before the independent
+browser recheck. This verdict-recording commit changes documentation only;
+its own CI and deployment identity remain to be checked.
 
 Independent QA on prior deployed SHA
 `c6bb35db5af5735acc1dee4e1de760d3fa7dfa3c` accepted the protected
 ETH/EUR and ETH/USDT direct Paper probes (workflows `40657045165` and
-`40657186911`). Each had a complete controlled exact-pair Score 2.0,
+`40657186911`; artifact SHA-256 respectively
+`11d19f514b3289ef29ed2b41956c804516fadec0d3d939d841ae31e945cd0bbf`
+and `66cdd2c0161f5e7df09ae272960bf1f104f7754f38450211ee5b9a4258dd4396`).
+Each had a complete controlled exact-pair Score 2.0,
 matching setup, filled Paper order, ledger entry and zero Live calls.
 An authenticated browser check showed correct pair-specific chart symbols,
 quote units, BTC scores and plan/bot labels. It also found that the watchlist
@@ -35,7 +41,15 @@ FINN action matrix passed 16/16 contracts plus 21 targeted regressions
 (artifact SHA-256 `cd0498f723f333f676f854c1632f95647596a5509cc595fcb01e7b4e0a204ccf`).
 The Luna/Responses implementation is unchanged from the prior real-provider
 20/20 development and 109/109 regression evidence in this status file.
-Independent browser recheck of the watchlist correction remains open. The protected Paper probes use
+Independent authenticated Chrome QA on `e14e6669629780e04ac90915f2c6816bb51f3a56`
+passed BTC/EUR, BTC/USDT, reverse switching and BTC→ETH→BTC switching.
+The active watchlist row matched the main panel's pair price and 24-hour
+change: EUR €73,102 and +2.23%; USDT 81,454 USDT and +1.97%. The main
+benchmark was 36.7/33.3 respectively; the watchlist displayed its existing
+whole-point rounding as 37/33. TradingView used `BINANCE:BTCEUR` and
+`BINANCE:BTCUSDT` respectively. No writes or orders occurred. Missing
+24-hour change did not occur in this browser run and is covered by code
+review/build only. The protected Paper probes use
 controlled indicator evidence and direct engine execution; provider ingest
 and Celery scheduling remain outside their proof boundary.
 
