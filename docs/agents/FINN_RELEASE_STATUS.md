@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport: actuele posities, botbeslissingen en lokale tijd (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION_PASSED_CI_PENDING`. Candidate branch:
+Current phase: `LIVE_READBACK_PASSED_AWAITING_QA`. Candidate branch:
 `codex/daily-report-trader-status`, [PR #684](https://github.com/gvangalen/antigravity-trading-tool/pull/684).
 The daily report keeps its stored morning snapshot. A separate owner-scoped
 read shows current bot positions, saved stop and first target, Paper exit
@@ -27,8 +27,14 @@ executes on that schema. The complete public local FINN matrix passed **16/16**
 action contracts, **9/9** downstream lineage checks and **37/37** runtime cases
 (artifact SHA-256 `d11dc080b49ee5259108575acb94d0decd1109f042f4671fc25586ff9d1fea7d`).
 No Live bot or non-allowlisted execution occurred. A separate Setup → Strategy
-→ Paper-bot chain passed 10/10. CI, Auto Deploy, public SHA identity and
-independent authenticated QA are pending; no live acceptance is claimed yet.
+→ Paper-bot chain passed 10/10. All five candidate CI checks passed; main CI
+run `40759190299` and Auto Deploy run `40759718440` succeeded for merge SHA
+`fffd662da597d3d768fc55f2bbabede2e3fafabe`. Public backend health and
+frontend build-info each returned HTTP 200 and that exact SHA. This status
+update will create a later documentation-only SHA; its main CI, Auto Deploy
+and public identity must also pass before independent authenticated QA starts.
+The authenticated report page, live bot status and report generation are not
+yet independently accepted.
 
 ## Paper exit quote order and protected review diagnostics (28 oktober 2026)
 
