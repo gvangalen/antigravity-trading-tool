@@ -6,8 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper exit quote order and protected review diagnostics (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATED_AWAITING_CI`. Candidate branch:
-`codex/paper-exit-qa-diagnostics`. The automatic Paper-exit path now selects a
+Current phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Candidate branch:
+`codex/paper-exit-qa-diagnostics`. [PR #681](https://github.com/gvangalen/antigravity-trading-tool/pull/681)
+passed all five CI jobs in run `40709933856`. Main CI `40710508152` and Auto
+Deploy `40711080097` succeeded for merge SHA
+`1704b0dc69fa6973609fa2109f9b829eedd5052c`; public backend health and
+frontend build-info each returned HTTP 200 and that exact SHA. This
+documentation-only status commit creates a later main SHA; its CI, deploy and
+public identity must also finish before QA tests the final public revision.
+The automatic Paper-exit path now selects a
 unique newest market row when two rows share the same source and ingest time.
 The existing protected closed-trade runner no longer reports two Paper
 execution calls before its fixture starts. It marks that count unobserved and
