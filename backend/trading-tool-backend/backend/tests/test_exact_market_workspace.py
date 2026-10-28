@@ -61,6 +61,47 @@ def test_unknown_exact_market_returns_no_legacy_workspace():
     assert asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR")) is None
 
 
+def test_selected_pair_watchlist_row_uses_the_workspace_quote_and_score(monkeypatch):
+    observed = datetime.now(timezone.utc).replace(tzinfo=None)
+    market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
+                             tradingview_symbol="BINANCE:ETHEUR")
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[
+        _Result([market]), _Result([]), _Result([]),
+    ]))
+    quote = SimpleNamespace(price=2400, change_24h=2, volume=100,
+                            quote_currency="EUR", price_provider="binance",
+                            source_observed_at=observed)
+    matcher = SimpleNamespace(for_asset=AsyncMock(return_value={
+        "benchmark_score": 65, "benchmark_weights": {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3},
+        "reported_scores": {"market_score": 50, "macro_score": 80, "technical_score": 65},
+        "component_source_status": {}, "source_status": "available", "matches": [],
+        "component_source_observed_at": {}, "as_of": observed,
+    }))
+    watchlist = {"rows": [
+        {"symbol": "ETH", "price": 2600, "quote_currency": "USDT", "score": 30},
+        {"symbol": "BTC", "price": 81000, "quote_currency": "USDT", "score": 40},
+    ]}
+    workspace = SimpleNamespace(
+        _macro_rows=AsyncMock(return_value=[]),
+        get_watchlist=AsyncMock(return_value=watchlist),
+        _category_payload=lambda rows, *_args, **_kwargs: {"rows": rows, "score": {}},
+    )
+    monkeypatch.setattr(module, "MarketDataRepository", lambda _session: SimpleNamespace(
+        get_latest_exact_market_snapshot=AsyncMock(return_value=quote)))
+    monkeypatch.setattr(module, "SetupMarketMatchService", lambda _session: matcher)
+    monkeypatch.setattr(module, "WorkspaceDataService", lambda _session: workspace)
+
+    result = asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR"))
+
+    assert result["quote"]["price"] == result["watchlist"]["rows"][0]["price"] == 2400
+    assert result["combined"]["score"] == result["watchlist"]["rows"][0]["score"] == 65
+    assert result["watchlist"]["rows"][0]["market_id"] == 43
+    assert result["watchlist"]["rows"][0]["quote_currency"] == "EUR"
+    assert result["watchlist"]["rows"][0]["tradingview_symbol"] == "BINANCE:ETHEUR"
+    assert result["watchlist"]["rows"][1]["price"] == 81000
+    assert result["watchlist"]["rows"][1]["quote_currency"] == "USDT"
+
+
 def test_non_daily_period_does_not_show_daily_combined_score(monkeypatch):
     observed = datetime.now(timezone.utc).replace(tzinfo=None)
     market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",

@@ -1901,7 +1901,10 @@ function AssetList({
                     ) : (
                       <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-blue-600" : "bg-slate-300"}`} />
                     )}
-                    <span className="text-[15px] font-black text-slate-950">{row.symbol}</span>
+                    <span className="text-[15px] font-black text-slate-950">
+                      {row.assetClass === "crypto" && row.quoteCurrency
+                        ? `${row.symbol}/${row.quoteCurrency}` : row.symbol}
+                    </span>
                   </div>
                   <div className="mt-0.5 truncate text-[13px] font-medium text-slate-500">
                     {row.displayName || ASSET_NAMES[row.symbol] || "Asset context"}
@@ -2674,7 +2677,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
     async function loadWatchlistRows() {
         const nextRows = (watchlistData || []).map((row) => {
-          const changeValue = Number(row?.change_24h);
+          const changeValue = row?.change_24h == null ? NaN : Number(row.change_24h);
           const assetClass = String(row?.asset_class || "").toLowerCase();
           return {
             symbol: row.symbol,
@@ -2683,6 +2686,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             tradingviewSymbol: row?.tradingview_symbol || row?.tradingviewSymbol || null,
             assetClass,
             assetGroup: normalizeAssetGroup(assetClass),
+            quoteCurrency: String(row?.quote_currency || "").toUpperCase(),
             lastPrice: formatQuotePrice(row?.price, locale, row?.quote_currency),
             change24h: formatPercent(changeValue, 2),
             changeTone: Number.isFinite(changeValue)
@@ -2709,8 +2713,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [locale, ui, watchlistData, watchlistLoading]);
 
   const currentWatchlistRows = useMemo(
-    () => watchlistRows.filter((row) => !removedWatchlistSymbols.includes(row.symbol)),
-    [removedWatchlistSymbols, watchlistRows]
+    () => watchlistRows.filter((row) => !removedWatchlistSymbols.includes(row.symbol)
+      && (row.symbol !== activeSymbol || !activeQuoteCurrency || row.quoteCurrency === activeQuoteCurrency)),
+    [activeQuoteCurrency, activeSymbol, removedWatchlistSymbols, watchlistRows]
   );
   const visibleWatchlistRows = useMemo(
     () => currentWatchlistRows.filter((row) => row.assetGroup === activeAssetGroup),
