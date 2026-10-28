@@ -103,7 +103,7 @@ def _get_live_price(
                   AND tm.venue='BINANCE' AND tm.is_active=TRUE
                   AND m.price IS NOT NULL AND m.source_observed_at IS NOT NULL
                   AND m.quote_currency=tm.quote_currency
-                ORDER BY m.source_observed_at DESC, m.timestamp DESC LIMIT 1
+                ORDER BY m.source_observed_at DESC, m.timestamp DESC, m.id DESC LIMIT 1
             """, (market_id, market_id, symbol))
         else:
             cur.execute(
@@ -117,7 +117,7 @@ def _get_live_price(
               AND m.price IS NOT NULL
               AND m.source_observed_at IS NOT NULL
               AND m.quote_currency IS NOT NULL
-            ORDER BY m.source_observed_at DESC, m.timestamp DESC
+            ORDER BY m.source_observed_at DESC, m.timestamp DESC, m.id DESC
             LIMIT 1
             """,
             (symbol,),
@@ -188,7 +188,7 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True,
                 SELECT price, source_observed_at, quote_currency FROM market_data
                 WHERE symbol=%s AND market_id=%s AND price IS NOT NULL
                   AND source_observed_at IS NOT NULL AND quote_currency=%s
-                ORDER BY source_observed_at DESC, timestamp DESC LIMIT 1
+                ORDER BY source_observed_at DESC, timestamp DESC, id DESC LIMIT 1
             """, (symbol, market_id, catalog_quote))
         else:
             cur.execute("""
@@ -197,7 +197,7 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True,
               AND market_id IS NULL
               AND source_observed_at IS NOT NULL
               AND quote_currency IS NOT NULL
-            ORDER BY source_observed_at DESC, timestamp DESC LIMIT 1
+            ORDER BY source_observed_at DESC, timestamp DESC, id DESC LIMIT 1
             """, (symbol,))
         market_row = cur.fetchone()
     from backend.services.portfolio_fx_service import trade_quote_context

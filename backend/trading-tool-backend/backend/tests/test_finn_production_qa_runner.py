@@ -620,7 +620,47 @@ def test_closed_paper_review_qa_report_marks_attempt_before_fixture_error():
         run_protected_closed_paper_probe(report, fail, "qa-test")
     assert report["protected_profile_attempted"] is True
     assert report["qa_status"] == "INCOMPLETE"
-    assert report["safety"] == {"read_only_profile": False, "execution_calls": 2}
+    assert report["safety"] == {
+        "read_only_profile": False,
+        "execution_calls": None,
+        "execution_call_basis": "not_instrumented",
+    }
+    assert report["closed_paper_probe_checkpoint"] == "fixture_running"
+    assert report["closed_paper_probe_diagnostic"] == {
+        "checkpoint": "fixture_running", "exception_kind": "other",
+    }
+
+
+def test_closed_paper_review_probe_diagnostic_does_not_export_private_exception():
+    from backend.scripts.run_finn_production_qa import (
+        profile_error_category, run_protected_closed_paper_probe,
+    )
+
+    report = {"safety": {"read_only_profile": True, "execution_calls": 0},
+              "qa_status": "NOT_STARTED", "outcome": "failed"}
+
+    def fail(_namespace):
+        raise TypeError("private user and database details")
+
+    with pytest.raises(TypeError):
+        run_protected_closed_paper_probe(report, fail, "qa-test")
+    assert report["closed_paper_probe_diagnostic"] == {
+        "checkpoint": "fixture_running", "exception_kind": "type_error",
+    }
+    assert "private" not in json.dumps(report)
+    assert "qa-test" not in json.dumps(report)
+    assert profile_error_category("closed_paper_trade_review", TypeError("private")) == (
+        "closed_paper_review_runtime_error"
+    )
+    assert profile_error_category("closed_paper_trade_review", RuntimeError("private user")) == (
+        "closed_paper_review_runtime_error"
+    )
+    assert profile_error_category("closed_paper_trade_review", ValueError("private database")) == (
+        "closed_paper_review_runtime_error"
+    )
+    assert profile_error_category(
+        "closed_paper_trade_review", RuntimeError("closed_paper_review_projection_failed"),
+    ) == "closed_paper_review_projection_failed"
 
 
 def test_closed_paper_review_fixture_restores_rollout_after_projection_error(monkeypatch):

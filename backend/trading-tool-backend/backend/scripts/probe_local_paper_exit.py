@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local-only Paper position exit probe; never touches a live exchange."""
 
+import asyncio
 import json
 import os
 import uuid
@@ -10,7 +11,8 @@ from datetime import date, datetime, timedelta, timezone
 def main() -> None:
     scenario = os.getenv("PAPER_EXIT_PROBE_SCENARIO", "target")
     if scenario not in {"target", "stop", "stale", "changed_levels", "execution_failure",
-                        "usdt_target", "usdt_stop", "mixed_levels", "same_plan_add"}:
+                        "usdt_target", "usdt_stop", "mixed_levels", "same_plan_add",
+                        "same_timestamp_quote"}:
         raise RuntimeError("unknown_probe_scenario")
     symbol = "BTC" if scenario.startswith("usdt_") else "AAPL"
     quote_currency = "USDT" if symbol == "BTC" else "USD"
@@ -71,6 +73,12 @@ def main() -> None:
                 # Market rows are global in this disposable database.
                 cur.execute("""UPDATE market_data SET source_observed_at=%s,timestamp=%s
                                WHERE symbol=%s""", (observed_at, observed_at, symbol))
+            if scenario == "same_timestamp_quote":
+                # Same source and ingest moments with opposite triggers must
+                # resolve to the last inserted quote, never heap row order.
+                cur.execute("""INSERT INTO market_data (symbol,price,timestamp,source_observed_at,quote_currency)
+                               VALUES (%s,340,%s,%s,%s)""",
+                            (symbol, observed_at, observed_at, quote_currency))
             cur.execute("""INSERT INTO market_data (symbol,price,timestamp,source_observed_at,quote_currency)
                            VALUES (%s,%s,%s,%s,%s)""", (symbol, price, observed_at, observed_at, quote_currency))
             evidence = {"trade_plan": {
@@ -165,14 +173,31 @@ def main() -> None:
               "orders": orders, "portfolio": portfolio}
     print(json.dumps(result, default=str))
     assert first["ok"] and second["ok"], result
-    if scenario in {"target", "stop", "same_plan_add"}:
+    if scenario in {"target", "stop", "same_plan_add", "same_timestamp_quote"}:
         expected_buys = [("assessment", "buy", "executed")] * (
             2 if scenario == "same_plan_add" else 1)
         assert decisions == expected_buys + [("paper_exit", "sell", "executed")], result
         assert orders == [("buy", "filled")] * len(expected_buys) + [("sell", "filled")], result
         assert first["decisions"][0]["trigger"] == (
-            "first_target" if scenario in {"target", "same_plan_add"} else "stop_loss"), result
+            "first_target" if scenario in {"target", "same_plan_add", "same_timestamp_quote"}
+            else "stop_loss"), result
         assert float(portfolio[1]) == 0, result
+        async def project_closed_trade():
+            from backend.infrastructure.database import async_session_factory
+            from backend.services.finn_trade_review_service import FinnTradeReviewService
+
+            async with async_session_factory() as session:
+                await FinnTradeReviewService(session)._project(user_id)
+            async with async_session_factory() as session:
+                return await FinnTradeReviewService(session).list_reviews(user_id)
+
+        reviews = asyncio.run(project_closed_trade())
+        assert reviews["total"] == 1 and reviews["projection_pending"] is False, reviews
+        assert reviews["items"][0]["symbol"] == symbol, reviews
+        assert reviews["items"][0]["execution_environment"] == "paper", reviews
+        assert float(reviews["items"][0]["entry_qty"]) == (1.5 if scenario == "same_plan_add" else 1.2), reviews
+        print(json.dumps({"closed_trade_review_total": reviews["total"],
+                          "projection_pending": reviews["projection_pending"]}))
     else:
         expected_decisions = [("assessment", "buy", "executed")] * (
             2 if scenario == "mixed_levels" else 1)
