@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair Paper price and FX decision consistency (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA accepted the preceding
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA accepted the preceding
 targeted exact-pair readback matrix on public backend/frontend SHA
 `f854544db87253e6d8670a68a30db2ec210a6eba`; that verdict did not
 include a positive score-driven Paper fill. The user requested that remaining
@@ -38,8 +38,13 @@ selection passed **20/20** (artifact SHA-256
 and regression passed **109/109** (artifact SHA-256
 `b5b34fc7e466fdf8b6318fa23bba4d63d95d7c1262cf93ec9cbd53028ab44604`),
 both with zero provider, schema, timeout or parse failures. Security's
-read-only review found no P1/P2 issue in the fix. CI, deployment and
-independent live QA have not yet tested this candidate.
+read-only review found no P1/P2 issue in the fix. PR #667 merged as
+`167893cf62a92d5217eb5a2ede007d116bae5211`; PR CI run `40645359853`,
+main CI run `40645726939`, and Auto Deploy run `40646038810` all succeeded.
+Public backend health and frontend build-info each returned HTTP 200 and that
+exact merge SHA. This status-only update produces a later main SHA and deploy
+cycle; independent QA must test the final public revision. No independent QA
+acceptance is claimed for the new Paper decision/FX path yet.
 
 ## Named saved strategy amount repair candidate (27 oktober 2026)
 
