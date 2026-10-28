@@ -16,6 +16,19 @@ class BotRepository:
             SELECT id FROM bot_configs WHERE user_id=:user_id AND id=:bot_id FOR UPDATE
         """), {"user_id": user_id, "bot_id": bot_id})
 
+    async def lock_manual_paper_setup(self, user_id: int, setup_id: int, symbol: str,
+                                      market_id: int | None) -> None:
+        """Keep the scored setup and today's score stable until the fill commits."""
+        await self.session.execute(text("""
+            SELECT id FROM setups WHERE user_id=:user_id AND id=:setup_id FOR SHARE
+        """), {"user_id": user_id, "setup_id": setup_id})
+        await self.session.execute(text("""
+            SELECT id FROM daily_scores
+            WHERE user_id=:user_id AND symbol=:symbol AND report_date=CURRENT_DATE
+              AND market_id IS NOT DISTINCT FROM :market_id
+            FOR SHARE
+        """), {"user_id": user_id, "symbol": symbol, "market_id": market_id})
+
     async def has_execution_history(self, user_id: int, bot_id: int) -> bool:
         result = await self.session.execute(text("""
             SELECT 1 WHERE EXISTS (
@@ -685,7 +698,8 @@ class BotRepository:
         )
         query = text("""
             SELECT
-              b.id, b.name, b.is_active, b.is_live, b.mode, COALESCE(b.risk_profile,'balanced') as risk_profile,
+              b.id, b.name, b.is_active, b.is_live, b.mode, b.market_id,
+              tm.quote_currency, COALESCE(b.risk_profile,'balanced') as risk_profile,
               COALESCE(b.budget_total_eur,0) as budget_total_eur, COALESCE(b.budget_daily_limit_eur,0) as budget_daily_limit_eur,
               COALESCE(b.budget_min_order_eur,0) as budget_min_order_eur, COALESCE(b.budget_max_order_eur,0) as budget_max_order_eur,
               COALESCE(
@@ -700,6 +714,7 @@ class BotRepository:
               ))) AS unverified_ledger,
               """ + base_currency_select + """
             FROM bot_configs b
+            LEFT JOIN trading_markets tm ON tm.id=b.market_id AND tm.is_active=TRUE
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = b.user_id
             LEFT JOIN bot_portfolios p ON p.bot_id = b.id AND p.user_id = b.user_id
@@ -852,16 +867,19 @@ class BotRepository:
         if not normalized:
             return {}
         result = await self.session.execute(text("""
-            SELECT DISTINCT ON (symbol) symbol, price, source_observed_at
+            SELECT DISTINCT ON (symbol) symbol, price, source_observed_at,
+                   quote_currency
             FROM market_data
             WHERE symbol=ANY(:symbols) AND price IS NOT NULL AND price>0
                   AND market_id IS NULL
                   AND source_observed_at IS NOT NULL
+                  AND quote_currency IS NOT NULL
             ORDER BY symbol, source_observed_at DESC, timestamp DESC
         """), {"symbols": normalized})
         return {str(row._mapping["symbol"]).upper(): {
             "price": float(row._mapping["price"]),
             "observed_at": row._mapping["source_observed_at"],
+            "quote_currency": str(row._mapping["quote_currency"]).upper(),
         } for row in result.fetchall()}
 
     async def get_valuatable_exact_market_prices(self, market_ids: List[int]) -> Dict[int, dict]:
@@ -1149,10 +1167,13 @@ class BotRepository:
             if market_id is not None and str(price_row.get("symbol") or "").upper() != str(sym).upper():
                 price_row = {}
             price = price_row.get("price")
-            # The market price is in the catalog quote currency. Apply a
-            # separately sourced, dated conversion before calling it EUR.
-            quote_currency = (price_row.get("quote_currency") if market_id is not None
-                              else quote_currencies.get(sym))
+            # The quote must come from the price row itself. The catalog is a
+            # consistency check, never evidence for the unit of an older row.
+            quote_currency = price_row.get("quote_currency")
+            if market_id is None and quote_currency != quote_currencies.get(sym):
+                price_row = {}
+                price = None
+                quote_currency = None
             observed_at = price_row.get("source_observed_at") if market_id is not None else price_row.get("observed_at")
             eur_price, valuation_source_at, fx_factor, fx_at = price_in_eur(
                 price=price, price_at=observed_at, quote_currency=quote_currency,

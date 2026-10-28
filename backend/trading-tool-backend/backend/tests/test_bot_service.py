@@ -20,7 +20,7 @@ def test_paper_price_reads_saved_exact_market_only():
         async def get_valuatable_exact_market_prices(self, market_ids):
             assert market_ids == [73]
             return {73: {"symbol": "ETH", "quote_currency": "EUR", "price": 2100,
-                         "observed_at": now}}
+                         "source_observed_at": now}}
         async def get_valuatable_market_prices(self, symbols):
             raise AssertionError("legacy base price must not be read")
         async def get_portfolio_fx_rates(self):
@@ -669,7 +669,7 @@ def test_paper_order_preflight_uses_virtual_cash_not_unused_budget(monkeypatch):
             return {}
 
         async def get_valuatable_market_prices(self, _symbols):
-            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc)}}
+            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc), "quote_currency": "EUR"}}
 
     service.repository = Repo()
 
@@ -781,7 +781,7 @@ def test_paper_manual_preview_uses_actual_cash(monkeypatch):
             return {}
 
         async def get_valuatable_market_prices(self, _symbols):
-            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc)}}
+            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc), "quote_currency": "EUR"}}
 
     service.repository = Repo()
 
@@ -816,7 +816,7 @@ def test_paper_manual_preview_explains_saved_minimum_order(monkeypatch):
             return {}
 
         async def get_valuatable_market_prices(self, _symbols):
-            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc)}}
+            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc), "quote_currency": "EUR"}}
 
     service.repository = Repo()
 
@@ -856,7 +856,7 @@ def test_paper_full_position_close_below_buy_minimum_is_consistent_in_preview_an
             return {}
 
         async def get_valuatable_market_prices(self, _symbols):
-            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc)}}
+            return {"BTC": {"price": 50000, "observed_at": datetime.now(timezone.utc), "quote_currency": "EUR"}}
 
     service.repository = Repo()
 
@@ -909,7 +909,7 @@ def test_paper_manual_preview_converts_usdt_price_to_eur(monkeypatch):
             return {"USDT": {"eur_per_unit": 0.8, "observed_at": datetime.now(timezone.utc)}}
 
         async def get_valuatable_market_prices(self, _symbols):
-            return {"BTC": {"price": 125, "observed_at": datetime.now(timezone.utc)}}
+            return {"BTC": {"price": 125, "observed_at": datetime.now(timezone.utc), "quote_currency": "USDT"}}
 
     service.repository = Repo()
 
@@ -922,9 +922,124 @@ def test_paper_manual_preview_converts_usdt_price_to_eur(monkeypatch):
     result = asyncio.run(service.preview_manual_order(payload, user_id=7))
     assert result["price"] == 100.0
     assert result["price_currency"] == "EUR"
+    assert result["price_source_quote_currency"] == "USDT"
+    assert result["price_is_fx_converted"] is True
     assert result["gross_eur"] == 100.0
     assert result["quantity"] == 0.9975
     assert result["paper_preview_token"]
+
+
+def test_paper_preview_rejects_price_row_with_other_quote(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class Repo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual")
+            return bot
+
+        async def get_asset_quote_currencies(self, _symbols):
+            return {"BTC": "EUR"}
+
+        async def get_valuatable_market_prices(self, _symbols):
+            return {"BTC": {"price": 80000, "observed_at": datetime.now(timezone.utc),
+                            "quote_currency": "USDT"}}
+
+    service.repository = Repo()
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001,
+                                   price=80000, idempotency_key="wrong-quote")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.preview_manual_order(payload, user_id=7))
+    assert exc.value.status_code == 409
+    assert "koersvaluta" in str(exc.value.detail)
+
+
+def test_manual_paper_preview_and_confirmation_require_fresh_trade_quote(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class Repo(_ManualOrderRepo):
+        price_at = datetime.now(timezone.utc)
+
+        async def get_paper_cash(self, **_fields):
+            return 500.0
+
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual")
+            return bot
+
+        async def get_valuatable_market_prices(self, symbols):
+            return {"BTC": {"price": 50000, "quote_currency": "EUR",
+                            "observed_at": self.price_at}}
+
+    repo = Repo()
+    service.repository = repo
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001,
+                                   price=50000, price_currency="EUR", value_eur=50,
+                                   idempotency_key="stale-between-preview-and-commit")
+    preview = asyncio.run(service.preview_manual_order(payload, user_id=7))
+    assert preview["paper_preview_token"]
+    payload.quantity = preview["quantity"]
+    payload.paper_preview_token = preview["paper_preview_token"]
+    repo.price_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=7))
+    assert exc.value.status_code == 409
+    assert repo.created_orders == 0
+    with pytest.raises(HTTPException) as preview_exc:
+        asyncio.run(service.preview_manual_order(payload, user_id=7))
+    assert preview_exc.value.status_code == 409
+
+
+def test_manual_paper_confirmation_rechecks_quote_after_cash_lock(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class Repo(_ManualOrderRepo):
+        price_at = datetime.now(timezone.utc)
+
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(is_live=False, mode="manual")
+            return bot
+
+        async def get_paper_cash(self, **_fields):
+            self.price_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+            return 500.0
+
+        async def get_valuatable_market_prices(self, symbols):
+            return {"BTC": {"price": 50000, "quote_currency": "EUR",
+                            "observed_at": self.price_at}}
+
+    repo = Repo()
+    service.repository = repo
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    payload = BotManualOrderSchema(
+        bot_id=9, symbol="BTC", side="buy", quantity=0.001,
+        price=50000, price_currency="EUR", value_eur=50,
+        idempotency_key="quote-stale-during-lock",
+    )
+    preview = asyncio.run(service.preview_manual_order(payload, user_id=7))
+    payload.quantity = preview["quantity"]
+    payload.paper_preview_token = preview["paper_preview_token"]
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(payload, user_id=7))
+    assert exc.value.status_code == 409
+    assert repo.created_orders == 0
 
 
 def test_paper_preview_ignores_a_forged_client_eur_price(monkeypatch):
@@ -946,7 +1061,7 @@ def test_paper_preview_ignores_a_forged_client_eur_price(monkeypatch):
             return {}
 
         async def get_valuatable_market_prices(self, _symbols):
-            return {"BTC": {"price": 100, "observed_at": datetime.now(timezone.utc)}}
+            return {"BTC": {"price": 100, "observed_at": datetime.now(timezone.utc), "quote_currency": "EUR"}}
 
     service.repository = Repo()
 
@@ -1089,6 +1204,7 @@ def test_paper_confirmation_books_previewed_gross_eur_after_fee(monkeypatch):
     )
     payload.paper_preview_token = service._paper_preview_token(
         user_id=7, payload=payload, quantity=payload.quantity, price=100, gross_eur=100,
+        source_quote_currency="EUR",
     )
     result = asyncio.run(service.create_manual_order(payload, user_id=7))
     assert result["notional_eur"] == 100
@@ -1136,6 +1252,7 @@ def test_replaying_a_paper_preview_does_not_book_a_second_fill(monkeypatch):
     )
     payload.paper_preview_token = service._paper_preview_token(
         user_id=7, payload=payload, quantity=payload.quantity, price=100, gross_eur=100,
+        source_quote_currency="EUR",
     )
     first = asyncio.run(service.create_manual_order(payload, user_id=7))
     second = asyncio.run(service.create_manual_order(payload, user_id=7))
@@ -1146,6 +1263,7 @@ def test_replaying_a_paper_preview_does_not_book_a_second_fill(monkeypatch):
     changed = payload.copy(update={"price": 110.0, "value_eur": 110.0})
     changed.paper_preview_token = service._paper_preview_token(
         user_id=7, payload=changed, quantity=changed.quantity, price=110, gross_eur=110,
+        source_quote_currency="EUR",
     )
     with pytest.raises(HTTPException) as exc:
         asyncio.run(service.create_manual_order(changed, user_id=7))
@@ -1157,6 +1275,20 @@ _DEFAULT_MARKET_SNAPSHOT = object()
 
 
 class _ManualOrderRepo:
+    async def lock_manual_paper_setup(self, user_id, setup_id, symbol, market_id):
+        return None
+
+    async def get_asset_quote_currencies(self, symbols):
+        return {symbol: "EUR" for symbol in symbols}
+
+    async def get_valuatable_market_prices(self, symbols):
+        prices = {"BTC": 50000, "ETH": 100}
+        return {symbol: {"price": prices[symbol], "quote_currency": "EUR",
+                         "observed_at": datetime.now(timezone.utc)} for symbol in symbols}
+
+    async def get_portfolio_fx_rates(self):
+        return {}
+
     def __init__(
         self,
         decisions=None,
@@ -1317,7 +1449,7 @@ class _MultiAssetPortfolioRepo:
 
     async def get_valuatable_market_prices(self, symbols):
         now = datetime.now(timezone.utc)
-        return {symbol: {"price": {"AAPL": 240.0, "MSFT": 510.0}[symbol], "observed_at": now}
+        return {symbol: {"price": {"AAPL": 240.0, "MSFT": 510.0}[symbol], "observed_at": now, "quote_currency": "USD"}
                 for symbol in symbols}
 
     async def get_asset_quote_currencies(self, symbols):
@@ -1336,6 +1468,42 @@ def test_bot_portfolios_use_each_bots_canonical_strategy_symbol():
     assert [item["symbol"] for item in result] == ["AAPL", "MSFT"]
     assert [item["stats"]["last_price"] for item in result] == [192.0, 408.0]
     assert all(item["stats"]["price_currency"] == "EUR" for item in result)
+
+
+def test_bot_portfolio_cards_value_each_saved_pair_from_its_own_quote():
+    now = datetime.now(timezone.utc)
+
+    class Repo(_MultiAssetPortfolioRepo):
+        async def get_bot_portfolios_base(self, user_id):
+            rows = await super().get_bot_portfolios_base(user_id)
+            return [{**rows[0], "id": 1, "symbol": "BTC", "market_id": 41,
+                     "quote_currency": "EUR"},
+                    {**rows[1], "id": 2, "symbol": "BTC", "market_id": 42,
+                     "quote_currency": "USDT"}]
+
+        async def get_valuatable_market_prices(self, symbols):
+            return {"BTC": {"price": 99999, "quote_currency": "USDT", "observed_at": now}}
+
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            assert market_ids == [41, 42]
+            return {41: {"symbol": "BTC", "price": 100, "quote_currency": "EUR", "source_observed_at": now},
+                    42: {"symbol": "BTC", "price": 100, "quote_currency": "USDT", "source_observed_at": now}}
+
+        async def get_asset_quote_currencies(self, symbols):
+            return {"BTC": "USDT"}
+
+        async def get_portfolio_fx_rates(self):
+            return {"USDT": {"eur_per_unit": 0.8, "observed_at": now}}
+
+        async def get_bot_ledger_stats(self, user_id, bot_id, today):
+            return {"net_cash": -50, "executed_cash": -50, "net_qty": 1,
+                    "today_spent": 0, "today_reserved": 0}
+
+    service = BotService.__new__(BotService)
+    service.repository = Repo()
+    result = asyncio.run(service.get_bot_portfolios(user_id=27))
+    assert [bot["stats"]["position_value_eur"] for bot in result] == [100, 80]
+    assert [bot["valuation_status"] for bot in result] == ["available", "available"]
 
 
 def test_closed_paper_bot_keeps_gross_purchases_distinct_from_net_cash():
@@ -1635,6 +1803,7 @@ def test_manual_paper_order_rechecks_budget_after_bot_lock(monkeypatch):
     payload.paper_preview_token = service._paper_preview_token(
         user_id=1, payload=payload, quantity=payload.quantity,
         price=payload.price, gross_eur=50,
+        source_quote_currency="EUR",
     )
 
     with pytest.raises(HTTPException) as exc:

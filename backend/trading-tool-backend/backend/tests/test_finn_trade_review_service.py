@@ -269,6 +269,20 @@ def test_utc_plan_capture_and_naive_utc_ledger_timestamp_keep_entry_plan():
     assert reviews[0]["plan_provenance"]["source"] == "bot_order_context"
 
 
+def test_manual_entry_keeps_linked_plan_without_claiming_plan_adherence():
+    rows = [fill(1, 1, -100, source="manual"),
+            fill(2, -1, 110, source="manual")]
+    rows[0]["plan_snapshot"] = {
+        "linked_setup": {"id": 7, "min_benchmark_score": 61},
+        "linked_strategy": {"id": 11, "name": "BTC plan"},
+        "plan_adherence": "not_assessed",
+    }
+    reviews, excluded = build_closed_positions(rows, {}, {(5, "BTC"): Decimal(0)})
+    assert excluded == {"legacy_or_ambiguous": 0, "inconsistent": 0}
+    assert reviews[0]["plan_snapshot"]["linked_strategy"]["name"] == "BTC plan"
+    assert reviews[0]["plan_provenance"]["relation"] == "linked_plan_at_manual_entry_not_adherence"
+
+
 def test_exit_order_plan_is_not_relabelled_as_original_entry_plan():
     rows = [fill(1, 1, -100), fill(2, -1, 110)]
     rows[0]["plan_snapshot"] = None

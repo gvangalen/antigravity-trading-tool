@@ -31,13 +31,14 @@ const isExchangeReview = (origin) => origin === 'exchange_user_attested' || orig
 
 function PlanFacts({ plan, copy }) {
   const label = (key) => copy.planFields?.[key] || key.replaceAll('_', ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+  const visible = (entries) => entries.filter(([key]) => !['id', 'market_id', 'order_context', 'plan_adherence'].includes(key));
   const value = (item, depth = 0) => {
     if (item == null || item === '') return null;
     if (Array.isArray(item)) return <ul className="mt-1 list-disc space-y-1 pl-5">{item.map((part, index) => <li key={index}>{value(part, depth + 1)}</li>)}</ul>;
-    if (typeof item === 'object' && depth < 3) return <dl className="mt-1 space-y-1">{Object.entries(item).map(([key, part]) => <div key={key}><dt className="inline font-semibold">{label(key)}: </dt><dd className="inline">{value(part, depth + 1)}</dd></div>)}</dl>;
-    return String(item);
+    if (typeof item === 'object' && depth < 3) return <dl className="mt-1 space-y-1">{visible(Object.entries(item)).map(([key, part]) => <div key={key}><dt className="inline font-semibold">{label(key)}: </dt><dd className="inline">{value(part, depth + 1)}</dd></div>)}</dl>;
+    return copy.planFields?.[String(item)] || String(item);
   };
-  return <dl className="mt-4 space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{Object.entries(plan).map(([key, item]) => <div key={key}><dt className="font-bold text-slate-900 dark:text-white">{label(key)}</dt><dd>{value(item)}</dd></div>)}</dl>;
+  return <dl className="mt-4 space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{visible(Object.entries(plan)).map(([key, item]) => <div key={key}><dt className="font-bold text-slate-900 dark:text-white">{label(key)}</dt><dd>{value(item)}</dd></div>)}</dl>;
 }
 
 function TradeChart({ chart, copy, locale }) {
@@ -115,6 +116,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const fills = Array.isArray(review.fills) ? review.fills : [];
   const plan = review.plan_snapshot && typeof review.plan_snapshot === 'object' ? review.plan_snapshot : null;
   const originalPlanVerified = Boolean(plan) && review.plan_status === 'entry_order_plan_recorded';
+  const manualLinkedPlan = review.plan_provenance?.relation === 'linked_plan_at_manual_entry_not_adherence';
   const isDerivative = review.origin === 'bybit_derivative_user_attested';
   const isExchange = review.origin === 'exchange_user_attested' || isDerivative;
   const isPaper = !isExchange && String(review.execution_environment).toLowerCase() === 'paper';
@@ -308,7 +310,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
       <div className="mt-7 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {originalPlanVerified ? copy.plan : plan ? copy.planUnverified : copy.plan}</h4>
-          {plan ? <><PlanFacts plan={plan} copy={copy} />{!originalPlanVerified && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
+          {plan ? <><PlanFacts plan={plan} copy={copy} />{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>
