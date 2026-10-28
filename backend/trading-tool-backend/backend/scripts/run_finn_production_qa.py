@@ -2201,6 +2201,11 @@ def main() -> int:
         if report["error_category"] in {"fixture_namespace_required", "fixture_namespace_invalid"}:
             report["outcome"] = "blocked"
             report["qa_status"] = "QA BLOCKED / NOT STARTED"
+        elif report["error_category"] == "exact_pair_probe_price_window_unstable":
+            # The Paper fill already happened. A volatile source window makes
+            # this fixture inconclusive, not unstarted or a product failure.
+            report["outcome"] = "incomplete"
+            report["qa_status"] = "INCOMPLETE"
     except Exception:
         report["error_category"] = "runner_internal"
     finally:

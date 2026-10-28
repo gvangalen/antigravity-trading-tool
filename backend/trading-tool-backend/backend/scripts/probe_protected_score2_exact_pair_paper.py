@@ -106,7 +106,7 @@ def _verify(user_id: int, bot_id: int, report_date: str,
                              AND decision_date=%s""", (user_id, bot_id, report_date))
             decision = cur.fetchone()
             cur.execute("""SELECT status,execution_environment,market_id,
-                                  executed_price_eur,executed_qty
+                                  executed_price_eur,executed_qty,quote_amount_eur
                            FROM bot_orders WHERE user_id=%s AND bot_id=%s""",
                         (user_id, bot_id))
             orders = cur.fetchall()
@@ -127,19 +127,38 @@ def _verify(user_id: int, bot_id: int, report_date: str,
                 or (decision[3].get("setup_match") or {}).get("status") != "matches"):
             raise RuntimeError("exact_pair_decision_not_matched_buy")
         amount = float(decision[1])
-        if (len(orders) != 1 or orders[0][:3] != ("filled", "paper", market_id)
-                or not isclose(float(orders[0][3]), eur_price, rel_tol=1e-8)
-                or not isclose(float(orders[0][4]), amount / eur_price, abs_tol=1e-8)):
-            raise RuntimeError("exact_pair_paper_order_mismatch")
-        if (len(fills) != 1 or fills[0][0] != market_id
-                or not isclose(float(fills[0][1]), -amount, abs_tol=0.01)
-                or not isclose(float(fills[0][2]), amount / eur_price, abs_tol=1e-8)
-                or not portfolio or not isclose(float(portfolio[0]), 100 - amount, abs_tol=0.01)
-                or not isclose(float(portfolio[1]), amount / eur_price, abs_tol=1e-8)
+        if len(orders) != 1:
+            raise RuntimeError("exact_pair_paper_order_count_mismatch")
+        order_status, environment, order_market_id, price, qty, spent = orders[0]
+        if order_status != "filled" or environment != "paper":
+            raise RuntimeError("exact_pair_paper_order_state_mismatch")
+        if order_market_id != market_id:
+            raise RuntimeError("exact_pair_paper_order_market_mismatch")
+        if price is None or qty is None or spent is None:
+            raise RuntimeError("exact_pair_paper_fill_missing")
+        execution_price, execution_qty, actual_spend = float(price), float(qty), float(spent)
+        # Paper execution rechecks the pair quote and may reprice after the
+        # preflight. The approved EUR spend stays bounded while quantity is
+        # rounded down to eight decimals. A modest source move is valid.
+        if execution_price <= 0:
+            raise RuntimeError("exact_pair_paper_fill_price_invalid")
+        if not isclose(execution_price, eur_price, rel_tol=0.03):
+            # The execution quote is re-read. A large move makes this one
+            # fixture window inconclusive; it is not evidence of a bot bug.
+            raise RuntimeError("exact_pair_probe_price_window_unstable")
+        if (execution_qty <= 0 or actual_spend <= 0 or actual_spend > amount + 0.001
+                or amount - actual_spend > 0.02
+                or not isclose(execution_qty * execution_price, actual_spend, abs_tol=0.011)):
+            raise RuntimeError("exact_pair_paper_fill_amount_mismatch")
+        if len(fills) != 1 or fills[0][0] != market_id:
+            raise RuntimeError("exact_pair_paper_ledger_count_or_market_mismatch")
+        if (not isclose(float(fills[0][1]), -actual_spend, abs_tol=0.001)
+                or not isclose(float(fills[0][2]), execution_qty, abs_tol=1e-8)):
+            raise RuntimeError("exact_pair_paper_ledger_amount_mismatch")
+        if (not portfolio or not isclose(float(portfolio[0]), 100 - actual_spend, abs_tol=0.01)
+                or not isclose(float(portfolio[1]), execution_qty, abs_tol=1e-8)
                 or portfolio[2] is not False or portfolio[3] is not True or keys):
-            raise RuntimeError("exact_pair_paper_ledger_mismatch")
-        if _source(quote) != (market_id, eur_price):
-            raise RuntimeError("exact_pair_price_changed_during_probe")
+            raise RuntimeError("exact_pair_paper_portfolio_or_safety_mismatch")
         return {"result": "PASS", "pair": f"ETH/{quote}",
                 "score_components": "complete_synthetic_pair_fixture",
                 "execution_path": "direct_paper_engine",

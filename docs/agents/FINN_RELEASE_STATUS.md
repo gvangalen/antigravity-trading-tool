@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair Paper verifier repair after independent QA (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+`620cc6038e8675fbd903ea01084205fca28e3c3f` accepted the protected
+ETH/EUR pair probe (workflow `40653374093`): complete pair-scoped fixture
+score, `matches`, `buy`, one filled Paper order and one ledger execution, with
+zero Live calls. The ETH/USDT probe (workflow `40653532388`) returned
+`exact_pair_paper_order_mismatch` after its existing quote/FX preflight,
+complete pair score and matched buy decision. Its artifact did not identify
+which order invariant failed. QA did not retry; the failed synthetic bot was
+quarantined. The combined pair verdict was `NOT_ACCEPTED`.
+
+The Paper engine rechecks the exact pair price at execution and may reduce
+quantity while keeping approved EUR spend bounded. The first protected
+verifier incorrectly required the fill price and quantity to equal values
+calculated from the earlier preflight price. This is a plausible cause of the
+USDT result, not proven from the coarse artifact. The repair verifies the
+persisted executed price, quantity, actual spend, ledger and cash together;
+it treats a move above 3% from the independently verified preflight pair
+price as an inconclusive fixture window, not a product failure, and gives
+separate failure codes for order count, state, market ID,
+price, amount, ledger and portfolio. It does not change bot execution.
+Three targeted verifier regressions passed, including a valid reprice, wrong
+market ID, and an unexplained large price move. Local worker-driven ETH/EUR
+and ETH/USDT positive fills passed the repaired verifier. Independent QA
+must retest the exact final deployed SHA; no live USDT acceptance is claimed.
+
 ## Exact ETH/EUR and ETH/USDT protected Paper proof (28 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA on public SHA
