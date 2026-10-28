@@ -38,6 +38,16 @@ def _timestamp(value: Any) -> str | None:
     return value.isoformat() if isinstance(value, datetime) else None
 
 
+_DECISION_REASON_KEYS = {
+    "Scheduled DCA amount selected from the confirmed plan": "scheduled_dca_amount",
+    "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark.": "outside_conditions",
+    "Opgeslagen setupvoorwaarden passen niet bij de actuele scores.": "outside_conditions",
+    "Actuele benchmarkgegevens zijn onvoldoende voor deze trade.": "insufficient_data",
+    "Actuele benchmarkgegevens zijn onvoldoende voor deze aankoop.": "insufficient_data",
+    "Deze setup heeft geen beoordeelbare scorevoorwaarden.": "unconfigured",
+}
+
+
 async def current_daily_trader_status(session, user_id: int) -> dict[str, Any]:
     portfolios = await BotService(session).get_bot_portfolios(user_id)
     if not portfolios:
@@ -120,6 +130,7 @@ async def current_daily_trader_status(session, user_id: int) -> dict[str, Any]:
                 "action": row.get("action"), "status": row.get("decision_status"),
                 "at": _timestamp(row.get("decision_ts")),
                 "reason": reasons[0] if reasons else None,
+                "reason_key": _DECISION_REASON_KEYS.get(reasons[0]) if reasons else None,
                 "block_code": scores.get("guardrail_reason") or scores.get("execution_failure"),
             } if row.get("decision_id") is not None else None),
         })

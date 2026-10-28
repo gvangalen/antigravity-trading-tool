@@ -1677,6 +1677,7 @@
           "levels_unconfirmed": "Price levels have not been fully confirmed", "configured_check_unverified": "Configured; a recent exit check was not recorded separately",
           "unknown": "Cannot determine"
         },
+        "reasons": { "scheduled_dca_amount": "The recurring purchase amount follows the confirmed plan.", "outside_conditions": "The saved setup conditions do not match the current benchmark.", "insufficient_data": "Current benchmark data is insufficient for a decision.", "unconfigured": "This setup has no score conditions that can be assessed." },
         "actions": { "BUY": "Buy", "SELL": "Sell", "HOLD": "Hold", "buy": "Buy", "sell": "Sell", "hold": "Hold", "other": "Assessment" }
       },
       "marketReportDescription": "Follow market, macro and technical changes to build a clearer view of the market.",
@@ -1710,7 +1711,7 @@
       "hudNoAssets": "No score sources for followed assets were recorded for this report.",
       "hudSourceUnknown": "Source time unavailable",
       "hudScoresByAsset": "Saved scores by asset",
-      "hudIndicatorLabels": {"change_24h": "24-hour price change", "inflation_rate": "Inflation rate"},
+      "hudIndicatorLabels": {"price": "Price", "prijs": "Price", "change_24h": "24-hour price change", "inflation_rate": "Inflation rate"},
       "hudSourceStatus": {"fresh": "current when reported", "stale": "stale when reported", "missing": "missing when reported", "pending": "recalculation needed", "unknown": "status unknown"},
       "types": {
         "daily": "Daily report",

@@ -70,6 +70,9 @@ export default function DailyTraderStatus({ report, status, loading, error, onRe
           {openPositions.length === 0 && <p className="text-sm text-slate-600">{copy.noOpenPositions}</p>}
           {bots.map((bot) => {
             const decision = bot.latest_decision;
+            const decisionReason = (decision?.block_code && t?.botPage?.focus?.riskCodes?.[decision.block_code])
+              || (decision?.reason_key && copy.reasons?.[decision.reason_key])
+              || decision?.reason;
             const decisionAt = dateTime(decision?.at, locale, 'Europe/Amsterdam');
             const lastRun = dateTime(bot.last_run, locale, 'Europe/Amsterdam');
             const priceAt = dateTime(bot.price_source_at, locale, 'Europe/Amsterdam');
@@ -98,7 +101,7 @@ export default function DailyTraderStatus({ report, status, loading, error, onRe
                 </div>
                 <div className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-700">
                   <strong>{copy.latestDecision}:</strong> {decision
-                    ? `${copy.actions[decision.action] || copy.actions.other} · ${decisionAt || copy.unknown}${decision.reason ? ` · ${decision.reason}` : ''}`
+                    ? `${copy.actions[decision.action] || copy.actions.other} · ${decisionAt || copy.unknown}${decisionReason ? ` · ${decisionReason}` : ''}`
                     : copy.noDecision}
                   {decision?.at && Number.isFinite(reportEpoch) && new Date(decision.at).getTime() > reportEpoch && (
                     <span className="ml-2 text-blue-700">{copy.afterReport}</span>

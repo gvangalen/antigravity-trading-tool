@@ -1678,6 +1678,7 @@
           "levels_unconfirmed": "Koersniveaus zijn niet volledig bevestigd", "configured_check_unverified": "Ingesteld; recente exitcontrole is niet afzonderlijk vastgelegd",
           "unknown": "Niet vast te stellen"
         },
+        "reasons": { "scheduled_dca_amount": "Het periodieke aankoopbedrag volgt het bevestigde plan.", "outside_conditions": "De opgeslagen setupvoorwaarden passen niet bij de actuele benchmark.", "insufficient_data": "Actuele benchmarkgegevens zijn onvoldoende voor een beslissing.", "unconfigured": "Deze setup heeft geen beoordeelbare scorevoorwaarden." },
         "actions": { "BUY": "Koop", "SELL": "Verkoop", "HOLD": "Houd vast", "buy": "Koop", "sell": "Verkoop", "hold": "Houd vast", "other": "Beoordeling" }
       },
       "marketReportDescription": "Volg Markt, Macro en Technisch om gevoel te krijgen voor de marktomstandigheden.",
@@ -1711,7 +1712,7 @@
       "hudNoAssets": "Voor dit rapport zijn geen scorebronnen van gevolgde assets vastgelegd.",
       "hudSourceUnknown": "Bronmoment niet beschikbaar",
       "hudScoresByAsset": "Opgeslagen scores per asset",
-      "hudIndicatorLabels": {"price": "Prijs", "change_24h": "Koerswijziging 24 uur", "inflation_rate": "Inflatie", "cpi": "Consumentenprijsindex"},
+      "hudIndicatorLabels": {"price": "Prijs", "prijs": "Prijs", "change_24h": "Koerswijziging 24 uur", "inflation_rate": "Inflatie", "cpi": "Consumentenprijsindex"},
       "hudSourceStatus": {"fresh": "actueel op rapportmoment", "stale": "verouderd op rapportmoment", "missing": "ontbrekend op rapportmoment", "pending": "herberekening nodig", "unknown": "status onbekend"},
       "types": {
         "daily": "Dagrapport",

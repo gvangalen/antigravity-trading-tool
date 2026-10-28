@@ -54,3 +54,8 @@ def test_current_status_is_owner_scoped_and_does_not_claim_unrecorded_exit_check
     assert bot["level_currency"] == "USD"
     assert bot["exit_monitoring"] == "configured_check_unverified"
     assert bot["latest_decision"]["action"] == "HOLD"
+
+
+def test_known_bot_reasons_have_locale_keys():
+    assert trader_status._DECISION_REASON_KEYS["Scheduled DCA amount selected from the confirmed plan"] == "scheduled_dca_amount"
+    assert trader_status._DECISION_REASON_KEYS["Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark."] == "outside_conditions"
