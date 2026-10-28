@@ -224,10 +224,10 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         ("watchlist_remove", "Entferne SOL wieder aus meiner Watchlist.", "watchlist_remove"),
         ("indicator_create", "Create a technical RSI indicator configuration for SOL.", "create_indicator_configuration"),
         ("indicator_update", "Aktualisiere meine RSI-Indikatorkonfiguration fuer SOL und setze die Periode auf 21.", "update_indicator_configuration"),
-        ("indicator_delete", "Verwijder mijn RSI indicatorconfiguratie voor SOL.", "delete_indicator_configuration"),
+        ("indicator_delete", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "delete_indicator_configuration"),
         (
             "setup_create",
-            f"Erstelle ein Trade-Setup fuer SOL auf 4 Stunden mit dem Namen {names['setup']}.",
+            f"Erstelle ein Trade-Setup fuer SOL/USDT auf 4 Stunden mit dem Namen {names['setup']}.",
             "create_setup",
         ),
         # Every dependent turn deliberately omits the object name and ID. It

@@ -98,9 +98,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Match production: expand the exact-market schema before its cutover.
     command: >-
       sh -ec 'python backend/scripts/bootstrap_local_finn_schema.py &&
-      for migration in backend/scripts/migrations/*.py; do python backend/scripts/run_sql_migration.py "$$migration"; done'
+      for migration in backend/scripts/migrations/*.py; do
+        case "$$migration" in
+          *2026_10_28_trading_market_identity_cutover.py) continue ;;
+        esac;
+        python backend/scripts/run_sql_migration.py "$$migration";
+      done &&
+      python backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_10_28_trading_market_identity_cutover.py'
     restart: "no"
 
   runtime:

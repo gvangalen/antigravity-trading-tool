@@ -9,9 +9,11 @@ from backend.services.finn_unified_report_service import _regular_session_at
 
 def test_regular_session_only_claims_proven_outside_hours():
     assert _regular_session_at("2026-10-24T14:00:00+00:00", "stock", "America/New_York") == "outside_regular_hours"
+    assert _regular_session_at("2026-10-24T14:00:00+00:00", "equity", "America/New_York") == "outside_regular_hours"
     assert _regular_session_at("2026-10-23T14:00:00+00:00", "stock", "America/New_York") == "unknown"
     assert _regular_session_at("2026-10-24T14:00:00+00:00", "crypto", "UTC") == "not_applicable"
     assert _regular_session_at("2026-10-24T14:00:00+00:00", "stock", None) == "unknown"
+    assert _regular_session_at("2026-10-24T14:00:00+00:00", "stock", "Europe/Amsterdam") == "unknown"
 
 
 def test_current_status_is_owner_scoped_and_does_not_claim_unrecorded_exit_check(monkeypatch):

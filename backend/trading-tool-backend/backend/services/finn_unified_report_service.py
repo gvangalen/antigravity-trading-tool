@@ -37,8 +37,10 @@ def _regular_session_at(observed_at: Any, asset_class: Any, market_timezone: Any
     Being inside scheduled hours does not prove the exchange was open: holidays,
     halts and provider delays still need exchange evidence.
     """
-    if str(asset_class or "").lower() not in {"stock", "etf"}:
+    if str(asset_class or "").lower() not in {"stock", "equity", "etf"}:
         return "not_applicable"
+    if str(market_timezone or "") not in {"America/New_York", "US/Eastern"}:
+        return "unknown"
     try:
         instant = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00"))
         if instant.tzinfo is None:
