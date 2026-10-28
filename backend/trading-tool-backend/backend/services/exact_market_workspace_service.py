@@ -90,6 +90,26 @@ class ExactMarketWorkspaceService:
             categories[category] = payload
 
         daily_period = all(periods.get(category) == "day" for category in ("market", "macro", "technical"))
+        watchlist = await workspace.get_watchlist(user_id, watchlist_symbols or [])
+        # The base-asset watchlist uses its default market. On an exact-pair
+        # workspace, the selected asset row must use the very same pair quote
+        # and Score 2.0 assessment as the main panel.
+        for row in watchlist.get("rows", []):
+            if str(row.get("symbol") or "").upper() != symbol:
+                continue
+            row.update({
+                "market_id": int(market.id),
+                "tradingview_symbol": market.tradingview_symbol,
+                "price": float(latest.price) if latest and latest.price is not None else None,
+                "quote_currency": quote_currency,
+                "change_24h": float(latest.change_24h) if latest and latest.change_24h is not None else None,
+                "score": assessment["benchmark_score"],
+                "score_status": assessment["source_status"],
+                "quote": _freshness(latest.source_observed_at if latest else None,
+                                    STALE_AFTER_SECONDS["quote"], "exact_market_data"),
+                "score_freshness": _freshness(assessment["as_of"],
+                                              STALE_AFTER_SECONDS["day"], "daily_scores"),
+            })
         return {
             "symbol": symbol,
             "market_id": int(market.id),
@@ -128,7 +148,7 @@ class ExactMarketWorkspaceService:
                 "source_status": assessment["source_status"] if daily_period else "unsupported_period",
             },
             "setup_matches": assessment["matches"],
-            "watchlist": await workspace.get_watchlist(user_id, watchlist_symbols or []),
+            "watchlist": watchlist,
             "score_source_observed_at": assessment["component_source_observed_at"],
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "ai_calls": 0,

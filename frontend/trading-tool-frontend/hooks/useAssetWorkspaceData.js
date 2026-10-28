@@ -642,7 +642,11 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
     ? workspace : null;
   return {
     workspace: visibleWorkspace,
-    watchlist: workspaceScope === snapshotScope ? watchlist : [],
+    // An exact-pair switch must never expose rows from the previous pair,
+    // even for the render before the workspace-reset effect runs.
+    watchlist: !visibleWorkspace ? [] : selectedQuote
+      ? (Array.isArray(visibleWorkspace.watchlist?.rows) ? visibleWorkspace.watchlist.rows : [])
+      : (workspaceScope === snapshotScope ? watchlist : []),
     loading: loading || !visibleWorkspace,
     watchlistLoading,
     error,

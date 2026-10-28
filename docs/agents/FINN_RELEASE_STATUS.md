@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair Analyse watchlist parity (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Independent QA on final deployed SHA
+`c6bb35db5af5735acc1dee4e1de760d3fa7dfa3c` accepted the protected
+ETH/EUR and ETH/USDT direct Paper probes (workflows `40657045165` and
+`40657186911`). Each had a complete controlled exact-pair Score 2.0,
+matching setup, filled Paper order, ledger entry and zero Live calls.
+An authenticated browser check showed correct pair-specific chart symbols,
+quote units, BTC scores and plan/bot labels. It also found that the watchlist
+on BTC/EUR still showed the base asset's USDT quote and score for BTC.
+
+This batch makes the selected watchlist row use the exact workspace's
+owner-scoped pair price and Score 2.0 assessment. Crypto rows show their
+quote currency, and switching pairs cannot briefly reuse the previous
+pair's watchlist rows. Missing 24-hour change is shown as unknown instead
+of +0.00%. The change is read-only and leaves bot execution untouched.
+Targeted exact-workspace tests passed (10/10). The full backend suite passed
+4087 tests with 4 skips. Frontend typecheck, production build, command tests
+(33/33), i18n tests (26/26) and i18n lint passed. The local worker-driven
+FINN action matrix passed 16/16 contracts plus 21 targeted regressions
+(artifact SHA-256 `cd0498f723f333f676f854c1632f95647596a5509cc595fcb01e7b4e0a204ccf`).
+The Luna/Responses implementation is unchanged from the prior real-provider
+20/20 development and 109/109 regression evidence in this status file.
+CI, deployment and independent browser recheck remain to be recorded from
+measured results. The protected Paper probes use
+controlled indicator evidence and direct engine execution; provider ingest
+and Celery scheduling remain outside their proof boundary.
+
 ## Exact-pair Paper verifier repair after independent QA (28 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #671 CI
