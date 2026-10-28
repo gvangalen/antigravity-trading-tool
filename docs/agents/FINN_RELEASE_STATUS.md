@@ -6,9 +6,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Manual Paper plan boundary and entry evidence (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATED_AWAITING_CI`. Candidate branch:
-`codex/paper-manual-plan-boundary`. Production SHA and independent QA verdict
-are pending; this batch is not yet live.
+Current phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Candidate branch:
+`codex/paper-manual-plan-boundary`. PR #676 passed all five CI jobs in run
+`40683954035`; main CI `40684463636` and Auto Deploy `40684881485`
+succeeded for SHA `9da4b99e76370e47613f46a341c51f27a0be072b`. Public backend
+health and frontend build-info returned HTTP 200 and this exact SHA after
+deployment. This documentation-only status commit will create a later main
+SHA; its CI, deploy and public identity must also succeed before independent
+QA tests the final SHA. Independent QA verdict remains pending.
 
 The 28 October trader log showed that a manual BTC Paper buy passed when its
 linked setup required benchmark 61–75 and the asset-wide benchmark was 28.3.
