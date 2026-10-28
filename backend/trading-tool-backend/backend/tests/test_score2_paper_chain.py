@@ -269,9 +269,12 @@ def test_legacy_manual_live_bot_decision_cannot_book_unconfirmed_fill(monkeypatc
         )
 
 
-@pytest.mark.parametrize("unavailable", [None, "missing", "stale", "outside"])
+@pytest.mark.parametrize(("unavailable", "price_ready"), [
+    (None, True), ("missing", True), ("stale", True),
+    ("outside", True), (None, False),
+])
 @pytest.mark.parametrize("mode", ["manual", "semi-auto", "auto"])
-def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailable, mode):
+def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailable, price_ready, mode):
     monkeypatch.setattr(store_daily_scores_task.reconcile_coach_feed_score, "delay", lambda *_: None)
     feed_decisions = []
     monkeypatch.setattr(store_daily_scores_task.publish_coach_bot_decision, "delay",
@@ -345,7 +348,7 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
         "mode": mode,
         "budget": {},
     }])
-    monkeypatch.setattr(paper_worker, "_get_live_price", lambda *_: 100)
+    monkeypatch.setattr(paper_worker, "_get_live_price", lambda *_: 100 if price_ready else None)
     monkeypatch.setattr(paper_worker, "_get_strategy_setup_payload", lambda *_, **__: {
         **strategy, "setup_type": "dca", "symbol": "ETH",
     })
@@ -369,13 +372,16 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     monkeypatch.setattr(paper_worker, "_persist_decision_and_order", lambda **kwargs: persisted.update(kwargs) or 13)
 
     result = paper_worker.run_trading_bot_execution(user_id=7, report_date=date.today())
+    worker_hold = bool(unavailable) or not price_ready
     assert result["ok"] is True
-    assert result["decisions"][0]["action"] == ("hold" if unavailable else "buy")
-    assert result["decisions"][0]["decision"]["amount_eur"] == (0 if unavailable else 150)
+    assert result["decisions"][0]["action"] == ("hold" if worker_hold else "buy")
+    assert result["decisions"][0]["decision"]["amount_eur"] == (0 if worker_hold else 150)
     assert result["decisions"][0]["execution_status"] == (
-        "no_order" if unavailable else "filled" if mode == "auto" else "pending_confirmation"
+        "no_order" if worker_hold else "filled" if mode == "auto" else "pending_confirmation"
     )
-    assert len(saved_orders) == (0 if unavailable else 1)
-    assert len(auto_calls) == (1 if not unavailable and mode == "auto" else 0)
+    assert len(saved_orders) == (0 if worker_hold else 1)
+    assert len(auto_calls) == (1 if not worker_hold and mode == "auto" else 0)
     assert persisted["scores"]["_setup_match"]["status"] == expected_match_status
-    assert feed_decisions == ([] if unavailable else [(7, 13)])
+    if not price_ready:
+        assert persisted["decision"]["guardrail_reason"] == "paper_market_price_eur_unavailable"
+    assert feed_decisions == ([] if worker_hold else [(7, 13)])

@@ -2536,13 +2536,19 @@ def run_trading_bot_execution(
             # a missing dated FX rate still fail closed before an order.
             brain = _hold_for_unconverted_trade_levels(brain, setup_payload)
 
-            if live_cash_error or (bot.get("is_live") and live_price is None):
-                reason_code = live_cash_error or "market_price_stale"
+            if live_cash_error or (live_price is None and
+                                   _normalize_action(brain.get("action")) == "buy"):
+                reason_code = live_cash_error or (
+                    "market_price_stale" if bot.get("is_live")
+                    else "paper_market_price_eur_unavailable"
+                )
                 original = float((brain.get("guardrails_result") or {}).get("original_amount_eur") or 0)
                 brain["guardrails_result"] = {
                     "allowed": False, "adjusted_amount_eur": 0.0,
                     "original_amount_eur": original, "blocked_by": reason_code,
-                    "reason": "Live kassaldo of actuele EUR-marktprijs is niet bevestigd.",
+                    "reason": ("Live kassaldo of actuele EUR-marktprijs is niet bevestigd."
+                               if bot.get("is_live") else
+                               "Een recente marktprijs en eventuele omrekening naar EUR ontbreken."),
                     "warnings": [reason_code], "debug_code": reason_code, "guardrails": {},
                 }
                 brain["guardrail_reason"] = reason_code
