@@ -167,6 +167,10 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
             "symbol": item.get("symbol"),
             "asset_class": item.get("asset_class"),
             "market_timezone": item.get("market_timezone"),
+            "market_session_at_report": _regular_session_at(
+                context.get("observed_at"), item.get("asset_class"),
+                item.get("market_timezone"),
+            ),
             "score_status": benchmark.get("source_status"),
             "score_report_date": benchmark.get("as_of"),
             "component_source_status": source_status,
@@ -273,6 +277,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "provided owner-scoped facts. Missing or stale scores are unknown, never zero. "
             "A setup match is not an entry signal; a bot budget is not cash. "
             "Do not claim an order or trade occurred unless the supplied facts prove it. "
+            "If market_session_at_report is outside_regular_hours, explain that the "
+            "latest stock quote may be from the previous regular session; do not "
+            "infer that a market was open from a timestamp alone. "
             "Use the localized indicator display names supplied in the context. "
             "Return valid JSON with the eight requested string fields."
         ),
@@ -420,10 +427,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "content_locale": locale,
             "assets": [{
                 "symbol": item["symbol"],
-                "market_session_at_report": _regular_session_at(
-                    context.get("observed_at"), item.get("asset_class"),
-                    item.get("market_timezone"),
-                ),
+                "market_session_at_report": item["market_session_at_report"],
                 "score_report_date": item.get("score_report_date"),
                 "score_status": item["score_status"],
                 "component_source_status": item["component_source_status"],
