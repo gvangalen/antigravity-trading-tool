@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact ETH/EUR and ETH/USDT protected Paper proof (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA on public SHA
 `4879c2c3267125c6f3851a0fb15e32b289499138` passed the existing
 synthetic Score 2.0 positive Paper profile (workflow `40648216340`:
 `matches`, `buy`, one filled Paper order and one ledger execution) and the
@@ -48,7 +48,14 @@ The real Luna/Responses development selection passed **20/20** (artifact
 SHA-256 `328f4b6658bba99305aac8c44971f83f9f33dd81313ff44a4a50c84c1a472c21`),
 and regression passed **109/109** (artifact SHA-256
 `bfc2fe8d740b8f88ed0803267f5cc93b537ac263772f30b651f4346ef03c2e92`),
-both with no case failure category. Candidate CI/deploy remain pending.
+both with no case failure category. PR #669 merged as
+`979d42ed549d9c51699d004f4ed5ccec15ffae4f`; PR CI run `40651186893`,
+main CI run `40651654441`, and Auto Deploy run `40651984061` all succeeded.
+Public backend health and frontend build-info each returned HTTP 200 and the
+same merge SHA. This status-only update will create a later main revision;
+independent QA must verify that final public revision before running the new
+ETH/EUR and ETH/USDT protected Paper profiles. No independent acceptance is
+claimed for those profiles yet.
 
 ## Exact-pair Paper price and FX decision consistency (28 oktober 2026)
 
